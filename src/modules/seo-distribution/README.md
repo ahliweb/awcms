@@ -2,8 +2,10 @@
 
 Admitted by ADR-0038 (adapting awcms-micro ADR-0028), ported additively net-new
 under the absorb-awcms-micro program (ADR-0035, `docs/awcms/absorb-awcms-micro-roadmap.md`
-Wave 1). **This is the DISCOVERY scope of the module — the redirect-governance
-half is deferred (see the bottom).** This module is the **CONSUMER/aggregator of
+Wave 1). The DISCOVERY scope shipped in ADR-0038; the **redirect-governance scope
+shipped in ADR-0039** (exact-path redirect rules + URL-change capture + 404
+telemetry + one fail-open `src/middleware.ts` edit — see "Redirect governance"
+below). This module is the **CONSUMER/aggregator of
 SEO facts, not a provider** — content modules provide `seo_facts`;
 `seo_distribution` composes them into public metadata + discovery surfaces. Nothing
 in the base registry depends on it, and its lifecycle `dependencies` are only the
@@ -136,20 +138,34 @@ that type exists. Only one module may declare `provides: ["seo_facts"]` at a tim
 (`module-composition.ts`'s `capability_provider_conflict`). The port version is
 registered at `1.1.0` in `_shared/capability-contract-versions.ts` (ADR-0015 rule).
 
-## Deliberately deferred (redirect-governance follow-up PR)
+## Redirect governance (ADR-0039)
 
-- **Redirect rules + the `src/middleware.ts` redirect hook.** awcms-micro's
-  exact-path redirect resolution (redirect tables + middleware hook) is out of
-  scope — no redirect table/permission/route is created, and `src/middleware.ts` is
-  NOT edited. The frozen port's redirect guards
-  (`classifyRedirectTarget`/`assertSafeRedirectTarget`) are likewise deferred (see
-  `_shared/ports/seo-facts-port.ts`'s header) and re-enter as backward-compatible
-  standalone helpers, not `SeoFactsSource` methods.
-- **404 telemetry + the `dataLifecycle` descriptor.** awcms-micro's
-  privacy-minimized 404 governance table and the module's `dataLifecycle`
-  descriptor that references it are DEFERRED — this module therefore declares **no**
-  `dataLifecycle` yet, seeds no `redirect.*`/`not_found.*` permissions, and grants
-  no `awcms_worker` table privileges.
+The redirect-governance scope completes the module (migrations `sql/060` schema +
+`sql/061` permissions):
+
+- **Exact-path redirect rules** (`awcms_seo_redirects`, RLS FORCE'd) — 301/302/307/308,
+  optional locale/host scope, effective window, `preserve_query`, soft-delete/restore/
+  purge lifecycle. Resolved in `src/middleware.ts` on the non-`/admin` branch BEFORE
+  content routing, EXCLUDING admin/API/auth/static/system/discovery paths
+  (`domain/redirect-eligibility.ts`, enforced at resolve AND write time). Every target
+  is routed through the frozen open-redirect guard
+  (`domain/redirect-target-classification.ts` — re-homed as a standalone domain helper,
+  NOT re-added to the `seo_facts` port) on write AND every resolve; chains are bounded +
+  non-recursive and fail CLOSED on loop/over-cap.
+- **URL-change capture** (`POST /api/v1/seo/redirects/capture-url-change`) turns an
+  old→new path change into an audited redirect proposal (inactive) or active rule per
+  the tenant's `url_change_auto_policy`.
+- **Privacy-minimized 404 telemetry** (`awcms_seo_not_found_observations`, RLS FORCE'd)
+  — aggregate rows (sanitized path + bare referrer domain only), a `dataLifecycle`
+  analytics_telemetry descriptor (`seo_distribution.not_found_observations`, generic
+  purge, 30d default) with a `SELECT, DELETE ... TO awcms_worker` grant.
+- **The one invasive edit** `src/middleware.ts` is FAIL-OPEN: the resolver swallows all
+  faults to null (never a 500), the 404 capture never throws; the `/admin` guard and
+  API body-ceiling are untouched.
+
+**awcms adaptations (ADR-0039):** tenant resolution is host-based-only first cut
+(path-tenant deferred); the legacy `/blog/{tenantCode}` → `/news` rewrite is INERT (no
+`/news` route family, policy off by default); `locale` is always null (no i18n seam).
 
 ## Documented follow-ups (out of discovery scope)
 

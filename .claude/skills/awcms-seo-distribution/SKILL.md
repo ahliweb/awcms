@@ -1,31 +1,38 @@
 ---
 name: awcms-seo-distribution
-description: Modul seo_distribution SUDAH di-port ke repo ini — SCOPE DISCOVERY saja (ADR-0038, mengadaptasi awcms-micro ADR-0028; migrasi sql/057 schema + sql/058 permission + sql/059 kolom feed). Modul `type: domain` (v0.1.0, deps Core-only) CONSUMER/aggregator: renderer metadata SEO terpusat (canonical/hreflang/robots/OG/JSON-LD terkontrol, host diturunkan server dari `tenant_domain`) + route discovery publik tak-terautentikasi di root host (`/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`, route Astro XML/text BUKAN OpenAPI) + config admin `GET`/`PUT /api/v1/seo/config`. Mengonsumsi capability `seo_facts` (`blog_content` menyediakan lewat `application/seo-facts-port-adapter.ts`, seam `_shared/ports/seo-facts-port.ts`, `CAPABILITY_CONTRACT_VERSIONS["seo_facts"]="1.1.0"`) + `media_library` (opsional). Milik tabel `awcms_seo_tenant_settings` (FORCE RLS). Tata-kelola redirect + telemetri 404 + descriptor `dataLifecycle` DITUNDA (PR lanjutan). Gunakan saat mengubah renderer/serializer SEO, config tenant, seam `seo_facts`, atau route discovery.
+description: Modul seo_distribution SUDAH di-port PENUH ke repo ini — DISCOVERY (ADR-0038; migrasi sql/057 schema + sql/058 permission + sql/059 kolom feed) + REDIRECT GOVERNANCE (ADR-0039; migrasi sql/060 schema 3 tabel + sql/061 6 permission). Modul `type: domain` (v0.2.0, deps Core-only) CONSUMER/aggregator: renderer metadata SEO terpusat (canonical/hreflang/robots/OG/JSON-LD terkontrol, host diturunkan server dari `tenant_domain`) + route discovery publik tak-terautentikasi di root host (`/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`, route Astro XML/text BUKAN OpenAPI) + config admin `GET`/`PUT /api/v1/seo/config`. REDIRECT: aturan redirect exact-path (`awcms_seo_redirects`), telemetri 404 (`awcms_seo_not_found_observations` + descriptor `dataLifecycle`), kebijakan (`awcms_seo_redirect_settings`), semua FORCE RLS; di-resolve di `src/middleware.ts` cabang non-`/admin` (FAIL-OPEN) via `src/lib/seo/redirect-middleware.ts`; guard open-redirect beku di `domain/redirect-target-classification.ts` (BUKAN di port `seo_facts`); admin API `/api/v1/seo/redirects/*` + `/api/v1/seo/not-found/*`. Adaptasi awcms: host-based-only (path-tenant ditunda), legacy-blog `/news` INERT, `locale=null`. Mengonsumsi capability `seo_facts` (`blog_content` menyediakan, seam `_shared/ports/seo-facts-port.ts`, `CAPABILITY_CONTRACT_VERSIONS["seo_facts"]="1.1.0"`) + `media_library` (opsional). Gunakan saat mengubah renderer/serializer SEO, config tenant, seam `seo_facts`, route discovery, atau tata-kelola redirect/404.
 ---
 
 # AWCMS — SEO & Distribution (Discovery: renderer + sitemap/robots/feed + config)
 
-> **STATUS — modul ini SUDAH di-port ke repo ini (ADR-0038), TAPI hanya SCOPE
-> DISCOVERY.** `seo_distribution` hidup di `src/modules/seo-distribution/`,
-> migrasi `sql/057` (schema `awcms_seo_tenant_settings`, FORCE RLS) + `sql/058`
-> (permission config) + `sql/059` (kolom config feed/sitemap). Rujukan tabel/kode
-> di bawah NYATA di repo ini. **Tata-kelola redirect (tabel redirect + hook
-> `src/middleware.ts`), telemetri 404, dan descriptor `dataLifecycle` DITUNDA** ke
-> PR lanjutan — JANGAN asumsikan file/tabel redirect/`not_found` ada di repo ini
-> (verifikasi `ls src/modules/seo-distribution/domain` — tidak ada `redirect*`/
-> `not-found*`). Guard redirect port (`classifyRedirectTarget`/
-> `assertSafeRedirectTarget`) SENGAJA belum di-port.
+> **STATUS — modul ini SUDAH di-port PENUH ke repo ini (DISCOVERY ADR-0038 +
+> REDIRECT GOVERNANCE ADR-0039).** `seo_distribution` hidup di
+> `src/modules/seo-distribution/`. Discovery: migrasi `sql/057` (schema
+> `awcms_seo_tenant_settings`, FORCE RLS) + `sql/058` (permission config) + `sql/059`
+> (kolom feed/sitemap). Redirect governance: migrasi `sql/060` (3 tabel
+> `awcms_seo_redirects`/`awcms_seo_not_found_observations`/`awcms_seo_redirect_settings`,
+> semua FORCE RLS) + `sql/061` (6 permission `redirect.*`/`not_found.*`). File
+> redirect NYATA ada sekarang: `domain/redirect-*.ts` (incl.
+> `redirect-target-classification.ts` = guard beku, di-rumahkan di domain BUKAN di
+> port `seo_facts`), `application/redirect-*.ts`/`not-found-directory.ts`,
+> `src/lib/seo/redirect-middleware.ts`, route `src/pages/api/v1/seo/redirects/**` +
+> `not-found/**`, dan **satu edit `src/middleware.ts`** (cabang non-`/admin`,
+> FAIL-OPEN). Adaptasi awcms: resolusi tenant host-based-only (path-tenant ditunda),
+> legacy-blog `/news` INERT (tanpa keluarga route `/news`), `locale=null` (tanpa seam
+> i18n).
 
 ## Bentuk modul
 
-- `key: seo_distribution`, `type: domain`, `version: 0.1.0`, `dependencies:
+- `key: seo_distribution`, `type: domain`, `version: 0.2.0`, `dependencies:
 [tenant_admin, identity_access]` (Core-only → DAG asiklik). **CONSUMER/aggregator**,
   bukan provider — tidak ada modul lain yang dibuat bergantung padanya.
 - `capabilities.consumes`: `seo_facts` (providedBy `blog_content`, `optional`) +
   `media_library` (providedBy `media_library`, `optional`). Kedua `optional: true`
   → degrade aman (tak ada fakta/gambar → tak ada halaman/feed).
-- `permissions`: **HANYA `config.read` + `config.update`** (redirect/not_found
-  ditunda). **TIDAK ada `dataLifecycle`/`jobs`/`events`/`navigation`.**
+- `permissions`: `config.{read,update}` (discovery) + `redirect.{read,create,update,delete}`
+  - `not_found.{read,update}` (redirect governance, ADR-0039). `dataLifecycle`:
+    descriptor `seo_distribution.not_found_observations` (analytics_telemetry, generic
+    purge). **TIDAK ada `jobs`/`events`/`navigation`.**
 
 ## Seam capability `seo_facts` (INI titik ekstensi utama)
 

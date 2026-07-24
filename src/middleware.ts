@@ -8,6 +8,10 @@ import {
   bodyTooLargeResponse,
   checkContentLengthCeiling
 } from "./lib/security/request-body-limit";
+import {
+  recordPublicNotFound,
+  resolvePublicRedirectForRequest
+} from "./lib/seo/redirect-middleware";
 
 const PROTECTED_PREFIX = "/admin";
 const API_PREFIX = "/api/";
@@ -59,8 +63,39 @@ export const onRequest = defineMiddleware(async (context, next) => {
     );
   }
 
+  // Public (non-`/admin`) branch: resolve a `seo_distribution` redirect BEFORE
+  // serving, then serve, then best-effort record a 404 observation (ADR-0039).
+  // FAIL-OPEN by construction: `resolvePublicRedirectForRequest` swallows every
+  // fault to `null` (a redirect-subsystem error never becomes a 500 or blocks a
+  // page), and the 404 capture runs AFTER the response is produced and never
+  // throws. awcms has NO i18n/locale seam, so `locale` is `null`. The `/admin`
+  // guard and the API body-ceiling above are untouched.
   if (!context.url.pathname.startsWith(PROTECTED_PREFIX)) {
-    return applyResponseHeaders(await next(), context.locals.correlationId);
+    const redirectResult = await resolvePublicRedirectForRequest(
+      context.request,
+      context.url,
+      null
+    );
+
+    if (redirectResult && "redirect" in redirectResult) {
+      return applyResponseHeaders(
+        redirectResult.redirect,
+        context.locals.correlationId
+      );
+    }
+
+    const notFoundCapture =
+      redirectResult && "capture" in redirectResult
+        ? redirectResult.capture
+        : null;
+
+    const response = await next();
+
+    if (notFoundCapture && response.status === 404) {
+      await recordPublicNotFound(context.request, notFoundCapture);
+    }
+
+    return applyResponseHeaders(response, context.locals.correlationId);
   }
 
   const ssrContext = await resolveSsrContext(context.cookies, new Date());

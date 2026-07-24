@@ -38,3 +38,6 @@ blob-report/
 
 # Claude Code user-local settings (jangan commit)
 .claude/settings.local.json
+
+# graphify skill output (local artifact, never committed)
+graphify-out/

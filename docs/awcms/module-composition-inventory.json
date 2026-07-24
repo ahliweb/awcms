@@ -226,7 +226,7 @@
     {
       "key": "seo_distribution",
       "name": "SEO & Distribution",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "status": "active",
       "type": "domain",
       "dependencies": ["tenant_admin", "identity_access"],
@@ -243,7 +243,7 @@
           "optional": true
         }
       ],
-      "permissionCount": 2,
+      "permissionCount": 8,
       "navigationCount": 0,
       "jobCount": 0,
       "hasHealthCheck": false,
