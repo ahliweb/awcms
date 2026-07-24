@@ -71,16 +71,38 @@ hanya dari env `TENANT_DOMAIN_CLOUDFLARE_*`.
 
 `awcms_resolve_tenant_domain_lookup(p_normalized_hostname text)` — satu-satunya
 jalur baca bootstrap yang disahkan untuk resolusi host→tenant SEBELUM ada tenant
-context (`app.current_tenant_id` GUC). Kenapa aman:
+context (`app.current_tenant_id` GUC). Kenapa aman — **JANGAN** andalkan asumsi
+"owner migrasi superuser → fungsi bypass RLS": itu SALAH di posture hardened
+repo ini. Fungsi `SECURITY DEFINER` jalan dengan hak **owner-nya saat dipanggil**,
+dan sql/019–022 sengaja menjalankan runtime sebagai role NON-superuser
+NOBYPASSRLS; deployment role-separated (dan integration harness, yang men-demote
+owner migrasi ke `NOSUPERUSER NOBYPASSRLS` tepat setelah migrasi) tidak
+menyisakan superuser yang meng-own fungsi ini. Owner non-superuser tunduk penuh
+pada `FORCE RLS` → fungsi akan resolve **0 baris** untuk setiap host. Jadi
+keamanan bootstrap **bukan** dari bypass, melainkan:
 
-- Owner migrasi (`DATABASE_URL`) adalah superuser → bypass RLS unconditional;
-  `FORCE` hanya mencabut exemption owner NON-superuser. Jadi keamanan TIDAK
-  datang dari RLS di level fungsi ini.
-- Pagar sebenarnya: (1) badan fungsi SQL statis, hanya me-return 8 kolom
-  non-sensitif untuk satu `normalized_hostname` terparameterkan +
-  `deleted_at IS NULL` — tidak bisa membaca `verification_token_hash`/
-  `verification_record_value`/`hostname` mentah; (2) `EXECUTE` di-`REVOKE` dari
-  `PUBLIC`, di-`GRANT` hanya ke `awcms_app`. `awcms_app` tetap tidak bisa
+- **Owner role khusus `awcms_domain_bootstrap`** — `NOLOGIN NOSUPERUSER
+NOBYPASSRLS`, dibuat idempoten (pola sama sql/019/022, cluster-scoped). Fungsi
+  di-`ALTER FUNCTION ... OWNER TO awcms_domain_bootstrap` → eksekusi sebagai role
+  ini. NOLOGIN + **tanpa anggota** (khususnya `awcms_app` bukan anggota; reassign
+  owner memakai owner migrasi SUPERUSER, **tanpa** grant membership ke siapa pun)
+  → tak ada yang bisa `SET ROLE` ke situ; satu-satunya kode yang jalan sebagai
+  role ini adalah fungsi ini.
+- **Policy baca ter-scope** `awcms_tenant_domains_bootstrap_read` — permissive
+  `FOR SELECT TO awcms_domain_bootstrap USING (true)`, di-OR dengan (bukan ganti)
+  `tenant_isolation`. RLS mencocokkan role policy lewat membership, jadi policy
+  ini berlaku HANYA saat role adalah/anggota `awcms_domain_bootstrap` — yakni
+  HANYA di dalam fungsi ini. `SELECT` langsung `awcms_app` tetap cuma kena
+  `tenant_isolation` → fail-closed. `FORCE RLS` + policy `tenant_isolation`
+  sql/046 **tidak** disentuh. `awcms_domain_bootstrap` juga butuh `GRANT SELECT`
+  eksplisit di `awcms_tenant_domains` + `awcms_tenants` (privilege tabel terpisah
+  dari policy RLS).
+- Pagar tambahan (bukan sumber utama keamanan, tapi wajib): (1) badan fungsi SQL
+  statis, hanya me-return 8 kolom non-sensitif untuk satu `normalized_hostname`
+  terparameterkan + `deleted_at IS NULL` — **daftar kolom** itu batasnya, tak
+  bisa membaca `verification_token_hash`/`verification_record_value`/`hostname`
+  mentah walau policy mengizinkan SELECT seluruh tabel; (2) `EXECUTE` di-`REVOKE`
+  dari `PUBLIC`, di-`GRANT` hanya ke `awcms_app`. `awcms_app` tetap tidak bisa
   `SELECT` langsung dari tabel tanpa `withTenant`.
 - `SET search_path = public, pg_temp` + `STABLE`.
 - JOIN ke `awcms_tenants` (sudah RLS-free, ADR-0003) di dalam fungsi yang sama
@@ -88,9 +110,12 @@ context (`app.current_tenant_id` GUC). Kenapa aman:
   timing side-channel antara "host tak dikenal" vs "host ada tapi tenant
   non-aktif". **Jangan** memecah ini jadi query kedua bersyarat.
 
-Diverifikasi terhadap Postgres nyata (docker `psql` di dalam container): `SELECT`
-langsung `awcms_tenant_domains` di bawah `awcms_app` dengan GUC fail-closed → 0
-baris; `awcms_resolve_tenant_domain_lookup(...)` → 1 baris.
+Diverifikasi terhadap Postgres nyata (docker `psql`, mereplikasi owner
+ter-demote `NOSUPERUSER NOBYPASSRLS` seperti harness): `SELECT` langsung
+`awcms_tenant_domains` di bawah `awcms_app` dengan GUC fail-closed → 0 baris;
+`awcms_resolve_tenant_domain_lookup(...)` → 1 baris (owner fungsi non-superuser);
+drop policy bootstrap → fungsi balik 0 baris (bukti policy load-bearing);
+`awcms_app` tetap tak bisa baca `verification_token_hash`.
 
 ## Resolver publik (`public-host-tenant-resolver.ts`)
 

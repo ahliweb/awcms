@@ -17,15 +17,15 @@ Turnstile / CSP guarantees are unchanged.
 
 ## What shipped
 
-| Area            | Detail                                                                                                                                                            |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Schema          | `awcms_tenant_domains` (migration **046**) — tenant-scoped, `ENABLE`+`FORCE ROW LEVEL SECURITY`, global case-insensitive hostname uniqueness, one primary/tenant. |
-| Permissions     | migration **047** — `tenant_domain.domains.{read,create,update,delete,verify,set_primary}`.                                                                       |
-| Host lookup     | migration **048** — `awcms_resolve_tenant_domain_lookup(text)` `SECURITY DEFINER`, `EXECUTE` revoked from `PUBLIC`, granted only to `awcms_app`.                  |
-| Management API  | `GET/POST /api/v1/tenant/domains`, `GET/PATCH/DELETE .../{id}`, `POST .../{id}/verify`, `POST .../{id}/set-primary`.                                              |
-| Admin screen    | `/admin/tenant/domains` (SSR read + client-side `fetch` mutations, `tenant_domain.domains.read`-gated).                                                           |
-| Public resolver | `src/lib/tenant/public-host-tenant-resolver.ts` (additive; coexists with ADR-0009).                                                                               |
-| Optional DNS    | `infrastructure/cloudflare-dns-adapter.ts` — env-gated, absent-safe, **not wired into any route**.                                                                |
+| Area            | Detail                                                                                                                                                                                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema          | `awcms_tenant_domains` (migration **046**) — tenant-scoped, `ENABLE`+`FORCE ROW LEVEL SECURITY`, global case-insensitive hostname uniqueness, one primary/tenant.                                                                                                            |
+| Permissions     | migration **047** — `tenant_domain.domains.{read,create,update,delete,verify,set_primary}`.                                                                                                                                                                                  |
+| Host lookup     | migration **048** — `awcms_resolve_tenant_domain_lookup(text)` `SECURITY DEFINER`, owned by a dedicated `NOLOGIN`/`NOSUPERUSER`/`NOBYPASSRLS` `awcms_domain_bootstrap` role with a scoped `FOR SELECT` policy; `EXECUTE` revoked from `PUBLIC`, granted only to `awcms_app`. |
+| Management API  | `GET/POST /api/v1/tenant/domains`, `GET/PATCH/DELETE .../{id}`, `POST .../{id}/verify`, `POST .../{id}/set-primary`.                                                                                                                                                         |
+| Admin screen    | `/admin/tenant/domains` (SSR read + client-side `fetch` mutations, `tenant_domain.domains.read`-gated).                                                                                                                                                                      |
+| Public resolver | `src/lib/tenant/public-host-tenant-resolver.ts` (additive; coexists with ADR-0009).                                                                                                                                                                                          |
+| Optional DNS    | `infrastructure/cloudflare-dns-adapter.ts` — env-gated, absent-safe, **not wired into any route**.                                                                                                                                                                           |
 
 ## Data model (`awcms_tenant_domains`)
 
