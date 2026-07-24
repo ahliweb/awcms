@@ -230,10 +230,20 @@ export async function collectVisitorTelemetry(
       isAuthenticated,
       parsedUserAgent
     });
-    const visitorKeyHash = hashVisitorKey(visitorKey, config.hashSalt);
-    const ipHash = ipAddress ? hashIpAddress(ipAddress, config.hashSalt) : null;
+    // Visitor identifiers are keyed by BOTH the deployment salt AND `tenantId`
+    // (see `visitor-key.ts`) so the same browser/IP/user-agent yields different
+    // hashes across tenants sharing one origin — cross-tenant unlinkability at
+    // the storage layer.
+    const visitorKeyHash = hashVisitorKey(
+      visitorKey,
+      config.hashSalt,
+      tenantId
+    );
+    const ipHash = ipAddress
+      ? hashIpAddress(ipAddress, config.hashSalt, tenantId)
+      : null;
     const userAgentHash = userAgent
-      ? hashUserAgent(userAgent, config.hashSalt)
+      ? hashUserAgent(userAgent, config.hashSalt, tenantId)
       : null;
     const rawIpAddress = config.rawIpEnabled ? ipAddress : null;
     const referrerDomain = extractReferrerDomain(referrerHeader);

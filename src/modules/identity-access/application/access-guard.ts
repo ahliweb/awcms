@@ -211,3 +211,45 @@ export async function authorizeInTransaction(
 
   return { allowed: true, context, grantedPermissionKeys };
 }
+
+/**
+ * Secondary FIELD-level access check, reusing a context already authorized by
+ * `authorizeInTransaction`.
+ *
+ * The primary guard decides whether a caller may reach an endpoint at all; some
+ * endpoints then expose extra DE-ANONYMIZING fields behind a SEPARATE permission
+ * (e.g. `visitor_analytics.raw_detail.read`). Gating those on
+ * `grantedPermissionKeys.has(fieldKey)` alone checks only RBAC membership and
+ * silently ignores the ABAC layer — so a `deny` DSL policy on the field key would
+ * NOT be honored (deny-overrides-allow bypassed for the field). This routes the
+ * field decision through the SAME `evaluateAccess` used for the primary action,
+ * so RBAC grant AND no applicable ABAC deny are both required. Returns a plain
+ * boolean (never a Response): a denied field is omitted from the response, not an
+ * endpoint-level 403.
+ *
+ * Reuses the caller's already-resolved `context`/`grantedPermissionKeys` and the
+ * tenant's active policies (tenant-keyed cache — no extra session/permission
+ * round-trips). It deliberately records NO decision log: this is a projection
+ * refinement of an already-logged allowed decision, not a separate
+ * resource-access decision. `fieldGuard.action` must be a read-only action (this
+ * never runs the high-risk SoD chokepoint).
+ */
+export async function evaluateFieldAccessInTransaction(
+  tx: Bun.SQL,
+  tenantId: string,
+  context: TenantContext,
+  grantedPermissionKeys: ReadonlySet<string>,
+  fieldGuard: AccessRequest,
+  now: Date
+): Promise<boolean> {
+  const policies = await loadActivePolicies(tx, tenantId);
+  const decision = evaluateAccess(
+    context,
+    fieldGuard,
+    grantedPermissionKeys,
+    undefined,
+    { policies, env: { now, ipTrusted: false } }
+  );
+
+  return decision.allowed;
+}

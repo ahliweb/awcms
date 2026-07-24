@@ -21,6 +21,7 @@ import {
 } from "../src/modules/visitor-analytics/domain/analytics-range";
 import { resolveGeoEnrichment } from "../src/modules/visitor-analytics/domain/geo-enrichment";
 import { resolveAnalyticsClientIp } from "../src/modules/visitor-analytics/domain/client-ip";
+import { setLogSink, type LogEntry } from "../src/lib/logging/logger";
 import {
   planVisitorKeyCookie,
   shouldRevokeVisitorKeyCookie
@@ -143,6 +144,34 @@ describe("client-IP trust gate", () => {
         trustCloudflare: false
       })
     ).toBe("9.9.9.9");
+  });
+
+  test("the multi-value anomaly log records ONLY valueCount — never a raw IP fragment (FIX 3)", () => {
+    // Capture the structured log via the logger's own sink extension point so
+    // this asserts on the exact payload, no console/mock plumbing.
+    const captured: LogEntry[] = [];
+    setLogSink((entry) => captured.push(entry));
+    try {
+      const req = new Request("http://x/", {
+        headers: { "x-forwarded-for": "1.1.1.1, 2.2.2.2" }
+      });
+      resolveAnalyticsClientIp(req, "9.9.9.9", {
+        trustProxy: true,
+        trustCloudflare: false
+      });
+    } finally {
+      setLogSink(null);
+    }
+
+    const anomaly = captured.find((e) =>
+      e.message.endsWith("x_forwarded_for_multi_value")
+    );
+    expect(anomaly).toBeDefined();
+    expect(anomaly!.valueCount).toBe(2);
+    // The raw header value (and any fragment of it) must NOT appear anywhere in
+    // the log line — the old `firstValuePreview` leaked an unhashed client IP.
+    expect("firstValuePreview" in anomaly!).toBe(false);
+    expect(JSON.stringify(anomaly)).not.toContain("1.1.1.1");
   });
 });
 

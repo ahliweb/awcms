@@ -13,6 +13,12 @@
  * the least-privilege `awcms_worker` role (sql/022) when
  * `WORKER_DATABASE_URL` is configured.
  *
+ * Audit note (accepted asymmetry, base-consistent): unlike the on-demand
+ * `POST /api/v1/analytics/retention/purge` endpoint (which writes a `critical`
+ * audit event), this SCHEDULED run is not audited to `awcms_audit_events` — its
+ * record of record is the job runner's JSON telemetry (job-telemetry-as-record),
+ * the same posture as the other scheduled retention/rollup jobs in this base.
+ *
  * Retention windows come from the module's env config
  * (VISITOR_ANALYTICS_EVENT_RETENTION_DAYS / _RAW_DETAIL_RETENTION_DAYS /
  * _ROLLUP_RETENTION_DAYS). `--dry-run` reports the tenant count without

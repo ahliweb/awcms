@@ -15,18 +15,28 @@ needs than `reporting`/`logging` are exactly why it is its own module.
   `VISITOR_ANALYTICS_ENABLED=true`. That software switch is never itself the
   lawful-basis/consent decision required by UU PDP — it only enables the
   mechanism.
-- **Identifiers are salted-hashed, never raw.** The anonymous visitor-key
-  cookie, IP address, and user-agent are stored only as `HMAC-SHA256`
-  (`domain/visitor-key.ts`), keyed by `VISITOR_ANALYTICS_HASH_SALT`. A real
-  salt is **required** when the module is enabled (`scripts/validate-env.ts`
-  enforces it) — the salt is what defeats correlation against a precomputed
-  hash table.
-- **Raw detail is an explicit, independent opt-in.** `ip_address` (raw) and
-  `login_identifier_snapshot` are only ever populated when
-  `VISITOR_ANALYTICS_RAW_IP_ENABLED=true` / for authenticated sessions; the
+- **Identifiers are per-tenant salted-hashed, never raw.** The anonymous
+  visitor-key cookie, IP address, and user-agent are stored only as
+  `HMAC-SHA256` (`domain/visitor-key.ts`), keyed by `VISITOR_ANALYTICS_HASH_SALT`
+  **and bound to the tenant id** (a `\0` domain separator folds `tenantId` into
+  the HMAC). Two properties fall out: cross-DEPLOYMENT rainbow-table resistance
+  (the salt), and cross-TENANT unlinkability (the tenant binding) — the same
+  browser/IP/user-agent yields DIFFERENT hashes across tenants sharing one
+  origin, so the raw hash columns of two tenants cannot be correlated at the
+  storage layer. A real salt of **≥ 16 chars** is **required** when the module
+  is enabled (`scripts/validate-env.ts` enforces both non-placeholder and the
+  minimum length).
+- **Raw detail is an explicit, independent opt-in, gated through ABAC.**
+  `ip_address` (raw) and `login_identifier_snapshot` are only ever populated
+  when `VISITOR_ANALYTICS_RAW_IP_ENABLED=true` / for authenticated sessions; the
   public ingest path here never populates either (anonymous-only). Reading raw
-  detail over the API needs the separate `visitor_analytics.raw_detail.read`
-  permission — gated once, server-side, in `domain/analytics-response-shaping.ts`.
+  detail over the API / dashboard needs the separate
+  `visitor_analytics.raw_detail.read` permission, and that field decision is
+  routed through the **ABAC evaluator** (`evaluateFieldAccessInTransaction`),
+  not a bare permission-set membership check — so a `deny` DSL policy on
+  `raw_detail.read` is honored (deny-overrides-allow). Applied uniformly across
+  `GET /sessions`, `GET /events`, and `/admin/analytics`; the actual field
+  omission happens once, server-side, in `domain/analytics-response-shaping.ts`.
 - **Nothing sensitive is ever persisted.** `domain/path-sanitizer.ts` strips
   token/secret query params (fail-safe: an unparseable path drops its whole
   query string) before a path reaches `path_sanitized`; `domain/referrer.ts`
@@ -70,6 +80,16 @@ needed), then records a privacy-preserving page view via
 (never the body). It is fire-and-forget (always `202`) and records **public-area
 page views only** — an anonymous beacon cannot prove an admin/API request, so it
 is not allowed to pollute admin/api analytics.
+
+**Abuse backstop.** Because it is an unauthenticated DB write, the beacon is
+fronted by a **per-IP rate limit** (the shared `checkRateLimit` in-process
+fixed-window limiter, the same one `auth/login.ts` and `setup/initialize.ts`
+use) before any database work — so a client holding a public `tenantCode`
+cannot flood unbounded session/event rows or poison a tenant's aggregates. The
+key is the client IP only (never the tenant), so a `429` reveals nothing about
+tenant existence; a `path` over `MAX_PATH_LENGTH` (2048) is rejected before
+storage. Tunable via `VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_MAX` /
+`_WINDOW_SEC` (defaults 120 req / 60 s per IP).
 
 ## API (authenticated, ABAC-guarded)
 

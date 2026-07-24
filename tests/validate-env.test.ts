@@ -94,7 +94,17 @@ describe("validateEnv", () => {
         VISITOR_ANALYTICS_HASH_SALT: "change-me"
       }).some((p) => p.startsWith("VISITOR_ANALYTICS_HASH_SALT"))
     ).toBe(true);
-    // Enabled with a real salt -> clean.
+    // Enabled with a too-short salt (< 16 chars) -> a problem (FIX 4).
+    expect(
+      validateEnv({
+        ...base,
+        VISITOR_ANALYTICS_ENABLED: "true",
+        VISITOR_ANALYTICS_HASH_SALT: "short-salt"
+      }).some(
+        (p) => p.startsWith("VISITOR_ANALYTICS_HASH_SALT") && p.includes("16")
+      )
+    ).toBe(true);
+    // Enabled with a real, long-enough salt -> clean.
     expect(
       validateEnv({
         ...base,

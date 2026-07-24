@@ -23,6 +23,7 @@ import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { withTenant } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { evaluateFieldAccessInTransaction } from "../../modules/identity-access/application/access-guard";
 import { resolveVisitorAnalyticsConfig } from "../../modules/visitor-analytics/domain/visitor-analytics-config";
 import {
   DEFAULT_ANALYTICS_RANGE,
@@ -64,9 +65,25 @@ const canRealtime = ssr.permissions.has(
 const canSessions = ssr.permissions.has(
   permissionKey("visitor_analytics", "sessions", "read")
 );
-const canRawDetail = ssr.permissions.has(
-  permissionKey("visitor_analytics", "raw_detail", "read")
-);
+
+// Raw-detail (IP/user-agent/login snapshot) visibility is resolved through the
+// ABAC evaluator inside `withTenant` below (see `rawDetailAllowed`), NOT a bare
+// `ssr.permissions.has(...)` membership check — so a `deny` DSL policy on
+// `visitor_analytics.raw_detail.read` is honored (deny-overrides-allow),
+// matching the `/api/v1/analytics/{sessions,events}` endpoints. Defaults false
+// (fail-closed) until that resolution runs.
+const RAW_DETAIL_GUARD = {
+  moduleKey: "visitor_analytics",
+  activityCode: "raw_detail",
+  action: "read" as const
+};
+const subjectContext = {
+  tenantId: ssr.tenantId,
+  tenantUserId: ssr.tenantUserId,
+  identityId: ssr.identityId,
+  roles: ssr.roles
+};
+let canRawDetail = false;
 
 const config = resolveVisitorAnalyticsConfig();
 const geoActive = config.geoEnabled && config.trustCloudflare;
@@ -94,6 +111,20 @@ if (canView) {
     const start = resolveRangeStart(range, now);
 
     const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+      // Resolve raw-detail visibility through ABAC (deny-overrides-allow),
+      // reusing the SSR-resolved subject/permissions — only when sessions are
+      // shown at all (the sole place raw detail renders). Fail-closed otherwise.
+      const rawDetailAllowed = canSessions
+        ? await evaluateFieldAccessInTransaction(
+            tx,
+            ssr.tenantId,
+            subjectContext,
+            ssr.permissions,
+            RAW_DETAIL_GUARD,
+            now
+          )
+        : false;
+
       // Sequential (one tx connection): concurrent queries would leak it.
       const rt = canRealtime
         ? await fetchRealtimeStats(tx, ssr.tenantId, config.onlineWindowSeconds)
@@ -108,7 +139,7 @@ if (canView) {
       const sec = await fetchSecurityView(tx, ssr.tenantId, range, start);
       const sess = canSessions
         ? (await listVisitorSessions(tx, ssr.tenantId)).rows.map((row) =>
-            shapeVisitorSession(row, canRawDetail)
+            shapeVisitorSession(row, rawDetailAllowed)
           )
         : [];
 
@@ -120,7 +151,8 @@ if (canView) {
         topDevices,
         topCountries,
         sec,
-        sess
+        sess,
+        rawDetailAllowed
       };
     });
 
@@ -137,6 +169,7 @@ if (canView) {
       countries = result.topCountries;
       security = result.sec;
       sessions = result.sess;
+      canRawDetail = result.rawDetailAllowed;
     }
   } catch {
     loadError = true;

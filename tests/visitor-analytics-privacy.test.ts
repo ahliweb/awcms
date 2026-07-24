@@ -21,23 +21,49 @@ import {
   type VisitorSessionRow
 } from "../src/modules/visitor-analytics/domain/analytics-response-shaping";
 
-describe("visitor-key hashing (salted HMAC-SHA256)", () => {
-  test("is deterministic for the same value + salt", () => {
-    expect(hashVisitorKey("visitor-1", "salt")).toBe(
-      hashVisitorKey("visitor-1", "salt")
+const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+describe("visitor-key hashing (per-tenant salted HMAC-SHA256)", () => {
+  test("is deterministic for the same value + salt + tenant", () => {
+    expect(hashVisitorKey("visitor-1", "salt", TENANT_A)).toBe(
+      hashVisitorKey("visitor-1", "salt", TENANT_A)
     );
   });
 
   test("is salt-sensitive: a different salt yields a different hash", () => {
-    expect(hashIpAddress("203.0.113.5", "salt-a")).not.toBe(
-      hashIpAddress("203.0.113.5", "salt-b")
+    expect(hashIpAddress("203.0.113.5", "salt-a", TENANT_A)).not.toBe(
+      hashIpAddress("203.0.113.5", "salt-b", TENANT_A)
+    );
+  });
+
+  test("is tenant-sensitive: the same value + salt under a DIFFERENT tenant yields a DIFFERENT hash (cross-tenant unlinkability)", () => {
+    // The whole point of FIX 2: the same browser/IP/user-agent must NOT hash to
+    // the same value across tenants sharing one origin — otherwise the raw hash
+    // columns would let two tenants' data be correlated at the storage layer.
+    expect(hashIpAddress("203.0.113.5", "salt", TENANT_A)).not.toBe(
+      hashIpAddress("203.0.113.5", "salt", TENANT_B)
+    );
+    expect(hashVisitorKey("visitor-1", "salt", TENANT_A)).not.toBe(
+      hashVisitorKey("visitor-1", "salt", TENANT_B)
+    );
+    expect(hashUserAgent("Mozilla/5.0", "salt", TENANT_A)).not.toBe(
+      hashUserAgent("Mozilla/5.0", "salt", TENANT_B)
+    );
+  });
+
+  test("the tenant/value boundary is unambiguous (domain separator)", () => {
+    // Without the `\0` domain separator, tenant "ab" + value "c" would collide
+    // with tenant "a" + value "bc". They must not.
+    expect(hashIpAddress("c", "salt", "ab")).not.toBe(
+      hashIpAddress("bc", "salt", "a")
     );
   });
 
   test("is keyed HMAC, not the plain sha256 of the value", async () => {
     const value = "Mozilla/5.0";
     const salt = "deployment-salt";
-    const keyed = hashUserAgent(value, salt);
+    const keyed = hashUserAgent(value, salt, TENANT_A);
     // A plain unsalted SHA-256 of the value must NOT equal the keyed hash —
     // the salt is what defeats a precomputed rainbow table.
     const plain = `sha256:${new Bun.CryptoHasher("sha256").update(value).digest("hex")}`;
@@ -46,11 +72,15 @@ describe("visitor-key hashing (salted HMAC-SHA256)", () => {
   });
 
   test("all three hashers share the same HMAC construction", () => {
-    // Same salt + same input across the three helpers -> same digest (they are
-    // the same keyed function, only named per call site for readability).
+    // Same salt + same tenant + same input across the three helpers -> same
+    // digest (they are the same keyed function, only named per call site).
     const salt = "s";
-    expect(hashVisitorKey("x", salt)).toBe(hashIpAddress("x", salt));
-    expect(hashIpAddress("x", salt)).toBe(hashUserAgent("x", salt));
+    expect(hashVisitorKey("x", salt, TENANT_A)).toBe(
+      hashIpAddress("x", salt, TENANT_A)
+    );
+    expect(hashIpAddress("x", salt, TENANT_A)).toBe(
+      hashUserAgent("x", salt, TENANT_A)
+    );
   });
 });
 

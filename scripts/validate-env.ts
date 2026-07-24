@@ -250,6 +250,21 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  // Per-IP rate-limit backstop on the PUBLIC ingest beacon
+  // (`POST /api/v1/analytics/collect`). Optional; the endpoint applies safe
+  // defaults (120 req / 60 s per IP) when unset or invalid.
+  {
+    name: "VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
   {
     name: "VISITOR_ANALYTICS_HASH_SALT",
     required: false,
@@ -260,6 +275,14 @@ const RULES: readonly Rule[] = [
 
 /** Nilai placeholder yang aman di dev tapi dilarang di produksi. */
 const PLACEHOLDER_SECRETS = new Set(["change-me", "changeme", "secret", ""]);
+
+/**
+ * Panjang minimum `VISITOR_ANALYTICS_HASH_SALT` saat modul aktif. Salt inilah
+ * kunci HMAC yang menahan korelasi hash identifier pengunjung terhadap tabel
+ * pra-komputasi; salt 1-2 karakter praktis tak memberi perlindungan itu, jadi
+ * ditegakkan fail-closed di semua tier saat modul enabled.
+ */
+const VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH = 16;
 
 function parseEnvFile(source: string): EnvBag {
   const bag: EnvBag = {};
@@ -388,6 +411,10 @@ export function validateEnv(env: EnvBag): string[] {
     if (salt === "" || PLACEHOLDER_SECRETS.has(salt)) {
       problems.push(
         "VISITOR_ANALYTICS_HASH_SALT wajib berisi salt nyata saat VISITOR_ANALYTICS_ENABLED=true (hash identifier pengunjung tidak boleh memakai salt kosong)."
+      );
+    } else if (salt.length < VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH) {
+      problems.push(
+        `VISITOR_ANALYTICS_HASH_SALT harus minimal ${VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH} karakter saat VISITOR_ANALYTICS_ENABLED=true (salt terlalu pendek mudah ditebak/brute-force).`
       );
     }
   }

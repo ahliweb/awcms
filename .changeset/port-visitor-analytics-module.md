@@ -12,3 +12,10 @@ Port modul `visitor_analytics` dari awcms-micro (epic #617-#624) sebagai modul s
 - **Dashboard** `/admin/analytics` (SSR-render).
 
 Adaptasi port terdokumentasi: kopling `data_lifecycle`/`LegalHoldGuardPort` DI-DROP (modul belum ada di base — purge tanpa gerbang legal-hold), dan wiring preset `news_portal_full_online_r2` DEFERRED (modul `news_portal` tidak disentuh).
+
+**Security hardening (DoD + security review atas port ini):**
+
+- **Rate-limit backstop pada beacon publik.** `POST /api/v1/analytics/collect` (unauth DB write) kini digerbangi rate limit per-IP (`checkRateLimit` yang sama dengan login/setup) SEBELUM tulis DB — mencegah flooding baris/pencemaran agregat oleh pemegang `tenantCode` publik. Kunci berbasis IP saja (tak membocorkan eksistensi tenant); `path` dibatasi panjang sebelum disimpan. Tunable `VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_MAX`/`_WINDOW_SEC` (default 120/60s).
+- **Salt HMAC per-tenant (privacy-by-design).** `visitor_key_hash`/`ip_hash`/`user_agent_hash` kini di-key dengan salt deployment DAN `tenantId` (domain-separator `\0`), sehingga browser/IP/user-agent yang sama menghasilkan hash BERBEDA lintas tenant satu origin — menutup korelasi lintas-tenant di lapisan penyimpanan. Diterapkan mumpung belum ada data. `VISITOR_ANALYTICS_HASH_SALT` kini wajib ≥ 16 karakter saat modul aktif.
+- **raw_detail lewat ABAC, bukan hanya keanggotaan RBAC.** Field de-anonimisasi (`ipHash`/`ipAddress`/`userAgentHash`/`loginIdentifierSnapshot`) di `GET /sessions`, `GET /events`, dan `/admin/analytics` kini diputuskan lewat evaluator ABAC (`evaluateFieldAccessInTransaction`) sehingga kebijakan DSL `deny` atas `raw_detail.read` dihormati (deny-overrides-allow).
+- Log fragmen IP mentah pada header forwarded multi-nilai dihapus (`client-ip.ts` hanya mencatat `valueCount`, bukan nilai).

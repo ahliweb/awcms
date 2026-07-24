@@ -44,12 +44,13 @@ function extractSingleTrustedHeaderValue(
   }
 
   if (parts.length > 1) {
+    // Log ONLY anomaly metadata — never the header value itself. A forwarded
+    // header's first entry is a raw client IP; emitting even a fragment of it
+    // would write an unhashed IP to logs, bypassing the `rawIpEnabled` opt-in
+    // that the storage path honors. `valueCount` is enough to spot the anomaly.
     log("warning", warningEvent, {
       moduleKey: "visitor_analytics",
-      valueCount: parts.length,
-      // Not a secret, but capped defensively — an anomaly report, not a
-      // place to let an attacker-sized header balloon log storage.
-      firstValuePreview: parts[0]?.slice(0, 100)
+      valueCount: parts.length
     });
   }
 
