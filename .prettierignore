@@ -5,3 +5,4 @@ bun.lock
 CHANGELOG.md
 .changeset/*.md
 .claude/worktrees/
+graphify-out/
