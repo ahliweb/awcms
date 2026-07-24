@@ -73,6 +73,20 @@ function anyComposeFileExists() {
 
 /** @typedef {import("./lib/docs-checks.mjs").Problem} Problem */
 
+/**
+ * Berkas markdown yang di-GENERATE, di mana pemeriksaan doc di berkas ini tidak
+ * berlaku dan hanya menghasilkan false positive.
+ *
+ * `agent-memory.md` adalah cermin verbatim memory agent (`bun run
+ * memory:docs:sync`): indeks `MEMORY.md`-nya menautkan berkas memory yang hidup
+ * di luar repo (terbaca sebagai tautan internal rusak), dan prosanya penuh
+ * rujukan `sql/NNN`/`[[wikilink]]`/issue historis. Memperbaikinya agar "lolos"
+ * berarti mengubah isi memory — merusak fidelitas round-trip
+ * `memory:docs:restore`.
+ * @type {Set<string>}
+ */
+const GENERATED_EXEMPT = new Set(["docs/awcms/agent-memory.md"]);
+
 /** @returns {string[]} */
 function listMarkdown() {
   const out = execFileSync("git", ["ls-files", "*.md"], {
@@ -85,6 +99,7 @@ function listMarkdown() {
   return out
     .split("\n")
     .filter(Boolean)
+    .filter((file) => !GENERATED_EXEMPT.has(file))
     .filter((file) => existsSync(join(ROOT, file)));
 }
 
