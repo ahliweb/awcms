@@ -46,7 +46,16 @@ import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
 import { hashPassword } from "../src/lib/auth/password";
-import { evaluateAccess } from "../src/modules/identity-access/domain/access-control";
+import { listModules } from "../src/modules";
+import {
+  evaluateAccess,
+  isHighRiskAction
+} from "../src/modules/identity-access/domain/access-control";
+import {
+  formatLifecycleRegistryIssue,
+  validateLifecycleRegistry
+} from "../src/modules/data-lifecycle/domain/lifecycle-registry";
+import { DATA_LIFECYCLE_PERMISSIONS } from "../src/modules/data-lifecycle/domain/data-lifecycle-permissions";
 import { evaluateLoginAttempt } from "../src/modules/identity-access/domain/login-policy";
 import { checkRateLimit } from "../src/lib/security/rate-limit";
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
@@ -1031,7 +1040,17 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // log-like, not an audited high-risk action from the scheduled path).
   awcms_visit_events: ["SELECT", "DELETE"],
   awcms_visitor_sessions: ["SELECT", "UPDATE", "DELETE"],
-  awcms_visitor_daily_rollups: ["SELECT", "INSERT", "UPDATE", "DELETE"]
+  awcms_visitor_daily_rollups: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  // data_lifecycle — data-lifecycle:archive-purge (sql/055, ADR-0037). Legal
+  // holds are SELECT-ONLY for the worker: it reads holds to decide whether to
+  // skip a descriptor's purge, but never creates/releases them (that stays an
+  // admin/API action on awcms_app). Cursors + manifests are SELECT/INSERT/
+  // UPDATE (bounded pause/resume state + archive evidence); runs are
+  // SELECT/INSERT/DELETE (the generic engine purges its own aged run history).
+  awcms_data_lifecycle_legal_holds: ["SELECT"],
+  awcms_data_lifecycle_cursors: ["SELECT", "INSERT", "UPDATE"],
+  awcms_data_lifecycle_archive_manifests: ["SELECT", "INSERT", "UPDATE"],
+  awcms_data_lifecycle_runs: ["SELECT", "INSERT", "DELETE"]
 };
 
 /**
@@ -1267,6 +1286,89 @@ export function checkAbacDefaultDeny(): SecurityCheckResult {
     severity,
     status: "fail",
     evidence: `evaluateAccess() with an empty granted-permission set unexpectedly allowed access: ${JSON.stringify(decision)}.`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Data lifecycle (ADR-0037, ported from awcms-micro Issue #745)
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure code-registry check (no DB, no I/O) — same shape as `checkAbacDefaultDeny`
+ * above. `bun run data-lifecycle:registry:check` already gates this in CI (`bun
+ * run check`); this duplicates the SAME `validateLifecycleRegistry` call as a
+ * `security:readiness`/go-live signal too, so a broken high-volume table
+ * descriptor (wrong owner, missing legal-hold precedence, unbounded batch limit,
+ * etc.) is also visible from the go-live checklist, not only from CI.
+ */
+export function checkDataLifecycleRegistryValid(): SecurityCheckResult {
+  const name = "data_lifecycle high-volume table registry is valid";
+  const severity: CheckSeverity = "critical";
+
+  const result = validateLifecycleRegistry(listModules());
+
+  if (result.valid) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${result.descriptors.length} registered high-volume table descriptor(s) all pass validateLifecycleRegistry (owner, scope, cursor, bounds, indexes, legal-hold, archive, purge strategy).`
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "fail",
+    evidence: `${result.issues.length} registry issue(s): ${result.issues.map(formatLifecycleRegistryIssue).join("; ")}.`
+  };
+}
+
+/**
+ * Guards the "default-deny release" invariant (ADR-0037 critical requirement)
+ * structurally: every `DATA_LIFECYCLE_PERMISSIONS` value must stay UNIQUE (in
+ * particular `legal_hold.create` and `legal_hold.release` must never collapse
+ * into one `legal_hold.manage`-style permission a future refactor might be
+ * tempted to introduce — a role granted create must not implicitly also be able
+ * to release), and `release` must stay classified as a high-risk action. Pure
+ * code check, no DB. Iterates `Object.values` (plain `string[]`) rather than
+ * comparing two specific literal-typed constants directly, so this stays a
+ * genuine RUNTIME safety net — comparing two same-file literal types directly
+ * would be flagged by `tsc` as a statically-impossible comparison and defeat the
+ * point of a regression guard.
+ */
+export function checkDataLifecycleLegalHoldReleaseSeparate(): SecurityCheckResult {
+  const name =
+    "data_lifecycle legal hold release is a separate, high-risk permission";
+  const severity: CheckSeverity = "critical";
+
+  const values: string[] = Object.values(DATA_LIFECYCLE_PERMISSIONS);
+  const uniqueValues = new Set(values);
+
+  if (uniqueValues.size !== values.length) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `DATA_LIFECYCLE_PERMISSIONS has duplicate permission key(s) — expected ${values.length} unique values, found ${uniqueValues.size}. legal_hold.create must never resolve to the same key as legal_hold.release.`
+    };
+  }
+
+  if (!isHighRiskAction("release")) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence:
+        '"release" is no longer classified in HIGH_RISK_ACTIONS (access-control.ts) — releasing a legal hold removes a data-protection safeguard and must stay high-risk.'
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence: `All ${values.length} DATA_LIFECYCLE_PERMISSIONS values are unique (legal_hold.create ("${DATA_LIFECYCLE_PERMISSIONS.legalHoldCreate}") and legal_hold.release ("${DATA_LIFECYCLE_PERMISSIONS.legalHoldRelease}") included), and "release" is classified as a high-risk action.`
   };
 }
 
@@ -1810,6 +1912,8 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkRuntimeRoleGrants(),
     await checkWorkerSetupRoleGrants(),
     checkAbacDefaultDeny(),
+    checkDataLifecycleRegistryValid(),
+    checkDataLifecycleLegalHoldReleaseSeparate(),
     await checkAuditLogTableReachable(),
     checkEnvConfigValid(),
     checkSyncHmacSecretNotDefault(),

@@ -42,6 +42,7 @@ import {
   resolveVisitorAnalyticsConfig,
   type VisitorAnalyticsConfig
 } from "../src/modules/visitor-analytics/domain/visitor-analytics-config";
+import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 
 export type VisitorAnalyticsPurgeResult = {
   tenantsChecked: number;
@@ -79,7 +80,13 @@ export async function runVisitorAnalyticsPurge(
     }
 
     const result = await withTenant(sql, tenant.id, (tx) =>
-      purgeVisitorAnalyticsData(tx, tenant.id, config, now)
+      purgeVisitorAnalyticsData(
+        tx,
+        tenant.id,
+        config,
+        now,
+        legalHoldGuardPortAdapter
+      )
     );
 
     if (result instanceof Response) {

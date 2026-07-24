@@ -1,5 +1,7 @@
 import { withTenant } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "./audit-log";
+import { LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY } from "../module";
+import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
 
 /**
  * Retention/purge for `awcms_audit_events` (Issue #146). Ported from
@@ -22,21 +24,23 @@ import { recordAuditEvent } from "./audit-log";
  * long-lived tenant. Overridable per run via `AUDIT_LOG_RETENTION_DAYS`
  * (doc 18) or `--retention-days=<n>`.
  *
- * ## Differences from mini's version (deliberate, not oversights)
+ * ## Legal hold enforcement (ADR-0037)
  *
- * - **No `legalHoldGuard` parameter.** Mini takes a `LegalHoldGuardPort` and
- *   skips a batch when `logging.audit_events` is under an active legal hold.
- *   That port only exists there because mini HAS a `data_lifecycle` module
- *   with a legal-hold registry; this base has neither (no `data-lifecycle`
- *   under `src/modules/`, no `_shared/ports/legal-hold-guard-port.ts`).
- *   Porting the parameter here would mean inventing a guard with nothing
- *   behind it — a fake gate that always answers "not held", which is more
- *   dangerous than an honest absence. When a legal-hold registry lands in
- *   this base, this function is the enforcement point that must consult it,
- *   and the parameter should be REQUIRED (not optional) so no call site can
- *   silently skip the check — the shape mini already uses.
- * - **No `LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY`.** Same reason: that constant
- *   is a `data_lifecycle` descriptor key.
+ * `logging.audit_events` is this module's registered "delegated" adopter
+ * (`src/modules/logging/module.ts`'s `dataLifecycle` descriptor,
+ * `executionMode: "delegated"`) — the `data_lifecycle` module's own engine
+ * NEVER mutates this table, it only reports a dry-run snapshot, so THIS function
+ * is the only real enforcement point for "an active legal hold on
+ * `logging.audit_events` overrides ordinary retention and cannot be silently
+ * bypassed". Before deleting, this asks the caller-supplied `legalHoldGuard`
+ * (a `LegalHoldGuardPort`, see `_shared/ports/legal-hold-guard-port.ts`) whether
+ * this exact descriptor key is held — if so, the whole batch is skipped
+ * (`purgedCount: 0`) rather than deleting anything. The parameter is REQUIRED
+ * (not optional/defaulted) so no call site can silently skip the check. Not
+ * imported directly from `data_lifecycle`'s `application`/`domain` code — that
+ * would create a forbidden circular cross-module import (ADR-0011); the port is
+ * the documented way around it, wired at the composition root
+ * (`scripts/audit-log-purge.ts`).
  *
  * ## Scope: this purges `awcms_audit_events` ONLY
  *
@@ -109,6 +113,7 @@ export function resolveAuditRetentionCutoff(
 export async function purgeExpiredAuditEvents(
   sql: Bun.SQL,
   tenantId: string,
+  legalHoldGuard: LegalHoldGuardPort,
   options: PurgeAuditEventsOptions = {}
 ): Promise<PurgeAuditEventsResult> {
   const retentionDays =
@@ -121,6 +126,20 @@ export async function purgeExpiredAuditEvents(
     sql,
     tenantId,
     async (tx) => {
+      // Legal hold enforcement (ADR-0037): if `logging.audit_events` is under an
+      // active legal hold for this tenant, skip the whole batch rather than
+      // deleting anything — a hold overrides ordinary retention and cannot be
+      // silently bypassed. Checked here, inside the tenant transaction, before
+      // any DELETE.
+      const held = await legalHoldGuard.isDescriptorHeld(
+        tx,
+        tenantId,
+        LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY
+      );
+      if (held) {
+        return 0;
+      }
+
       // The inner SELECT is bounded and ordered oldest-first so repeated
       // passes make monotonic progress; `tenant_id` stays in the predicate
       // even though FORCE RLS (sql/017) already scopes the table — belt and

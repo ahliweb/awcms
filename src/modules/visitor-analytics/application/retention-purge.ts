@@ -4,12 +4,20 @@
  * (on-demand) and `bun run analytics:purge` (scheduled worker, via
  * `purgeVisitorAnalyticsForAllTenants`).
  *
- * PORT NOTE: awcms-micro guarded step 1's DELETE behind a `LegalHoldGuardPort`
- * from its `data_lifecycle` module. That module is NOT ported to this base
- * (`ls src/modules` has no `data-lifecycle`, and `_shared/ports/
- * legal-hold-guard-port.ts` does not exist here), so the legal-hold gate is
- * DROPPED and step 1 is an unconditional DELETE. If/when `data_lifecycle` is
- * ported, re-introduce the guard here exactly as awcms-micro does.
+ * Legal hold enforcement (ADR-0037): step 1 (`awcms_visit_events`) is this
+ * module's registered "delegated" adopter for `visitor_analytics.visit_events`
+ * (`src/modules/visitor-analytics/module.ts`'s `dataLifecycle` descriptor) — the
+ * `data_lifecycle` module's own engine never mutates this table, only reports a
+ * dry-run snapshot, so THIS function is the real enforcement point. Before step
+ * 1's DELETE, this asks the caller-supplied `legalHoldGuard` (a
+ * `LegalHoldGuardPort`, see `_shared/ports/legal-hold-guard-port.ts`) and skips
+ * ONLY that step if `visitor_analytics.visit_events` is held — steps 2-4 (session
+ * raw-detail clearing, session deletion, rollup deletion) are not covered by any
+ * registered descriptor today and are unaffected. Not imported directly from
+ * `data_lifecycle`'s `application`/`domain` code — that would create a forbidden
+ * circular cross-module import (ADR-0011); the port is the documented way around
+ * it, wired at the composition roots (the retention-purge route and
+ * `scripts/visitor-analytics-purge.ts`).
  *
  * Four independent cutoffs, each from the module's config
  * (`VisitorAnalyticsConfig`):
@@ -29,6 +37,8 @@
  *      deleted.
  */
 import type { VisitorAnalyticsConfig } from "../domain/visitor-analytics-config";
+import { VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY } from "../module";
+import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
 
 export type RetentionPurgeResult = {
   eventsDeleted: number;
@@ -45,7 +55,8 @@ export async function purgeVisitorAnalyticsData(
   tx: Bun.SQL,
   tenantId: string,
   config: VisitorAnalyticsConfig,
-  now: Date
+  now: Date,
+  legalHoldGuard: LegalHoldGuardPort
 ): Promise<RetentionPurgeResult> {
   const eventCutoff = daysAgo(now, config.eventRetentionDays);
   const rawDetailCutoff = daysAgo(now, config.rawDetailRetentionDays);
@@ -53,11 +64,19 @@ export async function purgeVisitorAnalyticsData(
     .toISOString()
     .slice(0, 10);
 
-  const deletedEvents = await tx`
-    DELETE FROM awcms_visit_events
-    WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
-    RETURNING id
-  `;
+  const visitEventsHeld = await legalHoldGuard.isDescriptorHeld(
+    tx,
+    tenantId,
+    VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY
+  );
+
+  const deletedEvents = visitEventsHeld
+    ? []
+    : await tx`
+        DELETE FROM awcms_visit_events
+        WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
+        RETURNING id
+      `;
 
   const clearedSessions = await tx`
     UPDATE awcms_visitor_sessions

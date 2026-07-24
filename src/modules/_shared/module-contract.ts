@@ -152,6 +152,18 @@ export type ModuleDescriptor = {
    */
   reportingProjections?: ProjectionDescriptor[];
   /**
+   * High-volume table lifecycle descriptors this module owns (ported from
+   * awcms-micro Issue #745, ADR-0037) — see `HighVolumeTableDescriptor`'s own
+   * doc comment below. Same "module declares its own array, a central engine
+   * reads `listModules()`" shape the rest of this contract uses: the
+   * `data_lifecycle` module's `domain/lifecycle-registry.ts` aggregates every
+   * module's array and validates it (`bun run data-lifecycle:registry:check`),
+   * and its bounded archive/purge engine operates ONLY on the metadata the
+   * OWNING module declared here — it never reaches into another module's schema
+   * (ADR-0013 §6 "no shared-table write").
+   */
+  dataLifecycle?: HighVolumeTableDescriptor[];
+  /**
    * Segregation-of-duties conflict rules this module owns (Issue #181,
    * epic #177 Wave 2 authorization) — see `SoDRuleDescriptor`'s own doc
    * comment below. A module contributes ONE of these per GENERIC
@@ -313,6 +325,132 @@ export type SoDRuleDescriptor = {
 };
 
 /**
+ * High-volume table lifecycle descriptor family (ported from awcms-micro
+ * Issue #745, ADR-0037). A module contributes ONE `HighVolumeTableDescriptor`
+ * per high-volume table it owns, in its own `module.ts`'s `dataLifecycle`
+ * array — trusted, code-only metadata (never tenant/request-controlled). The
+ * `data_lifecycle` module's engine reads `listModules()`, validates the whole
+ * registry (`data-lifecycle/domain/lifecycle-registry.ts`), plans dry-runs,
+ * and — for `"generic"` descriptors only — performs bounded archive/purge on
+ * the owning module's behalf using ONLY the column names/limits declared here.
+ * A `"delegated"` descriptor keeps its OWN existing purge mechanism as the
+ * sole mutator; the engine only reads it for a dry-run backlog snapshot.
+ */
+export type LifecycleTableScope = "tenant" | "global";
+
+/** Broad retention rationale bucket — used for readiness/compliance-mapping grouping, not itself a legal category (never asserts one universal legal retention period). */
+export type LifecycleRetentionClass =
+  | "audit_security"
+  | "analytics_telemetry"
+  | "operational_queue"
+  | "financial_tax"
+  | "communication_log"
+  | "system_event";
+
+/**
+ * `"delegated"` — the owning module already has its own hand-rolled
+ * purge/retention function and/or scheduled job (e.g.
+ * `purgeExpiredAuditEvents`); `data_lifecycle`'s engine may read this table for
+ * dry-run counts (read-only, safe) but NEVER mutates it — real archive/purge
+ * stays owned by the existing mechanism. `"generic"` — the owning module has
+ * NO existing purge mechanism and explicitly opts the table into
+ * `data_lifecycle`'s generic bounded archive/purge execution (table name,
+ * tenant column, cursor column, batch limit — all declared right here, by the
+ * owner, so this is never an unsanctioned cross-module schema access).
+ */
+export type LifecycleExecutionMode = "delegated" | "generic";
+
+export type LifecycleArchivePortKind =
+  "local_offline" | "external_object_storage" | "none";
+
+export type LifecycleArchiveFormat = "jsonl" | "csv";
+
+export type LifecycleDeletionMode =
+  "hard_delete" | "anonymize" | "status_transition_then_purge";
+
+export type LifecyclePartitionPolicy = {
+  eligible: boolean;
+  granularity?: "daily" | "monthly" | "yearly";
+  /** Required either way — "not eligible" needs as much of a stated reason as "eligible". */
+  rationale: string;
+};
+
+export type LifecycleArchivePolicy = {
+  archivable: boolean;
+  format?: LifecycleArchiveFormat;
+  port?: LifecycleArchivePortKind;
+  rationale: string;
+};
+
+export type LifecycleDeletionPolicy = {
+  mode: LifecycleDeletionMode;
+  rationale: string;
+};
+
+export type LifecycleLegalHoldPolicy = {
+  /**
+   * DOCUMENTATION/GUIDANCE ONLY — whether this class of data plausibly warrants
+   * a legal hold at all, for an operator deciding whether to bother creating
+   * one. Deliberately NOT consulted by the runtime engine
+   * (`data-lifecycle/domain/legal-hold.ts`'s `evaluateLegalHoldForDescriptor`)
+   * to decide whether an ACTUAL hold record applies — a hold record (a human,
+   * permission-gated, audited action) targeting this descriptor's `key`, or a
+   * tenant-wide hold (`descriptorKey: null`), always applies regardless of what
+   * this flag says. Letting `applicable: false` suppress enforcement would let
+   * an owning module silently defeat legal hold coverage for its own table by
+   * declaring it "not applicable" — exactly the bypass Issue #745 forbids
+   * ("cannot be silently bypassed by tenant policy").
+   */
+  applicable: boolean;
+  /**
+   * A literal, not a free-choice enum value, when `applicable` is `true` —
+   * "legal hold overrides ordinary retention/purge" (Issue #745 critical
+   * requirement) can never be declared away per-descriptor by an owning module
+   * picking a different precedence value. When `applicable` is `false`,
+   * precedence is moot (`"not_applicable"`).
+   */
+  precedence: "overrides_retention" | "not_applicable";
+};
+
+export type LifecycleIndexRequirement = {
+  columns: readonly string[];
+  purpose: string;
+};
+
+/** Documents an EXISTING hand-rolled purge mechanism this descriptor adopts rather than duplicates — required when `executionMode: "delegated"`. */
+export type LifecycleExistingAdopter = {
+  jobCommand?: string;
+  purgeFunctionRef: string;
+  description: string;
+};
+
+export type HighVolumeTableDescriptor = {
+  /** Stable, unique across the whole registry, e.g. `"logging.audit_events"` (`<ownerModuleKey>.<table_shortname>`). */
+  key: string;
+  /** Must start with `awcms_` and be snake_case. */
+  tableName: string;
+  /** Must equal the declaring module's own `key` — validated by the registry gate, not by the type system (see `data-lifecycle/domain/lifecycle-registry.ts`). */
+  ownerModuleKey: string;
+  scope: LifecycleTableScope;
+  cursorColumn: string;
+  /** Defaults to `"tenant_id"` when `scope === "tenant"`. */
+  tenantColumn?: string;
+  retentionClass: LifecycleRetentionClass;
+  retentionMinDays: number;
+  retentionMaxDays: number;
+  defaultRetentionDays: number;
+  partition: LifecyclePartitionPolicy;
+  archive: LifecycleArchivePolicy;
+  deletion: LifecycleDeletionPolicy;
+  legalHold: LifecycleLegalHoldPolicy;
+  requiredIndexes: readonly LifecycleIndexRequirement[];
+  batchLimit: number;
+  backupRestoreNotes: string;
+  executionMode: LifecycleExecutionMode;
+  existingAdopter?: LifecycleExistingAdopter;
+};
+
+/**
  * SemVer of this file's own exported type shape — independent of
  * `package.json` (release version) and OpenAPI/AsyncAPI `info.version`.
  * MAJOR: a field removed/renamed or an optional field becomes required.
@@ -341,8 +479,16 @@ export type SoDRuleDescriptor = {
  * (`src/modules/application-registry.ts`, migration namespace 900-999,
  * `extension:check`) is deleted; the base is a template used directly. No
  * `ModuleDescriptor` field changed — every `module.ts` stays valid unchanged.
+ *
+ * `2.1.0` (ADR-0037, ported from awcms-micro Issue #745) — added the optional
+ * `ModuleDescriptor.dataLifecycle` field plus the `HighVolumeTableDescriptor`
+ * family of exported types (`Lifecycle{TableScope,RetentionClass,ExecutionMode,
+ * ArchivePortKind,ArchiveFormat,DeletionMode}`, `Lifecycle{Partition,Archive,
+ * Deletion,LegalHold}Policy`, `LifecycleIndexRequirement`,
+ * `LifecycleExistingAdopter`) — MINOR: purely additive, every base `module.ts`
+ * that omits `dataLifecycle` stays valid unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "2.0.0";
+export const MODULE_CONTRACT_VERSION = "2.1.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

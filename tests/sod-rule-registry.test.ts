@@ -39,9 +39,17 @@ function moduleOwning(rules: SoDRuleDescriptor[]): ModuleDescriptor {
 }
 
 describe("validateSoDRuleRegistry — the CI gate", () => {
-  test("the BASE registry declares NO SoD rules (base ships none — issue #181 out-of-scope)", () => {
+  test("the BASE registry ships ONLY the data_lifecycle System-Foundation governance rule (no domain business rules — issue #181 out-of-scope)", () => {
+    // ADR-0037 admits exactly one SoD rule to the base: a System-Foundation
+    // GOVERNANCE maker/checker over `data_lifecycle`'s OWN legal-hold
+    // create/release permissions — NOT a domain business rule (finance/
+    // procurement/payroll/inventory), which remain out-of-scope in the base and
+    // live only in the example-domain fixture.
     const baseRules = collectSoDRuleDescriptors(BASE);
-    expect(baseRules).toHaveLength(0);
+    expect(baseRules.map((r) => r.ruleKey)).toEqual([
+      "data_lifecycle.legal_hold_maker_checker"
+    ]);
+    expect(baseRules[0]!.ownerModuleKey).toBe("data_lifecycle");
     expect(validateSoDRuleRegistry(BASE).valid).toBe(true);
   });
 
@@ -50,10 +58,16 @@ describe("validateSoDRuleRegistry — the CI gate", () => {
     expect(result.valid).toBe(true);
     // At least the five-plus illustrative example rules the issue requires.
     expect(result.rules.length).toBeGreaterThanOrEqual(5);
-    // Every rule is owned by the example domain module (never a base module).
-    for (const rule of result.rules) {
-      expect(rule.ownerModuleKey).toBe("example_crm");
-    }
+    // Every rule is owned either by the example domain module (illustrative
+    // business rules) or by the base `data_lifecycle` System-Foundation module
+    // (its governance maker/checker, ADR-0037) — never any other base module.
+    const ownerKeys = new Set(result.rules.map((r) => r.ownerModuleKey));
+    expect([...ownerKeys].sort()).toEqual(["data_lifecycle", "example_crm"]);
+    expect(
+      result.rules.some(
+        (r) => r.ruleKey === "data_lifecycle.legal_hold_maker_checker"
+      )
+    ).toBe(true);
   });
 
   test("DRIFT — a duplicate ruleKey across the registry makes the gate RED", () => {

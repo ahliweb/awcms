@@ -130,11 +130,13 @@ i18n framework or `components/ui/` library. No client script, no CSP surface.
 
 ## Port drops / deferrals (documented, not silent)
 
-- **data_lifecycle coupling DROPPED.** awcms-micro registered a `dataLifecycle`
-  descriptor and gated the events purge behind a `LegalHoldGuardPort` from its
-  `data_lifecycle` module — not ported to this base, so the descriptor and the
-  legal-hold guard are removed and the purge is unconditional. Re-introduce both
-  if/when `data_lifecycle` is ported.
+- **data_lifecycle coupling RE-WIRED (ADR-0037).** The `data_lifecycle` module
+  is now ported to this base, so the `dataLifecycle` descriptor
+  (`visitor_analytics.visit_events`, delegated) and the `LegalHoldGuardPort` gate
+  on step 1's `awcms_visit_events` DELETE are RE-ADDED, exactly as awcms-micro:
+  an active legal hold on this descriptor blocks the events purge (steps 2-4 stay
+  ungated). The concrete adapter is injected at the two composition roots
+  (`POST /api/v1/analytics/retention/purge` and `scripts/visitor-analytics-purge.ts`).
 - **news_portal preset wiring DEFERRED.** awcms-micro's
   `news_portal_full_online_r2` preset enables this module. This base's
   `news_portal` was ported without that wiring and is **not modified** here;

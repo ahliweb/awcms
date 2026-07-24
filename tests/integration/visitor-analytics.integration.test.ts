@@ -48,6 +48,18 @@ import {
   VISITOR_ANALYTICS_DEFAULTS,
   type VisitorAnalyticsConfig
 } from "../../src/modules/visitor-analytics/domain/visitor-analytics-config";
+import type { LegalHoldGuardPort } from "../../src/modules/_shared/ports/legal-hold-guard-port";
+
+// Legal hold enforcement (ADR-0037) is REQUIRED but orthogonal to this
+// retention-behavior test: a stub guard that reports nothing held keeps the
+// assertion focused on the cutoff logic. The end-to-end "an active hold blocks
+// the purge" coupling is proven in the dedicated data_lifecycle integration
+// test.
+const NEVER_HELD: LegalHoldGuardPort = {
+  async isDescriptorHeld() {
+    return false;
+  }
+};
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -247,7 +259,7 @@ suite("visitor_analytics module (integration)", () => {
     });
 
     const result = await withTenant(runtime, TENANT_A, (tx) =>
-      purgeVisitorAnalyticsData(tx, TENANT_A, CONFIG, new Date())
+      purgeVisitorAnalyticsData(tx, TENANT_A, CONFIG, new Date(), NEVER_HELD)
     );
     if (result instanceof Response)
       throw new Error("unexpected 503 during purge");

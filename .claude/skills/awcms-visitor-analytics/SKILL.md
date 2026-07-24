@@ -1,6 +1,6 @@
 ---
 name: awcms-visitor-analytics
-description: Modul visitor_analytics SUDAH di-port ke repo ini (dari awcms-micro epic #617-#624) sebagai modul standalone `type:"system"`. Gunakan saat menambah/mengubah `/api/v1/analytics/*`, skema session/event/rollup (`awcms_visitor_sessions`/`awcms_visit_events`/`awcms_visitor_daily_rollups`, migrasi 049/050/051), helper klasifikasi identity/UA/bot + sanitasi path, endpoint ingest publik `POST /api/v1/analytics/collect`, dashboard `/admin/analytics`, enrichment geolokasi, atau job `analytics:rollup`/`analytics:purge`. Merangkum keputusan port (kopling data_lifecycle DI-DROP, wiring news_portal preset DEFERRED, koleksi = endpoint ingest publik BUKAN middleware, TIDAK ada SECURITY DEFINER) supaya perubahan lanjutan tidak meregresi privasi/RLS.
+description: Modul visitor_analytics SUDAH di-port ke repo ini (dari awcms-micro epic #617-#624) sebagai modul standalone `type:"system"`. Gunakan saat menambah/mengubah `/api/v1/analytics/*`, skema session/event/rollup (`awcms_visitor_sessions`/`awcms_visit_events`/`awcms_visitor_daily_rollups`, migrasi 049/050/051), helper klasifikasi identity/UA/bot + sanitasi path, endpoint ingest publik `POST /api/v1/analytics/collect`, dashboard `/admin/analytics`, enrichment geolokasi, atau job `analytics:rollup`/`analytics:purge`. Merangkum keputusan port (kopling legal-hold data_lifecycle RE-WIRED per ADR-0037 — `purgeVisitorAnalyticsData` param ke-5 `legalHoldGuard` menggerbangi DELETE step-1; wiring news_portal preset DEFERRED; koleksi = endpoint ingest publik BUKAN middleware; TIDAK ada SECURITY DEFINER) supaya perubahan lanjutan tidak meregresi privasi/RLS.
 ---
 
 # AWCMS — Visitor Analytics (code guide)
@@ -15,8 +15,9 @@ kode yang bisa dipanggil — bukan spesifikasi target. Baca juga
 - **Descriptor** `module.ts`: `key: "visitor_analytics"`, `type: "system"`,
   `dependencies: [tenant_admin, identity_access, logging, reporting]`, 8
   permission, `navigation` `/admin/analytics`, `jobs` (rollup+purge),
-  `settings.schemaVersion:1`. TIDAK ada field `dataLifecycle` (di-drop, lihat
-  §Port).
+  `settings.schemaVersion:1`. Field `dataLifecycle`
+  (`visitor_analytics.visit_events`, delegated) SUDAH ada — kopling legal-hold
+  di-RE-WIRE (ADR-0037), lihat §Port.
 - **domain/** (murni, unit-tested tanpa DB): `visitor-analytics-config.ts`
   (env resolver privacy-first), `visitor-key.ts` (HMAC-SHA256 bersalt +
   visitor-key anonim), `user-agent.ts`, `human-classifier.ts`,
@@ -82,10 +83,14 @@ mikrodetik → lewatkan baris di batas halaman, Issue #158).
 
 ## Port (keputusan yang sudah diambil)
 
-- **DROP** descriptor `dataLifecycle` + `LegalHoldGuardPort` (modul
-  `data_lifecycle` belum di-port). `purgeVisitorAnalyticsData(tx, tenantId,
-config, now)` — 4 langkah tanpa gerbang legal-hold. Kembalikan bila
-  `data_lifecycle` di-port.
+- **RE-WIRED (ADR-0037)** descriptor `dataLifecycle`
+  (`visitor_analytics.visit_events`, delegated) + `LegalHoldGuardPort`.
+  `data_lifecycle` sudah di-port, jadi `purgeVisitorAnalyticsData(tx, tenantId,
+config, now, legalHoldGuard)` — param ke-5 WAJIB, menggerbangi HANYA DELETE
+  step-1 `awcms_visit_events` (step 2-4 tetap tak-tergerbang). Adaptor
+  `legalHoldGuardPortAdapter` di-inject di composition root (`POST
+/api/v1/analytics/retention/purge`, `scripts/visitor-analytics-purge.ts`).
+  Const kunci: `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` di `module.ts`.
 - **DEFER** wiring preset `news_portal_full_online_r2` → JANGAN sentuh modul
   `news_portal`. Modul ini standalone.
 - **Admin** = SSR-render (`admin/offices.astro` pattern), bukan client-fetch

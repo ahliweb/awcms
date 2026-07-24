@@ -1,28 +1,30 @@
 ---
 name: awcms-data-lifecycle
-description: BACAAN SAJA — modul data_lifecycle BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `data-lifecycle`, `HighVolumeTableDescriptor`/registry belum ada). Rujukan modul/tabel/registry di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan mendaftarkan tabel ke registry yang belum ada — verifikasi `ls src/modules` dulu. Konteks port (Issue #745, epic #738 platform-evolution).
+description: Modul data_lifecycle SUDAH di-port ke repo ini (ADR-0037, dari awcms-micro Issue #745; migrasi sql/055 schema + sql/056 permission). System Foundation (`type: system`, deps `[tenant_admin, identity_access, logging]`) yang MEMILIKI empat tabel `awcms_data_lifecycle_*` (legal_holds/cursors/archive_manifests/runs, semua FORCE RLS), registry `HighVolumeTableDescriptor` yang dikontribusikan tiap modul pemilik (`ModuleDescriptor.dataLifecycle`), dry-run planner zero-mutation, bounded archive/purge engine, provider-neutral archive port (local/offline). Menyediakan `LegalHoldGuardPort` (`_shared/ports/legal-hold-guard-port.ts`, seam level-sumber BUKAN capability-registry) yang dikonsumsi `logging` (wajib) & `visitor_analytics` (opsional-step) di composition root purge mereka. Gunakan saat mendaftarkan tabel bervolume tinggi baru, membuat/melepas legal hold, atau mengubah engine.
 ---
 
 # AWCMS — Data Lifecycle (Registry, Legal Hold, Dry-Run, Archive/Purge)
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `data_lifecycle` ada di **awcms-mini**, bukan di sini: `ls src/modules`
-> TIDAK memuat `data-lifecycle`, dan `sql/` tidak memuat migration-nya —
-> begitu pula `HighVolumeTableDescriptor` di `_shared/module-contract.ts`
-> yang dirujuk di bawah. Semua rujukan `src/modules/data-lifecycle/...`,
-> `docs/awcms/data-lifecycle.md`, dan tabel `awcms_data_lifecycle_*` adalah
-> artefak awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo
-> ini, dan jangan daftarkan tabel baru ke registry yang belum ada. Pakai
-> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
-> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
-> mengklaim apa pun ada.
+> **STATUS — modul ini SUDAH di-port ke repo ini (ADR-0037).**
+> `data_lifecycle` hidup di `src/modules/data-lifecycle/` (16 berkas),
+> migrasi `sql/055` (schema, empat tabel `awcms_data_lifecycle_*` FORCE
+> RLS) + `sql/056` (permission), dan `HighVolumeTableDescriptor` +
+> `ModuleDescriptor.dataLifecycle` ADA di `_shared/module-contract.ts`
+> (`MODULE_CONTRACT_VERSION` ≥ 2.1.0). Rujukan tabel/kode di bawah NYATA di
+> repo ini. `LegalHoldGuardPort` adalah **seam port level-sumber**, BUKAN
+> entri `capability-contract-versions.ts` — di-wire di composition root
+> (script/route), tidak pernah di-import dari dalam pohon `application`/
+> `domain` modul konsumen. Konsumen aktif: `logging.audit_events`
+> (delegated, guard WAJIB) & `visitor_analytics.visit_events` (delegated,
+> guard menggerbangi step-1 DELETE saja). Konsumen `form_drafts`/
+> `newsletter`/`comments` DITUNDA (modul belum di-port).
 
 Sumber kebenaran: `src/modules/_shared/module-contract.ts`
 (`HighVolumeTableDescriptor`), `src/modules/data-lifecycle/` (domain/
 application/infrastructure/api), `src/modules/data-lifecycle/README.md`
-(detail teknis lengkap), `docs/awcms/data-lifecycle.md` (panduan
-operasional + pemetaan kepatuhan), ADR-0013 §6 (data ownership matrix —
-"no shared-table write").
+(detail teknis lengkap + pemetaan kepatuhan + prosedur restore),
+`docs/adr/0037-data-lifecycle-module-admission.md`, ADR-0013 §6 (data
+ownership matrix — "no shared-table write").
 
 ## Kapan pakai skill ini
 
@@ -90,10 +92,10 @@ operasional + pemetaan kepatuhan), ADR-0013 §6 (data ownership matrix —
 3. `bun run data-lifecycle:registry:check` — perbaiki error yang
    dilaporkan (menyebut field dan alasan persis).
 
-4. Update `docs/awcms/data-lifecycle.md` §Retensi data (tabel) dan
-   §Pemetaan kepatuhan dengan rasional retensi tabel barumu — **jangan**
-   klaim satu periode retensi legal universal; jelaskan alasan spesifik
-   kelas data ini.
+4. Dokumentasikan rasional retensi tabel barumu di `README.md` modul
+   PEMILIK (dan/atau `src/modules/data-lifecycle/README.md` §compliance)
+   — **jangan** klaim satu periode retensi legal universal; jelaskan
+   alasan spesifik kelas data ini.
 
 5. `bun run changeset`.
 
@@ -133,15 +135,15 @@ terhadap dirinya sendiri.
   `CURSOR_BOUNDARY_SAFETY_MARGIN_MS` (1ms) — pola: pad batas ke ARAH
   YANG BENAR (upper bound `<=` → tambah 1ms; lower bound resume `>` →
   ubah jadi `>=` dengan bound `+1ms`) sebelum dipakai sebagai parameter
-  query berikutnya.
+  query berikutnya. Konstanta/helper: `domain/cursor-boundary.ts`.
 - **Bila menambah perbandingan cursor BARU** (fitur baru, refactor):
   reuse `CURSOR_BOUNDARY_SAFETY_MARGIN_MS` yang sudah ada, JANGAN
   bandingkan nilai `Date` yang dibaca-lalu-ditulis-ulang secara langsung
-  tanpa padding. Uji dengan
-  `tests/integration/data-lifecycle-archive-purge-job.integration.test.ts`'s
-  test volume besar (bug ini SELALU muncul di baris terakhir setiap
-  batch, bukan kasus langka — tanpa fix, backlog kecil bisa terjebak
-  loop sampai `DEFAULT_MAX_PASSES`).
+  tanpa padding. Uji dengan test regresi
+  `tests/data-lifecycle-cursor-boundary.test.ts` + integration
+  DB-gated (bug ini SELALU muncul di baris terakhir setiap batch, bukan
+  kasus langka — tanpa fix, backlog kecil bisa terjebak loop sampai
+  `DEFAULT_MAX_PASSES`).
 - Detail investigasi lengkap (bagaimana bug ditemukan, dampak sebelum
   fix): `src/modules/data-lifecycle/README.md` §Timestamp precision.
 
