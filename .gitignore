@@ -39,5 +39,8 @@ blob-report/
 # Claude Code user-local settings (jangan commit)
 .claude/settings.local.json
 
-# graphify skill output (local artifact, never committed)
-graphify-out/
+# graphify skill: track the shareable graph output, but never the
+# regenerable cache nor the machine/user-specific path markers.
+graphify-out/cache/
+graphify-out/.graphify_root
+graphify-out/.graphify_python
