@@ -1,6 +1,6 @@
 # Panduan Kontribusi API untuk Modul Domain/Website (Issue #182, ADR-0026)
 
-> **Reframing [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md).** Jalur "aplikasi turunan di repo terpisah" (ADR-0022) DICABUT — keluarga AWCMS kini template **dipakai-langsung**. Baca dokumen ini dengan pemetaan: "repo/modul turunan" = modul domain/website yang ditambahkan **langsung ke `src/modules/`** template ini. Pipeline OpenAPI modular (fragment per-modul + bundler + composition seam) tetap nyata dan berlaku; hanya framing repo terpisah yang usang.
+> **Reframing [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) & [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md).** Jalur "aplikasi turunan di repo terpisah" (ADR-0022) DICABUT — keluarga AWCMS kini template **dipakai-langsung**, dan `awcms` diposisikan **online-first hybrid + superset** yang menyerap klaster website/e-commerce awcms-micro langsung ke `src/modules/` (ADR-0035). Baca dokumen ini dengan pemetaan: "repo/modul turunan" = modul domain/website/e-commerce yang ditambahkan **langsung ke `src/modules/`** template ini. Pipeline OpenAPI modular (fragment per-modul + bundler + composition seam) tetap nyata dan berlaku; hanya framing repo terpisah yang usang.
 
 Dokumen ini menjelaskan cara sebuah **modul domain/website** (mis. ERP di
 atas base AWCMS) menyumbang kontrak REST untuk domainnya

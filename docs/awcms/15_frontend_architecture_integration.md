@@ -1,10 +1,10 @@
 # Bagian 15 — Arsitektur Frontend dan Integrasi Frontend–Backend
 
-> **Status dokumen (2026-07-14):** Repo `awcms` masih pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **belum ada kode modul ERP yang diimplementasikan**, termasuk API client, layar admin, atau mekanisme offline. Dokumen ini mengadaptasi arsitektur frontend base [awcms-mini](https://github.com/ahliweb/awcms-mini) (Astro SSR di atas Bun, islands, offline-first) menjadi **arsitektur target** untuk platform ERP AWCMS. Klaim "sudah live"/"diverifikasi" di sumber direframe di sini sebagai rencana yang mengikat untuk implementasi mendatang. Contoh route/endpoint domain diganti ke ERP (finance, inventory, procurement, manufacturing, HR/payroll) menggantikan contoh retail/POS di sumber.
+> **Status dokumen (2026-07-14):** Repo `awcms` adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)/[ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — base sudah menyertakan **admin SSR + modul website/konten** dan sedang **menyerap** klaster website/e-commerce awcms-micro ke `src/modules/` (status kode aktual: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). Dokumen ini mengadaptasi arsitektur frontend base [awcms-mini](https://github.com/ahliweb/awcms-mini) (Astro SSR di atas Bun, islands, offline-first) menjadi arsitektur untuk platform AWCMS yang **hybrid online-first**: jalur utama online, dengan ketahanan offline/LAN sebagai pelengkap. Klaim "sudah live"/"diverifikasi" di sumber tetap perlu diverifikasi ke `docs/ARCHITECTURE.md`. Contoh route/endpoint domain mencakup ERP (finance, inventory, procurement, manufacturing, HR/payroll) dan website/e-commerce.
 
 ## Tujuan
 
-Dokumen ini menetapkan **arsitektur frontend** dan **integrasi frontend ↔ backend** AWCMS: strategi rendering Astro, API client, autentikasi/sesi, **mekanisme offline-first (service worker + IndexedDB + outbox)**, state, form/validasi, dan kontrak layar→endpoint→event — sebagai baseline yang mengikat sebelum modul ERP pertama mulai dibangun.
+Dokumen ini menetapkan **arsitektur frontend** dan **integrasi frontend ↔ backend** AWCMS: strategi rendering Astro, API client, autentikasi/sesi, **mekanisme ketahanan offline (service worker + IndexedDB + outbox)** sebagai pelengkap jalur online-first, state, form/validasi, dan kontrak layar→endpoint→event — sebagai baseline yang mengikat untuk modul base maupun modul domain (ERP, website/e-commerce, konten).
 
 Terkait: `14_ui_ux_design_system.md` (desain), `16_backend_data_access_integration.md` (sisi backend/DB), dokumen kontrak API/event (menyusul, mengikuti pola `05_openapi_asyncapi_detail.md` di awcms-mini). Skill penegak yang direncanakan: **`awcms-ui-screen`** (`.claude/skills/`).
 
@@ -28,10 +28,10 @@ Astro **berjalan penuh di Bun** untuk semua fase: `bun install`, dev, build, dan
 
 Nuansa satu-satunya: Astro **belum punya adapter SSR Bun first-party** (yang resmi: `@astrojs/node`, Cloudflare, Vercel, Netlify — verifikasi versi saat implementasi). Dua opsi tersanksi, keduanya tetap runtime Bun:
 
-| Opsi                               | Cara                                                                                                                | Kapan                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **A. Pisahkan seam (rekomendasi)** | API/backend native `Bun.serve` (+Hono); Astro hanya frontend/SSR                                                    | Default base — paling "Bun-murni", cocok offline-first |
-| **B. `@astrojs/node` di atas Bun** | `output: "server"` + adapter node standalone; jalankan `bun ./dist/server/entry.mjs`; build `bun --bun astro build` | Bila ingin SSR Astro terpadu tanpa server terpisah     |
+| Opsi                               | Cara                                                                                                                | Kapan                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **A. Pisahkan seam (rekomendasi)** | API/backend native `Bun.serve` (+Hono); Astro hanya frontend/SSR                                                    | Default base — paling "Bun-murni", cocok jalur online-first + ketahanan offline |
+| **B. `@astrojs/node` di atas Bun** | `output: "server"` + adapter node standalone; jalankan `bun ./dist/server/entry.mjs`; build `bun --bun astro build` | Bila ingin SSR Astro terpadu tanpa server terpisah                              |
 
 Opsi B memakai paket ber-nama "node" tetapi **binary `node` tidak dipakai** — output-nya jalan di atas Node-compat Bun. Ini satu-satunya pemakaian paket "node" yang diizinkan; catat sebagai pengecualian di dokumen audit standar pengembangan bila dipilih (lihat doc 10 §Standar platform backend, saat ditulis; doc 18 §Runtime & tooling, saat ditulis). Output `static` (tanpa SSR) tidak butuh adapter dan bisa dilayani `Bun.serve` langsung.
 
@@ -170,11 +170,11 @@ awcms-mini, akan ditulis sebagai ADR terpisah di `docs/adr/` repo ini
 bila dibutuhkan) menetapkan polanya: tenant di-resolve dari segmen path
 eksplisit yang membawa `tenantCode` (`/<prefix>/{tenantCode}/...`, look
 up ke `awcms_tenants` yang RLS-free), **bukan** subdomain — subdomain
-butuh wildcard DNS/TLS yang bertentangan dengan topologi LAN-first
+butuh wildcard DNS/TLS yang bertentangan dengan topologi LAN (mode ketahanan)
 default. `tenantCode` tidak ditemukan/tenant tidak aktif → `404`, bukan
 bocor keberadaan tenant.
 
-## Offline-first (inti sistem)
+## Offline-first (mode ketahanan)
 
 Entri operasional lapangan (mis. penerimaan barang gudang, stock opname, entri jurnal kasir di lokasi tanpa koneksi stabil) **wajib** berjalan tanpa internet. Mekanisme yang direncanakan:
 

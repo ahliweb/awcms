@@ -19,7 +19,16 @@ Sejak [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-
 tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-turunan.
 `awcms` = template lini **ERP/back-office**.
 
-- Modul domain — **termasuk ERP dan modul website/konten** — **ditambahkan langsung di
+Disempurnakan oleh [ADR-0035](adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
+(positioning `awcms`): mode operasi `awcms` = **hybrid online + offline dengan prioritas
+online-first** (online jalur utama; offline/LAN mode ketahanan), **siap ERP + SaaS
+terintegrasi**, dan `awcms` menjadi **superset** keluarga yang **menyerap** klaster
+website/e-commerce, UI/UX, dan pengerasan auth `awcms-micro` (peta di
+[`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)). `awcms-mini`
+tetap hybrid offline-first (siap SaaS); `awcms-micro` tetap website full-online ramping.
+Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak berubah**.
+
+- Modul domain — **ERP, website/e-commerce, dan konten** — **ditambahkan langsung di
   `src/modules/`** template ini saat dipakai, lalu didaftarkan di `src/modules/index.ts`.
 - **Jalur aplikasi-turunan DIHAPUS**: tidak ada lagi `src/modules/application-registry.ts`,
   command `extension:check`, namespace migrasi `900+`, manifest kompatibilitas turunan.
@@ -82,13 +91,18 @@ Modul: `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 4. Backlog / langkah berikutnya
 
-- **Port modul `awcms-mini` yang belum ada** (via skill `awcms-port-from-mini`,
-  alur mini-first): `social-publishing`, `visitor-analytics`, `tenant-domain` routing,
-  `data-lifecycle`, `document-infrastructure`, `form-drafts`, `integration-hub`,
-  `idn-admin-regions`. Skill masing-masing (`BACAAN SAJA`) = spesifikasi target.
-  (`blog-content` + `news-portal` SUDAH di-port — PR #214; skill-nya kini panduan kode nyata.)
-  Prioritas tinggi: `tenant-domain` (buka rute publik `/news/**` + custom-domain) dan
+- **Serap awcms-micro → awcms (program utama, [ADR-0035](adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)).**
+  Peta bergelombang & urutan dependensi ada di
+  [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
+  atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari
+  `sql/045`), lulus `bun run check`. Gelombang: (0) pustaka `src/components/ui/` + seam
+  kontribusi + `media-library` + `tenant-domain`; (1) `form-drafts`, `seo-distribution`,
+  `site-search`, `comments`, `newsletter`, `social-publishing`, `visitor-analytics`,
+  `data-lifecycle`; (2) delta auth/admin (self-registration, password reset, admin security
+  UI, sidebar menu per-tenant); (3) trajektori e-commerce/toko online (ADR sendiri).
+  Prioritas awal: `tenant-domain` (buka rute publik `/news/**` + custom-domain) dan
   `social-publishing` (mengaktifkan hook publish yang kini no-op di `blog-content`).
+  (`blog-content` + `news-portal` SUDAH di-port — PR #214; skill-nya kini panduan kode nyata.)
 - **Follow-up `theming`**: port `media_library` (asset), adopsi public-route, domain events.
 - **Port generator `repo:inventory`** dari mini agar `repo-inventory.md` jadi ter-generate.
 - **Seam yang menunggu penyedia**: business-scope resolver base masih NO-OP fail-closed;

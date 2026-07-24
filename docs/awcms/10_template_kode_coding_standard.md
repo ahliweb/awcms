@@ -1,6 +1,6 @@
 # Bagian 10 — Template Implementasi Kode dan Coding Standard
 
-> **Status implementasi (2026-07-14).** Dokumen ini diadaptasi dari standar dasar `docs/awcms-mini/10_template_kode_coding_standard.md` (base yang sudah selesai diimplementasikan di repo asal). Di **repo `awcms` ini, belum ada satu pun modul ERP yang diimplementasikan** (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — seluruh isi di bawah adalah **standar yang mengikat untuk pekerjaan mendatang**, bukan cerminan kode yang sudah berjalan. Skill proyek yang dirujuk (`.claude/skills/awcms-*`) juga **belum dibuat**; rujukan di sini menandai skill yang **akan** dibuat mengikuti pola yang sama begitu modul terkait mulai dikerjakan.
+> **Status implementasi (2026-07-14).** Dokumen ini diadaptasi dari standar dasar `docs/awcms-mini/10_template_kode_coding_standard.md`. Repo `awcms` adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)): base sudah menyertakan **modul fondasi + modul website/konten** dan sedang **menyerap** klaster website/e-commerce awcms-micro langsung ke `src/modules/` (status kode aktual: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). Standar di bawah **mengikat** baik untuk modul base maupun modul domain (ERP, website/e-commerce, konten) yang ditambahkan langsung ke `src/modules/` template ini. Skill proyek yang dirujuk (`.claude/skills/awcms-*`) menandai pola implementasi yang mengikat untuk modul terkait.
 >
 > **Standar base + contoh domain.** Dokumen ini adalah **standar/pola reusable**. Contoh yang dipakai memakai domain **ERP (finance/accounting, inventory/warehouse)** sebagai ilustrasi — ganti detail domainnya sesuai kebutuhan modul yang sedang dibangun. Lihat [README paket dokumen](README.md).
 
@@ -157,8 +157,7 @@ export const warehouseManagementModule: ModuleDescriptor = {
 Sumber kebenaran kontrak `ModuleDescriptor` akan berada di `src/modules/_shared/module-contract.ts` begitu fondasi modul mulai diimplementasikan. Bentuk awal (target minimal, akan diperluas seiring kebutuhan ERP nyata — mis. capability port lintas modul finance/inventory/procurement):
 
 ```ts
-export type ModuleType =
-  "base" | "system" | "domain" | "integration" | "derived";
+export type ModuleType = "base" | "system" | "domain" | "integration";
 
 // `disabled` = dimatikan global oleh code/deployment — BUKAN toggle per-tenant.
 export type ModuleLifecycleStatus =
