@@ -3983,6 +3983,58 @@ Gated by news_portal.ad_placements.configure.
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+## SEO & Distribution
+
+Tenant SEO defaults for the central metadata renderer + public discovery/syndication surfaces (seo_distribution module, ADR-0038 discovery scope) — read/update site identity, default social/Organization images, Twitter handle, the tenant-wide noindex switch, and feed/sitemap config. The public robots.txt/sitemap/feed routes themselves are unauthenticated Astro XML/text routes (not part of this OpenAPI contract), host-resolved and cache-validated. config.update is high-risk (rewrites the public metadata/indexability surface), idempotency-keyed, and audited.
+
+### `GET /api/v1/seo/config` — Read this tenant's SEO defaults
+
+- **operationId**: `seoConfigRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by seo_distribution.config.read. Returns the tenant's SEO defaults (site identity, default social/Organization images, Twitter handle, tenant-wide noindex switch, and feed/sitemap config); a neutral default object when no config row exists yet. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | The tenant's resolved SEO defaults. | object                                 |
+| 400    | Validation error.                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/seo/config` — Replace this tenant's SEO defaults
+
+- **operationId**: `seoConfigUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by seo_distribution.config.update. High-risk mutation — rewrites the public metadata/indexability surface (including the tenant-wide noindex switch): requires Idempotency-Key and is audited. Full replace of the mutable fields (PUT semantics); unknown keys are ignored. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SeoConfigUpdateRequest`](#schema-seoconfigupdaterequest)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The saved SEO defaults, or a replay of a prior identical request.               | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -4246,6 +4298,48 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "isEnabled": false,
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: SeoConfigUpdateRequest
+
+PUT body for seoConfigUpdate — a full replace of the mutable SEO-defaults fields. Every field is optional in the request; an omitted string field is treated as null, and omitted booleans/limit fall back to their defaults (noindex=false, sitemap/feeds enabled=true, feedItemLimit=50). Unknown keys are ignored.
+
+| Field                     | Type            | Required | Nullable | Description |
+| ------------------------- | --------------- | -------- | -------- | ----------- |
+| `siteName`                | string          | no       | yes      |             |
+| `defaultMetaDescription`  | string          | no       | yes      |             |
+| `defaultSocialMediaId`    | string (uuid)   | no       | yes      |             |
+| `twitterSiteHandle`       | string          | no       | yes      |             |
+| `organizationName`        | string          | no       | yes      |             |
+| `organizationLogoMediaId` | string (uuid)   | no       | yes      |             |
+| `defaultRobotsNoindex`    | boolean         | no       | no       |             |
+| `feedTitle`               | string          | no       | yes      |             |
+| `feedDescription`         | string          | no       | yes      |             |
+| `feedLogoMediaId`         | string (uuid)   | no       | yes      |             |
+| `feedItemLimit`           | integer         | no       | no       |             |
+| `includedResourceTypes`   | array of string | no       | yes      |             |
+| `sitemapEnabled`          | boolean         | no       | no       |             |
+| `feedsEnabled`            | boolean         | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "siteName": "string",
+  "defaultMetaDescription": "string",
+  "defaultSocialMediaId": "00000000-0000-0000-0000-000000000000",
+  "twitterSiteHandle": "string",
+  "organizationName": "string",
+  "organizationLogoMediaId": "00000000-0000-0000-0000-000000000000",
+  "defaultRobotsNoindex": false,
+  "feedTitle": "string",
+  "feedDescription": "string",
+  "feedLogoMediaId": "00000000-0000-0000-0000-000000000000",
+  "feedItemLimit": 1,
+  "includedResourceTypes": ["string"],
+  "sitemapEnabled": false,
+  "feedsEnabled": false
 }
 ```
 

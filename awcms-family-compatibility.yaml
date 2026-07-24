@@ -44,6 +44,12 @@ contracts:
   capabilityContractVersions:
     party_directory: "1.0.0"
     media_library: "1.0.0"
+    # seo_facts is owned (provided) by the base `blog_content` module and consumed
+    # by `seo_distribution` (ADR-0038 discovery scope). Declared at 1.1.0 — the port
+    # ships with the `summarizePublicResourceFacts` roll-up + `offset`/`order` list
+    # options (awcms-micro's own 1.1.0 minor), so 1.0.0 would understate the shape a
+    # consumer binds against.
+    seo_facts: "1.1.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

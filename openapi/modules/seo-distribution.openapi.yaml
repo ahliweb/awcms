@@ -1,0 +1,227 @@
+# Source fragment for the "SEO & Distribution" module (ADR-0038, discovery scope;
+# adapts awcms-micro ADR-0028). One file per MODULE (Issue #182 convention): this
+# file owns every path carrying the "SEO & Distribution" tag and every schema
+# referenced ONLY by those operations.
+#
+# ONLY the tenant SEO CONFIG admin surface (`GET`/`PUT /api/v1/seo/config`) is an
+# OpenAPI contract. The public discovery/syndication routes (`/robots.txt`,
+# `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`) are
+# unauthenticated Astro XML/text routes at the host root — deliberately NOT under
+# `src/pages/api/v1`, so they are not part of this REST contract (same posture as
+# the public `/blog/{tenantCode}` content routes).
+#
+# Redirect governance + 404 telemetry endpoints are DEFERRED to a follow-up PR.
+#
+# NOT independently valid OpenAPI — $ref targets pointing at shared components only
+# resolve after `bun run openapi:bundle` merges this file with the root and every
+# sibling module fragment into openapi/awcms-public-api.openapi.yaml. Edit this file
+# (or the root for shared components), never the generated bundle.
+paths:
+  /api/v1/seo/config:
+    get:
+      tags:
+        - SEO & Distribution
+      summary: Read this tenant's SEO defaults
+      description: Gated by seo_distribution.config.read. Returns the tenant's SEO defaults (site identity, default social/Organization images, Twitter handle, tenant-wide noindex switch, and feed/sitemap config); a neutral default object when no config row exists yet. Tenant-scoped (withTenant + RLS FORCE).
+      operationId: seoConfigRead
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant's resolved SEO defaults.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoTenantSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      tags:
+        - SEO & Distribution
+      summary: Replace this tenant's SEO defaults
+      description: "Gated by seo_distribution.config.update. High-risk mutation — rewrites the public metadata/indexability surface (including the tenant-wide noindex switch): requires Idempotency-Key and is audited. Full replace of the mutable fields (PUT semantics); unknown keys are ignored. Tenant-scoped (withTenant + RLS FORCE)."
+      operationId: seoConfigUpdate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeoConfigUpdateRequest"
+      responses:
+        "200":
+          description: The saved SEO defaults, or a replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoTenantSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    SeoTenantSettings:
+      type: object
+      description: Resolved, render-ready tenant SEO defaults. Media id fields are bare object ids resolved through media_library at render time (never raw URLs). All string fields are trimmed and empty-collapsed to null.
+      required:
+        - siteName
+        - defaultMetaDescription
+        - defaultSocialMediaId
+        - twitterSiteHandle
+        - organizationName
+        - organizationLogoMediaId
+        - defaultRobotsNoindex
+        - feedTitle
+        - feedDescription
+        - feedLogoMediaId
+        - feedItemLimit
+        - includedResourceTypes
+        - sitemapEnabled
+        - feedsEnabled
+      additionalProperties: false
+      properties:
+        siteName:
+          type: string
+          nullable: true
+          maxLength: 200
+        defaultMetaDescription:
+          type: string
+          nullable: true
+          maxLength: 500
+        defaultSocialMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        twitterSiteHandle:
+          type: string
+          nullable: true
+          maxLength: 80
+        organizationName:
+          type: string
+          nullable: true
+          maxLength: 200
+        organizationLogoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        defaultRobotsNoindex:
+          type: boolean
+          description: Tenant-wide "this whole site is noindex" switch — when true every surface degrades to noindex and robots.txt disallows all crawling.
+        feedTitle:
+          type: string
+          nullable: true
+          maxLength: 200
+        feedDescription:
+          type: string
+          nullable: true
+          maxLength: 500
+        feedLogoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        feedItemLimit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: Max items per feed (RSS/Atom/JSON); default 50. Only ever makes a feed smaller than the code ceiling.
+        includedResourceTypes:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 64
+          description: Optional allow-list of resourceType slugs to include in sitemap/feeds; null means all eligible types.
+        sitemapEnabled:
+          type: boolean
+        feedsEnabled:
+          type: boolean
+    SeoConfigUpdateRequest:
+      type: object
+      description: PUT body for seoConfigUpdate — a full replace of the mutable SEO-defaults fields. Every field is optional in the request; an omitted string field is treated as null, and omitted booleans/limit fall back to their defaults (noindex=false, sitemap/feeds enabled=true, feedItemLimit=50). Unknown keys are ignored.
+      additionalProperties: true
+      properties:
+        siteName:
+          type: string
+          nullable: true
+          maxLength: 200
+        defaultMetaDescription:
+          type: string
+          nullable: true
+          maxLength: 500
+        defaultSocialMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        twitterSiteHandle:
+          type: string
+          nullable: true
+          maxLength: 80
+        organizationName:
+          type: string
+          nullable: true
+          maxLength: 200
+        organizationLogoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        defaultRobotsNoindex:
+          type: boolean
+        feedTitle:
+          type: string
+          nullable: true
+          maxLength: 200
+        feedDescription:
+          type: string
+          nullable: true
+          maxLength: 500
+        feedLogoMediaId:
+          type: string
+          format: uuid
+          nullable: true
+        feedItemLimit:
+          type: integer
+          minimum: 1
+          maximum: 200
+        includedResourceTypes:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 64
+        sitemapEnabled:
+          type: boolean
+        feedsEnabled:
+          type: boolean

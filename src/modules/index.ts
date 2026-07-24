@@ -16,6 +16,7 @@ import { newsPortalModule } from "./news-portal/module";
 import { tenantDomainModule } from "./tenant-domain/module";
 import { visitorAnalyticsModule } from "./visitor-analytics/module";
 import { dataLifecycleModule } from "./data-lifecycle/module";
+import { seoDistributionModule } from "./seo-distribution/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -84,7 +85,17 @@ const baseModules: ModuleDescriptor[] = [
   // visitor_analytics consume at their purge composition roots (NOT a
   // capability-registry entry). See src/modules/data-lifecycle/module.ts's
   // `description`.
-  dataLifecycleModule
+  dataLifecycleModule,
+  // Ported from awcms-micro (ADR-0038, adapting awcms-micro ADR-0028): the DISCOVERY
+  // scope of `seo_distribution` — the central SEO metadata renderer + public
+  // discovery/syndication surfaces (robots.txt, sitemap index/child, RSS/Atom/JSON
+  // feeds) + the tenant SEO config admin API. Depends only on
+  // tenant_admin/identity_access (both above), so the DAG stays acyclic. It is the
+  // CONSUMER/aggregator of the frozen `seo_facts` capability (`blog_content`
+  // provides it, optional) + `media_library` (optional); capability edges are not
+  // DAG edges. Redirect governance + 404 telemetry are DEFERRED to a follow-up PR.
+  // See src/modules/seo-distribution/module.ts's `description`.
+  seoDistributionModule
 ];
 
 /**

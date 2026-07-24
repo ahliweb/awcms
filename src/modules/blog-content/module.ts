@@ -40,7 +40,15 @@ export const blogContentModule = defineModule({
   // (`application/social-publishing-port-noop-adapter.ts`); `optional: true` is
   // what keeps that safe.
   capabilities: {
-    provides: ["public_content"],
+    // `public_content` (consumed by `news_portal`'s homepage composer) and, as of
+    // ADR-0038 (`seo_distribution` admission, discovery scope), `seo_facts` — the
+    // frozen `_shared/ports/seo-facts-port.ts` contract this module implements in
+    // `application/seo-facts-port-adapter.ts`, mapping an `awcms_blog_posts` row
+    // to the neutral `SeoResourceFacts` the sitemap/feed/robots aggregator
+    // consumes. `blog_content` is the base's single declared `seo_facts` provider
+    // (it owns the public post resources SEO renders); `news_portal` composes those
+    // posts but owns no standalone public resource, so it is not a second provider.
+    provides: ["public_content", "seo_facts"],
     consumes: [
       {
         capability: "media_library",
