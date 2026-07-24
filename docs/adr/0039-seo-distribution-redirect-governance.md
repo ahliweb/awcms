@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Tanggal:** 2026-07-25
 - **Pengambil keputusan:** @ahliweb
-- **Mengadaptasi:** awcms-micro `src/modules/seo-distribution/` scope redirect (ADR-0028 §8 + deferral ADR-0010, migrasi `sql/083`/`084`) ke basis `awcms`, melengkapi separuh discovery yang sudah mendarat di [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md).
+- **Mengadaptasi:** awcms-micro `src/modules/seo-distribution/` scope redirect (ADR-0028 §8 + deferral ADR-0010; di awcms-micro migrasinya bernomor 083/084 — penomoran repo itu, bukan repo ini) ke basis `awcms`, melengkapi separuh discovery yang sudah mendarat di [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md). Di `awcms` skema+permission redirect mendarat di `sql/060`/`sql/061`.
 - **Terkait:** ADR-0038 (separuh discovery `seo_distribution` — companion), ADR-0037 (`data_lifecycle`, descriptor 404 di-register ke sini), ADR-0036 (`media_library`), ADR-0009 (resolusi tenant publik host/tenant-code), ADR-0035 (program penyerapan awcms-micro), [`docs/awcms/absorb-awcms-micro-roadmap.md`](../awcms/absorb-awcms-micro-roadmap.md) §5.
 
 ## Konteks

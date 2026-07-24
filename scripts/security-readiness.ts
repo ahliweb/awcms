@@ -1050,7 +1050,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_data_lifecycle_legal_holds: ["SELECT"],
   awcms_data_lifecycle_cursors: ["SELECT", "INSERT", "UPDATE"],
   awcms_data_lifecycle_archive_manifests: ["SELECT", "INSERT", "UPDATE"],
-  awcms_data_lifecycle_runs: ["SELECT", "INSERT", "DELETE"]
+  awcms_data_lifecycle_runs: ["SELECT", "INSERT", "DELETE"],
+  // seo_distribution — the generic data_lifecycle purge engine (ADR-0039,
+  // sql/060) age-DELETEs stale 404 telemetry. The table is registered as a
+  // `dataLifecycle` descriptor (hard_delete, analytics_telemetry), so the
+  // worker needs SELECT (bounded cursor scan) + DELETE only. No INSERT/UPDATE:
+  // the 404 upsert is a public-path write on awcms_app, never the worker.
+  awcms_seo_not_found_observations: ["SELECT", "DELETE"]
 };
 
 /**
