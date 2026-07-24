@@ -13,10 +13,13 @@
  * (`ModuleDescriptor.sodRules`, see `_shared/module-contract.ts`) — this file
  * only AGGREGATES (`collectSoDRuleDescriptors`) and VALIDATES what modules
  * already declared. It never invents a rule and never reaches into another
- * module's schema. The BASE ships no domain rules (issue #181 out-of-scope);
- * the illustrative rules live in the test-support fixture
- * `tests/fixtures/example-domain-modules/`. The gate validates whatever the
- * `listModules()` registry contains.
+ * module's schema. The BASE ships no domain *business* rules (issue #181
+ * out-of-scope); the illustrative business rules live in the test-support
+ * fixture `tests/fixtures/example-domain-modules/`. It DOES ship one
+ * System-Foundation governance rule — `data_lifecycle.legal_hold_maker_checker`
+ * (ADR-0037), a module-owned maker/checker over `data_lifecycle`'s own
+ * permissions. The gate validates whatever the `listModules()` registry
+ * contains.
  */
 import type {
   ModuleDescriptor,

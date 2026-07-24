@@ -57,6 +57,7 @@ import {
   purgeExpiredAuditEvents,
   resolveAuditRetentionCutoff
 } from "../src/modules/logging/application/audit-purge";
+import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 
 export function resolveRetentionDays(
   argv: string[] = process.argv,
@@ -145,12 +146,17 @@ export async function runAuditLogPurge(
   const { tenants, totalCount, perTenant } = await iterateTenantsInBatches(
     sql,
     async (tenantId) => {
-      const result = await purgeExpiredAuditEvents(sql, tenantId, {
-        retentionDays,
-        now,
-        batchLimit: options.batchLimit,
-        correlationId: ctx.correlationId
-      });
+      const result = await purgeExpiredAuditEvents(
+        sql,
+        tenantId,
+        legalHoldGuardPortAdapter,
+        {
+          retentionDays,
+          now,
+          batchLimit: options.batchLimit,
+          correlationId: ctx.correlationId
+        }
+      );
 
       return { count: result.purgedCount };
     },

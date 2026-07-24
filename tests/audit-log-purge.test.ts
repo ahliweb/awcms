@@ -30,6 +30,7 @@ import {
   resolveRetentionDays,
   runAuditLogPurge
 } from "../scripts/audit-log-purge";
+import type { LegalHoldGuardPort } from "../src/modules/_shared/ports/legal-hold-guard-port";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeOrSkip = DATABASE_URL ? describe : describe.skip;
@@ -37,6 +38,17 @@ const describeOrSkip = DATABASE_URL ? describe : describe.skip;
 const TENANT_A = "a1a1a1a1-aaaa-4aaa-8aaa-a1a1a1a1a1a1";
 const TENANT_B = "b1b1b1b1-bbbb-4bbb-8bbb-b1b1b1b1b1b1";
 const NOW = new Date("2026-07-01T00:00:00.000Z");
+
+// Legal hold enforcement (ADR-0037) is REQUIRED but orthogonal to these
+// retention-behavior tests: a stub guard that reports nothing held keeps the
+// existing assertions focused on the cutoff/batching logic. The end-to-end
+// "an active hold blocks the purge" coupling is proven in the dedicated
+// data_lifecycle integration test.
+const NEVER_HELD: LegalHoldGuardPort = {
+  async isDescriptorHeld() {
+    return false;
+  }
+};
 
 describe("resolveRetentionDays", () => {
   test("prefers the CLI flag over the env var", () => {
@@ -145,7 +157,9 @@ describeOrSkip("audit log purge (real PostgreSQL)", () => {
     await seedEvents(TENANT_A, 2, 10); // recent, must survive
     await seedEvents(TENANT_B, 4, 900); // past cutoff but ANOTHER tenant
 
-    const result = await purgeExpiredAuditEvents(sql, TENANT_A, { now: NOW });
+    const result = await purgeExpiredAuditEvents(sql, TENANT_A, NEVER_HELD, {
+      now: NOW
+    });
 
     expect(result.purgedCount).toBe(6);
     expect(result.cutoff).toEqual(
@@ -182,7 +196,9 @@ describeOrSkip("audit log purge (real PostgreSQL)", () => {
 
   test("an empty batch writes no audit event and reports zero", async () => {
     const before = await countEvents(TENANT_A);
-    const result = await purgeExpiredAuditEvents(sql, TENANT_A, { now: NOW });
+    const result = await purgeExpiredAuditEvents(sql, TENANT_A, NEVER_HELD, {
+      now: NOW
+    });
 
     expect(result.purgedCount).toBe(0);
     // No new "purged 0 events" noise — the table is unchanged.
@@ -198,7 +214,7 @@ describeOrSkip("audit log purge (real PostgreSQL)", () => {
     await seedEvents(TENANT_A, 7, 900);
 
     // One bounded call must delete at most batchLimit rows...
-    const first = await purgeExpiredAuditEvents(sql, TENANT_A, {
+    const first = await purgeExpiredAuditEvents(sql, TENANT_A, NEVER_HELD, {
       now: NOW,
       batchLimit: 3
     });

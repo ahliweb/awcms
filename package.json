@@ -44,6 +44,8 @@
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",
     "logs:audit:purge": "bun scripts/audit-log-purge.ts",
+    "data-lifecycle:archive-purge": "bun scripts/data-lifecycle-archive-purge.ts",
+    "data-lifecycle:registry:check": "bun scripts/data-lifecycle-registry-check.ts",
     "analytics:rollup": "bun scripts/visitor-analytics-rollup.ts",
     "analytics:purge": "bun scripts/visitor-analytics-purge.ts",
     "email:dispatch": "bun scripts/email-dispatch.ts",
@@ -78,7 +80,7 @@
     "test:coverage": "bun test --coverage",
     "test:e2e": "bun --bun playwright test",
     "test:e2e:install": "bun --bun playwright install --with-deps chromium",
-    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run family:conformance:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run data-lifecycle:registry:check && bun run family:conformance:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"

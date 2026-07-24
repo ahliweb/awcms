@@ -1,5 +1,5 @@
 {
-  "moduleCount": 16,
+  "moduleCount": 17,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -30,6 +30,22 @@
       ],
       "permissionCount": 39,
       "navigationCount": 1,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "data_lifecycle",
+      "name": "Data Lifecycle",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": ["tenant_admin", "identity_access", "logging"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

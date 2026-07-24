@@ -15,6 +15,7 @@ import { blogContentModule } from "./blog-content/module";
 import { newsPortalModule } from "./news-portal/module";
 import { tenantDomainModule } from "./tenant-domain/module";
 import { visitorAnalyticsModule } from "./visitor-analytics/module";
+import { dataLifecycleModule } from "./data-lifecycle/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -69,10 +70,21 @@ const baseModules: ModuleDescriptor[] = [
   // analytics. Standalone/additive — depends only on
   // tenant_admin/identity_access/logging/reporting (all above), so the DAG
   // stays acyclic. Collection is an additive PUBLIC ingest endpoint (not
-  // middleware); the data_lifecycle legal-hold coupling and the news_portal
-  // preset wiring are dropped/deferred. See
+  // middleware); the news_portal preset wiring is deferred. The data_lifecycle
+  // legal-hold coupling (dropped at its original port) is RE-WIRED by
+  // dataLifecycleModule below (ADR-0037). See
   // src/modules/visitor-analytics/module.ts's `description`.
-  visitorAnalyticsModule
+  visitorAnalyticsModule,
+  // Ported from awcms-micro (Issue #745, ADR-0037): System Foundation retention
+  // governance + legal-hold engine (module-contributed high-volume table
+  // registry, dry-run planning, bounded archive/purge on the worker runner,
+  // provider-neutral archive port). Depends only on
+  // tenant_admin/identity_access/logging (all above), so the DAG stays acyclic.
+  // Provides the source-level LegalHoldGuardPort that logging and
+  // visitor_analytics consume at their purge composition roots (NOT a
+  // capability-registry entry). See src/modules/data-lifecycle/module.ts's
+  // `description`.
+  dataLifecycleModule
 ];
 
 /**

@@ -93,7 +93,15 @@ export type AccessAction =
   // endpoint still requires `Idempotency-Key` and is audited regardless of this
   // classification. (`read`/`create`/`update`/`delete`/`verify` for
   // tenant_domain reuse existing union members.)
-  | "set_primary";
+  | "set_primary"
+  // Data lifecycle (ported from awcms-micro Issue #745, ADR-0037): `release`
+  // ends an active legal hold — a distinct, default-deny-separate permission
+  // from `create` (a role that can create a hold must not implicitly also be
+  // able to release one). Classified HIGH-RISK below: releasing a hold removes
+  // a data-protection safeguard that may let purge/archive resume against
+  // previously-protected rows. (`read`/`create`/`analyze`/`purge` for
+  // data_lifecycle reuse existing union members.)
+  | "release";
 
 export type AccessRequest = {
   moduleKey: string;
@@ -202,7 +210,10 @@ const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
   "revoke",
   "rebuild",
   "export",
-  "archive"
+  "archive",
+  // Data lifecycle (ADR-0037): releasing a legal hold removes a data-protection
+  // safeguard — see the `AccessAction` union's own comment for `release`.
+  "release"
 ]);
 
 export function isHighRiskAction(action: AccessAction): boolean {

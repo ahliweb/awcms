@@ -20,6 +20,7 @@ import {
 } from "../../../../../modules/_shared/idempotency";
 import { purgeVisitorAnalyticsData } from "../../../../../modules/visitor-analytics/application/retention-purge";
 import { resolveVisitorAnalyticsConfig } from "../../../../../modules/visitor-analytics/domain/visitor-analytics-config";
+import { legalHoldGuardPortAdapter } from "../../../../../modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 
 const PURGE_GUARD = {
   moduleKey: "visitor_analytics",
@@ -98,7 +99,13 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       });
     }
 
-    const result = await purgeVisitorAnalyticsData(tx, tenantId, config, now);
+    const result = await purgeVisitorAnalyticsData(
+      tx,
+      tenantId,
+      config,
+      now,
+      legalHoldGuardPortAdapter
+    );
 
     await recordAuditEvent(tx, {
       tenantId,
