@@ -18,6 +18,8 @@
  * is "still applies".
  */
 
+import { DESCRIPTOR_KEY_PATTERN } from "./lifecycle-registry";
+
 export type LegalHoldStatus = "active" | "released";
 
 export type LegalHoldRecord = {
@@ -85,7 +87,16 @@ export type LegalHoldValidationError = { field: string; message: string };
  * — an empty or trivially short reason defeats that evidentiary purpose.
  */
 export function validateCreateLegalHoldInput(
-  input: CreateLegalHoldInput
+  input: CreateLegalHoldInput,
+  /**
+   * The keys of the currently-registered lifecycle descriptors
+   * (`collectHighVolumeTableDescriptors(listModules()).map(d => d.key)`). When
+   * provided, a non-null `descriptorKey` MUST be one of them — a hold scoped to
+   * an unknown key would be "active" yet protect nothing (an operator typo like
+   * `visit_event` for `visit_events` would silently leave data purgeable). Left
+   * optional so the pure rule stays unit-testable without the registry.
+   */
+  validDescriptorKeys?: readonly string[]
 ): LegalHoldValidationError[] {
   const errors: LegalHoldValidationError[] = [];
 
@@ -129,12 +140,30 @@ export function validateCreateLegalHoldInput(
     });
   }
 
-  if (input.descriptorKey !== null && input.descriptorKey.trim().length === 0) {
-    errors.push({
-      field: "descriptorKey",
-      message:
-        "descriptorKey must be null (tenant-wide hold) or a non-empty descriptor key."
-    });
+  if (input.descriptorKey !== null) {
+    if (input.descriptorKey.trim().length === 0) {
+      errors.push({
+        field: "descriptorKey",
+        message:
+          "descriptorKey must be null (tenant-wide hold) or a non-empty descriptor key."
+      });
+    } else if (!DESCRIPTOR_KEY_PATTERN.test(input.descriptorKey)) {
+      // Format-check in the app layer so a malformed key is a clean 400, not an
+      // uncaught `23514` CHECK violation surfacing as a 500.
+      errors.push({
+        field: "descriptorKey",
+        message:
+          'descriptorKey must be null (tenant-wide) or match "<module>.<table>" in lowercase (e.g. "visitor_analytics.visit_events").'
+      });
+    } else if (
+      validDescriptorKeys &&
+      !validDescriptorKeys.includes(input.descriptorKey)
+    ) {
+      errors.push({
+        field: "descriptorKey",
+        message: `descriptorKey "${input.descriptorKey}" is not a registered lifecycle descriptor — a hold scoped to an unknown key would be active yet protect nothing. Use null for a tenant-wide hold, or one of the registered descriptor keys.`
+      });
+    }
   }
 
   if (input.endsAt !== null && Number.isNaN(input.endsAt.getTime())) {

@@ -9,16 +9,19 @@
  * enforcement (fail-closed on a detected, un-excepted conflict), distinct from
  * the ASSIGNMENT-TIME evaluation `business-scope-assignment-service.ts` runs.
  *
- * **Base ships NO rules.** `SOD_RULES` is composed from `listModules()`, and
- * the base registry declares no `sodRules` (issue #181 out-of-scope: the base
- * never hardcodes a domain rule) — so in a pure-base deployment this guard is
- * inert (the cheap `SOD_RELEVANT_PERMISSION_KEYS` set is empty, every request
- * short-circuits before any query). Once a domain module with `sodRules` is
- * added directly to `src/modules/`, `listModules()` (and therefore
- * `SOD_RULES`) carries them and this guard begins enforcing. The optional
- * `rules` parameter lets a test/composition root inject a rule set (e.g. the
- * in-repo fixture's illustrative rules) to exercise enforcement without
- * editing any base module — production always uses the default `SOD_RULES`.
+ * **Base ships exactly one governance rule.** `SOD_RULES` is composed from
+ * `listModules()`. The base ships no *domain business* rule (issue #181
+ * out-of-scope; those stay in the in-repo fixture), but since ADR-0037 the
+ * `data_lifecycle` System-Foundation module ships one module-owned governance
+ * rule — `data_lifecycle.legal_hold_maker_checker` (maker/checker over its own
+ * `legal_hold.create`/`.release`). So in a pure-base deployment this guard is
+ * NOT inert: `SOD_RELEVANT_PERMISSION_KEYS` contains those two keys and a
+ * request touching either resolves the subject's facts and can be denied. Any
+ * further domain module added directly to `src/modules/` with `sodRules` adds
+ * more. The optional `rules` parameter lets a test/composition root inject a
+ * rule set (e.g. the in-repo fixture's illustrative rules) to exercise
+ * enforcement without editing any base module — production always uses the
+ * default `SOD_RULES`.
  *
  * **Both fact sources.** The subject can hold a conflicting permission via an
  * active business-scope assignment's role OR an ordinary RBAC role grant;
@@ -53,7 +56,7 @@ import { resolveSoDAssignmentFacts } from "./business-scope-facts";
 import { recordSoDConflictEvaluation } from "./sod-conflict-evaluation-log";
 import { findValidSoDConflictException } from "./sod-exception-service";
 
-/** The module registry's SoD rules. Empty in a pure base (base ships none). */
+/** The module registry's SoD rules. A pure base ships exactly one — the `data_lifecycle` legal-hold maker/checker (ADR-0037); domain business rules stay fixture-only (#181). */
 const SOD_RULES = collectSoDRuleDescriptors(listModules());
 
 /** Every permission key appearing in ANY default-registry rule — the cheap short-circuit set. Precomputed once for the common (default `SOD_RULES`) path. */

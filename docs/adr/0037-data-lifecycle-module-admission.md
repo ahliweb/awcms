@@ -47,7 +47,7 @@ Eksekusi archive/purge nyata adalah operasi maintenance tak-berpengawas (`bun ru
 
 ## Re-wire dua konsumen yang shipped
 
-- **`visitor_analytics`** (PR #220): descriptor `dataLifecycle` (`visitor_analytics.visit_events`, delegated) + const `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` DIKEMBALIKAN; `purgeVisitorAnalyticsData` menerima param ke-5 `legalHoldGuard` dan menggerbangi HANYA DELETE step-1 `awcms_visit_events` (step 2-4 tetap tak-tergerbang, persis awcms-micro).
+- **`visitor_analytics`** (PR #220): descriptor `dataLifecycle` (`visitor_analytics.visit_events`, delegated) + const `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` DIKEMBALIKAN; `purgeVisitorAnalyticsData` menerima param ke-5 `legalHoldGuard`. Hold yang mencakup `visitor_analytics.visit_events` (descriptor-scoped ATAU tenant-wide) melewati SELURUH purge — events DAN step 2-4 (pembersihan raw-detail sesi, penghapusan sesi, penghapusan rollup) — mempreservasi semua data analitik. Ini SENGAJA lebih luas dari awcms-micro (yang hanya menggerbangi DELETE events): step 2-4 juga memusnahkan data relevan-litigasi (IP/login snapshot, agregat), jadi over-preservasi di bawah hold adalah default aman untuk kontrol kepatuhan.
 - **`logging`** (Issue #146): descriptor `dataLifecycle` (`logging.audit_events`, delegated) + const `LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY` DITAMBAHKAN; `purgeExpiredAuditEvents` menerima param `legalHoldGuard` **WAJIB** (bukan opsional — sesuai instruksi header berkas itu sendiri) dan menggerbangi DELETE audit-events.
 
 Konsumen `form_drafts`/`newsletter`/`comments` (belum di-port ke basis ini) DITUNDA.

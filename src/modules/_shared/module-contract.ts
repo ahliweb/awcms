@@ -170,11 +170,14 @@ export type ModuleDescriptor = {
    * conflicting-permission declaration it wants enforced;
    * `identity_access/domain/sod-rule-registry.ts` is the aggregator/validator
    * (`collectSoDRuleDescriptors`/`validateSoDRuleRegistry` over
-   * `listModules()`). The BASE ships NO domain SoD rules (issue #181
+   * `listModules()`). The BASE ships NO domain *business* SoD rules (issue #181
    * out-of-scope: "Hardcode rule finance/procurement/payroll/inventory ke
    * base" — the base never invents a business rule); a domain module declares
    * its own, and the in-repo test-support fixture
    * `tests/fixtures/example-domain-modules/` carries the illustrative examples.
+   * A System-Foundation module MAY still ship a rule governing ITS OWN
+   * permissions: since ADR-0037 the base `data_lifecycle` module ships one
+   * governance maker/checker rule over its `legal_hold.create`/`.release`.
    */
   sodRules?: SoDRuleDescriptor[];
 };

@@ -222,6 +222,95 @@ suite("data_lifecycle module (integration)", () => {
     expect(unblocked.eventsDeleted).toBe(1);
   });
 
+  test("legal hold preserves ALL visitor-analytics data — session PII + rollups, not just events (M2)", async () => {
+    const runtime = getRuntimeSql();
+    const oldTs = daysAgo(200);
+    const oldDate = daysAgo(800).toISOString().slice(0, 10); // past 730d rollup cutoff
+
+    // An ORPHANED old session (no visit_events) WITH raw PII, plus an old
+    // rollup — absent a hold, step 2 clears the PII, step 3 deletes the session,
+    // step 4 deletes the rollup. (No event, so this is distinct from the prior
+    // test where the event transitively protected the session.)
+    await withTenant(runtime, TENANT_A, async (tx) => {
+      await tx`
+        INSERT INTO awcms_visitor_sessions
+          (tenant_id, visitor_key_hash, area, first_seen_at, last_seen_at,
+           ip_address, login_identifier_snapshot)
+        VALUES (${TENANT_A}, 'sha256:orphan', 'public', ${oldTs}, ${oldTs},
+           '203.0.113.5', 'hash:user@example')
+      `;
+      await tx`
+        INSERT INTO awcms_visitor_daily_rollups (tenant_id, date, area)
+        VALUES (${TENANT_A}, ${oldDate}, 'public')
+      `;
+    });
+
+    // A TENANT-WIDE hold (descriptorKey null) must cover visit_events too, so
+    // the whole purge is skipped.
+    await withTenant(runtime, TENANT_A, (tx) =>
+      createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
+    );
+
+    const held = await withTenant(runtime, TENANT_A, (tx) =>
+      purgeVisitorAnalyticsData(
+        tx,
+        TENANT_A,
+        VA_CONFIG,
+        NOW,
+        legalHoldGuardPortAdapter
+      )
+    );
+    if (held instanceof Response) throw new Error("unexpected 503 (held run)");
+    expect(held).toEqual({
+      eventsDeleted: 0,
+      sessionsRawDetailCleared: 0,
+      sessionsDeleted: 0,
+      rollupsDeleted: 0
+    });
+
+    // The PII column is physically untouched, and both rows still exist.
+    const preserved = await withTenant(runtime, TENANT_A, async (tx) => {
+      const s = (await tx`
+        SELECT ip_address, login_identifier_snapshot
+        FROM awcms_visitor_sessions WHERE tenant_id = ${TENANT_A}
+      `) as {
+        ip_address: string | null;
+        login_identifier_snapshot: string | null;
+      }[];
+      const r = (await tx`
+        SELECT count(*)::int AS n FROM awcms_visitor_daily_rollups WHERE tenant_id = ${TENANT_A}
+      `) as { n: number }[];
+      return { s, rollups: r[0]!.n };
+    });
+    expect(preserved.s).toHaveLength(1);
+    expect(preserved.s[0]!.ip_address).toBe("203.0.113.5");
+    expect(preserved.s[0]!.login_identifier_snapshot).toBe("hash:user@example");
+    expect(preserved.rollups).toBe(1);
+
+    // Release → normal retention resumes: PII cleared, session + rollup deleted.
+    await withTenant(runtime, TENANT_A, async (tx) => {
+      const active = await fetchActiveLegalHoldsForPlanning(tx, TENANT_A);
+      for (const hold of active) {
+        await releaseLegalHold(tx, TENANT_A, ACTOR, hold.id, {
+          releaseReason: "Legal matter concluded 2026-07."
+        });
+      }
+    });
+    const after = await withTenant(runtime, TENANT_A, (tx) =>
+      purgeVisitorAnalyticsData(
+        tx,
+        TENANT_A,
+        VA_CONFIG,
+        NOW,
+        legalHoldGuardPortAdapter
+      )
+    );
+    if (after instanceof Response) throw new Error("unexpected 503");
+    expect(after.sessionsRawDetailCleared).toBe(1);
+    expect(after.sessionsDeleted).toBe(1);
+    expect(after.rollupsDeleted).toBe(1);
+  });
+
   test("legal hold blocks the logging audit-events purge; release un-blocks it", async () => {
     const runtime = getRuntimeSql();
     const oldTs = daysAgo(900); // past the 730d audit default cutoff

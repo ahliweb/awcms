@@ -41,10 +41,13 @@ export const VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY =
  *  - data_lifecycle COUPLING RE-WIRED (ADR-0037). The `data_lifecycle` module
  *    was ported to this base, so the `dataLifecycle` descriptor
  *    (`visitor_analytics.visit_events`, delegated) and the `LegalHoldGuardPort`
- *    gate on step 1's `awcms_visit_events` DELETE are RE-ADDED, exactly as
- *    awcms-micro: an active legal hold on this descriptor now blocks the events
- *    purge. Steps 2-4 (session raw-detail clearing, session deletion, rollup
- *    deletion) stay ungated (not covered by any registered descriptor).
+ *    gate are RE-ADDED. An active hold covering `visitor_analytics.visit_events`
+ *    (descriptor-scoped OR tenant-wide) blocks the ENTIRE purge — events AND
+ *    steps 2-4 (session raw-detail clearing, session deletion, rollup deletion).
+ *    This is deliberately broader than awcms-micro (which gated only the events
+ *    DELETE): steps 2-4 also destroy litigation-relevant data (IP/login
+ *    snapshot, aggregates), so over-preserving under a hold is the safe default
+ *    for a compliance control (`application/retention-purge.ts`).
  *  - NEWS PORTAL PRESET WIRING DEFERRED. awcms-micro's
  *    `news_portal_full_online_r2` preset enables this module. This base's
  *    `news_portal` was ported without that wiring and is NOT modified here
@@ -205,7 +208,7 @@ export const visitorAnalyticsModule = defineModule({
         purgeFunctionRef:
           "src/modules/visitor-analytics/application/retention-purge.ts#purgeVisitorAnalyticsData",
         description:
-          "Deletes/clears four categories of visitor analytics data past their respective retention cutoffs (events, session raw detail, sessions, rollups) — the same function both the scheduled job and the on-demand POST /api/v1/analytics/retention/purge endpoint call. The step-1 events DELETE is gated by a LegalHoldGuardPort (ADR-0037)."
+          "Deletes/clears four categories of visitor analytics data past their respective retention cutoffs (events, session raw detail, sessions, rollups) — the same function both the scheduled job and the on-demand POST /api/v1/analytics/retention/purge endpoint call. An active legal hold covering visitor_analytics.visit_events (descriptor-scoped or tenant-wide) skips the ENTIRE purge, preserving all analytics data (LegalHoldGuardPort, ADR-0037)."
       }
     }
   ]

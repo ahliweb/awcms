@@ -121,6 +121,48 @@ describe("validateCreateLegalHoldInput", () => {
     });
     expect(errors.map((e) => e.field)).toContain("endsAt");
   });
+
+  test("rejects a malformed descriptorKey (L1 — clean 400, not a 500 from the DB CHECK)", () => {
+    for (const bad of [
+      "NoDot",
+      "Visitor_Analytics.Visit_Events",
+      "a.b.c",
+      "1bad.key"
+    ]) {
+      const errors = validateCreateLegalHoldInput({
+        ...valid,
+        descriptorKey: bad
+      });
+      expect(errors.map((e) => e.field)).toContain("descriptorKey");
+    }
+  });
+
+  test("rejects a well-formed but UNREGISTERED descriptorKey when the registry is supplied (M1 — a hold that protects nothing)", () => {
+    const registered = [
+      "visitor_analytics.visit_events",
+      "logging.audit_events"
+    ];
+    // Operator typo: `visit_event` (missing the trailing 's') is well-formed but not registered.
+    const errors = validateCreateLegalHoldInput(
+      { ...valid, descriptorKey: "visitor_analytics.visit_event" },
+      registered
+    );
+    expect(errors.map((e) => e.field)).toContain("descriptorKey");
+
+    // A registered key (and a tenant-wide null) pass.
+    expect(
+      validateCreateLegalHoldInput(
+        { ...valid, descriptorKey: "visitor_analytics.visit_events" },
+        registered
+      )
+    ).toEqual([]);
+    expect(
+      validateCreateLegalHoldInput(
+        { ...valid, descriptorKey: null },
+        registered
+      )
+    ).toEqual([]);
+  });
 });
 
 describe("validateReleaseLegalHoldInput", () => {

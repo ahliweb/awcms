@@ -133,9 +133,13 @@ i18n framework or `components/ui/` library. No client script, no CSP surface.
 - **data_lifecycle coupling RE-WIRED (ADR-0037).** The `data_lifecycle` module
   is now ported to this base, so the `dataLifecycle` descriptor
   (`visitor_analytics.visit_events`, delegated) and the `LegalHoldGuardPort` gate
-  on step 1's `awcms_visit_events` DELETE are RE-ADDED, exactly as awcms-micro:
-  an active legal hold on this descriptor blocks the events purge (steps 2-4 stay
-  ungated). The concrete adapter is injected at the two composition roots
+  are RE-ADDED. An active hold covering `visitor_analytics.visit_events`
+  (descriptor-scoped or tenant-wide) skips the **entire** purge — events AND
+  steps 2-4 (session raw-detail clearing, session deletion, rollup deletion) —
+  preserving all analytics data. This is deliberately broader than awcms-micro
+  (which gated only the events DELETE): steps 2-4 also destroy litigation-relevant
+  data (IP/login snapshot, aggregates), so over-preserving under a hold is the
+  safe default. The concrete adapter is injected at the two composition roots
   (`POST /api/v1/analytics/retention/purge` and `scripts/visitor-analytics-purge.ts`).
 - **news_portal preset wiring DEFERRED.** awcms-micro's
   `news_portal_full_online_r2` preset enables this module. This base's

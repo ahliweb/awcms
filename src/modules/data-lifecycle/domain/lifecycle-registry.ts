@@ -23,7 +23,7 @@ import type {
 
 const TABLE_NAME_PATTERN = /^awcms_[a-z][a-z0-9_]*$/;
 const COLUMN_NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
-const DESCRIPTOR_KEY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+export const DESCRIPTOR_KEY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 
 /** Sane upper bound on a single batch/pass size — defense in depth against a descriptor accidentally declaring an effectively-unbounded batch ("purge must not issue unbounded deletes"). Ten times `AUDIT_EVENT_PURGE_BATCH_LIMIT` (5000, the largest existing precedent) leaves generous headroom without allowing an arbitrary value. */
 export const MAX_LIFECYCLE_BATCH_LIMIT = 50_000;

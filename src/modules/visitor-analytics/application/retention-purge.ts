@@ -4,19 +4,25 @@
  * (on-demand) and `bun run analytics:purge` (scheduled worker, via
  * `purgeVisitorAnalyticsForAllTenants`).
  *
- * Legal hold enforcement (ADR-0037): step 1 (`awcms_visit_events`) is this
- * module's registered "delegated" adopter for `visitor_analytics.visit_events`
+ * Legal hold enforcement (ADR-0037): `awcms_visit_events` is this module's
+ * registered "delegated" adopter for `visitor_analytics.visit_events`
  * (`src/modules/visitor-analytics/module.ts`'s `dataLifecycle` descriptor) — the
  * `data_lifecycle` module's own engine never mutates this table, only reports a
- * dry-run snapshot, so THIS function is the real enforcement point. Before step
- * 1's DELETE, this asks the caller-supplied `legalHoldGuard` (a
- * `LegalHoldGuardPort`, see `_shared/ports/legal-hold-guard-port.ts`) and skips
- * ONLY that step if `visitor_analytics.visit_events` is held — steps 2-4 (session
- * raw-detail clearing, session deletion, rollup deletion) are not covered by any
- * registered descriptor today and are unaffected. Not imported directly from
- * `data_lifecycle`'s `application`/`domain` code — that would create a forbidden
- * circular cross-module import (ADR-0011); the port is the documented way around
- * it, wired at the composition roots (the retention-purge route and
+ * dry-run snapshot, so THIS function is the real enforcement point. Before any
+ * DELETE, this asks the caller-supplied `legalHoldGuard` (a `LegalHoldGuardPort`,
+ * see `_shared/ports/legal-hold-guard-port.ts`) and, if a hold covers
+ * `visitor_analytics.visit_events` (a descriptor-scoped hold OR a tenant-wide
+ * `descriptorKey: null` hold — `isDescriptorHeld` surfaces both), skips **every**
+ * step and preserves all of this tenant's analytics data. This is deliberately
+ * broader than awcms-micro (which gated only the events DELETE): steps 2-4
+ * (session raw-detail clearing, session deletion, rollup deletion) also destroy
+ * litigation-relevant data (IP / login snapshot, aggregates), and the session/
+ * rollup tables are not separately registered descriptors, so gating them behind
+ * the events hold is the safe, over-preserving default for a compliance control
+ * — normal retention resumes once the hold is released. Not imported directly
+ * from `data_lifecycle`'s `application`/`domain` code — that would create a
+ * forbidden circular cross-module import (ADR-0011); the port is the documented
+ * way around it, wired at the composition roots (the retention-purge route and
  * `scripts/visitor-analytics-purge.ts`).
  *
  * Four independent cutoffs, each from the module's config
@@ -70,13 +76,23 @@ export async function purgeVisitorAnalyticsData(
     VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY
   );
 
-  const deletedEvents = visitEventsHeld
-    ? []
-    : await tx`
-        DELETE FROM awcms_visit_events
-        WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
-        RETURNING id
-      `;
+  // A hold covering this module's data preserves ALL of it (see header): skip
+  // every step, not just the events DELETE, so session PII and rollups survive
+  // the hold too.
+  if (visitEventsHeld) {
+    return {
+      eventsDeleted: 0,
+      sessionsRawDetailCleared: 0,
+      sessionsDeleted: 0,
+      rollupsDeleted: 0
+    };
+  }
+
+  const deletedEvents = await tx`
+    DELETE FROM awcms_visit_events
+    WHERE tenant_id = ${tenantId} AND occurred_at < ${eventCutoff}
+    RETURNING id
+  `;
 
   const clearedSessions = await tx`
     UPDATE awcms_visitor_sessions
