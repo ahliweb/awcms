@@ -55,12 +55,18 @@ describe("descriptor <-> permission seed parity", () => {
 
   test("descriptor is a standalone system module with the expected deps", () => {
     expect(visitorAnalyticsModule.type).toBe("system");
+    // `reporting` is intentionally NOT a lifecycle dependency: `dependencies`
+    // governs enable/disable ORDERING only and this module consumes no
+    // `reporting` capability/port/table/projection (it is a conceptual peer,
+    // not a runtime prerequisite). Declaring it would force `reporting` to stay
+    // enabled for no functional reason and wrongly make it a non-leaf. See the
+    // PORT ADAPTATIONS block in the module descriptor.
     expect(visitorAnalyticsModule.dependencies).toEqual([
       "tenant_admin",
       "identity_access",
-      "logging",
-      "reporting"
+      "logging"
     ]);
+    expect(visitorAnalyticsModule.dependencies).not.toContain("reporting");
     expect(visitorAnalyticsModule.api?.basePath).toBe("/api/v1/analytics");
   });
 });

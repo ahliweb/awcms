@@ -37,6 +37,17 @@ import { defineModule } from "../_shared/module-contract";
  *    `news_portal_full_online_r2` preset enables this module. This base's
  *    `news_portal` was ported without that wiring and is NOT modified here
  *    (this module ships standalone).
+ *  - NO `reporting` LIFECYCLE DEPENDENCY. awcms-micro lists `reporting` in
+ *    `dependencies`, but `dependencies` governs enable/disable LIFECYCLE
+ *    ORDERING only (see `_shared/module-contract.ts`) and neither micro nor
+ *    this base consumes any `reporting` capability, port, table, or projection
+ *    from `visitor_analytics` (no `capabilities.consumes` entry, no import).
+ *    `reporting` is a conceptual PEER (both `type: "system"` observability),
+ *    not a runtime prerequisite — visitor telemetry has its own schema and
+ *    rollup and functions with `reporting` disabled. Declaring the edge would
+ *    force `reporting` to stay enabled for no functional reason and wrongly
+ *    make it a non-leaf. Dropped here (kept `tenant_admin`/`identity_access`/
+ *    `logging`, which ARE used for tenant context, ABAC, and audit).
  */
 export const visitorAnalyticsModule = defineModule({
   key: "visitor_analytics",
@@ -45,7 +56,7 @@ export const visitorAnalyticsModule = defineModule({
   status: "active",
   description:
     "Privacy-first human visitor statistics for admin and public routes, in both online and offline/LAN configurations (ported from awcms-micro epic #617-#624). VISITOR_ANALYTICS_ENABLED=false by default — a fresh install collects nothing until an operator opts in; raw IP, raw user-agent, and geolocation collection are each independently disabled unless explicitly enabled (see domain/visitor-analytics-config.ts). Visitor identifiers (visitor-key cookie, IP, user-agent) are stored only as salted HMAC-SHA256 hashes, never raw, unless the operator explicitly opts into raw collection. Ships the tenant-scoped awcms_visitor_sessions/awcms_visit_events/awcms_visitor_daily_rollups schema (migrations 049/050/051, RLS FORCE), the additive PUBLIC visit-ingest endpoint POST /api/v1/analytics/collect (anonymous beacon, resolves tenant from tenantCode, src/middleware.ts untouched), the authenticated ABAC-guarded read API (GET /api/v1/analytics/summary|realtime|sessions|events|pages|devices|locations|security|settings, PATCH .../settings), the high-risk POST /api/v1/analytics/retention/purge (Idempotency-Key + critical audit), the scheduled rollup and retention-purge jobs (bun run analytics:rollup / analytics:purge), and the /admin/analytics dashboard. PORT DROPS: the awcms-micro dataLifecycle descriptor and data_lifecycle LegalHoldGuardPort (that module is not ported here) — purge is unconditional. PORT DEFERRAL: the news_portal preset that enables this module in awcms-micro is not wired here.",
-  dependencies: ["tenant_admin", "identity_access", "logging", "reporting"],
+  dependencies: ["tenant_admin", "identity_access", "logging"],
   type: "system",
   api: {
     openApiPath: "openapi/modules/visitor-analytics.openapi.yaml",

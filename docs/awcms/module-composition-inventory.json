@@ -256,12 +256,7 @@
       "version": "0.1.0",
       "status": "active",
       "type": "system",
-      "dependencies": [
-        "tenant_admin",
-        "identity_access",
-        "logging",
-        "reporting"
-      ],
+      "dependencies": ["tenant_admin", "identity_access", "logging"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 8,
