@@ -13,7 +13,7 @@ import { listPublicBlogPostsForFeed } from "../../../modules/blog-content/applic
 import { fetchBlogSettings } from "../../../modules/blog-content/application/blog-settings-directory";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import { resolveNewsArticlePreviewImage } from "../../../modules/blog-content/application/news-article-seo-metadata";
-import { newsMediaPortAdapter } from "../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../modules/media-library/application/media-library-port-adapter";
 
 /**
  * `GET /blog/{tenantCode}/sitemap-blog.xml` (Issue #540) — sitemap
@@ -61,7 +61,7 @@ export const GET: APIRoute = async ({ params, url }) => {
         const previewImage = await resolveNewsArticlePreviewImage(
           tx,
           tenant.tenantId,
-          newsMediaPortAdapter,
+          mediaLibraryPortAdapter,
           settings,
           post
         );

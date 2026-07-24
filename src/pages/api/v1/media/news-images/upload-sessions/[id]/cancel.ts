@@ -12,10 +12,10 @@ import { recordAuditEvent } from "../../../../../../../modules/logging/applicati
 import {
   fetchNewsMediaObjectById,
   markNewsMediaObjectFailed
-} from "../../../../../../../modules/news-portal/application/news-media-object-directory";
+} from "../../../../../../../modules/media-library/application/media-object-directory";
 
 const CANCEL_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "media_library",
   activityCode: "media",
   action: "cancel" as const
 };
@@ -90,7 +90,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
     await recordAuditEvent(tx, {
       tenantId,
       actorTenantUserId: auth.context.tenantUserId,
-      moduleKey: "news_portal",
+      moduleKey: "media_library",
       action: "news_media.object.upload_cancelled",
       resourceType: "news_media_object",
       resourceId: objectId,

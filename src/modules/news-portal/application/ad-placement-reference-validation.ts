@@ -29,7 +29,7 @@ import { AD_PLACEMENT_PRESETS } from "../domain/ad-placement-policy";
 import {
   fetchNewsMediaObjectById,
   isNewsMediaObjectSafeForPublicReference
-} from "./news-media-object-directory";
+} from "../../media-library/application/media-object-directory";
 
 export type AdPlacementReferenceValidationError = {
   field: string;

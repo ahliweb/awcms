@@ -15,13 +15,13 @@ import {
 import {
   resolveNewsMediaR2Config,
   findMissingNewsMediaR2Vars
-} from "../../../../../../modules/news-portal/domain/news-media-r2-config";
-import { validateCreateNewsMediaUploadSessionInput } from "../../../../../../modules/news-portal/domain/news-media-upload-session-validation";
-import { createPendingNewsMediaObject } from "../../../../../../modules/news-portal/application/news-media-object-directory";
-import { createNewsMediaR2Client } from "../../../../../../modules/news-portal/infrastructure/news-media-r2-client";
+} from "../../../../../../modules/media-library/domain/media-r2-config";
+import { validateCreateNewsMediaUploadSessionInput } from "../../../../../../modules/media-library/domain/media-upload-session-validation";
+import { createPendingNewsMediaObject } from "../../../../../../modules/media-library/application/media-object-directory";
+import { createNewsMediaR2Client } from "../../../../../../modules/media-library/infrastructure/media-r2-client";
 
 const CREATE_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "media_library",
   activityCode: "media",
   action: "create" as const
 };

@@ -11,7 +11,7 @@ import { hashSessionToken } from "../../../../../../lib/auth/session-token";
 import { fetchBlogPageById } from "../../../../../../modules/blog-content/application/blog-page-directory";
 import { fetchBlogSettings } from "../../../../../../modules/blog-content/application/blog-settings-directory";
 import { evaluateContentQualityChecklistForContent } from "../../../../../../modules/blog-content/application/content-quality-checklist-gate";
-import { newsMediaPortAdapter } from "../../../../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../../../../modules/media-library/application/media-library-port-adapter";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -80,7 +80,7 @@ export const GET: APIRoute = async ({ request, params, cookies }) => {
       "page",
       page,
       0,
-      newsMediaPortAdapter,
+      mediaLibraryPortAdapter,
       blogSettings.contentQualityChecklistPolicy,
       {
         socialPreviewFallback: {

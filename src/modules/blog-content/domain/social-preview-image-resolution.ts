@@ -1,7 +1,7 @@
 /**
  * Social/SEO preview image source-priority resolution (Issue #649, epic
  * `news_portal`). Pure function — takes candidate media object ids plus the
- * SET of ids that already resolved safely (`NewsMediaPort.resolveMediaReferences`'s
+ * SET of ids that already resolved safely (`MediaLibraryPort.resolveMediaReferences`'s
  * result keys: existing, same-tenant, `verified`/`attached` R2 objects only)
  * and returns the FIRST candidate, in priority order, that is actually safe
  * to use. Never does its own database round trip or R2 verification — that

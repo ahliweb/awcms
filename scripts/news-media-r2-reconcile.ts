@@ -59,9 +59,9 @@ import {
   runJob,
   writeJobTelemetry
 } from "../src/lib/jobs/job-runner";
-import { createNewsMediaR2Client } from "../src/modules/news-portal/infrastructure/news-media-r2-client";
-import { resolveNewsMediaR2Config } from "../src/modules/news-portal/domain/news-media-r2-config";
-import { reconcileNewsMediaForAllTenants } from "../src/modules/news-portal/application/news-media-reconciliation";
+import { createNewsMediaR2Client } from "../src/modules/media-library/infrastructure/media-r2-client";
+import { resolveNewsMediaR2Config } from "../src/modules/media-library/domain/media-r2-config";
+import { reconcileNewsMediaForAllTenants } from "../src/modules/media-library/application/media-reconciliation";
 
 async function main() {
   const config = resolveNewsMediaR2Config();

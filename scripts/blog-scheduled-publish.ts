@@ -15,7 +15,7 @@
  * script predates that runner and used a hand-rolled try/catch loop).
  *
  * This script is the composition root (ADR-0011) that would wire
- * `news_portal`'s `NewsMediaPort`/`social_publishing`'s
+ * `news_portal`'s `MediaLibraryPort`/`social_publishing`'s
  * `SocialPublishingPort` implementations into `blog_content`'s scheduled-
  * publish job. Neither module is ported to this base yet, so this script
  * injects `blog_content`'s own no-op adapters instead — see
@@ -37,7 +37,7 @@ import {
 } from "../src/lib/jobs/job-runner";
 import { fetchActiveTenants } from "../src/lib/jobs/batching";
 import { publishDueScheduledPosts } from "../src/modules/blog-content/application/blog-scheduled-publish";
-import { newsMediaPortAdapter } from "../src/modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../src/modules/media-library/application/media-library-port-adapter";
 import { noopSocialPublishingPortAdapter } from "../src/modules/blog-content/application/social-publishing-port-noop-adapter";
 
 async function main() {
@@ -78,7 +78,7 @@ async function main() {
             const tenantResult = await publishDueScheduledPosts(
               sql,
               tenant.id,
-              newsMediaPortAdapter,
+              mediaLibraryPortAdapter,
               { now: new Date(), correlationId: ctx.correlationId },
               noopSocialPublishingPortAdapter
             );

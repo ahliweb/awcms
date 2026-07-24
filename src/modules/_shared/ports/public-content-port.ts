@@ -3,7 +3,7 @@
  * capability `news_portal` consumes from `blog_content`: read-only,
  * public-safe post/category queries for the editorial homepage section
  * composer (Issue #637). Lives in neutral ground (`_shared`, imports
- * NOTHING from either module), same reasoning as `news-media-port.ts`
+ * NOTHING from either module), same reasoning as `media-library-port.ts`
  * (see that file's header) but for the opposite direction of capability
  * flow — `blog_content` is the PROVIDER here, `news_portal` the consumer.
  *

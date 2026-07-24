@@ -3,7 +3,7 @@
  * metadata on a public post detail page — the single place that bulk-
  * resolves every candidate media object id (featured image, explicit SEO
  * image override, gallery images, video thumbnails, tenant fallback social
- * image) in ONE `NewsMediaPort.resolveMediaReferences` call, picks the
+ * image) in ONE `MediaLibraryPort.resolveMediaReferences` call, picks the
  * winning social preview image via the pure priority chain
  * (`social-preview-image-resolution.ts`), and builds the `NewsArticle`
  * JSON-LD object. Shared by BOTH public post detail routes (`/news/[slug].ts`,
@@ -13,7 +13,7 @@
  * `content-quality-checklist-gate.ts` and `news-media-reference-gate.ts`
  * already established for this epic.
  */
-import type { NewsMediaPort } from "../../_shared/ports/news-media-port";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 import type { PublicBlogPostDetail } from "./public-blog-directory";
 import { fetchPublicPostTaxonomyTerms } from "./public-blog-directory";
 import type { BlogSettingsView } from "./blog-settings-directory";
@@ -61,7 +61,7 @@ export type NewsArticleSeoMetadata = {
 export async function buildNewsArticleSeoMetadata(
   tx: Bun.SQL,
   tenantId: string,
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   blogSettings: BlogSettingsView,
   input: NewsArticleSeoMetadataInput
 ): Promise<NewsArticleSeoMetadata> {
@@ -203,7 +203,7 @@ export type ResolvedNewsArticlePreviewImage = {
 export async function resolveNewsArticlePreviewImage(
   tx: Bun.SQL,
   tenantId: string,
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   blogSettings: BlogSettingsView,
   post: PublicBlogPostDetail
 ): Promise<ResolvedNewsArticlePreviewImage | null> {

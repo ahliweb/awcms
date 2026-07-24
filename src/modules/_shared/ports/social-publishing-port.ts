@@ -3,7 +3,7 @@
  * capability `blog_content` consumes from `social_publishing`: "an eligible
  * article just became published, create outbox jobs for it if applicable."
  * Lives in neutral ground (`_shared`, imports NOTHING from either module),
- * same reasoning `news-media-port.ts`/`public-content-port.ts` document in
+ * same reasoning `media-library-port.ts`/`public-content-port.ts` document in
  * their own headers.
  *
  * `optional: true` on `blog_content`'s `capabilities.consumes` entry for
@@ -16,7 +16,7 @@
  * The concrete implementation
  * (`social-publishing/application/social-publishing-port-adapter.ts`) is a
  * FACTORY (`createSocialPublishingPortAdapter(mediaPort)`), not a ready-made
- * singleton — it itself needs `news_portal`'s `NewsMediaPort` (to resolve a
+ * singleton — it itself needs `media_library`'s `MediaLibraryPort` (to resolve a
  * verified R2 image URL for the article, per the issue's own "Integration
  * with news content" section) but must not import `news_portal`'s concrete
  * adapter from within `social_publishing/application` (that would be the

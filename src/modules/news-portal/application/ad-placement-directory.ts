@@ -11,7 +11,7 @@ import {
   selectAdsForRotation,
   type AdRotationCandidate
 } from "../domain/ad-placement-rotation";
-import { isNewsMediaObjectSafeForPublicReference } from "./news-media-object-directory";
+import { isNewsMediaObjectSafeForPublicReference } from "../../media-library/application/media-object-directory";
 
 /**
  * Read/write query module for `awcms_news_portal_ad_placements`

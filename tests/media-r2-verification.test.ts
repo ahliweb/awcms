@@ -9,12 +9,12 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { verifyNewsMediaR2Object } from "../src/modules/news-portal/application/news-media-r2-verification";
+import { verifyNewsMediaR2Object } from "../src/modules/media-library/application/media-r2-verification";
 import type {
   NewsMediaR2Client,
   NewsMediaR2HeadResult,
   NewsMediaR2GetResult
-} from "../src/modules/news-portal/infrastructure/news-media-r2-client";
+} from "../src/modules/media-library/infrastructure/media-r2-client";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BYTES = 10_485_760;

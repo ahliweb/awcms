@@ -4,7 +4,7 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import { fetchPostTermIds } from "./blog-taxonomy-directory";
 import { fetchBlogSettings } from "./blog-settings-directory";
 import { evaluateContentQualityChecklistForContent } from "./content-quality-checklist-gate";
-import type { NewsMediaPort } from "../../_shared/ports/news-media-port";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 import type { SocialPublishingPort } from "../../_shared/ports/social-publishing-port";
 
 /**
@@ -94,7 +94,7 @@ type DuePostRow = {
 export async function publishDueScheduledPosts(
   sql: Bun.SQL,
   tenantId: string,
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   options: PublishDueScheduledPostsOptions = {},
   socialPublishingPort?: SocialPublishingPort
 ): Promise<PublishDueScheduledPostsResult> {
@@ -187,7 +187,7 @@ export async function publishDueScheduledPosts(
          * tenant's whole batch" down to one query round-trip — it doesn't
          * eliminate the race outright (that would need locking the
          * referenced media rows too, a bigger change touching the shared
-         * `NewsMediaPort` every read-only preview endpoint also uses), but
+         * `MediaLibraryPort` every read-only preview endpoint also uses), but
          * closes the realistic exposure at negligible cost.
          */
         if (checklist.passed) {

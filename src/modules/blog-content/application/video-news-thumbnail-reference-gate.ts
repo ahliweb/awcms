@@ -1,5 +1,5 @@
 import { collectVideoNewsThumbnailReferences } from "../domain/content-block-media-references";
-import type { NewsMediaPort } from "../../_shared/ports/news-media-port";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
 
 /**
  * Sibling to `news-media-reference-gate.ts`'s
@@ -30,14 +30,14 @@ export async function validateVideoNewsThumbnailReferencesForFullOnlineR2Mode(
   tx: Bun.SQL,
   tenantId: string,
   contentJson: Record<string, unknown> | undefined,
-  mediaPort: NewsMediaPort,
+  mediaPort: MediaLibraryPort,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<VideoNewsThumbnailReferenceValidationResult> {
   if (!contentJson) {
     return { valid: true };
   }
 
-  const modeActive = await mediaPort.isFullOnlineR2ModeActiveForTenant(
+  const modeActive = await mediaPort.isManagedMediaEnforcementActiveForTenant(
     tx,
     tenantId,
     env

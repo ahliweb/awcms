@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { decideNewsMediaFinalizeOutcome } from "../src/modules/news-portal/domain/news-media-finalize-decision";
+import { decideNewsMediaFinalizeOutcome } from "../src/modules/media-library/domain/media-finalize-decision";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 

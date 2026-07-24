@@ -7,7 +7,7 @@ import {
   isValidNewsMediaObjectKey,
   UnsupportedNewsMediaMimeTypeError,
   UntrustedNewsMediaPublicBaseUrlError
-} from "../src/modules/news-portal/domain/news-media-object-key";
+} from "../src/modules/media-library/domain/media-object-key";
 
 const TENANT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const OTHER_TENANT_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";

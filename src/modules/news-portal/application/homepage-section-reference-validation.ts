@@ -36,7 +36,7 @@ import type { PublicContentPort } from "../../_shared/ports/public-content-port"
 import {
   fetchNewsMediaObjectById,
   isNewsMediaObjectSafeForPublicReference
-} from "./news-media-object-directory";
+} from "../../media-library/application/media-object-directory";
 
 export type HomepageSectionReferenceValidationError = {
   field: string;

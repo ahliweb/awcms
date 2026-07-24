@@ -35,7 +35,7 @@ import {
   checklistBlockersToErrorDetails,
   evaluateContentQualityChecklistForContent
 } from "../../../../../../modules/blog-content/application/content-quality-checklist-gate";
-import { newsMediaPortAdapter } from "../../../../../../modules/news-portal/application/news-media-port-adapter";
+import { mediaLibraryPortAdapter } from "../../../../../../modules/media-library/application/media-library-port-adapter";
 
 const SCHEDULE_GUARD = {
   moduleKey: "blog_content",
@@ -161,7 +161,7 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
       "post",
       post,
       termIds.length,
-      newsMediaPortAdapter,
+      mediaLibraryPortAdapter,
       blogSettings.contentQualityChecklistPolicy,
       {
         scheduledAt,
