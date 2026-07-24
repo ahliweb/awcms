@@ -48,17 +48,27 @@ export function lockElement(
  * `body` is optional so a bodyless mutation (e.g. `DELETE /roles/{id}`, a
  * restore/toggle) can be sent without an empty-object payload; when omitted no
  * request body and no `Content-Type` header are attached.
+ *
+ * `extraHeaders` is optional and merged onto the request headers — used by
+ * high-risk mutations that must carry an `Idempotency-Key` header (e.g. the
+ * tenant-domain verify/set-primary buttons). It never overrides the
+ * `Content-Type` a JSON body sets.
  */
 export async function sendJson(
   method: "POST" | "PATCH" | "PUT" | "DELETE",
   url: string,
-  body?: unknown
+  body?: unknown,
+  extraHeaders?: Record<string, string>
 ): Promise<{ ok: boolean; errorCode: string | null }> {
   try {
     const hasBody = body !== undefined;
+    const headers: Record<string, string> = { ...extraHeaders };
+    if (hasBody) {
+      headers["Content-Type"] = "application/json";
+    }
     const response = await fetch(url, {
       method,
-      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       credentials: "same-origin",
       body: hasBody ? JSON.stringify(body) : undefined
     });

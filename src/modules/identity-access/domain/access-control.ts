@@ -84,7 +84,15 @@ export type AccessAction =
   // gate on idempotency/audit). (`attach`/`detach`/`delete`/`restore`/`purge`/
   // `cancel` are also seeded in the `news_portal.media` permission catalog but
   // reuse existing union members / are not yet authorized by any ported route.)
-  | "verify";
+  | "verify"
+  // Tenant domain (ported from awcms-micro epic #555): `set_primary` atomically
+  // makes a verified tenant domain the active primary. Deliberately NOT in
+  // `HIGH_RISK_ACTIONS` (same posture as `verify` — it only flips one row's
+  // primary flag, does not delete or irreversibly change data); the set-primary
+  // endpoint still requires `Idempotency-Key` and is audited regardless of this
+  // classification. (`read`/`create`/`update`/`delete`/`verify` for
+  // tenant_domain reuse existing union members.)
+  | "set_primary";
 
 export type AccessRequest = {
   moduleKey: string;

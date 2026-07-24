@@ -27,23 +27,26 @@ Kami memutuskan memakai **PostgreSQL** dengan **Row Level Security (RLS)** pada 
 
 RLS + `FORCE` (di atas) menutup akses tenant-scoped biasa, tapi beberapa
 query harus dijalankan **sebelum** tenant context ada sama sekali (mis.
-resolusi publik `hostname`/`tenantCode` -> `tenant_id`). Contoh ilustratif
-(prospektif): saat modul `tenant_domain` di-port dari `awcms-mini`, resolver
-lookup-nya (mis. fungsi `awcms_resolve_tenant_domain_lookup`, Issue #559,
-epic #555) akan memakai pola `SECURITY DEFINER` ini. **Catatan status:** modul
-`tenant_domain` **belum di-port** ke repo ini — belum ada migrasi lookup-nya
-dan **tidak ada satu pun fungsi `SECURITY DEFINER` di `sql/` saat ini**; nomor
-migrasi lookup-nya nanti **TBD (bukan `033`, yang kini dipakai skema
-`theming`)**. Setiap fungsi `SECURITY DEFINER` baru di repo ini wajib
-memenuhi checklist berikut sebelum dianggap aman (termasuk verifikasi empiris
-terhadap DB yang berjalan, bukan diasumsikan dari dokumentasi PostgreSQL
-semata):
+resolusi publik `hostname`/`tenantCode` -> `tenant_id`). **Contoh nyata:** modul
+`tenant_domain` (di-port dari `awcms-micro` epic #555) kini ada di repo ini;
+resolver lookup-nya `awcms_resolve_tenant_domain_lookup` (`sql/048`) adalah
+**fungsi `SECURITY DEFINER` pertama** di `sql/`. Setiap fungsi `SECURITY DEFINER`
+baru di repo ini wajib memenuhi checklist berikut sebelum dianggap aman
+(termasuk verifikasi empiris terhadap DB yang berjalan, bukan diasumsikan dari
+dokumentasi PostgreSQL semata):
 
-1. **Konfirmasi role pemilik benar-benar superuser (atau owner tabel yang
-   dituju)** — `SELECT rolsuper FROM pg_roles WHERE rolname = '<role>'`.
-   Migration di repo ini berjalan sebagai `POSTGRES_USER` (`awcms`),
-   yang memang superuser sungguhan — keamanan mekanisme ini TIDAK datang
-   dari interaksi RLS/`FORCE`, melainkan dari dua pagar di bawah.
+1. **Pastikan owner fungsi benar-benar bisa membaca di bawah `FORCE RLS`.** Ada
+   DUA posture owner yang valid: (a) owner adalah superuser sungguhan (bypass RLS
+   tanpa syarat); ATAU (b) **owner adalah role bootstrap khusus** `NOLOGIN
+NOSUPERUSER NOBYPASSRLS` **tanpa anggota**, ditambah policy `FOR SELECT TO
+<role> USING (true)` ter-scope ke role itu (pola `sql/048` —
+   `awcms_domain_bootstrap`). **PENTING — asumsi "owner superuser" TIDAK cukup**
+   di deployment role-separated/hardened (sql/019–022) dan di integration harness,
+   yang men-demote owner migrasi ke `NOSUPERUSER NOBYPASSRLS` setelah migrasi: di
+   sana fungsi `SECURITY DEFINER` yang di-own role non-superuser tunduk penuh
+   pada `FORCE RLS` dan resolve **0 baris**. **Pilih (b)** agar bootstrap tetap
+   bekerja lintas posture. Keamanan mekanisme TIDAK datang dari interaksi
+   RLS/`FORCE`, melainkan dari kepemilikan yang benar + dua pagar di bawah.
 2. **Body fungsi wajib SQL statis/tetap** — tidak ada dynamic SQL/string
    concatenation dari parameter. Parameter selalu lewat argumen fungsi yang
    diparameterkan (`p_<nama> text`, dst.), tidak pernah diselipkan ke query
@@ -68,11 +71,13 @@ semata):
    rows lewat role least-privilege TANPA `app.current_tenant_id` GUC
    di-set; (b) `SELECT` langsung ke tabel yang sama dari role/session yang
    sama (tanpa fungsi) tetap 0 baris; (c) kolom yang di-return persis
-   sesuai yang didokumentasikan, tidak lebih. `tests/integration/public-tenant-resolution.integration.test.ts`
-   adalah contoh test yang membuktikan ketiganya.
+   sesuai yang didokumentasikan, tidak lebih. `tests/integration/tenant-domain.integration.test.ts`
+   adalah contoh test yang membuktikan ketiganya (di bawah role `awcms_app`,
+   dengan harness yang men-demote owner migrasi — lihat checklist item 1).
 8. **Hindari timing side-channel** — kalau fungsi ini dipanggil lalu diikuti
    query kedua yang kondisional (mis. "kalau baris pertama ditemukan, query
    lagi ke tabel lain"), pertimbangkan apakah beda jumlah round-trip antar
    outcome bisa dieksploitasi sebagai side-channel — gabungkan jadi satu query
    via `JOIN` kalau tabel kedua sudah RLS-free/publicly readable, seperti
-   `awcms_tenants` (pola ini akan relevan saat resolver `tenant_domain` diport).
+   `awcms_tenants` (pola ini dipakai resolver `tenant_domain` `sql/048` — satu
+   `JOIN awcms_tenants` supaya tiap outcome butuh tepat satu round-trip).
