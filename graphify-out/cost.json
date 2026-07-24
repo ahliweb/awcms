@@ -6,8 +6,14 @@
       "output_tokens": 0,
       "files": 1196,
       "mode": "full"
+    },
+    {
+      "date": "2026-07-24T22:14:15.596624+00:00",
+      "input_tokens": 135992,
+      "output_tokens": 0,
+      "files": 17
     }
   ],
-  "total_input_tokens": 0,
+  "total_input_tokens": 135992,
   "total_output_tokens": 0
 }
