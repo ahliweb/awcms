@@ -3648,12 +3648,57 @@ Read-only: validate a proposed theme config against its theme descriptor and, wh
 
 Direct-to-R2 presigned upload flow for news images (news_portal module, ported from awcms-mini) — create an upload session (server-generated object key + short-lived presigned PUT URL), finalize (real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum, never a bare HEAD), and cancel a still-pending_upload session. R2 credentials are never exposed to the browser; only a scoped, expiring presigned URL is returned.
 
+### `GET /api/v1/media/enforcement` — Read whether managed-media enforcement is active for this tenant
+
+- **operationId**: `mediaEnforcementRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by media_library.enforcement.read. Reports whether this tenant's content media references must resolve to verified registry objects, and — when enforcement cannot be enabled — the deployment-config reasons why (ADR-0036 step 5a). `reasons` name environment variables, never their values, so nothing secret is exposed; the endpoint is still permission-gated rather than public.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                       | Schema                                 |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Current enforcement state for this tenant plus this deployment's media readiness. | object                                 |
+| 400    | Validation error.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/media/enforcement` — Turn managed-media enforcement ON for this tenant (one-way)
+
+- **operationId**: `mediaEnforcementEnable`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by media_library.enforcement.enable. Enables managed-media enforcement: from then on, content media references must resolve to verified, same-tenant registry objects rather than raw URLs (ADR-0036 step 5a). This is the switch a brochure-site tenant (`blog_content` + `tenant_domain`, no news portal) previously did not have. This operation is one-way and there is deliberately no counterpart that disables enforcement — a tenant able to switch its own media validation off is a confirmed exploit this design exists to prevent (see migration `sql/043`'s header). A deployment that must roll back does so by changing its `NEWS_MEDIA_R2_*` configuration. Idempotent: re-enabling an already-enforcing tenant succeeds, refreshes the timestamp, and returns `alreadyEnforced: true`. No `Idempotency-Key` is required.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                                                                                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Enforcement is active for this tenant.                                                                                                                                                                                                                                                                                  | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The deployment's media storage is not ready, so enforcement cannot be enabled (`MANAGED_MEDIA_NOT_READY`) — `error.details.reasons` says which check failed. A 409 rather than a 400 on purpose: the request is well-formed and the caller is authorized; it is the deployment, not the request body, that must change. | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/media/news-images/upload-sessions` — Create a direct-to-R2 presigned upload session for a news image
 
 - **operationId**: `newsMediaUploadSessionsCreate`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by news_portal.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
+Gated by media_library.media.create. Returns a `pending_upload` metadata row plus a short-lived presigned PUT URL scoped to exactly one server-generated object key. Raw R2 credentials are never exposed to the browser.
 
 **Parameters**
 
@@ -3678,7 +3723,7 @@ Gated by news_portal.media.create. Returns a `pending_upload` metadata row plus 
 - **operationId**: `newsMediaUploadSessionsCancel`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by news_portal.media.cancel. Transitions a `pending_upload` session to `failed`.
+Gated by media_library.media.cancel. Transitions a `pending_upload` session to `failed`.
 
 **Parameters**
 
@@ -3703,7 +3748,7 @@ Gated by news_portal.media.cancel. Transitions a `pending_upload` session to `fa
 - **operationId**: `newsMediaUploadSessionsFinalize`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by news_portal.media.verify. High-risk, requires Idempotency-Key. Verifies the object actually uploaded to R2 (HEAD for existence/real size, then a full GET), sniffs the MIME type from the object's real magic bytes, and computes a SHA-256 checksum server-side. A client-claimed `checksumSha256` is only a transport-corruption cross-check, never a substitute for the MIME sniff — HEAD alone can never promote a media object to `verified`.
+Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifies the object actually uploaded to R2 (HEAD for existence/real size, then a full GET), sniffs the MIME type from the object's real magic bytes, and computes a SHA-256 checksum server-side. A client-claimed `checksumSha256` is only a transport-corruption cross-check, never a substitute for the MIME sniff — HEAD alone can never promote a media object to `verified`.
 
 **Parameters**
 

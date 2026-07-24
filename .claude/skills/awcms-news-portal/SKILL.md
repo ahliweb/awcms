@@ -1,6 +1,6 @@
 ---
 name: awcms-news-portal
-description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/news-portal`, migrasi `sql/041`–`sql/045`, 4 tabel `awcms_news_*` FORCE RLS). Menyediakan capability `news_media` (media object registry R2 + presigned upload) yang dikonsumsi `blog_content` via adapter NYATA. Panduan untuk mengubah/menambah ke `src/modules/news-portal` (registry media, upload flow, R2 readiness, homepage composer, ad placements, reconcile job). DROPPED saat port (WAJIB tahu): rute publik `/news/**` host-resolved DAN helper render-nya (butuh `tenant_domain`, belum di-port); aktivasi preset `news_portal_full_online_r2` (butuh preset subsystem `module_management`) — tabel `awcms_news_portal_tenant_state` ada tapi tanpa writer, mode R2-only selalu inactive/fail-closed. Nomor `sql/NNN` di badan skill penomoran awcms-mini — nyata di awcms `sql/041`–`sql/045`. `tenant_domain` & `social_publishing` masih belum di-port.
+description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/news-portal`, migrasi `sql/043`–`sql/045`). **INVERSI ADR-0036 (migrasi 052-054):** registry media R2 + presigned upload + MIME sniffing + verifikasi + job `news-media:reconcile` sudah DIEKSTRAK KELUAR ke modul baru `media_library` (lihat skill `awcms-media-library`); tabel `awcms_news_media_objects` tetap bernama sama (FK komposit keras dari ad placements). news_portal kini TIDAK provides `news_media` (pensiun) — ia CONSUMES `media_library` (wajib, untuk FK ad placement) + `public_content`; basePath `/api/v1/news-portal`. Yang MASIH milik news_portal di sini: homepage section composer + ad placements (`sql/044`/`045`). Panduan untuk mengubah homepage/ad placements. Untuk media (upload/registry/reconcile/enforcement) pakai skill `awcms-media-library`. DROPPED saat port (WAJIB tahu): rute publik `/news/**` host-resolved + helper render; aktivasi preset `news_portal_full_online_r2` — `awcms_news_portal_tenant_state` (`sql/043`) ada tapi tanpa writer (inert). `news-portal-preset-readiness.ts` kini COMPOSE `evaluateManagedMediaReadiness` milik media_library. Nomor `sql/NNN` di badan skill penomoran awcms-mini.
 ---
 
 # AWCMS — News Portal (full-online R2-only media)
@@ -14,6 +14,22 @@ description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/
 > **panduan mengubah/menambah kode nyata**. Baca `src/modules/news-portal/README.md`
 >
 > - `sql/` untuk nomor/tabel akurat.
+>
+> **⚠ INVERSI ADR-0036 (WAJIB BACA — mengubah kepemilikan media): media
+> BUKAN LAGI milik news_portal.** Migrasi `052`/`053`/`054` mengekstrak SELURUH
+> registry media (`awcms_news_media_objects`), presigned upload/finalize/cancel,
+> MIME sniffer, R2 config/client/verification, categorization, dan job
+> `news-media:reconcile` KELUAR dari `news-portal/` ke modul baru
+> `src/modules/media-library/` (file `news-media-*` → `media-*`, symbol internal
+> `fetchNewsMediaObjectById`/`NewsMediaObjectView` DIPERTAHANKAN). Port
+> `_shared/ports/news-media-port.ts` DIHAPUS → `media-library-port.ts`
+> (`MediaLibraryPort`, `isManagedMediaEnforcementActiveForTenant`). Permission
+> `news_portal.media.*` → `media_library.media.*` (repoint destruktif `sql/052`).
+> **Untuk apa pun tentang media (upload, registry, reconcile, R2 config,
+> enforcement) pakai skill `awcms-media-library`, BUKAN skill ini.** news_portal
+> di sini tinggal homepage sections + ad placements; ia CONSUMES `media_library`.
+> Sebagian besar badan skill di bawah masih men-spesifikasi bentuk PRA-inversi
+> (mini) — perlakukan bagian media-nya sebagai sejarah, bukan lokasi kode kini.
 >
 > **DELTA PORT AWCMS (WAJIB — sebagian besar badan skill di bawah men-spesifikasi bentuk mini; ini yang BEDA di sini):**
 >
