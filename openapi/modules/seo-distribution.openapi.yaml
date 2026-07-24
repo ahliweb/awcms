@@ -10,7 +10,10 @@
 # `src/pages/api/v1`, so they are not part of this REST contract (same posture as
 # the public `/blog/{tenantCode}` content routes).
 #
-# Redirect governance + 404 telemetry endpoints are DEFERRED to a follow-up PR.
+# The redirect-governance + 404 telemetry admin API (ADR-0039) is contracted here:
+# `/api/v1/seo/redirects/*` and `/api/v1/seo/not-found/*`. The `src/middleware.ts`
+# public-redirect resolver is NOT an OpenAPI surface (it emits 3xx `Location`
+# responses on the non-`/admin` branch, not a REST contract).
 #
 # NOT independently valid OpenAPI — $ref targets pointing at shared components only
 # resolve after `bun run openapi:bundle` merges this file with the root and every
@@ -89,6 +92,645 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/redirects:
+    get:
+      tags:
+        - SEO & Distribution
+      summary: List/search/filter redirect rules
+      description: Tenant-scoped exact-path redirect rules, keyset-paginated newest first (limit 100). Filter by state, targetType, or a source-path substring q. Gated by seo_distribution.redirect.read. Tenant-scoped (withTenant + RLS FORCE).
+      operationId: seoRedirectsList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque keyset cursor from a previous page.
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, inactive, archived]
+        - name: targetType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [relative_same_tenant, verified_external]
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Substring match on the normalized source path.
+      responses:
+        "200":
+          description: This tenant's redirect rules.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    required: [redirects, nextCursor]
+                    properties:
+                      redirects:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SeoRedirect"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Create a redirect rule
+      description: "High-risk: requires an Idempotency-Key, audited. The target is validated through the frozen open-redirect guard and the rule is rejected if it conflicts with an existing source/scope, self-redirects, or would create a loop / over-long chain. Gated by seo_distribution.redirect.create. Tenant-scoped (withTenant + RLS FORCE)."
+      operationId: seoRedirectsCreate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeoRedirectCreateRequest"
+      responses:
+        "200":
+          description: Redirect rule created (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirect"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Source/scope conflict, redirect loop, over-long chain, or idempotency-key reuse with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/redirects/{id}:
+    get:
+      tags:
+        - SEO & Distribution
+      summary: Read one redirect rule
+      operationId: seoRedirectsGet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The redirect rule.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirect"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags:
+        - SEO & Distribution
+      summary: Update a redirect rule
+      description: Replace the mutable fields (source path is immutable). Re-validates the target through the frozen open-redirect guard + the conflict/loop/chain safety gate. Audited. Gated by seo_distribution.redirect.update.
+      operationId: seoRedirectsUpdate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeoRedirectUpdateRequest"
+      responses:
+        "200":
+          description: Redirect rule updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirect"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Source conflict, redirect loop, or over-long chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - SEO & Distribution
+      summary: Soft-delete a redirect rule
+      description: Soft delete (a non-empty reason is required). Restore/purge via the lifecycle endpoint. Audited. Gated by seo_distribution.redirect.delete.
+      operationId: seoRedirectsDelete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          description: Redirect rule soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirect"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/seo/redirects/{id}/lifecycle:
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Transition a redirect rule's state / delete lifecycle
+      description: "activate | deactivate | archive | restore | purge. Idempotency-keyed, audited. purge needs seo_distribution.redirect.delete; every other action needs seo_distribution.redirect.update (dynamic guard)."
+      operationId: seoRedirectsLifecycle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [activate, deactivate, archive, restore, purge]
+      responses:
+        "200":
+          description: The lifecycle transition result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Idempotency-key reuse with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/redirects/validate:
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Validate a redirect rule (dry run) + preview its chain
+      description: "Read-only: normalize + validate a proposed rule (frozen open-redirect guard), preview the redirect chain it would produce, and explain any conflict/loop/over-long chain — writing nothing. Gated by seo_distribution.redirect.read."
+      operationId: seoRedirectsValidate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeoRedirectCreateRequest"
+      responses:
+        "200":
+          description: The validation + chain-preview result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/seo/redirects/import:
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Bulk-import redirect rules (with dry run)
+      description: "Validate + safety-check up to 200 rules. dryRun: true returns a per-item report writing nothing; a real import is all-or-nothing (idempotency-keyed, audited). Gated by seo_distribution.redirect.create."
+      operationId: seoRedirectsImport
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [redirects]
+              properties:
+                dryRun:
+                  type: boolean
+                  default: false
+                redirects:
+                  type: array
+                  maxItems: 200
+                  items:
+                    $ref: "#/components/schemas/SeoRedirectCreateRequest"
+      responses:
+        "200":
+          description: The import report.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-key reuse with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/redirects/capture-url-change:
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Capture a URL change into a redirect proposal/rule
+      description: Turn an old→new public path change into an audited redirect PROPOSAL (inactive) or active rule per the tenant's url_change_auto_policy (overridable). Idempotency-keyed. Gated by seo_distribution.redirect.create.
+      operationId: seoRedirectsCaptureUrlChange
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPath, newPath, changeType]
+              properties:
+                oldPath:
+                  type: string
+                newPath:
+                  type: string
+                changeType:
+                  type: string
+                  enum: [slug_change, domain_change, locale_change]
+                policy:
+                  type: string
+                  enum: [skip, propose, create]
+                localeScope:
+                  type: string
+                  nullable: true
+                domainScopeHost:
+                  type: string
+                  nullable: true
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: The capture outcome (skipped/proposed/created).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Conflict/loop/chain rejection, or idempotency-key reuse with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/redirects/settings:
+    get:
+      tags:
+        - SEO & Distribution
+      summary: Read this tenant's redirect governance policy
+      description: The legacy-blog auto-redirect toggle (INERT in awcms — no /news route family) and the default URL-change auto-capture policy. Gated by seo_distribution.redirect.read.
+      operationId: seoRedirectSettingsRead
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: This tenant's redirect policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirectSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      tags:
+        - SEO & Distribution
+      summary: Update this tenant's redirect governance policy
+      description: "High-risk (the legacy-blog toggle changes public routing intent): requires an Idempotency-Key, audited. Gated by seo_distribution.redirect.update."
+      operationId: seoRedirectSettingsUpdate
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeoRedirectSettings"
+      responses:
+        "200":
+          description: Redirect policy updated (or an idempotent replay).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoRedirectSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-key reuse with a different payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/seo/not-found:
+    get:
+      tags:
+        - SEO & Distribution
+      summary: List the privacy-minimized 404 governance dashboard
+      description: Top 404 observations by hit count (sanitized path + bare referrer domain only — never full URLs/queries/secrets). unresolvedOnly=true filters to open items. Gated by seo_distribution.not_found.read.
+      operationId: seoNotFoundList
+      parameters:
+        - name: unresolvedOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: This tenant's 404 observations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    required: [observations]
+                    properties:
+                      observations:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SeoNotFoundObservation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/seo/not-found/{id}:
+    post:
+      tags:
+        - SEO & Distribution
+      summary: Resolve a 404 observation
+      description: Mark an observation resolved, optionally attaching a same-tenant suggested redirect id (validated to exist). Audited. Gated by seo_distribution.not_found.update.
+      operationId: seoNotFoundResolve
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                suggestedRedirectId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: The resolved observation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/SeoNotFoundObservation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags:
+        - SEO & Distribution
+      summary: Dismiss a 404 observation
+      description: Hard-delete an observation the operator does not want to track. Audited. Gated by seo_distribution.not_found.update.
+      operationId: seoNotFoundDismiss
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The observation was dismissed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   schemas:
     SeoTenantSettings:
@@ -225,3 +867,253 @@ components:
           type: boolean
         feedsEnabled:
           type: boolean
+    SeoRedirect:
+      type: object
+      description: A tenant-scoped exact-path redirect rule (awcms_seo_redirects).
+      required:
+        - id
+        - sourcePath
+        - normalizedSourcePath
+        - localeScope
+        - domainScopeHost
+        - targetType
+        - target
+        - statusCode
+        - state
+        - effectiveFrom
+        - effectiveUntil
+        - preserveQuery
+        - reason
+        - origin
+        - hitCount
+        - lastHitAt
+        - createdAt
+        - updatedAt
+        - deletedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        sourcePath:
+          type: string
+          description: The source path as entered (display form).
+        normalizedSourcePath:
+          type: string
+          description: The canonical, match-safe source path (dot-segments resolved, duplicate slashes collapsed, CRLF/traversal/Unicode-confusion rejected).
+        localeScope:
+          type: string
+          nullable: true
+          description: Optional locale narrowing; null = all locales.
+        domainScopeHost:
+          type: string
+          nullable: true
+          description: Optional server-derived host narrowing (a verified normalized_hostname); null = all of this tenant's hosts.
+        targetType:
+          type: string
+          enum: [relative_same_tenant, verified_external]
+        target:
+          type: string
+          description: The (normalized) redirect target — a relative same-origin path or an absolute URL to one of this tenant's verified hosts. Validated through the frozen open-redirect guard.
+        statusCode:
+          type: integer
+          enum: [301, 302, 307, 308]
+        state:
+          type: string
+          enum: [active, inactive, archived]
+        effectiveFrom:
+          type: string
+          format: date-time
+          nullable: true
+        effectiveUntil:
+          type: string
+          format: date-time
+          nullable: true
+        preserveQuery:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+        origin:
+          type: string
+          enum:
+            [
+              manual,
+              slug_change,
+              domain_change,
+              locale_change,
+              import,
+              legacy_blog
+            ]
+        hitCount:
+          type: integer
+        lastHitAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+    SeoRedirectCreateRequest:
+      type: object
+      required:
+        - sourcePath
+        - target
+      properties:
+        sourcePath:
+          type: string
+          maxLength: 2048
+          description: The source path (path-absolute; normalized before matching/uniqueness).
+        target:
+          type: string
+          maxLength: 2048
+          description: A relative same-origin path or an absolute URL to one of this tenant's verified hosts. The target TYPE is derived; any unsafe/cross-host/protocol-relative/CRLF target is rejected by the frozen guard.
+        localeScope:
+          type: string
+          nullable: true
+        domainScopeHost:
+          type: string
+          nullable: true
+          description: Must be one of this tenant's verified domains, or null.
+        statusCode:
+          type: integer
+          enum: [301, 302, 307, 308]
+          default: 301
+        state:
+          type: string
+          enum: [active, inactive, archived]
+          default: active
+        effectiveFrom:
+          type: string
+          format: date-time
+          nullable: true
+        effectiveUntil:
+          type: string
+          format: date-time
+          nullable: true
+        preserveQuery:
+          type: boolean
+          default: false
+        reason:
+          type: string
+          nullable: true
+          maxLength: 500
+        origin:
+          type: string
+          enum:
+            [
+              manual,
+              slug_change,
+              domain_change,
+              locale_change,
+              import,
+              legacy_blog
+            ]
+          default: manual
+    SeoRedirectUpdateRequest:
+      type: object
+      required:
+        - target
+      description: Update the mutable fields (source path is immutable — supplied only at create).
+      properties:
+        target:
+          type: string
+          maxLength: 2048
+        localeScope:
+          type: string
+          nullable: true
+        domainScopeHost:
+          type: string
+          nullable: true
+        statusCode:
+          type: integer
+          enum: [301, 302, 307, 308]
+          default: 301
+        state:
+          type: string
+          enum: [active, inactive, archived]
+          default: active
+        effectiveFrom:
+          type: string
+          format: date-time
+          nullable: true
+        effectiveUntil:
+          type: string
+          format: date-time
+          nullable: true
+        preserveQuery:
+          type: boolean
+          default: false
+        reason:
+          type: string
+          nullable: true
+          maxLength: 500
+    SeoRedirectSettings:
+      type: object
+      description: Per-tenant redirect governance policy (awcms_seo_redirect_settings).
+      required:
+        - legacyBlogRedirectEnabled
+        - urlChangeAutoPolicy
+      properties:
+        legacyBlogRedirectEnabled:
+          type: boolean
+          default: false
+          description: INERT in awcms (no /news route family) — retained for parity. When true (and the tenant has a verified primary host) /blog/{tenantCode}... would 301-redirect to the canonical /news... equivalent. Default false = behavior unchanged.
+        urlChangeAutoPolicy:
+          type: string
+          enum: [skip, propose, create]
+          default: propose
+          description: Default action when a URL change is captured. 'propose' (default) creates an INACTIVE rule for operator review; 'create' activates immediately; 'skip' does nothing.
+    SeoNotFoundObservation:
+      type: object
+      description: A privacy-minimized aggregate 404 observation (sanitized path + bare referrer domain only).
+      required:
+        - id
+        - normalizedPath
+        - referrerDomain
+        - locale
+        - domainHost
+        - hitCount
+        - firstSeenAt
+        - lastSeenAt
+        - suggestedRedirectId
+        - resolvedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        normalizedPath:
+          type: string
+          description: Sanitized, normalized request path (query dropped).
+        referrerDomain:
+          type: string
+          nullable: true
+          description: Bare referrer hostname only (never the full referrer URL).
+        locale:
+          type: string
+          nullable: true
+        domainHost:
+          type: string
+          nullable: true
+        hitCount:
+          type: integer
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        suggestedRedirectId:
+          type: string
+          format: uuid
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true

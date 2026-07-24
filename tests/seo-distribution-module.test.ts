@@ -5,17 +5,19 @@ import { seoDistributionModule } from "../src/modules/seo-distribution/module";
 import { blogContentModule } from "../src/modules/blog-content/module";
 import { CAPABILITY_CONTRACT_VERSIONS } from "../src/modules/_shared/capability-contract-versions";
 
-describe("seo_distribution module descriptor (ADR-0038, discovery scope)", () => {
+describe("seo_distribution module descriptor (ADR-0038 discovery + ADR-0039 redirect governance)", () => {
   test("listModules() includes seo_distribution", () => {
     expect(listModules().some((m) => m.key === "seo_distribution")).toBe(true);
     expect(getModuleByKey("seo_distribution")).toBe(seoDistributionModule);
   });
 
-  test("descriptor shape: domain module, v0.1.0, Core-only deps", () => {
+  test("descriptor shape: domain module, v0.2.0 (redirect governance), Core-only deps", () => {
     expect(seoDistributionModule.key).toBe("seo_distribution");
     expect(seoDistributionModule.status).toBe("active");
     expect(seoDistributionModule.type).toBe("domain");
-    expect(seoDistributionModule.version).toBe("0.1.0");
+    // 0.1.0 = discovery (ADR-0038); 0.2.0 adds the redirect-governance scope
+    // (ADR-0039) — still a Core-only-deps consumer/aggregator module.
+    expect(seoDistributionModule.version).toBe("0.2.0");
     expect(seoDistributionModule.dependencies).toEqual([
       "tenant_admin",
       "identity_access"
@@ -34,15 +36,32 @@ describe("seo_distribution module descriptor (ADR-0038, discovery scope)", () =>
     ]);
   });
 
-  test("permissions are config.read + config.update ONLY (redirect/not_found deferred)", () => {
+  test("permissions: config.{read,update} (ADR-0038) + redirect.{read,create,update,delete} + not_found.{read,update} (ADR-0039)", () => {
     const perms = (seoDistributionModule.permissions ?? []).map(
       (p) => `${p.activityCode}.${p.action}`
     );
-    expect(perms.sort()).toEqual(["config.read", "config.update"]);
+    expect(perms.sort()).toEqual([
+      "config.read",
+      "config.update",
+      "not_found.read",
+      "not_found.update",
+      "redirect.create",
+      "redirect.delete",
+      "redirect.read",
+      "redirect.update"
+    ]);
   });
 
-  test("DEFERRALS: no dataLifecycle descriptor, no jobs/events/navigation", () => {
-    expect(seoDistributionModule.dataLifecycle).toBeUndefined();
+  test("dataLifecycle: governs the 404-telemetry table (ADR-0039); no jobs/events/navigation", () => {
+    // ADR-0038 shipped no dataLifecycle; ADR-0039's redirect scope adds the
+    // privacy-minimized 404-observations table, which MUST be governed.
+    const lifecycle = seoDistributionModule.dataLifecycle ?? [];
+    expect(lifecycle.map((d) => d.key)).toEqual([
+      "seo_distribution.not_found_observations"
+    ]);
+    expect(lifecycle[0]?.tableName).toBe("awcms_seo_not_found_observations");
+    expect(lifecycle[0]?.executionMode).toBe("generic");
+    expect(lifecycle[0]?.deletion.mode).toBe("hard_delete");
     expect(seoDistributionModule.jobs).toBeUndefined();
     expect(seoDistributionModule.events).toBeUndefined();
     expect(seoDistributionModule.navigation).toBeUndefined();

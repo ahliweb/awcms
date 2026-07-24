@@ -4035,6 +4035,358 @@ Gated by seo_distribution.config.update. High-risk mutation — rewrites the pub
 | 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/seo/not-found` — List the privacy-minimized 404 governance dashboard
+
+- **operationId**: `seoNotFoundList`
+- **Security**: bearerAuth + tenantHeader
+
+Top 404 observations by hit count (sanitized path + bare referrer domain only — never full URLs/queries/secrets). unresolvedOnly=true filters to open items. Gated by seo_distribution.not_found.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type    | Description |
+| ------------------ | ------ | -------- | ------- | ----------- |
+| `unresolvedOnly`   | query  | no       | boolean |             |
+| `X-Correlation-ID` | header | no       | string  |             |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | This tenant's 404 observations. | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/not-found/{id}` — Resolve a 404 observation
+
+- **operationId**: `seoNotFoundResolve`
+- **Security**: bearerAuth + tenantHeader
+
+Mark an observation resolved, optionally attaching a same-tenant suggested redirect id (validated to exist). Audited. Gated by seo_distribution.not_found.update.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The resolved observation.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/seo/not-found/{id}` — Dismiss a 404 observation
+
+- **operationId**: `seoNotFoundDismiss`
+- **Security**: bearerAuth + tenantHeader
+
+Hard-delete an observation the operator does not want to track. Audited. Gated by seo_distribution.not_found.update.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | The observation was dismissed. | object                                 |
+| 400    | Validation error.              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.            | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/seo/redirects` — List/search/filter redirect rules
+
+- **operationId**: `seoRedirectsList`
+- **Security**: bearerAuth + tenantHeader
+
+Tenant-scoped exact-path redirect rules, keyset-paginated newest first (limit 100). Filter by state, targetType, or a source-path substring q. Gated by seo_distribution.redirect.read. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                              | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------------------------- | ---------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string                                            |                                                |
+| `cursor`           | query  | no       | string                                            | Opaque keyset cursor from a previous page.     |
+| `state`            | query  | no       | enum(`active`, `inactive`, `archived`)            |                                                |
+| `targetType`       | query  | no       | enum(`relative_same_tenant`, `verified_external`) |                                                |
+| `q`                | query  | no       | string                                            | Substring match on the normalized source path. |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | This tenant's redirect rules. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/redirects` — Create a redirect rule
+
+- **operationId**: `seoRedirectsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk: requires an Idempotency-Key, audited. The target is validated through the frozen open-redirect guard and the rule is rejected if it conflicts with an existing source/scope, self-redirects, or would create a loop / over-long chain. Gated by seo_distribution.redirect.create. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SeoRedirectCreateRequest`](#schema-seoredirectcreaterequest)
+
+**Responses**
+
+| Status | Description                                                                                               | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Redirect rule created (or an idempotent replay).                                                          | object                                 |
+| 400    | Validation error.                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | Source/scope conflict, redirect loop, over-long chain, or idempotency-key reuse with a different payload. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/seo/redirects/{id}` — Read one redirect rule
+
+- **operationId**: `seoRedirectsGet`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The redirect rule.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/seo/redirects/{id}` — Update a redirect rule
+
+- **operationId**: `seoRedirectsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Replace the mutable fields (source path is immutable). Re-validates the target through the frozen open-redirect guard + the conflict/loop/chain safety gate. Audited. Gated by seo_distribution.redirect.update.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`SeoRedirectUpdateRequest`](#schema-seoredirectupdaterequest)
+
+**Responses**
+
+| Status | Description                                         | Schema                                 |
+| ------ | --------------------------------------------------- | -------------------------------------- |
+| 200    | Redirect rule updated.                              | object                                 |
+| 400    | Validation error.                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | Source conflict, redirect loop, or over-long chain. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/seo/redirects/{id}` — Soft-delete a redirect rule
+
+- **operationId**: `seoRedirectsDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Soft delete (a non-empty reason is required). Restore/purge via the lifecycle endpoint. Audited. Gated by seo_distribution.redirect.delete.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Redirect rule soft-deleted. | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/redirects/{id}/lifecycle` — Transition a redirect rule's state / delete lifecycle
+
+- **operationId**: `seoRedirectsLifecycle`
+- **Security**: bearerAuth + tenantHeader
+
+activate | deactivate | archive | restore | purge. Idempotency-keyed, audited. purge needs seo_distribution.redirect.delete; every other action needs seo_distribution.redirect.update (dynamic guard).
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The lifecycle transition result.                | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                             | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-key reuse with a different payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/redirects/capture-url-change` — Capture a URL change into a redirect proposal/rule
+
+- **operationId**: `seoRedirectsCaptureUrlChange`
+- **Security**: bearerAuth + tenantHeader
+
+Turn an old→new public path change into an audited redirect PROPOSAL (inactive) or active rule per the tenant's url_change_auto_policy (overridable). Idempotency-keyed. Gated by seo_distribution.redirect.create.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                       | Schema                                 |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The capture outcome (skipped/proposed/created).                                   | object                                 |
+| 400    | Validation error.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                       | [`ApiError`](#standard-error-envelope) |
+| 409    | Conflict/loop/chain rejection, or idempotency-key reuse with a different payload. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/redirects/import` — Bulk-import redirect rules (with dry run)
+
+- **operationId**: `seoRedirectsImport`
+- **Security**: bearerAuth + tenantHeader
+
+Validate + safety-check up to 200 rules. dryRun: true returns a per-item report writing nothing; a real import is all-or-nothing (idempotency-keyed, audited). Gated by seo_distribution.redirect.create.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The import report.                              | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-key reuse with a different payload. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/seo/redirects/settings` — Read this tenant's redirect governance policy
+
+- **operationId**: `seoRedirectSettingsRead`
+- **Security**: bearerAuth + tenantHeader
+
+The legacy-blog auto-redirect toggle (INERT in awcms — no /news route family) and the default URL-change auto-capture policy. Gated by seo_distribution.redirect.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | This tenant's redirect policy. | object                                 |
+| 400    | Validation error.              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/seo/redirects/settings` — Update this tenant's redirect governance policy
+
+- **operationId**: `seoRedirectSettingsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk (the legacy-blog toggle changes public routing intent): requires an Idempotency-Key, audited. Gated by seo_distribution.redirect.update.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SeoRedirectSettings`](#schema-seoredirectsettings)
+
+**Responses**
+
+| Status | Description                                        | Schema                                 |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| 200    | Redirect policy updated (or an idempotent replay). | object                                 |
+| 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                        | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-key reuse with a different payload.    | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/seo/redirects/validate` — Validate a redirect rule (dry run) + preview its chain
+
+- **operationId**: `seoRedirectsValidate`
+- **Security**: bearerAuth + tenantHeader
+
+Read-only: normalize + validate a proposed rule (frozen open-redirect guard), preview the redirect chain it would produce, and explain any conflict/loop/over-long chain — writing nothing. Gated by seo_distribution.redirect.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SeoRedirectCreateRequest`](#schema-seoredirectcreaterequest)
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | The validation + chain-preview result. | object                                 |
+| 400    | Validation error.                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -4340,6 +4692,90 @@ PUT body for seoConfigUpdate — a full replace of the mutable SEO-defaults fiel
   "includedResourceTypes": ["string"],
   "sitemapEnabled": false,
   "feedsEnabled": false
+}
+```
+
+### Schema: SeoRedirectCreateRequest
+
+| Field             | Type                                                                                     | Required | Nullable | Description                                                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourcePath`      | string                                                                                   | yes      | no       | The source path (path-absolute; normalized before matching/uniqueness).                                                                                                                                 |
+| `target`          | string                                                                                   | yes      | no       | A relative same-origin path or an absolute URL to one of this tenant's verified hosts. The target TYPE is derived; any unsafe/cross-host/protocol-relative/CRLF target is rejected by the frozen guard. |
+| `localeScope`     | string                                                                                   | no       | yes      |                                                                                                                                                                                                         |
+| `domainScopeHost` | string                                                                                   | no       | yes      | Must be one of this tenant's verified domains, or null.                                                                                                                                                 |
+| `statusCode`      | enum(`301`, `302`, `307`, `308`)                                                         | no       | no       |                                                                                                                                                                                                         |
+| `state`           | enum(`active`, `inactive`, `archived`)                                                   | no       | no       |                                                                                                                                                                                                         |
+| `effectiveFrom`   | string (date-time)                                                                       | no       | yes      |                                                                                                                                                                                                         |
+| `effectiveUntil`  | string (date-time)                                                                       | no       | yes      |                                                                                                                                                                                                         |
+| `preserveQuery`   | boolean                                                                                  | no       | no       |                                                                                                                                                                                                         |
+| `reason`          | string                                                                                   | no       | yes      |                                                                                                                                                                                                         |
+| `origin`          | enum(`manual`, `slug_change`, `domain_change`, `locale_change`, `import`, `legacy_blog`) | no       | no       |                                                                                                                                                                                                         |
+
+**Example**
+
+```json
+{
+  "sourcePath": "string",
+  "target": "string",
+  "localeScope": "string",
+  "domainScopeHost": "tenant.example.com",
+  "statusCode": 301,
+  "state": "active",
+  "effectiveFrom": "2026-01-01T00:00:00.000Z",
+  "effectiveUntil": "2026-01-01T00:00:00.000Z",
+  "preserveQuery": false,
+  "reason": "string",
+  "origin": "manual"
+}
+```
+
+### Schema: SeoRedirectSettings
+
+Per-tenant redirect governance policy (awcms_seo_redirect_settings).
+
+| Field                       | Type                              | Required | Nullable | Description                                                                                                                                                                                                                             |
+| --------------------------- | --------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacyBlogRedirectEnabled` | boolean                           | yes      | no       | INERT in awcms (no /news route family) — retained for parity. When true (and the tenant has a verified primary host) /blog/{tenantCode}... would 301-redirect to the canonical /news... equivalent. Default false = behavior unchanged. |
+| `urlChangeAutoPolicy`       | enum(`skip`, `propose`, `create`) | yes      | no       | Default action when a URL change is captured. 'propose' (default) creates an INACTIVE rule for operator review; 'create' activates immediately; 'skip' does nothing.                                                                    |
+
+**Example**
+
+```json
+{
+  "legacyBlogRedirectEnabled": false,
+  "urlChangeAutoPolicy": "skip"
+}
+```
+
+### Schema: SeoRedirectUpdateRequest
+
+Update the mutable fields (source path is immutable — supplied only at create).
+
+| Field             | Type                                   | Required | Nullable | Description |
+| ----------------- | -------------------------------------- | -------- | -------- | ----------- |
+| `target`          | string                                 | yes      | no       |             |
+| `localeScope`     | string                                 | no       | yes      |             |
+| `domainScopeHost` | string                                 | no       | yes      |             |
+| `statusCode`      | enum(`301`, `302`, `307`, `308`)       | no       | no       |             |
+| `state`           | enum(`active`, `inactive`, `archived`) | no       | no       |             |
+| `effectiveFrom`   | string (date-time)                     | no       | yes      |             |
+| `effectiveUntil`  | string (date-time)                     | no       | yes      |             |
+| `preserveQuery`   | boolean                                | no       | no       |             |
+| `reason`          | string                                 | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "target": "string",
+  "localeScope": "string",
+  "domainScopeHost": "tenant.example.com",
+  "statusCode": 301,
+  "state": "active",
+  "effectiveFrom": "2026-01-01T00:00:00.000Z",
+  "effectiveUntil": "2026-01-01T00:00:00.000Z",
+  "preserveQuery": false,
+  "reason": "string"
 }
 ```
 
