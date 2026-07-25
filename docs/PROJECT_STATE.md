@@ -142,6 +142,16 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 4. Backlog / langkah berikutnya
 
+- **Serap tulang punggung awcms-mini → awcms (fondasi bisnis + SaaS control plane).**
+  Peta eksekusi di
+  [`awcms/absorb-awcms-mini-backbone-roadmap.md`](awcms/absorb-awcms-mini-backbone-roadmap.md).
+  **Temuan audit 2026-07-25:** lima modul sudah di-`Accepted` oleh ADR di repo ini tetapi
+  **tidak ada kodenya** — `organization_structure` (ADR-0016), `document_infrastructure`
+  (ADR-0017), `data_exchange` (ADR-0018), `integration_hub` (ADR-0019), `reference_data`
+  (ADR-0021); kelimanya matang di mini. [ADR-0020](adr/0020-erp-extension-readiness-contracts.md)
+  (kontrak kesiapan ERP) juga `Accepted` tanpa implementasi `_shared`. Klaster SaaS control
+  plane (7 modul mini) **belum di-admit sama sekali** di sini dan butuh ADR admission baru
+  sebelum baris implementasinya boleh dikerjakan.
 - **Serap awcms-micro → awcms (program utama, [ADR-0035](adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)).**
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
