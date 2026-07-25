@@ -1,5 +1,153 @@
 # awcms
 
+## 6.1.0
+
+### Minor Changes
+
+- eb5519a: Reposisi governance AWCMS (ADR-0035, menyempurnakan positioning ADR-0034 — `docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md`): `awcms` kini diposisikan sebagai template **online-first hybrid** (online jalur utama; offline/LAN mode ketahanan), **siap ERP + SaaS terintegrasi**, dan **superset** keluarga yang **menyerap** klaster website/e-commerce, UI/UX, dan pengerasan auth `awcms-micro` langsung ke `src/modules/`. `awcms-mini` tetap hybrid offline-first (siap SaaS); `awcms-micro` tetap template website full-online ramping. Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) tidak berubah.
+
+  Perubahan dokumentasi/governance saja (tanpa perubahan kode runtime): ADR-0035 baru + banner supersede-parsial di ADR-0034; reposisi README/README.id/AGENTS/PROJECT_STATE + paket `docs/awcms/` (01/06/09/10/12/13/15, alur-pengembangan-mini-first, README index, api-contribution-guide); manifest `awcms-family-compatibility.yaml` (`role` + rasional divergence Turnstile diselaraskan ke mode hybrid); dokumen peta baru `docs/awcms/absorb-awcms-micro-roadmap.md` untuk penyerapan bertahap awcms-micro.
+
+- c25e795: Port the redirect-governance scope of `seo_distribution` from awcms-micro (ADR-0039, companion to ADR-0038 — `docs/adr/0039-seo-distribution-redirect-governance.md`), completing the module whose discovery half shipped in ADR-0038. Adds tenant-contained exact-path redirect rules (301/302/307/308), URL-change capture into audited redirect proposals, privacy-minimized 404 telemetry, and the admin API under `/api/v1/seo/redirects/*` + `/api/v1/seo/not-found/*`.
+
+  - **Migrations 060 (schema) + 061 (permissions).** Three tenant-scoped tables (`awcms_seo_redirects`, `awcms_seo_not_found_observations`, `awcms_seo_redirect_settings`), all `ENABLE`+`FORCE ROW LEVEL SECURITY` + `tenant_isolation`; the 404 table has a `dataLifecycle` analytics_telemetry descriptor (`seo_distribution.not_found_observations`, generic purge, 30d default) with a `SELECT, DELETE ... TO awcms_worker` grant. Six new permissions (`redirect.{read,create,update,delete}`, `not_found.{read,update}`).
+  - **One invasive `src/middleware.ts` edit** — the non-`/admin` branch resolves a public redirect BEFORE serving and records a best-effort 404 observation AFTER. FAIL-OPEN: the resolver swallows all faults to null (never a 500), the 404 capture never throws; the `/admin` login guard and API body-ceiling are untouched. Wiring lives in the importable `src/lib/seo/redirect-middleware.ts`.
+  - **Open-redirect / loop / hijack defenses** — the frozen `classifyRedirectTarget`/`assertSafeRedirectTarget` guard is re-homed as a standalone domain helper (`redirect-target-classification.ts`), NOT re-added to the `seo_facts` port, and enforced on write AND every resolve; normalization rejects CRLF/traversal/Unicode-confusion/protocol-relative; chains are bounded + non-recursive (fail-closed on loop/over-cap); the eligibility gate excludes admin/API/auth/static/system/discovery paths.
+  - **Adaptations (documented in ADR-0039):** tenant resolution is host-based-only first cut (path-tenant deferred); the legacy `/blog/{tenantCode}` → `/news` rewrite is INERT (no `/news` route family, policy off by default); `locale` is always null (awcms has no i18n seam). `seo_distribution` bumped 0.1.0 → 0.2.0.
+
+- 0dce625: Media-library ownership inversion (ADR-0036, mengadaptasi awcms-micro ADR-0026 — `docs/adr/0036-media-library-module-admission-ownership-inversion.md`).
+
+  **CAPABILITY RETIREMENT (bukan bump minor kapabilitas):** capability `news_media` **dipensiunkan** dan digantikan `media_library`. Penyedianya berubah (`news_portal` → `media_library` baru) **dan** kontrak port kehilangan satu method (`isFullOnlineR2ModeActiveForTenant` → `isManagedMediaEnforcementActiveForTenant`; `resolveMediaPublicBaseUrl` di-drop). `_shared/capability-contract-versions.ts` + manifest `awcms-family-compatibility.yaml` menambah `media_library: "1.0.0"`; setiap konsumen yang dipin ke `news_media` harus gagal terang-terangan.
+
+  Perubahan NON-aditif — menyentuh modul yang sudah di-ship:
+
+  - **Modul baru `media_library`** (System Foundation, `type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`): registry media `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari ad placements), presigned upload/finalize/cancel, MIME sniffing, verifikasi R2, job `news-media:reconcile` (nama command dipertahankan), plus penyalaan enforcement (`POST/GET /api/v1/media/enforcement`, satu arah, readiness-gated + audited).
+  - **`news_portal`** tidak lagi PROVIDES `news_media`; kini CONSUMES `media_library` (wajib) + `public_content`; basePath berubah ke `/api/v1/news-portal`; job reconcile & 9 permission media pindah keluar.
+  - **`blog_content`** consumes `media_library` (opsional, dulu `news_media`); adaptor no-op media vestigial dihapus; gate media & 12 composition-root handler + worker menyuntik `mediaLibraryPortAdapter`.
+  - **Migrasi (ADD-only, urutan load-bearing):** `052` repoint permission `news_portal.media.*` → `media_library.media.*` (INSERT→repoint grant→DELETE), `053` tabel `awcms_media_library_tenant_state` (RLS ENABLE+FORCE + backfill dari `awcms_news_portal_tenant_state`), `054` permission `media_library.enforcement.{read,enable}`.
+  - Fragment OpenAPI media dipindah ke `openapi/modules/media-library.openapi.yaml` (+ path enforcement); bundle + api-reference diregenerasi.
+
+  Diverifikasi terhadap PostgreSQL nyata: repoint permission bersih, RLS FORCE + isolasi tenant + fail-closed `awcms_app`, dan backfill lintas-tenant (role migrasi BYPASSRLS). Step 5b/5c/5d micro (`/admin/media`, srcset, PDF) ditunda.
+
+- a777152: Port modul `blog_content` dari awcms-mini: manajemen blog/konten tenant-scoped (posts, pages, kategori/tag, riwayat revisi append-only, pencarian full-text, template/menu/widget/iklan presentasi, pengaturan blog, dan automatic internal tag linking). Menambahkan 6 migrasi baru (`sql/035`-`sql/040`, 15 tabel + seed 39 permission), ~40 route admin di `/api/v1/blog/*`, 7 route publik anonim di `/blog/{tenantCode}/...` (ADR-0009), job terjadwal `bun run blog:publish:scheduled`, serta fragment OpenAPI/AsyncAPI baru untuk modul ini.
+
+  Dua kapabilitas opsional modul ini (`news_media` dari `news_portal`, `social_publishing` dari `social_publishing`) belum punya provider nyata di base ini — setiap titik panggil memakai adapter no-op modul sendiri (mode full-online-R2-only selalu tidak aktif, hook social-publishing selalu no-op `{ jobsCreated: 0 }`), aman dan terdokumentasi, tanpa mengimpor modul yang belum ada. Keluarga rute `/news/**` (butuh modul `tenant_domain` yang belum di-port) sengaja tidak diikutkan di port ini.
+
+- cc52dce: Port modul `data_lifecycle` dari awcms-micro (Issue #745, ADR-0037) sebagai modul **System Foundation** net-baru aditif, PLUS re-wire kopling legal-hold dua konsumen (`visitor_analytics`, `logging`) yang di-drop saat port awalnya.
+
+  - **Seam kontrak (aditif, MINOR):** `ModuleDescriptor.dataLifecycle?: HighVolumeTableDescriptor[]` + keluarga tipe `Lifecycle*` di `_shared/module-contract.ts` (`MODULE_CONTRACT_VERSION` 2.0.0 → 2.1.0, pin manifest keluarga diselaraskan). Registry dikontribusikan tiap modul pemilik, divalidasi `bun run data-lifecycle:registry:check` (masuk rantai `check`) + `security:readiness`.
+  - **Modul** (`src/modules/data-lifecycle/`, 16 berkas): legal-hold (rules murni + service + guard-port adapter), lifecycle-registry, dry-run planner (zero-mutation), bounded archive/purge engine di worker runner bersama, archive port provider-neutral + local/offline adapter (JSONL/CSV + SHA-256), cursor/manifest/run stores, cursor-boundary safety margin (1ms, fix presisi timestamptz mikrodetik). `type: system`, deps `[tenant_admin, identity_access, logging]`, 6 permission, job `data-lifecycle:archive-purge`, satu descriptor `generic` (tabel run-history sendiri), aturan SoD maker/checker `legal_hold.create` vs `.release`.
+  - **Skema** (migrasi `055` schema, `056` permission): empat tabel tenant-scoped (`awcms_data_lifecycle_legal_holds`/`_cursors`/`_archive_manifests`/`_runs`), semua `ENABLE`+`FORCE ROW LEVEL SECURITY` + policy `tenant_isolation`, CHECK konsistensi + index; GRANT `awcms_worker` least-privilege — **SELECT-only pada legal_holds** (create/release tetap aksi admin/API), SELECT/INSERT/UPDATE pada cursors+manifests, SELECT/INSERT/DELETE pada runs. Non-destruktif (semua `IF NOT EXISTS`).
+  - **Endpoint** (`/api/v1/data-lifecycle/*`): registry GET, dry-run POST (tanpa idempotency), runs GET, legal-holds GET+POST (Idempotency-Key + audit critical), legal-holds/{id}/release POST (Idempotency-Key + audit critical). Archive/purge nyata **tidak** diekspos lewat HTTP (job saja). Fragmen OpenAPI per-modul + bundle + api-reference diregenerasi.
+  - **`AccessAction` baru:** `release` (HIGH-RISK — melepas hold menghapus safeguard perlindungan data).
+  - **Legal hold tidak bisa di-bypass diam-diam:** dienforce pada RECORD hold aktif (bukan metadata `legalHold.applicable`), dicek SEBELUM DELETE dan tanpa syarat. Untuk deskriptor `delegated`, fungsi purge modul pemilik adalah titik enforcement nyata via `LegalHoldGuardPort` (`_shared/ports/legal-hold-guard-port.ts`, seam level-sumber, bukan capability-registry) yang di-wire di composition root.
+  - **Re-wire `visitor_analytics`:** descriptor `visitor_analytics.visit_events` + param ke-5 `legalHoldGuard` pada `purgeVisitorAnalyticsData` menggerbangi HANYA DELETE step-1 `awcms_visit_events` (step 2-4 tetap tak-tergerbang); adaptor di-inject di `POST /api/v1/analytics/retention/purge` + `scripts/visitor-analytics-purge.ts`.
+  - **Re-wire `logging`:** descriptor `logging.audit_events` + param **WAJIB** `legalHoldGuard` pada `purgeExpiredAuditEvents` menggerbangi DELETE audit-events; adaptor di-inject di `scripts/audit-log-purge.ts`.
+  - **Ditunda:** konsumen `form_drafts`/`newsletter`/`comments` (modul belum di-port).
+
+- a777152: Port modul `news_portal` dari awcms-mini: registry media objek R2-only tenant-scoped (`awcms_news_media_objects`) dengan alur presigned upload langsung-ke-R2 (create/finalize/cancel), homepage section composer editorial (`awcms_news_portal_homepage_sections`), ad placement preset R2-only (`awcms_news_portal_ad_placements`), state tenant mode R2-only (`awcms_news_portal_tenant_state`), dan job rekonsiliasi `news-media:reconcile`. Migrasi `sql/041`..`sql/045` (empat tabel baru RLS ENABLE+FORCE). Modul MENYEDIAKAN capability `news_media` — adapter nyata kini menggantikan no-op blog_content di seluruh composition root (route + worker `blog:publish:scheduled`) — dan MENGONSUMSI `public_content` blog_content untuk validasi referensi homepage section. Rute publik `/news/**` (butuh `tenant_domain`), halaman admin `.astro`, dan aktivasi preset (butuh subsistem preset `module_management`) sengaja di-drop dan didokumentasikan. Menambah aksi `verify` ke union `AccessAction`, grant `awcms_worker` untuk job rekonsiliasi, dan skrip `news-media:reconcile`.
+- c9baa0c: Port modul `seo_distribution` — **scope discovery** — dari awcms-micro (ADR-0038, mengadaptasi awcms-micro ADR-0028; program penyerapan ADR-0035, Wave 1). Aditif net-baru; DAG tetap asiklik.
+
+  Yang ditambahkan:
+
+  - **Seam capability `seo_facts`** (`_shared/ports/seo-facts-port.ts`, `CAPABILITY_CONTRACT_VERSIONS["seo_facts"]="1.1.0"`): kontrak kontribusi beku (tipe fakta + guard JSON-LD terkontrol + predikat visibility + cache-key). `blog_content` kini `provides: ["public_content","seo_facts"]` lewat adaptor `application/seo-facts-port-adapter.ts` (baris `awcms_blog_posts` → `SeoResourceFacts`; noindex/non-publik/belum-terbit → `sitemap:null`/`feed:null`). `seo_distribution` `consumes` `seo_facts` (opsional) + `media_library` (opsional).
+  - **Modul `seo_distribution`** (`type: domain`, v0.1.0, deps Core-only): renderer metadata terpusat (canonical/hreflang/robots/OG/Twitter/JSON-LD terkontrol, host diturunkan server dari `tenant_domain`), serializer sitemap/robots/feed, orkestrator discovery + validator cache (ETag/Last-Modified/304).
+  - **Route discovery publik tak-terautentikasi** di root host: `/robots.txt`, `/sitemap.xml`, `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json` (route Astro XML/text, bukan OpenAPI; `src/middleware.ts` TIDAK diedit).
+  - **Config admin tenant** `GET`/`PUT /api/v1/seo/config` (`config.read`/`config.update`, tenant-scoped, `PUT` idempoten + di-audit) + fragment OpenAPI + tag "SEO & Distribution".
+  - **Migrasi 057-059**: `awcms_seo_tenant_settings` (RLS ENABLE+FORCE + `tenant_isolation`), seed permission config, kolom config feed/sitemap.
+  - Helper aditif `escapeXmlText` + varian error `text/plain` di `src/lib/html/*`; env var publik didokumentasikan (`PUBLIC_TRUST_PROXY`, `PUBLIC_TENANT_RESOLUTION_MODE`, `PUBLIC_DEFAULT_TENANT_*`).
+
+  Ditunda ke PR lanjutan (tata-kelola redirect): aturan redirect + hook redirect middleware, tabel telemetri 404, descriptor `dataLifecycle`, dan permission `redirect.*`/`not_found.*`.
+
+- 359bd7a: Port modul `tenant_domain` dari awcms-micro (epic #555): pemetaan
+  hostname/subdomain → tenant untuk routing publik berbasis host (Wave-0 program
+  penyerapan awcms-micro). Menambah tabel `awcms_tenant_domains` (migrasi 046, tenant-scoped
+  `ENABLE`+`FORCE ROW LEVEL SECURITY`, unique hostname lintas-tenant, satu primary
+  per tenant), seed permission `tenant_domain.domains.*` (migrasi 047), dan fungsi
+  lookup host→tenant `awcms_resolve_tenant_domain_lookup` `SECURITY DEFINER`
+  (migrasi 048). Fungsi ini di-own oleh role bootstrap khusus `awcms_domain_bootstrap`
+  (`NOLOGIN`/`NOSUPERUSER`/`NOBYPASSRLS`, tanpa anggota) dengan policy `FOR SELECT`
+  ter-scope (`USING (true)` khusus role itu) sehingga bootstrap host→tenant tetap
+  resolve di deployment role-separated tempat owner migrasi **bukan** superuser
+  (mis. `awcms_app`/`awcms_worker`/`awcms_setup` dari sql/019–022, dan harness
+  integrasi yang men-demote owner-nya) — tanpa memberi `BYPASSRLS` ke role apa pun,
+  tanpa melepas `FORCE ROW LEVEL SECURITY`, dan tanpa menyentuh policy
+  `tenant_isolation`. `EXECUTE` hanya ke `awcms_app`; kolom sensitif
+  (`verification_token_hash`/`verification_record_value`) tetap tak terbaca.
+
+  API manajemen tenant-scoped di `/api/v1/tenant/domains` (list/create/read/
+  update/soft-delete + `verify` dan `set-primary` yang ber-`Idempotency-Key` dan
+  diaudit), layar admin `/admin/tenant/domains`, resolver host publik ADITIF
+  (`lib/tenant/public-host-tenant-resolver.ts` — hidup berdampingan dengan
+  routing berbasis path `/blog/{tenantCode}` ADR-0009, tidak meregresi), dan
+  adapter Cloudflare DNS OPSIONAL (env-gated, aman tanpa kredensial, belum
+  di-wire ke rute mana pun).
+
+  Deferral yang didokumentasikan: rute konten publik ber-resolusi host belum
+  di-wire (deferral yang sama seperti `/news/**` news_portal); `src/middleware.ts`
+  tidak disentuh (jaminan login/Turnstile/CSP tak berubah). Union `AccessAction`
+  identity-access diperluas dengan `set_primary`.
+
+  **Risiko residual (harden sebelum go-live self-service custom domain).** `verify`
+  saat ini mengaktifkan domain berdasarkan field in-row tanpa bukti kepemilikan
+  outbound (model manual-first; adapter DNS ada tapi belum di-wire). Untuk mencegah
+  pengambilalihan domain (dangling-DNS) pada custom domain bersama, aktivasi
+  `custom_domain` **wajib digerbangi operator/manual** sampai bukti kepemilikan
+  DNS-token (`verification_token_hash` + cek TXT/CNAME lewat adapter) di-wire.
+  `verify` sudah default-deny + di-audit; risiko ini didokumentasikan di README modul
+  dan skill `awcms-tenant-domain-routing`.
+
+- 8c959ff: Port modul `visitor_analytics` dari awcms-micro (epic #617-#624) sebagai modul standalone `type: "system"` (ADR-0035 Wave 1). Menambah statistik pengunjung manusia **privacy-first** untuk rute admin & publik, online maupun offline/LAN.
+
+  - **Skema** (migrasi 049 permission, 050 schema, 051 session-lookup index): `awcms_visitor_sessions`/`awcms_visit_events`/`awcms_visitor_daily_rollups`, semua `FORCE ROW LEVEL SECURITY` + policy `tenant_isolation`, index tenant_id-first, composite FK `(tenant_id, visitor_session_id)` lintas-tenant, dan GRANT `awcms_worker` least-privilege untuk job terjadwal.
+  - **Privasi:** off by default (`VISITOR_ANALYTICS_ENABLED=false`); visitor-key/IP/user-agent disimpan hanya sebagai HMAC-SHA256 bersalt (salt wajib saat enabled — ditegakkan `validate-env`); raw IP & login snapshot opt-in terpisah; query string sensitif di-strip fail-safe.
+  - **Koleksi = endpoint ingest PUBLIK** `POST /api/v1/analytics/collect` (anonim, resolve tenant dari `tenantCode` tabel `awcms_tenants` yang RLS-free — TANPA SECURITY DEFINER), **bukan** middleware: `src/middleware.ts` tidak disentuh (jaminan login/Turnstile/CSP tetap).
+  - **API terautentikasi ABAC:** `GET /api/v1/analytics/{summary,realtime,sessions,events,pages,devices,locations,security,settings}`, `PATCH .../settings`, dan `POST .../retention/purge` (Idempotency-Key + audit `critical`). Raw-detail digerbangi `visitor_analytics.raw_detail.read`.
+  - **Job:** `bun run analytics:rollup` & `bun run analytics:purge` (worker role, offline-safe).
+  - **Dashboard** `/admin/analytics` (SSR-render).
+
+  Adaptasi port terdokumentasi: kopling `data_lifecycle`/`LegalHoldGuardPort` DI-DROP (modul belum ada di base — purge tanpa gerbang legal-hold), dan wiring preset `news_portal_full_online_r2` DEFERRED (modul `news_portal` tidak disentuh).
+
+  **Security hardening (DoD + security review atas port ini):**
+
+  - **Rate-limit backstop pada beacon publik.** `POST /api/v1/analytics/collect` (unauth DB write) kini digerbangi rate limit per-IP (`checkRateLimit` yang sama dengan login/setup) SEBELUM tulis DB — mencegah flooding baris/pencemaran agregat oleh pemegang `tenantCode` publik. Kunci berbasis IP saja (tak membocorkan eksistensi tenant); `path` dibatasi panjang sebelum disimpan. Tunable `VISITOR_ANALYTICS_COLLECT_RATE_LIMIT_MAX`/`_WINDOW_SEC` (default 120/60s).
+  - **Salt HMAC per-tenant (privacy-by-design).** `visitor_key_hash`/`ip_hash`/`user_agent_hash` kini di-key dengan salt deployment DAN `tenantId` (domain-separator `\0`), sehingga browser/IP/user-agent yang sama menghasilkan hash BERBEDA lintas tenant satu origin — menutup korelasi lintas-tenant di lapisan penyimpanan. Diterapkan mumpung belum ada data. `VISITOR_ANALYTICS_HASH_SALT` kini wajib ≥ 16 karakter saat modul aktif.
+  - **raw_detail lewat ABAC, bukan hanya keanggotaan RBAC.** Field de-anonimisasi (`ipHash`/`ipAddress`/`userAgentHash`/`loginIdentifierSnapshot`) di `GET /sessions`, `GET /events`, dan `/admin/analytics` kini diputuskan lewat evaluator ABAC (`evaluateFieldAccessInTransaction`) sehingga kebijakan DSL `deny` atas `raw_detail.read` dihormati (deny-overrides-allow).
+  - Log fragmen IP mentah pada header forwarded multi-nilai dihapus (`client-ip.ts` hanya mencatat `valueCount`, bukan nilai).
+
+- bc7c4fa: Overhaul UI/UX seluruh surface pengguna: mobile-first responsif, animasi profesional CSS-murni, dan aksesibilitas (WCAG AA, `prefers-reduced-motion`, skip-link, target sentuh ≥44px). Semua di dalam jaminan CSP single-owner "zero third-party origin di LAN/offline" — tanpa font CDN/library eksternal; animasi = keyframes/transition CSS; styling di-serve same-origin (bundle Astro atau `public/css/*.css`), tidak ada `<style>`/`<script>` inline.
+
+  - **Design system (fondasi)**: perkaya `tokens.css` (skala tipografi/spacing/radius/elevation, tint interaksi, token MOTION durasi+easing), tambah lapisan utility animasi reusable `motion.css` (fade/scale/slide/stagger/hover-lift/skeleton/spinner), dan shell layout admin+publik responsif dengan drawer mobile CSS-only.
+  - **Login**: redesign form + auto tenant picker — 1 tenant disembunyikan/prefilled, 2–50 dropdown nama tenant, >50 fallback manual (anti mass-enumeration), fail-closed ke input manual saat pre-setup/DB error. Tanpa endpoint publik baru; kontrak DOM login dipertahankan.
+  - **Admin**: 8 layar (`index`/`users`/`roles`/`offices`/`profiles`/`modules`/`abac-policies`/`email-templates`) mobile-first — tabel lebar → pola kartu/stack (`data-label` per sel), stat/quick-link beranimasi, hierarki visual & empty state konsisten. Selektor/hook E2E dipertahankan.
+  - **Blog publik** (`/blog/{tenantCode}/...`): tipografi baca nyaman (measure ~65ch), kartu post grid→stack, media/tabel/kode responsif, animasi entrance halus; renderer `content_json` whitelist-based tidak dilonggarkan.
+
+### Patch Changes
+
+- 2a1e73e: Perbaiki logika fallback media type di `scripts/api-spec-check.ts` (CodeQL alert #140, `js/trivial-conditional`). `asRecord()` selalu mengembalikan objek non-null, sehingga operator `??` pada `asRecord(content["application/json"]) ?? Object.values(content)[0]` membuat cabang fallback jadi dead code — response error yang hanya memakai media type non-`application/json` salah dilaporkan tidak beresolusi ke envelope `ApiError`. Nullish-coalescing dipindahkan ke dalam `asRecord` agar fallback ke media type pertama benar-benar berjalan.
+- 59757f1: chore: refresh the tracked graphify knowledge-graph output (`graphify-out/`)
+  via `/graphify --update` after the project-state doc sync and agent-guide PDF
+  removal — 6664 nodes / 19913 edges / 330 communities. Artifact-only; no runtime
+  behavior change.
+- 4905024: Login card entrance is now transform-only (`@keyframes auth-card-rise`,
+  `translateY`) instead of the shared `.fade-in-up` utility that fades from
+  `opacity: 0`. Fading the whole card — including its text — from transparent can
+  let an axe-core contrast scan read semi-transparent text as a contrast
+  violation if it scans mid-animation; a transform-only entrance keeps the text
+  fully opaque throughout. A local `prefers-reduced-motion` guard neutralises it
+  (motion.css's global reduced-motion block only targets its utility classes).
+  CSS/markup only — the DOM contract and login logic are unchanged. Documented as
+  the canonical rule in doc 14 §Motion / §Auth screen.
+- 4c42029: feat(tooling): port `memory:docs:sync` from awcms-mini — snapshot the
+  out-of-repo Claude Code agent memory into a committed `docs/awcms/agent-memory.md`
+  so it survives clones/device moves (`sync`/`restore`/`check`). Adapts the doc
+  path, header, password-placeholder redaction, and excludes the device-specific
+  local-Postgres memory. check:docs exempts the generated mirror; prettier ignores
+  it. Dev-tooling only — no runtime behavior change.
+- d5ec206: chore: track the graphify knowledge-graph output (`graphify-out/`) so the repo
+  graph is viewable from a clone. Regenerable cache and machine/user-specific path
+  markers stay gitignored; the artifacts are excluded from prettier.
+
 ## 6.0.0
 
 ### Major Changes
