@@ -35,9 +35,17 @@ Menyalakan salah satu sisi saja tidak berbahaya, tetapi juga tidak berguna.
    `docker compose -f docker-compose.yml -f infra/varnish/docker-compose.varnish.yml up -d`.
 
 `EDGE_CACHE_PURGE_TOKEN` container **wajib sama persis** dengan milik aplikasi.
-Beda = setiap BAN ditolak 403 secara senyap dan situs menyajikan konten basi
+Beda = setiap purge ditolak 403 secara senyap dan situs menyajikan konten basi
 sambil terlihat sehat. `bun run security:readiness` melaporkan endpoint-tanpa-token
 sebagai temuan **critical** justru karena kegagalan ini tidak berisik.
+
+> **Verifikasi dengan `X-Cache`, jangan percaya exit code.** Seluruh jalur ini
+> punya kebiasaan gagal sambil melaporkan sukses. Tiga bug nyata terbukti begitu
+> saat lapisan ini pertama kali benar-benar dijalankan di staging
+> (2026-07-25/26) — lihat §Pelajaran. Uji penerimaan yang benar: hangatkan objek
+> sampai `X-Cache: HIT`, kirim purge, pastikan permintaan berikutnya `MISS`,
+> lalu `HIT` lagi. Ekspresi ban yang ditolak, method yang tidak terkirim, dan
+> policy RLS yang salah GUC semuanya lolos dari cek yang lebih longgar.
 
 ## Mode
 
@@ -86,12 +94,44 @@ t:<tenantId>:r:<type>:<id>            satu resource
 ```
 
 Modul konten memanggil `enqueueEdgeCachePurge(tx, tenantId, scopes, reason)`
-**di transaksi konten yang sama** (pola outbox ADR-0006). Pengiriman BAN
-dikerjakan worker dengan lease + retry.
+**di transaksi konten yang sama** (pola outbox ADR-0006). Pengirimannya dikerjakan
+worker dengan lease + retry.
+
+Protokol kabel: **`POST /__edge-cache-purge`** dengan header
+`X-Edge-Purge-Token` + `X-Edge-Purge-Key`. VCL juga tetap menerima method `BAN`
+asli, jadi `curl -X BAN` tetap jalan untuk operator; aplikasi **tidak bisa**
+memakainya karena Bun tidak mengirim method HTTP non-standar (lihat §Pelajaran).
 
 Key dibatasi `[A-Za-z0-9:._-]` saat dibangun **dan** divalidasi ulang di VCL:
 key masuk ke regex, jadi `.*` akan mengubah satu invalidasi menjadi
 "buang seluruh cache ke origin".
+
+## Pelajaran — tiga bug yang hanya muncul saat dijalankan
+
+Lapisan ini lolos review, lolos `bun run check`, dan tetap salah di tiga tempat.
+Semuanya baru terlihat ketika Varnish benar-benar dipasang di depan staging, dan
+ketiganya **melaporkan sukses** sambil tidak bekerja. Pola yang sama akan
+terulang pada lapisan berikutnya bila tidak diingat.
+
+1. **Spasi literal di ekspresi ban.** `(^| )key( |$)` — Varnish memecah ekspresi
+   ban pada whitespace, jadi jumlah token salah dan setiap ban ditolak
+   `Wrong number of arguments`. Handler tetap membalas 200. Perbaikan:
+   `(^|[[:space:]])key([[:space:]]|$)`.
+2. **Method `BAN` tidak pernah terkirim.** Bun mengirimkan method non-standar
+   sebagai `GET` (`fetch` maupun `node:http`, diverifikasi 1.3.14 lewat
+   `varnishlog -i ReqMethod`). Setiap purge jatuh ke origin dan 404.
+3. **Policy RLS antrean purge memakai GUC yang tak pernah di-set.** `sql/068`
+   menulis `awcms.tenant_id`; `withTenant()` menyetel `app.current_tenant_id`.
+   Ini **bukan** bug cache — `WITH CHECK` jadi NULL, INSERT ditolak, dan karena
+   enqueue di-`await` di dalam transaksi konten tanpa guard, **publish blog ikut
+   gagal 500** begitu cache dinyalakan. Diperbaiki `sql/070`.
+
+Benang merahnya: `sendEdgeCachePurge` sama sekali **tidak punya test**, dan mock
+`fetchImpl` memang tidak bisa menangkap kelas bug (2) — ia memeriksa argumen,
+bukan kabel. Sekarang dijaga `tests/edge-cache-purge-client.test.ts`
+(`Bun.serve` nyata, menegakkan `request.method` seperti DITERIMA),
+`tests/migration-tenant-guc-consistency.test.ts`, dan dua assertion tingkat-berkas
+atas `default.vcl`.
 
 ## Yang belum tersambung (jangan klaim ada)
 

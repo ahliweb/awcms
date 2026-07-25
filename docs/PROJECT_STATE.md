@@ -38,13 +38,13 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek      | Nilai (per commit ini)                                                                  | Sumber kebenaran                                      |
-| ---------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi      | **6.1.0** (tag `v6.1.0`, 2026-07-25); 4 changeset MINOR/PATCH menunggu rilis berikutnya | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                |
-| Migrasi    | **69** (`sql/001`–`069`)                                                                | `ls sql/`                                             |
-| ADR        | **43** (`0000`–`0042`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
+| Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
+| ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Versi      | **6.2.0** (tag `v6.2.0`, 2026-07-26); 0 changeset menunggu                | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
+| Migrasi    | **70** (`sql/001`–`070`)                                                  | `ls sql/`                                             |
+| ADR        | **43** (`0000`–`0042`)                                                    | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -148,6 +148,15 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   no-op total.** Tiga lapis default-deny independen; sinyal tekanan hanya mengubah _berapa
   lama_, tidak pernah _apa_ yang boleh di-cache. Emisi purge sudah terpasang di jalur tulis
   `blog_content`; `news_portal`/`theming`/`media_library` **belum**.
+  **AKTIF di staging sejak 2026-07-26** (`EDGE_CACHE_MODE=on`, Varnish 7.5 di
+  depan Traefik, worker purge tiap menit) — dan pengaktifan itulah yang
+  membongkar TIGA bug yang lolos review dan `bun run check`: ekspresi ban
+  dengan spasi literal (ditolak Varnish, tetap balas 200), method `BAN` yang
+  Bun kirim sebagai `GET`, dan policy RLS `sql/068` yang memakai GUC
+  `awcms.tenant_id` sehingga **publish blog gagal 500** saat cache menyala
+  (diperbaiki `sql/070`). Ketiganya melapor sukses sambil tidak bekerja. Detail
+  - gate baru di [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md)
+    §Pelajaran.
 - **Rekonsiliasi DNS subdomain tenant** (#236, `sql/069`) — `ensureServingRecord`
   desired-state (drift → `PUT`, tidak pernah `POST` kedua), `reconcileServingRecords`,
   `bun run tenant-domain:dns:sync` sebagai `awcms_worker` SELECT-only. Tanpa
@@ -175,7 +184,7 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
   atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari nomor
-  berikutnya setelah `sql/069`), lulus `bun run check`. Progres:
+  berikutnya setelah `sql/070`), lulus `bun run check`. Progres:
   - **Wave 0 — SUDAH:** `tenant-domain` (#219), paritas admin shell/chrome (#229).
     **BELUM:** pustaka komponen `src/components/ui/` + paritas design-token (#229 menyentuh
     shell admin, bukan pustaka komponen reusable). Seam kontribusi descriptor
