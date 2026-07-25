@@ -1,0 +1,16 @@
+-- Grant the worker role read access to `awcms_tenant_domains` so
+-- `bun run tenant-domain:dns:sync` can read the desired subdomain state.
+--
+-- SELECT only, deliberately. The reconcile job's side effect lives in
+-- Cloudflare, not in this database: it writes no sync state, no timestamps, and
+-- no record ids back. That keeps the job stateless and idempotent, and it means
+-- a compromised worker cannot alter which hostname belongs to which tenant —
+-- which is exactly the mapping that decides whose content a visitor is served.
+--
+-- No INSERT/UPDATE/DELETE, and specifically no UPDATE: recording a
+-- `last_synced_at` would be convenient and is not worth handing the worker write
+-- access to the tenant-routing table for.
+--
+-- Matching entry required in `WORKER_ROLE_GRANTS` (scripts/security-readiness.ts);
+-- a drift test compares this file's text against that matrix.
+GRANT SELECT ON awcms_tenant_domains TO awcms_worker;

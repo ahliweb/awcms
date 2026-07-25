@@ -97,11 +97,46 @@ trip (no timing side-channel). `X-Forwarded-Host` is read only when
   public render routes plumbed through it (news_portal deferred its own
   `/news/**` routes for the same reason). Wiring it is a clean follow-up; the
   seam is stable.
-- **Cloudflare DNS automation.** `resolveTenantDomainDnsProvider(env)` and
-  `createCloudflareDnsProvider` exist and are unit-tested, but no route calls
-  them. With no `TENANT_DOMAIN_DNS_PROVIDER=cloudflare` configured the resolver
-  returns a clean misconfigured-result provider (never throws), so awcms builds
-  and runs with zero Cloudflare credentials.
+- **Cloudflare DNS automation for CUSTOM domains.** The TXT/CNAME verification
+  half of the adapter still has no caller — custom-domain ownership proof remains
+  manual (`POST /api/v1/tenant/domains/{id}/verify`).
+
+  Platform **subdomains** ARE automated: see §Subdomain DNS reconciliation below.
+
+## Subdomain DNS reconciliation
+
+`bun run tenant-domain:dns:sync` reconciles active `domain_type = 'subdomain'`
+rows to serving A/CNAME records in the managed Cloudflare zone, via
+`ensureServingRecord` on the `TenantDomainDnsProvider` port. Adding a tenant
+subdomain is an INSERT; the next pass makes it resolve.
+
+Why a job rather than a call inside `POST /api/v1/tenant/domains`: a DNS write is
+slow and externally owned, so putting it in a tenant's request would block on
+Cloudflare, and a failure would leave a row whose domain never resolves with
+nothing to retry it. A pass is idempotent, so it also heals a record edited by
+hand in the dashboard.
+
+Two behaviours worth knowing:
+
+- A drifted record is **moved** (`PUT`), never joined by a second record —
+  two A records for one hostname round-robin traffic between the old and new
+  target, which reads as an intermittent outage rather than a misconfiguration.
+- **Nothing is ever deleted.** A suspended or soft-deleted domain is skipped,
+  leaving a stale record pointing at the platform (visible, harmless) rather than
+  having an automated job issue destructive DNS writes.
+
+Custom domains are excluded by construction: they are hostnames the platform does
+not own, so their records are not ours to write.
+
+Config (all absent-safe — unset means the job exits without touching the
+database): `TENANT_DOMAIN_DNS_PROVIDER=cloudflare`, the
+`TENANT_DOMAIN_CLOUDFLARE_*` credentials, and `TENANT_DOMAIN_SERVING_TARGET`.
+There is deliberately no default target: guessing it points every tenant
+subdomain at a wrong address. `--dry-run` reports intended changes.
+
+The worker holds `SELECT` only on `awcms_tenant_domains` (`sql/069`) — the job
+writes nothing back, so a compromised worker cannot alter the hostname->tenant
+mapping that decides whose content a visitor is served.
 
 ## Security residual risk — gate before untrusted self-service (M1)
 

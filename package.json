@@ -50,6 +50,7 @@
     "site-search:sources:check": "bun scripts/site-search-sources-check.ts",
     "comments:resources:check": "bun scripts/comments-resources-check.ts",
     "comments:retention": "bun scripts/comments-retention.ts",
+    "tenant-domain:dns:sync": "bun scripts/tenant-domain-dns-sync.ts",
     "edge-cache:surfaces:check": "bun scripts/edge-cache-surfaces-check.ts",
     "edge-cache:purge": "bun scripts/edge-cache-purge.ts",
     "data-lifecycle:registry:check": "bun scripts/data-lifecycle-registry-check.ts",

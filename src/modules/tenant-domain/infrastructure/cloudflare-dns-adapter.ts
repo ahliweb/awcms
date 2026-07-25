@@ -3,17 +3,19 @@
  * /api/v1/tenant/domains/{id}/verify`) remains the MVP default — this adapter
  * is never called unless an operator explicitly sets
  * `TENANT_DOMAIN_DNS_PROVIDER=cloudflare` (see
- * `../domain/tenant-domain-dns-config.ts`). **No route in this repo calls it
- * yet** — wiring it into `.../verify` or a "provision platform subdomain" flow
- * is deferred (see the module README's §Not yet available); this file exists so
- * that future work can depend on the `TenantDomainDnsProvider` port without
- * inventing the provider boundary, config split, or redaction/timeout/
- * idempotency behavior at that point. awcms builds and runs with no Cloudflare
- * credentials configured — `resolveTenantDomainDnsProvider` degrades to a clean
- * misconfigured-result provider rather than throwing.
+ * `../domain/tenant-domain-dns-config.ts`). awcms builds and runs with no
+ * Cloudflare credentials configured — `resolveTenantDomainDnsProvider` degrades
+ * to a clean misconfigured-result provider rather than throwing.
  *
- * Capabilities: create a TXT/CNAME DNS verification record, and check whether a
- * DNS record has propagated to the value expected. Both calls are
+ * **Who calls this.** `bun run tenant-domain:dns:sync`
+ * (`scripts/tenant-domain-dns-sync.ts`) reconciles active platform subdomains in
+ * `awcms_tenant_domains` to serving records in the managed zone. No REQUEST path
+ * calls this adapter: a DNS write is slow, externally-owned, and must never sit
+ * inside a tenant's HTTP request or a DB transaction (ADR-0006).
+ *
+ * Capabilities: create a TXT/CNAME verification record, check whether a record
+ * has propagated to the expected value, and reconcile the A/CNAME *serving*
+ * record for a platform subdomain to its desired target. Both calls are
  * timeout-bounded (`withTimeout`) and gated by a shared circuit breaker
  * (`getProviderCircuitBreaker("tenant-domain-cloudflare-dns")`) — the same
  * pattern the email/sync-storage outbound provider calls already use. Both
@@ -85,10 +87,53 @@ export type CheckVerificationStatusResult =
   | { ok: true; verified: boolean }
   | { ok: false; error: string; retryable: boolean };
 
+/** Record types that can actually serve traffic for a tenant hostname. */
+export type ServingRecordType = "A" | "CNAME";
+
+export type EnsureServingRecordInput = {
+  recordType: ServingRecordType;
+  /** The tenant hostname itself, e.g. "acme.platform.example". */
+  recordName: string;
+  /** IPv4 address for `A`, or the target hostname for `CNAME`. */
+  recordValue: string;
+  /**
+   * Whether Cloudflare should proxy (orange-cloud) the record. Defaults to
+   * `true`: a proxied record is what gives the tenant edge TLS without the
+   * platform issuing a certificate per subdomain, which is the entire reason
+   * unlimited subdomains are practical on this stack.
+   */
+  proxied?: boolean;
+};
+
+export type EnsureServingRecordResult =
+  | {
+      ok: true;
+      providerRecordId?: string;
+      /** `unchanged` means the desired state already held — the common steady-state result. */
+      action: "created" | "updated" | "unchanged";
+    }
+  | { ok: false; error: string; retryable: boolean };
+
 /**
- * The port. A future issue that wires this into `.../verify` or a
- * subdomain-provisioning endpoint should depend on this type, never on
- * `createCloudflareDnsProvider` by name.
+ * The port. Callers depend on this type, never on `createCloudflareDnsProvider`
+ * by name.
+ *
+ * ## Why `ensureServingRecord` is separate from `createVerificationRecord`
+ *
+ * They look similar and are not. A verification record is **create-only and
+ * additive**: it proves the tenant controls a domain we do not own, and if one
+ * already exists with a different value that is simply a second, unrelated
+ * proof — never something to overwrite.
+ *
+ * A serving record is **desired-state**: exactly one record must exist for the
+ * hostname, and if its content has drifted from where traffic should go, the
+ * correct action is to *move* it. Modelling that as "create" would leave the
+ * stale record in place and silently keep routing a tenant to the old target.
+ *
+ * That is also why this is reconciliation rather than a create-time side effect
+ * — it can be re-run safely, it heals drift introduced by hand in the Cloudflare
+ * dashboard, and a subdomain whose record creation failed once is fixed by the
+ * next pass instead of staying broken.
  */
 export type TenantDomainDnsProvider = {
   createVerificationRecord(
@@ -97,6 +142,9 @@ export type TenantDomainDnsProvider = {
   checkVerificationStatus(
     input: CheckVerificationStatusInput
   ): Promise<CheckVerificationStatusResult>;
+  ensureServingRecord(
+    input: EnsureServingRecordInput
+  ): Promise<EnsureServingRecordResult>;
 };
 
 export type CloudflareDnsProviderConfig = {
@@ -122,6 +170,8 @@ type CloudflareDnsRecord = {
   type: string;
   name: string;
   content: string;
+  /** Absent on older API shapes; treated as "not proxied" when missing. */
+  proxied?: boolean;
 };
 
 function truncate(message: string): string {
@@ -281,6 +331,74 @@ export function validateDnsRecordInput(
   return null;
 }
 
+/**
+ * A strict dotted-quad check. `Number.parseInt` is deliberately not used: it
+ * accepts `"1.2.3.4abc"` and leading zeros, and a malformed address that
+ * Cloudflare then rejects would burn a reconcile attempt for every pass.
+ */
+function isValidIpv4(value: string): boolean {
+  const octets = value.trim().split(".");
+
+  return (
+    octets.length === 4 &&
+    octets.every(
+      (octet) =>
+        /^(0|[1-9]\d{0,2})$/.test(octet) &&
+        Number(octet) >= 0 &&
+        Number(octet) <= 255
+    )
+  );
+}
+
+/**
+ * Validate a serving-record request before any network call. Same discipline as
+ * `validateDnsRecordInput`: a hostname must live inside the platform root
+ * domain, so a tenant row cannot induce the platform's Cloudflare token to write
+ * a record in some unrelated part of the zone.
+ */
+export function validateServingRecordInput(
+  input: { recordType: unknown; recordName: unknown; recordValue: unknown },
+  platformRootDomain: string
+): string | null {
+  if (input.recordType !== "A" && input.recordType !== "CNAME") {
+    return 'recordType must be "A" or "CNAME".';
+  }
+
+  if (
+    typeof input.recordName !== "string" ||
+    !isWithinPlatformRootDomain(input.recordName, platformRootDomain)
+  ) {
+    return "recordName must equal the platform root domain or be a subdomain of it.";
+  }
+
+  if (
+    typeof input.recordValue !== "string" ||
+    /[\r\n]/.test(input.recordValue)
+  ) {
+    return "recordValue must be a single-line string.";
+  }
+
+  if (input.recordType === "A" && !isValidIpv4(input.recordValue)) {
+    return "recordValue must be a valid IPv4 address for an A record.";
+  }
+
+  if (input.recordType === "CNAME") {
+    let normalized: string | null = null;
+
+    try {
+      normalized = normalizePublicHost(input.recordValue);
+    } catch {
+      normalized = null;
+    }
+
+    if (!normalized) {
+      return "recordValue must be a valid hostname for a CNAME record.";
+    }
+  }
+
+  return null;
+}
+
 function normalizeRecordValueForComparison(
   recordType: DnsRecordType,
   value: string
@@ -335,7 +453,7 @@ export function createCloudflareDnsProvider(
   }
 
   async function listMatchingRecords(
-    recordType: DnsRecordType,
+    recordType: DnsRecordType | ServingRecordType,
     recordName: string
   ): Promise<CloudflareDnsRecord[]> {
     const query = new URLSearchParams({ type: recordType, name: recordName });
@@ -481,8 +599,136 @@ export function createCloudflareDnsProvider(
           retryable: true
         };
       }
+    },
+
+    async ensureServingRecord(input) {
+      const attemptedAt = new Date();
+      const validationError = validateServingRecordInput(
+        input,
+        config.platformRootDomain
+      );
+
+      if (validationError) {
+        return { ok: false, error: validationError, retryable: false };
+      }
+
+      if (!breaker.canAttempt(attemptedAt)) {
+        return {
+          ok: false,
+          error: "Cloudflare DNS circuit breaker is open; skipping attempt.",
+          retryable: true
+        };
+      }
+
+      const proxied = input.proxied ?? true;
+
+      try {
+        const existing = await listMatchingRecords(
+          input.recordType,
+          input.recordName
+        );
+
+        const desired = normalizeServingValue(
+          input.recordType,
+          input.recordValue
+        );
+        const current = existing[0];
+
+        if (
+          current &&
+          normalizeServingValue(input.recordType, current.content) ===
+            desired &&
+          current.proxied === proxied
+        ) {
+          breaker.recordSuccess(attemptedAt);
+
+          return {
+            ok: true,
+            providerRecordId: current.id,
+            action: "unchanged"
+          };
+        }
+
+        // Drifted or absent. PUT onto the existing record id rather than
+        // creating a second one: two A records for one hostname round-robin
+        // traffic between the old and new target, which looks like an
+        // intermittent outage rather than a misconfiguration.
+        const { status, body } = current
+          ? await callApi<CloudflareDnsRecord>(
+              `/dns_records/${encodeURIComponent(current.id)}`,
+              {
+                method: "PUT",
+                body: JSON.stringify({
+                  type: input.recordType,
+                  name: input.recordName,
+                  content: input.recordValue,
+                  ttl: 300,
+                  proxied
+                })
+              },
+              "cloudflare dns update serving record"
+            )
+          : await callApi<CloudflareDnsRecord>(
+              "/dns_records",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  type: input.recordType,
+                  name: input.recordName,
+                  content: input.recordValue,
+                  ttl: 300,
+                  proxied
+                })
+              },
+              "cloudflare dns create serving record"
+            );
+
+        if (status < 200 || status >= 300 || !body?.success) {
+          breaker.recordFailure(attemptedAt);
+
+          return {
+            ok: false,
+            error: truncate(
+              redact(
+                `Cloudflare DNS API serving-record request failed (HTTP ${status}, ${summarizeApiErrors(body?.errors)}).`,
+                secrets
+              )
+            ),
+            retryable: status >= 500 || status === 0
+          };
+        }
+
+        breaker.recordSuccess(attemptedAt);
+
+        return {
+          ok: true,
+          providerRecordId: body.result?.id,
+          action: current ? "updated" : "created"
+        };
+      } catch (error) {
+        breaker.recordFailure(attemptedAt);
+        const message = error instanceof Error ? error.message : String(error);
+
+        return {
+          ok: false,
+          error: truncate(redact(message, secrets)),
+          retryable: true
+        };
+      }
     }
   };
+}
+
+/** CNAME targets are case- and trailing-dot-insensitive; A record contents are literal. */
+function normalizeServingValue(
+  recordType: ServingRecordType,
+  value: string
+): string {
+  const trimmed = value.trim();
+
+  return recordType === "CNAME"
+    ? trimmed.replace(/\.$/, "").toLowerCase()
+    : trimmed;
 }
 
 function createMisconfiguredProvider(reason: string): TenantDomainDnsProvider {
@@ -491,6 +737,9 @@ function createMisconfiguredProvider(reason: string): TenantDomainDnsProvider {
       return { ok: false, error: reason, retryable: false };
     },
     async checkVerificationStatus() {
+      return { ok: false, error: reason, retryable: false };
+    },
+    async ensureServingRecord() {
       return { ok: false, error: reason, retryable: false };
     }
   };
