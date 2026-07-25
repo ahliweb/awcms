@@ -1,81 +1,109 @@
 ---
 name: awcms-form-drafts
-description: BACAAN SAJA — modul form_drafts BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `form-drafts`, tidak ada migration-nya di `sql/`). Rujukan `src/modules/form-drafts`/tabel/API di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Untuk wizard multi-step, lihat skill `awcms-wizard-form` — CATATAN: seperti modul ini, komponennya BELUM di-port ke repo ini juga; verifikasi dulu sebelum memakainya sebagai panduan implementasi.
+description: Modul form_drafts SUDAH di-port ke repo ini (dari awcms-micro Issue #484; migrasi `sql/062` schema + `sql/063` permission, Gelombang-1 baris 1 `docs/awcms/absorb-awcms-micro-roadmap.md`). Draft store server-side generik & domain-agnostic untuk form multi-langkah — `type: system`, deps `[identity_access]`, tabel `awcms_form_drafts` (ENABLE+FORCE RLS), endpoint `/api/v1/form-drafts/*`, job retensi dua fase `bun run form-drafts:purge` dengan gerbang legal-hold. Gunakan saat menambah/mengubah penyimpanan progres form, aturan payload, atau retensi draft. CATATAN: pustaka KOMPONEN wizard (`WizardStepper`/`wizard-client.ts`) BELUM di-port (baris Gelombang-0 `src/components/ui/` masih terbuka) — skill `awcms-wizard-form` tetap BACAAN SAJA.
 ---
 
 # AWCMS — Server-Side Form Draft Persistence
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `form_drafts` ada di **awcms-mini**, bukan di sini: `ls src/modules` TIDAK
-> memuat `form-drafts`, dan `sql/` tidak memuat migration-nya. Semua rujukan
-> `src/modules/form-drafts/...`, tabel `awcms_form_drafts`, dan
-> `src/pages/admin/examples/wizard.astro` di bawah adalah artefak
-> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Pakai
-> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
-> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
-> mengklaim apa pun ada.
+Ikuti `src/modules/form-drafts/README.md`. Modul ini **ada dan bisa dipanggil**
+di repo ini — diport dari awcms-micro Issue #484.
 
-Ikuti `src/modules/form-drafts/README.md` (modul) dan
-`docs/awcms/examples/wizard-form-pattern.md` §Server-side draft
-(kapan ini vs client-only state). Contoh pemakaian nyata:
-`src/pages/admin/examples/wizard.astro` (pilot, Issue #484).
+> **Yang TIDAK ikut di-port** (jangan klaim ada, sudah diverifikasi tidak ada):
+>
+> - Pustaka komponen wizard `src/components/ui/` (`WizardStepper`,
+>   `WizardPanel`, `WizardActions`, `wizard-client.ts`) — baris Gelombang-0
+>   yang masih terbuka. Skill `awcms-wizard-form` masih BACAAN SAJA.
+> - `docs/awcms/examples/wizard-form-pattern.md` — tidak ada di repo ini.
+> - `src/pages/admin/examples/wizard.astro` (pilot micro) — tidak ada di repo
+>   ini; `src/pages/admin/examples/` sendiri tidak ada.
+>
+> Store ini tetap berguna tanpa ketiganya: yang dipanggil sebuah wizard adalah
+> API-nya, bukan sebaliknya.
 
-## Kapan pakai ini vs client-only `wizard-client.ts` state
+## Kapan pakai server-side draft
 
-Server-side draft **hanya** bila: user perlu resume lintas sesi/tab/
-perangkat, atau ada kebutuhan audit/observability atas progress form
-(bukan sekadar UX). Jangan default ke ini untuk setiap wizard — form
-pendek yang selesai dalam satu duduk cukup pakai state in-memory
-`wizard-client.ts` (skill `awcms-wizard-form`) tanpa network round-trip
-tambahan.
+Hanya bila user perlu resume lintas sesi/tab/perangkat, atau ada kebutuhan
+audit atas progres form. Form pendek yang selesai sekali duduk cukup state
+in-memory di klien — jangan tambah round-trip jaringan tanpa alasan itu.
 
 ## API
 
 `GET/POST /api/v1/form-drafts`, `GET/PATCH/DELETE /api/v1/form-drafts/{id}`,
 `POST /api/v1/form-drafts/{id}/submit`. Guard
-`form_drafts.draft.{read,create,update,delete}` — permission generik,
-tidak per `moduleKey` pembuat draft (RLS sudah isolasi tenant).
+`form_drafts.draft.{read,create,update,delete}` — generik, tidak per
+`moduleKey` pembuat draft (RLS sudah mengisolasi tenant).
+
+**Tidak ada action `submit`.** Submit menjaga `draft.update`. Menambah action
+`submit` berarti melebarkan union `AccessAction` **dan** menanam
+latent-authz trap: action yang tak pernah di-seed ke role akan men-deny
+bahkan owner, sementara kodenya terlihat benar saat review.
 
 ## Aturan wajib
 
 1. **`moduleKey`/`wizardKey`/`resourceType` milik modul Anda sendiri** —
-   format lowercase snake_case (`^[a-z][a-z0-9_]{1,63}$`), unik per
-   modul/wizard supaya query resume-on-load (`?moduleKey=&wizardKey=`)
-   tidak bentrok dengan modul lain.
-2. **Payload tidak boleh berisi field yang menyerupai secret**
-   (`password`/`token`/`secret`/`credential`/`apiKey`/`privateKey`,
-   dicek rekursif) — ditolak `400 VALIDATION_ERROR`, bukan direduksi
-   diam-diam. Jangan simpan data sensitif di draft sama sekali, bukan
-   hanya menghindari nama field yang jelas menyerupai secret.
-3. **Payload maksimum 32KB serialized** (`MAX_PAYLOAD_BYTES`) — draft
-   adalah scratch state form, bukan penyimpan dokumen/lampiran.
-4. **Create/update/delete TIDAK butuh `Idempotency-Key`** — create
-   worst-case menghasilkan draft duplikat berisiko rendah, update/delete
-   idempotent secara struktural. **Submit WAJIB `Idempotency-Key`** —
-   transisi status yang berarti, sama seperti mutation high-risk lain
-   (skill `awcms-idempotency`).
-5. **Hanya draft `status = 'draft'` yang editable** — submitted/
-   abandoned/expired mengembalikan `404` dari PATCH, bukan mengizinkan
-   edit riwayat.
+   lowercase snake_case (`^[a-z][a-z0-9_]{1,63}$`). Pola ini di-CHECK di
+   `sql/062` **dan** di `domain/form-draft-validation.ts`; ubah keduanya
+   bersama (`tests/form-drafts-module.test.ts` menjaga kesamaannya).
+2. **Payload tidak boleh berisi field menyerupai secret**
+   (`password`/`token`/`secret`/`credential`/`api[_-]?key`/`private[_-]?key`,
+   dicek rekursif termasuk di dalam array) — **DITOLAK 400, bukan
+   di-redact diam-diam**. Alasannya penting: kalau di-strip diam-diam,
+   pemanggil dapat 200 dan tak bisa membedakan field yang dibuang dari yang
+   tersimpan. Jangan simpan data sensitif di draft sama sekali.
+3. **Payload maksimum 32KB serialized** (`MAX_PAYLOAD_BYTES`) — scratch state,
+   bukan penyimpan dokumen/lampiran.
+4. **Create/update/delete TIDAK butuh `Idempotency-Key`; submit WAJIB.**
+   Retry create = satu baris scratch bernilai rendah yang bisa dihapus;
+   delete idempotent secara struktural (`deleted_at IS NULL`). Retry submit =
+   menyerahkan payload ke aksi domain dua kali. Asimetri ini disengaja —
+   mewajibkan key di mana-mana melatih pemanggil membuat key asal-asalan,
+   yang justru melemahkan jaminan di tempat yang penting.
+5. **Hanya `status = 'draft'` yang editable** — submitted/abandoned/expired
+   membalas `404` dari PATCH (tidak membedakan "state salah" dari "tidak
+   ada").
 6. **Resume-on-load lewat application layer langsung dari SSR**
-   (`listFormDrafts(tx, tenantId, {moduleKey, wizardKey, status: "draft"})`),
-   bukan round-trip HTTP ke endpoint sendiri — pola sama seperti
-   `admin/index.astro`'s dashboard reports.
-7. **Retensi** — jadwalkan `bun run form-drafts:purge` (cron/systemd
-   timer/k8s CronJob, tidak lewat HTTP) untuk expire draft overdue lalu
-   purge draft expired/abandoned lama. Default retention 30 hari,
-   override `--retention-days=<n>` atau env `FORM_DRAFT_RETENTION_DAYS`.
+   (`listFormDrafts(tx, tenantId, { moduleKey, wizardKey, status: "draft" })`),
+   bukan round-trip HTTP ke endpoint sendiri.
+
+## Retensi dua fase + legal hold (jangan diubah tanpa membaca ini)
+
+`bun run form-drafts:purge` (harian, cron/systemd/CronJob — bukan lewat HTTP):
+
+1. `expireOverdueFormDrafts` — `draft` lewat `expires_at` → `status='expired'`.
+   **Transisi, bukan delete**; baris masih ada untuk audit/debug.
+2. `purgeExpiredFormDrafts` — DELETE fisik baris `expired`/`abandoned` yang
+   lebih tua dari cutoff retensi (default 30 hari; `--retention-days=<n>`,
+   lalu env `FORM_DRAFT_RETENTION_DAYS`).
+
+**Titik enforcement legal hold ada di fase 2 di modul ini, BUKAN di mesin
+`data_lifecycle`.** Descriptor modul ini `executionMode: "delegated"` — planner
+`data_lifecycle` hanya MEMBACA tabel ini untuk visibilitas backlog dan tidak
+pernah memutasinya, jadi hold yang ditegakkan hanya di mesin itu tidak
+menghentikan apa pun. Fase 2 menanyai `LegalHoldGuardPort`
+(`_shared/ports/legal-hold-guard-port.ts`, di-inject di composition root
+`scripts/form-draft-purge.ts`) sebelum DELETE dan melewatkan seluruh batch bila
+descriptor ditahan. **Fase 1 sengaja TIDAK digerbangi** — ia tak menghapus apa
+pun, jadi tak memikul risiko kehilangan permanen yang jadi alasan legal hold
+ada.
+
+`FORM_DRAFTS_LIFECYCLE_KEY` di-export `module.ts` dan **di-import** oleh purge —
+jangan menulis ulang literalnya. Kalau kunci descriptor dan kunci yang dicek
+purge berbeda, hold **fail OPEN**: purge tak menemukan hold dan tetap menghapus,
+tanpa error dan tanpa log.
 
 ## Verifikasi
 
-`tests/form-draft-validation.test.ts` (denylist, format, ukuran payload).
-`tests/integration/form-drafts.integration.test.ts` (CRUD+submit
-end-to-end, RLS tenant isolation, ABAC default-deny, submit idempotency,
-retention/expiry) — jalankan terhadap Postgres nyata sebelum PR yang
-menyentuh modul ini dianggap selesai.
+- `tests/form-draft-validation.test.ts` — denylist, format key, ukuran payload.
+- `tests/form-drafts-module.test.ts` — drift guard tiga-arah (descriptor
+  `module.ts` ↔ seed `sql/063` ↔ guard route), kunci lifecycle di-pin sebagai
+  literal, FORCE RLS, dan grant `awcms_worker` minimal (SELECT/UPDATE/DELETE,
+  **tanpa INSERT**). Ketiga kelas mutasi ini sudah dibuktikan MERAH.
+- **Belum ada** `tests/integration/form-drafts.integration.test.ts` di repo ini.
+  Jangan mengklaim CRUD/RLS/idempotency sudah diuji end-to-end terhadap
+  Postgres nyata — itu celah yang masih terbuka.
 
 ## Skill terkait
 
-`awcms-wizard-form` (komponen UI wizard yang biasanya memakai ini),
-`awcms-idempotency` (submit), `awcms-abac-guard`,
-`awcms-observability` (pola retensi/purge terjadwal yang sama).
+`awcms-idempotency` (submit), `awcms-abac-guard`, `awcms-data-lifecycle`
+(descriptor/legal hold), `awcms-new-migration`, `awcms-wizard-form`
+(BACAAN SAJA — komponen belum ada).

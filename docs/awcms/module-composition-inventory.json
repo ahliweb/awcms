@@ -1,5 +1,5 @@
 {
-  "moduleCount": 18,
+  "moduleCount": 20,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -79,6 +79,22 @@
       "permissionCount": 0,
       "navigationCount": 0,
       "jobCount": 3,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "form_drafts",
+      "name": "Form Drafts",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": ["identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 4,
+      "navigationCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null
@@ -246,6 +262,22 @@
       "permissionCount": 8,
       "navigationCount": 0,
       "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "site_search",
+      "name": "Site Search",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 6,
+      "navigationCount": 0,
+      "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

@@ -17,6 +17,8 @@ import { tenantDomainModule } from "./tenant-domain/module";
 import { visitorAnalyticsModule } from "./visitor-analytics/module";
 import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
+import { formDraftsModule } from "./form-drafts/module";
+import { siteSearchModule } from "./site-search/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -95,7 +97,28 @@ const baseModules: ModuleDescriptor[] = [
   // provides it, optional) + `media_library` (optional); capability edges are not
   // DAG edges. Redirect governance + 404 telemetry are DEFERRED to a follow-up PR.
   // See src/modules/seo-distribution/module.ts's `description`.
-  seoDistributionModule
+  seoDistributionModule,
+  // Ported from awcms-micro (Issue #484), Gelombang-1 row 1 of
+  // docs/awcms/absorb-awcms-micro-roadmap.md: a generic, domain-agnostic
+  // server-side draft store for multi-step forms. Net-new and additive —
+  // depends only on identity_access (above), so the DAG stays acyclic, and
+  // nothing consumes it yet. Registers a `delegated` data_lifecycle descriptor
+  // whose real purge (and legal-hold check) stays in this module's own
+  // `purgeExpiredFormDrafts`. The awcms-micro wizard COMPONENT library is a
+  // separate, still-open Gelombang-0 row and is not part of this port. See
+  // src/modules/form-drafts/module.ts's `description`.
+  formDraftsModule,
+  // Ported from awcms-micro (Issue #270, ADR-0040), Gelombang-1 of
+  // docs/awcms/absorb-awcms-micro-roadmap.md: the tenant-scoped, cross-content
+  // PostgreSQL full-text search index + public query/suggest surface + admin
+  // index/settings/diagnostics API. Depends only on tenant_admin/identity_access
+  // (both above), so the DAG stays acyclic, and no existing module depends on
+  // it: content modules CONTRIBUTE reviewed, pure-data `searchSources`
+  // descriptors (blog_content declares `blog_content.post`) that this module's
+  // generic engine reads through `listModules()` — a descriptor-list seam, not a
+  // capability `provides`, precisely because many providers are expected. See
+  // src/modules/site-search/module.ts's `description`.
+  siteSearchModule
 ];
 
 /**
