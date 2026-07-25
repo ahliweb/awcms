@@ -1692,6 +1692,78 @@ export function checkSsoCredentialEncryptionKeyConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// comments module secrets (ADR-0041) — warnings, not critical, and here is why
+// ---------------------------------------------------------------------------
+
+/**
+ * `comments` has two optional secrets. Neither is `critical`, because neither
+ * can cause a data leak or an authorization bypass when absent — both degrade
+ * to a strictly safe state. They are `warning` because both degradations are
+ * silent from the outside and cost real functionality, so an operator should
+ * see them before going live rather than discover them from a support ticket.
+ *
+ * - `COMMENTS_SUBSCRIBER_ENCRYPTION_KEY` absent → reply-notify subscriptions
+ *   store `UNRESOLVABLE_SUBSCRIBER_REF` instead of an encrypted address. No
+ *   plaintext address ever reaches disk; reply notifications simply cannot be
+ *   sent. A key of the wrong length is treated identically (fail-closed), which
+ *   is worth reporting distinctly because it looks configured but is not.
+ * - `COMMENTS_TIMING_SECRET` absent → the form's timing token is signed with a
+ *   per-process random key, so a form rendered before a restart fails the
+ *   anti-abuse timing check and the visitor is asked to resubmit.
+ */
+export function checkCommentsSecretsConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "comments module secrets are configured";
+  const severity: CheckSeverity = "warning";
+
+  const notes: string[] = [];
+
+  const encryptionKey = env.COMMENTS_SUBSCRIBER_ENCRYPTION_KEY?.trim() ?? "";
+  if (encryptionKey === "") {
+    notes.push(
+      "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY is unset — reply-notify subscriptions store an unresolvable sentinel instead of an encrypted recipient, so reply notifications cannot be sent (no plaintext address is ever written; this fails closed)."
+    );
+  } else {
+    let byteLength = 0;
+    try {
+      byteLength = Buffer.from(encryptionKey, "base64").length;
+    } catch {
+      byteLength = 0;
+    }
+    if (byteLength !== 32) {
+      notes.push(
+        `COMMENTS_SUBSCRIBER_ENCRYPTION_KEY base64-decodes to ${byteLength} bytes, not 32 — AES-256-GCM requires exactly 32 (\`openssl rand -base64 32\`). It LOOKS configured but is rejected at runtime, so reply notifications silently cannot be sent.`
+      );
+    }
+  }
+
+  const timingSecret = env.COMMENTS_TIMING_SECRET?.trim() ?? "";
+  if (timingSecret === "") {
+    notes.push(
+      "COMMENTS_TIMING_SECRET is unset — comment-form timing tokens are signed with a per-process random key, so a form rendered before a restart (or on another instance) fails the anti-abuse timing check and the visitor must resubmit."
+    );
+  }
+
+  if (notes.length > 0) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: notes.join(" ")
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY is a valid 32-byte AES-256 key and COMMENTS_TIMING_SECRET is set — reply notifications are deliverable and timing tokens survive a restart."
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full-online deployment-profile gate is correctly configured (Issue #186) —
 // critical when misconfigured, informational when disabled intentionally
 // ---------------------------------------------------------------------------
@@ -1963,6 +2035,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),
     checkSsoCredentialEncryptionKeyConfigured(),
+    checkCommentsSecretsConfigured(),
     checkOnlineAuthSecurityReady(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
