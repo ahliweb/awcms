@@ -8,13 +8,16 @@
  * ## Two deliberate port-time adaptations (not oversights)
  *
  * 1. **No inline typeahead script.** awcms-micro's page shipped the suggestion
- *    combobox as an inline `<script>`. This base's CSP is `default-src 'self'`
- *    with NO `'unsafe-inline'` for scripts (`lib/security/security-headers.ts`),
- *    so an inline script would simply be blocked — and this route is a plain
- *    `.ts` APIRoute emitting an HTML string (the established convention for every
- *    public page here, e.g. `/blog/{tenantCode}`), so there is no Astro component
- *    to bundle an external script from. The page therefore renders the no-JS core
- *    search only: a native `<form>` + result links, fully keyboard accessible.
+ *    combobox as an inline `<script>`. This base's CSP never carries
+ *    `'unsafe-inline'` for scripts (`lib/security/security-headers.ts`), so an
+ *    arbitrary inline script is blocked outright. The admin shell's theme-init
+ *    script shows the one sanctioned way around that — naming a script's exact
+ *    SHA-256 in `script-src` — but that is not available here: this route is a
+ *    plain `.ts` APIRoute emitting an HTML string (the established convention for
+ *    every public page, e.g. `/blog/{tenantCode}`), so there is neither an Astro
+ *    component to bundle an external script from nor a build step to compute and
+ *    keep that hash in sync. The page therefore renders the no-JS core search
+ *    only: a native `<form>` + result links, fully keyboard accessible.
  *    `GET /api/v1/site-search/suggest` still ships and is what a theme's own
  *    bundled client (or a future `.astro` page) consumes — see README §Follow-up.
  * 2. **Labels are supplied by the caller** (`DEFAULT_SEARCH_PAGE_LABELS` here)
