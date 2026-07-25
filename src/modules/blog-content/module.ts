@@ -267,6 +267,50 @@ export const blogContentModule = defineModule({
     openApiPath: "openapi/awcms-public-api.openapi.yaml",
     basePath: "/api/v1/blog"
   },
+  // Public search-source contribution to `site_search` (ADR-0040 §3, ported
+  // from awcms-micro Issue #270). Pure DATA — no executable extractor, no SQL:
+  // `site_search`'s generic engine reads `awcms_blog_posts` through this
+  // declarative column mapping + publication filter. The filter is the EXACT
+  // public-visibility predicate this module's own public routes and its
+  // `seo_facts` adapter use (published + public + not soft-deleted + a reached
+  // `published_at`), enforced at the source->index boundary so a
+  // draft/private/deleted/scheduled post is never even read into the index.
+  //
+  // `urlTemplate` carries `:tenantCode` because this base's public post route is
+  // path-tenant-scoped (`/blog/{tenantCode}/{slug}`, ADR-0009) — awcms-micro's
+  // descriptor used host-resolved `/news/:slug`, a route family that is NOT
+  // ported here (see this module's `description`). Blog PAGES are deliberately
+  // NOT contributed: they have no public route in this base, so an indexed page
+  // would produce a search hit that 404s.
+  //
+  // This declaration adds NO dependency edge to `site_search`: the arrow points
+  // inward (ADR-0040 §2) — content declares, the aggregator discovers.
+  searchSources: [
+    {
+      key: "blog_content.post",
+      ownerModuleKey: "blog_content",
+      resourceType: "blog_post",
+      tableName: "awcms_blog_posts",
+      tenantColumn: "tenant_id",
+      idColumn: "id",
+      localeColumn: "locale",
+      updatedAtColumn: "updated_at",
+      titleColumn: "title",
+      summaryColumn: "excerpt",
+      bodyColumns: ["content_text"],
+      tagsColumn: null,
+      urlTemplate: "/blog/:tenantCode/:slug",
+      slugColumn: "slug",
+      publicationFilter: {
+        equals: { status: "published", visibility: "public" },
+        nullColumns: ["deleted_at"],
+        notNullColumns: ["published_at"],
+        timeReachedColumns: ["published_at"]
+      },
+      weight: 1.0,
+      privacyClassification: "public"
+    }
+  ],
   // Non-secret public-route-behavior preference, read/written through
   // Module Management's existing generic framework (GET/PATCH
   // /api/v1/tenant/modules/blog_content/settings), not a bespoke settings

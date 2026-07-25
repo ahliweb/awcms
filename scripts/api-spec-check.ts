@@ -29,7 +29,15 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // visit-ingest beacon is anonymous by design: it carries no session, resolves
   // the tenant from a public tenant code, records only privacy-preserving,
   // anonymized, public-area page views, and is fire-and-forget (always 202).
-  "analyticsCollect"
+  "analyticsCollect",
+  // site_search (ADR-0040, ported from awcms-micro Issue #270) — the public
+  // search + typeahead endpoints are anonymous by design: a site visitor has no
+  // session. Both resolve the tenant from the request HOST (never a
+  // client-supplied tenant header), read a projection that contains PUBLISHED
+  // PUBLIC content only, are per-IP rate-limited and query-length-bounded, and
+  // return the same neutral empty payload for every non-serving outcome.
+  "siteSearchQuery",
+  "siteSearchSuggest"
 ]);
 
 /**

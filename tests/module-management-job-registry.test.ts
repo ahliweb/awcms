@@ -98,6 +98,7 @@ describe("fetchModuleJobs", () => {
         "bun run news-media:reconcile",
         "bun run reporting:exports:dispatch",
         "bun run reporting:projections:refresh",
+        "bun run site-search:reconcile",
         "bun run sync:objects:dispatch",
         "bun run workflow:escalations:dispatch"
       ].sort()

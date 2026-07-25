@@ -69,7 +69,7 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **18 modul** aktif dengan RLS `FORCE`, pemisahan role DB
+- **20 modul** aktif dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection
@@ -90,8 +90,8 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   Presentasi-only; jaminan CSP single-owner "zero third-party origin" dipertahankan.
 - **Kontrak OpenAPI modular** per-modul + bundler deterministik (ADR-0026), **family
   compatibility manifest + CI conformance** (ADR-0032).
-- **Penyerapan awcms-micro — Wave 0/1 (2026-07-24/25, PR #218–#224, `sql/046`–`sql/061`).**
-  Lima modul baru diserap satu-PR-atomic-per-modul lewat pipeline delta → coder →
+- **Penyerapan awcms-micro — Wave 0/1 (2026-07-24/25, PR #218–#231, `sql/046`–`sql/065`).**
+  Tujuh modul baru diserap satu-PR-atomic-per-modul lewat pipeline delta → coder →
   reviewer + security-auditor → validasi Postgres nyata:
   - **`tenant-domain`** (#219, `sql/046`–`048`) — routing host→tenant + lookup domain
     terverifikasi (fondasi host-resolved untuk SEO/rute publik).
@@ -107,6 +107,14 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     host diturunkan server) + rute discovery publik (`robots.txt`/sitemap/feed) + **tata
     kelola redirect** (aturan exact-path, telemetri 404, hook `src/middleware.ts` fail-open,
     guard open-redirect beku). Mengonsumsi capability `seo_facts` (disediakan `blog_content`).
+  - **`form-drafts`** (#230, `sql/062`–`063`) — draft store server-side generik untuk form
+    multi-langkah (payload JSONB opaque, penolakan key mirip-rahasia, purge dua fase).
+  - **`site-search`** (#231, ADR-0040, `sql/064`–`065`) — indeks PostgreSQL FTS
+    **lintas-konten** per tenant atas konten publik terbit + query/suggest publik
+    host-resolved + halaman `/search` + admin index/settings/diagnostics. Seam kontribusi
+    baru `ModuleDescriptor.searchSources` (`MODULE_CONTRACT_VERSION` 2.2.0): modul konten
+    MENDEKLARASIKAN sumber, agregator menemukannya lewat `listModules()` — tidak ada modul
+    yang bergantung pada `site_search`.
 
 ## 4. Backlog / langkah berikutnya
 
@@ -114,13 +122,14 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
   atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari
-  `sql/061`), lulus `bun run check`. Progres:
+  `sql/065`), lulus `bun run check`. Progres:
   - **Wave 0 — SUDAH:** `tenant-domain` (#219). **BELUM:** pustaka `src/components/ui/`
     (seam kontribusi descriptor `dataLifecycle`/`seo_facts` sudah mendarat sepanjang Wave 1).
   - **Wave 1 — SUDAH:** `visitor-analytics` (#220), `media-library` (#221, inversi ADR-0036),
     `data-lifecycle` (#222, ADR-0037), `seo-distribution` (#223/#224, ADR-0038/0039 — discovery
-    **dan** redirect governance, LENGKAP). **BELUM:** `form-drafts`, `site-search`, `comments`,
-    `newsletter`, `social-publishing` (mengaktifkan hook publish yang kini no-op di `blog-content`).
+    **dan** redirect governance, LENGKAP), `form-drafts` (#230), `site-search` (#231, ADR-0040).
+    **BELUM:** `comments`, `newsletter`, `social-publishing` (mengaktifkan hook publish yang
+    kini no-op di `blog-content`).
   - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,
     sidebar menu per-tenant).
   - **Wave 3 — BELUM:** trajektori e-commerce/toko online (ADR sendiri).
