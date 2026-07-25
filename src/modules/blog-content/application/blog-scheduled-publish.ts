@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../lib/edge-cache/content-purge";
 import { withTenant } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { recordAuditEvent } from "../../logging/application/audit-log";
@@ -235,6 +236,17 @@ export async function publishDueScheduledPosts(
         `;
 
         publishedPostIds.push(post.id);
+
+        // ADR-0042: invalidate this tenant's cached blog surfaces in the SAME
+        // transaction as the publish, so a rolled-back publish leaves no stray
+        // purge and a committed one can never lose its invalidation. No-op when
+        // the edge cache is disabled.
+        await enqueueModuleContentPurge(
+          tx,
+          tenantId,
+          "blog_content",
+          "blog.post.published"
+        );
 
         await recordAuditEvent(tx, {
           tenantId,

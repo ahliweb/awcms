@@ -95,9 +95,11 @@ key masuk ke regex, jadi `.*` akan mengubah satu invalidasi menjadi
 
 ## Yang belum tersambung (jangan klaim ada)
 
-- **Emisi purge dari event konten.** `enqueueEdgeCachePurge` siap dipanggil;
-  belum ada pemanggil. Sampai itu ada, invalidasi bergantung TTL — dan TTL surface
-  sengaja pendek (120–600 detik) justru karena itu.
+- ~~Emisi purge dari event konten.~~ **SUDAH** untuk `blog_content`: keempat
+  jalur tulis (create, update, soft-delete, scheduled publish) memanggil
+  `enqueueModuleContentPurge` di transaksi yang sama. Modul konten lain
+  (`news_portal`, `theming`, `media_library`) **belum** — suntingan di sana masih
+  menunggu TTL.
 - **Surface discovery ber-resolusi-host** (`/robots.txt`, `/sitemap.xml`,
   `/feed.xml`, `/atom.xml`, `/feed.json`). Kandidat terbaik, tetapi
   `serveDiscovery(request, …)` tidak menerima `locals` sehingga rute tak bisa

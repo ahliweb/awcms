@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -358,6 +359,16 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       correlationId
     });
 
+    // ADR-0042: same transaction as the content change, so the invalidation
+    // cannot be lost or left behind by a rollback. No-op when the edge
+    // cache is disabled.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.updated"
+    );
+
     log("info", "blog-content.post.updated", {
       correlationId,
       tenantId,
@@ -453,6 +464,16 @@ export const DELETE: APIRoute = async ({
       attributes: { reason },
       correlationId
     });
+
+    // ADR-0042: same transaction as the content change, so the invalidation
+    // cannot be lost or left behind by a rollback. No-op when the edge
+    // cache is disabled.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.deleted"
+    );
 
     log("info", "blog-content.post.deleted", {
       correlationId,
