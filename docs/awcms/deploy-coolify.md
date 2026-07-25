@@ -1,5 +1,17 @@
 # Deploy Coolify
 
+> **Domain environment awcms** (lihat [`environments.md`](environments.md) untuk
+> daftar lengkap + isolasi staging):
+>
+> | Environment | Domain                         | `APP_ENV`    |
+> | ----------- | ------------------------------ | ------------ |
+> | Production  | `awcms.ahlikoding.com`         | `production` |
+> | Staging     | `awcms-staging.ahlikoding.com` | `staging`    |
+>
+> **Satu app Coolify per environment**, bukan satu app dengan dua domain —
+> environment yang berbagi app berbagi env var, dan itulah cara staging tanpa
+> sengaja menulis ke data produksi.
+
 > **Status dokumen:** panduan target sebagian. Repo `awcms` belum punya `docker-compose.yml` yang nyata, tapi `Dockerfile.production` SUDAH ada — nyata di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis (lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat). Karena itu, **Pola 1 dan Pola 2 di bawah (build dari `Dockerfile.production`) sudah bisa dipakai hari ini** — dokumen ini mengadaptasi panduan operasional Coolify yang sudah terbukti di basis `awcms-mini` untuk detail khusus Coolify (topologi VPS, opsi PostgreSQL, checklist keamanan) yang masih standar target sampai dipraktikkan sungguhan terhadap deployment nyata.
 
 Panduan operasional untuk deploy AWCMS ke [Coolify](https://coolify.io) memakai `Dockerfile.production` sebagai jalur registry/CI-push, berdampingan dengan `docker-compose.yml` yang tetap menjadi jalur LAN-first/offline yang direkomendasikan (lihat [`deployment-profiles.md`](deployment-profiles.md) §production (online) — image registry). Dokumen ini **tidak menggantikan** dokumen itu — dokumen ini menambahkan detail khusus Coolify: topologi satu VPS, topologi multi aplikasi dalam satu VPS, opsi PostgreSQL, kapasitas praktis, dan checklist keamanan.
@@ -162,7 +174,7 @@ Setiap aplikasi/database pada topologi multi-app punya migrasi one-shot sendiri 
 Endpoint: `GET /api/v1/health` — dipakai sebagai **Health Check Path** di konfigurasi Coolify application (lihat §Dua pola deploy di atas). Coolify memakai endpoint ini untuk menentukan container sehat sebelum menandai deploy sukses/sebelum mengarahkan traffic.
 
 ```bash
-curl https://<domain-aplikasi>/api/v1/health
+curl https://awcms.ahlikoding.com/api/v1/health   # staging: awcms-staging.ahlikoding.com
 ```
 
 Setiap aplikasi pada topologi multi-app dicek lewat endpoint health-nya masing-masing — tidak ada health check bersama lintas aplikasi.
