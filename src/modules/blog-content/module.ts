@@ -311,6 +311,34 @@ export const blogContentModule = defineModule({
       privacyClassification: "public"
     }
   ],
+  /**
+   * Reviewed commentable resource contributed to `comments` (ADR-0041). The
+   * publication filter is IDENTICAL to the `searchSources` one above and must
+   * stay that way: both answer "is this post public right now?", and letting
+   * them drift would mean a post is searchable but not commentable (or worse,
+   * commentable while unpublished). `comments` reads this through
+   * `listModules()`; nothing here imports `comments`.
+   */
+  commentableResources: [
+    {
+      key: "blog_content.post",
+      ownerModuleKey: "blog_content",
+      resourceType: "blog_post",
+      tableName: "awcms_blog_posts",
+      tenantColumn: "tenant_id",
+      idColumn: "id",
+      localeColumn: "locale",
+      slugColumn: "slug",
+      urlTemplate: "/blog/:tenantCode/:slug",
+      publicationFilter: {
+        equals: { status: "published", visibility: "public" },
+        nullColumns: ["deleted_at"],
+        notNullColumns: ["published_at"],
+        timeReachedColumns: ["published_at"]
+      },
+      defaultPolicy: "moderated-anonymous"
+    }
+  ],
   // Non-secret public-route-behavior preference, read/written through
   // Module Management's existing generic framework (GET/PATCH
   // /api/v1/tenant/modules/blog_content/settings), not a bespoke settings
