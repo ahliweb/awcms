@@ -6,6 +6,7 @@ import {
   ok
 } from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
+import { enqueueModuleContentPurge } from "../../../../lib/edge-cache/content-purge";
 import { withTenant } from "../../../../lib/database/tenant-context";
 import {
   authorizeInTransaction,
@@ -130,6 +131,17 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
           correlationId
         });
       }
+    );
+
+    // ADR-0042: same transaction as the change, so the invalidation cannot be
+    // lost to a rollback. `theming` owns the `theming-tokens` surface
+    // (`/theming/{tenantCode}/tokens.css`), so this ban actually matches
+    // cached objects. No-op when the edge cache is disabled.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      THEMING_MODULE_KEY,
+      "theming.version.rolled_back"
     );
 
     if (!result.ok) {

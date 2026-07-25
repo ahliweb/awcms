@@ -13,11 +13,98 @@
  * `/blog/../admin/users`. Asserting the property directly is far more reliable
  * than asking a reviewer to simulate regexes in their head.
  */
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+
 import {
   PUBLIC_CACHE_SURFACES,
   matchPublicCacheSurface
 } from "../src/lib/edge-cache/surface-registry";
 import { listModules } from "../src/modules";
+
+/** Roots searched for `enqueueModuleContentPurge` call sites. */
+const PURGE_CALLER_ROOTS = ["src/pages", "src/modules"];
+
+/**
+ * Collect the module keys any code actually enqueues a purge for.
+ *
+ * Matches the literal third argument of `enqueueModuleContentPurge(...)`, which
+ * is a deliberate restriction: a computed module key cannot be verified
+ * statically, and a purge whose target is unknown at review time is exactly the
+ * thing this gate exists to prevent.
+ */
+async function collectPurgedModuleKeys(): Promise<Set<string>> {
+  const keys = new Set<string>();
+  const constants = new Map<string, string>();
+  const pattern =
+    /enqueueModuleContentPurge\(\s*[^,]+,\s*[^,]+,\s*(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/g;
+  const constantPattern =
+    /export const ([A-Z][A-Z0-9_]*_MODULE_KEY)\s*=\s*"([^"]+)"/g;
+  const callSites: string[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    let entries;
+
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+
+      if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".astro")) {
+        continue;
+      }
+
+      const source = await readFile(full, "utf8");
+
+      // Collect exported `*_MODULE_KEY` constants from every file first, so a
+      // call site may name one that is declared elsewhere — which is the
+      // readable spelling and the one existing code uses.
+      for (const declared of source.matchAll(constantPattern)) {
+        constants.set(declared[1]!, declared[2]!);
+      }
+
+      if (source.includes("enqueueModuleContentPurge(")) {
+        callSites.push(source);
+      }
+    }
+  }
+
+  for (const root of PURGE_CALLER_ROOTS) {
+    await walk(root);
+  }
+
+  for (const source of callSites) {
+    for (const match of source.matchAll(pattern)) {
+      const literal = match[1];
+
+      if (literal) {
+        keys.add(literal);
+        continue;
+      }
+
+      const resolved = constants.get(match[2]!);
+
+      if (resolved) {
+        keys.add(resolved);
+      }
+
+      // An unresolvable identifier is deliberately NOT counted. A purge whose
+      // target cannot be read at review time is the thing this gate exists to
+      // catch, so it should fail loudly rather than be assumed correct.
+    }
+  }
+
+  return keys;
+}
 
 /**
  * Paths that must never resolve to a cacheable surface. Includes traversal and
@@ -50,7 +137,7 @@ const SAFE_SURFACE_KEY = /^[A-Za-z0-9._-]{1,128}$/;
 
 const MAX_DECLARED_TTL_SECONDS = 86_400;
 
-function main(): void {
+async function main(): Promise<void> {
   const failures: string[] = [];
   const seenKeys = new Set<string>();
   const moduleKeys = new Set(listModules().map((module) => module.key));
@@ -138,6 +225,39 @@ function main(): void {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Every module that OWNS a cacheable surface must emit purges for it.
+  //
+  // This is the asymmetry that makes stale content silent. Declaring a surface
+  // is one line in the registry and takes effect immediately; wiring the
+  // invalidation is a separate edit in a different file that nothing forces.
+  // Miss it and the surface caches correctly, serves correctly, and never
+  // updates — with no error anywhere.
+  //
+  // Framed by OWNERSHIP rather than by module list on purpose. Modules with no
+  // declared surface (`news_portal`, `media_library` today) are correctly
+  // silent: a ban for a module key that tags no cached object matches nothing
+  // while the queue reports success, so demanding a purge from them would add
+  // ceremony that looks like coverage and provides none. The obligation appears
+  // by itself on the day they declare a surface.
+  // ---------------------------------------------------------------------
+  const declaredOwners = new Set(
+    PUBLIC_CACHE_SURFACES.map((surface) => surface.moduleKey).filter(
+      (key): key is string => Boolean(key)
+    )
+  );
+  const purgedKeys = await collectPurgedModuleKeys();
+
+  for (const owner of declaredOwners) {
+    if (!purgedKeys.has(owner)) {
+      failures.push(
+        `Module "${owner}" owns a cacheable surface but no code calls ` +
+          `enqueueModuleContentPurge(..., "${owner}", ...). Its cached pages ` +
+          `would go stale until TTL with nothing reporting a problem.`
+      );
+    }
+  }
+
   if (failures.length > 0) {
     console.error("edge-cache:surfaces:check FAILED");
 
@@ -150,8 +270,9 @@ function main(): void {
 
   console.log(
     `edge-cache:surfaces:check OK — ${PUBLIC_CACHE_SURFACES.length} declared surfaces, ` +
-      `${MUST_NEVER_MATCH.length} never-cacheable probes held.`
+      `${MUST_NEVER_MATCH.length} never-cacheable probes held, ` +
+      `${declaredOwners.size} surface-owning module(s) emit purges.`
   );
 }
 
-main();
+await main();

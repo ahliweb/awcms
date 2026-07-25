@@ -86,11 +86,20 @@ describe("enqueueModuleContentPurge", () => {
   });
 });
 
-describe("blog write paths emit a purge", () => {
+describe("content write paths emit a purge", () => {
   test.each([
     ["src/pages/api/v1/blog/posts/[id].ts", 2],
     ["src/pages/api/v1/blog/posts/index.ts", 1],
-    ["src/modules/blog-content/application/blog-scheduled-publish.ts", 1]
+    ["src/modules/blog-content/application/blog-scheduled-publish.ts", 1],
+    // `theming` owns the `theming-tokens` surface, so these three change what a
+    // cached object contains. `news_portal` and `media_library` are absent on
+    // purpose: they own no declared surface, so a ban keyed to them would match
+    // nothing while the queue reported success. `edge-cache:surfaces:check`
+    // enforces the obligation by ownership and will demand them the day they
+    // declare one.
+    ["src/pages/api/v1/theming/publish.ts", 1],
+    ["src/pages/api/v1/theming/rollback.ts", 1],
+    ["src/pages/api/v1/theming/retire.ts", 1]
   ])(
     "%s calls enqueueModuleContentPurge %i time(s)",
     async (path, expected) => {
