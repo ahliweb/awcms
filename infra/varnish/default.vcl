@@ -50,7 +50,20 @@ sub vcl_recv {
     # ---------------------------------------------------------------------
     # Invalidation
     # ---------------------------------------------------------------------
-    if (req.method == "BAN") {
+    # Two ways in, one code path.
+    #
+    # `BAN` is the conventional Varnish idiom and stays supported so an operator
+    # can `curl -X BAN` by hand. The application cannot use it: Bun does not
+    # transmit non-standard HTTP methods — `fetch`/`node:http` with
+    # `method: "BAN"` arrive here as `GET` (verified against Bun 1.3.14 via
+    # `varnishlog -i ReqMethod`; the same bytes over a raw socket log `BAN`).
+    # Every purge therefore fell through to the backend and 404'd.
+    #
+    # So the origin sends `POST /__edge-cache-purge`. The method was never a
+    # security control — the ACL, the token, and the key charset check below are,
+    # and they apply identically to both entry points.
+    if (req.method == "BAN"
+        || (req.method == "POST" && req.url == "/__edge-cache-purge")) {
         if (!client.ip ~ purge_clients) {
             return (synth(403, "Not allowed"));
         }

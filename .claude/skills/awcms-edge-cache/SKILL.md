@@ -45,6 +45,28 @@ ketiga yang senyap.
 
 ## Jebakan yang sudah ditemukan (jangan diulang)
 
+- **Bun TIDAK mengirim method HTTP non-standar.** `fetch`/`node:http` dengan
+  `method: "BAN"` tiba di Varnish sebagai **`GET`** (diverifikasi Bun 1.3.14 lewat
+  `varnishlog -i ReqMethod`; byte yang sama lewat raw socket tercatat `BAN` dan
+  dijawab `200 Banned`). Akibatnya setiap purge lolos dari cabang ban di VCL,
+  jatuh ke origin, dan 404. Repo ini Bun-only (ADR-0002) — tidak ada konfigurasi
+  yang membuat method `BAN` bekerja. Protokol kabel sekarang
+  **`POST /__edge-cache-purge`**; VCL tetap menerima `BAN` asli untuk
+  `curl -X BAN` manual. Method tidak pernah jadi kontrol keamanan — ACL, token,
+  dan validasi charset key yang menjaganya, dan ketiganya berlaku di kedua pintu.
+- **Mock `fetchImpl` TIDAK bisa menangkap kelas bug ini.** Ia memeriksa argumen,
+  bukan kabel, jadi ia akan menyatakan `method === "BAN"` dan lulus selamanya.
+  `tests/edge-cache-purge-client.test.ts` menegakkan `request.method` seperti
+  **DITERIMA** oleh `Bun.serve` sungguhan. Tulis test transport dengan server
+  nyata.
+- **GUC RLS salah nama = jalur tulis MATI, bukan sekadar cache basi.** `sql/068`
+  memakai `awcms.tenant_id` padahal `withTenant()` menyetel
+  `app.current_tenant_id` (108 policy lain memakai yang benar). `WITH CHECK`
+  jadi NULL → INSERT ditolak → dan karena `enqueueModuleContentPurge` di-`await`
+  DI DALAM transaksi konten tanpa guard, publish blog ikut gagal 500. Diperbaiki
+  `sql/070`; dijaga `tests/migration-tenant-guc-consistency.test.ts` (gate teks,
+  tanpa DB, jalan di job `quality`).
+
 - **Spasi literal di ekspresi ban membuat invalidasi TIDAK PERNAH bekerja.**
   Varnish memecah ekspresi ban pada whitespace menjadi
   `<field> <operator> <argument>`. Bentuk pertama yang dikirim, `(^| )key( |$)`,
