@@ -122,7 +122,8 @@ tanpa itu suntingan editor baru terlihat setelah TTL habis. Rinci di
 | Health staging                     | ✅ `GET /api/v1/health` → 200, 21 modul                             |
 | Migrasi DB staging                 | ✅ `sql/001`–`sql/069`, 69 applied / 0 skipped                      |
 | Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`        |
-| Seed tenant pertama staging        | ❌ belum — `GET /api/v1/setup/status` → `{"locked":false}`          |
+| Seed tenant pertama staging        | ✅ tenant `staging` + owner; `setup/status` → `locked:true`         |
+| Isolasi RLS staging                | ✅ dibuktikan di bawah `awcms_app` (lihat di bawah)                 |
 
 Staging memakai `--ip 10.0.1.61` (produksi `10.0.1.51`); Coolify tidak bisa
 mem-publish port, jadi alamat container ditetapkan lewat
@@ -194,10 +195,27 @@ FROM pg_roles WHERE rolname LIKE 'awcms%';
 `ADMIN_DATABASE_URL` **tidak dibaca kode mana pun** — jangan menyetelnya; ia
 hanya menyesatkan pembaca env berikutnya.
 
+### Buktikan isolasinya, jangan diasumsikan
+
+Konfigurasi yang benar belum tentu isolasi yang bekerja. Kueri di bawah
+dijalankan pada staging **sebagai `awcms_app`** setelah tenant pertama ada, dan
+itulah bentuk bukti yang diterima — sebelum repointing, kueri yang sama berjalan
+sebagai superuser dan **lulus tanpa membuktikan apa pun**:
+
+```sql
+                                                    -- hasil di staging
+SELECT count(*) FROM awcms_offices;                 -- 0  (fail-closed)
+SELECT set_config('app.current_tenant_id','<tenant nyata>',false);
+SELECT count(*) FROM awcms_offices;                 -- 1
+SELECT set_config('app.current_tenant_id','<uuid asing>',false);
+SELECT count(*) FROM awcms_offices;                 -- 0
+```
+
+Tanpa tenant context hasilnya **0**, bukan "semua baris" — itu perbedaan antara
+policy yang menyaring dan policy yang inert.
+
 ## Yang masih terbuka
 
-- **Seed tenant pertama di staging.** Skema ada, tetapi setup wizard belum
-  dijalankan (`locked:false`), jadi belum ada tenant/admin untuk login.
 - Varnish belum dipasang di depan staging; `EDGE_CACHE_MODE=off` sampai itu ada.
 - `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
   memang tidak pernah ada.
