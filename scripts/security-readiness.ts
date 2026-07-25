@@ -1078,7 +1078,23 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_site_search_index_runs: ["SELECT", "INSERT", "UPDATE"],
   awcms_site_search_index_failures: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   awcms_site_search_query_log: ["SELECT", "DELETE"],
-  awcms_site_search_settings: ["SELECT"]
+  awcms_site_search_settings: ["SELECT"],
+  // comments — `comments:retention` (sql/066, ADR-0041) plus the generic
+  // data_lifecycle purge engine. Retention ANONYMIZES aged author identity in
+  // place, so comments are SELECT + UPDATE with NO DELETE (the append-only
+  // moderation history must keep pointing at a row) and NO INSERT (the worker
+  // never authors a comment). Each anonymization appends its own
+  // `anonymize` moderation event, hence SELECT + INSERT there. Abuse events and
+  // unconfirmed reply subscriptions are SELECT + DELETE — both are aged out,
+  // never rewritten, the same shape as `awcms_site_search_query_log` above.
+  // Settings and threads are read-only: the sweep reads a tenant's retention
+  // window and the thread a comment belongs to, and rewrites neither.
+  awcms_comments_settings: ["SELECT"],
+  awcms_comments_threads: ["SELECT"],
+  awcms_comments_comments: ["SELECT", "UPDATE"],
+  awcms_comments_moderation_events: ["SELECT", "INSERT"],
+  awcms_comments_abuse_events: ["SELECT", "DELETE"],
+  awcms_comments_reply_subscriptions: ["SELECT", "DELETE"]
 };
 
 /**
