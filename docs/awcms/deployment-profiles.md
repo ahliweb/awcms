@@ -113,7 +113,7 @@ docker run -d --name awcms \
   -p 4321:4321 \
   --cap-drop=ALL --security-opt=no-new-privileges:true \
   -e DATABASE_URL=postgres://awcms_app:<password>@<db-host>:5432/awcms \
-  -e AUTH_JWT_SECRET=<secret> \
+  -e APP_URL=https://<fqdn> \
   -e AUTH_COOKIE_SECURE=true \
   -e APP_ENV=production \
   awcms:prod
@@ -122,7 +122,7 @@ curl http://localhost:4321/api/v1/health
 
 `--cap-drop=ALL --security-opt=no-new-privileges:true` — standar wajib, tidak butuh `--cap-add` tambahan untuk app yang berjalan.
 
-Secret (`DATABASE_URL`, `AUTH_JWT_SECRET`, HMAC sync, kredensial integrasi eksternal, dst.) **selalu** disuntikkan saat `docker run`/lewat orkestrator (env var, secret store, atau `--env-file`) — **tidak pernah** dibakar ke dalam image. `.dockerignore` mengecualikan `.env`/`.env.*` dari build context. Untuk orkestrator yang mendukung file secret (Docker Swarm secrets, Kubernetes Secrets sebagai volume mount, dsb.), pola `_FILE` suffix adalah alternatif standar industri — belum wajib diimplementasikan di kode aplikasi; operator yang butuh ini bisa mem-bridge di level orkestrator (entrypoint script yang membaca file secret lalu `export` env var biasa sebelum `exec bun ...`).
+Secret (`DATABASE_URL`, `AUTH_IP_HASH_SECRET`, HMAC sync, kunci enkripsi MFA/SSO, kredensial integrasi eksternal, dst.) **selalu** disuntikkan saat `docker run`/lewat orkestrator (env var, secret store, atau `--env-file`) — **tidak pernah** dibakar ke dalam image. `.dockerignore` mengecualikan `.env`/`.env.*` dari build context. Untuk orkestrator yang mendukung file secret (Docker Swarm secrets, Kubernetes Secrets sebagai volume mount, dsb.), pola `_FILE` suffix adalah alternatif standar industri — belum wajib diimplementasikan di kode aplikasi; operator yang butuh ini bisa mem-bridge di level orkestrator (entrypoint script yang membaca file secret lalu `export` env var biasa sebelum `exec bun ...`).
 
 Image ini **tidak** menjalankan migration — peran runtime-nya (`awcms_app`, least-privilege) tidak punya hak DDL/GRANT yang migration butuhkan (model dua-peran di bawah). Jalankan `bun run db:migrate` sebagai langkah terpisah (job CI, atau `docker run` sekali pakai dengan `DATABASE_URL` privileged) terhadap database baru sebelum container ini pertama kali dijalankan.
 
@@ -174,7 +174,7 @@ Prinsip konfigurasi wajib: "Konfigurasi tervalidasi saat boot; nilai wajib yang 
 
 **Config registry & deprecated vars (direncanakan)**: `src/lib/config/registry.ts` menjadi sumber kebenaran terstruktur untuk setiap variabel (type/required/owner/sensitivity/profiles/deprecation). `bun run config:docs:check` (bagian dari `bun run check`) menjaga registry ini, `.env.example`, dan referensi konfigurasi tetap sinkron.
 
-- Wajib non-kosong: `APP_ENV`, `APP_URL`, `APP_TIMEZONE`, `DATABASE_URL`, `AUTH_JWT_SECRET`.
+- Wajib non-kosong: `APP_ENV`, `APP_URL`, `DATABASE_URL`. Daftar ini terikat ke `RULES` di `scripts/validate-env.ts` oleh `tests/env-required-vars-doc.test.ts` — ubah salah satunya tanpa yang lain dan gate merah. (`APP_TIMEZONE` dan `AUTH_JWT_SECRET` pernah tercantum di sini; **keduanya tidak ada di awcms** — tidak dibaca kode mana pun — dan sudah dihapus.)
 - Kondisional: bila sync/integrasi eksternal (`AWCMS_SYNC_ENABLED=true`), maka `AWCMS_SYNC_HMAC_SECRET` wajib diisi dan bukan placeholder `.env.example` (`change-me`).
 - Kondisional: bila storage objek eksternal (`R2_ENABLED=true`), maka kredensial R2 terkait wajib diisi.
 - Tidak pernah mencetak nilai secret asli — hanya nama variabel yang hilang/tidak valid. Exit code bukan nol bila ada kegagalan.

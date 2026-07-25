@@ -68,7 +68,7 @@ dibakar ke image (`.dockerignore` mengecualikan `.env`).
 
 **Multi-aplikasi dalam satu VPS/Coolify**: setiap aplikasi wajib
 domain/secret/database (atau minimal schema+role) terpisah — jangan reuse
-`AUTH_JWT_SECRET`/HMAC/kredensial R2 antar aplikasi; lihat
+`AUTH_IP_HASH_SECRET`/HMAC/kredensial R2 antar aplikasi; lihat
 `deploy-coolify.md` §Opsi PostgreSQL untuk perbandingan satu cluster vs
 satu container per aplikasi vs managed database eksternal.
 
@@ -118,6 +118,17 @@ security:readiness` memblokir go-live bila terdeteksi.
 > ```
 >
 > Role runtime harus `rolsuper=f` **dan** `rolbypassrls=f`.
+
+## Credential otomasi (agent-cred)
+
+Kalau langkah deploy ini butuh token API Coolify/Cloudflare atau kredensial
+server secara interaktif (dijalankan agent/operator dalam satu sesi kerja,
+bukan job cron), ambil lewat `agent-cred get <service> <field>` (isi dulu
+dengan `agent-cred set <service>` bila belum ada) — jangan `read -s` ad-hoc
+atau credential inline baru, termasuk untuk `ALTER ROLE ... PASSWORD` di
+atas: generate & simpan dulu via `agent-cred set postgres`. TTL cache 3 jam.
+Detail: repo `personal-coding` `docs/sop-agent-cred-credential-cache.md`.
+Job cron/systemd tetap pakai env var/secret file seperti biasa.
 
 ## Rollback
 
