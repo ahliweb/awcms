@@ -1,0 +1,61 @@
+# Varnish edge cache overlay — ADR-0042.
+#
+# Not a standalone stack: it defines the cache tier that sits IN FRONT of an
+# already-running awcms app service named `app` (see `.host = "app"` in
+# `default.vcl`). Compose it alongside your existing deployment file:
+#
+#   docker compose -f docker-compose.yml -f infra/varnish/docker-compose.varnish.yml up -d
+#
+# ## Adopting this is a two-sided change
+#
+# Starting the container is not enough, and starting it alone does nothing
+# useful: with `EDGE_CACHE_MODE` unset the origin tags nothing, the VCL's
+# default-deny passes everything through, and you have added a hop for no gain.
+# The app side must also set `EDGE_CACHE_MODE=auto` (or `on`),
+# `EDGE_CACHE_PURGE_ENDPOINT`, and `EDGE_CACHE_PURGE_TOKEN`, and must schedule
+# `bun run edge-cache:purge`. Without that job, published edits stay stale at the
+# edge until their TTL expires.
+#
+# The ordering that avoids a stale-content window: enable the app side first
+# (harmless — nothing is caching yet), confirm `Surrogate-Control` appears on a
+# public response, then put this container in front.
+
+services:
+  varnish:
+    image: varnishcache/varnish:7.5
+    depends_on:
+      - app
+    # 80 is Varnish's own listener; publish it wherever your TLS terminator
+    # expects the origin. Varnish does not do TLS — terminate in front of it.
+    ports:
+      - "8080:80"
+    volumes:
+      - ./default.vcl:/etc/varnish/default.vcl:ro
+    environment:
+      # Read by `std.getenv()` in the BAN handler. MUST match the app's
+      # `EDGE_CACHE_PURGE_TOKEN` exactly — a mismatch makes every invalidation
+      # fail with 403 and the site silently serves stale content, which is why
+      # `security:readiness` reports a configured endpoint without a token as a
+      # hard failure rather than a warning.
+      EDGE_CACHE_PURGE_TOKEN: ${EDGE_CACHE_PURGE_TOKEN:?set EDGE_CACHE_PURGE_TOKEN}
+    # Malloc storage sized for the public working set. Bans are evaluated
+    # against every object until the lurker collects them, so an oversized cache
+    # makes invalidation slower, not just memory-hungrier — size this to the
+    # content that is actually hot, not to the total corpus.
+    command: >-
+      varnishd -F
+      -a :80
+      -f /etc/varnish/default.vcl
+      -s malloc,256m
+      -p default_ttl=0
+      -p default_grace=0
+    # `default_ttl=0` is deliberate belt-and-braces: even if `vcl_backend_response`
+    # were bypassed, an untagged response would get a zero TTL rather than
+    # Varnish's stock 120s. Three independent layers now have to fail before an
+    # untagged response is cached.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "varnishadm", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
