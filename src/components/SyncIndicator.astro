@@ -1,0 +1,61 @@
+---
+/**
+ * SyncIndicator — dot + label showing whether this tenant has any active sync
+ * node, adapted from awcms-micro's `src/components/SyncIndicator.astro`.
+ *
+ * This is REAL state, not decoration: `active` comes from
+ * `reporting/application/sync-indicator.ts`'s `fetchSyncIndicatorActive`, a
+ * single bounded `EXISTS` over `awcms_sync_nodes` — deliberately not the full
+ * `fetchSyncHealthReport` aggregation, because this renders on every single
+ * `/admin/*` request and the topbar only needs one boolean.
+ *
+ * Red (inactive) is the honest default for this base: most deployments have no
+ * offline node registered at all, and "inactive" is the accurate word for that
+ * — it does not imply a fault, only that nothing is pushing.
+ */
+interface Props {
+  active: boolean;
+  activeLabel?: string;
+  inactiveLabel?: string;
+}
+
+const {
+  active,
+  activeLabel = "Sync active",
+  inactiveLabel = "Sync inactive"
+} = Astro.props;
+
+const label = active ? activeLabel : inactiveLabel;
+---
+
+<div
+  class="sync-indicator"
+  data-status={active ? "active" : "inactive"}
+  role="status"
+>
+  <span class="sync-indicator-dot" aria-hidden="true"></span>
+  <span class="sync-indicator-label">{label}</span>
+</div>
+
+<style>
+  .sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .sync-indicator-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: var(--radius-full);
+    background: var(--color-danger);
+  }
+
+  .sync-indicator[data-status="active"] .sync-indicator-dot {
+    background: var(--color-success);
+  }
+</style>

@@ -1,0 +1,54 @@
+---
+/**
+ * LocaleBadge — names the language the admin is being served in.
+ *
+ * awcms-micro's topbar has a `LanguageSwitcher` here (a real `<select>` over
+ * its gettext catalog). awcms has NO i18n module — no `.po` catalog, no locale
+ * middleware, one hardcoded language — so a switcher would be a control with
+ * nothing behind it. That is the same fake-affordance mistake `TenantBadge`'s
+ * comment argues against, and a `<select>` with one option is the worst version
+ * of it: it looks switchable and simply is not.
+ *
+ * So this renders the SAME visual slot as a plain, non-interactive badge. It
+ * still carries real information (which language you are reading), it just
+ * does not pretend to offer a choice that does not exist. When an i18n module
+ * lands, this component is the obvious place to grow into a real switcher —
+ * its props already take the locale rather than assuming it.
+ */
+interface Props {
+  /** BCP-47-ish tag of the locale actually being served. */
+  locale?: string;
+  label?: string;
+  flag?: string;
+}
+
+const { locale = "en", label = "English", flag = "🇬🇧" } = Astro.props;
+---
+
+<div class="locale-badge" role="status" aria-label={`Language: ${label}`}>
+  <span class="locale-badge-flag" aria-hidden="true">{flag}</span>
+  <span class="locale-badge-label" lang={locale}>{label}</span>
+</div>
+
+<style>
+  .locale-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  /* The flag is decoration; the word carries the meaning. On phones the topbar
+     is already crowded, so keep the glyph and drop the word. */
+  @media (max-width: 767.98px) {
+    .locale-badge-label {
+      display: none;
+    }
+  }
+</style>

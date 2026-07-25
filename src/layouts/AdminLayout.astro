@@ -9,22 +9,30 @@
  * The chrome, which is what an operator actually sees and compares:
  *   - `.admin-shell` column wrapper + sticky topbar
  *   - a tenant badge (`TenantBadge`) naming the active tenant
+ *   - a `SyncIndicator` dot, fed by the real `fetchSyncIndicatorActive`
+ *     (a bounded `EXISTS`, not the full sync-health aggregation)
  *   - a working colour-theme control (`ThemeToggle`) — awcms already shipped
  *     `:root[data-theme="dark"]` tokens with nothing to set that attribute, so
  *     dark mode existed but was unreachable
- *   - a GROUPED sidebar (section label -> links) instead of one flat list,
- *     with the app version pinned to its footer
+ *   - an avatar + roles + log-out cluster
+ *   - a TWO-LEVEL sidebar (section heading -> owning module -> links) instead
+ *     of one flat list, with the app version pinned to its footer
  *   - a breadcrumb above the page slot
+ *
+ * The tenant-name lookup and the sync `EXISTS` share ONE transaction, so all
+ * this chrome costs a single round trip per `/admin/*` render.
+ *
+ * WHAT WAS ADAPTED RATHER THAN COPIED
+ * -----------------------------------
+ *   - `LanguageSwitcher` -> `LocaleBadge`. awcms has no gettext catalog, so a
+ *     `<select>` with one option would be a control that cannot do anything —
+ *     the same fake-affordance mistake `TenantBadge`'s comment argues against.
+ *     The badge fills the same slot and states the served language honestly.
+ *   - The avatar is a plain tile, not a link: micro's points at
+ *     `/admin/profile`, a page awcms does not have.
  *
  * WHAT WAS DELIBERATELY NOT ADOPTED
  * ---------------------------------
- *   - `LanguageSwitcher` — awcms has no gettext catalog / i18n module. A
- *     language control with one language is the same fake-affordance mistake
- *     `TenantBadge`'s own comment argues against.
- *   - `SyncIndicator` — micro's reads through its reporting module on EVERY
- *     `/admin/*` render. Not worth a per-request query here until there is
- *     sync state worth showing.
- *   - Profile icon link — awcms has no `/admin/profile` page to link to.
  *   - micro's JS drawer (focus trap + `inert` + Escape). awcms's CSS-only
  *     checkbox drawer is KEPT: it needs no script at all, which is strictly
  *     better under this repo's CSP, and swapping it for JS would be a
@@ -50,8 +58,11 @@ import "../styles/motion.css";
 import "../styles/admin.css";
 import TenantBadge from "../components/TenantBadge.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
+import SyncIndicator from "../components/SyncIndicator.astro";
+import LocaleBadge from "../components/LocaleBadge.astro";
 import { getDatabaseClient } from "../lib/database/client";
 import { withTenant } from "../lib/database/tenant-context";
+import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
 import packageJson from "../../package.json";
 
@@ -88,34 +99,49 @@ if (!ssr) {
 const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
 
 /**
- * Tenant name for the badge. Cosmetic chrome on a page that renders for EVERY
- * `/admin/*` request, so a database hiccup must degrade rather than 500 the
- * whole admin area.
+ * Topbar chrome: tenant name + whether any sync node is active. Both are
+ * cosmetic on a page that renders for EVERY `/admin/*` request, so a database
+ * hiccup must degrade rather than 500 the whole admin area.
  *
- * Note the `Array.isArray` guard: this repo's `withTenant` RETURNS a `Response`
- * (503 `DATABASE_BUSY`) when the circuit breaker is open instead of throwing,
- * so a bare `rows[0]` would read a property off a `Response` and quietly
- * produce `undefined`. Checking the shape is what makes the fallback real.
+ * Note the shape check rather than a truthiness check: this repo's
+ * `withTenant` RETURNS a `Response` (503 `DATABASE_BUSY`) when the circuit
+ * breaker is open instead of throwing. A `Response` is truthy, so `catch`
+ * alone would let it through and every field read off it would silently be
+ * `undefined`. Testing for a key we know we returned is what makes the
+ * fallback real.
  */
 let tenantName = "Tenant";
+let syncActive = false;
 
 try {
   const sql = getDatabaseClient();
-  const rows = await withTenant(sql, ssr.tenantId, async (tx) => {
-    return (await tx`
+  const chrome = await withTenant(sql, ssr.tenantId, async (tx) => {
+    const rows = (await tx`
       SELECT tenant_name FROM awcms_tenants WHERE id = ${ssr.tenantId}
     `) as Array<{ tenant_name: string | null }>;
+
+    return {
+      tenantName: rows[0]?.tenant_name ?? null,
+      // Bounded EXISTS, not the full sync-health aggregation — the topbar
+      // needs one boolean and this runs on every `/admin/*` request.
+      syncActive: await fetchSyncIndicatorActive(tx, ssr.tenantId)
+    };
   });
 
-  if (Array.isArray(rows)) {
-    const name = rows[0]?.tenant_name;
-
-    if (typeof name === "string" && name.trim() !== "") {
-      tenantName = name;
+  // Shape check, not a truthiness check: on circuit-open `withTenant` hands
+  // back a `Response`, whose `.tenantName` is `undefined` rather than an error.
+  if (chrome && typeof chrome === "object" && "tenantName" in chrome) {
+    if (
+      typeof chrome.tenantName === "string" &&
+      chrome.tenantName.trim() !== ""
+    ) {
+      tenantName = chrome.tenantName;
     }
+
+    syncActive = chrome.syncActive === true;
   }
 } catch {
-  // Badge falls back to the generic label — never a broken admin page.
+  // Chrome falls back to generic label + inactive — never a broken admin page.
 }
 
 /**
@@ -127,56 +153,103 @@ try {
  * anything. Hiding links by permission would need `ssr.permissions`, and a
  * hidden link is not a security control regardless.
  */
-const navGroups: Array<{
+const navSections: Array<{
+  /** Uppercase top-level category. */
   label: string;
-  items: Array<{ key: NavKey; href: string; label: string }>;
+  modules: Array<{
+    /**
+     * Owning module's display name, rendered as a muted sub-label. `null` for
+     * core entries that belong to no single module (micro does the same via
+     * its `CORE_MODULE_KEY` check) — those links sit directly under the
+     * section heading with no sub-label.
+     */
+    label: string | null;
+    items: Array<{ key: NavKey; href: string; label: string }>;
+  }>;
 }> = [
   {
-    label: "Overview",
-    items: [{ key: "dashboard", href: "/admin", label: "Dashboard" }]
+    label: "General",
+    modules: [
+      {
+        label: null,
+        items: [{ key: "dashboard", href: "/admin", label: "Dashboard" }]
+      }
+    ]
   },
   {
-    label: "Organization",
-    items: [
-      { key: "offices", href: "/admin/offices", label: "Offices" },
+    label: "Identity",
+    modules: [
       {
-        key: "tenant-domains",
-        href: "/admin/tenant/domains",
-        label: "Tenant domains"
+        label: "Profile Identity",
+        items: [{ key: "profiles", href: "/admin/profiles", label: "Profiles" }]
       },
-      { key: "profiles", href: "/admin/profiles", label: "Profiles" }
-    ]
-  },
-  {
-    label: "Access control",
-    items: [
-      { key: "users", href: "/admin/users", label: "Users" },
-      { key: "roles", href: "/admin/roles", label: "Roles" },
       {
-        key: "abac-policies",
-        href: "/admin/abac-policies",
-        label: "ABAC policies"
+        label: "Identity & Access",
+        items: [
+          { key: "users", href: "/admin/users", label: "Users" },
+          { key: "roles", href: "/admin/roles", label: "Roles" },
+          {
+            key: "abac-policies",
+            href: "/admin/abac-policies",
+            label: "ABAC policies"
+          }
+        ]
       }
     ]
   },
   {
-    label: "Platform",
-    items: [
-      { key: "modules", href: "/admin/modules", label: "Modules" },
+    label: "System",
+    modules: [
       {
-        key: "email-templates",
-        href: "/admin/email-templates",
-        label: "Email templates"
+        label: "Tenant Admin",
+        items: [{ key: "offices", href: "/admin/offices", label: "Offices" }]
+      },
+      {
+        label: "Tenant Domain",
+        items: [
+          {
+            key: "tenant-domains",
+            href: "/admin/tenant/domains",
+            label: "Tenant domains"
+          }
+        ]
+      },
+      {
+        label: "Module Management",
+        items: [{ key: "modules", href: "/admin/modules", label: "Modules" }]
+      },
+      {
+        label: "Email",
+        items: [
+          {
+            key: "email-templates",
+            href: "/admin/email-templates",
+            label: "Email templates"
+          }
+        ]
       }
     ]
   },
   {
-    label: "Insights",
-    items: [
-      { key: "analytics", href: "/admin/analytics", label: "Visitor analytics" }
+    label: "Operations",
+    modules: [
+      {
+        label: "Visitor Analytics",
+        items: [
+          {
+            key: "analytics",
+            href: "/admin/analytics",
+            label: "Visitor analytics"
+          }
+        ]
+      }
     ]
   }
 ];
+
+/** Decorative topbar avatar (aria-hidden). Static SVG — no CSP cost. */
+const ICON_USER =
+  '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path></svg>';
 ---
 
 <!doctype html>
@@ -218,11 +291,20 @@ const navGroups: Array<{
         <TenantBadge tenantName={tenantName} />
         <div class="admin-topbar-spacer"></div>
         <div class="admin-topbar-right">
+          <SyncIndicator active={syncActive} />
           <ThemeToggle />
-          <span class="admin-roles" id="admin-roles">{roles}</span>
-          <button type="button" id="admin-logout" class="admin-logout">
-            Sign out
-          </button>
+          <LocaleBadge />
+          <div class="admin-user-menu">
+            <span
+              class="admin-avatar"
+              aria-hidden="true"
+              set:html={ICON_USER}
+            />
+            <span class="admin-roles" id="admin-roles">{roles}</span>
+            <button type="button" id="admin-logout" class="admin-logout">
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -233,20 +315,33 @@ const navGroups: Array<{
           <nav aria-label="Admin">
             <ul class="admin-sidebar-groups">
               {
-                navGroups.map((group) => (
+                navSections.map((section) => (
                   <li class="admin-sidebar-group">
-                    <span class="admin-sidebar-group-label">{group.label}</span>
-                    <ul class="admin-sidebar-links">
-                      {group.items.map((item) => (
-                        <li>
-                          <a
-                            href={item.href}
-                            aria-current={
-                              active === item.key ? "page" : undefined
-                            }
-                          >
-                            {item.label}
-                          </a>
+                    <span class="admin-sidebar-group-label">
+                      {section.label}
+                    </span>
+                    <ul class="admin-sidebar-modules">
+                      {section.modules.map((module) => (
+                        <li class="admin-sidebar-module">
+                          {module.label !== null && (
+                            <span class="admin-sidebar-module-label">
+                              {module.label}
+                            </span>
+                          )}
+                          <ul class="admin-sidebar-links">
+                            {module.items.map((item) => (
+                              <li>
+                                <a
+                                  href={item.href}
+                                  aria-current={
+                                    active === item.key ? "page" : undefined
+                                  }
+                                >
+                                  {item.label}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
                         </li>
                       ))}
                     </ul>
