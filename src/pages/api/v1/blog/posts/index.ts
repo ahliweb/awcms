@@ -1,3 +1,4 @@
+import { enqueueModuleContentPurge } from "../../../../../lib/edge-cache/content-purge";
 import type { APIRoute } from "astro";
 
 import { fail, ok } from "../../../../../modules/_shared/api-response";
@@ -284,6 +285,16 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       message: `Blog post created: ${post.slug}.`,
       correlationId
     });
+
+    // ADR-0042: same transaction as the content change, so the invalidation
+    // cannot be lost or left behind by a rollback. No-op when the edge
+    // cache is disabled.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      "blog_content",
+      "blog.post.created"
+    );
 
     log("info", "blog-content.post.created", {
       correlationId,
