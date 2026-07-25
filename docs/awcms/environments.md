@@ -63,9 +63,11 @@ Zona `ahlikoding.com` ada di Cloudflare (NS `dilbert`/`katja`). Kedua host di
 atas menunjuk ke `192.42.84.46`.
 
 Setelah record ada, TLS terbit otomatis lewat Traefik — tidak ada konfigurasi
-lain. Bila record dipasang **proxied** (orange cloud), Traefik tetap menerbitkan
-sertifikat asalkan tantangan HTTP-01 bisa lewat; bila ragu, mulai **DNS-only**
-lalu nyalakan proxy setelah TLS terbit.
+lain. Sejak 2026-07-25 resolver `letsencrypt` di Traefik pakai **tantangan
+DNS-01 via Cloudflare** (bukan HTTP-01 lagi), jadi status proxy record
+(DNS-only vs proxied/orange cloud) **tidak memengaruhi** penerbitan/renewal
+sertifikat — keduanya jalan sama saja. Detail perubahan dan alasannya ada di
+`docs/12-cloudflare-proxy-dns01.md` pada repo `serv-dinkesdocker`.
 
 ### Subdomain tenant (asumsi — konfirmasi sebelum dipakai)
 
@@ -112,42 +114,90 @@ tanpa itu suntingan editor baru terlihat setelah TTL habis. Rinci di
 
 | Hal                                | Status                                                              |
 | ---------------------------------- | ------------------------------------------------------------------- |
-| DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, DNS-only                                     |
-| DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, DNS-only (dibuat 2026-07-25)                 |
+| DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
+| DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
 | App Coolify produksi               | ✅ `got4etcblum9kowdv4mrixqo` + DB `eel59mczdlkidkm5a6fhbdeh`       |
 | App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`       |
 | TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS |
 | Health staging                     | ✅ `GET /api/v1/health` → 200, 21 modul                             |
-| **Migrasi DB staging**             | ❌ **BELUM dijalankan** — lihat di bawah                            |
+| Migrasi DB staging                 | ✅ `sql/001`–`sql/069`, 69 applied / 0 skipped                      |
+| Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`        |
+| Seed tenant pertama staging        | ❌ belum — `GET /api/v1/setup/status` → `{"locked":false}`          |
 
 Staging memakai `--ip 10.0.1.61` (produksi `10.0.1.51`); Coolify tidak bisa
 mem-publish port, jadi alamat container ditetapkan lewat
 `custom_docker_run_options`.
 
-### Migrasi staging belum jalan — dan kenapa
+### Menjalankan migrasi: container one-shot, bukan `docker exec`
 
 `Dockerfile.production` menghasilkan image **runtime saja**: `scripts/` tidak
 ikut, jadi `docker exec <app> bun run db:migrate` gagal dengan
-`Module not found "scripts/db-migrate.ts"`. Ini bukan kesalahan konfigurasi
-staging; itu memang bentuk image-nya.
+`Module not found "scripts/db-migrate.ts"`. Ini bukan kesalahan konfigurasi;
+itu memang bentuk image-nya, dan tidak perlu diubah.
 
-Jalankan migrasi sebagai **container one-shot** dari repo, berbagi network
-container DB supaya DSN-nya `127.0.0.1` (pola yang sama dipakai staging
+Jalankan migrasi sebagai **container one-shot** dari checkout repo, berbagi
+network container DB supaya DSN-nya `127.0.0.1` (pola yang sama dipakai staging
 `awcms-micro`):
 
 ```bash
+git clone --depth 1 --branch main https://github.com/ahliweb/awcms.git /tmp/awcms-migrate
 docker run --rm --network container:my85c1xd4txesedhic72maeu \
-  -v "$PWD":/app -w /app \
+  -v /tmp/awcms-migrate:/app -w /app \
   -e DATABASE_URL="postgres://awcms_staging:<pw>@127.0.0.1:5432/awcms_staging" \
-  oven/bun:1.3.14-alpine sh -c "bun install --frozen-lockfile && bun run db:migrate"
+  oven/bun:1.3.14-alpine \
+  sh -c "bun install --frozen-lockfile --production && bun run db:migrate"
 ```
 
-Sampai itu dijalankan, staging **belum punya skema** — endpoint health tetap 200
-karena tidak menyentuh database.
+Migrasi memakai user **owner** (di sini superuser `awcms_staging`) karena ia
+`CREATE ROLE`/`GRANT`. Runtime app **tidak boleh** memakai user itu — lihat di
+bawah.
+
+### Jebakan: user yang dibuat Coolify adalah superuser
+
+Ini menggigit staging pada 2026-07-25 dan layak diingat karena kegagalannya
+tidak terlihat sama sekali.
+
+Coolify (dan image `postgres:*` pada umumnya) membuat `POSTGRES_USER` sebagai
+**superuser**. Bentuk paling wajar setelah provisioning otomatis adalah
+`DATABASE_URL` runtime menunjuk user itu — dan **superuser melewati RLS tanpa
+syarat, bahkan dengan `FORCE`**. Deployment tampak sehat: migrasi hijau, health
+200, semua endpoint jalan. Isolasi tenant tidak ada sama sekali.
+
+`sql/019` dan `sql/022` membuat `awcms_app`/`awcms_worker`/`awcms_setup`
+**`NOLOGIN` dan tanpa password** — sengaja, karena password adalah secret dan
+secret tidak boleh masuk berkas migrasi. Jadi migrasi selesai bersih tetapi
+belum satu pun role bisa dipakai. Langkah pengaktifannya eksplisit, per
+deployment:
+
+```sql
+ALTER ROLE awcms_app    LOGIN PASSWORD '<secret app>';
+ALTER ROLE awcms_worker LOGIN PASSWORD '<secret worker>';
+ALTER ROLE awcms_setup  LOGIN PASSWORD '<secret setup>';
+GRANT CONNECT ON DATABASE <db> TO awcms_app, awcms_worker, awcms_setup;
+```
+
+Lalu arahkan env var runtime:
+
+```bash
+DATABASE_URL=postgres://awcms_app:<secret app>@<host>:5432/<db>
+WORKER_DATABASE_URL=postgres://awcms_worker:<secret worker>@<host>:5432/<db>
+SETUP_DATABASE_URL=postgres://awcms_setup:<secret setup>@<host>:5432/<db>
+```
+
+Verifikasi dengan kueri, bukan asumsi — ketiganya harus `f`/`f`:
+
+```sql
+SELECT rolname, rolcanlogin, rolsuper, rolbypassrls
+FROM pg_roles WHERE rolname LIKE 'awcms%';
+```
+
+`ADMIN_DATABASE_URL` **tidak dibaca kode mana pun** — jangan menyetelnya; ia
+hanya menyesatkan pembaca env berikutnya.
 
 ## Yang masih terbuka
 
-- Migrasi + seed tenant pertama di staging (di atas).
+- **Seed tenant pertama di staging.** Skema ada, tetapi setup wizard belum
+  dijalankan (`locked:false`), jadi belum ada tenant/admin untuk login.
+- Varnish belum dipasang di depan staging; `EDGE_CACHE_MODE=off` sampai itu ada.
 - `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
   memang tidak pernah ada.
-- Varnish belum dipasang di depan staging; `EDGE_CACHE_MODE=off` sampai itu ada.

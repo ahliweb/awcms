@@ -278,12 +278,23 @@ ini), `awcms-abac-guard` (guard bersama yang juga menegakkan
 kategori modul (Core/System/Official Optional Module/Derived Application/
 External Integration), kriteria admission, aturan dependency required vs
 optional (§5, melengkapi `capabilities` di atas), ekspektasi kompatibilitas
-offline/LAN vs full-online-only, dan pemetaan 23 modul terdaftar saat ini
-(`src/modules/index.ts`'s `baseModules`, termasuk 7 modul platform-evolution
-epic #738: data_lifecycle, domain_event_runtime, organization_structure,
-document_infrastructure, data_exchange, integration_hub, reference_data)
-ke kategori tersebut (termasuk catatan remediasi field `type`/`isCore`/
-`maintainers` yang belum konsisten diisi — lihat doc 21 §8). Baca dokumen
+offline/LAN vs full-online-only, dan pemetaan 23 modul ke kategori tersebut
+(termasuk catatan remediasi field `type`/`isCore`/`maintainers` yang belum
+konsisten diisi — lihat doc 21 §8).
+
+> **Jangan baca "23 modul" sebagai isi registry.** `listModules()` mengembalikan
+> **21** modul; jalankan itu bila butuh angka pasti, jangan kutip doc 21. Dari
+> 7 modul platform-evolution epic #738 yang dipetakan doc 21, hanya
+> **`data_lifecycle` dan `domain_event_runtime`** yang benar-benar terdaftar.
+> `organization_structure`, `document_infrastructure`, `data_exchange`,
+> `integration_hub`, dan `reference_data` **belum ada kodenya** — ADR-nya
+> Accepted (0016/0017/0018/0019/0021) tetapi tidak ada `src/modules/<x>/`.
+> `organization_structure` hanya muncul sebagai string `providedBy` pada
+> capability opsional di `identity-access/module.ts` — itu metadata seam, bukan
+> bukti modulnya ada. Rencana pengadaannya: Gelombang B
+> `docs/awcms/absorb-awcms-mini-backbone-roadmap.md`.
+
+Baca dokumen
 itu sebelum mengusulkan modul baru atau mengubah kategori/status lifecycle
 modul yang sudah ada.
 

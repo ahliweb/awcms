@@ -72,7 +72,7 @@ domain/secret/database (atau minimal schema+role) terpisah — jangan reuse
 `deploy-coolify.md` §Opsi PostgreSQL untuk perbandingan satu cluster vs
 satu container per aplikasi vs managed database eksternal.
 
-## Model dua-peran basis data (wajib di semua profil)
+## Model tiga-peran basis data (wajib di semua profil)
 
 Migrasi = role privileged (DDL/GRANT). Runtime app = `awcms_app`
 least-privilege, `FORCE ROW LEVEL SECURITY` ditegakkan untuknya. Jangan
@@ -82,16 +82,42 @@ security:readiness` memblokir go-live bila terdeteksi.
 **Status konkret di repo ini** (jangan asumsikan lebih dari ini):
 
 - Role `awcms_app` dibuat `sql/019_awcms_db_role_separation.sql` (Issue
-  #141). Ia **tidak dipakai otomatis** — `DATABASE_URL` default masih
-  menunjuk owner migrasi. Deployment WAJIB mengarahkan `DATABASE_URL`
-  runtime ke `awcms_app` secara eksplisit; selama tidak, setiap policy
-  `*_tenant_isolation` inert (superuser/owner melewati RLS meski `FORCE`).
-- **Tidak ada role `awcms_worker`/`awcms_setup`.**
-  `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` adalah seam pool nyata
-  (`src/lib/database/client.ts`) tapi fallback ke `DATABASE_URL` bila
-  kosong — mengarahkannya ke role yang belum ada = `permission denied` di
-  setiap background job. Baca header `sql/019` sebelum menjanjikan
-  pemisahan app/worker ke siapa pun.
+  #141); `awcms_worker` dan `awcms_setup` dibuat
+  `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163). **KOREKSI:** versi
+  skill ini sebelumnya menyatakan `awcms_worker`/`awcms_setup` "tidak ada" dan
+  bahwa mengarahkan `WORKER_DATABASE_URL` ke sana menghasilkan
+  `permission denied`. Itu sudah lama tidak benar — jangan menolak memisahkan
+  role atas dasar itu.
+- Ketiganya dibuat **`NOLOGIN` dan tanpa password** — sengaja, karena password
+  itu secret dan secret tidak boleh masuk berkas migrasi. Migrasi selesai
+  bersih tetapi **belum satu pun role bisa dipakai**. Deployment yang
+  mengaktifkannya:
+
+  ```sql
+  ALTER ROLE awcms_app    LOGIN PASSWORD '<secret>';
+  ALTER ROLE awcms_worker LOGIN PASSWORD '<secret>';
+  ALTER ROLE awcms_setup  LOGIN PASSWORD '<secret>';
+  GRANT CONNECT ON DATABASE <db> TO awcms_app, awcms_worker, awcms_setup;
+  ```
+
+- Lalu arahkan `DATABASE_URL`→`awcms_app`, `WORKER_DATABASE_URL`→`awcms_worker`,
+  `SETUP_DATABASE_URL`→`awcms_setup`. Dua yang terakhir **fallback ke
+  `DATABASE_URL`** bila kosong (opt-in, tidak breaking).
+
+> **Jebakan yang benar-benar terjadi (staging 2026-07-25).** Platform PaaS
+> (Coolify, dan sebagian besar image `postgres:*`) membuat `POSTGRES_USER`
+> sebagai **superuser**. Bila `DATABASE_URL` runtime dibiarkan menunjuk user
+> itu — bentuk paling wajar setelah provisioning otomatis — aplikasi berjalan
+> sebagai superuser dan **setiap policy `*_tenant_isolation` inert meski
+> `FORCE`**: superuser melewati RLS tanpa syarat. Deployment tampak sehat,
+> migrasi hijau, health 200, dan isolasi tenant tidak ada sama sekali.
+> Verifikasi dengan koneksi nyata, bukan asumsi:
+>
+> ```sql
+> SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname LIKE 'awcms%';
+> ```
+>
+> Role runtime harus `rolsuper=f` **dan** `rolbypassrls=f`.
 
 ## Rollback
 

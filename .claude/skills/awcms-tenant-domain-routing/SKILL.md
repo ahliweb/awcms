@@ -1,6 +1,6 @@
 ---
 name: awcms-tenant-domain-routing
-description: Modul tenant_domain SUDAH di-port ke repo ini (dari awcms-micro epic #555). Pemetaan hostname/subdomain → tenant untuk routing publik berbasis host, hidup berdampingan dengan routing berbasis path `/blog/{tenantCode}` (ADR-0009) tanpa meregresinya. Gunakan saat mengubah skema/API/UI tenant domain, resolver tenant berbasis host, fungsi lookup `SECURITY DEFINER`, adapter Cloudflare DNS opsional, atau saat mem-wire rute konten publik ber-resolusi host (masih deferred). Merangkum keputusan desain yang mengikat supaya perubahan lanjutan tidak mengulang/kontradiksi.
+description: Modul tenant_domain SUDAH di-port ke repo ini (dari awcms-micro epic #555). Pemetaan hostname/subdomain → tenant untuk routing publik berbasis host, hidup berdampingan dengan routing berbasis path `/blog/{tenantCode}` (ADR-0009) tanpa meregresinya. Gunakan saat mengubah skema/API/UI tenant domain, resolver tenant berbasis host, fungsi lookup `SECURITY DEFINER`, adapter Cloudflare DNS opsional, rekonsiliasi record serving `bun run tenant-domain:dns:sync` (`ensureServingRecord` desired-state + `sql/069` grant SELECT `awcms_worker`), atau saat mem-wire rute konten publik ber-resolusi host (masih deferred). Merangkum keputusan desain yang mengikat supaya perubahan lanjutan tidak mengulang/kontradiksi.
 ---
 
 # AWCMS — Tenant Domain & Host-Based Public Routing
@@ -189,7 +189,7 @@ MIKRODETIK tapi JS `Date` cuma milidetik — cursor dari `Date` melewatkan baris
 yang berbagi milidetik itu (Issue #158). Jangan membangun cursor dari
 `view.createdAt`.
 
-## Adapter Cloudflare DNS (opsional, BELUM di-wire)
+## Adapter Cloudflare DNS (opsional, KINI di-wire untuk record serving)
 
 `infrastructure/cloudflare-dns-adapter.ts` — `resolveTenantDomainDnsProvider(env)`
 
@@ -204,6 +204,41 @@ yang berbagi milidetik itu (Issue #158). Jangan membangun cursor dari
   (env `TENANT_DOMAIN_CLOUDFLARE_TIMEOUT_MS`, default 8 detik, tak pernah gagalkan
   boot). Secret Cloudflare hanya dari env — tak pernah di DB/response.
 
+### Rekonsiliasi record serving (`bun run tenant-domain:dns:sync`)
+
+**KOREKSI:** bagian ini sebelumnya berbunyi "BELUM di-wire / tak ada rute yang
+memanggilnya". Itu masih benar untuk record **verifikasi** (TXT, create-only),
+tapi tidak lagi untuk record **serving**.
+
+- Port `TenantDomainDnsProvider` kini punya `ensureServingRecord`
+  (`A`/`CNAME`). Bedanya dengan `createDnsRecord`: ia **desired-state** —
+  saat record dengan nama itu sudah ada tapi isinya beda, ia `PUT` pada id yang
+  ada, **tidak pernah `POST` kedua**. Dua record untuk satu hostname adalah
+  round-robin diam-diam ke tujuan yang salah separuh waktu.
+- `application/dns-serving-reconciler.ts` — `reconcileServingRecords()`
+  memproses baris **berurutan** (Cloudflare rate-limit per token; burst paralel
+  lintas tenant men-throttle seluruh pass) dan **satu kegagalan tidak
+  membatalkan pass**.
+- `scripts/tenant-domain-dns-sync.ts` — entrypoint worker, tidak pernah
+  di-expose lewat HTTP, jalankan terjadwal. `--dry-run` melaporkan tanpa
+  menulis.
+- Baca sebagai role `awcms_worker` **SELECT-only** (`sql/069`); RLS FORCE
+  berlaku untuk role itu, jadi query dibungkus `withTenant`.
+- **Hanya `domain_type = 'subdomain'`.** Custom domain ada di zona milik tenant
+  — menulisnya bukan hanya tidak sopan, tapi tidak mungkin.
+- **Tidak pernah menghapus apa pun.** Domain soft-deleted/suspended dilewati,
+  meninggalkan record basi yang menunjuk platform — kelihatan dan tidak
+  berbahaya — ketimbang membiarkan job otomatis melakukan DNS write destruktif.
+- **Tidak ada default target.** `resolveServingTarget()` mengembalikan `null`
+  bila `TENANT_DOMAIN_SERVING_TARGET` kosong, dan job no-op. Menebak di sini
+  berarti mengarahkan SEMUA subdomain tenant ke alamat yang salah — outage
+  seluruh platform, bukan bug kecil.
+- **Exit hijau ≠ semua record mendarat.** Kegagalan per-domain dicatat dan pass
+  lanjut; yang menyatakan hasil adalah hitungan `failed=` di baris ringkasan.
+- Dua environment **tidak boleh** sama-sama `TENANT_DOMAIN_DNS_PROVIDER=cloudflare`
+  pada zona yang sama — keduanya akan saling menimpa record serving hostname
+  yang sama. Staging tetap `manual` (lihat `docs/awcms/environments.md`).
+
 ## Yang BELUM ada (deferred, terdokumentasi)
 
 - **Rute konten publik ber-resolusi host** (permukaan gaya `/news`). Resolver +
@@ -215,7 +250,9 @@ yang berbagi milidetik itu (Issue #158). Jangan membangun cursor dari
   `PUBLIC_DEFAULT_TENANT_ID`/`PUBLIC_DEFAULT_TENANT_CODE` belum divalidasi
   `scripts/validate-env.ts` (belum ada konsumen runtime) — tambahkan saat
   mem-wire rute publik.
-- **Otomasi Cloudflare DNS** (lihat di atas).
+- **Otomasi Cloudflare DNS untuk record VERIFIKASI** (TXT `_acme-challenge`
+  dsb.) — masih create-only/aditif, tak ada rute yang memanggilnya. Record
+  **serving** sudah otomatis; lihat `tenant-domain:dns:sync` di atas.
 
 ## Aturan mengikat lintas-perubahan
 
@@ -242,7 +279,10 @@ yang berbagi milidetik itu (Issue #158). Jangan membangun cursor dari
   `tests/tenant-domain-validation.test.ts`,
   `tests/tenant-domain-dns-config.test.ts`,
   `tests/cloudflare-dns-adapter.test.ts`,
-  `tests/public-host-tenant-resolver.test.ts`.
+  `tests/public-host-tenant-resolver.test.ts`,
+  `tests/tenant-domain-dns-serving.test.ts` (rekonsiliasi serving; API
+  Cloudflare palsu lewat `Bun.serve`, membuktikan drift → `PUT` bukan `POST`
+  kedua).
 - Integration (DB-gated): `tests/integration/tenant-domain.integration.test.ts`
   — CRUD/verify/set-primary, unique lintas-tenant, soft-delete reuse,
   satu-primary-per-tenant, dan **RLS dibuktikan di bawah `awcms_app`** (SELECT
