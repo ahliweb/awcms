@@ -53,6 +53,8 @@ tags:
     description: R2-only advertisement placement presets for the news portal (news_portal module) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
   - name: SEO & Distribution
     description: Tenant SEO defaults for the central metadata renderer + public discovery/syndication surfaces (seo_distribution module, ADR-0038 discovery scope) — read/update site identity, default social/Organization images, Twitter handle, the tenant-wide noindex switch, and feed/sitemap config. The public robots.txt/sitemap/feed routes themselves are unauthenticated Astro XML/text routes (not part of this OpenAPI contract), host-resolved and cache-validated. config.update is high-risk (rewrites the public metadata/indexability surface), idempotency-keyed, and audited.
+  - name: Form Drafts
+    description: Generic, domain-agnostic server-side draft store for multi-step forms (form_drafts module) — tenant-scoped, RLS-protected create/read/update/submit/delete of an opaque JSONB payload plus the wizard coordinates needed to resume it. The payload is size-bounded and rejected outright (never silently redacted) when any key at any nesting depth resembles a secret — password/token/secret/credential/apiKey/privateKey — so a caller can never mistake a stripped field for a saved one. What a payload MEANS is owned by the module that created it (moduleKey/wizardKey), never by this one. submit is high-risk (it hands the payload to a domain action), idempotency-keyed, and audited; create deliberately is not, since a retry costs one deletable scratch row.
 paths:
   /api/v1/abac/policies:
     get:
@@ -5713,6 +5715,260 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/form-drafts:
+    get:
+      operationId: listFormDrafts
+      tags:
+        - Form Drafts
+      summary: List this tenant's non-deleted form drafts.
+      description: "Bounded to the 100 most recently updated non-deleted drafts, newest first. No pagination cursor: this is scratch state a caller filters by its own moduleKey/wizardKey, not a browsable archive."
+      parameters:
+        - name: moduleKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: wizardKey
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FormDraftStatus"
+      responses:
+        "200":
+          description: Form draft list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      drafts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/FormDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createFormDraft
+      tags:
+        - Form Drafts
+      summary: Create a form draft.
+      description: "Deliberately NOT idempotency-keyed: the worst case for a retry is one extra low-value scratch row the caller can delete, not a domain side effect. Submitting is the operation that needs a key."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormDraftCreateRequest"
+      responses:
+        "200":
+          description: Created form draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/FormDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: Request body exceeded the endpoint's size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/form-drafts/{id}:
+    get:
+      operationId: getFormDraft
+      tags:
+        - Form Drafts
+      summary: Read one form draft.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Form draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/FormDraft"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateFormDraft
+      tags:
+        - Form Drafts
+      summary: Update a draft's step, payload, or expiry.
+      description: Only a draft still in `draft` status can be updated; a submitted, abandoned, or expired draft returns 404 rather than distinguishing "wrong state" from "does not exist".
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormDraftUpdateRequest"
+      responses:
+        "200":
+          description: Updated form draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/FormDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          description: Request body exceeded the endpoint's size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteFormDraft
+      tags:
+        - Form Drafts
+      summary: Soft-delete (abandon) a form draft.
+      description: Idempotent by construction — the `deleted_at IS NULL` guard makes a second call a safe no-op, so no Idempotency-Key is required.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Draft abandoned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+                        enum:
+                          - true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/form-drafts/{id}/submit:
+    post:
+      operationId: submitFormDraft
+      tags:
+        - Form Drafts
+      summary: Mark a draft as submitted.
+      description: "High-risk: hands the payload to a domain action, so an Idempotency-Key is required and the same key with a different body is a conflict. Guarded on `form_drafts.draft.update` — there is no separate `submit` permission, because an action nobody seeds into a role denies even the tenant owner while looking correct."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Submitted form draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/FormDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/health:
     get:
       operationId: getHealth
@@ -13628,6 +13884,106 @@ components:
           description: Optional. When supplied, compared against the checksum computed server-side from the bytes actually read from R2 — a transport-corruption check only, never a substitute for the server-side MIME sniff.
           pattern: ^[0-9a-fA-F]{64}$
           example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    FormDraft:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        moduleKey:
+          type: string
+        wizardKey:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          nullable: true
+        currentStep:
+          type: string
+        payload:
+          type: object
+          description: Opaque JSON object owned by the creating module. Never contains a key resembling a secret — such payloads are rejected on write.
+        status:
+          $ref: "#/components/schemas/FormDraftStatus"
+        createdBy:
+          type: string
+          format: uuid
+        updatedBy:
+          type: string
+          format: uuid
+        submittedBy:
+          type: string
+          format: uuid
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+    FormDraftCreateRequest:
+      type: object
+      required:
+        - moduleKey
+        - wizardKey
+        - resourceType
+        - currentStep
+        - payload
+      properties:
+        moduleKey:
+          type: string
+          description: Lowercase snake_case, 2-64 characters, starting with a letter.
+        wizardKey:
+          type: string
+          description: Lowercase snake_case, 2-64 characters, starting with a letter.
+        resourceType:
+          type: string
+          description: Lowercase snake_case, 2-64 characters, starting with a letter.
+        resourceId:
+          type: string
+          maxLength: 128
+          description: Free-form text, not a uuid — a draft may reference a not-yet-created resource or a non-UUID external identifier.
+        currentStep:
+          type: string
+          maxLength: 64
+        payload:
+          type: object
+          description: JSON object, at most 32768 bytes serialized. Rejected outright if any key at any depth matches password/token/secret/credential/ apiKey/privateKey.
+        expiresAt:
+          type: string
+          format: date-time
+    FormDraftStatus:
+      type: string
+      enum:
+        - draft
+        - submitted
+        - abandoned
+        - expired
+    FormDraftUpdateRequest:
+      type: object
+      description: At least one of currentStep, payload, or expiresAt is required.
+      properties:
+        currentStep:
+          type: string
+          maxLength: 64
+        payload:
+          type: object
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
     HomepageSectionConfig:
       description: "Shape depends on sectionType — headline: {postId}; latest_posts: {limit?, categorySlug?}; featured_posts/editor_picks: {postIds: []}; category_grid: {categorySlugs: [], postsPerCategory?}; gallery_block: {mediaObjectIds: [], caption?}. Validated server-side per sectionType; every id/slug must already exist for the same tenant, and gallery_block's mediaObjectIds must each be a verified R2 media object."
       type: object

@@ -4387,6 +4387,146 @@ Read-only: normalize + validate a proposed rule (frozen open-redirect guard), pr
 | 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
 
+## Form Drafts
+
+Generic, domain-agnostic server-side draft store for multi-step forms (form_drafts module) — tenant-scoped, RLS-protected create/read/update/submit/delete of an opaque JSONB payload plus the wizard coordinates needed to resume it. The payload is size-bounded and rejected outright (never silently redacted) when any key at any nesting depth resembles a secret — password/token/secret/credential/apiKey/privateKey — so a caller can never mistake a stripped field for a saved one. What a payload MEANS is owned by the module that created it (moduleKey/wizardKey), never by this one. submit is high-risk (it hands the payload to a domain action), idempotency-keyed, and audited; create deliberately is not, since a retry costs one deletable scratch row.
+
+### `GET /api/v1/form-drafts` — List this tenant's non-deleted form drafts.
+
+- **operationId**: `listFormDrafts`
+- **Security**: bearerAuth + tenantHeader
+
+Bounded to the 100 most recently updated non-deleted drafts, newest first. No pagination cursor: this is scratch state a caller filters by its own moduleKey/wizardKey, not a browsable archive.
+
+**Parameters**
+
+| Name        | In    | Required | Type                                         | Description |
+| ----------- | ----- | -------- | -------------------------------------------- | ----------- |
+| `moduleKey` | query | no       | string                                       |             |
+| `wizardKey` | query | no       | string                                       |             |
+| `status`    | query | no       | [`FormDraftStatus`](#schema-formdraftstatus) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Form draft list.            | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/form-drafts` — Create a form draft.
+
+- **operationId**: `createFormDraft`
+- **Security**: bearerAuth + tenantHeader
+
+Deliberately NOT idempotency-keyed: the worst case for a retry is one extra low-value scratch row the caller can delete, not a domain side effect. Submitting is the operation that needs a key.
+
+**Request body** (required): [`FormDraftCreateRequest`](#schema-formdraftcreaterequest)
+
+**Responses**
+
+| Status | Description                                        | Schema                                 |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| 200    | Created form draft.                                | object                                 |
+| 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                        | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeded the endpoint's size ceiling. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/form-drafts/{id}` — Read one form draft.
+
+- **operationId**: `getFormDraft`
+- **Security**: bearerAuth + tenantHeader
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Form draft.                 | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/form-drafts/{id}` — Update a draft's step, payload, or expiry.
+
+- **operationId**: `updateFormDraft`
+- **Security**: bearerAuth + tenantHeader
+
+Only a draft still in `draft` status can be updated; a submitted, abandoned, or expired draft returns 404 rather than distinguishing "wrong state" from "does not exist".
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): [`FormDraftUpdateRequest`](#schema-formdraftupdaterequest)
+
+**Responses**
+
+| Status | Description                                        | Schema                                 |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| 200    | Updated form draft.                                | object                                 |
+| 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                        | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                        | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeded the endpoint's size ceiling. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/form-drafts/{id}` — Soft-delete (abandon) a form draft.
+
+- **operationId**: `deleteFormDraft`
+- **Security**: bearerAuth + tenantHeader
+
+Idempotent by construction — the `deleted_at IS NULL` guard makes a second call a safe no-op, so no Idempotency-Key is required.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Draft abandoned.            | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/form-drafts/{id}/submit` — Mark a draft as submitted.
+
+- **operationId**: `submitFormDraft`
+- **Security**: bearerAuth + tenantHeader
+
+High-risk: hands the payload to a domain action, so an Idempotency-Key is required and the same key with a different body is a conflict. Guarded on `form_drafts.draft.update` — there is no separate `submit` permission, because an action nobody seeds into a role denies even the tenant owner while looking correct.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Submitted form draft.                                                           | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -4584,6 +4724,62 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
 ```json
 {
   "checksumSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
+```
+
+### Schema: FormDraftCreateRequest
+
+| Field          | Type               | Required | Nullable | Description                                                                                                                                         |
+| -------------- | ------------------ | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `moduleKey`    | string             | yes      | no       | Lowercase snake_case, 2-64 characters, starting with a letter.                                                                                      |
+| `wizardKey`    | string             | yes      | no       | Lowercase snake_case, 2-64 characters, starting with a letter.                                                                                      |
+| `resourceType` | string             | yes      | no       | Lowercase snake_case, 2-64 characters, starting with a letter.                                                                                      |
+| `resourceId`   | string             | no       | no       | Free-form text, not a uuid — a draft may reference a not-yet-created resource or a non-UUID external identifier.                                    |
+| `currentStep`  | string             | yes      | no       |                                                                                                                                                     |
+| `payload`      | object             | yes      | no       | JSON object, at most 32768 bytes serialized. Rejected outright if any key at any depth matches password/token/secret/credential/ apiKey/privateKey. |
+| `expiresAt`    | string (date-time) | no       | no       |                                                                                                                                                     |
+
+**Example**
+
+```json
+{
+  "moduleKey": "string",
+  "wizardKey": "string",
+  "resourceType": "string",
+  "resourceId": "string",
+  "currentStep": "string",
+  "payload": "(operation-specific payload)",
+  "expiresAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: FormDraftStatus
+
+Enum values: `draft`, `submitted`, `abandoned`, `expired`.
+
+**Example**
+
+```json
+"draft"
+```
+
+### Schema: FormDraftUpdateRequest
+
+At least one of currentStep, payload, or expiresAt is required.
+
+| Field         | Type               | Required | Nullable | Description |
+| ------------- | ------------------ | -------- | -------- | ----------- |
+| `currentStep` | string             | no       | no       |             |
+| `payload`     | object             | no       | no       |             |
+| `expiresAt`   | string (date-time) | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "currentStep": "string",
+  "payload": "(operation-specific payload)",
+  "expiresAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 

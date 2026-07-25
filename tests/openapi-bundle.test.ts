@@ -279,10 +279,13 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     // registry/upload, editorial homepage sections, R2-only ad placements), and
     // "SEO & Distribution" owned by the ported seo_distribution module (ADR-0038
     // discovery scope — the tenant SEO config admin surface; its public
-    // sitemap/robots/feed routes are unauthenticated Astro routes, not OpenAPI).
+    // sitemap/robots/feed routes are unauthenticated Astro routes, not OpenAPI),
+    // and "Form Drafts" owned by the ported form_drafts module (awcms-micro
+    // Issue #484 — the generic multi-step-form draft store).
     const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
     expect(added).toEqual([
       "Domain Event Runtime",
+      "Form Drafts",
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",
