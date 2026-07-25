@@ -17,6 +17,7 @@ import { tenantDomainModule } from "./tenant-domain/module";
 import { visitorAnalyticsModule } from "./visitor-analytics/module";
 import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
+import { formDraftsModule } from "./form-drafts/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -95,7 +96,17 @@ const baseModules: ModuleDescriptor[] = [
   // provides it, optional) + `media_library` (optional); capability edges are not
   // DAG edges. Redirect governance + 404 telemetry are DEFERRED to a follow-up PR.
   // See src/modules/seo-distribution/module.ts's `description`.
-  seoDistributionModule
+  seoDistributionModule,
+  // Ported from awcms-micro (Issue #484), Gelombang-1 row 1 of
+  // docs/awcms/absorb-awcms-micro-roadmap.md: a generic, domain-agnostic
+  // server-side draft store for multi-step forms. Net-new and additive —
+  // depends only on identity_access (above), so the DAG stays acyclic, and
+  // nothing consumes it yet. Registers a `delegated` data_lifecycle descriptor
+  // whose real purge (and legal-hold check) stays in this module's own
+  // `purgeExpiredFormDrafts`. The awcms-micro wizard COMPONENT library is a
+  // separate, still-open Gelombang-0 row and is not part of this port. See
+  // src/modules/form-drafts/module.ts's `description`.
+  formDraftsModule
 ];
 
 /**

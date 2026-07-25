@@ -1056,7 +1056,14 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // `dataLifecycle` descriptor (hard_delete, analytics_telemetry), so the
   // worker needs SELECT (bounded cursor scan) + DELETE only. No INSERT/UPDATE:
   // the 404 upsert is a public-path write on awcms_app, never the worker.
-  awcms_seo_not_found_observations: ["SELECT", "DELETE"]
+  awcms_seo_not_found_observations: ["SELECT", "DELETE"],
+  // form_drafts — form-drafts:purge (sql/062). Two phases on one table:
+  // SELECT picks each bounded batch, UPDATE performs phase 1's
+  // `status -> 'expired'` transition, DELETE performs phase 2's physical purge
+  // of expired/abandoned rows past the retention cutoff. NO INSERT — the
+  // worker never creates a draft; only an authenticated caller on awcms_app
+  // does. The purge's own audit INSERT reuses awcms_audit_events above.
+  awcms_form_drafts: ["SELECT", "UPDATE", "DELETE"]
 };
 
 /**

@@ -45,6 +45,7 @@
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",
     "logs:audit:purge": "bun scripts/audit-log-purge.ts",
     "data-lifecycle:archive-purge": "bun scripts/data-lifecycle-archive-purge.ts",
+    "form-drafts:purge": "bun scripts/form-draft-purge.ts",
     "data-lifecycle:registry:check": "bun scripts/data-lifecycle-registry-check.ts",
     "analytics:rollup": "bun scripts/visitor-analytics-rollup.ts",
     "analytics:purge": "bun scripts/visitor-analytics-purge.ts",
