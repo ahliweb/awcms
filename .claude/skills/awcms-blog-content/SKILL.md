@@ -1,6 +1,6 @@
 ---
 name: awcms-blog-content
-description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules/blog-content`, migrasi `sql/035`–`sql/040`, 15 tabel `awcms_blog_*` FORCE RLS). Panduan untuk MENGUBAH/menambah ke `src/modules/blog-content`, `src/pages/blog`, mengubah schema blog, atau mengerjakan issue susulan. CATATAN adaptasi awcms (beda dari spesifikasi mini di bawah): rute publik PATH-based `/blog/{tenantCode}` (ADR-0009), BUKAN `/news/**` host-resolved (itu butuh `tenant_domain`, belum di-port dan DI-DROP saat port); capability media kini `media_library` (INVERSI ADR-0036 — dulu `news_media` dari news_portal; kini modul `media_library` sendiri, adapter NYATA `mediaLibraryPortAdapter`, method `isManagedMediaEnforcementActiveForTenant`); hook `social_publishing` masih no-op (modul itu belum di-port); admin UI blog (`src/pages/admin/blog`) TIDAK di-port. Nomor `sql/NNN` di badan skill memakai penomoran awcms-mini — migrasi nyata di awcms adalah `sql/035`–`sql/040` (lihat README modul + `sql/` nyata). Gunakan saat menambah endpoint/logic blog, mengubah schema, atau issue lanjutan.
+description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules/blog-content`, migrasi `sql/035`–`sql/040`, 15 tabel `awcms_blog_*` FORCE RLS). Panduan untuk MENGUBAH/menambah ke `src/modules/blog-content`, `src/pages/blog`, mengubah schema blog, atau mengerjakan issue susulan. CATATAN adaptasi awcms (beda dari spesifikasi mini di bawah): rute publik PATH-based `/blog/{tenantCode}` (ADR-0009), BUKAN `/news/**` host-resolved (DI-DROP saat port karena `tenant_domain` belum ada; modul itu kini SUDAH di-port (#219) tapi rute `/news/**` tetap belum diadopsi); capability media kini `media_library` (INVERSI ADR-0036 — dulu `news_media` dari news_portal; kini modul `media_library` sendiri, adapter NYATA `mediaLibraryPortAdapter`, method `isManagedMediaEnforcementActiveForTenant`); hook `social_publishing` masih no-op (modul itu belum di-port); admin UI blog (`src/pages/admin/blog`) TIDAK di-port. Nomor `sql/NNN` di badan skill memakai penomoran awcms-mini — migrasi nyata di awcms adalah `sql/035`–`sql/040` (lihat README modul + `sql/` nyata). Gunakan saat menambah endpoint/logic blog, mengubah schema, atau issue lanjutan.
 ---
 
 # AWCMS — Blog Content Module
@@ -19,8 +19,18 @@ description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules
 >
 > - Rute publik **path-based `/blog/{tenantCode}`** (ADR-0009): index, detail,
 >   arsip kategori/tag, search, RSS `feed.xml`, `sitemap-blog.xml`. Keluarga
->   rute **host-resolved `/news/**` TIDAK di-port** (butuh modul `tenant_domain`
->   yang belum ada) — jangan bangun/rujuk `/news/**` sebagai ada di sini.
+>   rute **host-resolved `/news/**` TIDAK di-port** — saat port itu blocker-nya
+>   `tenant_domain` belum ada; modul itu kini SUDAH ada (#219) tapi rute
+>   `/news/**` **tetap belum diadopsi**, jadi jangan bangun/rujuk sebagai ada.
+> - **`blog_content` adalah PENYUMBANG descriptor lintas-modul.** `module.ts`
+>   menyediakan capability `seo_facts` (dikonsumsi `seo_distribution`) dan
+>   mendeklarasikan `searchSources: [{ key: "blog_content.post", ... }]` yang
+>   dibaca `site_search` lewat `listModules()`. Keduanya **pure data** —
+>   nama tabel/kolom + filter publikasi deklaratif, tanpa import silang. Saat
+>   mengubah nama tabel/kolom post, status publikasi, atau template URL publik,
+>   descriptor itu **wajib ikut diperbarui** atau gate `site-search:sources:check`
+>   merah dan indeks pencarian jadi bohong. Jangan menulis ke tabel
+>   `awcms_site_search_*` dari sini.
 > - Capability `news_media` kini **adapter NYATA** (`news_portal` sudah di-port,
 >   PR #214) — bukan lagi no-op. Hook `social_publishing` **masih no-op**
 >   (`social_publishing` belum di-port).

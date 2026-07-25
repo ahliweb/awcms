@@ -251,9 +251,22 @@ check`), dan di-deploy sebagai satu artefak — **tidak pernah** dimuat
 
 ## 8. Peta target modul ERP → kategori (belum ada modul terimplementasi)
 
+> **USANG per 2026-07-25 — judul dan tabel §8 ini adalah artefak perencanaan
+> awal.** Klaim "belum ada modul terimplementasi" / "registry itu belum ada sama
+> sekali" **tidak lagi benar**: `src/modules/index.ts` kini punya **20 modul
+> aktif** dan kolom "Belum diimplementasikan" di bawah salah untuk
+> `tenant_admin`, `identity_access`, `profile_identity`, `module_management`,
+> `sync_storage`, `reporting`, dan `workflow_approval` — ketujuhnya **sudah
+> hidup**. Yang masih akurat: seluruh baris **ERP Domain Module** (finance,
+> inventory, procurement, manufacturing, hr-payroll, tax-coretax,
+> business-integrations) memang belum ada. Sumber kebenaran registry adalah
+> [`../ARCHITECTURE.md`](../ARCHITECTURE.md) + `src/modules/index.ts`, bukan
+> tabel ini. Pohon keputusan §3 dan kriteria admission §4 **tetap berlaku** —
+> hanya §8 yang basi.
+
 > **Perbedaan penting dari dokumen asal**: tabel di bawah **bukan** pemetaan
-> modul yang sudah ada di `src/modules/index.ts` (registry itu belum ada sama
-> sekali). Ini adalah **peta target** hasil penerapan pohon keputusan §3 pada
+> modul yang sudah ada di `src/modules/index.ts` (saat tabel ini ditulis,
+> registry itu belum ada sama sekali). Ini adalah **peta target** hasil penerapan pohon keputusan §3 pada
 > rencana sprint doc 11, ditulis lebih awal agar admission tiap modul sudah
 > jelas kategorinya **sebelum** scaffold pertama dimulai — bukan retrospektif
 > seperti di awcms-mini yang menganalisis registry yang sudah berjalan.

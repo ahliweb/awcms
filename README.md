@@ -8,7 +8,7 @@
 
 > **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY**, developed from the awcms-mini technical base. Its operating mode is **hybrid online + offline with an online-first priority** (online is the primary path; offline/LAN is the resilience mode), and it is **ERP-ready and built for integrated SaaS**. It is the family's **superset** template: it absorbs the full website/e-commerce module cluster, UI/UX, and auth hardening of `awcms-micro` on top of the awcms-mini foundation and ERP scope ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), refining [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). By contrast, `awcms-mini` stays hybrid **offline-first** (SaaS-ready) and `awcms-micro` stays the lean **full-online website-only** template. The base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); domain modules — ERP and website/content alike — are added **directly in `src/modules/`**, not a separate derived repo. Absorption map: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Eighteen modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state) — thirteen foundation modules plus five website/content modules absorbed from awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`) — as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
+> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Twenty modules are already live (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state) — thirteen foundation modules plus seven website/content modules absorbed from awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`) — as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
 
 ## Table of contents
 
@@ -204,7 +204,7 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 
 ## Versioning
 
-**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `6.0.0`.
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `6.1.0`.
 
 **Version numbering policy (important, read before comparing versions):**
 

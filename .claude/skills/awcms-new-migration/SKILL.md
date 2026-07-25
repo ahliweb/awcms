@@ -41,15 +41,27 @@ TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
     menganggapnya tabel tenant-scoped tanpa RLS dan **memblokir go-live**.
     (`ALLOWED_GLOBAL_TABLE_GRANTS` **tidak ada** di script ini — itu masih
     milik awcms-mini; jangan cari/daftarkan ke sana.)
-12. **JANGAN tulis blok `GRANT` per tabel.** Role `awcms_app` ada sejak
-    `sql/019_awcms_db_role_separation.sql` (Issue #141), dan 019 memasang
-    `ALTER DEFAULT PRIVILEGES` sehingga tabel/sequence baru yang dibuat
+12. **JANGAN tulis blok `GRANT ... TO awcms_app` per tabel.** Role `awcms_app`
+    ada sejak `sql/019_awcms_db_role_separation.sql` (Issue #141), dan 019
+    memasang `ALTER DEFAULT PRIVILEGES` sehingga tabel/sequence baru yang dibuat
     pemilik migration **otomatis** ter-grant ke `awcms_app` — GRANT manual
     murni derau. Yang TIDAK otomatis: `FUNCTION` (lihat §SECURITY DEFINER)
-    dan objek yang dibuat role LAIN. Role **`awcms_worker`/`awcms_setup`
-    tidak ada** — `GRANT ... TO awcms_worker` yang disalin dari mini akan
-    gagal jalan. Baca header `sql/019`: ia sengaja bukan port penuh
-    pemisahan app/worker mini.
+    dan objek yang dibuat role LAIN.
+13. **`awcms_worker`/`awcms_setup` ADA — dan grant-nya WAJIB eksplisit.**
+    KOREKSI 2026-07-25: versi skill ini sebelumnya menyatakan kedua role itu
+    tidak ada; itu **SALAH** sejak `sql/022_awcms_db_worker_setup_roles.sql`.
+    Keduanya sengaja **tidak** ikut `ALTER DEFAULT PRIVILEGES` — itulah inti
+    least-privilege-nya. Jadi bila tabel barumu dibaca/ditulis job terjadwal:
+    - tulis `GRANT <verb...> ON <tabel> TO awcms_worker;` seminimal mungkin
+      (hanya verb yang benar-benar dipakai job — mis. retensi yang
+      meng-anonimkan cukup `SELECT, UPDATE`, tanpa `DELETE`/`INSERT`);
+    - tambahkan entri **identik** ke `WORKER_ROLE_GRANTS` di
+      `scripts/security-readiness.ts`, plus komentar alasan tiap verb.
+
+    Matriks itu dijaga drift test dua-arah: under-grant → job kena
+    `permission denied` di produksi; over-grant → isolasi yang jadi alasan
+    split-role itu bohong. Lupa memperbaruinya membuat `bun run check` merah
+    (gagal keras, bukan senyap).
 
 ## Template
 

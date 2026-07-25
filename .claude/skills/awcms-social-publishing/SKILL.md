@@ -1,6 +1,6 @@
 ---
 name: awcms-social-publishing
-description: BACAAN SAJA — modul social_publishing BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `social-publishing`, tidak ada migration-nya di `sql/`; bergantung pada blog_content/news_portal yang juga belum di-port). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #643-#647). Gunakan saat menambah/mengubah account connector, publish rule/template, outbox job/attempt, approval, retry/backoff, dispatcher, atau provider adapter (Meta/LinkedIn/Telegram) untuk auto-posting berita ke platform sosial. Merangkum keputusan arsitektur yang sudah dibuat di Issue #643 (fondasi) supaya issue adapter lanjutan (#644-#646) dan issue dokumentasi (#647) tidak mengulang/kontradiksi.
+description: BACAAN SAJA — modul social_publishing BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `social-publishing`, tidak ada migration-nya di `sql/`). Dependensinya `blog_content`/`news_portal` SUDAH di-port (PR #214), jadi blocker fondasinya hilang — yang tersisa adalah port modul ini sendiri. Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #643-#647). Gunakan saat menambah/mengubah account connector, publish rule/template, outbox job/attempt, approval, retry/backoff, dispatcher, atau provider adapter (Meta/LinkedIn/Telegram) untuk auto-posting berita ke platform sosial. Merangkum keputusan arsitektur yang sudah dibuat di Issue #643 (fondasi) supaya issue adapter lanjutan (#644-#646) dan issue dokumentasi (#647) tidak mengulang/kontradiksi.
 ---
 
 # AWCMS — Social Publishing (auto-posting outbox foundation)
@@ -10,8 +10,10 @@ description: BACAAN SAJA — modul social_publishing BELUM di-port ke repo ini (
 > **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
 > `social_publishing` ada di **awcms-mini**, bukan di sini: `ls src/modules`
 > TIDAK memuat `social-publishing`, dan `sql/` tidak memuat migration-nya.
-> Ia juga **bergantung** pada `blog_content`/`news_portal` yang belum
-> di-port. Semua rujukan `src/modules/social-publishing/...`, tabel
+> Dependensinya `blog_content`/`news_portal` **sudah** di-port (PR #214,
+> `sql/035`–`sql/045`), jadi blocker fondasi sudah hilang dan hook publish
+> di `blog_content` sudah ada tapi **no-op** — menyalakannya adalah bagian
+> dari port ini. Semua rujukan `src/modules/social-publishing/...`, tabel
 > `awcms_social_*`, dan `sql/NNN` di bawah adalah artefak awcms-mini —
 > **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN`
 > memakai penomoran awcms-mini dan akan berubah saat di-port (melanjutkan

@@ -38,13 +38,13 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek      | Nilai (per commit ini)                                                                                       | Sumber kebenaran                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Versi      | **6.0.0** (rilis nyata pertama 2026-07-21, tag `v6.0.0`); 13 changeset MINOR/PATCH menunggu rilis berikutnya | `package.json`, `CHANGELOG.md`, tag `v*`  |
-| Modul base | **18** (lihat daftar di ARCHITECTURE.md)                                                                     | `src/modules/index.ts`                    |
-| Migrasi    | **61** (`sql/001`–`061`)                                                                                     | `ls sql/`                                 |
-| ADR        | **40** (`0000`–`0039`)                                                                                       | `docs/adr/README.id.md` (indeks ter-gate) |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI                                                                         | `openapi/`, `asyncapi/`                   |
+| Aspek      | Nilai (per commit ini)                                                                  | Sumber kebenaran                                      |
+| ---------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Versi      | **6.1.0** (tag `v6.1.0`, 2026-07-25); 4 changeset MINOR/PATCH menunggu rilis berikutnya | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Modul base | **20** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                |
+| Migrasi    | **65** ter-ship (`sql/001`–`065`); `066`–`067` in-flight di branch `feat/port-comments` | `ls sql/`                                             |
+| ADR        | **41** (`0000`–`0040`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -57,11 +57,17 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > job pause di "Waiting for review" sebelum sign/attest/publish (lihat
 > [`release-process.md`](awcms/release-process.md) §Environment approval).
 
-Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
+Modul (20): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 `module-management`, `sync-storage`, `workflow-approval`, `reporting`, `email`,
 `domain-event-runtime`, `theming`, `blog-content`, `news-portal`, **`tenant-domain`**,
-**`visitor-analytics`**, **`media-library`**, **`data-lifecycle`**, **`seo-distribution`**.
-(Lima terakhir = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.)
+**`visitor-analytics`**, **`media-library`**, **`data-lifecycle`**, **`seo-distribution`**,
+**`form-drafts`**, **`site-search`**.
+(Tujuh terakhir = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.)
+
+> **Sedang berjalan:** port `comments` (branch `feat/port-comments`) sudah
+> mendaratkan seam `commentableResources` (`MODULE_CONTRACT_VERSION` 2.2.0 →
+> **2.3.0**), `sql/066`–`067`, dan spine sanitasi. Modulnya **belum terdaftar**
+> di `src/modules/index.ts` — angka 20 di atas benar sampai port itu selesai.
 
 > Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
 > [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
@@ -88,6 +94,19 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 - **UI/UX overhaul** (PR #215) — login + 8 layar admin + blog publik: mobile-first,
   animasi CSS-only, a11y AA, auto tenant picker di `/login` (sembunyi saat 1 tenant).
   Presentasi-only; jaminan CSP single-owner "zero third-party origin" dipertahankan.
+- **Paritas admin shell dengan awcms-micro** (PR #229) — `.admin-shell` + topbar sticky,
+  badge tenant, sidebar dua-level (section → modul pemilik → link) + footer versi,
+  breadcrumb, dashboard KPI/detail/module-usage, dan **toggle tema terang/gelap yang
+  benar-benar berfungsi**. Token `:root[data-theme="dark"]` sudah ada sebelumnya tanpa
+  apa pun yang menyetel atribut; toggle butuh script head yang jalan sebelum paint,
+  sehingga `script-src` kini **selalu** dipancarkan berisi `'self'` + **SHA-256 satu
+  script inline itu** (hash, BUKAN `'unsafe-inline'` — hanya satu urutan byte persis yang
+  diizinkan). `tests/theme-init-script.test.ts` merah bila body script dan hash melenceng;
+  tanpa gate itu, ketidakcocokan hash gagal senyap (script diblokir, tanpa error/log).
+  DI-DROP karena capability pendukungnya belum ada: LanguageSwitcher (belum ada katalog
+  i18n), SyncIndicator, link profil (`/admin/profile` belum ada), penataan sidebar
+  per-tenant. Drawer JS micro **ditolak**: drawer checkbox CSS-only awcms tak butuh script
+  sama sekali — lebih baik di bawah CSP ini.
 - **Kontrak OpenAPI modular** per-modul + bundler deterministik (ADR-0026), **family
   compatibility manifest + CI conformance** (ADR-0032).
 - **Penyerapan awcms-micro — Wave 0/1 (2026-07-24/25, PR #218–#231, `sql/046`–`sql/065`).**
@@ -122,13 +141,18 @@ Modul (18): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
   atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari
-  `sql/065`), lulus `bun run check`. Progres:
-  - **Wave 0 — SUDAH:** `tenant-domain` (#219). **BELUM:** pustaka `src/components/ui/`
-    (seam kontribusi descriptor `dataLifecycle`/`seo_facts` sudah mendarat sepanjang Wave 1).
+  `sql/067`), lulus `bun run check`. Progres:
+  - **Wave 0 — SUDAH:** `tenant-domain` (#219), paritas admin shell/chrome (#229).
+    **BELUM:** pustaka komponen `src/components/ui/` + paritas design-token (#229 menyentuh
+    shell admin, bukan pustaka komponen reusable). Seam kontribusi descriptor
+    (`dataLifecycle`, capability `seo_facts`, `searchSources`, `commentableResources`) sudah
+    mendarat sepanjang Wave 1; `newsletterContentSources` belum.
   - **Wave 1 — SUDAH:** `visitor-analytics` (#220), `media-library` (#221, inversi ADR-0036),
     `data-lifecycle` (#222, ADR-0037), `seo-distribution` (#223/#224, ADR-0038/0039 — discovery
     **dan** redirect governance, LENGKAP), `form-drafts` (#230), `site-search` (#231, ADR-0040).
-    **BELUM:** `comments`, `newsletter`, `social-publishing` (mengaktifkan hook publish yang
+    **SEDANG BERJALAN:** `comments` (branch `feat/port-comments` — seam
+    `commentableResources` + `sql/066`–`067` + spine sanitasi sudah, modul belum terdaftar).
+    **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
   - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,
     sidebar menu per-tenant).

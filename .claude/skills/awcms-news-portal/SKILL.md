@@ -37,9 +37,12 @@ description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/
 >   detail, kategori, tag, search, feed, sitemap) beserta helper render-nya
 >   (`homepage-section-composer`, `homepage-section-rendering`, `news-share-config`).
 >   Butuh `lib/tenant/public-host-tenant-resolver.ts` + env `PUBLIC_TENANT_RESOLUTION_MODE`
->   dari modul **`tenant_domain` yang belum di-port**. Jangan bangun/rujuk
->   `/news/**` sebagai ada. (Rute publik yang ADA = `/blog/{tenantCode}` milik
->   `blog_content`, path-based ADR-0009.)
+>   dari modul `tenant_domain`. **UPDATE 2026-07-25: `tenant_domain` SUDAH
+>   di-port (#219, `sql/046`–`048`)**, jadi blocker fondasinya hilang — tapi
+>   rute `/news/**` itu sendiri **tetap belum diadopsi**. Jangan bangun/rujuk
+>   `/news/**` sebagai ada; mengadopsinya sekarang adalah pekerjaan tersendiri,
+>   bukan konsekuensi otomatis dari `tenant_domain`. (Rute publik yang ADA =
+>   `/blog/{tenantCode}` milik `blog_content`, path-based ADR-0009.)
 > - **DI-DROP**: aktivasi preset `news_portal_full_online_r2`
 >   (`apply-news-portal-preset.ts`) — butuh preset subsystem `module_management`
 >   yang belum di-port. Tabel `awcms_news_portal_tenant_state` + reader
