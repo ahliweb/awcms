@@ -95,20 +95,58 @@ Staging sebaiknya **tidak** memakai provider `cloudflare` (biarkan `manual`):
 dua environment yang menulis ke zona yang sama akan saling menimpa record
 serving milik hostname yang sama.
 
-## Cache tepi (ADR-0042)
+## Cache tepi (ADR-0042) — AKTIF di staging
 
 Staging adalah tempat yang benar untuk membuktikan lapisan Varnish sebelum
-produksi:
+produksi, dan pembuktian itu terbayar: mengaktifkannya membongkar tiga bug yang
+lolos review dan `bun run check`, satu di antaranya mematikan jalur tulis blog.
+Lihat [`edge-cache-architecture.md`](edge-cache-architecture.md) §Pelajaran.
 
-```bash
-EDGE_CACHE_MODE=auto
-EDGE_CACHE_PURGE_ENDPOINT=http://varnish:80
-EDGE_CACHE_PURGE_TOKEN=<secret per environment>
+Topologi staging sejak 2026-07-26:
+
+```
+Cloudflare (proxied) -> Traefik :443 -> varnish:80 -> app 10.0.1.61:4321
 ```
 
-Token purge **berbeda per environment**. Jadwalkan `bun run edge-cache:purge`;
-tanpa itu suntingan editor baru terlihat setelah TTL habis. Rinci di
-[`edge-cache-architecture.md`](edge-cache-architecture.md).
+Varnish **bukan** resource Coolify. Ia container compose biasa
+(`/home/admin1/awcms-varnish/`) di network `coolify`, memegang label Traefik
+untuk `awcms-staging.ahlikoding.com`; FQDN app dikosongkan supaya Traefik tidak
+merutekan dua router ke host yang sama. `default.vcl` disalin apa adanya dari
+`infra/varnish/default.vcl` (checksum dicocokkan) supaya berkas yang di-review
+adalah berkas yang berjalan. Backend `app` disuplai `extra_hosts` — bukan DNS
+compose — karena app adalah application Coolify, bukan service compose.
+
+Env aplikasi:
+
+```bash
+EDGE_CACHE_MODE=on          # `auto` hanya meng-cache saat origin tertekan;
+                            # `on` untuk membuktikan lapisannya
+EDGE_CACHE_PURGE_ENDPOINT=http://awcms-staging-varnish:80
+EDGE_CACHE_PURGE_TOKEN=<secret per environment>
+EDGE_CACHE_MAX_TTL_SECONDS=300
+```
+
+Token purge **berbeda per environment**. Worker purge berjalan tiap menit dari
+cron host sebagai container one-shot — `Dockerfile.production` tidak mengirim
+`scripts/`, jadi ia tidak bisa dijalankan lewat `docker exec` pada container app
+(masalah dan pola yang sama dengan migrasi di atas):
+
+```
+* * * * * /home/admin1/awcms-varnish/purge-runner.sh
+```
+
+### Uji penerimaan — `X-Cache`, bukan exit code
+
+Setiap bug di lapisan ini melapor sukses sambil tidak bekerja. Yang sah hanya:
+
+| langkah                           | harus             |
+| --------------------------------- | ----------------- |
+| dua kali GET `/blog/<tenant>`     | `X-Cache: HIT`    |
+| GET `/api/v1/health` dua kali     | tetap `MISS`      |
+| purge key **near-miss** `t:<id>x` | tetap `HIT`       |
+| purge key **tepat** `t:<id>`      | `MISS`            |
+| permintaan berikutnya             | `HIT` lagi        |
+| baris antrean                     | `done attempts=1` |
 
 ## Status nyata (2026-07-25)
 
@@ -216,6 +254,8 @@ policy yang menyaring dan policy yang inert.
 
 ## Yang masih terbuka
 
-- Varnish belum dipasang di depan staging; `EDGE_CACHE_MODE=off` sampai itu ada.
+- Varnish **belum** dipasang di depan produksi; `EDGE_CACHE_MODE` di sana masih
+  belum di-set (= `off`). Aktifkan hanya setelah `sql/070` diterapkan di
+  produksi — tanpa itu, menyalakan cache mematikan publish blog.
 - `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
   memang tidak pernah ada.

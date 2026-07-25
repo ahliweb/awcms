@@ -1,5 +1,306 @@
 # awcms
 
+## 6.2.0
+
+### Minor Changes
+
+- e60409d: Bring the admin shell to structural parity with awcms-micro's admin pages.
+
+  **Admin shell (`src/layouts/AdminLayout.astro`)** — adopted from awcms-micro's `AdminLayout.astro`:
+
+  - `.admin-shell` column wrapper + sticky topbar. The layout row's hardcoded `min-height: calc(100vh - 57px)` (a measured topbar height) is replaced by `flex: 1`, so added topbar chrome can no longer desync it.
+  - **`TenantBadge`** (`src/components/TenantBadge.astro`) names the active tenant in the topbar. Rendered as a plain non-interactive badge, never a `<select disabled>` — awcms scopes an identity to exactly one tenant, so there is nothing to switch to, and a disabled control would advertise a capability with no server-side enforcement behind it. `availableTenants` is kept as the seam for a real, server-computed switcher later.
+  - **`ThemeToggle`** (`src/components/ThemeToggle.astro`) cycles system → light → dark, persists to `localStorage["awcms_theme"]`, and follows the OS while in system mode. awcms already shipped `:root[data-theme="dark"]` tokens with nothing to set the attribute — dark mode existed but was unreachable. This closes the dark-mode follow-up noted in PR #215.
+  - **`SyncIndicator`** (`src/components/SyncIndicator.astro`) — dot + label driven by the real `fetchSyncIndicatorActive`, a bounded `EXISTS` over `awcms_sync_nodes` rather than the full sync-health aggregation. It shares ONE transaction with the tenant-name lookup, so the whole topbar costs a single round trip per `/admin/*` render.
+  - **`LocaleBadge`** (`src/components/LocaleBadge.astro`) fills micro's `LanguageSwitcher` slot. awcms has no gettext catalog, so a `<select>` with one option would be a control that cannot do anything; the badge states the served language without pretending to offer a choice.
+  - **Avatar + roles + log-out cluster** in the topbar. The avatar is a plain tile, not a link — micro's points at `/admin/profile`, which awcms does not have.
+  - **Two-level sidebar** (section heading → owning module → links: General; Identity → Profile Identity / Identity & Access; System → Tenant Admin / Tenant Domain / Module Management / Email; Operations → Visitor Analytics) replacing one flat list, with the app version pinned to the footer. Grouping is presentation only — every route still runs its own ABAC guard, and a visible link grants nothing.
+  - **Breadcrumb** above the page slot.
+
+  **Dashboard (`src/pages/admin/index.astro`) — rebuilt, and not only cosmetically.** It previously rendered `Astro.locals.ssrContext` alone (tenant id, role count, permission count) plus quick links, with no database read at all — a page about your SESSION rather than your TENANT. It now renders the same four reports awcms-micro's dashboard does, every one of which already existed in this repo's `reporting` module and had simply never been surfaced in the UI:
+
+  - Accent-barred KPI tiles: active users, active offices, allow-decisions in the window, and active/total sync nodes with a "Needs attention" badge when sync is unhealthy.
+  - Detail cards for Tenant Activity, Access & Audit, and Sync Health, with alert styling on non-zero denies, open conflicts, and failed objects.
+  - A Module Usage table (18 rows against a fresh tenant).
+
+  Reads are gated on `reporting.dashboard.read`, so "you may not see this" stays distinguishable from "there is nothing here", and a report failure degrades to a notice rather than 500-ing the first page every admin lands on. The session cards remain below as the fallback view, preserving the `#admin-dashboard-heading` / `#dashboard-tenant-id` hooks asserted by `tests/e2e/admin-offices.e2e.ts`.
+
+  **CSP change — `script-src` is now unconditional.** The theme-init script must run synchronously in `<head>` or the shell flashes the wrong theme, which a deferred Astro-bundled module cannot do. It is therefore the one `is:inline` script in this repo, admitted by SHA-256 (`src/lib/security/theme-init-script.ts`), not by `'unsafe-inline'` — a hash authorises one exact byte sequence. `script-src 'self' '<hash>'` is now always emitted instead of appearing only for Turnstile; the LAN/offline guarantee that no third-party origin appears is unchanged. Verified in a real browser-shaped render, not just by `curl`: the bytes Astro emits hash to exactly the registered value (`tests/theme-init-script.test.ts` fails on drift, since a mismatch is otherwise silent — no error, no log, just a blocked script).
+
+  Deliberately NOT ported from awcms-micro, each because the backing capability does not exist here: `LanguageSwitcher` (no gettext catalog), `SyncIndicator` (would add a per-request reporting query), the profile icon (no `/admin/profile` route), the per-tenant sidebar-arrangement subsystem, and micro's JS drawer — awcms's CSS-only checkbox drawer is kept, since it needs no script at all and swapping it for JS would be a regression dressed as parity.
+
+  Verified against a real PostgreSQL: all 10 admin screens render 200 through the new shell, and the tenant badge resolves its name from the database with a shape-checked fallback (this repo's `withTenant` _returns_ a 503 `Response` on circuit-open rather than throwing, so a bare `rows[0]` would have silently produced `undefined`).
+
+- 952d616: Port the `comments` module from awcms-micro (ADR-0041) — moderation-first
+  commenting over published, public resources.
+
+  Registers the 21st base module. Content modules declare which of their resources
+  accept comments through the new `ModuleDescriptor.commentableResources`
+  descriptor list (`MODULE_CONTRACT_VERSION` 2.2.0 → 2.3.0, additive optional
+  field); `comments` discovers them via `listModules()` and depends only on Core,
+  so nothing depends on it and the DAG stays acyclic. `blog_content` contributes
+  the first descriptor.
+
+  Ships seven tables (`sql/066`, all ENABLE + FORCE RLS), eight permissions
+  (`sql/067`, reusing existing `AccessAction` literals — no union widening), ten
+  API routes, an SSR moderation queue at `/admin/comments`, three domain events, a
+  legal-hold-aware retention sweep (`bun run comments:retention`), and a registry
+  gate (`bun run comments:resources:check`).
+
+  Because this is an unauthenticated public write surface: bodies are stored as
+  plain text and escaped on render (no stored HTML, so no stored XSS); public
+  submit responses are uniform, so the endpoint cannot be used as an oracle for
+  blocked terms or unpublished content; author email, IP, and user-agent are only
+  ever stored hashed or masked; and notification recipients are encrypted under
+  their own key, with an unresolvable sentinel rather than plaintext when no key
+  is configured.
+
+  Three defects in the source were fixed rather than carried over: a
+  millisecond-rounded keyset cursor that skipped rows, `published_at` being
+  cleared on archive, and a worker INSERT grant justified by a retention event
+  that was never written.
+
+- 6308a84: Emit edge-cache invalidation from blog content changes (ADR-0042).
+
+  `enqueueEdgeCachePurge` previously had no callers, so a published edit stayed
+  visible at the edge until its TTL expired. The four blog write paths — create,
+  update, soft-delete, and scheduled publish — now enqueue a purge inside the same
+  transaction as the content change, so a rolled-back write leaves no stray purge
+  and a committed one cannot lose its invalidation.
+
+  Purges are module-scoped, not resource-scoped: cached responses carry
+  tenant/surface/module surrogate keys only, so a resource-scoped ban would match
+  no object and leave the page stale while reporting success.
+
+  No-op when `EDGE_CACHE_MODE` is off, so deployments that have not adopted the
+  edge cache do not accumulate queue rows.
+
+- 8a8e25c: Port the `form_drafts` module from awcms-micro (Issue #484) — row 1 of Gelombang 1 in `docs/awcms/absorb-awcms-micro-roadmap.md`. Net-new and additive: nothing existing changes behaviour, the module DAG stays acyclic (`dependencies: ["identity_access"]`), and nothing consumes it yet.
+
+  A generic, **domain-agnostic** server-side draft store for multi-step forms. One table holds an opaque JSONB payload plus the coordinates needed to resume it (`module_key`, `wizard_key`, `resource_type`, `resource_id`, `current_step`); what the payload MEANS stays owned by whichever module created it. `type: "system"` — shared platform mechanism, like `logging` and `data_lifecycle`.
+
+  - **Migrations `062` (schema) + `063` (permissions).** `awcms_form_drafts`, `ENABLE` + `FORCE ROW LEVEL SECURITY` + `tenant_isolation`, four indexes covering the resume/expire/purge/dry-run query paths. `awcms_worker` gets exactly SELECT/UPDATE/DELETE — no INSERT, since the purge job never creates a draft. Four permissions (`draft.{read,create,update,delete}`).
+  - **Endpoints** under `/api/v1/form-drafts` — list/create, get/patch/delete, and submit. Submit requires an `Idempotency-Key`; create deliberately does not, because a retried create costs one deletable scratch row while a retried submit hands the payload to a domain action twice. Requiring a key everywhere would just train callers to generate throwaway ones.
+  - **Payload safety.** 32 KB ceiling, and any key at any nesting depth resembling a secret (`password`/`token`/`secret`/`credential`/`apiKey`/`privateKey`) is **rejected outright, never silently redacted** — a caller who gets a 200 back must not have to wonder whether a field was stripped.
+  - **No `submit` permission.** Submit guards on `draft.update`; a separate action would widen the `AccessAction` union and plant a latent-authz trap, since an action nobody seeds into a role denies even the tenant owner while looking correct in review.
+  - **Two-phase retention** via `bun run form-drafts:purge`: expire overdue drafts to `status='expired'` (a transition, not a delete), then physically purge `expired`/`abandoned` rows past the cutoff (default 30d). Both bounded and self-auditing.
+  - **Legal-hold enforcement lives in this module, not in the engine.** The `data_lifecycle` descriptor is `delegated`: that engine only READS this table for backlog visibility and never mutates it, so a hold enforced only there would stop nothing. The real gate is in `purgeExpiredFormDrafts`, which asks the injected `LegalHoldGuardPort` before its DELETE and skips the batch when held. Phase 1 is deliberately ungated — it deletes nothing.
+
+  Verified: `tests/form-draft-validation.test.ts` (18) plus a new `tests/form-drafts-module.test.ts` (12) whose drift guards were **mutation-proven red** — renaming the lifecycle key, dropping `FORCE ROW LEVEL SECURITY`, and over-granting the worker each fail the suite. One assertion was rewritten after the first mutation run showed it was tautological (both sides read the same constant, so a rename kept it green); the descriptor key is now pinned as a literal, because a rename silently orphans every legal hold already recorded against the old key.
+
+  Not included, and not claimed: awcms-micro's wizard COMPONENT library (`src/components/ui/`) is a separate, still-open Gelombang-0 row, and there is no integration test against a real PostgreSQL for this module yet.
+
+- c2a981c: feat(site-search): port the `site_search` module from awcms-micro (ADR-0040)
+
+  Adds a tenant-scoped, cross-content PostgreSQL full-text search index over
+  PUBLISHED public website content, its public host-resolved query/suggest
+  surface, and its ABAC-guarded admin index/settings/diagnostics API.
+
+  - **New module `site_search`** (`type: domain`, depends only on
+    `tenant_admin`/`identity_access`) owning `awcms_site_search_documents` plus
+    tenant config, the index run ledger, failed-item diagnostics, and an opt-in
+    minimized query log (`sql/064`, `sql/065`).
+  - **New contribution seam** `ModuleDescriptor.searchSources` — content modules
+    declare reviewed, pure-data source descriptors in their own `module.ts` and
+    the aggregator discovers them through `listModules()`, so nothing depends on
+    `site_search`. `MODULE_CONTRACT_VERSION` 2.1.0 → 2.2.0 (additive: a
+    `module.ts` that omits `searchSources` stays valid). `blog_content`
+    contributes `blog_content.post`.
+  - **New public endpoints** `GET /api/v1/site-search/query` and `/suggest`
+    (anonymous, host-resolved, rate-limited) plus the public `/search` page, and
+    **new admin endpoints** `GET|PUT /api/v1/site-search/settings` and
+    `/api/v1/site-search/index/{status,reconcile,rebuild,failures}`.
+  - **New scheduled job** `bun run site-search:reconcile` and a new registry gate
+    `bun run site-search:sources:check` (added to the `check` chain).
+  - **New `AccessAction` member** `reconcile` (deliberately not high-risk; the
+    route is still idempotency-keyed and audited).
+
+  Public URLs are built with a server-resolved `:tenantCode` because this base's
+  public content routes are path-tenant-scoped (`/blog/{tenantCode}/{slug}`).
+  awcms-micro's inline typeahead script on `/search` is not ported: this base's
+  CSP forbids inline scripts and its public pages have no bundling step, so the
+  page ships the no-JS core search and `/suggest` stays available to a theme's own
+  client.
+
+  Existing tenants do not retroactively gain the six new permissions — like every
+  prior permission-seed migration, only tenants created after it runs get them via
+  setup initialization. Backfill `awcms_role_permissions` when deploying.
+
+- 476e6d1: Wire the Cloudflare DNS adapter so a database row becomes a working subdomain.
+
+  Adds `ensureServingRecord` to the `TenantDomainDnsProvider` port and a
+  reconciliation job (`bun run tenant-domain:dns:sync`) that brings the managed
+  Cloudflare zone into line with the active `domain_type = 'subdomain'` rows in
+  `awcms_tenant_domains`.
+
+  Reconciliation, not a create-time API call: it is idempotent, retries a failed
+  record on the next pass, and heals drift introduced by hand in the dashboard —
+  none of which a side effect inside the create request can do. Serving records
+  are desired-state, so a drifted record is moved with `PUT` rather than joined by
+  a second record that would round-robin the tenant between two targets.
+
+  Scope: platform subdomains only. Custom domains live in the tenant's own zone
+  and keep the manual/TXT verification flow. Nothing is ever deleted.
+
+  `sql/069` grants the worker `SELECT` (only) on `awcms_tenant_domains`. Unset
+  config is a no-op: there is deliberately no default serving target.
+
+- f4ee902: Add an optional Varnish edge-cache tier with origin-pressure auto-activation (ADR-0042).
+
+  Public, tenant-scoped, content-derived GET surfaces can now be answered by a
+  cache in front of the application instead of re-running the same database work
+  for every anonymous visitor. Off by default and a genuine no-op when off.
+
+  - `src/lib/edge-cache/` — fail-closed cacheability decision, surrogate-key
+    vocabulary, rolling-window pressure tracker, surface allow-list, header
+    application, durable purge queue, Varnish BAN client.
+  - `sql/068` — `awcms_edge_cache_purges` invalidation queue (ENABLE + FORCE RLS),
+    with matching `WORKER_ROLE_GRANTS` entries.
+  - `infra/varnish/` — default-deny VCL and a compose overlay.
+  - `bun run edge-cache:surfaces:check` — new registry gate in `bun run check`.
+  - `bun run edge-cache:purge` — scheduled invalidation worker.
+
+  Cacheability is an allow-list: an undeclared route is never cached. The
+  auto-activation ramp can only change how long something is cached, never whether
+  a private response becomes cacheable.
+
+### Patch Changes
+
+- bc7a883: Document the awcms-mini backbone absorption programme
+  (`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`).
+
+  Records an audit finding: five modules are admitted by **Accepted** ADRs in this
+  repository but have no code — `organization_structure` (ADR-0016),
+  `document_infrastructure` (ADR-0017), `data_exchange` (ADR-0018),
+  `integration_hub` (ADR-0019) and `reference_data` (ADR-0021). ADR-0020 (ERP
+  readiness contracts) is likewise Accepted with no `_shared` implementation. The
+  SaaS control-plane cluster is not admitted here at all and is gated behind a new
+  admission ADR.
+
+  Documentation only — no runtime change.
+
+- 4343f9e: Fix edge-cache invalidation, which had never worked.
+
+  The ban expression built by `infra/varnish/default.vcl` used `(^| )key( |$)` to
+  anchor a surrogate key to a whole token. Varnish parses a ban expression by
+  splitting it on **whitespace** into `<field> <operator> <argument>`, so the
+  literal spaces inside that regex produced the wrong token count and every ban
+  was rejected with `Wrong number of arguments`.
+
+  Nothing surfaced it. The VCL's BAN handler returns `200` regardless, so
+  `sendEdgeCachePurge` recorded success, the queue row was marked done, and the
+  object stayed cached until its TTL expired. The subsystem reported healthy
+  invalidation while performing none — the precise failure mode ADR-0042 exists to
+  prevent. It was found by putting Varnish in front of staging and watching
+  `X-Cache` stay `HIT` after a purge.
+
+  Both sides now emit `(^|[[:space:]])key([[:space:]]|$)`: same boundary semantics,
+  no literal space. Quoting the regex is not an alternative — the split happens
+  before quote handling (verified against Varnish 7.5).
+
+  Also corrects `infra/varnish/docker-compose.varnish.yml`, which named
+  `varnishcache/varnish:7.5`. No such Docker Hub repository exists, so adopting the
+  overlay failed with `pull access denied`. The image is `varnish:7.5`.
+
+  Guarded by two file-level assertions in `tests/edge-cache.test.ts`, because the
+  runtime expression is built in VCL rather than TypeScript and no unit test of the
+  origin can observe it.
+
+- 7e338da: Fix the edge-cache purge queue's tenant-isolation policy, which read a GUC the
+  application never sets — breaking every blog write when the cache was enabled.
+
+  `sql/068` created `awcms_edge_cache_purges_tenant_isolation` against
+  `current_setting('awcms.tenant_id', true)`. `withTenant()` sets
+  `app.current_tenant_id`, and so do the other 108 tenant policies in `sql/`.
+  `sql/068` was the only outlier.
+
+  The consequence was not a stale cache. `current_setting` returned NULL, so the
+  `WITH CHECK` predicate was NULL and every INSERT was rejected with
+  `new row violates row-level security policy`. `enqueueModuleContentPurge` is
+  awaited **inside** the content transaction (ADR-0042 §9 / ADR-0006) and is not
+  guarded, so that rejection aborted the publish: with `EDGE_CACHE_MODE` set to
+  `auto` or `on`, blog create, update, delete, and scheduled publish all returned 500. The `USING` side failed in the opposite, quieter direction — the purge
+  worker matched zero rows and reported `sent=0`, which reads exactly like an empty
+  queue.
+
+  It could not surface earlier. The subsystem defaults to `off`, where the enqueue
+  returns before touching the database, so no CI job, integration test, or
+  deployment had ever written to this table. It appeared on the first request after
+  the feature was switched on.
+
+  `sql/070` replaces the policy. `sql/068` is left untouched — it is applied in a
+  running deployment and rewriting it would change its checksum and block
+  `db:migrate`.
+
+  Adds `tests/migration-tenant-guc-consistency.test.ts`: a database-free gate that
+  scans every migration's executable SQL (comments stripped, so a repair migration
+  may name the wrong GUC while explaining itself) and fails on any
+  `current_setting` that is not `app.current_tenant_id`. It runs in the `quality`
+  job on every PR, which is where this class of typo needs to be caught — at
+  authoring time, not on the day a flag is enabled in production.
+
+- 7e338da: Fix the purge transport: Bun cannot send the `BAN` method, so no purge ever
+  reached Varnish.
+
+  `sendEdgeCachePurge` issued `fetch(endpoint, { method: "BAN" })`, the
+  conventional Varnish idiom. **Bun does not transmit non-standard HTTP methods.**
+  Both `fetch` and `node:http` deliver that request as `GET` — confirmed against
+  Bun 1.3.14 with `varnishlog -i ReqMethod`, where the same request written
+  byte-for-byte over a raw socket logs `BAN` and answers `200 Banned`.
+
+  Every purge therefore fell past the VCL's ban branch to the origin, which 404s an
+  unrouted path. On a Bun-only runtime (ADR-0002) no configuration makes the `BAN`
+  method work.
+
+  The wire protocol is now `POST /__edge-cache-purge`. The security model is
+  unchanged — the method was never a control; the purge ACL, the shared token, and
+  the key-charset re-validation at the edge all still apply, to both entry points.
+  The VCL continues to accept a real `BAN`, so `curl -X BAN` remains available for
+  operator debugging.
+
+  Adds `tests/edge-cache-purge-client.test.ts`, the first tests this client has had.
+  They run against a real `Bun.serve` and assert `request.method` **as received**,
+  because that is the only formulation that can fail for the reason this failed: an
+  injected `fetchImpl` observes the argument, not the wire, and would have asserted
+  `method === "BAN"` and passed forever.
+
+- f2b96da: Pin the two deployed environments to their domains: `awcms.ahlikoding.com`
+  (production) and `awcms-staging.ahlikoding.com` (staging).
+
+  Adds `docs/awcms/environments.md` (domains, per-environment `APP_ENV`/`APP_URL`,
+  staging isolation rules, DNS, edge-cache settings) and references it from
+  `.env.example` and `deploy-coolify.md`, which previously used only generic
+  placeholders.
+
+  `APP_URL` is called out specifically because it builds the OIDC/SSO callback URL
+  — a wrong host breaks login rather than just looking wrong.
+
+  Documentation and example configuration only; no runtime change.
+
+- 78a530b: docs(site-search): correct the CSP rationale on the `/search` page renderer
+
+  PR #229 landed between the site_search port and this change: `script-src` is now
+  always emitted, carrying `'self'` plus the SHA-256 of the admin theme-init
+  script. The renderer's comment still described the policy as `default-src 'self'`
+  and implied inline scripts are categorically impossible.
+
+  The no-`'unsafe-inline'` guarantee is unchanged, and the page's behaviour is
+  unchanged — but a reader would now find a sanctioned hashed-inline script in the
+  tree and conclude the comment was simply out of date. It names that pattern
+  explicitly and states the reason it does not apply here: this route is a plain
+  APIRoute with no build step to compute or keep such a hash in sync.
+
+- f6d0353: Record the real state of the deployed environments: staging is live at
+  `awcms-staging.ahlikoding.com` (own Coolify app and database, R2/email/sync off),
+  production DNS and app already existed, and `awcms-micro-staging` has been
+  removed.
+
+  Also documents why `db:migrate` cannot run via `docker exec` on the production
+  image — it is runtime-only and does not ship `scripts/` — and gives the one-shot
+  container command instead. Staging has no schema until that is run.
+
+  Documentation only.
+
 ## 6.1.0
 
 ### Minor Changes
