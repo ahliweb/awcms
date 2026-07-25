@@ -18,6 +18,7 @@ import { visitorAnalyticsModule } from "./visitor-analytics/module";
 import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
 import { formDraftsModule } from "./form-drafts/module";
+import { siteSearchModule } from "./site-search/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -106,7 +107,18 @@ const baseModules: ModuleDescriptor[] = [
   // `purgeExpiredFormDrafts`. The awcms-micro wizard COMPONENT library is a
   // separate, still-open Gelombang-0 row and is not part of this port. See
   // src/modules/form-drafts/module.ts's `description`.
-  formDraftsModule
+  formDraftsModule,
+  // Ported from awcms-micro (Issue #270, ADR-0040), Gelombang-1 of
+  // docs/awcms/absorb-awcms-micro-roadmap.md: the tenant-scoped, cross-content
+  // PostgreSQL full-text search index + public query/suggest surface + admin
+  // index/settings/diagnostics API. Depends only on tenant_admin/identity_access
+  // (both above), so the DAG stays acyclic, and no existing module depends on
+  // it: content modules CONTRIBUTE reviewed, pure-data `searchSources`
+  // descriptors (blog_content declares `blog_content.post`) that this module's
+  // generic engine reads through `listModules()` — a descriptor-list seam, not a
+  // capability `provides`, precisely because many providers are expected. See
+  // src/modules/site-search/module.ts's `description`.
+  siteSearchModule
 ];
 
 /**

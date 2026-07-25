@@ -4527,6 +4527,195 @@ High-risk: hands the payload to a domain action, so an Idempotency-Key is requir
 | 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
 
+## Site Search
+
+Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns.
+
+### `GET /api/v1/site-search/index/failures` — Read the search index failed-item diagnostics
+
+- **operationId**: `siteSearchIndexFailures`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.diagnostics.read`. Returns up to 100 unresolved failed items (aggregated per source/resource/locale) with a SANITIZED error class and detail — never a raw stack trace. Each reconcile clears its own source's prior failures, so this reflects the latest run.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Failed-item diagnostics.    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/site-search/index/rebuild` — Force a full search index rebuild
+
+- **operationId**: `siteSearchIndexRebuild`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.index.rebuild` — a HIGH-RISK action: it deletes every one of the tenant's index documents for the registered sources and re-extracts them. Idempotent (the end state is identical regardless of prior state), Idempotency-Key'd, and audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Rebuild run summary.                                       | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/site-search/index/reconcile` — Run an idempotent search index reconciliation
+
+- **operationId**: `siteSearchIndexReconcile`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.index.reconcile`. Upserts the tenant's currently public documents (skipping any whose checksum already matches) and deletes index documents whose source row is gone or no longer public, so an archive/delete/unpublish never leaves a stale public result. Running it while already in sync is a no-op. Deliberately NOT classified high-risk (a fully regenerable projection sync), but still Idempotency-Key'd and audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Reconcile run summary.                                     | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/site-search/index/status` — Read this tenant's search index status, freshness, and recent runs
+
+- **operationId**: `siteSearchIndexStatus`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.index.read`. Bounded: document counts by resource type, the most recent index run, the open failed-item count, and the 10 most recent runs.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | Index status and recent runs. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/site-search/query` — Public full-text search over this site's published content (anonymous)
+
+- **operationId**: `siteSearchQuery`
+- **Security**: none (public endpoint)
+
+PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error.
+
+**Parameters**
+
+| Name     | In    | Required | Type   | Description                                                                                                                         |
+| -------- | ----- | -------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `q`      | query | no       | string | Raw search text. Trimmed, whitespace-collapsed, and bounded before use.                                                             |
+| `type`   | query | no       | string | Restrict results to one resource type. Honored only when the tenant's `enabledResourceTypes` admits it; otherwise silently ignored. |
+| `locale` | query | no       | string | BCP-47-ish content locale. Malformed values fall back to the tenant default.                                                        |
+| `cursor` | query | no       | string | Opaque keyset cursor from a previous response's `nextCursor`.                                                                       |
+
+**Responses**
+
+| Status | Description                                | Schema                                 |
+| ------ | ------------------------------------------ | -------------------------------------- |
+| 200    | Search results (possibly empty).           | object                                 |
+| 429    | Too many search requests from this source. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/site-search/settings` — Read this tenant's search configuration
+
+- **operationId**: `siteSearchSettingsRead`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.settings.read`. Returns the module defaults when the tenant has never written a config row. Tenant-scoped (withTenant + RLS FORCE).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                  | Schema                                 |
+| ------ | ---------------------------- | -------------------------------------- |
+| 200    | Tenant search configuration. | object                                 |
+| 400    | Validation error.            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.  | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/site-search/settings` — Replace this tenant's search configuration
+
+- **operationId**: `siteSearchSettingsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by `site_search.settings.update`. Changes what the PUBLIC search surface returns (including the tenant-wide search on/off switch and the opt-in query-analytics switch), so it requires an Idempotency-Key and is audited. Merge semantics: omitted fields keep their current value; unknown keys are ignored.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`SiteSearchSettingsUpdateRequest`](#schema-sitesearchsettingsupdaterequest)
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Saved tenant search configuration.                         | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeded the endpoint's size ceiling.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/site-search/suggest` — Public bounded title typeahead (anonymous)
+
+- **operationId**: `siteSearchSuggest`
+- **Security**: none (public endpoint)
+
+PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale scoped. Same host-based tenant resolution, per-IP rate limit, query bounds and neutral empty payload as the search endpoint. Returns at most the tenant's configured `suggestionLimit`; returns an empty list when the tenant has suggestions turned off.
+
+**Parameters**
+
+| Name     | In    | Required | Type   | Description |
+| -------- | ----- | -------- | ------ | ----------- |
+| `q`      | query | no       | string |             |
+| `locale` | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | Title suggestions (possibly empty).            | object                                 |
+| 429    | Too many suggestion requests from this source. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -4972,6 +5161,34 @@ Update the mutable fields (source path is immutable — supplied only at create)
   "effectiveUntil": "2026-01-01T00:00:00.000Z",
   "preserveQuery": false,
   "reason": "string"
+}
+```
+
+### Schema: SiteSearchSettingsUpdateRequest
+
+Every field is optional — an omitted field keeps its current value.
+
+| Field                  | Type            | Required | Nullable | Description |
+| ---------------------- | --------------- | -------- | -------- | ----------- |
+| `enabled`              | boolean         | no       | no       |             |
+| `enabledResourceTypes` | array of string | no       | yes      |             |
+| `resultLimit`          | integer         | no       | no       |             |
+| `minQueryLength`       | integer         | no       | no       |             |
+| `suggestionsEnabled`   | boolean         | no       | no       |             |
+| `suggestionLimit`      | integer         | no       | no       |             |
+| `analyticsEnabled`     | boolean         | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "enabled": false,
+  "enabledResourceTypes": ["string"],
+  "resultLimit": 1,
+  "minQueryLength": 1,
+  "suggestionsEnabled": false,
+  "suggestionLimit": 1,
+  "analyticsEnabled": false
 }
 ```
 

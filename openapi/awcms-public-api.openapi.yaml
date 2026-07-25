@@ -55,6 +55,8 @@ tags:
     description: Tenant SEO defaults for the central metadata renderer + public discovery/syndication surfaces (seo_distribution module, ADR-0038 discovery scope) — read/update site identity, default social/Organization images, Twitter handle, the tenant-wide noindex switch, and feed/sitemap config. The public robots.txt/sitemap/feed routes themselves are unauthenticated Astro XML/text routes (not part of this OpenAPI contract), host-resolved and cache-validated. config.update is high-risk (rewrites the public metadata/indexability surface), idempotency-keyed, and audited.
   - name: Form Drafts
     description: Generic, domain-agnostic server-side draft store for multi-step forms (form_drafts module) — tenant-scoped, RLS-protected create/read/update/submit/delete of an opaque JSONB payload plus the wizard coordinates needed to resume it. The payload is size-bounded and rejected outright (never silently redacted) when any key at any nesting depth resembles a secret — password/token/secret/credential/apiKey/privateKey — so a caller can never mistake a stripped field for a saved one. What a payload MEANS is owned by the module that created it (moduleKey/wizardKey), never by this one. submit is high-risk (it hands the payload to a domain action), idempotency-keyed, and audited; create deliberately is not, since a retry costs one deletable scratch row.
+  - name: Site Search
+    description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
 paths:
   /api/v1/abac/policies:
     get:
@@ -10016,6 +10018,330 @@ paths:
                       lockedAt:
                         type: string
                         format: date-time
+  /api/v1/site-search/index/failures:
+    get:
+      operationId: siteSearchIndexFailures
+      tags:
+        - Site Search
+      summary: Read the search index failed-item diagnostics
+      description: Gated by `site_search.diagnostics.read`. Returns up to 100 unresolved failed items (aggregated per source/resource/locale) with a SANITIZED error class and detail — never a raw stack trace. Each reconcile clears its own source's prior failures, so this reflects the latest run.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Failed-item diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SiteSearchIndexFailure"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/site-search/index/rebuild:
+    post:
+      operationId: siteSearchIndexRebuild
+      tags:
+        - Site Search
+      summary: Force a full search index rebuild
+      description: "Gated by `site_search.index.rebuild` — a HIGH-RISK action: it deletes every one of the tenant's index documents for the registered sources and re-extracts them. Idempotent (the end state is identical regardless of prior state), Idempotency-Key'd, and audited."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Rebuild run summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchIndexRunResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-search/index/reconcile:
+    post:
+      operationId: siteSearchIndexReconcile
+      tags:
+        - Site Search
+      summary: Run an idempotent search index reconciliation
+      description: Gated by `site_search.index.reconcile`. Upserts the tenant's currently public documents (skipping any whose checksum already matches) and deletes index documents whose source row is gone or no longer public, so an archive/delete/unpublish never leaves a stale public result. Running it while already in sync is a no-op. Deliberately NOT classified high-risk (a fully regenerable projection sync), but still Idempotency-Key'd and audited.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Reconcile run summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchIndexRunResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-search/index/status:
+    get:
+      operationId: siteSearchIndexStatus
+      tags:
+        - Site Search
+      summary: Read this tenant's search index status, freshness, and recent runs
+      description: "Gated by `site_search.index.read`. Bounded: document counts by resource type, the most recent index run, the open failed-item count, and the 10 most recent runs."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Index status and recent runs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        $ref: "#/components/schemas/SiteSearchIndexStatus"
+                      recentRuns:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SiteSearchIndexRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/site-search/query:
+    get:
+      operationId: siteSearchQuery
+      tags:
+        - Site Search
+      security: []
+      summary: Public full-text search over this site's published content (anonymous)
+      description: PUBLIC, unauthenticated cross-content search. The tenant is resolved from the request host (never a session or a tenant header); results come from the tenant's search index, which contains PUBLISHED PUBLIC content only and is never an authorization source. The query text is always a bound parameter into `websearch_to_tsquery`, snippets are HTML-escaped before the `<mark>` highlights are inserted, and the endpoint is per-IP rate-limited, query-length-bounded (max 128 characters) and result-capped. An unresolved host, a disabled module, a search-disabled tenant, and a too-short query all return the SAME neutral empty payload — never a distinguishing error.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Raw search text. Trimmed, whitespace-collapsed, and bounded before use.
+          schema:
+            type: string
+            maxLength: 128
+        - name: type
+          in: query
+          required: false
+          description: Restrict results to one resource type. Honored only when the tenant's `enabledResourceTypes` admits it; otherwise silently ignored.
+          schema:
+            type: string
+        - name: locale
+          in: query
+          required: false
+          description: BCP-47-ish content locale. Malformed values fall back to the tenant default.
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset cursor from a previous response's `nextCursor`.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchQueryResult"
+        "429":
+          description: Too many search requests from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-search/settings:
+    get:
+      operationId: siteSearchSettingsRead
+      tags:
+        - Site Search
+      summary: Read this tenant's search configuration
+      description: Gated by `site_search.settings.read`. Returns the module defaults when the tenant has never written a config row. Tenant-scoped (withTenant + RLS FORCE).
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Tenant search configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: siteSearchSettingsUpdate
+      tags:
+        - Site Search
+      summary: Replace this tenant's search configuration
+      description: "Gated by `site_search.settings.update`. Changes what the PUBLIC search surface returns (including the tenant-wide search on/off switch and the opt-in query-analytics switch), so it requires an Idempotency-Key and is audited. Merge semantics: omitted fields keep their current value; unknown keys are ignored."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteSearchSettingsUpdateRequest"
+      responses:
+        "200":
+          description: Saved tenant search configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body exceeded the endpoint's size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/site-search/suggest:
+    get:
+      operationId: siteSearchSuggest
+      tags:
+        - Site Search
+      security: []
+      summary: Public bounded title typeahead (anonymous)
+      description: PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale scoped. Same host-based tenant resolution, per-IP rate limit, query bounds and neutral empty payload as the search endpoint. Returns at most the tenant's configured `suggestionLimit`; returns an empty list when the tenant has suggestions turned off.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: locale
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Title suggestions (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SiteSearchSuggestResult"
+        "429":
+          description: Too many suggestion requests from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/sync/conflicts:
     get:
       operationId: syncListConflicts
@@ -14974,6 +15300,349 @@ components:
           type: boolean
         feedsEnabled:
           type: boolean
+    SiteSearchIndexFailure:
+      type: object
+      properties:
+        sourceKey:
+          type: string
+        resourceId:
+          type: string
+        locale:
+          type: string
+        errorClass:
+          type: string
+        errorDetail:
+          type: string
+          nullable: true
+          description: Sanitized detail only.
+        occurrenceCount:
+          type: integer
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+      required:
+        - sourceKey
+        - resourceId
+        - locale
+        - errorClass
+        - errorDetail
+        - occurrenceCount
+        - firstSeenAt
+        - lastSeenAt
+    SiteSearchIndexRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        runType:
+          type: string
+          enum:
+            - rebuild
+            - reconcile
+            - reindex
+        status:
+          type: string
+          enum:
+            - running
+            - succeeded
+            - failed
+        trigger:
+          type: string
+          enum:
+            - manual
+            - scheduled
+        documentsIndexed:
+          type: integer
+        documentsUpdated:
+          type: integer
+        documentsRemoved:
+          type: integer
+        documentsUnchanged:
+          type: integer
+        sourcesProcessed:
+          type: integer
+        failureCount:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
+          description: Sanitized error summary only — never a raw stack trace.
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - runType
+        - status
+        - trigger
+        - documentsIndexed
+        - documentsUpdated
+        - documentsRemoved
+        - documentsUnchanged
+        - sourcesProcessed
+        - failureCount
+        - lastError
+        - startedAt
+        - finishedAt
+    SiteSearchIndexRunResult:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        runType:
+          type: string
+          enum:
+            - rebuild
+            - reconcile
+            - reindex
+        status:
+          type: string
+          enum:
+            - succeeded
+            - failed
+        totalIndexed:
+          type: integer
+        totalRemoved:
+          type: integer
+        failureCount:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchSourceResult"
+      required:
+        - runId
+        - runType
+        - status
+        - totalIndexed
+        - totalRemoved
+        - failureCount
+        - results
+    SiteSearchIndexStatus:
+      type: object
+      properties:
+        documentCount:
+          type: integer
+        byResourceType:
+          type: array
+          items:
+            type: object
+            properties:
+              resourceType:
+                type: string
+              count:
+                type: integer
+            required:
+              - resourceType
+              - count
+        latestIndexedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastRun:
+          oneOf:
+            - $ref: "#/components/schemas/SiteSearchIndexRun"
+            - type: "null"
+        openFailureCount:
+          type: integer
+      required:
+        - documentCount
+        - byResourceType
+        - latestIndexedAt
+        - lastRun
+        - openFailureCount
+    SiteSearchQueryResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchResultItem"
+        nextCursor:
+          type: string
+          nullable: true
+        query:
+          type: string
+          description: The NORMALIZED query actually executed (empty when nothing ran).
+        locale:
+          type: string
+        reason:
+          type: string
+          enum:
+            - empty
+            - too_short
+            - too_long
+          description: Present only when the submitted query was rejected by the input bounds.
+      required:
+        - items
+        - nextCursor
+        - query
+        - locale
+    SiteSearchResultItem:
+      type: object
+      description: One public search hit. `url` is a server-built absolute PATH, never a source-supplied URL.
+      properties:
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        snippet:
+          type: string
+          description: Pre-escaped safe HTML. The whole `ts_headline` output is HTML-escaped FIRST and only then are the non-HTML sentinels replaced with `<mark>`/`</mark>`, so the only markup this can ever contain is those two tags.
+        locale:
+          type: string
+        rank:
+          type: number
+      required:
+        - resourceType
+        - resourceId
+        - url
+        - title
+        - snippet
+        - locale
+        - rank
+    SiteSearchSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        enabledResourceTypes:
+          type: array
+          nullable: true
+          description: "`null` means every admitted resource type."
+          items:
+            type: string
+        resultLimit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        minQueryLength:
+          type: integer
+          minimum: 1
+          maximum: 20
+        suggestionsEnabled:
+          type: boolean
+        suggestionLimit:
+          type: integer
+          minimum: 1
+          maximum: 20
+        analyticsEnabled:
+          type: boolean
+          description: Opt-in, minimized query logging. Even when on, only a sha256 of the normalized query, its length, the locale and the result count are stored — never the raw query.
+      required:
+        - enabled
+        - enabledResourceTypes
+        - resultLimit
+        - minQueryLength
+        - suggestionsEnabled
+        - suggestionLimit
+        - analyticsEnabled
+    SiteSearchSettingsUpdateRequest:
+      type: object
+      description: Every field is optional — an omitted field keeps its current value.
+      properties:
+        enabled:
+          type: boolean
+        enabledResourceTypes:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 64
+        resultLimit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        minQueryLength:
+          type: integer
+          minimum: 1
+          maximum: 20
+        suggestionsEnabled:
+          type: boolean
+        suggestionLimit:
+          type: integer
+          minimum: 1
+          maximum: 20
+        analyticsEnabled:
+          type: boolean
+    SiteSearchSourceResult:
+      type: object
+      description: Per-source outcome of one reconcile/rebuild pass.
+      properties:
+        sourceKey:
+          type: string
+        resourceType:
+          type: string
+        sourceCount:
+          type: integer
+          description: Currently public source rows — the "reconciliation matches source counts" signal.
+        added:
+          type: integer
+        updated:
+          type: integer
+        unchanged:
+          type: integer
+        removed:
+          type: integer
+        failures:
+          type: integer
+      required:
+        - sourceKey
+        - resourceType
+        - sourceCount
+        - added
+        - updated
+        - unchanged
+        - removed
+        - failures
+    SiteSearchSuggestionItem:
+      type: object
+      properties:
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        locale:
+          type: string
+      required:
+        - resourceType
+        - resourceId
+        - url
+        - title
+        - locale
+    SiteSearchSuggestResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteSearchSuggestionItem"
+        query:
+          type: string
+        locale:
+          type: string
+      required:
+        - items
+        - query
+        - locale
     SoDConflictEvaluation:
       type: object
       description: One append-only segregation-of-duties conflict-check decision log entry (Issue

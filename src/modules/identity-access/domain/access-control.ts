@@ -101,7 +101,17 @@ export type AccessAction =
   // a data-protection safeguard that may let purge/archive resume against
   // previously-protected rows. (`read`/`create`/`analyze`/`purge` for
   // data_lifecycle reuse existing union members.)
-  | "release";
+  | "release"
+  // Site search (ported from awcms-micro Issue #270, ADR-0040): `reconcile`
+  // runs an idempotent index sweep (upsert the current public documents, remove
+  // stale ones). Deliberately NOT high-risk — it is a bounded, fully
+  // regenerable projection sync whose end state is the source of truth
+  // restated, unlike `rebuild` (already high-risk above) which DELETEs every
+  // document first. The reconcile route still requires `Idempotency-Key` and is
+  // audited regardless of this classification (`isHighRiskAction` is metadata,
+  // not a gate on idempotency/audit). (`read`/`update` for site_search reuse
+  // existing union members.)
+  | "reconcile";
 
 export type AccessRequest = {
   moduleKey: string;

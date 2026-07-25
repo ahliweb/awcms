@@ -164,6 +164,20 @@ export type ModuleDescriptor = {
    */
   dataLifecycle?: HighVolumeTableDescriptor[];
   /**
+   * Public search-source descriptors this module contributes to `site_search`
+   * (ported from awcms-micro Issue #270, ADR-0040) — see
+   * `SearchSourceDescriptor`'s own doc comment below. Same "module declares its
+   * own array, a central engine reads `listModules()`" shape `dataLifecycle`/
+   * `reportingProjections`/`sodRules` above already use: `site_search`'s
+   * `domain/search-source-registry.ts` aggregates + validates every module's
+   * array (`bun run site-search:sources:check`), and its generic extraction
+   * engine reads a source table using ONLY the column names + declarative
+   * publication filter the OWNING module declared here — never a cross-module
+   * TypeScript import and never a write into another module's tables
+   * (ADR-0013 §6).
+   */
+  searchSources?: SearchSourceDescriptor[];
+  /**
    * Segregation-of-duties conflict rules this module owns (Issue #181,
    * epic #177 Wave 2 authorization) — see `SoDRuleDescriptor`'s own doc
    * comment below. A module contributes ONE of these per GENERIC
@@ -325,6 +339,97 @@ export type SoDRuleDescriptor = {
   scopeApplicability: SoDRuleScopeApplicability;
   severity: SoDRuleSeverity;
   exceptionPolicy: SoDRuleExceptionPolicy;
+};
+
+/**
+ * A declarative, pure-data public search-source descriptor a content module
+ * contributes to `site_search` (ported from awcms-micro Issue #270, ADR-0040).
+ * Same "module declares its own descriptor array, a central engine reads
+ * `listModules()`" shape `dataLifecycle`/`reportingProjections`/`sodRules`
+ * already use — `site_search`'s `domain/search-source-registry.ts` is the
+ * aggregator/validator, mirroring `data-lifecycle/domain/lifecycle-registry.ts`.
+ *
+ * ## Why a descriptor-list, not a capability `provides` (ADR-0040 §3)
+ *
+ * Search wants MANY content modules to contribute sources. Modeling
+ * `search_source` as a capability `provides` would immediately trip
+ * `module-composition.ts`'s `capability_provider_conflict` (>1 declared provider
+ * of the same capability string). A descriptor-list riding `listModules()` lets
+ * a module contribute a reviewed source by declaring it in its own `module.ts`
+ * WITHOUT writing to `site_search`'s index tables.
+ *
+ * ## Pure DATA, not an executable extractor
+ *
+ * This descriptor carries NO function reference — only reviewed, code-only
+ * column/table NAMES and a declarative `publicationFilter`. `site_search`'s
+ * generic engine builds a PARAMETERIZED extraction query from it: literal filter
+ * VALUES are always bound parameters; only the IDENTIFIERS (table/column names)
+ * are interpolated, and they are re-validated with a strict identifier pattern
+ * immediately before interpolation — the exact discipline `data_lifecycle`'s
+ * `generic` executionMode uses. There is no place for a tenant to inject SQL.
+ *
+ * TRUSTED CODE-ONLY METADATA (same rule as every descriptor type here) —
+ * declared by the owning module's source, never tenant/request-controlled.
+ */
+export type SearchSourcePublicationFilter = {
+  /**
+   * Column = literal-value equality checks, e.g. `{ status: "published",
+   * visibility: "public" }`. The VALUES are bound parameters (never
+   * interpolated), the KEYS are validated identifiers. All must hold (AND).
+   */
+  equals?: Readonly<Record<string, string>>;
+  /** Columns that must be `IS NOT NULL` for a row to be public (e.g. `published_at`). */
+  notNullColumns?: readonly string[];
+  /** Columns that must be `IS NULL` for a row to be public — the soft-delete gate (e.g. `deleted_at`). */
+  nullColumns?: readonly string[];
+  /** Columns whose value must be `<= now()` for a row to be public — the schedule gate (e.g. `published_at`). */
+  timeReachedColumns?: readonly string[];
+};
+
+export type SearchSourceDescriptor = {
+  /** Stable, unique across the whole registry, `"<module_key>.<short>"` (e.g. `"blog_content.post"`). */
+  key: string;
+  /** Must equal the declaring module's own `key` — validated by the registry gate (`site-search/domain/search-source-registry.ts`), not the type system. */
+  ownerModuleKey: string;
+  /** Opaque content-type discriminator, e.g. `"blog_post"` / a domain module's `"product"`. Stored on each index document and used for admitted-type filtering; never interpreted structurally by `site_search`. */
+  resourceType: string;
+  /** Source table the generic engine reads (must start with `awcms_`). */
+  tableName: string;
+  /** Defaults to `"tenant_id"`. */
+  tenantColumn?: string;
+  /** Defaults to `"id"` — the resource primary key stored as the index document's `resource_id`. */
+  idColumn?: string;
+  /** Column carrying the BCP-47 locale of each row — every index document is locale-scoped. */
+  localeColumn: string;
+  /** Column carrying the row's last-modified `timestamptz` — the reconciliation staleness/`source_updated_at` signal. */
+  updatedAtColumn: string;
+  /** Column mapped to the index document's weighted `title` (tsvector weight A). */
+  titleColumn: string;
+  /** Column mapped to the index document's `summary` (tsvector weight B); `null`/omit when the source has none. */
+  summaryColumn?: string | null;
+  /** Columns concatenated into the index document's `body_text` (tsvector weight D + snippet source). */
+  bodyColumns: readonly string[];
+  /** `text[]` column mapped to the index document's `tags` (tsvector weight C); `null`/omit when the source has none. */
+  tagsColumn?: string | null;
+  /**
+   * Public URL template resolved at index time. Placeholders: `:slug` and `:id`
+   * (from `slugColumn`/`idColumn`) plus `:tenantCode` — an AWCMS-SPECIFIC
+   * addition over the awcms-micro original, because this base's public content
+   * routes are path-tenant-scoped (`/blog/{tenantCode}/{slug}`, ADR-0009) rather
+   * than host-resolved `/news/:slug`. `site_search`'s engine substitutes
+   * `:tenantCode` from `awcms_tenants.tenant_code` for the tenant being indexed;
+   * every substituted value is `encodeURIComponent`'d, so no source value can
+   * inject a path segment or a scheme.
+   */
+  urlTemplate: string;
+  /** Column supplying `:slug` in `urlTemplate`; `null`/omit when the template uses only `:id`. */
+  slugColumn?: string | null;
+  /** Declarative publication predicate enforced at the source→index boundary — the draft/private/deleted-leakage defense (ADR-0040 §5). */
+  publicationFilter: SearchSourcePublicationFilter;
+  /** Relevance multiplier applied to `ts_rank` at query time — lets a source rank above/below another (`0 < weight <= 10`). */
+  weight: number;
+  /** Privacy classification — ONLY `"public"` content is admitted to the index (never private/admin business data). */
+  privacyClassification: "public";
 };
 
 /**
@@ -490,8 +595,13 @@ export type HighVolumeTableDescriptor = {
  * Deletion,LegalHold}Policy`, `LifecycleIndexRequirement`,
  * `LifecycleExistingAdopter`) — MINOR: purely additive, every base `module.ts`
  * that omits `dataLifecycle` stays valid unchanged.
+ *
+ * `2.2.0` (ADR-0040, ported from awcms-micro Issue #270) — added the optional
+ * `ModuleDescriptor.searchSources` field plus the `SearchSourceDescriptor` /
+ * `SearchSourcePublicationFilter` exported types — MINOR: purely additive, every
+ * base `module.ts` that omits `searchSources` stays valid unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "2.1.0";
+export const MODULE_CONTRACT_VERSION = "2.2.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

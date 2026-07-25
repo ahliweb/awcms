@@ -1063,7 +1063,22 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // of expired/abandoned rows past the retention cutoff. NO INSERT — the
   // worker never creates a draft; only an authenticated caller on awcms_app
   // does. The purge's own audit INSERT reuses awcms_audit_events above.
-  awcms_form_drafts: ["SELECT", "UPDATE", "DELETE"]
+  awcms_form_drafts: ["SELECT", "UPDATE", "DELETE"],
+  // site_search — site-search:reconcile (sql/064, ADR-0040). The scheduled
+  // reconcile owns the index projection outright, so documents are
+  // SELECT/INSERT/UPDATE/DELETE (upsert the current public set, delete what
+  // went stale). Runs are SELECT/INSERT/UPDATE — the ledger is append-then-
+  // finalize and nothing prunes it from the worker. Failures add DELETE
+  // because each reconcile clears its source's prior failure rows before
+  // re-recording, and the generic data_lifecycle purge ages the rest out.
+  // The query log is SELECT + DELETE only: writing it is a public-path
+  // action on awcms_app; the worker only purges it. Settings are read-only
+  // (the reconcile never rewrites tenant config).
+  awcms_site_search_documents: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  awcms_site_search_index_runs: ["SELECT", "INSERT", "UPDATE"],
+  awcms_site_search_index_failures: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  awcms_site_search_query_log: ["SELECT", "DELETE"],
+  awcms_site_search_settings: ["SELECT"]
 };
 
 /**

@@ -451,6 +451,49 @@ export const METRIC_DEFINITIONS = {
     allowedLabelKeys: [],
     approxCardinality: "Exactly 1 — unlabeled.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  // site_search (ADR-0040, ported from awcms-micro Issue #270). Deliberately
+  // NO query/tenant/host label anywhere: the search TERM is user-supplied free
+  // text and would be both unbounded cardinality and a privacy leak — the
+  // opt-in, hashed query log is the only place a query is ever recorded.
+  site_search_queries_total: {
+    name: "site_search_queries_total",
+    type: "counter",
+    description:
+      "Count of public search/suggest requests by surface and outcome — the anonymous-abuse and empty-result signal for the public search endpoints.",
+    allowedLabelKeys: ["surface", "outcome"],
+    approxCardinality:
+      "At most 12 — 2 surfaces (search, suggest) x 6 code-defined outcomes (ok, empty, disabled, rate_limited, too_short, too_long).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  site_search_query_duration_ms: {
+    name: "site_search_query_duration_ms",
+    type: "histogram",
+    description:
+      "Wall-clock duration of a public search/suggest request, including tenant resolution — the latency signal for the FTS query path.",
+    allowedLabelKeys: ["surface"],
+    approxCardinality: "Exactly 2 — the search/suggest surfaces.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  site_search_index_operations_total: {
+    name: "site_search_index_operations_total",
+    type: "counter",
+    description:
+      "Count of search index operations by run type (rebuild, reconcile, reindex) and status — the indexing-health signal for the scheduled reconcile backbone.",
+    allowedLabelKeys: ["runType", "status"],
+    approxCardinality:
+      "At most 6 — 3 code-defined run types x 2 statuses (succeeded, failed).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  site_search_index_failures_total: {
+    name: "site_search_index_failures_total",
+    type: "counter",
+    description:
+      "Count of per-item search index failures by error class — the failed-item diagnostics counterpart of awcms_site_search_index_failures.",
+    allowedLabelKeys: ["errorClass"],
+    approxCardinality:
+      "Exactly 2 — the code-defined extract_error/upsert_error classes.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   }
 } as const satisfies Record<string, MetricDefinition>;
 
