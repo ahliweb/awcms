@@ -1,0 +1,101 @@
+---
+/**
+ * TenantBadge — non-interactive current-tenant indicator in the admin topbar,
+ * adapted from awcms-micro's `src/components/TenantBadge.astro`.
+ *
+ * The point of the badge (and the reason it is NOT a `<select disabled>`): a
+ * disabled form control is a presentation attribute only — anyone can strip it
+ * in devtools — and it advertises an interactive capability that has no
+ * server-side counterpart to enforce. A control that looks like "a switcher
+ * that happens to be off" is worse than no control: it invites someone to
+ * "just re-enable it" later without building the authorization behind it.
+ *
+ * awcms's data model makes this concrete: `awcms_tenant_users` scopes an
+ * identity to exactly one tenant, so there is nothing to switch TO for any
+ * role — a structural fact, not a permission gate.
+ *
+ * `availableTenants` is the extensibility seam for the day cross-tenant
+ * identity linking exists. It must be a list the SERVER computed from verified
+ * authorization data, never client state. `AdminLayout.astro` passes nothing
+ * today, so the badge branch always renders — that absence IS the enforcement
+ * (no switcher markup at all, rather than hidden or disabled markup).
+ */
+interface Props {
+  tenantName: string;
+  ariaLabel?: string;
+  /**
+   * Server-verified tenants this identity may actually switch to (excluding
+   * the current one). Empty/undefined -> non-interactive badge, which is the
+   * only real case today.
+   */
+  availableTenants?: ReadonlyArray<{ id: string; name: string }>;
+}
+
+const {
+  tenantName,
+  ariaLabel = "Active tenant",
+  availableTenants = []
+} = Astro.props;
+
+const canSwitch = availableTenants.length > 0;
+---
+
+{
+  canSwitch ? (
+    <form
+      class="tenant-badge tenant-switch-form"
+      method="get"
+      action="/admin/tenant/switch"
+    >
+      <label class="sr-only" for="tenant-switch-select">
+        {ariaLabel}
+      </label>
+      <select
+        id="tenant-switch-select"
+        name="tenantId"
+        class="tenant-switch-select"
+        aria-label={ariaLabel}
+      >
+        {availableTenants.map((tenant) => (
+          <option value={tenant.id}>{tenant.name}</option>
+        ))}
+      </select>
+    </form>
+  ) : (
+    <div class="tenant-badge" role="status" aria-label={ariaLabel}>
+      <span class="tenant-badge-text">{tenantName}</span>
+    </div>
+  )
+}
+
+<style>
+  .tenant-badge {
+    display: inline-flex;
+    align-items: center;
+    max-width: 14rem;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-3);
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+  }
+
+  /* Long tenant names must not push the topbar controls off-screen. */
+  .tenant-badge-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tenant-switch-select {
+    appearance: none;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-3);
+    min-height: 44px;
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+  }
+</style>

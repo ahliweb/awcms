@@ -1,0 +1,180 @@
+---
+/**
+ * ThemeToggle — cycles system -> light -> dark -> system, persists the choice
+ * in `localStorage["awcms_theme"]`, and updates `data-theme` on `<html>` live
+ * (no reload). Adapted from awcms-micro's `src/components/ThemeToggle.astro`.
+ *
+ * The no-flash resolution on first paint is NOT this component's job — that
+ * happens in the `is:inline` head script (`src/lib/security/theme-init-script.ts`),
+ * which runs before the body paints. This toggle only handles the live change
+ * after the user clicks. Both agree on one storage key, exported from that same
+ * module so the two can never drift.
+ *
+ * Unlike awcms-micro's version, the labels are plain English literals rather
+ * than `t()` props: awcms has no gettext catalog (no i18n module ported), and
+ * every other string in this admin shell is likewise literal English. The
+ * `data-label-*` attributes are kept anyway — that is the seam that lets
+ * translated labels arrive later without the client script needing to read a
+ * catalog it cannot access.
+ *
+ * CSP: this component's `<script>` has no `is:inline`, so Astro bundles it to
+ * an external module served from this origin — allowed by `script-src 'self'`
+ * with no hash bookkeeping. Only the head script needs a hash.
+ */
+interface Props {
+  ariaLabel?: string;
+  systemLabel?: string;
+  lightLabel?: string;
+  darkLabel?: string;
+}
+
+const {
+  ariaLabel = "Change colour theme",
+  systemLabel = "System",
+  lightLabel = "Light",
+  darkLabel = "Dark"
+} = Astro.props;
+---
+
+<button
+  type="button"
+  id="theme-toggle"
+  class="theme-toggle"
+  data-mode="system"
+  data-label-system={systemLabel}
+  data-label-light={lightLabel}
+  data-label-dark={darkLabel}
+  aria-label={ariaLabel}
+>
+  <span class="theme-toggle-icon" aria-hidden="true">🖥️</span>
+  <span class="theme-toggle-label">{systemLabel}</span>
+</button>
+
+<style>
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .theme-toggle:hover {
+    background: var(--color-surface-2);
+  }
+
+  .theme-toggle:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* Touch target >= 44px on tablet/mobile; desktop admin keeps the compact
+     density above. */
+  @media (max-width: 767.98px) {
+    .theme-toggle {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Icon alone on phones — the topbar already carries brand, tenant badge,
+       roles and logout, and the word is redundant next to the glyph. */
+    .theme-toggle-label {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  import { THEME_STORAGE_KEY } from "../lib/security/theme-init-script";
+
+  const ORDER = ["system", "light", "dark"] as const;
+  type ThemeMode = (typeof ORDER)[number];
+
+  const ICONS: Record<ThemeMode, string> = {
+    system: "🖥️",
+    light: "☀️",
+    dark: "🌙"
+  };
+
+  function isThemeMode(value: string | null): value is ThemeMode {
+    return value === "system" || value === "light" || value === "dark";
+  }
+
+  function labelFor(button: HTMLElement, mode: ThemeMode): string {
+    const key = `label${mode.charAt(0).toUpperCase()}${mode.slice(1)}` as
+      "labelSystem" | "labelLight" | "labelDark";
+
+    return button.dataset[key] ?? mode;
+  }
+
+  function resolveTheme(mode: ThemeMode): "light" | "dark" {
+    if (mode === "light" || mode === "dark") {
+      return mode;
+    }
+
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  function applyButtonState(button: HTMLElement, mode: ThemeMode): void {
+    button.dataset.mode = mode;
+
+    const icon = button.querySelector(".theme-toggle-icon");
+    const label = button.querySelector(".theme-toggle-label");
+
+    if (icon) {
+      icon.textContent = ICONS[mode];
+    }
+
+    if (label) {
+      label.textContent = labelFor(button, mode);
+    }
+  }
+
+  function init(): void {
+    const button = document.getElementById("theme-toggle");
+
+    if (!button) {
+      return;
+    }
+
+    // A hand-edited/corrupted localStorage value must not wedge the control:
+    // anything unrecognised falls back to "system" rather than being trusted.
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    const stored: ThemeMode = isThemeMode(raw) ? raw : "system";
+    applyButtonState(button, stored);
+
+    // Follow the OS while in "system" mode, so the admin doesn't sit on a
+    // stale theme when the machine flips at sunset with the tab open.
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", () => {
+      if (button.dataset.mode === "system") {
+        document.documentElement.setAttribute(
+          "data-theme",
+          resolveTheme("system")
+        );
+      }
+    });
+
+    button.addEventListener("click", () => {
+      const current = button.dataset.mode;
+      const currentMode: ThemeMode = isThemeMode(current ?? null)
+        ? (current as ThemeMode)
+        : "system";
+      const nextIndex = (ORDER.indexOf(currentMode) + 1) % ORDER.length;
+      const next = ORDER[nextIndex] ?? "system";
+
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+      document.documentElement.setAttribute("data-theme", resolveTheme(next));
+      applyButtonState(button, next);
+    });
+  }
+
+  init();
+</script>
