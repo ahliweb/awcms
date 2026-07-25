@@ -49,3 +49,18 @@ graphify-out/.graphify_python
 # The live artifacts beside it are the ones under review; a second full copy is
 # ~12 MB of duplicate JSON per run.
 graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+
+# graph.html is NOT tracked, deliberately. Two reasons, both learned the hard
+# way: graphify silently stops emitting it once the corpus passes its viz node
+# limit (the committed copy then rots while graph.json beside it stays current),
+# and at this corpus size it weighs ~8.7 MB per rebuild against graph.json's
+# ~10 MB, doubling what every refresh adds to history forever.
+#
+# Nothing is lost: it is one command away, and graph.json — which IS tracked —
+# is the queryable source it renders from.
+#
+#   GRAPHIFY_VIZ_NODE_LIMIT=8000 graphify cluster-only .
+#
+# Raise the limit above the current node count (see GRAPH_REPORT.md §Summary)
+# or the file is skipped without failing.
+graphify-out/graph.html

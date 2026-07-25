@@ -254,311 +254,6 @@
     "ast_hash": "e8fa0b6ab81cc22f0a1ced2049248729",
     "semantic_hash": "e8fa0b6ab81cc22f0a1ced2049248729"
   },
-  "sql/001_awcms_foundation_schema.sql": {
-    "mtime": 1784148191.1176572,
-    "ast_hash": "4331dbc7f992bdee171599775206188e",
-    "semantic_hash": "4331dbc7f992bdee171599775206188e"
-  },
-  "sql/002_awcms_tenant_office_schema.sql": {
-    "mtime": 1784148703.958595,
-    "ast_hash": "5a7b6afa8328cd265bca7fc82314d1a0",
-    "semantic_hash": "5a7b6afa8328cd265bca7fc82314d1a0"
-  },
-  "sql/003_awcms_central_profile_schema.sql": {
-    "mtime": 1784148896.6774054,
-    "ast_hash": "e8482b1265afbcb01ff90f9def3198bb",
-    "semantic_hash": "e8482b1265afbcb01ff90f9def3198bb"
-  },
-  "sql/004_awcms_identity_login_schema.sql": {
-    "mtime": 1784149029.5305865,
-    "ast_hash": "d1c3aea23d5109a0653be1635eb7f8d9",
-    "semantic_hash": "d1c3aea23d5109a0653be1635eb7f8d9"
-  },
-  "sql/005_awcms_abac_access_control_schema.sql": {
-    "mtime": 1784149055.5036876,
-    "ast_hash": "7d22c926930a0a874dbbd55b9f63a7f9",
-    "semantic_hash": "7d22c926930a0a874dbbd55b9f63a7f9"
-  },
-  "sql/006_awcms_setup_wizard_schema.sql": {
-    "mtime": 1784189199.7398286,
-    "ast_hash": "175f66e7e5cde1c6739ae53fe466f682",
-    "semantic_hash": "175f66e7e5cde1c6739ae53fe466f682"
-  },
-  "sql/007_awcms_audit_logging_schema.sql": {
-    "mtime": 1784149068.5744176,
-    "ast_hash": "978031d8e35581372ffe978393381b5d",
-    "semantic_hash": "978031d8e35581372ffe978393381b5d"
-  },
-  "sql/008_awcms_module_management_schema.sql": {
-    "mtime": 1784245419.7052221,
-    "ast_hash": "1887e3793003f1ac29e819ff24af771e",
-    "semantic_hash": "1887e3793003f1ac29e819ff24af771e"
-  },
-  "sql/009_awcms_domain_event_runtime_schema.sql": {
-    "mtime": 1784245419.7052221,
-    "ast_hash": "dcb0500bb39979d60841a6c259dae024",
-    "semantic_hash": "dcb0500bb39979d60841a6c259dae024"
-  },
-  "sql/010_awcms_sync_storage_outbox_inbox_schema.sql": {
-    "mtime": 1784245419.7052221,
-    "ast_hash": "71380cadf2a1478772e7757a86243fb3",
-    "semantic_hash": "71380cadf2a1478772e7757a86243fb3"
-  },
-  "sql/011_awcms_sync_storage_conflict_schema.sql": {
-    "mtime": 1784245419.7052221,
-    "ast_hash": "cd5e27e8504137c48a2f294eea31e137",
-    "semantic_hash": "cd5e27e8504137c48a2f294eea31e137"
-  },
-  "sql/012_awcms_object_sync_queue_schema.sql": {
-    "mtime": 1784245419.7052221,
-    "ast_hash": "883a0f2bcbb6762ebee7255f5317eb7c",
-    "semantic_hash": "883a0f2bcbb6762ebee7255f5317eb7c"
-  },
-  "sql/013_awcms_workflow_approval_schema.sql": {
-    "mtime": 1784245419.706222,
-    "ast_hash": "778853e08d98dbd730260918642a3a0f",
-    "semantic_hash": "778853e08d98dbd730260918642a3a0f"
-  },
-  "sql/014_awcms_email_schema.sql": {
-    "mtime": 1784299813.6373634,
-    "ast_hash": "cc1073ac50679ebf10b7627c4e42267c",
-    "semantic_hash": "cc1073ac50679ebf10b7627c4e42267c"
-  },
-  "sql/015_awcms_reporting_projections_schema.sql": {
-    "mtime": 1784245419.706222,
-    "ast_hash": "28a1084d7b9b2d98d2b19e6183b49095",
-    "semantic_hash": "28a1084d7b9b2d98d2b19e6183b49095"
-  },
-  "sql/016_awcms_reporting_permissions.sql": {
-    "mtime": 1784245419.706222,
-    "ast_hash": "7a8edc5468b0479331260c940bd77f5b",
-    "semantic_hash": "7a8edc5468b0479331260c940bd77f5b"
-  },
-  "sql/017_awcms_enforce_rls_force.sql": {
-    "mtime": 1784299830.831383,
-    "ast_hash": "f4ab4067980aa56cc5c610a50a7290d2",
-    "semantic_hash": "f4ab4067980aa56cc5c610a50a7290d2"
-  },
-  "sql/018_awcms_workflow_concurrency.sql": {
-    "mtime": 1784296784.618969,
-    "ast_hash": "dc8e6afa997d6891a04d658e5701cedf",
-    "semantic_hash": "dc8e6afa997d6891a04d658e5701cedf"
-  },
-  "sql/019_awcms_db_role_separation.sql": {
-    "mtime": 1784321396.5619738,
-    "ast_hash": "ff12dbf83ddc9cfc4877a62b5741ad06",
-    "semantic_hash": "ff12dbf83ddc9cfc4877a62b5741ad06"
-  },
-  "sql/020_awcms_offices_tenant_scoped_fk.sql": {
-    "mtime": 1784321396.5619738,
-    "ast_hash": "869a89baad070610fea078ca05a2ff50",
-    "semantic_hash": "869a89baad070610fea078ca05a2ff50"
-  },
-  "sql/021_awcms_db_role_grants_narrow.sql": {
-    "mtime": 1784324940.740821,
-    "ast_hash": "3788964ae8d33eab861d97ed1032cbe3",
-    "semantic_hash": "3788964ae8d33eab861d97ed1032cbe3"
-  },
-  "sql/022_awcms_db_worker_setup_roles.sql": {
-    "mtime": 1784341321.7075756,
-    "ast_hash": "2619502350e0de3ed41819ee3a842c38",
-    "semantic_hash": "2619502350e0de3ed41819ee3a842c38"
-  },
-  "sql/023_awcms_seed_office_management_delete_permission.sql": {
-    "mtime": 1784365247.5094433,
-    "ast_hash": "972006537150362741557b9dc9173c95",
-    "semantic_hash": "972006537150362741557b9dc9173c95"
-  },
-  "sql/024_awcms_mfa_totp_schema.sql": {
-    "mtime": 1784424222.222358,
-    "ast_hash": "8f7fb03e57ffafb3725ac39dac160dbe",
-    "semantic_hash": "8f7fb03e57ffafb3725ac39dac160dbe"
-  },
-  "sql/025_awcms_oidc_sso_schema.sql": {
-    "mtime": 1784429399.4250116,
-    "ast_hash": "76b37d45145b0f572fff213ca957be55",
-    "semantic_hash": "76b37d45145b0f572fff213ca957be55"
-  },
-  "sql/026_awcms_seed_sso_permissions.sql": {
-    "mtime": 1784429399.4250116,
-    "ast_hash": "6188fd62aaa0edd78fe06837a8bff214",
-    "semantic_hash": "6188fd62aaa0edd78fe06837a8bff214"
-  },
-  "sql/027_awcms_business_scope_assignments_schema.sql": {
-    "mtime": 1784439233.7400644,
-    "ast_hash": "88625be95b5d4475031dbc8b1b9cdb42",
-    "semantic_hash": "88625be95b5d4475031dbc8b1b9cdb42"
-  },
-  "sql/028_awcms_business_scope_permissions.sql": {
-    "mtime": 1784439233.7400644,
-    "ast_hash": "59d65f89ef42cfddc82495354c8bdc89",
-    "semantic_hash": "59d65f89ef42cfddc82495354c8bdc89"
-  },
-  "sql/029_awcms_sod_schema.sql": {
-    "mtime": 1784444133.4900906,
-    "ast_hash": "858a1ab3b70d49700df36a3a8ba8a89b",
-    "semantic_hash": "858a1ab3b70d49700df36a3a8ba8a89b"
-  },
-  "sql/030_awcms_sod_permissions.sql": {
-    "mtime": 1784444133.4900906,
-    "ast_hash": "141ab7a98951939098234ad5650ce5a0",
-    "semantic_hash": "141ab7a98951939098234ad5650ce5a0"
-  },
-  "sql/031_awcms_abac_policy_dsl_schema.sql": {
-    "mtime": 1784462736.4389746,
-    "ast_hash": "41efe0f65634a2c1bb6ea32a1db4649a",
-    "semantic_hash": "41efe0f65634a2c1bb6ea32a1db4649a"
-  },
-  "sql/032_awcms_abac_policy_admin_permissions.sql": {
-    "mtime": 1784462736.4389746,
-    "ast_hash": "3bae6d8ed415d9b5ec8d98072259d2d7",
-    "semantic_hash": "3bae6d8ed415d9b5ec8d98072259d2d7"
-  },
-  "sql/033_awcms_theming_config_schema.sql": {
-    "mtime": 1784600453.34026,
-    "ast_hash": "a30152c61b52fb5c9dd494e194b58598",
-    "semantic_hash": "a30152c61b52fb5c9dd494e194b58598"
-  },
-  "sql/034_awcms_theming_permissions.sql": {
-    "mtime": 1784600453.34126,
-    "ast_hash": "6e9b1a3ab624c062aeebe299635a4d6a",
-    "semantic_hash": "6e9b1a3ab624c062aeebe299635a4d6a"
-  },
-  "sql/035_awcms_blog_content_schema.sql": {
-    "mtime": 1784724693.1079612,
-    "ast_hash": "6c04902d8b3cd13728e4ccf64d172305",
-    "semantic_hash": "6c04902d8b3cd13728e4ccf64d172305"
-  },
-  "sql/036_awcms_blog_content_permissions.sql": {
-    "mtime": 1784724693.1079612,
-    "ast_hash": "e85592edb38964cbf46f3b6b2e52716f",
-    "semantic_hash": "e85592edb38964cbf46f3b6b2e52716f"
-  },
-  "sql/037_awcms_blog_content_presentation_schema.sql": {
-    "mtime": 1784724693.1079612,
-    "ast_hash": "22588c71e1a226c39d730ff3d63f3f16",
-    "semantic_hash": "22588c71e1a226c39d730ff3d63f3f16"
-  },
-  "sql/038_awcms_blog_content_presentation_permissions.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "11c7af84d2f041df358321e4d8c9d31f",
-    "semantic_hash": "11c7af84d2f041df358321e4d8c9d31f"
-  },
-  "sql/039_awcms_blog_content_internal_tag_links_schema.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "e6ce43b12b14e4c876169847d70a526f",
-    "semantic_hash": "e6ce43b12b14e4c876169847d70a526f"
-  },
-  "sql/040_awcms_blog_content_internal_tag_links_permissions.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "1403ef1d8945d97b0cc72577535733d1",
-    "semantic_hash": "1403ef1d8945d97b0cc72577535733d1"
-  },
-  "sql/041_awcms_news_media_object_registry_schema.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "a4bff9b570d8970623d0c02f97ebfc16",
-    "semantic_hash": "a4bff9b570d8970623d0c02f97ebfc16"
-  },
-  "sql/042_awcms_news_media_permissions.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "6f09579c3ea937961c770d7f78d88698",
-    "semantic_hash": "6f09579c3ea937961c770d7f78d88698"
-  },
-  "sql/043_awcms_news_portal_tenant_state_schema.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "affaa482451f6d5267b0b4a9c24e12a5",
-    "semantic_hash": "affaa482451f6d5267b0b4a9c24e12a5"
-  },
-  "sql/044_awcms_news_portal_homepage_sections_schema.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "ff2b257ba38ed2b7533a8512c6d98fc5",
-    "semantic_hash": "ff2b257ba38ed2b7533a8512c6d98fc5"
-  },
-  "sql/045_awcms_news_portal_ad_placements_schema.sql": {
-    "mtime": 1784724693.1099613,
-    "ast_hash": "1fe6ac60837cd3df08afb678fdce5fec",
-    "semantic_hash": "1fe6ac60837cd3df08afb678fdce5fec"
-  },
-  "sql/046_awcms_tenant_domain_schema.sql": {
-    "mtime": 1784871729.8653715,
-    "ast_hash": "e9557ee2fb924aefdd94afb4437eaf1d",
-    "semantic_hash": "e9557ee2fb924aefdd94afb4437eaf1d"
-  },
-  "sql/047_awcms_tenant_domain_permissions.sql": {
-    "mtime": 1784871729.8653715,
-    "ast_hash": "9af118d2cf7d86afbe5065f7de800ecf",
-    "semantic_hash": "9af118d2cf7d86afbe5065f7de800ecf"
-  },
-  "sql/048_awcms_tenant_domain_lookup_function.sql": {
-    "mtime": 1784871729.8653715,
-    "ast_hash": "670c9c23e9add439d74d11d3b32c7b81",
-    "semantic_hash": "670c9c23e9add439d74d11d3b32c7b81"
-  },
-  "sql/049_awcms_visitor_analytics_permissions.sql": {
-    "mtime": 1784874523.6685057,
-    "ast_hash": "a9dbe3687968fb23d92f5cfc66ccbbbf",
-    "semantic_hash": "a9dbe3687968fb23d92f5cfc66ccbbbf"
-  },
-  "sql/050_awcms_visitor_analytics_schema.sql": {
-    "mtime": 1784874523.6685057,
-    "ast_hash": "bad0f899eef90429135d587cc8f725cc",
-    "semantic_hash": "bad0f899eef90429135d587cc8f725cc"
-  },
-  "sql/051_awcms_visitor_analytics_session_lookup_index.sql": {
-    "mtime": 1784874523.6695063,
-    "ast_hash": "52688ace9481521a96537bb301e42214",
-    "semantic_hash": "52688ace9481521a96537bb301e42214"
-  },
-  "sql/052_awcms_media_library_permission_ownership.sql": {
-    "mtime": 1784884237.585625,
-    "ast_hash": "f8ba9ec4db3ad6a2a449bbb59e46baf3",
-    "semantic_hash": "f8ba9ec4db3ad6a2a449bbb59e46baf3"
-  },
-  "sql/053_awcms_media_library_tenant_state_schema.sql": {
-    "mtime": 1784884237.585625,
-    "ast_hash": "8166519dfadeefabf16b88fa8ebccf18",
-    "semantic_hash": "8166519dfadeefabf16b88fa8ebccf18"
-  },
-  "sql/054_awcms_media_library_enforcement_permissions.sql": {
-    "mtime": 1784884237.585625,
-    "ast_hash": "c03a9c06ec232d90d8d9b0e7bc18d87a",
-    "semantic_hash": "c03a9c06ec232d90d8d9b0e7bc18d87a"
-  },
-  "sql/055_awcms_data_lifecycle_schema.sql": {
-    "mtime": 1784894599.7653368,
-    "ast_hash": "d42c7fed6b36c72966b937099798157a",
-    "semantic_hash": "d42c7fed6b36c72966b937099798157a"
-  },
-  "sql/056_awcms_data_lifecycle_permissions.sql": {
-    "mtime": 1784894599.7653368,
-    "ast_hash": "a5a35c5b17be18279ba56bef7f9bba78",
-    "semantic_hash": "a5a35c5b17be18279ba56bef7f9bba78"
-  },
-  "sql/057_awcms_seo_distribution_config_schema.sql": {
-    "mtime": 1784917167.2648933,
-    "ast_hash": "e1e01fcc3ea3ff0ea8aab80d63deeadc",
-    "semantic_hash": "e1e01fcc3ea3ff0ea8aab80d63deeadc"
-  },
-  "sql/058_awcms_seo_distribution_config_permissions.sql": {
-    "mtime": 1784917167.2648933,
-    "ast_hash": "135fc0f76c70a8421d8b14c3e81f1578",
-    "semantic_hash": "135fc0f76c70a8421d8b14c3e81f1578"
-  },
-  "sql/059_awcms_seo_distribution_feed_config_schema.sql": {
-    "mtime": 1784917167.2648933,
-    "ast_hash": "4613eba71645ad0c7258d3e43c3b5d4d",
-    "semantic_hash": "4613eba71645ad0c7258d3e43c3b5d4d"
-  },
-  "sql/060_awcms_seo_distribution_redirect_schema.sql": {
-    "mtime": 1784926568.7637236,
-    "ast_hash": "120180bec0512d26a6c1b647732a332d",
-    "semantic_hash": "120180bec0512d26a6c1b647732a332d"
-  },
-  "sql/061_awcms_seo_distribution_redirect_permissions.sql": {
-    "mtime": 1784926568.7637236,
-    "ast_hash": "8d7b7bef80d1dcb0018050a23d6beafa",
-    "semantic_hash": "8d7b7bef80d1dcb0018050a23d6beafa"
-  },
   "src/env.d.ts": {
     "mtime": 1784974995.1596663,
     "ast_hash": "ea3b93d6e908cff40d1e8c39027003eb",
@@ -5959,51 +5654,6 @@
     "ast_hash": "321f8d85fc9468a5bc93970c81277cd5",
     "semantic_hash": "321f8d85fc9468a5bc93970c81277cd5"
   },
-  "sql/062_awcms_form_drafts_schema.sql": {
-    "mtime": 1784958520.4884524,
-    "ast_hash": "60e1d229436c2cd97419ed073bd89c91",
-    "semantic_hash": "60e1d229436c2cd97419ed073bd89c91"
-  },
-  "sql/063_awcms_form_drafts_permissions.sql": {
-    "mtime": 1784958520.4884524,
-    "ast_hash": "6821184bfd59d6fd2ce43c6226ab1479",
-    "semantic_hash": "6821184bfd59d6fd2ce43c6226ab1479"
-  },
-  "sql/064_awcms_site_search_schema.sql": {
-    "mtime": 1784963359.6849926,
-    "ast_hash": "297506d95d5bea4c3beb8526cf895c71",
-    "semantic_hash": "297506d95d5bea4c3beb8526cf895c71"
-  },
-  "sql/065_awcms_site_search_permissions.sql": {
-    "mtime": 1784963359.6849926,
-    "ast_hash": "2af8edcd4857d1191aa705dbe7090f97",
-    "semantic_hash": "2af8edcd4857d1191aa705dbe7090f97"
-  },
-  "sql/066_awcms_comments_schema.sql": {
-    "mtime": 1784971152.6083639,
-    "ast_hash": "5113ac40104f18f6bcc2db6a51697f6a",
-    "semantic_hash": "5113ac40104f18f6bcc2db6a51697f6a"
-  },
-  "sql/067_awcms_comments_permissions.sql": {
-    "mtime": 1784971152.6083639,
-    "ast_hash": "9b2de5954c70d48dbb98cf2340230044",
-    "semantic_hash": "9b2de5954c70d48dbb98cf2340230044"
-  },
-  "sql/068_awcms_edge_cache_purge_queue.sql": {
-    "mtime": 1784974995.1596663,
-    "ast_hash": "3c0ffcb529c9943a0bfa628a0678a580",
-    "semantic_hash": "3c0ffcb529c9943a0bfa628a0678a580"
-  },
-  "sql/069_awcms_tenant_domains_worker_read.sql": {
-    "mtime": 1784976507.349956,
-    "ast_hash": "a96e400763418efae4b5af210864a10a",
-    "semantic_hash": "a96e400763418efae4b5af210864a10a"
-  },
-  "sql/070_awcms_edge_cache_purges_tenant_guc_fix.sql": {
-    "mtime": 1785014239.844439,
-    "ast_hash": "c3f8e131c3082dcf52857bc4dafb88e5",
-    "semantic_hash": "c3f8e131c3082dcf52857bc4dafb88e5"
-  },
   "src/components/LocaleBadge.astro": {
     "mtime": 1784963575.2832246,
     "ast_hash": "c5631dd51a2e77a67bd88046248ad16f",
@@ -6503,5 +6153,355 @@
     "mtime": 1784963575.2852256,
     "ast_hash": "8e58cbfcb7172b66b01c907f6e88c6c9",
     "semantic_hash": "8e58cbfcb7172b66b01c907f6e88c6c9"
+  },
+  "sql/001_awcms_foundation_schema.sql": {
+    "mtime": 1784148191.1176572,
+    "ast_hash": "4331dbc7f992bdee171599775206188e",
+    "semantic_hash": "4331dbc7f992bdee171599775206188e"
+  },
+  "sql/002_awcms_tenant_office_schema.sql": {
+    "mtime": 1784148703.958595,
+    "ast_hash": "5a7b6afa8328cd265bca7fc82314d1a0",
+    "semantic_hash": "5a7b6afa8328cd265bca7fc82314d1a0"
+  },
+  "sql/003_awcms_central_profile_schema.sql": {
+    "mtime": 1784148896.6774054,
+    "ast_hash": "e8482b1265afbcb01ff90f9def3198bb",
+    "semantic_hash": "e8482b1265afbcb01ff90f9def3198bb"
+  },
+  "sql/004_awcms_identity_login_schema.sql": {
+    "mtime": 1784149029.5305865,
+    "ast_hash": "d1c3aea23d5109a0653be1635eb7f8d9",
+    "semantic_hash": "d1c3aea23d5109a0653be1635eb7f8d9"
+  },
+  "sql/005_awcms_abac_access_control_schema.sql": {
+    "mtime": 1784149055.5036876,
+    "ast_hash": "7d22c926930a0a874dbbd55b9f63a7f9",
+    "semantic_hash": "7d22c926930a0a874dbbd55b9f63a7f9"
+  },
+  "sql/006_awcms_setup_wizard_schema.sql": {
+    "mtime": 1784189199.7398286,
+    "ast_hash": "175f66e7e5cde1c6739ae53fe466f682",
+    "semantic_hash": "175f66e7e5cde1c6739ae53fe466f682"
+  },
+  "sql/007_awcms_audit_logging_schema.sql": {
+    "mtime": 1784149068.5744176,
+    "ast_hash": "978031d8e35581372ffe978393381b5d",
+    "semantic_hash": "978031d8e35581372ffe978393381b5d"
+  },
+  "sql/008_awcms_module_management_schema.sql": {
+    "mtime": 1784245419.7052221,
+    "ast_hash": "1887e3793003f1ac29e819ff24af771e",
+    "semantic_hash": "1887e3793003f1ac29e819ff24af771e"
+  },
+  "sql/009_awcms_domain_event_runtime_schema.sql": {
+    "mtime": 1784245419.7052221,
+    "ast_hash": "dcb0500bb39979d60841a6c259dae024",
+    "semantic_hash": "dcb0500bb39979d60841a6c259dae024"
+  },
+  "sql/010_awcms_sync_storage_outbox_inbox_schema.sql": {
+    "mtime": 1784245419.7052221,
+    "ast_hash": "71380cadf2a1478772e7757a86243fb3",
+    "semantic_hash": "71380cadf2a1478772e7757a86243fb3"
+  },
+  "sql/011_awcms_sync_storage_conflict_schema.sql": {
+    "mtime": 1784245419.7052221,
+    "ast_hash": "cd5e27e8504137c48a2f294eea31e137",
+    "semantic_hash": "cd5e27e8504137c48a2f294eea31e137"
+  },
+  "sql/012_awcms_object_sync_queue_schema.sql": {
+    "mtime": 1784245419.7052221,
+    "ast_hash": "883a0f2bcbb6762ebee7255f5317eb7c",
+    "semantic_hash": "883a0f2bcbb6762ebee7255f5317eb7c"
+  },
+  "sql/013_awcms_workflow_approval_schema.sql": {
+    "mtime": 1784245419.706222,
+    "ast_hash": "778853e08d98dbd730260918642a3a0f",
+    "semantic_hash": "778853e08d98dbd730260918642a3a0f"
+  },
+  "sql/014_awcms_email_schema.sql": {
+    "mtime": 1784299813.6373634,
+    "ast_hash": "cc1073ac50679ebf10b7627c4e42267c",
+    "semantic_hash": "cc1073ac50679ebf10b7627c4e42267c"
+  },
+  "sql/015_awcms_reporting_projections_schema.sql": {
+    "mtime": 1784245419.706222,
+    "ast_hash": "28a1084d7b9b2d98d2b19e6183b49095",
+    "semantic_hash": "28a1084d7b9b2d98d2b19e6183b49095"
+  },
+  "sql/016_awcms_reporting_permissions.sql": {
+    "mtime": 1784245419.706222,
+    "ast_hash": "7a8edc5468b0479331260c940bd77f5b",
+    "semantic_hash": "7a8edc5468b0479331260c940bd77f5b"
+  },
+  "sql/017_awcms_enforce_rls_force.sql": {
+    "mtime": 1784299830.831383,
+    "ast_hash": "f4ab4067980aa56cc5c610a50a7290d2",
+    "semantic_hash": "f4ab4067980aa56cc5c610a50a7290d2"
+  },
+  "sql/018_awcms_workflow_concurrency.sql": {
+    "mtime": 1784296784.618969,
+    "ast_hash": "dc8e6afa997d6891a04d658e5701cedf",
+    "semantic_hash": "dc8e6afa997d6891a04d658e5701cedf"
+  },
+  "sql/019_awcms_db_role_separation.sql": {
+    "mtime": 1784321396.5619738,
+    "ast_hash": "ff12dbf83ddc9cfc4877a62b5741ad06",
+    "semantic_hash": "ff12dbf83ddc9cfc4877a62b5741ad06"
+  },
+  "sql/020_awcms_offices_tenant_scoped_fk.sql": {
+    "mtime": 1784321396.5619738,
+    "ast_hash": "869a89baad070610fea078ca05a2ff50",
+    "semantic_hash": "869a89baad070610fea078ca05a2ff50"
+  },
+  "sql/021_awcms_db_role_grants_narrow.sql": {
+    "mtime": 1784324940.740821,
+    "ast_hash": "3788964ae8d33eab861d97ed1032cbe3",
+    "semantic_hash": "3788964ae8d33eab861d97ed1032cbe3"
+  },
+  "sql/022_awcms_db_worker_setup_roles.sql": {
+    "mtime": 1784341321.7075756,
+    "ast_hash": "2619502350e0de3ed41819ee3a842c38",
+    "semantic_hash": "2619502350e0de3ed41819ee3a842c38"
+  },
+  "sql/023_awcms_seed_office_management_delete_permission.sql": {
+    "mtime": 1784365247.5094433,
+    "ast_hash": "972006537150362741557b9dc9173c95",
+    "semantic_hash": "972006537150362741557b9dc9173c95"
+  },
+  "sql/024_awcms_mfa_totp_schema.sql": {
+    "mtime": 1784424222.222358,
+    "ast_hash": "8f7fb03e57ffafb3725ac39dac160dbe",
+    "semantic_hash": "8f7fb03e57ffafb3725ac39dac160dbe"
+  },
+  "sql/025_awcms_oidc_sso_schema.sql": {
+    "mtime": 1784429399.4250116,
+    "ast_hash": "76b37d45145b0f572fff213ca957be55",
+    "semantic_hash": "76b37d45145b0f572fff213ca957be55"
+  },
+  "sql/026_awcms_seed_sso_permissions.sql": {
+    "mtime": 1784429399.4250116,
+    "ast_hash": "6188fd62aaa0edd78fe06837a8bff214",
+    "semantic_hash": "6188fd62aaa0edd78fe06837a8bff214"
+  },
+  "sql/027_awcms_business_scope_assignments_schema.sql": {
+    "mtime": 1784439233.7400644,
+    "ast_hash": "88625be95b5d4475031dbc8b1b9cdb42",
+    "semantic_hash": "88625be95b5d4475031dbc8b1b9cdb42"
+  },
+  "sql/028_awcms_business_scope_permissions.sql": {
+    "mtime": 1784439233.7400644,
+    "ast_hash": "59d65f89ef42cfddc82495354c8bdc89",
+    "semantic_hash": "59d65f89ef42cfddc82495354c8bdc89"
+  },
+  "sql/029_awcms_sod_schema.sql": {
+    "mtime": 1784444133.4900906,
+    "ast_hash": "858a1ab3b70d49700df36a3a8ba8a89b",
+    "semantic_hash": "858a1ab3b70d49700df36a3a8ba8a89b"
+  },
+  "sql/030_awcms_sod_permissions.sql": {
+    "mtime": 1784444133.4900906,
+    "ast_hash": "141ab7a98951939098234ad5650ce5a0",
+    "semantic_hash": "141ab7a98951939098234ad5650ce5a0"
+  },
+  "sql/031_awcms_abac_policy_dsl_schema.sql": {
+    "mtime": 1784462736.4389746,
+    "ast_hash": "41efe0f65634a2c1bb6ea32a1db4649a",
+    "semantic_hash": "41efe0f65634a2c1bb6ea32a1db4649a"
+  },
+  "sql/032_awcms_abac_policy_admin_permissions.sql": {
+    "mtime": 1784462736.4389746,
+    "ast_hash": "3bae6d8ed415d9b5ec8d98072259d2d7",
+    "semantic_hash": "3bae6d8ed415d9b5ec8d98072259d2d7"
+  },
+  "sql/033_awcms_theming_config_schema.sql": {
+    "mtime": 1784600453.34026,
+    "ast_hash": "a30152c61b52fb5c9dd494e194b58598",
+    "semantic_hash": "a30152c61b52fb5c9dd494e194b58598"
+  },
+  "sql/034_awcms_theming_permissions.sql": {
+    "mtime": 1784600453.34126,
+    "ast_hash": "6e9b1a3ab624c062aeebe299635a4d6a",
+    "semantic_hash": "6e9b1a3ab624c062aeebe299635a4d6a"
+  },
+  "sql/035_awcms_blog_content_schema.sql": {
+    "mtime": 1784724693.1079612,
+    "ast_hash": "6c04902d8b3cd13728e4ccf64d172305",
+    "semantic_hash": "6c04902d8b3cd13728e4ccf64d172305"
+  },
+  "sql/036_awcms_blog_content_permissions.sql": {
+    "mtime": 1784724693.1079612,
+    "ast_hash": "e85592edb38964cbf46f3b6b2e52716f",
+    "semantic_hash": "e85592edb38964cbf46f3b6b2e52716f"
+  },
+  "sql/037_awcms_blog_content_presentation_schema.sql": {
+    "mtime": 1784724693.1079612,
+    "ast_hash": "22588c71e1a226c39d730ff3d63f3f16",
+    "semantic_hash": "22588c71e1a226c39d730ff3d63f3f16"
+  },
+  "sql/038_awcms_blog_content_presentation_permissions.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "11c7af84d2f041df358321e4d8c9d31f",
+    "semantic_hash": "11c7af84d2f041df358321e4d8c9d31f"
+  },
+  "sql/039_awcms_blog_content_internal_tag_links_schema.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "e6ce43b12b14e4c876169847d70a526f",
+    "semantic_hash": "e6ce43b12b14e4c876169847d70a526f"
+  },
+  "sql/040_awcms_blog_content_internal_tag_links_permissions.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "1403ef1d8945d97b0cc72577535733d1",
+    "semantic_hash": "1403ef1d8945d97b0cc72577535733d1"
+  },
+  "sql/041_awcms_news_media_object_registry_schema.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "a4bff9b570d8970623d0c02f97ebfc16",
+    "semantic_hash": "a4bff9b570d8970623d0c02f97ebfc16"
+  },
+  "sql/042_awcms_news_media_permissions.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "6f09579c3ea937961c770d7f78d88698",
+    "semantic_hash": "6f09579c3ea937961c770d7f78d88698"
+  },
+  "sql/043_awcms_news_portal_tenant_state_schema.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "affaa482451f6d5267b0b4a9c24e12a5",
+    "semantic_hash": "affaa482451f6d5267b0b4a9c24e12a5"
+  },
+  "sql/044_awcms_news_portal_homepage_sections_schema.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "ff2b257ba38ed2b7533a8512c6d98fc5",
+    "semantic_hash": "ff2b257ba38ed2b7533a8512c6d98fc5"
+  },
+  "sql/045_awcms_news_portal_ad_placements_schema.sql": {
+    "mtime": 1784724693.1099613,
+    "ast_hash": "1fe6ac60837cd3df08afb678fdce5fec",
+    "semantic_hash": "1fe6ac60837cd3df08afb678fdce5fec"
+  },
+  "sql/046_awcms_tenant_domain_schema.sql": {
+    "mtime": 1784871729.8653715,
+    "ast_hash": "e9557ee2fb924aefdd94afb4437eaf1d",
+    "semantic_hash": "e9557ee2fb924aefdd94afb4437eaf1d"
+  },
+  "sql/047_awcms_tenant_domain_permissions.sql": {
+    "mtime": 1784871729.8653715,
+    "ast_hash": "9af118d2cf7d86afbe5065f7de800ecf",
+    "semantic_hash": "9af118d2cf7d86afbe5065f7de800ecf"
+  },
+  "sql/048_awcms_tenant_domain_lookup_function.sql": {
+    "mtime": 1784871729.8653715,
+    "ast_hash": "670c9c23e9add439d74d11d3b32c7b81",
+    "semantic_hash": "670c9c23e9add439d74d11d3b32c7b81"
+  },
+  "sql/049_awcms_visitor_analytics_permissions.sql": {
+    "mtime": 1784874523.6685057,
+    "ast_hash": "a9dbe3687968fb23d92f5cfc66ccbbbf",
+    "semantic_hash": "a9dbe3687968fb23d92f5cfc66ccbbbf"
+  },
+  "sql/050_awcms_visitor_analytics_schema.sql": {
+    "mtime": 1784874523.6685057,
+    "ast_hash": "bad0f899eef90429135d587cc8f725cc",
+    "semantic_hash": "bad0f899eef90429135d587cc8f725cc"
+  },
+  "sql/051_awcms_visitor_analytics_session_lookup_index.sql": {
+    "mtime": 1784874523.6695063,
+    "ast_hash": "52688ace9481521a96537bb301e42214",
+    "semantic_hash": "52688ace9481521a96537bb301e42214"
+  },
+  "sql/052_awcms_media_library_permission_ownership.sql": {
+    "mtime": 1784884237.585625,
+    "ast_hash": "f8ba9ec4db3ad6a2a449bbb59e46baf3",
+    "semantic_hash": "f8ba9ec4db3ad6a2a449bbb59e46baf3"
+  },
+  "sql/053_awcms_media_library_tenant_state_schema.sql": {
+    "mtime": 1784884237.585625,
+    "ast_hash": "8166519dfadeefabf16b88fa8ebccf18",
+    "semantic_hash": "8166519dfadeefabf16b88fa8ebccf18"
+  },
+  "sql/054_awcms_media_library_enforcement_permissions.sql": {
+    "mtime": 1784884237.585625,
+    "ast_hash": "c03a9c06ec232d90d8d9b0e7bc18d87a",
+    "semantic_hash": "c03a9c06ec232d90d8d9b0e7bc18d87a"
+  },
+  "sql/055_awcms_data_lifecycle_schema.sql": {
+    "mtime": 1784894599.7653368,
+    "ast_hash": "d42c7fed6b36c72966b937099798157a",
+    "semantic_hash": "d42c7fed6b36c72966b937099798157a"
+  },
+  "sql/056_awcms_data_lifecycle_permissions.sql": {
+    "mtime": 1784894599.7653368,
+    "ast_hash": "a5a35c5b17be18279ba56bef7f9bba78",
+    "semantic_hash": "a5a35c5b17be18279ba56bef7f9bba78"
+  },
+  "sql/057_awcms_seo_distribution_config_schema.sql": {
+    "mtime": 1784917167.2648933,
+    "ast_hash": "e1e01fcc3ea3ff0ea8aab80d63deeadc",
+    "semantic_hash": "e1e01fcc3ea3ff0ea8aab80d63deeadc"
+  },
+  "sql/058_awcms_seo_distribution_config_permissions.sql": {
+    "mtime": 1784917167.2648933,
+    "ast_hash": "135fc0f76c70a8421d8b14c3e81f1578",
+    "semantic_hash": "135fc0f76c70a8421d8b14c3e81f1578"
+  },
+  "sql/059_awcms_seo_distribution_feed_config_schema.sql": {
+    "mtime": 1784917167.2648933,
+    "ast_hash": "4613eba71645ad0c7258d3e43c3b5d4d",
+    "semantic_hash": "4613eba71645ad0c7258d3e43c3b5d4d"
+  },
+  "sql/060_awcms_seo_distribution_redirect_schema.sql": {
+    "mtime": 1784926568.7637236,
+    "ast_hash": "120180bec0512d26a6c1b647732a332d",
+    "semantic_hash": "120180bec0512d26a6c1b647732a332d"
+  },
+  "sql/061_awcms_seo_distribution_redirect_permissions.sql": {
+    "mtime": 1784926568.7637236,
+    "ast_hash": "8d7b7bef80d1dcb0018050a23d6beafa",
+    "semantic_hash": "8d7b7bef80d1dcb0018050a23d6beafa"
+  },
+  "sql/062_awcms_form_drafts_schema.sql": {
+    "mtime": 1784958520.4884524,
+    "ast_hash": "60e1d229436c2cd97419ed073bd89c91",
+    "semantic_hash": "60e1d229436c2cd97419ed073bd89c91"
+  },
+  "sql/063_awcms_form_drafts_permissions.sql": {
+    "mtime": 1784958520.4884524,
+    "ast_hash": "6821184bfd59d6fd2ce43c6226ab1479",
+    "semantic_hash": "6821184bfd59d6fd2ce43c6226ab1479"
+  },
+  "sql/064_awcms_site_search_schema.sql": {
+    "mtime": 1784963359.6849926,
+    "ast_hash": "297506d95d5bea4c3beb8526cf895c71",
+    "semantic_hash": "297506d95d5bea4c3beb8526cf895c71"
+  },
+  "sql/065_awcms_site_search_permissions.sql": {
+    "mtime": 1784963359.6849926,
+    "ast_hash": "2af8edcd4857d1191aa705dbe7090f97",
+    "semantic_hash": "2af8edcd4857d1191aa705dbe7090f97"
+  },
+  "sql/066_awcms_comments_schema.sql": {
+    "mtime": 1784971152.6083639,
+    "ast_hash": "5113ac40104f18f6bcc2db6a51697f6a",
+    "semantic_hash": "5113ac40104f18f6bcc2db6a51697f6a"
+  },
+  "sql/067_awcms_comments_permissions.sql": {
+    "mtime": 1784971152.6083639,
+    "ast_hash": "9b2de5954c70d48dbb98cf2340230044",
+    "semantic_hash": "9b2de5954c70d48dbb98cf2340230044"
+  },
+  "sql/068_awcms_edge_cache_purge_queue.sql": {
+    "mtime": 1784974995.1596663,
+    "ast_hash": "3c0ffcb529c9943a0bfa628a0678a580",
+    "semantic_hash": "3c0ffcb529c9943a0bfa628a0678a580"
+  },
+  "sql/069_awcms_tenant_domains_worker_read.sql": {
+    "mtime": 1784976507.349956,
+    "ast_hash": "a96e400763418efae4b5af210864a10a",
+    "semantic_hash": "a96e400763418efae4b5af210864a10a"
+  },
+  "sql/070_awcms_edge_cache_purges_tenant_guc_fix.sql": {
+    "mtime": 1785014239.844439,
+    "ast_hash": "c3f8e131c3082dcf52857bc4dafb88e5",
+    "semantic_hash": "c3f8e131c3082dcf52857bc4dafb88e5"
   }
 }
