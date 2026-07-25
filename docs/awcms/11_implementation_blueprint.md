@@ -106,6 +106,14 @@ LOCAL_STORAGE_PATH=./storage
 R2_ENABLED=false
 ```
 
+> **Blok di atas adalah rencana 2026-07-14, bukan kontrak env yang berlaku.**
+> Dua barisnya tidak pernah terwujud: `APP_TIMEZONE` dan `AUTH_JWT_SECRET`
+> **tidak dibaca kode mana pun** — sesi awcms memakai token acak buram
+> ber-hash sha256 di `awcms_sessions`, bukan JWT. Kontrak yang berlaku ada di
+> [`.env.example`](../../.env.example) dan ditegakkan
+> `scripts/validate-env.ts`; yang wajib hanya `APP_ENV`, `APP_URL`, dan
+> `DATABASE_URL`. Blok ini sengaja tidak diedit agar rekaman rencana awal utuh.
+
 Base tidak menetapkan provider eksternal tertentu (payment gateway, marketplace, Coretax, logistik). Setiap integrasi bisnis menambah flag provider-nya sendiri (default off) — lihat doc 19 §Integrasi bisnis eksternal.
 
 ## Sprint 1 — Foundation

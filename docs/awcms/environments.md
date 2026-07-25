@@ -12,7 +12,7 @@
 | **Staging**    | `awcms-staging.ahlikoding.com` | `staging`     | Data buangan. Integrasi keluar MATI total. |
 | Development    | `http://localhost:4321`        | `development` | Lokal, tidak di-deploy.                    |
 
-Keduanya berjalan di host Docker yang sama dengan produksi lain
+Dua yang di-deploy berjalan di host Docker yang sama dengan produksi lain
 (`192.42.84.46`), dikelola Coolify, di belakang Traefik yang memegang `:80`/`:443`
 dan menerbitkan TLS lewat resolver `letsencrypt`. **Satu app Coolify per
 environment** — bukan satu app dengan dua domain: environment berbagi app berarti
@@ -24,7 +24,7 @@ Ketiga fase memakai konvensi yang sama, dan perbedaannya justru yang penting:
 
 | Hal                       | Development               | Staging                   | Production                |
 | ------------------------- | ------------------------- | ------------------------- | ------------------------- |
-| `tenant_code`             | hasil setup wizard lokal  | `staging`                 | `ahliweb`                 |
+| `tenant_code`             | `development`             | `staging`                 | `ahliweb`                 |
 | `PUBLIC_DEFAULT_TENANT_*` | pin ke tenant lokal       | pin ke tenant `staging`   | pin ke tenant `ahliweb`   |
 | Login owner               | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    |
 | Password owner            | **sendiri**               | **sendiri**               | **sendiri**               |
@@ -32,9 +32,18 @@ Ketiga fase memakai konvensi yang sama, dan perbedaannya justru yang penting:
 
 **Identifier-nya sama, password-nya TIDAK PERNAH sama.** `awcms_identities` unik
 pada `(tenant_id, login_identifier)`, jadi satu alamat di tiga environment adalah
-**tiga akun terpisah** dengan tiga hash password dan tiga `AUTH_JWT_SECRET`
-berbeda. Menyalin password antar fase membatalkan isolasi yang justru jadi alasan
-memisahkan environment.
+**tiga akun terpisah** dengan tiga hash password berbeda. Sesi juga tidak
+menyeberang: token sesi adalah nilai acak buram yang disimpan sebagai hash
+sha256 di `awcms_sessions` — tabel yang tenant-scoped — sehingga token hanya
+berlaku pada database yang menerbitkannya. Menyalin password antar fase
+membatalkan isolasi yang justru jadi alasan memisahkan environment, dan itu
+satu-satunya hal yang bisa membatalkannya, karena tidak ada lagi yang dibagi.
+
+> **Catatan koreksi.** Versi sebelumnya paragraf ini menyebut "tiga
+> `AUTH_JWT_SECRET` berbeda". **Variabel itu tidak ada di awcms** — tidak dibaca
+> di mana pun dalam `src/`, dan tidak ada JWT di jalur sesi. Klaim itu keliru dan
+> menyesatkan: operator bisa mengira memutar variabel tersebut memisahkan sesi
+> antar-environment, padahal yang memisahkan adalah tenant-scoping di atas.
 
 ### Kenapa `PUBLIC_DEFAULT_TENANT_*` di-pin, padahal tanpa itu pun jalan
 
@@ -77,8 +86,117 @@ SELECT count(*) FROM awcms_abac_policies WHERE is_active AND is_dsl_managed;
 SELECT count(*) FROM awcms_business_scope_assignments;
 ```
 
-Keduanya `0` di produksi dan staging per 2026-07-26, dan tidak ada rute base yang
-menyetel `requiredScopeType`, jadi RBAC benar-benar penentu tunggalnya.
+Ketiganya `0` di development, staging, dan produksi per 2026-07-26, dan tidak ada
+rute base yang menyetel `requiredScopeType`, jadi RBAC benar-benar penentu
+tunggalnya.
+
+## Development lokal disamakan dengan produksi (2026-07-26)
+
+Sebelum ini dev bukan versi kecil produksi, melainkan **environment yang
+berbeda secara diam-diam**: skema berhenti di migrasi 30 (produksi 70), nol
+tenant, tidak ada `.env`, dan satu-satunya role dengan LOGIN adalah `awcms`
+milik container — seorang **superuser**. Bug kelas paling mahal — kebocoran
+RLS dan 403 karena permission — justru yang paling mustahil direproduksi di
+sana, karena superuser menembus RLS dan tenant kosong tak punya permission
+untuk salah.
+
+Sekarang keduanya cocok baris per baris:
+
+|                      | Development     | Staging         | Production      |
+| -------------------- | --------------- | --------------- | --------------- |
+| migrasi              | 70              | 70              | 70              |
+| tabel                | 118             | 118             | 118             |
+| `awcms_permissions`  | 197             | 197             | 197             |
+| RLS `ENABLE`+`FORCE` | 109/118         | 109/118         | 109/118         |
+| runtime role         | `awcms_app`     | `awcms_app`     | `awcms_app`     |
+| owner                | `owner` 197/197 | `owner` 197/197 | `owner` 197/197 |
+
+Yang tetap **sengaja** berbeda, dan alasannya:
+
+| Var                     | Dev     | Prod   | Kenapa                                                                                                                                  |
+| ----------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_COOKIE_SECURE`    | `false` | `true` | dev jalan di `http://`; cookie `Secure` tidak akan pernah terkirim                                                                      |
+| `TRUSTED_PROXY_ENABLED` | `false` | `true` | tidak ada proxy di depan `bun dev`; kalau `true`, siapa pun bisa memalsukan `X-Forwarded-For` dan memilih bucket rate-limit-nya sendiri |
+| `EDGE_CACHE_MODE`       | `off`   | `auto` | tidak ada Varnish lokal; `auto` hanya akan mengantre purge yang tak pernah dikonsumsi                                                   |
+
+### Role separation di lokal — bukan formalitas
+
+`sql/019`/`022` membuat `awcms_app`/`awcms_worker`/`awcms_setup` sebagai
+`NOLOGIN` tanpa password. Migrasi hijau **tidak** berarti role separation
+aktif; sampai ketiganya diberi `LOGIN PASSWORD` dan `DATABASE_URL` diarahkan ke
+`awcms_app`, runtime tetap superuser dan `FORCE RLS` inert. Sekali jalan:
+
+```sql
+ALTER ROLE awcms_app    LOGIN PASSWORD '<acak>';
+ALTER ROLE awcms_worker LOGIN PASSWORD '<acak>';
+ALTER ROLE awcms_setup  LOGIN PASSWORD '<acak>';
+```
+
+Migrasi tetap dijalankan sebagai role pemilik DDL (`awcms`), **bukan**
+`awcms_setup` — role itu hanya punya `USAGE` pada schema `public`, bukan
+`CREATE`. Ini sama seperti produksi.
+
+Buktikan hasilnya, jangan diasumsikan — sebagai `awcms_app`:
+
+```
+super=false bypassrls=false
+tanpa tenant context   -> awcms_identities terlihat: 0
+tenant sendiri         -> awcms_identities terlihat: 1
+tenant asing (prod id) -> awcms_identities terlihat: 0
+```
+
+Pola `0 / 1 / 0` yang sama dipakai untuk staging dan produksi. Kalau baris
+pertama bukan `0`, RLS tidak menyala dan semua sisanya tidak ada artinya.
+
+### `DATABASE_URL` dipakai dua peran yang saling bertentangan
+
+Begitu `.env` ada, **suite DB-gated ikut menyala** — Bun memuat `.env` sendiri,
+jadi tidak ada `DATABASE_URL` kosong seperti job `quality` di CI. Dan di situ
+dua kebutuhan bertabrakan pada satu variabel yang sama:
+
+- **runtime** menginginkan `awcms_app` — least-privilege, RLS berlaku;
+- **harness integrasi** menginginkan role **privileged** — ia membuat database
+  ephemeral dan menjalankan `ALTER ROLE`. Dengan `awcms_app` hasilnya
+  `permission denied to alter role` (42501), bukan skip.
+
+CI menyelesaikannya dengan menjalankan keduanya di job berbeda. Di lokal,
+biarkan `.env` memegang konfigurasi runtime (`awcms_app`) dan **override saat
+menjalankan test**; env var eksplisit menang atas `.env`:
+
+```bash
+OWNER='postgres://awcms:<pw>@localhost:5433/awcms'
+DATABASE_URL="$OWNER" SETUP_DATABASE_URL="$OWNER" WORKER_DATABASE_URL="$OWNER" \
+  bun test tests/integration/
+```
+
+**Override ketiganya, bukan hanya `DATABASE_URL`.** Kalau `SETUP_DATABASE_URL`
+dibiarkan diambil dari `.env`, harness memeriksa bahwa klien app dan klien setup
+menunjuk database yang sama, gagal, dan melapor `Connection closed` — pesan yang
+sama sekali tidak menunjuk ke penyebabnya.
+
+Kedua suite itu **tidak boleh** satu proses `bun test` (tabrakan data — lihat
+komentar di `ci.yml`). Jalankan terpisah, persis seperti CI. Hasil di dev
+2026-07-26: harness 142 pass, legacy 64 pass, nol gagal.
+
+### Jebakan: `bun run db:migrate` dari host bisa timeout
+
+Di sebagian sandbox, TCP ke port Postgres yang di-publish **connect** tapi
+startup message-nya tidak pernah dibalas — gejalanya `Connection timeout after
+30s (sent startup message...)`, bukan connection refused, jadi mudah salah baca
+sebagai kredensial keliru. Jalan pintasnya: jalankan di dalam network namespace
+container DB-nya.
+
+```bash
+docker run --rm --network container:<pg-container> \
+  -v "$PWD":/app -w /app \
+  -e DATABASE_URL='postgres://awcms:<pw>@127.0.0.1:5432/awcms' \
+  -e APP_ENV=development -e APP_URL=http://localhost:4321 \
+  oven/bun:1 bun scripts/db-migrate.ts
+```
+
+Catat `127.0.0.1:5432` — di dalam namespace itu, port yang di-publish ke host
+tidak relevan. Image `oven/bun` **tidak punya `curl` maupun `git`**: pakai
+`fetch` untuk HTTP, dan jangan jalankan test yang memanggil `git` di sana.
 
 ## `APP_URL` bukan kosmetik
 
@@ -265,17 +383,18 @@ Cron produksi:
 * * * * * /home/admin1/awcms-prod-varnish/purge-runner.sh
 ```
 
-## Status nyata (2026-07-25)
+## Status nyata (2026-07-26)
 
 | Hal                                | Status                                                              |
 | ---------------------------------- | ------------------------------------------------------------------- |
+| Development lokal                  | ✅ migrasi 70, tenant `development`, owner 197/197, RLS `0/1/0`     |
 | DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
 | DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
 | App Coolify produksi               | ✅ `got4etcblum9kowdv4mrixqo` + DB `eel59mczdlkidkm5a6fhbdeh`       |
 | App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`       |
 | TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS |
 | Health staging                     | ✅ `GET /api/v1/health` → 200, 21 modul                             |
-| Migrasi DB staging                 | ✅ `sql/001`–`sql/069`, 69 applied / 0 skipped                      |
+| Migrasi DB staging                 | ✅ `sql/001`–`sql/070`, 70 applied — sama dengan produksi & dev     |
 | Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`        |
 | Seed tenant pertama staging        | ✅ tenant `staging` + owner; `setup/status` → `locked:true`         |
 | Isolasi RLS staging                | ✅ dibuktikan di bawah `awcms_app` (lihat di bawah)                 |
