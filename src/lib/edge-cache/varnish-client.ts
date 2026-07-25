@@ -1,8 +1,29 @@
 /**
  * Varnish invalidation client — ADR-0042 §10.
  *
- * Sends one `BAN` request per surrogate key. The bundled VCL turns it into
- * `ban(obj.http.Surrogate-Key ~ "(^| )<key>( |$)")`.
+ * Sends one purge request per surrogate key. The bundled VCL turns it into
+ * `ban(obj.http.Surrogate-Key ~ (^|[[:space:]])<key>([[:space:]]|$))`.
+ *
+ * ## Why `POST /__edge-cache-purge` and not the `BAN` method
+ *
+ * The conventional Varnish idiom is a custom `BAN` method, and that is what this
+ * client originally sent. **Bun does not transmit non-standard HTTP methods.**
+ * `fetch(url, { method: "BAN" })` and `node:http` with `method: "BAN"` both
+ * arrive at Varnish as `GET` — verified against Bun 1.3.14 by reading
+ * `varnishlog -i ReqMethod`, where the same request written byte-for-byte over a
+ * raw socket logs `BAN` and answers `200 Banned`.
+ *
+ * The effect was total: every purge fell through the VCL's BAN branch to the
+ * backend, which returned 404 for an unrouted path, and the queue recorded
+ * `Varnish rejected the BAN with status 404`. On a Bun-only runtime (ADR-0002)
+ * there is no configuration that makes the `BAN` method work.
+ *
+ * So the wire protocol is a `POST` to a reserved path instead. Nothing about the
+ * security model changes: the method was never a control. The three that matter
+ * — the purge ACL, the shared token, and the key charset re-validation — are
+ * unchanged and all still enforced at the edge. The VCL continues to accept a
+ * real `BAN` as well, so `curl -X BAN` still works for an operator debugging by
+ * hand.
  *
  * ## Why the key travels raw and the regex is assembled at the edge
  *
@@ -27,7 +48,21 @@ import { loadEdgeCacheConfig, type EdgeCacheConfig } from "./config";
 export const PURGE_TOKEN_HEADER = "X-Edge-Purge-Token";
 export const PURGE_KEY_HEADER = "X-Edge-Purge-Key";
 
-/** Bounds one BAN. Short: a healthy Varnish answers a ban in single-digit ms. */
+/**
+ * Reserved path the VCL intercepts. It must never reach the origin; if Varnish
+ * is absent or misconfigured the app has no such route, so the request 404s and
+ * the queue records a failure rather than doing something unintended.
+ */
+export const PURGE_PATH = "/__edge-cache-purge";
+
+/**
+ * The method actually put on the wire. Must stay a standard method — see the
+ * header note; an exotic one is silently rewritten to GET by Bun and every purge
+ * becomes a no-op that reports success at the HTTP layer.
+ */
+export const PURGE_METHOD = "POST";
+
+/** Bounds one purge. Short: a healthy Varnish answers a ban in single-digit ms. */
 const PURGE_TIMEOUT_MS = 5_000;
 
 export type PurgeOutcome =
@@ -46,6 +81,16 @@ export type FetchLike = (
  * future caller) still cannot inject a regex.
  */
 const SAFE_KEY = /^[A-Za-z0-9:._-]{1,512}$/;
+
+/**
+ * Join the configured endpoint with the reserved path, tolerating a trailing
+ * slash in configuration. `new URL` is deliberately avoided: the endpoint is an
+ * operator-supplied origin, and resolving a path against it would let a
+ * configured value with its own path silently drop that path.
+ */
+function buildPurgeUrl(endpoint: string): string {
+  return `${endpoint.replace(/\/+$/, "")}${PURGE_PATH}`;
+}
 
 export async function sendEdgeCachePurge(
   surrogateKey: string,
@@ -79,8 +124,8 @@ export async function sendEdgeCachePurge(
   const timeout = setTimeout(() => controller.abort(), PURGE_TIMEOUT_MS);
 
   try {
-    const response = await fetchImpl(config.purgeEndpoint, {
-      method: "BAN",
+    const response = await fetchImpl(buildPurgeUrl(config.purgeEndpoint), {
+      method: PURGE_METHOD,
       headers: {
         [PURGE_KEY_HEADER]: surrogateKey,
         ...(config.purgeToken
@@ -99,7 +144,7 @@ export async function sendEdgeCachePurge(
     // anything else is worth another pass.
     return {
       ok: false,
-      detail: `Varnish rejected the BAN with status ${response.status}.`,
+      detail: `Varnish rejected the purge with status ${response.status}.`,
       retryable: response.status >= 500
     };
   } catch (error) {
@@ -107,8 +152,8 @@ export async function sendEdgeCachePurge(
       ok: false,
       detail:
         error instanceof Error && error.name === "AbortError"
-          ? `BAN timed out after ${PURGE_TIMEOUT_MS}ms.`
-          : "BAN request failed before a response was received.",
+          ? `Purge timed out after ${PURGE_TIMEOUT_MS}ms.`
+          : "Purge request failed before a response was received.",
       retryable: true
     };
   } finally {
