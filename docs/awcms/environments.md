@@ -108,11 +108,46 @@ Token purge **berbeda per environment**. Jadwalkan `bun run edge-cache:purge`;
 tanpa itu suntingan editor baru terlihat setelah TTL habis. Rinci di
 [`edge-cache-architecture.md`](edge-cache-architecture.md).
 
-## Yang belum ada (jangan diklaim)
+## Status nyata (2026-07-25)
 
-- **Instance staging `awcms` belum dibuat.** Yang berjalan di host itu adalah
-  staging `awcms-micro` (app Coolify `a107y9000uz0t9cmgs18lzcv`, DB
-  `d437d850oei6v1s92dq5y3lf`) — instance repo LAIN.
-- **Record DNS kedua host belum ada.** Per 2026-07-25 keduanya `NXDOMAIN`.
-- Dokumen ini menetapkan **konfigurasi target**; ia tidak membuktikan sesuatu
-  sudah berjalan.
+| Hal                                | Status                                                              |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, DNS-only                                     |
+| DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, DNS-only (dibuat 2026-07-25)                 |
+| App Coolify produksi               | ✅ `got4etcblum9kowdv4mrixqo` + DB `eel59mczdlkidkm5a6fhbdeh`       |
+| App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`       |
+| TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS |
+| Health staging                     | ✅ `GET /api/v1/health` → 200, 21 modul                             |
+| **Migrasi DB staging**             | ❌ **BELUM dijalankan** — lihat di bawah                            |
+
+Staging memakai `--ip 10.0.1.61` (produksi `10.0.1.51`); Coolify tidak bisa
+mem-publish port, jadi alamat container ditetapkan lewat
+`custom_docker_run_options`.
+
+### Migrasi staging belum jalan — dan kenapa
+
+`Dockerfile.production` menghasilkan image **runtime saja**: `scripts/` tidak
+ikut, jadi `docker exec <app> bun run db:migrate` gagal dengan
+`Module not found "scripts/db-migrate.ts"`. Ini bukan kesalahan konfigurasi
+staging; itu memang bentuk image-nya.
+
+Jalankan migrasi sebagai **container one-shot** dari repo, berbagi network
+container DB supaya DSN-nya `127.0.0.1` (pola yang sama dipakai staging
+`awcms-micro`):
+
+```bash
+docker run --rm --network container:my85c1xd4txesedhic72maeu \
+  -v "$PWD":/app -w /app \
+  -e DATABASE_URL="postgres://awcms_staging:<pw>@127.0.0.1:5432/awcms_staging" \
+  oven/bun:1.3.14-alpine sh -c "bun install --frozen-lockfile && bun run db:migrate"
+```
+
+Sampai itu dijalankan, staging **belum punya skema** — endpoint health tetap 200
+karena tidak menyentuh database.
+
+## Yang masih terbuka
+
+- Migrasi + seed tenant pertama di staging (di atas).
+- `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
+  memang tidak pernah ada.
+- Varnish belum dipasang di depan staging; `EDGE_CACHE_MODE=off` sampai itu ada.
