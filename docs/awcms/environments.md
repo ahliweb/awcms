@@ -18,6 +18,68 @@ dan menerbitkan TLS lewat resolver `letsencrypt`. **Satu app Coolify per
 environment** — bukan satu app dengan dua domain: environment berbagi app berarti
 berbagi env var, dan itulah cara staging tanpa sengaja menulis ke data produksi.
 
+## Tenant default & akun owner — sama di tiga fase
+
+Ketiga fase memakai konvensi yang sama, dan perbedaannya justru yang penting:
+
+| Hal                       | Development               | Staging                   | Production                |
+| ------------------------- | ------------------------- | ------------------------- | ------------------------- |
+| `tenant_code`             | hasil setup wizard lokal  | `staging`                 | `ahliweb`                 |
+| `PUBLIC_DEFAULT_TENANT_*` | pin ke tenant lokal       | pin ke tenant `staging`   | pin ke tenant `ahliweb`   |
+| Login owner               | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    |
+| Password owner            | **sendiri**               | **sendiri**               | **sendiri**               |
+| Role                      | `owner` (system, 197/197) | `owner` (system, 197/197) | `owner` (system, 197/197) |
+
+**Identifier-nya sama, password-nya TIDAK PERNAH sama.** `awcms_identities` unik
+pada `(tenant_id, login_identifier)`, jadi satu alamat di tiga environment adalah
+**tiga akun terpisah** dengan tiga hash password dan tiga `AUTH_JWT_SECRET`
+berbeda. Menyalin password antar fase membatalkan isolasi yang justru jadi alasan
+memisahkan environment.
+
+### Kenapa `PUBLIC_DEFAULT_TENANT_*` di-pin, padahal tanpa itu pun jalan
+
+Rantai resolusinya `host` → `PUBLIC_DEFAULT_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_CODE`
+→ `awcms_setup_state.tenant_id`. Tanpa dua var itu, jawaban atas "host yang tidak
+cocok jatuh ke tenant mana?" tetap ada — tapi tersembunyi di sebuah baris tabel,
+bukan dinyatakan. Dan begitu tenant kedua ditambahkan, jawaban implisit itu bisa
+berubah tanpa satu pun perubahan konfigurasi. Konsumennya nyata:
+`seo_distribution` (`/robots.txt`, sitemap, feed) dan `site_search`.
+
+`PUBLIC_TENANT_RESOLUTION_MODE` **tidak** di-set di mana pun. Produksi punya baris
+`awcms_tenant_domains` untuk `awcms.ahlikoding.com`, jadi `host_default` akan
+bekerja — tetapi itu keputusan perilaku tersendiri (mengaktifkan lookup host dan
+memperluas permukaan yang tersentuh), bukan bagian dari "tetapkan tenant
+default". Nyalakan terpisah bila memang diinginkan.
+
+### Jebakan: seed permission tidak menjangkau tenant lama
+
+Migrasi seed permission hanya berlaku untuk tenant yang dibuat **setelahnya**.
+Mendaratkan modul baru **tidak** memberi permission-nya ke owner yang sudah ada —
+gejalanya 403 `ACCESS_DENIED` pada modul yang "sudah terpasang". Terjadi nyata di
+produksi 2026-07-26: owner kehilangan 18 permission (`comments`, `site_search`,
+`form_drafts`) setelah migrasi 062–070. Backfill adalah langkah deployment:
+
+```sql
+INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+SELECT r.tenant_id, r.id, p.id
+FROM awcms_roles r CROSS JOIN awcms_permissions p
+LEFT JOIN awcms_role_permissions rp
+  ON rp.role_id = r.id AND rp.permission_id = p.id
+WHERE r.role_code = 'owner' AND r.deleted_at IS NULL
+  AND rp.permission_id IS NULL;
+```
+
+Verifikasi bahwa "akses penuh" memang penuh — RBAC 197/197 belum cukup bila ada
+ABAC deny, aturan SoD, atau batasan business-scope:
+
+```sql
+SELECT count(*) FROM awcms_abac_policies WHERE is_active AND is_dsl_managed;
+SELECT count(*) FROM awcms_business_scope_assignments;
+```
+
+Keduanya `0` di produksi dan staging per 2026-07-26, dan tidak ada rute base yang
+menyetel `requiredScopeType`, jadi RBAC benar-benar penentu tunggalnya.
+
 ## `APP_URL` bukan kosmetik
 
 `APP_URL` **wajib** (`scripts/validate-env.ts`) dan bukan sekadar label: ia
