@@ -1,0 +1,315 @@
+---
+/**
+ * Comments moderation queue admin screen (ADR-0041, ported from awcms-micro
+ * Issue #271).
+ *
+ * ## Two port adaptations
+ *
+ * 1. **SSR read, scripted writes.** awcms-micro's screen was a fully
+ *    client-side SPA that fetched the queue on load. This base renders the
+ *    queue SERVER-SIDE (the `admin/analytics.astro` / `admin/offices.astro`
+ *    pattern), reading the application layer directly inside `withTenant`, so
+ *    the first paint needs no JavaScript at all. Only the moderation ACTIONS
+ *    need a script, because the endpoints require an `Idempotency-Key` header
+ *    that a plain `<form>` cannot send. That script is bundled EXTERNAL (it
+ *    imports, which forces Astro to emit a file rather than inline it) —
+ *    an inline script would be blocked by this app's CSP.
+ * 2. **No i18n.** micro passed a `data-strings` blob built from a gettext
+ *    catalog. This base has no catalog runtime, so labels are literals.
+ *
+ * ABAC is enforced SERVER-SIDE by `/api/v1/comments/admin/*`; every button here
+ * goes through those endpoints, which re-check permission on each call. The
+ * permission check on this page is a UI convenience only — it decides what to
+ * render, never what is allowed (doc 10: the UI must not be the only
+ * enforcement point).
+ *
+ * Comment bodies are rendered as PLAIN TEXT here (`{item.bodyText}`, which Astro
+ * escapes), never as the HTML the public renderer produces. A moderator is
+ * looking at hostile user input by definition; there is no reason for this
+ * screen to be the one place it gets interpreted.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { listModerationQueue } from "../../modules/comments/application/comment-moderation";
+import type { ModerationQueueItem } from "../../modules/comments/application/comment-moderation";
+import type { CommentStatus } from "../../modules/comments/domain/comment-status";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("comments", "moderation", "read")
+);
+const canApprove = ssr.permissions.has(
+  permissionKey("comments", "moderation", "approve")
+);
+const canReject = ssr.permissions.has(
+  permissionKey("comments", "moderation", "reject")
+);
+const canArchive = ssr.permissions.has(
+  permissionKey("comments", "moderation", "archive")
+);
+const canRestore = ssr.permissions.has(
+  permissionKey("comments", "moderation", "restore")
+);
+
+const STATUS_TABS: readonly { value: CommentStatus; label: string }[] = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+  { value: "spam", label: "Spam" },
+  { value: "deleted", label: "Deleted" }
+];
+
+const requestedStatus = Astro.url.searchParams.get("status");
+const activeStatus: CommentStatus = STATUS_TABS.some(
+  (tab) => tab.value === requestedStatus
+)
+  ? (requestedStatus as CommentStatus)
+  : "pending";
+
+let items: ModerationQueueItem[] = [];
+let loadFailed = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, (tx) =>
+      listModerationQueue(tx, ssr.tenantId, {
+        status: activeStatus,
+        limit: 50
+      })
+    );
+    items = result.items;
+  } catch {
+    // A read failure renders an explicit notice rather than an empty queue —
+    // "nothing to moderate" and "we could not load the queue" must never look
+    // the same to a moderator.
+    loadFailed = true;
+  }
+}
+
+function formatTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+}
+---
+
+<AdminLayout title="Comments">
+  <h1>Comment moderation</h1>
+  <p class="page-description">
+    Review comments submitted against published content. Every decision here is
+    audited with its reason code and re-checked against your permissions on the
+    server.
+  </p>
+
+  {
+    !canRead && (
+      <div class="state-notice state-notice--denied" role="status">
+        <p>
+          <strong>Access denied.</strong> You do not have the
+          <code>comments.moderation.read</code> permission for this tenant.
+        </p>
+      </div>
+    )
+  }
+
+  {
+    canRead && (
+      <>
+        <nav class="filter-bar" aria-label="Filter by status">
+          {STATUS_TABS.map((tab) => (
+            <a
+              href={`/admin/comments?status=${tab.value}`}
+              aria-current={tab.value === activeStatus ? "page" : undefined}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
+
+        {loadFailed && (
+          <div class="state-notice state-notice--error" role="alert">
+            <p>The moderation queue could not be loaded. Try again.</p>
+          </div>
+        )}
+
+        <p
+          class="form-banner"
+          data-queue-banner
+          role="status"
+          aria-live="polite"
+          hidden
+        />
+
+        {!loadFailed && items.length === 0 && (
+          <div class="state-notice" role="status">
+            <p>No {activeStatus} comments.</p>
+          </div>
+        )}
+
+        {!loadFailed && items.length > 0 && (
+          <div class="table-scroll">
+            <table class="data-table" data-comments-queue>
+              <caption class="sr-only">
+                {activeStatus} comments awaiting moderation
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Comment</th>
+                  <th scope="col">Author</th>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Reports</th>
+                  <th scope="col">Submitted</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr data-comment-id={item.id}>
+                    <td class="cell-body">{item.bodyText}</td>
+                    <td>
+                      <span>{item.authorDisplayName ?? "Anonymous"}</span>
+                      {item.authorEmailMasked && (
+                        <>
+                          <br />
+                          <small>{item.authorEmailMasked}</small>
+                        </>
+                      )}
+                      <br />
+                      <small>{item.authorKind}</small>
+                    </td>
+                    <td>
+                      <a href={item.resourceUrl}>{item.resourceType}</a>
+                    </td>
+                    <td>{item.reportCount}</td>
+                    <td>
+                      <time datetime={item.createdAt}>
+                        {formatTimestamp(item.createdAt)}
+                      </time>
+                    </td>
+                    <td class="cell-actions">
+                      {canApprove && item.status !== "approved" && (
+                        <button type="button" data-action="approve">
+                          Approve
+                        </button>
+                      )}
+                      {canReject && item.status !== "rejected" && (
+                        <button type="button" data-action="reject">
+                          Reject
+                        </button>
+                      )}
+                      {canReject && item.status !== "spam" && (
+                        <button type="button" data-action="spam">
+                          Spam
+                        </button>
+                      )}
+                      {canArchive && item.status === "approved" && (
+                        <button type="button" data-action="archive">
+                          Archive
+                        </button>
+                      )}
+                      {canRestore && item.status !== "pending" && (
+                        <button type="button" data-action="restore">
+                          Restore
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally: Astro hoists every `<script>` at build time, so
+  // wrapping this in a conditional would not stop it shipping — on a page where
+  // the table is absent the listeners simply find no targets. The import forces
+  // Astro to bundle this EXTERNAL; an import-free script would be inlined, and
+  // inline scripts are blocked by this app's CSP.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const table = document.querySelector<HTMLElement>("[data-comments-queue]");
+  const banner = document.querySelector<HTMLElement>("[data-queue-banner]");
+
+  function showBanner(message: string, isError: boolean): void {
+    if (!banner) return;
+    banner.textContent = message;
+    banner.hidden = false;
+    banner.classList.toggle("form-banner--error", isError);
+  }
+
+  /**
+   * `reject` and `spam` require a reason code; the server rejects the call
+   * without one, so asking here avoids a guaranteed round-trip failure. The
+   * server remains the enforcement point — this prompt is not a validation
+   * layer.
+   */
+  function reasonFor(action: string): string | null {
+    if (action !== "reject" && action !== "spam") return null;
+    const entered = window.prompt("Reason code for this decision:");
+    return entered && entered.trim() ? entered.trim() : null;
+  }
+
+  table?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+      "button[data-action]"
+    );
+    if (!button) return;
+
+    const action = button.dataset.action;
+    const row = button.closest<HTMLElement>("tr[data-comment-id]");
+    const commentId = row?.dataset.commentId;
+    if (!action || !commentId) return;
+
+    const reasonCode = reasonFor(action);
+    if ((action === "reject" || action === "spam") && !reasonCode) {
+      showBanner("A reason code is required to reject or mark spam.", true);
+      return;
+    }
+
+    const unlock = lockElement(button);
+
+    // A fresh Idempotency-Key per click: the header exists so a retried or
+    // double-submitted request applies once, not so two deliberate decisions
+    // collapse into one.
+    const idempotencyKey = crypto.randomUUID();
+
+    const request =
+      action === "archive" || action === "restore"
+        ? sendJson(
+            "POST",
+            `/api/v1/comments/admin/${commentId}/${action}`,
+            {},
+            { "Idempotency-Key": idempotencyKey }
+          )
+        : sendJson(
+            "POST",
+            `/api/v1/comments/admin/${commentId}/moderate`,
+            { decision: action, reasonCode },
+            { "Idempotency-Key": idempotencyKey }
+          );
+
+    void request.then((result) => {
+      unlock();
+      if (result.ok) {
+        row?.remove();
+        showBanner("Decision applied.", false);
+        return;
+      }
+      showBanner(
+        result.errorCode
+          ? `The action failed (${result.errorCode}).`
+          : "The action failed.",
+        true
+      );
+    });
+  });
+</script>

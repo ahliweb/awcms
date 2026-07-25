@@ -57,6 +57,8 @@ tags:
     description: Generic, domain-agnostic server-side draft store for multi-step forms (form_drafts module) — tenant-scoped, RLS-protected create/read/update/submit/delete of an opaque JSONB payload plus the wizard coordinates needed to resume it. The payload is size-bounded and rejected outright (never silently redacted) when any key at any nesting depth resembles a secret — password/token/secret/credential/apiKey/privateKey — so a caller can never mistake a stripped field for a saved one. What a payload MEANS is owned by the module that created it (moduleKey/wizardKey), never by this one. submit is high-risk (it hands the payload to a domain action), idempotency-keyed, and audited; create deliberately is not, since a retry costs one deletable scratch row.
   - name: Site Search
     description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
+  - name: Comments
+    description: "Tenant-scoped, moderation-first commenting over PUBLISHED, PUBLIC commentable resources (comments module, ADR-0041) — the public, anonymous, host-resolved submit/list/reply/edit/report/delete-request surface plus the ABAC-guarded admin moderation queue, per-decision transitions, bulk moderation, and tenant comment configuration. A comment is only ever accepted against, or shown on, a resource that satisfies its owning module's declarative publicationFilter, so a draft/private/deleted/scheduled resource never receives or exposes comments, and the comment surface is NEVER an authorization source for the underlying resource. Bodies are stored as raw plain text and HTML-escaped on render (no stored HTML, therefore no stored XSS), permitting only http(s) autolinks with rel=nofollow ugc noopener noreferrer. The public list returns approved rows only and never moderation metadata. Public submit responses are deliberately uniform: an anti-abuse block, an unresolved resource, and an accepted-but-pending comment all return the same neutral body, so the endpoint cannot be used as an oracle for blocked terms or for unpublished content. moderation.approve/restore/delete and settings.update are high-risk, idempotency-keyed, and audited with a reason code."
 paths:
   /api/v1/abac/policies:
     get:
@@ -4416,6 +4418,657 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/comments:
+    get:
+      operationId: listPublicComments
+      tags:
+        - Comments
+      summary: List approved comments for a published commentable resource.
+      description: PUBLIC and anonymous. The tenant is resolved from the request host. Only `approved`, non-deleted comments are returned, and never any moderation metadata (reason codes, actor ids, email/ip hashes). An unresolved host, a disabled module, an unpublished resource, and a resource with no comments all return the SAME empty payload — the endpoint is not an existence oracle for unpublished content.
+      security: []
+      parameters:
+        - name: resourceType
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The commentable resource type, e.g. `blog_post`.
+        - name: resourceId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: locale
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Defaults to the resolved tenant's default locale.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Full-precision `created_at` from a previous page's `nextCursor`. Must be sent together with `cursorId`; a timestamp alone cannot disambiguate two comments written in the same microsecond.
+        - name: cursorId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved comments, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/PublicCommentPage"
+        "429":
+          description: Per-IP rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: submitPublicComment
+      tags:
+        - Comments
+      summary: Submit a comment against a published commentable resource.
+      description: |-
+        PUBLIC and anonymous, host-resolved, `Idempotency-Key` required. Anti-abuse gated (honeypot field, submit-timing floor, blocked terms, duplicate fingerprint, per-IP rate limit).
+        RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, an anti-abuse block, and an accepted-but-held-for-moderation comment ALL return `{"status":"received"}`. Only a comment that is immediately publicly visible returns its id and status. A caller therefore cannot use this endpoint to enumerate blocked terms, probe the timing floor, or discover unpublished resources.
+      security: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitCommentRequest"
+      responses:
+        "200":
+          description: Accepted. Either the neutral `{"status":"received"}` acknowledgement or, when the comment is immediately public, its id and status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SubmitCommentResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Request body exceeded the endpoint's size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Per-IP rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/{id}:
+    patch:
+      operationId: editPublicComment
+      tags:
+        - Comments
+      summary: Edit your own comment within its edit window.
+      description: "PUBLIC, author-bound: a registered author is matched by session user id, an anonymous author by the stored IP hash. Editing someone else's comment returns 404, identical to a comment that does not exist."
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - body
+              properties:
+                body:
+                  type: string
+      responses:
+        "200":
+          description: The re-rendered, escaped comment HTML.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      bodyHtml:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The edit window for this comment has passed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: The edited body failed normalization or the link/length bounds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/{id}/delete-request:
+    post:
+      operationId: requestPublicCommentDeletion
+      tags:
+        - Comments
+      summary: Ask for your own comment to be removed.
+      description: PUBLIC, author-bound. Within the edit window this soft-deletes the comment immediately. Past the window it files a report for a moderator instead, so thread structure and moderation history stay coherent.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The request was accepted. `softDeleted` distinguishes an immediate removal from a queued moderator request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      softDeleted:
+                        type: boolean
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/comments/{id}/replies:
+    post:
+      operationId: submitPublicCommentReply
+      tags:
+        - Comments
+      summary: Reply to an existing comment.
+      description: PUBLIC. Same policy and anti-abuse gates as a top-level submission, with the parent supplied by the path and depth derived from it and capped. The parent's resource is re-confirmed as still published before the reply is accepted. Returns the same neutral acknowledgement shape as submit.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitCommentRequest"
+      responses:
+        "200":
+          description: Neutral acknowledgement, or the reply's id when immediately public.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SubmitCommentResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: Per-IP rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/{id}/report:
+    post:
+      operationId: reportPublicComment
+      tags:
+        - Comments
+      summary: Report a comment for moderator attention.
+      description: PUBLIC. De-duplicated per (comment, reporter ip hash, reason) by a database unique index, so repeated reports from one source do not inflate the queue's report count.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  enum:
+                    - spam
+                    - abuse
+                    - offensive
+                    - other
+                detail:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: The report was accepted (or silently de-duplicated).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/comments/admin/{id}/archive:
+    post:
+      operationId: archiveComment
+      tags:
+        - Comments
+      summary: Withdraw an approved comment from public view.
+      description: Requires `comments.moderation.archive`. Only an APPROVED comment can be archived. The row is retained with a reserved `archived` reason code so the queue distinguishes it from a plain rejection, and `published_at` is preserved. Idempotency-keyed and audited.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The comment was archived.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ModerationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Idempotency-Key conflict, or the comment is not approved and therefore cannot be archived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/admin/{id}/moderate:
+    post:
+      operationId: moderateComment
+      tags:
+        - Comments
+      summary: Approve, reject, or mark a comment as spam.
+      description: "`approve` requires `comments.moderation.approve`; `reject` and `spam` both require `comments.moderation.reject` — marking spam is a rejection subtype with the same blast radius, distinguished by its audited reason code rather than by a separate permission. A reason code is mandatory for `reject` and `spam`. Idempotency-keyed and audited."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                    - approve
+                    - reject
+                    - spam
+                reasonCode:
+                  type: string
+                  nullable: true
+                  maxLength: 64
+                note:
+                  type: string
+                  nullable: true
+                  maxLength: 2000
+      responses:
+        "200":
+          description: The decision was applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ModerationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Either the Idempotency-Key was reused with a different request, or the action is not legal from the comment's current status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/admin/{id}/restore:
+    post:
+      operationId: restoreComment
+      tags:
+        - Comments
+      summary: Return a rejected, spam, or archived comment to review.
+      description: Requires `comments.moderation.restore`. Moves the comment back to `pending` for a fresh decision. A soft-deleted comment is terminal and cannot be restored in-band. Idempotency-keyed and audited.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The comment was returned to pending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ModerationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Idempotency-Key conflict, or the comment's current status cannot transition back to pending.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/admin/bulk-moderate:
+    post:
+      operationId: bulkModerateComments
+      tags:
+        - Comments
+      summary: Apply one moderation action to many comments.
+      description: "Guarded by the same permission the single-comment action requires. Each comment is evaluated independently: the response reports which ids were applied and which were skipped, with the reason. A partial result is a 200, not an error — the applied decisions are real and must not be implied to have rolled back."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - commentIds
+                - decision
+              properties:
+                commentIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                decision:
+                  type: string
+                  enum:
+                    - approve
+                    - reject
+                    - spam
+                reasonCode:
+                  type: string
+                  nullable: true
+                note:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Per-comment outcomes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/BulkModerationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/admin/queue:
+    get:
+      operationId: listCommentModerationQueue
+      tags:
+        - Comments
+      summary: Read the moderation queue.
+      description: "Requires `comments.moderation.read`. This is the ONLY surface exposing moderation metadata: reason codes, masked author email, and open report counts. Keyset-paginated on `(created_at, id)`."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - approved
+              - rejected
+              - spam
+              - deleted
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Full-precision `created_at`; send with `cursorId`.
+        - name: cursorId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: A page of the moderation queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ModerationQueuePage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/comments/admin/settings:
+    get:
+      operationId: getCommentSettings
+      tags:
+        - Comments
+      summary: Read this tenant's comment configuration.
+      description: Requires `comments.settings.read`. Returns the stored configuration, or the built-in defaults when the tenant has never saved one.
+      responses:
+        "200":
+          description: The tenant's comment configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CommentSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: updateCommentSettings
+      tags:
+        - Comments
+      summary: Update this tenant's comment configuration.
+      description: Requires `comments.settings.update`. A partial body is merged over the current settings. High-risk (it changes the public comment surface), idempotency-keyed, and audited with before/after values. Every bound mirrors a database CHECK constraint, so an out-of-range value is a 400 rather than a constraint violation.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentSettings"
+      responses:
+        "200":
+          description: The saved configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/CommentSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The Idempotency-Key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/data-lifecycle/dry-run:
     post:
       tags:
@@ -13755,6 +14408,29 @@ components:
         description:
           type: string
           nullable: true
+    BulkModerationResult:
+      type: object
+      properties:
+        applied:
+          type: array
+          items:
+            type: string
+            format: uuid
+        appliedCount:
+          type: integer
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              reason:
+                type: string
+                enum:
+                  - not_found
+                  - illegal_transition
     BusinessScopeAssignment:
       type: object
       description: One business-scope assignment (Issue
@@ -13835,6 +14511,66 @@ components:
           type: string
           nullable: true
           description: Optional referrer URL; only its bare hostname is ever stored.
+    CommentKeysetCursor:
+      type: object
+      nullable: true
+      description: Full-precision keyset cursor. `createdAt` is microsecond-precision TEXT, not a JavaScript-rounded timestamp; paging on a rounded value silently skips every row sharing the same millisecond.
+      properties:
+        createdAt:
+          type: string
+        id:
+          type: string
+          format: uuid
+    CommentSettings:
+      type: object
+      description: Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint in sql/066.
+      properties:
+        defaultPolicyMode:
+          type: string
+          enum:
+            - disabled
+            - authenticated-only
+            - moderated-anonymous
+            - moderated-registered
+        requireModeration:
+          type: boolean
+        allowAnonymous:
+          type: boolean
+        editWindowSeconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
+        maxDepth:
+          type: integer
+          minimum: 0
+          maximum: 8
+          description: Only ever TIGHTENS the structural hard cap of 4; a larger value does not deepen the rendered tree.
+        maxLength:
+          type: integer
+          minimum: 100
+          maximum: 4000
+        maxLinksPerComment:
+          type: integer
+          minimum: 0
+          maximum: 20
+        minSubmitSeconds:
+          type: integer
+          minimum: 0
+          maximum: 600
+        rateLimitPerHour:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        blockedTerms:
+          type: array
+          maxItems: 200
+          items:
+            type: string
+            maxLength: 100
+        turnstileEnabled:
+          type: boolean
+        notifyOnReply:
+          type: boolean
     ContentQualityChecklistResult:
       type: object
       required:
@@ -14474,6 +15210,76 @@ components:
           description: Human-readable evidence, one entry per failing check. Names environment variables, never their values.
           items:
             type: string
+    ModerationQueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        resourceType:
+          type: string
+        resourceUrl:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        depth:
+          type: integer
+        bodyText:
+          type: string
+          description: Raw stored plain text — never pre-rendered HTML.
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - spam
+            - deleted
+        authorKind:
+          type: string
+        authorDisplayName:
+          type: string
+          nullable: true
+        authorEmailMasked:
+          type: string
+          nullable: true
+          description: Masked form only; the raw address is never stored.
+        moderationReasonCode:
+          type: string
+          nullable: true
+        reportCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ModerationQueuePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModerationQueueItem"
+        nextCursor:
+          $ref: "#/components/schemas/CommentKeysetCursor"
+    ModerationResult:
+      type: object
+      properties:
+        commentId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - approved
+            - rejected
+            - spam
+            - deleted
     ModuleCatalogEntry:
       type: object
       properties:
@@ -14838,6 +15644,47 @@ components:
           type: string
           format: date-time
           nullable: true
+    PublicComment:
+      type: object
+      description: A single publicly visible comment. Deliberately carries NO moderation metadata and no author contact data — `bodyHtml` is the escaped render of stored plain text, containing only `<br>` and safe http(s) `<a>` elements this server emitted.
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        depth:
+          type: integer
+          minimum: 0
+          maximum: 4
+        bodyHtml:
+          type: string
+        authorDisplayName:
+          type: string
+          nullable: true
+        authorKind:
+          type: string
+          enum:
+            - anonymous
+            - registered
+        createdAt:
+          type: string
+          format: date-time
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
+    PublicCommentPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicComment"
+        nextCursor:
+          $ref: "#/components/schemas/CommentKeysetCursor"
     RealtimeStats:
       type: object
       properties:
@@ -15764,6 +16611,59 @@ components:
         updatedAt:
           type: string
           format: date-time
+    SubmitCommentRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        resourceType:
+          type: string
+          description: Required when submitting to `/api/v1/comments`; implied by the parent on a reply.
+        resourceId:
+          type: string
+          format: uuid
+        locale:
+          type: string
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        authorDisplayName:
+          type: string
+          nullable: true
+          maxLength: 120
+        authorEmail:
+          type: string
+          nullable: true
+          description: Never stored raw. Normalized, then persisted only as a sha256 hash plus a masked form for the moderation queue.
+        website:
+          type: string
+          nullable: true
+          description: The honeypot field. Hidden from human visitors; any non-empty value marks the submission as automated.
+        timingToken:
+          type: string
+          nullable: true
+          description: The HMAC-signed token issued when the form was rendered. Supplies the elapsed-time measurement for the anti-abuse timing floor without trusting a client-supplied number.
+        subscribeToReplies:
+          type: boolean
+          description: Opt in to reply notifications. Requires `authorEmail` and the tenant's `notifyOnReply` setting; the address is encrypted at rest and never returned.
+    SubmitCommentResult:
+      type: object
+      description: "Either the neutral acknowledgement (`status: received`) or, only for an immediately public comment, its id and status."
+      properties:
+        status:
+          type: string
+          enum:
+            - received
+            - pending
+            - approved
+        publiclyVisible:
+          type: boolean
+        commentId:
+          type: string
+          format: uuid
     TenantAuthPolicy:
       type: object
       properties:

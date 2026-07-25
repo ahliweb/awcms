@@ -37,7 +37,31 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // PUBLIC content only, are per-IP rate-limited and query-length-bounded, and
   // return the same neutral empty payload for every non-serving outcome.
   "siteSearchQuery",
-  "siteSearchSuggest"
+  "siteSearchSuggest",
+  // comments (ADR-0041, ported from awcms-micro Issue #271) — the public
+  // comment surface is anonymous by design: a site visitor commenting on an
+  // article has no session, and requiring one would make the module useless for
+  // the case it exists to serve.
+  //
+  // What keeps that safe is NOT authentication, so it is worth stating plainly:
+  // every one of these resolves the tenant from the request HOST (never a
+  // client-supplied tenant header); every one re-confirms the target resource
+  // is PUBLISHED and PUBLIC through its owning module's declarative
+  // publicationFilter before doing anything; the two write paths are per-IP
+  // rate-limited, anti-abuse gated, and Idempotency-Key'd; the read path returns
+  // approved rows only, with no moderation metadata; and every non-serving
+  // outcome returns one uniform neutral response, so none of them can be used as
+  // an existence oracle for unpublished content. The two author-bound
+  // operations (edit, delete-request) match a registered author by session user
+  // id and an anonymous one by stored IP hash, returning 404 — not 403 — when
+  // the caller is not the author, so the endpoint does not confirm that some
+  // other author's comment exists.
+  "listPublicComments",
+  "submitPublicComment",
+  "editPublicComment",
+  "submitPublicCommentReply",
+  "reportPublicComment",
+  "requestPublicCommentDeletion"
 ]);
 
 /**
