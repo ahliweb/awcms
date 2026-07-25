@@ -37,13 +37,31 @@ ketiga yang senyap.
    `ssr-session.ts` dan menegakkan nama cookie asli masih cocok prefix itu.
 5. **Key surrogate masuk ke REGEX.** Dibatasi `[A-Za-z0-9:._-]` saat dibangun DAN
    divalidasi ulang di VCL. Key `.*` = satu permintaan membuang seluruh cache ke
-   origin. Pencocokan di-anchor `(^| )key( |$)` agar ban `t:abc` tidak ikut
-   membuang `t:abcdef` milik tenant lain.
+   origin. Pencocokan di-anchor `(^|[[:space:]])key([[:space:]]|$)` agar ban
+   `t:abc` tidak ikut membuang `t:abcdef` milik tenant lain. **JANGAN** kembalikan
+   ke spasi literal `(^| )` — lihat jebakan di bawah.
 6. **Tenant tak ter-resolve = tidak di-cache.** Objek tanpa key tenant tak bisa
    dijangkau purge mana pun, jadi akan basi selamanya.
 
 ## Jebakan yang sudah ditemukan (jangan diulang)
 
+- **Spasi literal di ekspresi ban membuat invalidasi TIDAK PERNAH bekerja.**
+  Varnish memecah ekspresi ban pada whitespace menjadi
+  `<field> <operator> <argument>`. Bentuk pertama yang dikirim, `(^| )key( |$)`,
+  punya spasi di dalam regex → jumlah token salah → ban ditolak
+  `Wrong number of arguments`. Yang membuatnya berbahaya: handler BAN tetap
+  membalas **200**, jadi `sendEdgeCachePurge` mencatat sukses, baris antrean
+  ditandai selesai, dan konten tetap basi sampai TTL habis. Tidak ada test,
+  log, atau metrik yang merah. Ditemukan hanya dengan memasang Varnish di depan
+  staging dan melihat `X-Cache` tetap `HIT` sesudah purge. Bentuk benar:
+  `(^|[[:space:]])key([[:space:]]|$)`. **Mengutip regex tidak menolong** —
+  pemecahan token terjadi sebelum penanganan kutip (diverifikasi di Varnish 7.5).
+  Dijaga `tests/edge-cache.test.ts` yang membaca `infra/varnish/default.vcl`
+  langsung; unit test murni tidak bisa menangkap ini karena ekspresi dibangun
+  di VCL, bukan di TypeScript.
+- **`varnishcache/varnish` bukan repository Docker Hub.** Compose overlay awal
+  menamainya dan gagal `pull access denied` bagi siapa pun yang mencoba
+  memakainya. Image yang benar: `varnish:7.5` (Docker Official Image).
 - **`/blog/{code}/search` adalah TIGA segmen** sehingga cocok dengan pola
   `blog-post` — padahal dokumentasi menyatakan surface query-driven dikecualikan.
   Ditangkap oleh probe gate, bukan oleh review. Sub-rute reserved baru di bawah

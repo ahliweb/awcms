@@ -22,7 +22,10 @@
 
 services:
   varnish:
-    image: varnishcache/varnish:7.5
+    # Docker Official Image. (There is no `varnishcache/varnish` repository on
+    # Docker Hub — an earlier revision of this file named one, so `compose up`
+    # failed with `pull access denied` for anybody who tried to adopt it.)
+    image: varnish:7.5
     depends_on:
       - app
     # 80 is Varnish's own listener; publish it wherever your TLS terminator

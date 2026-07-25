@@ -242,8 +242,56 @@ describe("surrogate keys", () => {
     // Without the boundaries, banning t:abc would also ban t:abcdef — a
     // different tenant's entire cache.
     expect(buildBanExpression("t:abc")).toBe(
-      'obj.http.Surrogate-Key ~ "(^| )t:abc( |$)"'
+      "obj.http.Surrogate-Key ~ (^|[[:space:]])t:abc([[:space:]]|$)"
     );
+  });
+
+  test("the ban expression contains no literal whitespace in its regex", () => {
+    // Varnish splits a ban expression on whitespace into
+    // `<field> <operator> <argument>`. A literal space inside the regex — which
+    // is what `(^| )` is — makes the token count wrong and Varnish rejects the
+    // ban with `Wrong number of arguments`.
+    //
+    // Nothing else catches this. The VCL's BAN handler returns 200 regardless,
+    // so the origin marks the purge delivered and the object stays cached until
+    // its TTL. Invalidation silently never happens. That is exactly what
+    // shipped, and it was only found by running Varnish in front of staging.
+    const expression = buildBanExpression("t:abc");
+    const [field, operator, ...rest] = expression.split(/\s+/);
+
+    expect(field).toBe("obj.http.Surrogate-Key");
+    expect(operator).toBe("~");
+    expect(rest).toHaveLength(1);
+  });
+});
+
+describe("the shipped VCL agrees with the origin", () => {
+  test("default.vcl builds the same ban expression shape", async () => {
+    // A file-level assertion on purpose: the runtime ban expression is built by
+    // the VCL (the origin only sends the key in a header), so a divergence
+    // between these two is invisible to every other test in this suite — and
+    // its symptom is silent staleness rather than an error.
+    const vcl = await Bun.file("infra/varnish/default.vcl").text();
+    const banCall = vcl
+      .split("\n")
+      .find((line) => line.trim().startsWith("ban("));
+
+    expect(banCall).toBeDefined();
+    expect(banCall).toContain("(^|[[:space:]])");
+    expect(banCall).toContain("([[:space:]]|$)");
+    // The bug, stated as the thing that must never come back.
+    expect(banCall).not.toContain("(^| )");
+    expect(banCall).not.toContain("( |$)");
+  });
+
+  test("the compose overlay names an image that exists on Docker Hub", async () => {
+    // `varnishcache/varnish` is not a Docker Hub repository; the earlier value
+    // failed with `pull access denied` for anyone who tried to adopt the file.
+    const compose = await Bun.file(
+      "infra/varnish/docker-compose.varnish.yml"
+    ).text();
+
+    expect(compose).toMatch(/^\s*image:\s*varnish:\d+\.\d+\s*$/m);
   });
 
   test("regex metacharacters are escaped for the ban expression", () => {
