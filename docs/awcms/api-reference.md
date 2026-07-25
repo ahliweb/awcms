@@ -4716,6 +4716,315 @@ PUBLIC, unauthenticated trigram typeahead over indexed titles, tenant and locale
 | 200    | Title suggestions (possibly empty).            | object                                 |
 | 429    | Too many suggestion requests from this source. | [`ApiError`](#standard-error-envelope) |
 
+## Comments
+
+Tenant-scoped, moderation-first commenting over PUBLISHED, PUBLIC commentable resources (comments module, ADR-0041) — the public, anonymous, host-resolved submit/list/reply/edit/report/delete-request surface plus the ABAC-guarded admin moderation queue, per-decision transitions, bulk moderation, and tenant comment configuration. A comment is only ever accepted against, or shown on, a resource that satisfies its owning module's declarative publicationFilter, so a draft/private/deleted/scheduled resource never receives or exposes comments, and the comment surface is NEVER an authorization source for the underlying resource. Bodies are stored as raw plain text and HTML-escaped on render (no stored HTML, therefore no stored XSS), permitting only http(s) autolinks with rel=nofollow ugc noopener noreferrer. The public list returns approved rows only and never moderation metadata. Public submit responses are deliberately uniform: an anti-abuse block, an unresolved resource, and an accepted-but-pending comment all return the same neutral body, so the endpoint cannot be used as an oracle for blocked terms or for unpublished content. moderation.approve/restore/delete and settings.update are high-risk, idempotency-keyed, and audited with a reason code.
+
+### `GET /api/v1/comments` — List approved comments for a published commentable resource.
+
+- **operationId**: `listPublicComments`
+- **Security**: none (public endpoint)
+
+PUBLIC and anonymous. The tenant is resolved from the request host. Only `approved`, non-deleted comments are returned, and never any moderation metadata (reason codes, actor ids, email/ip hashes). An unresolved host, a disabled module, an unpublished resource, and a resource with no comments all return the SAME empty payload — the endpoint is not an existence oracle for unpublished content.
+
+**Parameters**
+
+| Name           | In    | Required | Type          | Description                                                                                                                                                                                 |
+| -------------- | ----- | -------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resourceType` | query | yes      | string        | The commentable resource type, e.g. `blog_post`.                                                                                                                                            |
+| `resourceId`   | query | yes      | string (uuid) |                                                                                                                                                                                             |
+| `locale`       | query | no       | string        | Defaults to the resolved tenant's default locale.                                                                                                                                           |
+| `cursor`       | query | no       | string        | Full-precision `created_at` from a previous page's `nextCursor`. Must be sent together with `cursorId`; a timestamp alone cannot disambiguate two comments written in the same microsecond. |
+| `cursorId`     | query | no       | string (uuid) |                                                                                                                                                                                             |
+
+**Responses**
+
+| Status | Description                      | Schema                                 |
+| ------ | -------------------------------- | -------------------------------------- |
+| 200    | Approved comments, newest first. | object                                 |
+| 429    | Per-IP rate limit exceeded.      | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments` — Submit a comment against a published commentable resource.
+
+- **operationId**: `submitPublicComment`
+- **Security**: none (public endpoint)
+
+PUBLIC and anonymous, host-resolved, `Idempotency-Key` required. Anti-abuse gated (honeypot field, submit-timing floor, blocked terms, duplicate fingerprint, per-IP rate limit).
+RESPONSES ARE DELIBERATELY UNIFORM. An unresolved resource, a disabled module, an anti-abuse block, and an accepted-but-held-for-moderation comment ALL return `{"status":"received"}`. Only a comment that is immediately publicly visible returns its id and status. A caller therefore cannot use this endpoint to enumerate blocked terms, probe the timing floor, or discover unpublished resources.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): [`SubmitCommentRequest`](#schema-submitcommentrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Accepted. Either the neutral `{"status":"received"}` acknowledgement or, when the comment is immediately public, its id and status. | object                                 |
+| 400    | Validation error.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeded the endpoint's size ceiling.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 429    | Per-IP rate limit exceeded.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/comments/{id}` — Edit your own comment within its edit window.
+
+- **operationId**: `editPublicComment`
+- **Security**: none (public endpoint)
+
+PUBLIC, author-bound: a registered author is matched by session user id, an anonymous author by the stored IP hash. Editing someone else's comment returns 404, identical to a comment that does not exist.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | The re-rendered, escaped comment HTML.                          | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The edit window for this comment has passed.                    | [`ApiError`](#standard-error-envelope) |
+| 422    | The edited body failed normalization or the link/length bounds. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/{id}/delete-request` — Ask for your own comment to be removed.
+
+- **operationId**: `requestPublicCommentDeletion`
+- **Security**: none (public endpoint)
+
+PUBLIC, author-bound. Within the edit window this soft-deletes the comment immediately. Past the window it files a report for a moderator instead, so thread structure and moderation history stay coherent.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                                                 | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The request was accepted. `softDeleted` distinguishes an immediate removal from a queued moderator request. | object                                 |
+| 404    | Resource not found.                                                                                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/{id}/replies` — Reply to an existing comment.
+
+- **operationId**: `submitPublicCommentReply`
+- **Security**: none (public endpoint)
+
+PUBLIC. Same policy and anti-abuse gates as a top-level submission, with the parent supplied by the path and depth derived from it and capped. The parent's resource is re-confirmed as still published before the reply is accepted. Returns the same neutral acknowledgement shape as submit.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): [`SubmitCommentRequest`](#schema-submitcommentrequest)
+
+**Responses**
+
+| Status | Description                                                         | Schema                                 |
+| ------ | ------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Neutral acknowledgement, or the reply's id when immediately public. | object                                 |
+| 400    | Validation error.                                                   | [`ApiError`](#standard-error-envelope) |
+| 429    | Per-IP rate limit exceeded.                                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/{id}/report` — Report a comment for moderator attention.
+
+- **operationId**: `reportPublicComment`
+- **Security**: none (public endpoint)
+
+PUBLIC. De-duplicated per (comment, reporter ip hash, reason) by a database unique index, so repeated reports from one source do not inflate the queue's report count.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                          | Schema                                 |
+| ------ | ---------------------------------------------------- | -------------------------------------- |
+| 200    | The report was accepted (or silently de-duplicated). | object                                 |
+| 400    | Validation error.                                    | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/admin/{id}/archive` — Withdraw an approved comment from public view.
+
+- **operationId**: `archiveComment`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.moderation.archive`. Only an APPROVED comment can be archived. The row is retained with a reserved `archived` reason code so the queue distinguishes it from a plain rejection, and `published_at` is preserved. Idempotency-keyed and audited.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The comment was archived.                                                                  | object                                 |
+| 401    | Missing or invalid session.                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key conflict, or the comment is not approved and therefore cannot be archived. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/admin/{id}/moderate` — Approve, reject, or mark a comment as spam.
+
+- **operationId**: `moderateComment`
+- **Security**: bearerAuth + tenantHeader
+
+`approve` requires `comments.moderation.approve`; `reject` and `spam` both require `comments.moderation.reject` — marking spam is a rejection subtype with the same blast radius, distinguished by its audited reason code rather than by a separate permission. A reason code is mandatory for `reject` and `spam`. Idempotency-keyed and audited.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                   | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The decision was applied.                                                                                                     | object                                 |
+| 400    | Validation error.                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 409    | Either the Idempotency-Key was reused with a different request, or the action is not legal from the comment's current status. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/admin/{id}/restore` — Return a rejected, spam, or archived comment to review.
+
+- **operationId**: `restoreComment`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.moderation.restore`. Moves the comment back to `pending` for a fresh decision. A soft-deleted comment is terminal and cannot be restored in-band. Idempotency-keyed and audited.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The comment was returned to pending.                                                         | object                                 |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key conflict, or the comment's current status cannot transition back to pending. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/comments/admin/bulk-moderate` — Apply one moderation action to many comments.
+
+- **operationId**: `bulkModerateComments`
+- **Security**: bearerAuth + tenantHeader
+
+Guarded by the same permission the single-comment action requires. Each comment is evaluated independently: the response reports which ids were applied and which were skipped, with the reason. A partial result is a 200, not an error — the applied decisions are real and must not be implied to have rolled back.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                              | Schema                                 |
+| ------ | -------------------------------------------------------- | -------------------------------------- |
+| 200    | Per-comment outcomes.                                    | object                                 |
+| 400    | Validation error.                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/comments/admin/queue` — Read the moderation queue.
+
+- **operationId**: `listCommentModerationQueue`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.moderation.read`. This is the ONLY surface exposing moderation metadata: reason codes, masked author email, and open report counts. Keyset-paginated on `(created_at, id)`.
+
+**Parameters**
+
+| Name       | In    | Required | Type                                                       | Description                                        |
+| ---------- | ----- | -------- | ---------------------------------------------------------- | -------------------------------------------------- |
+| `status`   | query | no       | enum(`pending`, `approved`, `rejected`, `spam`, `deleted`) |                                                    |
+| `limit`    | query | no       | integer                                                    |                                                    |
+| `cursor`   | query | no       | string                                                     | Full-precision `created_at`; send with `cursorId`. |
+| `cursorId` | query | no       | string (uuid)                                              |                                                    |
+
+**Responses**
+
+| Status | Description                     | Schema                                 |
+| ------ | ------------------------------- | -------------------------------------- |
+| 200    | A page of the moderation queue. | object                                 |
+| 400    | Validation error.               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/comments/admin/settings` — Read this tenant's comment configuration.
+
+- **operationId**: `getCommentSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.settings.read`. Returns the stored configuration, or the built-in defaults when the tenant has never saved one.
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | The tenant's comment configuration. | object                                 |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/comments/admin/settings` — Update this tenant's comment configuration.
+
+- **operationId**: `updateCommentSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.settings.update`. A partial body is merged over the current settings. High-risk (it changes the public comment surface), idempotency-keyed, and audited with before/after values. Every bound mirrors a database CHECK constraint, so an out-of-range value is a 400 rather than a constraint violation.
+
+**Parameters**
+
+| Name              | In     | Required | Type   | Description |
+| ----------------- | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key` | header | yes      | string |             |
+
+**Request body** (required): [`CommentSettings`](#schema-commentsettings)
+
+**Responses**
+
+| Status | Description                                              | Schema                                 |
+| ------ | -------------------------------------------------------- | -------------------------------------- |
+| 200    | The saved configuration.                                 | object                                 |
+| 400    | Validation error.                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -4877,6 +5186,44 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
   "isActive": false,
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: CommentSettings
+
+Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint in sql/066.
+
+| Field                | Type                                                                                  | Required | Nullable | Description                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `defaultPolicyMode`  | enum(`disabled`, `authenticated-only`, `moderated-anonymous`, `moderated-registered`) | no       | no       |                                                                                                    |
+| `requireModeration`  | boolean                                                                               | no       | no       |                                                                                                    |
+| `allowAnonymous`     | boolean                                                                               | no       | no       |                                                                                                    |
+| `editWindowSeconds`  | integer                                                                               | no       | no       |                                                                                                    |
+| `maxDepth`           | integer                                                                               | no       | no       | Only ever TIGHTENS the structural hard cap of 4; a larger value does not deepen the rendered tree. |
+| `maxLength`          | integer                                                                               | no       | no       |                                                                                                    |
+| `maxLinksPerComment` | integer                                                                               | no       | no       |                                                                                                    |
+| `minSubmitSeconds`   | integer                                                                               | no       | no       |                                                                                                    |
+| `rateLimitPerHour`   | integer                                                                               | no       | no       |                                                                                                    |
+| `blockedTerms`       | array of string                                                                       | no       | no       |                                                                                                    |
+| `turnstileEnabled`   | boolean                                                                               | no       | no       |                                                                                                    |
+| `notifyOnReply`      | boolean                                                                               | no       | no       |                                                                                                    |
+
+**Example**
+
+```json
+{
+  "defaultPolicyMode": "disabled",
+  "requireModeration": false,
+  "allowAnonymous": false,
+  "editWindowSeconds": 0,
+  "maxDepth": 0,
+  "maxLength": 100,
+  "maxLinksPerComment": 0,
+  "minSubmitSeconds": 0,
+  "rateLimitPerHour": 1,
+  "blockedTerms": ["string"],
+  "turnstileEnabled": false,
+  "notifyOnReply": false
 }
 ```
 
@@ -5192,6 +5539,38 @@ Every field is optional — an omitted field keeps its current value.
 }
 ```
 
+### Schema: SubmitCommentRequest
+
+| Field                | Type          | Required | Nullable | Description                                                                                                                                                               |
+| -------------------- | ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `body`               | string        | yes      | no       |                                                                                                                                                                           |
+| `resourceType`       | string        | no       | no       | Required when submitting to `/api/v1/comments`; implied by the parent on a reply.                                                                                         |
+| `resourceId`         | string (uuid) | no       | no       |                                                                                                                                                                           |
+| `locale`             | string        | no       | no       |                                                                                                                                                                           |
+| `parentId`           | string (uuid) | no       | yes      |                                                                                                                                                                           |
+| `authorDisplayName`  | string        | no       | yes      |                                                                                                                                                                           |
+| `authorEmail`        | string        | no       | yes      | Never stored raw. Normalized, then persisted only as a sha256 hash plus a masked form for the moderation queue.                                                           |
+| `website`            | string        | no       | yes      | The honeypot field. Hidden from human visitors; any non-empty value marks the submission as automated.                                                                    |
+| `timingToken`        | string        | no       | yes      | The HMAC-signed token issued when the form was rendered. Supplies the elapsed-time measurement for the anti-abuse timing floor without trusting a client-supplied number. |
+| `subscribeToReplies` | boolean       | no       | no       | Opt in to reply notifications. Requires `authorEmail` and the tenant's `notifyOnReply` setting; the address is encrypted at rest and never returned.                      |
+
+**Example**
+
+```json
+{
+  "body": "string",
+  "resourceType": "string",
+  "resourceId": "00000000-0000-0000-0000-000000000000",
+  "locale": "string",
+  "parentId": "00000000-0000-0000-0000-000000000000",
+  "authorDisplayName": "string",
+  "authorEmail": "user@example.com",
+  "website": "string",
+  "timingToken": "string",
+  "subscribeToReplies": false
+}
+```
+
 ### Schema: ThemeConfigRequest
 
 A tenant's DATA-only theme configuration. Every key/value is validated against the chosen theme descriptor; unknown tokens/slots/assets/sections are rejected, and token values are validated by rejection against strict CSS grammars (no url()/expression()/@import/javascript:/comment-breakout).
@@ -5272,7 +5651,7 @@ consumer/subscriber contract in this file).
 }
 ```
 
-### Channels (41)
+### Channels (44)
 
 - `awcms.blog-content.ad.created` — An advertisement was created. Documented contract only; producer is `pages/api/v1/blog/ads/index.ts`'s `blog-content.ad.created` log line.
 - `awcms.blog-content.ad.deleted` — An advertisement was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/ads/[id].ts`'s `blog-content.ad.deleted` log line.
@@ -5301,6 +5680,9 @@ consumer/subscriber contract in this file).
 - `awcms.blog-content.widget.created` — A widget was created. Documented contract only; producer is `pages/api/v1/blog/widgets/index.ts`'s `blog-content.widget.created` log line.
 - `awcms.blog-content.widget.deleted` — A widget was soft-deleted. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.deleted` log line.
 - `awcms.blog-content.widget.updated` — A widget was updated. Documented contract only; producer is `pages/api/v1/blog/widgets/[id].ts`'s `blog-content.widget.updated` log line.
+- `awcms.comments.comment.approved` — A comment became publicly visible, either by auto-approval under the thread policy or by a moderator's approve decision. Producers: `comments/application/comment-service.ts`'s `submitComment` and `comments/application/comment-moderation.ts`'s `moderateComment`. The reply-notification consumer keys off THIS event rather than `comment.submitted`, so a comment still held for moderation never triggers a notification.
+- `awcms.comments.comment.submitted` — A comment was submitted against a published, public commentable resource (ADR-0041). Producer: `comments/application/comment-service.ts`'s `submitComment`. The payload carries opaque references only — comment and thread id, resource type, the server-derived public URL, and the resulting status. Never the body text, the author address, or any identity hash.
+- `awcms.comments.reply.created` — A submitted comment was a reply to an existing comment. Producer: `comments/application/comment-service.ts`'s `submitComment`, published alongside `comment.submitted` so a consumer can distinguish thread replies without re-reading the row. The recipient address is resolved from encrypted storage by the dispatcher at send time and is never carried here.
 - `awcms.domain-event-runtime.sample.recorded` — Reference/example event used to exercise the domain-event-runtime outbox, dispatcher, ordering, retry/backoff, dead-letter, and replay mechanism end-to-end. Real producer modules publish their OWN event types the same way, via `appendDomainEvent` — this one is intentionally self-contained rather than tied to another module's business logic in this foundation module (see `src/modules/domain-event-runtime/domain/event-type-registry.ts`'s own doc comment). Producer: any caller of `application/append-domain-event.ts`'s `appendDomainEvent` for this event type; consumers: `infrastructure/consumer-registry.ts`'s two reference consumers (a same-process cross-module audit projector and a self-contained read-model activity-rollup projection).
 - `awcms.email.message.cancelled` — An operator cancelled a still-queued message (`POST /api/v1/email/messages/{id}/cancel`) before dispatch. Documented contract only; producer is the structured JSON logger (`pages/api/v1/email/messages/[id]/cancel.ts`'s `email.message.cancelled` log line).
 - `awcms.email.message.failed` — The email dispatcher exhausted retries (or hit a non-retryable failure) for a queued message. Documented contract only; producer is the structured JSON logger (`email/application/email-dispatch.ts`'s `email.dispatch.failed` log line).

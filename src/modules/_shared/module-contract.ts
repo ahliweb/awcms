@@ -178,6 +178,20 @@ export type ModuleDescriptor = {
    */
   searchSources?: SearchSourceDescriptor[];
   /**
+   * Public commentable-resource descriptors this module contributes to
+   * `comments` (ported from awcms-micro Issue #271, ADR-0041) — see
+   * `CommentableResourceDescriptor`'s own doc comment below. Exactly the
+   * `searchSources` shape one field up: the owning content module declares
+   * which of ITS resources may be commented on, and `comments`'s
+   * `domain/commentable-resource-registry.ts` aggregates + validates every
+   * module's array through `listModules()` (`bun run
+   * comments:resources:check`). The engine confirms publication state by
+   * reading the source table through ONLY the column names + declarative
+   * filter declared here — never a cross-module TypeScript import, never a
+   * write into another module's tables (ADR-0013 §6).
+   */
+  commentableResources?: CommentableResourceDescriptor[];
+  /**
    * Segregation-of-duties conflict rules this module owns (Issue #181,
    * epic #177 Wave 2 authorization) — see `SoDRuleDescriptor`'s own doc
    * comment below. A module contributes ONE of these per GENERIC
@@ -433,6 +447,85 @@ export type SearchSourceDescriptor = {
 };
 
 /**
+ * A declarative, pure-data public commentable-resource descriptor a content
+ * module contributes to `comments` (ported from awcms-micro Issue #271,
+ * ADR-0041). Same seam as `searchSources` above, and for the same reason: many
+ * content modules may want to accept comments, so modeling
+ * `commentable_resource` as a capability `provides` would immediately trip
+ * `module-composition.ts`'s `capability_provider_conflict`. A descriptor-list
+ * riding `listModules()` lets a module admit a reviewed commentable type by
+ * declaring it in its own `module.ts` WITHOUT writing to `comments`'s tables.
+ *
+ * ## Pure DATA, not an executable extractor
+ *
+ * No function reference — only reviewed, code-only column/table NAMES and a
+ * declarative `publicationFilter`. `comments`'s engine builds a PARAMETERIZED
+ * existence/publication query from it: literal filter VALUES are always bound
+ * parameters; only the IDENTIFIERS are interpolated, re-validated with the
+ * sanctioned `assertSafeIdentifier` pattern immediately before interpolation. A
+ * resource must be PUBLISHED & PUBLIC (per `publicationFilter`) before a comment
+ * on it is ever accepted or shown, so a draft/private/deleted/scheduled resource
+ * can neither receive nor expose comments — and the comment surface is never an
+ * authorization source for the underlying resource.
+ *
+ * TRUSTED CODE-ONLY METADATA (same rule as every descriptor type here) —
+ * declared by the owning module's source, never tenant/request-controlled.
+ */
+export type CommentableResourcePublicationFilter = {
+  /** Column = literal-value equality checks, e.g. `{ status: "published", visibility: "public" }`. VALUES are bound parameters, KEYS are validated identifiers. All must hold (AND). */
+  equals?: Readonly<Record<string, string>>;
+  /** Columns that must be `IS NOT NULL` for a row to be public (e.g. `published_at`). */
+  notNullColumns?: readonly string[];
+  /** Columns that must be `IS NULL` for a row to be public — the soft-delete gate (e.g. `deleted_at`). */
+  nullColumns?: readonly string[];
+  /** Columns whose value must be `<= now()` for a row to be public — the schedule gate (e.g. `published_at`). */
+  timeReachedColumns?: readonly string[];
+};
+
+/**
+ * The policy a resource type's thread opens with until the tenant overrides it.
+ * Same four modes as `awcms_comments_settings.default_policy_mode` and the
+ * `comment-policy.ts` decision function.
+ */
+export type CommentableResourceDefaultPolicy =
+  | "disabled"
+  | "authenticated-only"
+  | "moderated-anonymous"
+  | "moderated-registered";
+
+export type CommentableResourceDescriptor = {
+  /** Stable, unique across the whole registry, `"<module_key>.<short>"` (e.g. `"blog_content.post"`). */
+  key: string;
+  /** Must equal the declaring module's own `key` — validated by the registry gate (`comments/domain/commentable-resource-registry.ts`), not the type system. */
+  ownerModuleKey: string;
+  /** Opaque content-type discriminator, e.g. `"blog_post"`. Stored on each thread; never interpreted structurally by `comments`. */
+  resourceType: string;
+  /** Source table the engine reads to confirm a resource is published/public (must start with `awcms_`). */
+  tableName: string;
+  /** Defaults to `"tenant_id"`. */
+  tenantColumn?: string;
+  /** Defaults to `"id"` — the resource primary key. */
+  idColumn?: string;
+  /** Column carrying the BCP-47 locale of each row — every thread is locale-scoped. */
+  localeColumn: string;
+  /** Column supplying `:slug` in `urlTemplate`; `null`/omit when the template uses only `:id`. */
+  slugColumn?: string | null;
+  /**
+   * Public URL template resolved when a thread is opened. Placeholders `:slug`,
+   * `:id`, and `:tenantCode` — the last one being the same AWCMS-specific
+   * addition `SearchSourceDescriptor.urlTemplate` carries, because this base's
+   * public content routes are path-tenant-scoped (`/blog/{tenantCode}/{slug}`,
+   * ADR-0009) rather than host-resolved. Every substituted value is
+   * `encodeURIComponent`'d.
+   */
+  urlTemplate: string;
+  /** Declarative publication predicate enforced at the resource→thread boundary — the draft/private/deleted-leakage defense (ADR-0041 §5). */
+  publicationFilter: CommentableResourcePublicationFilter;
+  /** Policy mode a fresh thread for this resource type opens with (the tenant's settings may override). */
+  defaultPolicy: CommentableResourceDefaultPolicy;
+};
+
+/**
  * High-volume table lifecycle descriptor family (ported from awcms-micro
  * Issue #745, ADR-0037). A module contributes ONE `HighVolumeTableDescriptor`
  * per high-volume table it owns, in its own `module.ts`'s `dataLifecycle`
@@ -600,8 +693,15 @@ export type HighVolumeTableDescriptor = {
  * `ModuleDescriptor.searchSources` field plus the `SearchSourceDescriptor` /
  * `SearchSourcePublicationFilter` exported types — MINOR: purely additive, every
  * base `module.ts` that omits `searchSources` stays valid unchanged.
+ *
+ * `2.3.0` (ADR-0041, ported from awcms-micro Issue #271) — added the optional
+ * `ModuleDescriptor.commentableResources` field plus the
+ * `CommentableResourceDescriptor` / `CommentableResourcePublicationFilter` /
+ * `CommentableResourceDefaultPolicy` exported types — MINOR: purely additive,
+ * every base `module.ts` that omits `commentableResources` stays valid
+ * unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "2.2.0";
+export const MODULE_CONTRACT_VERSION = "2.3.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

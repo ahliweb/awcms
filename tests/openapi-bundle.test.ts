@@ -284,9 +284,14 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     // Issue #484 — the generic multi-step-form draft store), and "Site Search"
     // owned by the ported site_search module (ADR-0040 — the cross-content FTS
     // index; its two PUBLIC query/suggest operations are in the contract, while
-    // the public /search HTML page is an Astro route, not OpenAPI).
+    // the public /search HTML page is an Astro route, not OpenAPI), and
+    // "Comments" owned by the ported comments module (ADR-0041 — the public
+    // submit/list/reply/report surface plus the admin moderation queue; the six
+    // unauthenticated operations are in the contract and individually justified
+    // in ALLOWED_PUBLIC_OPERATIONS).
     const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
     expect(added).toEqual([
+      "Comments",
       "Domain Event Runtime",
       "Form Drafts",
       "News Media",

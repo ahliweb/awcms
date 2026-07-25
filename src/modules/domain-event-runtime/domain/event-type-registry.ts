@@ -59,6 +59,17 @@ export const WORKFLOW_DELEGATION_CREATED_EVENT_TYPE =
 export const WORKFLOW_DELEGATION_REVOKED_EVENT_TYPE =
   "awcms.workflow.delegation.revoked";
 
+/**
+ * `comments` (ADR-0041). Declared here — not imported from
+ * `comments/domain/comment-events.ts` — deliberately: this foundation module
+ * must not depend on a domain module. The literals are kept identical on both
+ * sides by the AsyncAPI parity gate, which reads the registry and the spec.
+ */
+export const COMMENTS_EVENT_VERSION = "1.0";
+export const COMMENT_SUBMITTED_EVENT_TYPE = "awcms.comments.comment.submitted";
+export const COMMENT_APPROVED_EVENT_TYPE = "awcms.comments.comment.approved";
+export const COMMENT_REPLY_CREATED_EVENT_TYPE = "awcms.comments.reply.created";
+
 export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
   [
     {
@@ -112,6 +123,24 @@ export const DOMAIN_EVENT_TYPE_REGISTRY: readonly RegisteredDomainEventType[] =
       eventType: WORKFLOW_DELEGATION_REVOKED_EVENT_TYPE,
       eventVersion: WORKFLOW_EVENT_VERSION,
       description: "A workflow delegation/substitute assignment was revoked."
+    },
+    {
+      eventType: COMMENT_SUBMITTED_EVENT_TYPE,
+      eventVersion: COMMENTS_EVENT_VERSION,
+      description:
+        "A comment was submitted against a published, public commentable resource. Carries opaque references only (comment/thread id, resource type + server-derived public URL, resulting status) — never an author address, body text, or any identity hash."
+    },
+    {
+      eventType: COMMENT_APPROVED_EVENT_TYPE,
+      eventVersion: COMMENTS_EVENT_VERSION,
+      description:
+        "A comment became publicly visible, either by auto-approval under the thread policy or by a moderator's approve action. The reply-notification consumer keys off this event, not the submitted one, so a pending comment never triggers a notification."
+    },
+    {
+      eventType: COMMENT_REPLY_CREATED_EVENT_TYPE,
+      eventVersion: COMMENTS_EVENT_VERSION,
+      description:
+        "A submitted comment was a reply to an existing comment. Published alongside comment.submitted so a consumer can distinguish thread replies without re-reading the row; the recipient address is resolved from encrypted storage by the dispatcher at send time, never carried here."
     }
   ];
 

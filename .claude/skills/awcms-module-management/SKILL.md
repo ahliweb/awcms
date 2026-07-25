@@ -312,7 +312,19 @@ referensi dipertahankan untuk `descriptor-sync`).
 - **Fixture test**: `tests/fixtures/example-domain-modules/` (contoh modul domain
   untuk menguji enforcement base #180 business-scope + #181 SoD + komposisi #178),
   BUKAN "derived application".
-- **`MODULE_CONTRACT_VERSION` = 2.0.0** (tipe `ApplicationModuleRegistry`/
-  `ModuleMigrationNamespace` dihapus; pin `awcms-family-compatibility.yaml`).
+- **`MODULE_CONTRACT_VERSION` = 2.3.0** per 2026-07-25. ADR-0034 menaikkannya ke
+  **2.0.0** (breaking: tipe `ApplicationModuleRegistry`/`ModuleMigrationNamespace`
+  dihapus). Sejak itu tiga MINOR aditif, semuanya seam **descriptor-list** yang
+  ditemukan agregator lewat `listModules()` — bukan capability `provides`, karena
+  penyedia jamak memang diharapkan dan provider kedua akan men-trip
+  `capability_provider_conflict`:
+  - **2.1.0** `dataLifecycle` (#222) — retensi/arsip/purge generik.
+  - **2.2.0** `searchSources` (#231, ADR-0040) — sumber indeks `site_search`.
+  - **2.3.0** `commentableResources` (in-flight `feat/port-comments`, ADR-0041) —
+    resource yang boleh dikomentari.
+
+  Setiap kenaikan **wajib** ikut memperbarui pin
+  `contracts.moduleDescriptorContractVersion` di `awcms-family-compatibility.yaml`
+  atau `bun run family:conformance:check` merah.
 
 Detail: `docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md`.

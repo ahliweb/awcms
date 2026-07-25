@@ -200,9 +200,13 @@ ini (verifikasi: `grep -n "^export" src/lib/ui/admin-form-client.ts`); pakai
 Materialized view/caching untuk lima view live (lihat di atas — sengaja
 tidak dibangun). Pagination/filter tanggal kustom untuk `access-audit`. Test
 adversarial "bounded pass → simulated crash → resumed continuation → total
-benar" dan test `provisionWorkerRole()`-based least-privilege dari awcms-mini
-— **belum di-port**, repo ini belum punya suite `tests/integration/` untuk
-keduanya (verifikasi dulu sebelum mengklaim ada). Modul domain turunan (mis.
+benar" dari awcms-mini — **belum di-port**. Suite `tests/integration/` **kini
+ADA** (harness dua-world, Issue #154), termasuk
+`reporting-projections.integration.test.ts` dan
+`db-role-separation.integration.test.ts` yang meng-cover least-privilege role
+split — jadi tempat menaruh test crash-resume itu sudah tersedia; yang belum
+adalah test-nya sendiri. Verifikasi `ls tests/integration/` sebelum mengklaim
+salah satu arah. Modul domain turunan (mis.
 AWPOS) menambah view reporting domainnya sendiri di modul terpisah, bukan di
 modul generik ini.
 

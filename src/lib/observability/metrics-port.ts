@@ -494,6 +494,56 @@ export const METRIC_DEFINITIONS = {
     approxCardinality:
       "Exactly 2 — the code-defined extract_error/upsert_error classes.",
     privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  comments_submissions_total: {
+    name: "comments_submissions_total",
+    type: "counter",
+    description:
+      "Count of public comment submissions by outcome and the thread's policy mode — the moderation-load and rejection-rate signal for the public comment surface.",
+    allowedLabelKeys: ["outcome", "policyMode"],
+    approxCardinality:
+      "At most 8 — 2 code-defined outcomes (accepted, rejected) x 4 code-defined policy modes.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  comments_abuse_blocks_total: {
+    name: "comments_abuse_blocks_total",
+    type: "counter",
+    description:
+      "Count of comment submissions stopped by an anti-abuse signal, by reason — the bot-pressure signal for a public, unauthenticated write endpoint.",
+    allowedLabelKeys: ["reason"],
+    approxCardinality:
+      "Exactly 5 — the code-defined honeypot/too_fast/blocked_term/duplicate/rate_limited reasons.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  comments_moderation_actions_total: {
+    name: "comments_moderation_actions_total",
+    type: "counter",
+    description:
+      "Count of moderator decisions by action and result — the moderation-throughput and illegal-transition signal for the admin queue.",
+    allowedLabelKeys: ["action", "result"],
+    approxCardinality:
+      "At most 18 — 6 code-defined actions x 3 results (applied, not_found, illegal_transition).",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  comments_reports_total: {
+    name: "comments_reports_total",
+    type: "counter",
+    description:
+      "Count of abuse reports filed against comments by reason code — the community-flagging signal that drives moderation-queue priority.",
+    allowedLabelKeys: ["reason"],
+    approxCardinality:
+      "Exactly 4 — the code-defined spam/abuse/offensive/other reason codes.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
+  },
+  comments_retention_anonymized_total: {
+    name: "comments_retention_anonymized_total",
+    type: "counter",
+    description:
+      "Count of comments whose author identity was anonymized by the scheduled retention sweep — evidence the privacy-minimization job is actually running.",
+    allowedLabelKeys: ["outcome"],
+    approxCardinality:
+      "Exactly 2 — the code-defined anonymized/skipped_legal_hold outcomes.",
+    privacyNote: PRIVACY_NOTE_CODE_DEFINED_ENUM
   }
 } as const satisfies Record<string, MetricDefinition>;
 

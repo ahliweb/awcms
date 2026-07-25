@@ -1078,7 +1078,23 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_site_search_index_runs: ["SELECT", "INSERT", "UPDATE"],
   awcms_site_search_index_failures: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   awcms_site_search_query_log: ["SELECT", "DELETE"],
-  awcms_site_search_settings: ["SELECT"]
+  awcms_site_search_settings: ["SELECT"],
+  // comments — `comments:retention` (sql/066, ADR-0041) plus the generic
+  // data_lifecycle purge engine. Retention ANONYMIZES aged author identity in
+  // place, so comments are SELECT + UPDATE with NO DELETE (the append-only
+  // moderation history must keep pointing at a row) and NO INSERT (the worker
+  // never authors a comment). Each anonymization appends its own
+  // `anonymize` moderation event, hence SELECT + INSERT there. Abuse events and
+  // unconfirmed reply subscriptions are SELECT + DELETE — both are aged out,
+  // never rewritten, the same shape as `awcms_site_search_query_log` above.
+  // Settings and threads are read-only: the sweep reads a tenant's retention
+  // window and the thread a comment belongs to, and rewrites neither.
+  awcms_comments_settings: ["SELECT"],
+  awcms_comments_threads: ["SELECT"],
+  awcms_comments_comments: ["SELECT", "UPDATE"],
+  awcms_comments_moderation_events: ["SELECT", "INSERT"],
+  awcms_comments_abuse_events: ["SELECT", "DELETE"],
+  awcms_comments_reply_subscriptions: ["SELECT", "DELETE"]
 };
 
 /**
@@ -1676,6 +1692,78 @@ export function checkSsoCredentialEncryptionKeyConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// comments module secrets (ADR-0041) — warnings, not critical, and here is why
+// ---------------------------------------------------------------------------
+
+/**
+ * `comments` has two optional secrets. Neither is `critical`, because neither
+ * can cause a data leak or an authorization bypass when absent — both degrade
+ * to a strictly safe state. They are `warning` because both degradations are
+ * silent from the outside and cost real functionality, so an operator should
+ * see them before going live rather than discover them from a support ticket.
+ *
+ * - `COMMENTS_SUBSCRIBER_ENCRYPTION_KEY` absent → reply-notify subscriptions
+ *   store `UNRESOLVABLE_SUBSCRIBER_REF` instead of an encrypted address. No
+ *   plaintext address ever reaches disk; reply notifications simply cannot be
+ *   sent. A key of the wrong length is treated identically (fail-closed), which
+ *   is worth reporting distinctly because it looks configured but is not.
+ * - `COMMENTS_TIMING_SECRET` absent → the form's timing token is signed with a
+ *   per-process random key, so a form rendered before a restart fails the
+ *   anti-abuse timing check and the visitor is asked to resubmit.
+ */
+export function checkCommentsSecretsConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "comments module secrets are configured";
+  const severity: CheckSeverity = "warning";
+
+  const notes: string[] = [];
+
+  const encryptionKey = env.COMMENTS_SUBSCRIBER_ENCRYPTION_KEY?.trim() ?? "";
+  if (encryptionKey === "") {
+    notes.push(
+      "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY is unset — reply-notify subscriptions store an unresolvable sentinel instead of an encrypted recipient, so reply notifications cannot be sent (no plaintext address is ever written; this fails closed)."
+    );
+  } else {
+    let byteLength = 0;
+    try {
+      byteLength = Buffer.from(encryptionKey, "base64").length;
+    } catch {
+      byteLength = 0;
+    }
+    if (byteLength !== 32) {
+      notes.push(
+        `COMMENTS_SUBSCRIBER_ENCRYPTION_KEY base64-decodes to ${byteLength} bytes, not 32 — AES-256-GCM requires exactly 32 (\`openssl rand -base64 32\`). It LOOKS configured but is rejected at runtime, so reply notifications silently cannot be sent.`
+      );
+    }
+  }
+
+  const timingSecret = env.COMMENTS_TIMING_SECRET?.trim() ?? "";
+  if (timingSecret === "") {
+    notes.push(
+      "COMMENTS_TIMING_SECRET is unset — comment-form timing tokens are signed with a per-process random key, so a form rendered before a restart (or on another instance) fails the anti-abuse timing check and the visitor must resubmit."
+    );
+  }
+
+  if (notes.length > 0) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: notes.join(" ")
+    };
+  }
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence:
+      "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY is a valid 32-byte AES-256 key and COMMENTS_TIMING_SECRET is set — reply notifications are deliverable and timing tokens survive a restart."
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full-online deployment-profile gate is correctly configured (Issue #186) —
 // critical when misconfigured, informational when disabled intentionally
 // ---------------------------------------------------------------------------
@@ -1947,6 +2035,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),
     checkSsoCredentialEncryptionKeyConfigured(),
+    checkCommentsSecretsConfigured(),
     checkOnlineAuthSecurityReady(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),

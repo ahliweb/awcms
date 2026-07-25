@@ -19,6 +19,7 @@ import { dataLifecycleModule } from "./data-lifecycle/module";
 import { seoDistributionModule } from "./seo-distribution/module";
 import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
+import { commentsModule } from "./comments/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -118,7 +119,18 @@ const baseModules: ModuleDescriptor[] = [
   // generic engine reads through `listModules()` — a descriptor-list seam, not a
   // capability `provides`, precisely because many providers are expected. See
   // src/modules/site-search/module.ts's `description`.
-  siteSearchModule
+  siteSearchModule,
+  // Ported from awcms-micro (Issue #271, ADR-0041), Gelombang-1 of
+  // docs/awcms/absorb-awcms-micro-roadmap.md: moderation-first commenting over
+  // PUBLISHED, PUBLIC resources. Depends only on tenant_admin/identity_access
+  // (both above), so the DAG stays acyclic, and no existing module depends on
+  // it: content modules CONTRIBUTE reviewed, pure-data `commentableResources`
+  // descriptors (blog_content declares `blog_content.post`) that this module's
+  // generic engine reads through `listModules()` — a descriptor-list seam, not a
+  // capability `provides`, precisely because many providers are expected. The
+  // same shape site_search uses one entry up. See
+  // src/modules/comments/module.ts's `description`.
+  commentsModule
 ];
 
 /**

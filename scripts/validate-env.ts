@@ -270,7 +270,26 @@ const RULES: readonly Rule[] = [
     required: false,
     type: "string",
     secret: true
-  }
+  },
+  // comments (ADR-0041). Both are OPTIONAL, and both degrade rather than fail:
+  // without the encryption key, reply-notify subscriptions store an
+  // unresolvable sentinel instead of a recipient (no plaintext address ever
+  // reaches disk); without the timing secret, the form's timing token is signed
+  // with a per-process random key. `security:readiness` explains the cost of
+  // each — see `checkCommentsSecrets` there.
+  {
+    name: "COMMENTS_SUBSCRIBER_ENCRYPTION_KEY",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  {
+    name: "COMMENTS_TIMING_SECRET",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  { name: "COMMENTS_RETENTION_DAYS", required: false, type: "int", min: 1 }
 ];
 
 /** Nilai placeholder yang aman di dev tapi dilarang di produksi. */

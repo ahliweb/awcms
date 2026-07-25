@@ -1,5 +1,5 @@
 {
-  "moduleCount": 20,
+  "moduleCount": 21,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -29,6 +29,22 @@
         }
       ],
       "permissionCount": 39,
+      "navigationCount": 1,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "comments",
+      "name": "Comments",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "domain",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 8,
       "navigationCount": 1,
       "jobCount": 1,
       "hasHealthCheck": false,

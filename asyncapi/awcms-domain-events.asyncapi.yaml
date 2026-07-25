@@ -111,6 +111,42 @@ channels:
       A workflow delegation/substitute assignment was revoked. Producer:
       `workflow-approval/application/workflow-delegation-directory.ts`'s
       `revokeWorkflowDelegation`.
+  awcms.comments.comment.submitted:
+    address: awcms.comments.comment.submitted
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A comment was submitted against a published, public commentable resource
+      (ADR-0041). Producer: `comments/application/comment-service.ts`'s
+      `submitComment`. The payload carries opaque references only — comment and
+      thread id, resource type, the server-derived public URL, and the resulting
+      status. Never the body text, the author address, or any identity hash.
+  awcms.comments.comment.approved:
+    address: awcms.comments.comment.approved
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A comment became publicly visible, either by auto-approval under the
+      thread policy or by a moderator's approve decision. Producers:
+      `comments/application/comment-service.ts`'s `submitComment` and
+      `comments/application/comment-moderation.ts`'s `moderateComment`. The
+      reply-notification consumer keys off THIS event rather than
+      `comment.submitted`, so a comment still held for moderation never triggers
+      a notification.
+  awcms.comments.reply.created:
+    address: awcms.comments.reply.created
+    messages:
+      DomainEvent:
+        $ref: "#/components/messages/DomainEvent"
+    description: >-
+      A submitted comment was a reply to an existing comment. Producer:
+      `comments/application/comment-service.ts`'s `submitComment`, published
+      alongside `comment.submitted` so a consumer can distinguish thread replies
+      without re-reading the row. The recipient address is resolved from
+      encrypted storage by the dispatcher at send time and is never carried
+      here.
   awcms.email.message.queued:
     address: awcms.email.message.queued
     messages:
@@ -475,6 +511,24 @@ operations:
       $ref: "#/channels/awcms.workflow.delegation.revoked"
     messages:
       - $ref: "#/channels/awcms.workflow.delegation.revoked/messages/DomainEvent"
+  publishCommentSubmitted:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.comments.comment.submitted"
+    messages:
+      - $ref: "#/channels/awcms.comments.comment.submitted/messages/DomainEvent"
+  publishCommentApproved:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.comments.comment.approved"
+    messages:
+      - $ref: "#/channels/awcms.comments.comment.approved/messages/DomainEvent"
+  publishCommentReplyCreated:
+    action: send
+    channel:
+      $ref: "#/channels/awcms.comments.reply.created"
+    messages:
+      - $ref: "#/channels/awcms.comments.reply.created/messages/DomainEvent"
   publishEmailMessageQueued:
     action: send
     channel:
