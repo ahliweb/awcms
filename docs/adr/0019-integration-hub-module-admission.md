@@ -5,6 +5,16 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #754 (epic #738 `platform-evolution`, Wave 3), Issue #742/#745 (`domain_event_runtime`, `data_lifecycle` — keduanya dependency), Issue #739/ADR-0013 §1/§6 (pre-klasifikasi `integration_hub` sebagai System Foundation kandidat + data-ownership matrix), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
+> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
+> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
+> tidak ada `src/modules/integration_hub/`, tidak ada migrasi, tidak ada permission, dan
+> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
+> pengadaannya: Gelombang A
+> [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
+> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
+> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
+> modul masuk registry.
+
 ## Konteks
 
 ADR-0013 §1 sudah mem-pre-klasifikasikan `integration_hub` sebagai kandidat **System Foundation** untuk epic #738, dan §6 (data-ownership matrix) sudah menyatakan batasnya secara eksplisit: modul ini memiliki **status pengiriman envelope inbound/outbound (staging/inbox/outbox) — bukan data bisnis final**, berkolaborasi dengan modul pemilik data lewat capability port/API publik-internal. Issue #754 sendiri secara eksplisit mensyaratkan sebagai acceptance criterion pertama: "Admission decision/ADR confirms category, owner, dependencies, offline behavior, and adapter ownership rules" — ADR ini memenuhi syarat itu dengan mengisi format `module-proposal-template.md` inline, mengikuti preseden ADR-0016 (`organization_structure`, Issue #749) yang juga menulis ADR admission tersendiri karena issue-nya secara eksplisit memintanya (berbeda dari #742/#743 yang mengandalkan pre-klasifikasi ADR-0013 saja, tanpa ADR/doc 21 §8 terpisah).

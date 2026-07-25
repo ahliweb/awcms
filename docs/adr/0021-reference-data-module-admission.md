@@ -5,6 +5,16 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #750 (epic #738 `platform-evolution`, Wave 3), Issue #739 / ADR-0013 (extension layers, data-ownership matrix), ADR-0016 (`organization_structure` admission — sama pola template), Issue #742 / `domain_event_runtime` (outbox event runtime dipakai modul ini sebagai REAL producer), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
+> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
+> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
+> tidak ada `src/modules/reference_data/`, tidak ada migrasi, tidak ada permission, dan
+> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
+> pengadaannya: Gelombang A
+> [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
+> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
+> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
+> modul masuk registry.
+
 ## Konteks
 
 ADR-0013 §1 sudah mem-pre-klasifikasikan `reference_data` sebagai kandidat **Official Optional Business Foundation** (lapisan 3) untuk Wave 3 epic #738, dan §1 catatan penutup secara eksplisit mewanti-wanti implementer issue ini bahwa `idn_admin_regions` (modul terdaftar `type: "base"`, `status: "experimental"`, tanpa schema/API/UI) sudah "setengah membangun primitif yang sama" secara konseptual — ADR ini mengonfirmasi bagaimana kedua modul tetap terpisah tanpa duplikasi data (§4 di bawah). Issue #750 secara eksplisit mensyaratkan sebagai acceptance criterion pertama: "Admission decision/ADR confirms module category, ownership, dependencies, and offline behavior" — ADR ini memenuhi syarat itu dengan mengisi `docs/awcms/templates/module-proposal-template.md` inline, mengikuti format ADR-0016 (preseden Wave 2 terdekat yang juga menulis ADR admission tersendiri, bukan hanya mengandalkan pre-klasifikasi ADR-0013).
