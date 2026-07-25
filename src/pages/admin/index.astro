@@ -1,59 +1,339 @@
 ---
 /**
- * Admin dashboard (Issue #166). The simplest real authenticated page: it
- * renders only from `Astro.locals.ssrContext` (already resolved + guarded by
- * `src/middleware.ts`), so it needs no additional DB read of its own. Proves
- * the login → session-cookie → `/admin` guard → SSR render loop end to end.
+ * Admin dashboard (Issue #166; redesigned to match awcms-micro's dashboard
+ * during the admin-shell parity work).
  *
- * UI/UX phase-2: presents the session facts as scannable stat cards + quick
- * navigation tiles using only Phase-1 utilities (`.fade-in-up`,
- * `.stagger-children`, `.hover-lift`) and admin-screens.css helpers. The
- * `#admin-dashboard-heading`, `#dashboard-tenant-id` and
- * `#dashboard-permission-count` hooks (asserted by tests/e2e) are preserved.
+ * WHAT CHANGED AND WHY IT IS NOT COSMETIC-ONLY
+ *
+ * The old version rendered only `Astro.locals.ssrContext` — tenant id, role
+ * count, permission count — plus a grid of quick links, and needed no database
+ * read at all. That is a page about your SESSION, not about your TENANT, and it
+ * told an operator nothing they could act on.
+ *
+ * This version renders the same four reports awcms-micro's dashboard does, all
+ * of which already existed in this repo's `reporting` module and were simply
+ * never surfaced in the UI: tenant activity, access/audit, sync health, and
+ * module usage. The visual parity therefore comes with real parity of
+ * information — no placeholder tiles, no invented metrics.
+ *
+ * GATING AND DEGRADATION
+ *
+ * Reads are gated on `reporting.dashboard.read` (the permission the reporting
+ * module already declares). Without it the page shows a denied notice rather
+ * than an empty shell, so "you may not see this" stays distinguishable from
+ * "there is nothing here".
+ *
+ * A failure in the report queries must not 500 the one page every admin lands
+ * on first, so it degrades to an error notice. Note the shape check on the
+ * result: this repo's `withTenant` RETURNS a 503 `Response` when the circuit
+ * breaker is open instead of throwing, so `catch` alone would let a `Response`
+ * through and every field read off it would be `undefined`.
+ *
+ * The session cards are kept below the reports — they are the only thing an
+ * admin without `reporting.dashboard.read` can still see, and the
+ * `#admin-dashboard-heading` / `#dashboard-tenant-id` hooks are asserted by
+ * `tests/e2e/admin-offices.e2e.ts`.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { fetchTenantActivityReport } from "../../modules/reporting/application/tenant-activity-report";
+import { fetchAccessAuditReport } from "../../modules/reporting/application/access-audit-report";
+import { fetchSyncHealthReport } from "../../modules/reporting/application/sync-health-report";
+import { fetchModuleUsageReport } from "../../modules/reporting/application/module-usage-report";
+import { logAdminPageError } from "../../lib/logging/error-log";
 
 const ssr = Astro.locals.ssrContext!;
 const permissionCount = ssr.permissions.size;
 const roleCount = ssr.roles.length;
 const roleSummary = roleCount > 0 ? ssr.roles.join(", ") : "—";
 
-const quickLinks = [
-  { href: "/admin/offices", label: "Offices" },
-  { href: "/admin/profiles", label: "Profiles" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/roles", label: "Roles" },
-  { href: "/admin/abac-policies", label: "ABAC policies" },
-  { href: "/admin/modules", label: "Modules" },
-  { href: "/admin/email-templates", label: "Email templates" }
-];
+const DASHBOARD_PERMISSION = permissionKey("reporting", "dashboard", "read");
+const hasDashboardAccess = ssr.permissions.has(DASHBOARD_PERMISSION);
+
+type Dashboard = {
+  tenantActivity: Awaited<ReturnType<typeof fetchTenantActivityReport>>;
+  accessAudit: Awaited<ReturnType<typeof fetchAccessAuditReport>>;
+  syncHealth: Awaited<ReturnType<typeof fetchSyncHealthReport>>;
+  moduleUsage: Awaited<ReturnType<typeof fetchModuleUsageReport>>;
+};
+
+let dashboard: Dashboard | null = null;
+let loadError = false;
+
+if (hasDashboardAccess) {
+  try {
+    const result = await withTenant(
+      getDatabaseClient(),
+      ssr.tenantId,
+      async (tx) => ({
+        tenantActivity: await fetchTenantActivityReport(tx, ssr.tenantId),
+        accessAudit: await fetchAccessAuditReport(tx, ssr.tenantId),
+        syncHealth: await fetchSyncHealthReport(tx, ssr.tenantId),
+        moduleUsage: await fetchModuleUsageReport(tx, ssr.tenantId)
+      })
+    );
+
+    // See the header note: a circuit-open `Response` arrives here as an
+    // ordinary value, so presence of a known key is the only honest test.
+    if (result && typeof result === "object" && "tenantActivity" in result) {
+      dashboard = result as Dashboard;
+    } else {
+      loadError = true;
+    }
+  } catch (error) {
+    logAdminPageError("admin/index.astro: failed to load dashboard", error, {
+      correlationId: Astro.locals.correlationId
+    });
+    loadError = true;
+  }
+}
+
+const syncNeedsAttention =
+  dashboard !== null && !dashboard.syncHealth.isHealthy;
+
+/* Decorative line icons (aria-hidden), injected with `set:html`. Static SVG
+   only — no inline style or script — so they carry no CSP cost, and
+   `currentColor` keeps them theme-aware in both light and dark. */
+const ICON_USERS =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+const ICON_OFFICE =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></svg>';
+const ICON_SHIELD =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>';
+const ICON_SYNC =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.7 3L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9 9 0 0 0 6.7-3L21 16"/><path d="M21 21v-5h-5"/></svg>';
+const ICON_MODULES =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>';
 ---
 
 <AdminLayout title="Dashboard" active="dashboard">
-  <header class="page-header fade-in-up">
-    <h1 id="admin-dashboard-heading">Dashboard</h1>
-    <p class="page-description">
-      You are signed in. Here is a snapshot of your current session and the
-      areas you can manage.
-    </p>
-  </header>
+  <h1 id="admin-dashboard-heading" class="sr-only">Dashboard</h1>
 
-  <section aria-label="Session overview">
-    <ul class="stat-grid stagger-children">
-      <li class="stat-card hover-lift fade-in-up">
+  {
+    !hasDashboardAccess && (
+      <p class="state-notice fade-in-up" id="dashboard-denied">
+        You do not have permission to view the tenant dashboard reports (
+        <code>{DASHBOARD_PERMISSION}</code>). Your session details are shown
+        below.
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="dashboard-error">
+        The dashboard reports could not be loaded right now. Your session
+        details are shown below; try again shortly.
+      </p>
+    )
+  }
+
+  {
+    dashboard && (
+      <div class="dashboard">
+        <div class="kpi-grid stagger-children">
+          <article class="kpi kpi--primary fade-in-up">
+            <span class="kpi-icon" set:html={ICON_USERS} />
+            <span class="kpi-value">
+              {dashboard.tenantActivity.activeUserCount}
+            </span>
+            <span class="kpi-label">Active users</span>
+          </article>
+
+          <article class="kpi kpi--info fade-in-up">
+            <span class="kpi-icon" set:html={ICON_OFFICE} />
+            <span class="kpi-value">
+              {dashboard.tenantActivity.activeOfficeCount}
+            </span>
+            <span class="kpi-label">Active offices</span>
+          </article>
+
+          <article class="kpi kpi--success fade-in-up">
+            <span class="kpi-icon" set:html={ICON_SHIELD} />
+            <span class="kpi-value">{dashboard.accessAudit.allowCount}</span>
+            <span class="kpi-label">
+              Allow ({dashboard.accessAudit.decisionWindowDays} days)
+            </span>
+          </article>
+
+          <article class="kpi kpi--warning fade-in-up">
+            <span class="kpi-icon" set:html={ICON_SYNC} />
+            <span class="kpi-value">
+              {dashboard.syncHealth.activeNodeCount}/
+              {dashboard.syncHealth.totalNodeCount}
+            </span>
+            <span class="kpi-label">Active nodes</span>
+            {syncNeedsAttention && (
+              <span class="kpi-status">
+                <span class="badge badge--warning">Needs attention</span>
+              </span>
+            )}
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="dashboard-card fade-in-up">
+            <header class="card-header">
+              <span class="card-icon" set:html={ICON_USERS} />
+              <h2>Tenant Activity</h2>
+            </header>
+            <dl>
+              <div class="row">
+                <dt>Tenant</dt>
+                <dd>
+                  {dashboard.tenantActivity.tenantName}
+                  <span class="badge badge--muted">
+                    {dashboard.tenantActivity.tenantStatus}
+                  </span>
+                </dd>
+              </div>
+              <div class="row">
+                <dt>Active users</dt>
+                <dd>{dashboard.tenantActivity.activeUserCount}</dd>
+              </div>
+              <div class="row">
+                <dt>Active offices</dt>
+                <dd>{dashboard.tenantActivity.activeOfficeCount}</dd>
+              </div>
+              <div class="row">
+                <dt>Last login</dt>
+                <dd>{dashboard.tenantActivity.mostRecentLoginAt ?? "—"}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="dashboard-card fade-in-up">
+            <header class="card-header">
+              <span class="card-icon" set:html={ICON_SHIELD} />
+              <h2>Access &amp; Audit</h2>
+            </header>
+            <dl>
+              <div class="row">
+                <dt>Allow ({dashboard.accessAudit.decisionWindowDays} days)</dt>
+                <dd>{dashboard.accessAudit.allowCount}</dd>
+              </div>
+              <div class="row">
+                <dt>Deny ({dashboard.accessAudit.decisionWindowDays} days)</dt>
+                <dd
+                  class={
+                    dashboard.accessAudit.denyCount > 0 ? "dd-alert" : undefined
+                  }
+                >
+                  {dashboard.accessAudit.denyCount}
+                </dd>
+              </div>
+              <div class="row">
+                <dt>Total decision logs</dt>
+                <dd>{dashboard.accessAudit.totalDecisionCount}</dd>
+              </div>
+              <div class="row">
+                <dt>Audit events</dt>
+                <dd>{dashboard.accessAudit.auditEventCount}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="dashboard-card fade-in-up">
+            <header class="card-header">
+              <span class="card-icon" set:html={ICON_SYNC} />
+              <h2>Sync Health</h2>
+              {syncNeedsAttention && (
+                <span class="card-header-badge">
+                  <span class="badge badge--warning">Needs attention</span>
+                </span>
+              )}
+            </header>
+            <dl>
+              <div class="row">
+                <dt>Active nodes</dt>
+                <dd>
+                  {dashboard.syncHealth.activeNodeCount} /{" "}
+                  {dashboard.syncHealth.totalNodeCount}
+                </dd>
+              </div>
+              <div class="row">
+                <dt>Open conflicts</dt>
+                <dd
+                  class={
+                    dashboard.syncHealth.hasOpenConflicts
+                      ? "dd-alert"
+                      : undefined
+                  }
+                >
+                  {dashboard.syncHealth.openConflictCount}
+                </dd>
+              </div>
+              <div class="row">
+                <dt>Pending objects</dt>
+                <dd>{dashboard.syncHealth.pendingObjectCount}</dd>
+              </div>
+              <div class="row">
+                <dt>Failed objects</dt>
+                <dd
+                  class={
+                    dashboard.syncHealth.hasFailedObjects
+                      ? "dd-alert"
+                      : undefined
+                  }
+                >
+                  {dashboard.syncHealth.failedObjectCount}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        </div>
+
+        <section class="dashboard-card dashboard-card--wide fade-in-up">
+          <header class="card-header">
+            <span class="card-icon" set:html={ICON_MODULES} />
+            <h2>Module Usage</h2>
+          </header>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Module</th>
+                  <th scope="col">Metric</th>
+                  <th scope="col" class="num">
+                    Count
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.moduleUsage.map((entry) => (
+                  <tr>
+                    <td>{entry.moduleName}</td>
+                    <td>{entry.metricLabel}</td>
+                    <td class="num">{entry.recordCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  <section class="admin-section" aria-label="Session">
+    <h2 class="admin-section-title">Your session</h2>
+    <ul class="stat-grid">
+      <li class="stat-card">
         <div class="stat-label">Tenant</div>
         <div class="stat-value stat-value--mono" id="dashboard-tenant-id">
           {ssr.tenantId}
         </div>
         <div class="stat-hint">Active tenant context</div>
       </li>
-      <li class="stat-card hover-lift fade-in-up">
+      <li class="stat-card">
         <div class="stat-label">Roles</div>
         <div class="stat-value">{roleCount}</div>
         <div class="stat-hint">{roleSummary}</div>
       </li>
-      <li class="stat-card hover-lift fade-in-up">
+      <li class="stat-card">
         <div class="stat-label">Granted permissions</div>
         <div class="stat-value" id="dashboard-permission-count">
           {permissionCount}
@@ -62,22 +342,255 @@ const quickLinks = [
       </li>
     </ul>
   </section>
-
-  <section class="admin-section" aria-label="Quick navigation">
-    <h2 class="admin-section-title">Manage</h2>
-    <ul class="quick-links stagger-children">
-      {
-        quickLinks.map((link) => (
-          <li class="fade-in-up">
-            <a class="quick-link transition-base" href={link.href}>
-              <span>{link.label}</span>
-              <span class="quick-link-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </li>
-        ))
-      }
-    </ul>
-  </section>
 </AdminLayout>
+
+<style>
+  /* ── KPI tiles ────────────────────────────────────────────────────────*/
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+
+  .kpi {
+    --kpi-accent: var(--color-primary);
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0 var(--sp-3);
+    padding: var(--sp-4);
+    padding-left: calc(var(--sp-4) + 3px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  /* The accent is a bar, not a tinted border — a 3px rule reads as a category
+     marker, whereas colouring the whole border reads as a state
+     (error/warning) that the tile does not necessarily have. */
+  .kpi::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--kpi-accent);
+  }
+
+  .kpi--primary {
+    --kpi-accent: var(--color-primary);
+  }
+  .kpi--info {
+    --kpi-accent: var(--color-info);
+  }
+  .kpi--success {
+    --kpi-accent: var(--color-success);
+  }
+  .kpi--warning {
+    --kpi-accent: var(--color-warning);
+  }
+
+  .kpi-icon {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--kpi-accent) 15%, transparent);
+    color: var(--kpi-accent);
+  }
+
+  /* `set:html`-injected SVG is not reached by Astro's scoped selector, so it
+     has to be sized through :global(). */
+  .kpi-icon :global(svg) {
+    width: 22px;
+    height: 22px;
+  }
+
+  .kpi-value {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
+    line-height: 1;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  .kpi-label {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* Pinned to the corner so tiles keep a uniform height whether or not they
+     carry a badge. */
+  .kpi-status {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+  }
+
+  /* ── Detail cards ─────────────────────────────────────────────────────*/
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+  }
+
+  .dashboard-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--sp-4);
+  }
+
+  .dashboard-card--wide {
+    grid-column: 1 / -1;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-3);
+    margin-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .card-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    color: var(--color-primary-strong);
+  }
+
+  .card-icon :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+
+  .dashboard-card h2 {
+    margin: 0;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+  }
+
+  .card-header-badge {
+    margin-left: auto;
+  }
+
+  .dashboard-card dl {
+    margin: 0;
+  }
+
+  .dashboard-card .row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .dashboard-card .row:last-child {
+    border-bottom: none;
+  }
+
+  .dashboard-card dt {
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+  }
+
+  .dashboard-card dd {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-weight: var(--fw-semibold);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dashboard-card dd.dd-alert {
+    color: var(--color-danger-strong);
+  }
+
+  /* ── Badges ───────────────────────────────────────────────────────────*/
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--sp-2);
+    border-radius: var(--radius-full);
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+  }
+
+  .badge--warning {
+    background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+    color: var(--color-text);
+  }
+
+  .badge--muted {
+    background: var(--color-surface-2);
+    color: var(--color-text-muted);
+  }
+
+  /* ── Module usage table ───────────────────────────────────────────────*/
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard-card table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+  }
+
+  .dashboard-card th,
+  .dashboard-card td {
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .dashboard-card thead th {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-bold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+    color: var(--color-text-muted);
+  }
+
+  .dashboard-card tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .dashboard-card td.num,
+  .dashboard-card th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dashboard-card td.num {
+    font-weight: var(--fw-semibold);
+  }
+</style>

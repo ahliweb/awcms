@@ -1,19 +1,45 @@
 ---
 /**
  * Admin shell (Issue #166; grown into a mobile-first responsive shell by the
- * UI/UX overhaul foundation). Still deliberately minimal vs awcms-mini: NO
- * TenantBadge / SyncIndicator / ThemeToggle / LanguageSwitcher / i18n — those
- * drag in visitor-analytics, theme persistence, and the gettext catalog awcms
- * does not have yet. Kept: brand, the signed-in user's roles, a
- * permission-agnostic sidebar, logout, and the page slot. Added: a skip link
- * and a CSS-only responsive sidebar drawer for small screens.
+ * UI/UX overhaul foundation; brought to structural parity with awcms-micro's
+ * admin shell by the admin-shell parity work).
  *
- * Responsive sidebar (mobile-first): below `--bp-md` (768px) the sidebar is an
- * off-canvas drawer toggled by a hidden, keyboard-focusable checkbox
- * (`#admin-nav-toggle`) driven by a hamburger `<label>` and a scrim `<label>` —
- * ALL CSS-only (see admin.css). No JS is used for the toggle, so there is
- * nothing for the strict CSP to block; on desktop the sidebar is static and the
- * toggle/scrim are `display: none`.
+ * WHAT WAS ADOPTED FROM awcms-micro
+ * ---------------------------------
+ * The chrome, which is what an operator actually sees and compares:
+ *   - `.admin-shell` column wrapper + sticky topbar
+ *   - a tenant badge (`TenantBadge`) naming the active tenant
+ *   - a `SyncIndicator` dot, fed by the real `fetchSyncIndicatorActive`
+ *     (a bounded `EXISTS`, not the full sync-health aggregation)
+ *   - a working colour-theme control (`ThemeToggle`) — awcms already shipped
+ *     `:root[data-theme="dark"]` tokens with nothing to set that attribute, so
+ *     dark mode existed but was unreachable
+ *   - an avatar + roles + log-out cluster
+ *   - a TWO-LEVEL sidebar (section heading -> owning module -> links) instead
+ *     of one flat list, with the app version pinned to its footer
+ *   - a breadcrumb above the page slot
+ *
+ * The tenant-name lookup and the sync `EXISTS` share ONE transaction, so all
+ * this chrome costs a single round trip per `/admin/*` render.
+ *
+ * WHAT WAS ADAPTED RATHER THAN COPIED
+ * -----------------------------------
+ *   - `LanguageSwitcher` -> `LocaleBadge`. awcms has no gettext catalog, so a
+ *     `<select>` with one option would be a control that cannot do anything —
+ *     the same fake-affordance mistake `TenantBadge`'s comment argues against.
+ *     The badge fills the same slot and states the served language honestly.
+ *   - The avatar is a plain tile, not a link: micro's points at
+ *     `/admin/profile`, a page awcms does not have.
+ *
+ * WHAT WAS DELIBERATELY NOT ADOPTED
+ * ---------------------------------
+ *   - micro's JS drawer (focus trap + `inert` + Escape). awcms's CSS-only
+ *     checkbox drawer is KEPT: it needs no script at all, which is strictly
+ *     better under this repo's CSP, and swapping it for JS would be a
+ *     regression dressed up as parity. The visible result is the same.
+ *   - micro's per-tenant sidebar arrangement subsystem (`sidebar-menu-config`).
+ *     The grouping below is static; the DB-backed reordering is a separate
+ *     capability, not a UI/UX detail.
  *
  * Auth is NOT enforced here — `src/middleware.ts` already guards `/admin/*`
  * (resolves the session, redirects to `/login` when absent, and sets
@@ -21,30 +47,44 @@
  * one is a middleware invariant violation, not a user-facing state, so it
  * throws rather than rendering a half-authenticated page.
  *
- * CSP (see astro.config.mjs / security-headers.ts): styles come from external
- * stylesheets (`tokens.css` + `admin.css` + `motion.css`, emitted as <link> by
- * `inlineStylesheets: "never"`) and the only script is the Astro-bundled logout
- * module below — no inline script/style, no third-party origin, so
- * `default-src 'self'` holds and the CSP guarantee is unchanged.
+ * CSP (see astro.config.mjs / security-headers.ts): styles are external
+ * stylesheets (`inlineStylesheets: "never"`), the logout + theme-toggle
+ * scripts are Astro-bundled external modules, and the ONE inline script — the
+ * theme-init in `<head>` — is admitted by SHA-256, not `'unsafe-inline'`. See
+ * `src/lib/security/theme-init-script.ts` for why it must be inline.
  */
 import "../styles/tokens.css";
 import "../styles/motion.css";
 import "../styles/admin.css";
+import TenantBadge from "../components/TenantBadge.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
+import SyncIndicator from "../components/SyncIndicator.astro";
+import LocaleBadge from "../components/LocaleBadge.astro";
+import { getDatabaseClient } from "../lib/database/client";
+import { withTenant } from "../lib/database/tenant-context";
+import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
+import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
+import packageJson from "../../package.json";
+
+/** Shown in the sidebar footer; single source of truth is package.json. */
+const appVersion = packageJson.version;
+
+type NavKey =
+  | "dashboard"
+  | "offices"
+  | "profiles"
+  | "users"
+  | "roles"
+  | "abac-policies"
+  | "modules"
+  | "email-templates"
+  | "tenant-domains"
+  | "analytics";
 
 interface Props {
   title: string;
   /** Sidebar key to mark `aria-current="page"`. */
-  active?:
-    | "dashboard"
-    | "offices"
-    | "profiles"
-    | "users"
-    | "roles"
-    | "abac-policies"
-    | "modules"
-    | "email-templates"
-    | "tenant-domains"
-    | "analytics";
+  active?: NavKey;
 }
 
 const { title, active } = Astro.props;
@@ -57,6 +97,159 @@ if (!ssr) {
 }
 
 const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
+
+/**
+ * Topbar chrome: tenant name + whether any sync node is active. Both are
+ * cosmetic on a page that renders for EVERY `/admin/*` request, so a database
+ * hiccup must degrade rather than 500 the whole admin area.
+ *
+ * Note the shape check rather than a truthiness check: this repo's
+ * `withTenant` RETURNS a `Response` (503 `DATABASE_BUSY`) when the circuit
+ * breaker is open instead of throwing. A `Response` is truthy, so `catch`
+ * alone would let it through and every field read off it would silently be
+ * `undefined`. Testing for a key we know we returned is what makes the
+ * fallback real.
+ */
+let tenantName = "Tenant";
+let syncActive = false;
+
+try {
+  const sql = getDatabaseClient();
+  const chrome = await withTenant(sql, ssr.tenantId, async (tx) => {
+    const rows = (await tx`
+      SELECT tenant_name FROM awcms_tenants WHERE id = ${ssr.tenantId}
+    `) as Array<{ tenant_name: string | null }>;
+
+    return {
+      tenantName: rows[0]?.tenant_name ?? null,
+      // Bounded EXISTS, not the full sync-health aggregation — the topbar
+      // needs one boolean and this runs on every `/admin/*` request.
+      syncActive: await fetchSyncIndicatorActive(tx, ssr.tenantId)
+    };
+  });
+
+  // Shape check, not a truthiness check: on circuit-open `withTenant` hands
+  // back a `Response`, whose `.tenantName` is `undefined` rather than an error.
+  if (chrome && typeof chrome === "object" && "tenantName" in chrome) {
+    if (
+      typeof chrome.tenantName === "string" &&
+      chrome.tenantName.trim() !== ""
+    ) {
+      tenantName = chrome.tenantName;
+    }
+
+    syncActive = chrome.syncActive === true;
+  }
+} catch {
+  // Chrome falls back to generic label + inactive — never a broken admin page.
+}
+
+/**
+ * Static grouped navigation (micro renders the same shape from its per-tenant
+ * sidebar subsystem; awcms groups in code — see the header note).
+ *
+ * This is presentation only. It is NOT a permission gate: every target route
+ * runs its own ABAC guard server-side, so a link being visible never grants
+ * anything. Hiding links by permission would need `ssr.permissions`, and a
+ * hidden link is not a security control regardless.
+ */
+const navSections: Array<{
+  /** Uppercase top-level category. */
+  label: string;
+  modules: Array<{
+    /**
+     * Owning module's display name, rendered as a muted sub-label. `null` for
+     * core entries that belong to no single module (micro does the same via
+     * its `CORE_MODULE_KEY` check) — those links sit directly under the
+     * section heading with no sub-label.
+     */
+    label: string | null;
+    items: Array<{ key: NavKey; href: string; label: string }>;
+  }>;
+}> = [
+  {
+    label: "General",
+    modules: [
+      {
+        label: null,
+        items: [{ key: "dashboard", href: "/admin", label: "Dashboard" }]
+      }
+    ]
+  },
+  {
+    label: "Identity",
+    modules: [
+      {
+        label: "Profile Identity",
+        items: [{ key: "profiles", href: "/admin/profiles", label: "Profiles" }]
+      },
+      {
+        label: "Identity & Access",
+        items: [
+          { key: "users", href: "/admin/users", label: "Users" },
+          { key: "roles", href: "/admin/roles", label: "Roles" },
+          {
+            key: "abac-policies",
+            href: "/admin/abac-policies",
+            label: "ABAC policies"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "System",
+    modules: [
+      {
+        label: "Tenant Admin",
+        items: [{ key: "offices", href: "/admin/offices", label: "Offices" }]
+      },
+      {
+        label: "Tenant Domain",
+        items: [
+          {
+            key: "tenant-domains",
+            href: "/admin/tenant/domains",
+            label: "Tenant domains"
+          }
+        ]
+      },
+      {
+        label: "Module Management",
+        items: [{ key: "modules", href: "/admin/modules", label: "Modules" }]
+      },
+      {
+        label: "Email",
+        items: [
+          {
+            key: "email-templates",
+            href: "/admin/email-templates",
+            label: "Email templates"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    label: "Operations",
+    modules: [
+      {
+        label: "Visitor Analytics",
+        items: [
+          {
+            key: "analytics",
+            href: "/admin/analytics",
+            label: "Visitor analytics"
+          }
+        ]
+      }
+    ]
+  }
+];
+
+/** Decorative topbar avatar (aria-hidden). Static SVG — no CSP cost. */
+const ICON_USER =
+  '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path></svg>';
 ---
 
 <!doctype html>
@@ -65,106 +258,116 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title} · AWCMS</title>
+    {
+      /* The one inline script in this repo — must run before body paint or the
+        shell flashes the wrong theme. CSP admits it by SHA-256; `set:html`
+        guarantees the rendered bytes are exactly the hashed constant. */
+    }
+    <script is:inline set:html={THEME_INIT_SCRIPT_BODY} />
   </head>
   <body class="admin-body">
     <a class="skip-link" href="#admin-main">Skip to main content</a>
 
-    {
-      /* CSS-only responsive drawer toggle (see admin.css). Hidden + static
-        sidebar on desktop; off-canvas drawer + this hamburger on mobile. */
-    }
-    <input
-      type="checkbox"
-      id="admin-nav-toggle"
-      class="admin-nav-toggle-checkbox"
-      aria-label="Toggle navigation menu"
-    />
+    <div class="admin-shell">
+      {
+        /* CSS-only responsive drawer toggle (see admin.css). The checkbox,
+          topbar and layout row must stay SIBLINGS — admin.css drives the
+          drawer with `:checked + .admin-topbar` / `:checked ~ .admin-layout`
+          selectors. */
+      }
+      <input
+        type="checkbox"
+        id="admin-nav-toggle"
+        class="admin-nav-toggle-checkbox"
+        aria-label="Toggle navigation menu"
+      />
 
-    <header class="admin-topbar">
-      <label class="admin-nav-toggle" for="admin-nav-toggle">
-        <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
-        <span class="sr-only">Toggle navigation menu</span>
-      </label>
-      <a href="/admin" class="admin-brand">AWCMS</a>
-      <div class="admin-topbar-right">
-        <span class="admin-roles" id="admin-roles">{roles}</span>
-        <button type="button" id="admin-logout" class="admin-logout">
-          Sign out
-        </button>
+      <header class="admin-topbar">
+        <label class="admin-nav-toggle" for="admin-nav-toggle">
+          <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
+          <span class="sr-only">Toggle navigation menu</span>
+        </label>
+        <a href="/admin" class="admin-brand">AWCMS</a>
+        <TenantBadge tenantName={tenantName} />
+        <div class="admin-topbar-spacer"></div>
+        <div class="admin-topbar-right">
+          <SyncIndicator active={syncActive} />
+          <ThemeToggle />
+          <LocaleBadge />
+          <div class="admin-user-menu">
+            <span
+              class="admin-avatar"
+              aria-hidden="true"
+              set:html={ICON_USER}
+            />
+            <span class="admin-roles" id="admin-roles">{roles}</span>
+            <button type="button" id="admin-logout" class="admin-logout">
+              Log out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="admin-layout">
+        <label class="admin-scrim" for="admin-nav-toggle" aria-hidden="true"
+        ></label>
+        <aside class="admin-sidebar" id="admin-sidebar">
+          <nav aria-label="Admin">
+            <ul class="admin-sidebar-groups">
+              {
+                navSections.map((section) => (
+                  <li class="admin-sidebar-group">
+                    <span class="admin-sidebar-group-label">
+                      {section.label}
+                    </span>
+                    <ul class="admin-sidebar-modules">
+                      {section.modules.map((module) => (
+                        <li class="admin-sidebar-module">
+                          {module.label !== null && (
+                            <span class="admin-sidebar-module-label">
+                              {module.label}
+                            </span>
+                          )}
+                          <ul class="admin-sidebar-links">
+                            {module.items.map((item) => (
+                              <li>
+                                <a
+                                  href={item.href}
+                                  aria-current={
+                                    active === item.key ? "page" : undefined
+                                  }
+                                >
+                                  {item.label}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))
+              }
+            </ul>
+          </nav>
+          <div class="admin-sidebar-footer">
+            <span class="admin-sidebar-version">
+              Version
+              <span class="admin-sidebar-version-value">v{appVersion}</span>
+            </span>
+          </div>
+        </aside>
+
+        <main class="admin-main" id="admin-main" tabindex="-1">
+          <nav class="admin-breadcrumb" aria-label="Breadcrumb">
+            <ol>
+              <li><a href="/admin">AWCMS</a></li>
+              <li aria-current="page">{title}</li>
+            </ol>
+          </nav>
+          <slot />
+        </main>
       </div>
-    </header>
-
-    <div class="admin-layout">
-      <label class="admin-scrim" for="admin-nav-toggle" aria-hidden="true"
-      ></label>
-      <aside class="admin-sidebar" id="admin-sidebar">
-        <nav aria-label="Admin">
-          <a
-            href="/admin"
-            aria-current={active === "dashboard" ? "page" : undefined}
-          >
-            Dashboard
-          </a>
-          <a
-            href="/admin/offices"
-            aria-current={active === "offices" ? "page" : undefined}
-          >
-            Offices
-          </a>
-          <a
-            href="/admin/tenant/domains"
-            aria-current={active === "tenant-domains" ? "page" : undefined}
-          >
-            Tenant domains
-          </a>
-          <a
-            href="/admin/profiles"
-            aria-current={active === "profiles" ? "page" : undefined}
-          >
-            Profiles
-          </a>
-          <a
-            href="/admin/users"
-            aria-current={active === "users" ? "page" : undefined}
-          >
-            Users
-          </a>
-          <a
-            href="/admin/roles"
-            aria-current={active === "roles" ? "page" : undefined}
-          >
-            Roles
-          </a>
-          <a
-            href="/admin/abac-policies"
-            aria-current={active === "abac-policies" ? "page" : undefined}
-          >
-            ABAC policies
-          </a>
-          <a
-            href="/admin/modules"
-            aria-current={active === "modules" ? "page" : undefined}
-          >
-            Modules
-          </a>
-          <a
-            href="/admin/email-templates"
-            aria-current={active === "email-templates" ? "page" : undefined}
-          >
-            Email templates
-          </a>
-          <a
-            href="/admin/analytics"
-            aria-current={active === "analytics" ? "page" : undefined}
-          >
-            Visitor analytics
-          </a>
-        </nav>
-      </aside>
-
-      <main class="admin-main" id="admin-main" tabindex="-1">
-        <slot />
-      </main>
     </div>
 
     <script>

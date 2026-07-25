@@ -15,6 +15,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
+import { THEME_INIT_SCRIPT_HASH } from "../src/lib/security/theme-init-script";
 
 function cspFor(isProduction: boolean, turnstileEnabled = false): string {
   const header = buildSecurityHeaders({ isProduction, turnstileEnabled }).find(
@@ -41,13 +42,14 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     ).toContain("Content-Security-Policy");
   });
 
-  test("carries every directive ported from awcms-mini's own policy", () => {
+  test("carries every directive ported from awcms-mini's own policy, plus the always-on script-src", () => {
     expect(directives()).toEqual([
       "default-src 'self'",
       "object-src 'none'",
       "base-uri 'none'",
       "form-action 'self'",
-      "frame-ancestors 'none'"
+      "frame-ancestors 'none'",
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`
     ]);
   });
 
@@ -68,9 +70,12 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     expect(policy).not.toContain("challenges.cloudflare.com");
     expect(policy).not.toContain("youtube-nocookie.com");
     expect(policy).not.toMatch(/https?:\/\//);
-    // No script-src / frame-src at all — both fall through to default-src 'self'.
-    expect(policy).not.toContain("script-src");
+    // `frame-src` still appears only for Turnstile. `script-src` IS present
+    // now (the admin theme-init hash lives there) but names nothing beyond
+    // `'self'` and that one self-authored hash — no origin, third-party or
+    // otherwise, is reachable through it.
     expect(policy).not.toContain("frame-src");
+    expect(policy).toContain(`script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`);
   });
 
   test("keeps X-Frame-Options: DENY alongside frame-ancestors 'none' as an independent older-browser layer", () => {
@@ -107,7 +112,9 @@ describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
   test("opens EXACTLY the one Cloudflare origin in script-src and frame-src when enabled", () => {
     const list = directives(true, true);
 
-    expect(list).toContain(`script-src 'self' ${CF}`);
+    expect(list).toContain(
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}' ${CF}`
+    );
     expect(list).toContain(`frame-src ${CF}`);
     // The Turnstile origin is the ONLY third-party origin — narrow, as required.
     const policy = cspFor(true, true);
@@ -116,7 +123,11 @@ describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
   });
 
   test("re-states 'self' in script-src so the bundled login client still loads once script-src is present", () => {
-    expect(cspFor(true, true)).toContain(`script-src 'self' ${CF}`);
+    expect(cspFor(true, true)).toContain(
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}' ${CF}`
+    );
+    // ...and with Turnstile off too, since script-src is unconditional now.
+    expect(cspFor(true, false)).toContain("script-src 'self'");
   });
 
   test("keeps every base directive unchanged when enabled (origin is purely additive)", () => {
@@ -133,12 +144,30 @@ describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
     }
   });
 
-  test("enabled vs disabled differ ONLY by the two Turnstile directives — proof the origin never leaks into the LAN/offline policy", () => {
+  test("enabled vs disabled differ ONLY by the Turnstile origin — proof it never leaks into the LAN/offline policy", () => {
     const disabled = directives(true, false);
     const enabled = directives(true, true);
     const added = enabled.filter((d) => !disabled.includes(d));
 
-    expect(added).toEqual([`script-src 'self' ${CF}`, `frame-src ${CF}`]);
-    expect(disabled.every((d) => enabled.includes(d))).toBe(true);
+    // `script-src` now exists in BOTH; enabling Turnstile appends its origin to
+    // the existing directive rather than introducing the directive. So the
+    // delta is the rewritten script-src plus the new frame-src — and the ONLY
+    // textual difference between the two script-src values is the appended
+    // origin, which is what this test really guards.
+    expect(added).toEqual([
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}' ${CF}`,
+      `frame-src ${CF}`
+    ]);
+
+    const scriptSrcDisabled = disabled.find((d) => d.startsWith("script-src"));
+    const scriptSrcEnabled = enabled.find((d) => d.startsWith("script-src"));
+    expect(scriptSrcEnabled).toBe(`${scriptSrcDisabled} ${CF}`);
+
+    // Every non-script-src directive survives enabling untouched.
+    expect(
+      disabled
+        .filter((d) => !d.startsWith("script-src"))
+        .every((d) => enabled.includes(d))
+    ).toBe(true);
   });
 });

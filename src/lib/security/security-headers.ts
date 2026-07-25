@@ -26,14 +26,23 @@
  * WITHOUT enabling Astro's own `security.csp` (which would set a SECOND,
  * conflicting `content-security-policy` during page render that this
  * middleware's `headers.set(...)` then silently replaces — a broken page
- * with no obvious cause): the pages ship NO inline script and NO inline
- * style. `astro.config.mjs`'s `build.inlineStylesheets: "never"` forces every
- * stylesheet (including Astro scoped `<style>`) out to an external `<link>`
- * from this origin, and every page `<script>` is an Astro-bundled module
- * (never `is:inline`), also external from this origin — both satisfied by
- * `'self'`. So there is still nothing inline for this policy to break, and no
- * hash list to keep in sync. A future page that genuinely needs inline
- * script/style must revisit the single-owner decision (see astro.config.mjs).
+ * with no obvious cause): the pages ship NO inline style, and exactly ONE
+ * inline script. `astro.config.mjs`'s `build.inlineStylesheets: "never"` forces
+ * every stylesheet (including Astro scoped `<style>`) out to an external
+ * `<link>` from this origin, and every page `<script>` but one is an
+ * Astro-bundled module, also external from this origin — both satisfied by
+ * `'self'`.
+ *
+ * THE ONE EXCEPTION — the admin theme-init script (admin-shell parity with
+ * awcms-micro). It must run synchronously in `<head>` to prevent a theme
+ * flash, which a deferred bundled module cannot do, so it is `is:inline` and
+ * its SHA-256 (`THEME_INIT_SCRIPT_HASH`) is named in `script-src`. That makes
+ * `script-src` unconditional now, where it used to appear only for Turnstile.
+ * A hash is not `'unsafe-inline'`: it admits one exact byte sequence and
+ * nothing else, so the single-owner decision and the no-`'unsafe-inline'`
+ * guarantee both still hold. `tests/theme-init-script.test.ts` fails if the
+ * script body and that hash ever drift apart. Any FURTHER inline script/style
+ * must revisit the single-owner decision (see astro.config.mjs).
  *
  * `base-uri 'none'` + `form-action 'self'` are the two that carry real
  * weight for an API-only deployment even though session cookies are already
@@ -46,16 +55,18 @@
  * `challenges.cloudflare.com` origin are added to `script-src`/`frame-src`
  * ONLY when `turnstileEnabled` is true (the caller passes
  * `isTurnstileRequired()`; `src/middleware.ts`). On every LAN/offline
- * deployment (the default, `turnstileEnabled` false/omitted) the policy is
- * byte-identical to before this issue: no extra origin, no `frame-src`,
- * `script-src` still falls through to `default-src 'self'`. This is what keeps
- * the "fully off on LAN — no CSP origin" guarantee. When enabled, the widget
- * loader (`api.js`) needs `script-src` and its challenge iframe needs
- * `frame-src`, both narrowed to that one origin; `'self'` is re-stated in
- * `script-src` so the Astro-bundled login client (served from this origin)
- * keeps working once `script-src` is present.
+ * deployment (the default, `turnstileEnabled` false/omitted) NO third-party
+ * origin appears anywhere in the policy and there is no `frame-src` at all —
+ * that is the "fully off on LAN — no CSP origin" guarantee, and it is
+ * unchanged. (What DID change: `script-src` is now always emitted, carrying
+ * `'self'` plus the theme-init hash, instead of falling through to
+ * `default-src`. Both are same-origin/self-authored — no new origin is
+ * reachable.) When Turnstile is enabled, the widget loader (`api.js`) needs
+ * `script-src` and its challenge iframe needs `frame-src`, both narrowed to
+ * that one origin.
  */
 import { TURNSTILE_ORIGIN } from "./turnstile";
+import { THEME_INIT_SCRIPT_HASH } from "./theme-init-script";
 
 const BASE_CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -65,11 +76,33 @@ const BASE_CSP_DIRECTIVES = [
   "frame-ancestors 'none'"
 ] as const;
 
+/**
+ * `script-src` is now ALWAYS present, because the admin shell's theme-init
+ * script is `is:inline` and needs its SHA-256 explicitly allowed (see
+ * `theme-init-script.ts` for why that one script cannot be an Astro-bundled
+ * external module like every other script here).
+ *
+ * This does NOT widen the policy the way `'unsafe-inline'` would: a hash
+ * authorises one exact byte sequence. `'self'` is re-stated because naming
+ * `script-src` at all stops the fall-through to `default-src`, and the
+ * Astro-bundled admin/login clients still have to load from this origin.
+ */
+function scriptSrcSources(turnstileEnabled: boolean): string {
+  const sources = ["'self'", `'${THEME_INIT_SCRIPT_HASH}'`];
+
+  if (turnstileEnabled) {
+    sources.push(TURNSTILE_ORIGIN);
+  }
+
+  return sources.join(" ");
+}
+
 function buildContentSecurityPolicy(turnstileEnabled: boolean): string {
   const directives: string[] = [...BASE_CSP_DIRECTIVES];
 
+  directives.push(`script-src ${scriptSrcSources(turnstileEnabled)}`);
+
   if (turnstileEnabled) {
-    directives.push(`script-src 'self' ${TURNSTILE_ORIGIN}`);
     directives.push(`frame-src ${TURNSTILE_ORIGIN}`);
   }
 

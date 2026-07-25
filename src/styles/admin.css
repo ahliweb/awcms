@@ -158,13 +158,59 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Column wrapper so the topbar/sidebar/main stack fills the viewport height
+   (the sidebar's `margin-top: auto` version footer depends on a full-height
+   column, not on `.admin-body` alone). */
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 .admin-brand {
   font-weight: var(--fw-bold);
   font-size: var(--fs-md);
   color: var(--color-text);
   text-decoration: none;
-  /* Sit between the toggle and the right-hand group. */
-  margin-right: auto;
+  white-space: nowrap;
+}
+
+/* Pushes the right-hand control group away from brand + tenant badge. The
+   brand used to carry `margin-right: auto` itself; the badge now sits between
+   them, so the spacer has to be its own element. */
+.admin-topbar-spacer {
+  flex: 1;
+}
+
+/* The topbar now carries hamburger + brand + tenant badge + theme toggle +
+   roles + logout. At phone widths that runs past the right edge and forces a
+   whole-page horizontal scroll, so let the row wrap and drop the spacer that
+   only makes sense on one line. Roles are secondary chrome — the tenant badge
+   is the identity that matters here — so they give way first. */
+@media (max-width: 767.98px) {
+  .admin-topbar {
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-3);
+  }
+
+  .admin-topbar-spacer {
+    display: none;
+  }
+
+  .admin-roles {
+    display: none;
+  }
+
+  /* Keep the sync dot (it is the signal) but drop its wording, same trade as
+     the theme toggle's label. */
+  .admin-topbar .sync-indicator-label {
+    display: none;
+  }
+
+  .admin-avatar {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .admin-topbar-right {
@@ -172,6 +218,28 @@
   align-items: center;
   gap: var(--sp-3);
   min-width: 0;
+}
+
+.admin-user-menu {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* Circular avatar tile. Purely an identity marker — it is not a link, because
+   awcms has no /admin/profile page for it to lead to. */
+.admin-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
 }
 
 .admin-roles {
@@ -291,7 +359,12 @@
 /* ---- Layout: sidebar + main ---------------------------------------- */
 .admin-layout {
   position: relative;
-  min-height: calc(100vh - 57px);
+  /* `flex: 1` inside `.admin-shell` replaces the old hardcoded
+     `min-height: calc(100vh - 57px)` — that magic number was the topbar's
+     measured height, and the topbar is taller now that it carries the tenant
+     badge and theme toggle. Letting flex do the arithmetic means the row can
+     never be wrong again when topbar chrome changes. */
+  flex: 1;
 }
 
 /* Scrim (mobile only) — a <label> that also closes the drawer on tap. */
@@ -329,10 +402,86 @@
     visibility var(--motion-base) var(--ease-out);
 }
 
+/* The sidebar is now a column: nav on top, version footer pinned to the
+   bottom by the footer's own `margin-top: auto`. */
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
 .admin-sidebar nav {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
+}
+
+/* ---- Grouped navigation (section label -> links) ------------------- */
+.admin-sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-sidebar-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.admin-sidebar-group-label {
+  display: block;
+  padding: 0 var(--sp-3);
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted);
+}
+
+/* Second level: the owning module's name, muted and smaller than the section
+   heading above it. Core entries (Dashboard) carry no module label and their
+   links sit directly under the section heading. */
+.admin-sidebar-modules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.admin-sidebar-module-label {
+  display: block;
+  padding: 0 var(--sp-3);
+  margin-bottom: 2px;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.admin-sidebar-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Version pinned to the bottom regardless of how many nav items there are. */
+.admin-sidebar-footer {
+  margin-top: auto;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-sidebar-version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.admin-sidebar-version-value {
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .admin-sidebar a {
@@ -379,6 +528,31 @@
   margin-top: 0;
   font-size: var(--fs-xl);
   line-height: var(--lh-tight);
+}
+
+/* ---- Breadcrumb ---------------------------------------------------- */
+.admin-breadcrumb ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.admin-breadcrumb li + li::before {
+  content: "/";
+  margin-right: var(--sp-1);
+}
+
+.admin-breadcrumb a {
+  color: var(--color-text-muted);
+}
+
+.admin-breadcrumb a:hover {
+  color: var(--color-text);
 }
 
 /* ---- Desktop: static sidebar, no drawer/toggle/scrim --------------- */
