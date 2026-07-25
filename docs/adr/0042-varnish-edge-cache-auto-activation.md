@@ -90,8 +90,18 @@ atas header itu.
 Karena key masuk ke **regex**, key dibatasi ke `[A-Za-z0-9:._-]` saat dibangun DAN
 divalidasi ulang di VCL: sebuah key `.*` akan mengubah satu invalidasi menjadi
 "buang seluruh cache ke origin" — denial-of-service satu permintaan. Pencocokan
-juga di-anchor `(^| )key( |$)` agar ban `t:abc` tidak ikut membuang `t:abcdef`
-milik tenant lain.
+juga di-anchor `(^|[[:space:]])key([[:space:]]|$)` agar ban `t:abc` tidak ikut
+membuang `t:abcdef` milik tenant lain.
+
+`[[:space:]]` bukan pilihan gaya. Varnish memecah ekspresi ban pada **whitespace**
+menjadi `<field> <operator> <argument>`; spasi literal di dalam regex — persis
+yang ditulis versi pertama, `(^| )` — membuat jumlah token salah dan ban ditolak
+`Wrong number of arguments`. Handler BAN tetap membalas `200`, sehingga origin
+mencatat purge terkirim, baris antrean ditandai selesai, dan objek tetap
+ter-cache sampai TTL habis: **invalidasi tidak pernah bekerja sama sekali**.
+Ditemukan hanya setelah Varnish benar-benar dipasang di depan staging dan
+`X-Cache` tetap `HIT` sesudah purge. Mengutip regex tidak menolong — pemecahan
+token terjadi lebih dulu.
 
 Enqueue terjadi di **transaksi konten yang sama** (pola outbox ADR-0006), bukan
 panggilan HTTP di dalam transaksi. Pengiriman dilakukan `bun run edge-cache:purge`

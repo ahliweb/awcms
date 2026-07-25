@@ -70,9 +70,19 @@ sub vcl_recv {
             return (synth(400, "Bad purge key"));
         }
 
-        # `(^| )` / `( |$)` anchor the match to a whole space-separated token, so
-        # banning tenant `t:abc` cannot also ban `t:abcdef` — a different tenant.
-        ban("obj.http.Surrogate-Key ~ (^| )" + req.http.X-Edge-Purge-Key + "( |$)");
+        # `(^|[[:space:]])` / `([[:space:]]|$)` anchor the match to a whole
+        # space-separated token, so banning tenant `t:abc` cannot also ban
+        # `t:abcdef` — a different tenant.
+        #
+        # `[[:space:]]` rather than a literal space is NOT cosmetic. Varnish
+        # parses a ban expression by splitting it on whitespace into
+        # `<field> <operator> <argument>`; a literal space inside the regex
+        # yields the wrong token count and the ban is rejected with
+        # `Wrong number of arguments`. This handler still returns 200 in that
+        # case, so the origin records the purge as delivered and the object
+        # stays cached until its TTL — invalidation silently never happens.
+        # Quoting the regex does not help; the split happens first.
+        ban("obj.http.Surrogate-Key ~ (^|[[:space:]])" + req.http.X-Edge-Purge-Key + "([[:space:]]|$)");
 
         return (synth(200, "Banned"));
     }

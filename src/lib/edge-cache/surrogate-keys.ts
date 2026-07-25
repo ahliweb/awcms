@@ -20,8 +20,9 @@
  *    Belt and braces, because these two steps can be reached independently.
  * 2. **Prefix collisions widening a ban.** A naive ban on `t:abc` also matches
  *    the key `t:abcdef` — a different tenant. Keys are matched with explicit
- *    space-or-anchor boundaries (`(^| )key( |$)`) so one tenant can never flush
- *    another's cache by having an id that happens to be a prefix.
+ *    whitespace-or-anchor boundaries (`(^|[[:space:]])key([[:space:]]|$)`) so
+ *    one tenant can never flush another's cache by having an id that happens to
+ *    be a prefix.
  *
  * Both hazards are cross-tenant, which is why the sanitizer REJECTS rather than
  * silently rewriting: a key that cannot be represented safely must not become a
@@ -110,13 +111,36 @@ export function escapeForBanRegex(literal: string): string {
 /**
  * Build the ban expression for one key.
  *
- * The `(^| )` / `( |$)` boundaries are load-bearing (see the prefix-collision
- * hazard above) — do not "simplify" them away.
+ * ## Why `[[:space:]]` and not a literal space
+ *
+ * Varnish parses a ban expression by splitting it on **whitespace** into
+ * `<field> <operator> <argument>` triplets. A literal space anywhere in the
+ * regex — including inside `(^| )` — therefore produces the wrong token count
+ * and the ban is rejected with `Wrong number of arguments`.
+ *
+ * The original form of this expression used `(^| )`/`( |$)` and was rejected
+ * every single time. Nothing surfaced it: the VCL's BAN handler still returned
+ * `200`, so `sendEdgeCachePurge` recorded success, the purge row was marked
+ * done, and the object stayed in cache until its TTL expired. Invalidation had
+ * simply never worked. It was caught only by putting Varnish in front of
+ * staging and watching `X-Cache` stay `HIT` after a purge.
+ *
+ * `[[:space:]]` is the same boundary with no literal space in it, so the
+ * expression survives the tokenizer. The boundaries themselves are load-bearing
+ * (see the prefix-collision hazard above) — do not "simplify" them away, and do
+ * not reintroduce a bare space.
+ *
+ * Quoting the regex does NOT fix it: the tokenizer splits before any quote
+ * handling, so `~ "(^| )x( |$)"` fails identically. Verified against Varnish
+ * 7.5.
+ *
+ * This must stay byte-compatible with the `ban(...)` call in
+ * `infra/varnish/default.vcl`; `tests/edge-cache.test.ts` asserts both.
  */
 export function buildBanExpression(key: string): string {
   const escaped = escapeForBanRegex(key);
 
-  return `obj.http.Surrogate-Key ~ "(^| )${escaped}( |$)"`;
+  return `obj.http.Surrogate-Key ~ (^|[[:space:]])${escaped}([[:space:]]|$)`;
 }
 
 /**
