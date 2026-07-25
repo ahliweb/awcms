@@ -9,12 +9,12 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > kini juga dari [`awcms-micro`](https://github.com/ahliweb/awcms-micro)
 > (program penyerapan ADR-0035). **KOREKSI:** versi sebelumnya menyatakan
 > implementasi ini "baru fondasi Sprint 1–2" dengan empat modul — itu **sudah
-> lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/067`;
+> lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/069`;
 > lihat [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) untuk daftar nyata.
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **60
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **63
 > script**, termasuk yang dulu ditandai belum ada (`openapi:bundle`,
 > `data-lifecycle:*`, `reporting:*`). Yang masih **benar-benar tidak ada**:
 > `repo:inventory:*`, `work-class`, `i18n:*`, dan `extension:check` (yang
@@ -79,12 +79,13 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 
 Skill di bawah bersifat **peningkatan** — menilai & menaikkan mutu artefak yang sudah ada, bukan membangunnya dari nol. Pakai setelah fitur jalan, saat audit, atau menjelang go-live.
 
-| Skill                      | Kapan dipakai                                                           | Sumber docs |
-| -------------------------- | ----------------------------------------------------------------------- | ----------- |
-| `awcms-ux-review`          | Audit & naikkan mutu UI/UX yang sudah ada (usability, a11y AA, i18n)    | 14, 15, 19  |
-| `awcms-performance`        | Tuning performa aplikasi & database (query, index, pagination, pool)    | 16, 07      |
-| `awcms-integration`        | Kerasan backend & integrasi eksternal (outbox, retry, webhook, kontrak) | 16, 05, 10  |
-| `awcms-security-hardening` | Audit keamanan berbasis standar (OWASP Top 10, ASVS, ISO 27001)         | 20, 10, 13  |
+| Skill                      | Kapan dipakai                                                                               | Sumber docs                          |
+| -------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `awcms-ux-review`          | Audit & naikkan mutu UI/UX yang sudah ada (usability, a11y AA, i18n)                        | 14, 15, 19                           |
+| `awcms-performance`        | Tuning performa aplikasi & database (query, index, pagination, pool)                        | 16, 07                               |
+| `awcms-edge-cache`         | Lapisan cache tepi Varnish auto-aktivasi: permukaan cacheable, surrogate key, antrean purge | ADR-0042, edge-cache-architecture.md |
+| `awcms-integration`        | Kerasan backend & integrasi eksternal (outbox, retry, webhook, kontrak)                     | 16, 05, 10                           |
+| `awcms-security-hardening` | Audit keamanan berbasis standar (OWASP Top 10, ASVS, ISO 27001)                             | 20, 10, 13                           |
 
 ## Katalog maintenance/tooling
 
@@ -154,6 +155,8 @@ flowchart TD
 
   UI --> UXR[awcms-ux-review]
   EP --> PERF[awcms-performance]
+  PERF --> EDGE[awcms-edge-cache]
+  EDGE --> DEP
   EP --> INT[awcms-integration]
   INT --> OBS
   SEC --> HARD[awcms-security-hardening]

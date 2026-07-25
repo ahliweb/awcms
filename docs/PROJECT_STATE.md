@@ -42,8 +42,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ---------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.1.0** (tag `v6.1.0`, 2026-07-25); 4 changeset MINOR/PATCH menunggu rilis berikutnya | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                |
-| Migrasi    | **67** (`sql/001`–`067`)                                                                | `ls sql/`                                             |
-| ADR        | **42** (`0000`–`0041`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Migrasi    | **69** (`sql/001`–`069`)                                                                | `ls sql/`                                             |
+| ADR        | **43** (`0000`–`0042`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
@@ -140,6 +140,25 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     PII penulis di-hash/mask. Diverifikasi terhadap Postgres nyata: 67 migrasi bersih,
     FORCE RLS di 7 tabel, grant worker persis matriks.
 
+- **Cache tepi Varnish auto-aktivasi** ([ADR-0042](adr/0042-varnish-edge-cache-auto-activation.md),
+  #234/#237, `sql/068`) — subsistem `src/lib/edge-cache/`, VCL `infra/varnish/`, antrean purge
+  transaksional `awcms_edge_cache_purges` (FORCE RLS), worker `bun run edge-cache:purge`, gate
+  `bun run edge-cache:surfaces:check`, skill `awcms-edge-cache`, dokumen
+  [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md). **Default `off` =
+  no-op total.** Tiga lapis default-deny independen; sinyal tekanan hanya mengubah _berapa
+  lama_, tidak pernah _apa_ yang boleh di-cache. Emisi purge sudah terpasang di jalur tulis
+  `blog_content`; `news_portal`/`theming`/`media_library` **belum**.
+- **Rekonsiliasi DNS subdomain tenant** (#236, `sql/069`) — `ensureServingRecord`
+  desired-state (drift → `PUT`, tidak pernah `POST` kedua), `reconcileServingRecords`,
+  `bun run tenant-domain:dns:sync` sebagai `awcms_worker` SELECT-only. Tanpa
+  `TENANT_DOMAIN_SERVING_TARGET` job no-op — tidak ada default, karena menebak berarti
+  outage seluruh platform.
+- **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
+  `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
+  ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
+  termasuk jebakan "user Coolify itu superuser sehingga RLS inert", di
+  [`awcms/environments.md`](awcms/environments.md).
+
 ## 4. Backlog / langkah berikutnya
 
 - **Serap tulang punggung awcms-mini → awcms (fondasi bisnis + SaaS control plane).**
@@ -155,8 +174,8 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 - **Serap awcms-micro → awcms (program utama, [ADR-0035](adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)).**
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
-  atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari
-  `sql/068`), lulus `bun run check`. Progres:
+  atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari nomor
+  berikutnya setelah `sql/069`), lulus `bun run check`. Progres:
   - **Wave 0 — SUDAH:** `tenant-domain` (#219), paritas admin shell/chrome (#229).
     **BELUM:** pustaka komponen `src/components/ui/` + paritas design-token (#229 menyentuh
     shell admin, bukan pustaka komponen reusable). Seam kontribusi descriptor
