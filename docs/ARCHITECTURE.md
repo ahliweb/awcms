@@ -8,7 +8,7 @@ yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapa
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **20 modul aktif**, migration `sql/001`-`sql/065`, RLS
+bawah). Repo ini punya **21 modul aktif**, migration `sql/001`-`sql/067`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
@@ -30,7 +30,7 @@ src/modules/<module>/
   api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
 ```
 
-20 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+21 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
 
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
@@ -54,17 +54,13 @@ src/modules/<module>/
 - **`form-drafts`** (`type: "system"`) — di-port dari micro (#230, `sql/062`-`sql/063`): penyimpan draft form multi-langkah yang generik & bebas-domain (create/read/update/submit/delete payload JSONB tenant-scoped), dibatasi ukuran dan divalidasi denylist terhadap nama field berbentuk-rahasia, dengan job retensi dua-fase expire-lalu-purge (descriptor `dataLifecycle` bertipe `delegated` — purge nyata + cek legal-hold tetap di modul ini). Tanpa logika domain: modul yang membuat draft yang memiliki arti payload-nya. Pustaka KOMPONEN wizard awcms-micro **tidak** termasuk port ini (baris Gelombang-0 yang masih terbuka).
 - **`site-search`** (`type: "domain"`) — di-port dari micro ([ADR-0040](adr/0040-site-search-module-admission.md), #231, `sql/064`-`sql/065`): full-text search PostgreSQL lintas-konten per tenant atas konten website **yang sudah terbit**. Memiliki indeks terpadu `awcms_site_search_documents` (`tsvector`/GIN + indeks judul `pg_trgm` untuk suggest), config per-tenant, ledger index run, diagnostik item gagal, dan query log terminimalisasi yang opt-in. **Konsumen/agregator** descriptor `searchSources` — pemetaan tabel/kolom + filter publikasi murni-data yang dideklarasikan modul konten (bukan capability `provides`, karena penyedia jamak justru diharapkan), dibaca generik lewat `listModules()`. Reconcile/rebuild deterministik & idempoten (`site-search:reconcile`) menjaga indeks tetap proyeksi setia: archive/delete/unpublish hilang dari hasil publik tanpa sisa. Halaman publik `/search` + endpoint JSON `/api/v1/site-search/query` & `/suggest` ter-scope tenant+locale; teks query **selalu** parameter terikat ke `websearch_to_tsquery`, snippet `ts_headline` di-escape sebelum HTML apa pun dipancarkan. URL publik dibangun dari `urlTemplate` tiap descriptor dengan `:tenantCode` yang diresolusi server (rute konten publik base ini path-tenant-scoped, ADR-0009 — bukan host-resolved seperti micro). **DI-DROP saat port** (terdokumentasi): script typeahead inline micro — CSP base ini melarang script inline dan halaman publiknya APIRoute polos tanpa langkah bundling, jadi `/search` ship pencarian inti no-JS dan `/suggest` tetap tersedia untuk klien ter-bundle milik tema. Indeks pencarian adalah proyeksi konten publik saja dan **tidak pernah** menjadi sumber otorisasi.
 
-Modul lain di ekosistem keluarga (mis. `comments`, `newsletter`,
+- **`comments`** (`type: "domain"`) — di-port dari micro ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`-`sql/067`): komentar **moderation-first** di atas resource yang **sudah terbit & publik**. Memiliki thread, komentar ber-kedalaman-terbatas (hard cap 4), riwayat moderasi append-only, laporan penyalahgunaan, setting per-tenant, telemetri anti-abuse terminimalisasi, dan langganan notifikasi-balasan terenkripsi. **Konsumen/agregator** descriptor `commentableResources` (`MODULE_CONTRACT_VERSION` 2.3.0) — modul konten MENDEKLARASIKAN resource mana yang boleh dikomentari; `comments` menemukannya lewat `listModules()`. Tulang punggung keamanannya: batas publikasi ditegakkan di perbatasan resource→thread (draft/privat/terhapus tak pernah menerima maupun mengekspos komentar); body disimpan **teks polos** dan di-escape saat render (tak ada HTML tersimpan → tak ada XSS tersimpan), hanya autolink http(s) `rel="nofollow ugc noopener noreferrer"`; respons submit publik **seragam** sehingga endpoint tak bisa dipakai sebagai oracle blocked-term atau konten belum-terbit; PII penulis diminimalkan (sha256 + mask, tak pernah mentah). Notifikasi balasan lewat outbox event (payload tanpa alamat), retensi meng-**anonimkan** di tempat (bukan menghapus) dan menghormati legal hold. Admin `/admin/comments` + API `/api/v1/comments/*`.
+
+Modul lain di ekosistem keluarga (mis. `newsletter`,
 `social-publishing`, `document-infrastructure`, `integration-hub`,
 `idn-admin-regions`) **belum di-port** ke repo ini — lihat
 skill masing-masing (ditandai "BACAAN SAJA") + [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
 untuk spesifikasi target & urutan porting.
-
-> **Sedang berjalan (branch `feat/port-comments`).** Port `comments` sudah
-> meletakkan seam `commentableResources` pada `ModuleDescriptor`
-> (`MODULE_CONTRACT_VERSION` 2.3.0) plus migrasi `sql/066`-`sql/067`; modul itu
-> sendiri **belum terdaftar** di `src/modules/index.ts`, sehingga `listModules()`
-> tetap mengembalikan 20 modul sampai port-nya selesai.
 
 ### Komposisi & validasi registry modul (ADR-0034)
 
@@ -298,13 +294,13 @@ Sudah live dan diverifikasi terhadap kode (bukan rencana):
   `media-library` (`sql/052`–`054`, inversi kepemilikan ADR-0036),
   `data-lifecycle` (`sql/055`–`056`, ADR-0037), `seo-distribution`
   (`sql/057`–`061`, ADR-0038/0039), `form-drafts` (`sql/062`–`063`), dan
-  `site-search` (`sql/064`–`065`, ADR-0040) — semuanya modul aktif.
+  `site-search` (`sql/064`–`065`, ADR-0040), dan `comments` (`sql/066`–`067`,
+  ADR-0041) — semuanya modul aktif.
 
 Gap yang genuinely masih ada (jangan diklaim selesai):
 
-- Modul keluarga yang belum di-port (`comments` — sedang berjalan, `newsletter`,
-  `social-publishing`, `document-infrastructure`, `integration-hub`,
-  `idn-admin-regions`) — lihat skill masing-masing
+- Modul keluarga yang belum di-port (`newsletter`, `social-publishing`,
+  `document-infrastructure`, `integration-hub`, `idn-admin-regions`) — lihat skill masing-masing
   (BACAAN SAJA) untuk spesifikasi target, dan
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
   untuk urutannya. Pasca-[ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)

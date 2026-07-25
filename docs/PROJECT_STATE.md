@@ -41,9 +41,9 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Aspek      | Nilai (per commit ini)                                                                  | Sumber kebenaran                                      |
 | ---------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.1.0** (tag `v6.1.0`, 2026-07-25); 4 changeset MINOR/PATCH menunggu rilis berikutnya | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base | **20** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                |
-| Migrasi    | **65** ter-ship (`sql/001`–`065`); `066`–`067` in-flight di branch `feat/port-comments` | `ls sql/`                                             |
-| ADR        | **41** (`0000`–`0040`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                |
+| Migrasi    | **67** (`sql/001`–`067`)                                                                | `ls sql/`                                             |
+| ADR        | **42** (`0000`–`0041`)                                                                  | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
@@ -57,17 +57,12 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > job pause di "Waiting for review" sebelum sign/attest/publish (lihat
 > [`release-process.md`](awcms/release-process.md) §Environment approval).
 
-Modul (20): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
+Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 `module-management`, `sync-storage`, `workflow-approval`, `reporting`, `email`,
 `domain-event-runtime`, `theming`, `blog-content`, `news-portal`, **`tenant-domain`**,
 **`visitor-analytics`**, **`media-library`**, **`data-lifecycle`**, **`seo-distribution`**,
-**`form-drafts`**, **`site-search`**.
-(Tujuh terakhir = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.)
-
-> **Sedang berjalan:** port `comments` (branch `feat/port-comments`) sudah
-> mendaratkan seam `commentableResources` (`MODULE_CONTRACT_VERSION` 2.2.0 →
-> **2.3.0**), `sql/066`–`067`, dan spine sanitasi. Modulnya **belum terdaftar**
-> di `src/modules/index.ts` — angka 20 di atas benar sampai port itu selesai.
+**`form-drafts`**, **`site-search`**, **`comments`**.
+(Delapan terakhir = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.)
 
 > Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
 > [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
@@ -75,7 +70,7 @@ Modul (20): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **20 modul** aktif dengan RLS `FORCE`, pemisahan role DB
+- **21 modul** aktif dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection
@@ -134,6 +129,16 @@ Modul (20): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     baru `ModuleDescriptor.searchSources` (`MODULE_CONTRACT_VERSION` 2.2.0): modul konten
     MENDEKLARASIKAN sumber, agregator menemukannya lewat `listModules()` — tidak ada modul
     yang bergantung pada `site_search`.
+  - **`comments`** ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`–`067`) —
+    komentar **moderation-first** di atas resource TERBIT & publik: thread, komentar
+    ber-kedalaman-terbatas, riwayat moderasi append-only, laporan, setting per-tenant,
+    telemetri anti-abuse terminimalisasi, langganan notifikasi-balasan terenkripsi, antrean
+    moderasi admin `/admin/comments`. Seam kontribusi `commentableResources`
+    (`MODULE_CONTRACT_VERSION` 2.3.0), **nol `AccessAction` baru**. Tulang punggung
+    keamanan: batas publikasi di perbatasan resource→thread, simpan-teks-polos +
+    escape-saat-render (tak ada XSS tersimpan), respons publik seragam (tanpa oracle),
+    PII penulis di-hash/mask. Diverifikasi terhadap Postgres nyata: 67 migrasi bersih,
+    FORCE RLS di 7 tabel, grant worker persis matriks.
 
 ## 4. Backlog / langkah berikutnya
 
@@ -150,8 +155,7 @@ Modul (20): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   - **Wave 1 — SUDAH:** `visitor-analytics` (#220), `media-library` (#221, inversi ADR-0036),
     `data-lifecycle` (#222, ADR-0037), `seo-distribution` (#223/#224, ADR-0038/0039 — discovery
     **dan** redirect governance, LENGKAP), `form-drafts` (#230), `site-search` (#231, ADR-0040).
-    **SEDANG BERJALAN:** `comments` (branch `feat/port-comments` — seam
-    `commentableResources` + `sql/066`–`067` + spine sanitasi sudah, modul belum terdaftar).
+    `comments` ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`–`067`).
     **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
   - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,

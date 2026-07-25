@@ -4,27 +4,23 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 
 > Baca [`../../AGENTS.md`](../../AGENTS.md) lebih dulu untuk aturan wajib & alur kerja.
 
-> **Asal & status.** Skill-skill ini diadaptasi dari repo acuan
-> [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini) (basis teknis
-> modular monolith yang sama) dan menjadi **playbook pengembangan** AWCMS —
-> mereka mendeskripsikan pola _target_ standar, bukan klaim bahwa semua modul
-> sudah ada. Implementasi AWCMS saat ini baru fondasi Sprint 1–2 (`logging`,
-> `tenant-admin`, `profile-identity`, `identity-access` — lihat
-> [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)). Referensi nomor issue
-> (`#NNN`) dan modul CMS (blog, news portal, dsb.) menunjuk ke pola/epik di
-> repo acuan sebagai contoh; padankan ke peta sprint ERP di
-> [`docs/awcms/11_implementation_blueprint.md`](../../docs/awcms/11_implementation_blueprint.md)
-> saat mengerjakan modul AWCMS yang setara.
+> **Asal & status (diperbarui 2026-07-25).** Skill-skill ini diadaptasi dari
+> repo acuan [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini) dan
+> kini juga dari [`awcms-micro`](https://github.com/ahliweb/awcms-micro)
+> (program penyerapan ADR-0035). **KOREKSI:** versi sebelumnya menyatakan
+> implementasi ini "baru fondasi Sprint 1–2" dengan empat modul — itu **sudah
+> lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/067`;
+> lihat [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) untuk daftar nyata.
+> Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
+> per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Command `bun run <x>` di dalam skill adalah target.** Banyak skill merujuk
-> script (mis. `repo:inventory:check`, `openapi:bundle`, `extension:check`,
-> `data-lifecycle:*`, `reporting:*`) yang **belum diimplementasikan** di repo ini —
-> hanya ~23 script yang benar-benar terdaftar di `package.json`. Sebelum
-> menjalankan sebuah command dari skill, **verifikasi keberadaannya di
-> `package.json`**; bila belum ada, itu bagian standar yang masih perlu di-port
-> dari awcms-mini (lihat
-> [`docs/awcms/alur-pengembangan-mini-first.md`](../../docs/awcms/alur-pengembangan-mini-first.md)),
-> bukan perintah yang bisa langsung dieksekusi.
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **60
+> script**, termasuk yang dulu ditandai belum ada (`openapi:bundle`,
+> `data-lifecycle:*`, `reporting:*`). Yang masih **benar-benar tidak ada**:
+> `repo:inventory:*`, `work-class`, `i18n:*`, dan `extension:check` (yang
+> terakhir **DIHAPUS** oleh ADR-0034, bukan tertunda — jangan merujuknya). Tetap
+> cek `package.json` sebelum mengeksekusi command dari sebuah skill; daftar ini
+> bergerak tiap kali modul baru mendarat.
 
 ## Katalog
 
@@ -69,6 +65,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | `awcms-media-library`                        | Kelola/konsumsi modul media_library — registry objek media per-tenant, presigned R2 upload/finalize, reconcile, enforcement (ADR-0036)                                             | media-library/SKILL.md, ADR-0036            |
 | `awcms-seo-distribution`                     | Kelola/konsumsi modul seo_distribution — metadata SEO terpusat, rute discovery publik (robots/sitemap/feed), tata kelola redirect + telemetri 404 (ADR-0038/0039)                  | seo-distribution/SKILL.md, ADR-0038/0039    |
 | `awcms-site-search`                          | Kelola/konsumsi modul site_search — indeks FTS lintas-konten, seam `searchSources`, query/suggest publik, admin index/settings/diagnostics (ADR-0040)                              | site-search/SKILL.md, ADR-0040              |
+| `awcms-comments`                             | Kelola/konsumsi modul comments — komentar moderation-first, seam `commentableResources`, permukaan tulis PUBLIK tak-terautentikasi, antrean moderasi admin (ADR-0041)              | comments/SKILL.md, ADR-0041                 |
 | `awcms-erp-extension-readiness`              | BACAAN SAJA / HISTORIS (ADR-0034) — kontrak kesiapan ekstensi ERP base & jalur turunan DIHAPUS; ERP kini modul `domain` langsung di `src/modules/` (pakai `awcms-new-module`)      | erp-extension-readiness/SKILL.md (historis) |
 | `awcms-document-infrastructure`              | Kerjakan bagian mana pun modul document_infrastructure — registry dokumen generik, versioning, classification, numbering (Issue #751)                                              | document-infrastructure/SKILL.md            |
 | `awcms-integration-hub`                      | Kerjakan bagian mana pun modul integration_hub — inbound webhook, outbound subscription, adapter health, SSRF guard (Issue #754)                                                   | integration-hub/SKILL.md                    |

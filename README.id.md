@@ -6,7 +6,7 @@
 
 > **AWCMS adalah template lini ERP/back-office keluarga AWCMS — dipakai LANGSUNG**, dikembangkan dari basis teknis [awcms-mini](https://github.com/ahliweb/awcms-mini). Mode operasinya **hybrid online + offline dengan prioritas online-first** (online adalah jalur utama; offline/LAN adalah mode ketahanan), dan ia **siap ERP serta dibangun untuk SaaS terintegrasi**. Ia adalah template **superset** keluarga: menyerap seluruh klaster modul website/e-commerce, UI/UX, dan pengerasan auth dari `awcms-micro` di atas fondasi awcms-mini dan skop ERP ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), menyempurnakan [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). Sebaliknya, `awcms-mini` tetap **hybrid offline-first** (siap SaaS) dan `awcms-micro` tetap template **website full-online** yang ramping. Base menyediakan **modul fondasi reusable + kontrak netral kesiapan ERP** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); modul domain — ERP maupun website/konten — ditambahkan **langsung di `src/modules/`**, bukan repo turunan terpisah. Peta penyerapan awcms-micro: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). Lihat juga [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Delapan belas modul sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini) — tiga belas modul fondasi plus lima modul website/konten yang diserap dari awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`) — sebagai **basis** pengembangan ERP, SaaS, dan website/e-commerce — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
+> **Status: fondasi aktif dikembangkan.** File kode legacy di repo ini sudah dihapus (lihat commit `chore(foundation): remove legacy repository files`) dan repo ini **dikembangkan ulang dari nol** di atas standar teknis modular monolith (Bun + Astro 7 + PostgreSQL/RLS). Dua puluh satu modul sudah live (lihat [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) untuk state kode saat ini) — tiga belas modul fondasi plus delapan modul website/konten yang diserap dari awcms-micro (`tenant-domain`, `visitor-analytics`, `media-library`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`) — sebagai **basis** pengembangan ERP, SaaS, dan website/e-commerce — bukan sekadar CMS/base generik, dan bukan pula sebuah ERP jadi.
 
 ## Daftar isi
 
@@ -202,7 +202,7 @@ Riwayat perubahan lengkap ada di [`CHANGELOG.md`](CHANGELOG.md); status issue/PR
 
 ## Versioning
 
-**Semantic Versioning** + **[Changesets](.changeset/README.md)**; riwayat lengkap di [`CHANGELOG.md`](CHANGELOG.md). Setiap PR yang mengubah perilaku wajib menyertakan changeset (ditegakkan `bun run changesets:policy:check` di CI). Versi rilis saat ini `6.0.0`.
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; riwayat lengkap di [`CHANGELOG.md`](CHANGELOG.md). Setiap PR yang mengubah perilaku wajib menyertakan changeset (ditegakkan `bun run changesets:policy:check` di CI). Versi rilis saat ini `6.1.0`.
 
 **Kebijakan penomoran versi (penting, baca sebelum membandingkan versi):**
 
