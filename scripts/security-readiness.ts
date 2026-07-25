@@ -1100,7 +1100,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // outside the retention window (the job really does prune — this is not a
   // speculative grant). No INSERT: enqueueing happens in the application's
   // content transaction, never in the worker.
-  awcms_edge_cache_purges: ["SELECT", "UPDATE", "DELETE"]
+  awcms_edge_cache_purges: ["SELECT", "UPDATE", "DELETE"],
+  // tenant-domain:dns:sync (sql/069): SELECT the desired subdomain state only.
+  // The job's side effect is in Cloudflare, not here — it writes nothing back,
+  // so the worker never gets write access to the hostname->tenant mapping that
+  // decides whose content a visitor is served.
+  awcms_tenant_domains: ["SELECT"]
 };
 
 /**
