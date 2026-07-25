@@ -168,6 +168,12 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     `comments` ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`–`067`).
     **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
+- **Environment ter-deploy.** Produksi `awcms.ahlikoding.com` dan staging
+  `awcms-staging.ahlikoding.com` (dibuat 2026-07-25, app Coolify
+  `n3gg3qudm91kqdy62znmyxuq`, DB sendiri, R2/email/sync MATI). Health staging 200.
+  **BELUM:** migrasi DB staging — image produksi runtime-only sehingga
+  `db:migrate` harus dijalankan sebagai container one-shot; langkahnya ada di
+  [`awcms/environments.md`](awcms/environments.md).
 - **Cache tepi Varnish ([ADR-0042](adr/0042-varnish-edge-cache-auto-activation.md), `sql/068`).**
   Tier cache OPSIONAL di depan aplikasi, default MATI dan no-op saat mati. Allow-list
   surface fail-closed (`src/lib/edge-cache/`), aktivasi otomatis berbasis tekanan origin,
