@@ -1,0 +1,214 @@
+/**
+ * The allow-list of public surfaces that may be cached at the edge — ADR-0042 §5.
+ *
+ * This registry is the *entire* answer to "what is cacheable". If a path is not
+ * matched here it is never cached, no matter how public it looks. Adding an
+ * entry is a deliberate, reviewable act; forgetting to add one costs performance
+ * and nothing else.
+ *
+ * ## Why these, and pointedly not the others
+ *
+ * Included are the anonymous, tenant-scoped, content-derived GET surfaces whose
+ * bodies are a pure function of published content plus tenant configuration —
+ * exactly the responses that today re-run the same database work for every
+ * visitor, which is what ADR-0042 exists to stop.
+ *
+ * Excluded, each for a specific reason rather than by oversight:
+ *
+ * - **`/search` and `/blog/{tenantCode}/search`** — the response varies on a
+ *   free-text query. The key space is unbounded, so caching them converts a
+ *   cheap request into cache-fill pressure and lets a stranger evict the useful
+ *   entries by walking random queries. Site search has its own index; that is
+ *   the right place to make it fast.
+ * - **`/theming/preview/{token}` and `/theming/preview-tokens/{token}.css`** —
+ *   the URL carries a bearer token for unpublished theme state. Caching
+ *   token-scoped previews at a shared edge is precisely the disclosure this
+ *   subsystem must not create.
+ * - **`/login`** — authentication surface; it also sets cookies, so
+ *   `decideCacheability` would refuse it anyway. Belt and braces.
+ * - **`/[...path]`** — the catch-all that resolves `seo_distribution` redirects
+ *   and records 404 observations. Caching it would both suppress the 404
+ *   observation (a product feature) and hold a redirect that an editor has since
+ *   changed. Left to the origin on purpose.
+ * - **Every `/api/v1/**` route** — including the six unauthenticated ones.
+ *   `analyticsCollect` is a write, and the search endpoints are query-driven.
+ *   The public comments list is a genuine candidate and is a documented
+ *   follow-up, not an omission.
+ *
+ * ## Deferred, and precisely why (not an oversight)
+ *
+ * The **host-resolved root discovery surfaces** — `/robots.txt`, `/sitemap.xml`,
+ * `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json` — are the single
+ * best caching target in the codebase (identical body for every anonymous
+ * reader, rebuilt from a content roll-up on each request). They are absent here
+ * anyway, because they are **host**-resolved, not path-resolved: their tenant is
+ * established inside `withSeoPublicTenant` with the full ADR-0010 host
+ * configuration, and `serveDiscovery(request, …)` does not receive Astro's
+ * `locals`, so the route cannot publish `edgeCacheTenantId`.
+ *
+ * Declaring them regardless would have produced surfaces that match, resolve no
+ * tenant, and are then refused by `decideCacheability` on every single request —
+ * a registry entry that reads as "cached" while caching nothing. A dead
+ * declaration is worse than an honest omission. Wiring them is a mechanical
+ * follow-up: thread `locals` through `serveDiscovery` and its six callers, set
+ * `locals.edgeCacheTenantId` from the resolved context, and re-add the three
+ * entries. Tracked in `docs/awcms/edge-cache-architecture.md`.
+ *
+ * The path-scoped blog feed and sitemap below (`/blog/{tenantCode}/feed.xml`,
+ * `/blog/{tenantCode}/sitemap-blog.xml`) ARE covered, so tenants on the ADR-0009
+ * path-scoped surface get feed caching today.
+ */
+
+/** A declared cacheable public surface. */
+export type PublicCacheSurface = {
+  /** Stable identifier; also the `s:` component of the surrogate key. */
+  key: string;
+  /** Owning module, used for module-scoped invalidation. `null` for core surfaces. */
+  moduleKey: string | null;
+  /** Matches the request pathname. */
+  pattern: RegExp;
+  /**
+   * Requested `Surrogate-Control: max-age` for this surface, before the
+   * auto-activation ramp and before the global ceiling clamp.
+   */
+  ttlSeconds: number;
+  /**
+   * When true, a response whose tenant could not be resolved is NOT cached.
+   * Every tenant-scoped surface sets this: an untagged object cannot be
+   * invalidated by any surrogate key, so it would go stale permanently.
+   */
+  requiresTenant: boolean;
+  /**
+   * Query parameters this surface may be cached WITH. Any other parameter makes
+   * the request uncacheable.
+   *
+   * This exists because the edge keys on the full URL, query string included.
+   * Without a bound, `/blog/acme?x=1`, `?x=2`, … are unlimited distinct cache
+   * entries, so any stranger can evict the genuinely hot objects — and pay for
+   * it with one cheap request each. An allow-list turns an unbounded key space
+   * into a small finite one.
+   */
+  allowedQueryParams: readonly string[];
+  /** Why this surface is safe to cache — kept next to the declaration on purpose. */
+  rationale: string;
+};
+
+/**
+ * Patterns are anchored and use explicit character classes rather than `.*`, so
+ * a path cannot smuggle its way into a more permissive surface. `[^/]+`
+ * deliberately excludes `/` so `/blog/a/b/c` cannot match a two-segment surface.
+ */
+export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
+  {
+    key: "blog-index",
+    moduleKey: "blog_content",
+    pattern: /^\/blog\/[^/]+\/?$/,
+    ttlSeconds: 120,
+    requiresTenant: true,
+    allowedQueryParams: ["page"],
+    rationale:
+      "Published-post listing for one tenant (ADR-0009 path-scoped). Shorter TTL than discovery because an editor expects a new post to appear promptly even if a purge is missed."
+  },
+  {
+    key: "blog-post",
+    moduleKey: "blog_content",
+    pattern: /^\/blog\/[^/]+\/[^/]+$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "A single published post. Purged by resource key on update/unpublish, so the TTL is only the fallback."
+  },
+  {
+    key: "blog-taxonomy",
+    moduleKey: "blog_content",
+    pattern: /^\/blog\/[^/]+\/(category|tag)\/[^/]+$/,
+    ttlSeconds: 120,
+    requiresTenant: true,
+    allowedQueryParams: ["page"],
+    rationale:
+      "Published-post listing filtered by a taxonomy term; same reasoning as the index."
+  },
+  {
+    key: "blog-discovery",
+    moduleKey: "blog_content",
+    pattern: /^\/blog\/[^/]+\/(feed\.xml|sitemap-blog\.xml)$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "Per-tenant blog feed and sitemap; content-derived, anonymous, identical for every reader."
+  },
+  {
+    key: "theming-tokens",
+    moduleKey: "theming",
+    pattern: /^\/theming\/[^/]+\/tokens\.css$/,
+    ttlSeconds: 600,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "Published design tokens for a tenant. Changes only on theme publish, which enqueues a module purge — the longest TTL here because it is the most stable and the most frequently re-fetched."
+  }
+];
+
+/**
+ * Resolve the surface for a pathname, or `null` when the path is not declared
+ * cacheable.
+ *
+ * First match wins and the list is ordered specific-to-general, so
+ * `/blog/x/feed.xml` resolves to `blog-discovery` rather than `blog-post`.
+ * `matchPublicCacheSurface` is exercised by a test that asserts exactly that
+ * ordering, because a reordering here would silently change TTLs and keys.
+ */
+export function matchPublicCacheSurface(
+  pathname: string,
+  surfaces: readonly PublicCacheSurface[] = PUBLIC_CACHE_SURFACES
+): PublicCacheSurface | null {
+  if (hasTraversalSegment(pathname) || hasReservedSegment(pathname)) {
+    return null;
+  }
+
+  const specificFirst = [...surfaces].sort(
+    (left, right) => right.pattern.source.length - left.pattern.source.length
+  );
+
+  return (
+    specificFirst.find((surface) => surface.pattern.test(pathname)) ?? null
+  );
+}
+
+/**
+ * Reject any path containing a `..` segment before it reaches a pattern.
+ *
+ * This is load-bearing and not theoretical: `/blog/../admin` is three segments,
+ * so it satisfies `^\/blog\/[^/]+\/[^/]+$` and would resolve to the `blog-post`
+ * surface. In practice `new URL()` normalizes dot segments away before
+ * middleware ever sees the path — but "a WHATWG URL parser upstream happens to
+ * clean this for us" is a property of the current request pipeline, not an
+ * invariant of this function, and a caller that passes a raw path would silently
+ * get a cacheable admin URL.
+ *
+ * Percent-encoded forms are covered too: `%2e` never legitimately appears as a
+ * whole path segment, so treating it as traversal costs nothing real.
+ */
+/**
+ * Path segments that are never a content slug, even though they sit exactly
+ * where one does.
+ *
+ * `/blog/{tenantCode}/search` is three segments, so it satisfies the `blog-post`
+ * pattern and WOULD have been cached with a 300s TTL — while this file's header
+ * claims search is excluded. The registry gate's probe list caught the
+ * contradiction. Adding a reserved sub-route under `/blog/{code}/` in future
+ * means adding it here, or it inherits `blog-post` caching by accident.
+ */
+const RESERVED_SEGMENTS = new Set(["search"]);
+
+function hasReservedSegment(pathname: string): boolean {
+  return pathname
+    .split("/")
+    .some((segment) => RESERVED_SEGMENTS.has(segment.toLowerCase()));
+}
+
+function hasTraversalSegment(pathname: string): boolean {
+  return pathname.split("/").some((segment) => /^(\.|%2e){2}$/i.test(segment));
+}

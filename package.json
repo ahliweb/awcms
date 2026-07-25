@@ -50,6 +50,8 @@
     "site-search:sources:check": "bun scripts/site-search-sources-check.ts",
     "comments:resources:check": "bun scripts/comments-resources-check.ts",
     "comments:retention": "bun scripts/comments-retention.ts",
+    "edge-cache:surfaces:check": "bun scripts/edge-cache-surfaces-check.ts",
+    "edge-cache:purge": "bun scripts/edge-cache-purge.ts",
     "data-lifecycle:registry:check": "bun scripts/data-lifecycle-registry-check.ts",
     "analytics:rollup": "bun scripts/visitor-analytics-rollup.ts",
     "analytics:purge": "bun scripts/visitor-analytics-purge.ts",
@@ -88,7 +90,7 @@
     "test:coverage": "bun test --coverage",
     "test:e2e": "bun --bun playwright test",
     "test:e2e:install": "bun --bun playwright install --with-deps chromium",
-    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run data-lifecycle:registry:check && bun run site-search:sources:check && bun run comments:resources:check && bun run family:conformance:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run data-lifecycle:registry:check && bun run site-search:sources:check && bun run comments:resources:check && bun run edge-cache:surfaces:check && bun run family:conformance:check && bun run logging:lint:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"

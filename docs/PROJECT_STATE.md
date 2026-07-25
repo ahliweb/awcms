@@ -146,7 +146,7 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   Peta bergelombang & urutan dependensi ada di
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) — satu PR
   atomic per modul, adaptasi (rename `awcms_micro_` → `awcms_`, migrasi lanjut dari
-  `sql/067`), lulus `bun run check`. Progres:
+  `sql/068`), lulus `bun run check`. Progres:
   - **Wave 0 — SUDAH:** `tenant-domain` (#219), paritas admin shell/chrome (#229).
     **BELUM:** pustaka komponen `src/components/ui/` + paritas design-token (#229 menyentuh
     shell admin, bukan pustaka komponen reusable). Seam kontribusi descriptor
@@ -158,6 +158,15 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     `comments` ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`–`067`).
     **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
+- **Cache tepi Varnish ([ADR-0042](adr/0042-varnish-edge-cache-auto-activation.md), `sql/068`).**
+  Tier cache OPSIONAL di depan aplikasi, default MATI dan no-op saat mati. Allow-list
+  surface fail-closed (`src/lib/edge-cache/`), aktivasi otomatis berbasis tekanan origin,
+  VCL default-deny (`infra/varnish/`), antrean invalidasi tahan-lama + worker
+  `bun run edge-cache:purge`, gate `bun run edge-cache:surfaces:check`.
+  **BELUM:** emisi purge dari event konten (`enqueueEdgeCachePurge` siap dipanggil, belum ada
+  pemanggil — invalidasi masih bergantung TTL) dan surface discovery ber-resolusi-host
+  (`serveDiscovery` tak menerima `locals`). Rinci di
+  [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md).
   - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,
     sidebar menu per-tenant).
   - **Wave 3 — BELUM:** trajektori e-commerce/toko online (ADR sendiri).

@@ -1094,7 +1094,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_comments_comments: ["SELECT", "UPDATE"],
   awcms_comments_moderation_events: ["SELECT", "INSERT"],
   awcms_comments_abuse_events: ["SELECT", "DELETE"],
-  awcms_comments_reply_subscriptions: ["SELECT", "DELETE"]
+  awcms_comments_reply_subscriptions: ["SELECT", "DELETE"],
+  // ADR-0042 — edge-cache:purge (sql/068): SELECT claimable rows, UPDATE to
+  // take the lease and record the outcome, DELETE to prune rows that completed
+  // outside the retention window (the job really does prune — this is not a
+  // speculative grant). No INSERT: enqueueing happens in the application's
+  // content transaction, never in the worker.
+  awcms_edge_cache_purges: ["SELECT", "UPDATE", "DELETE"]
 };
 
 /**
@@ -1764,6 +1770,71 @@ export function checkCommentsSecretsConfigured(
 }
 
 // ---------------------------------------------------------------------------
+// edge cache / Varnish (ADR-0042) — critical only for the one silently-broken
+// combination
+// ---------------------------------------------------------------------------
+
+/**
+ * The edge cache is off by default and a no-op when off, so absence is never
+ * reported. Two enabled-but-wrong states are:
+ *
+ * - **endpoint set, token unset → `critical`.** The bundled VCL rejects an
+ *   unauthenticated BAN with 403, so every invalidation fails, every failure is
+ *   recorded on a queue row nobody is watching, and the site serves stale
+ *   content indefinitely while looking healthy. This is the only edge-cache
+ *   misconfiguration that is both silent and unbounded in impact, which is what
+ *   earns `critical` — the same bar the rest of this file uses.
+ * - **enabled, no endpoint → `warning`.** Caching works, invalidation does not,
+ *   but staleness is bounded by the TTL rather than permanent. Legitimate for a
+ *   read-only mirror, so not a failure.
+ */
+export function checkEdgeCacheConfigured(
+  env: NodeJS.ProcessEnv = process.env
+): SecurityCheckResult {
+  const name = "edge cache (Varnish) configuration is coherent";
+
+  const mode = env.EDGE_CACHE_MODE?.trim().toLowerCase() ?? "off";
+  const endpoint = env.EDGE_CACHE_PURGE_ENDPOINT?.trim() ?? "";
+  const token = env.EDGE_CACHE_PURGE_TOKEN?.trim() ?? "";
+
+  if (mode === "off" || !["auto", "on"].includes(mode)) {
+    return {
+      name,
+      severity: "warning",
+      status: "pass",
+      evidence:
+        "EDGE_CACHE_MODE is off (or unset) — the edge-cache subsystem is inert: no surrogate headers are emitted and no invalidation is attempted."
+    };
+  }
+
+  if (endpoint !== "" && token === "") {
+    return {
+      name,
+      severity: "critical",
+      status: "fail",
+      evidence:
+        "EDGE_CACHE_PURGE_ENDPOINT is set without EDGE_CACHE_PURGE_TOKEN. The bundled VCL rejects unauthenticated BAN requests with 403, so every invalidation fails silently and published content stays stale at the edge indefinitely."
+    };
+  }
+
+  if (endpoint === "") {
+    return {
+      name,
+      severity: "warning",
+      status: "fail",
+      evidence: `EDGE_CACHE_MODE=${mode} but EDGE_CACHE_PURGE_ENDPOINT is unset — responses will be cached with no way to invalidate them, so an edit stays invisible until its TTL expires.`
+    };
+  }
+
+  return {
+    name,
+    severity: "warning",
+    status: "pass",
+    evidence: `EDGE_CACHE_MODE=${mode} with an authenticated purge endpoint configured — invalidation can reach the edge. Confirm 'bun run edge-cache:purge' is scheduled, or the queue will simply grow.`
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full-online deployment-profile gate is correctly configured (Issue #186) —
 // critical when misconfigured, informational when disabled intentionally
 // ---------------------------------------------------------------------------
@@ -2036,6 +2107,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkMfaEncryptionKeyConfigured(),
     checkSsoCredentialEncryptionKeyConfigured(),
     checkCommentsSecretsConfigured(),
+    checkEdgeCacheConfigured(),
     checkOnlineAuthSecurityReady(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),

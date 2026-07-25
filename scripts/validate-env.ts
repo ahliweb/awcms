@@ -289,7 +289,47 @@ const RULES: readonly Rule[] = [
     type: "string",
     secret: true
   },
-  { name: "COMMENTS_RETENTION_DAYS", required: false, type: "int", min: 1 }
+  { name: "COMMENTS_RETENTION_DAYS", required: false, type: "int", min: 1 },
+  // ADR-0042 edge cache (Varnish). All optional: unset means the subsystem is
+  // inert. The one dangerous combination — a purge endpoint with no token, which
+  // makes every invalidation fail silently — is a CRITICAL finding in
+  // `security:readiness` (`checkEdgeCacheConfigured`) rather than a shape error
+  // here, because it is a relationship between two variables, not a bad value in
+  // one of them.
+  { name: "EDGE_CACHE_MODE", required: false, type: "string" },
+  { name: "EDGE_CACHE_PURGE_ENDPOINT", required: false, type: "string" },
+  {
+    name: "EDGE_CACHE_PURGE_TOKEN",
+    required: false,
+    type: "string",
+    secret: true
+  },
+  { name: "EDGE_CACHE_MAX_TTL_SECONDS", required: false, type: "int", min: 0 },
+  {
+    name: "EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS",
+    required: false,
+    type: "int",
+    min: 0
+  },
+  {
+    name: "EDGE_CACHE_AUTO_REQUEST_RATE_THRESHOLD",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "EDGE_CACHE_AUTO_LATENCY_THRESHOLD_MS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "EDGE_CACHE_AUTO_WINDOW_SECONDS",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  { name: "EDGE_CACHE_PURGE_BATCH_SIZE", required: false, type: "int", min: 1 }
 ];
 
 /** Nilai placeholder yang aman di dev tapi dilarang di produksi. */

@@ -1,6 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 
 import { resolveSsrContext } from "./lib/auth/ssr-session";
+import { annotateEdgeCache } from "./lib/edge-cache/runtime";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
 import {
@@ -53,14 +54,36 @@ function applyResponseHeaders(
 export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.correlationId = resolveCorrelationId(context.request);
 
+  const startedAtMs = performance.now();
+
+  /**
+   * Single exit point for every branch below (ADR-0042 §7). Routing ALL
+   * responses — `/admin` and `/api` included — through the edge-cache
+   * annotator is what guarantees no response ever reaches Varnish unlabelled:
+   * an undeclared path resolves to `surface_not_declared` and is stamped
+   * `Cache-Control: private, no-store`. Varnish's built-in VCL would otherwise
+   * cache an unlabelled `200` for its `default_ttl`, which on an admin page is
+   * a cross-tenant disclosure. Annotation never throws and never blocks.
+   */
+  const finalize = async (response: Response): Promise<Response> =>
+    applyResponseHeaders(
+      await annotateEdgeCache({
+        request: context.request,
+        pathname: context.url.pathname,
+        searchParams: context.url.searchParams,
+        response,
+        publishedTenantId: context.locals.edgeCacheTenantId,
+        originLatencyMs: performance.now() - startedAtMs,
+        nowMs: Date.now()
+      }),
+      context.locals.correlationId
+    );
+
   if (
     context.url.pathname.startsWith(API_PREFIX) &&
     !checkContentLengthCeiling(context.request)
   ) {
-    return applyResponseHeaders(
-      bodyTooLargeResponse(BODY_SIZE_HARD_CEILING_BYTES),
-      context.locals.correlationId
-    );
+    return finalize(bodyTooLargeResponse(BODY_SIZE_HARD_CEILING_BYTES));
   }
 
   // Public (non-`/admin`) branch: resolve a `seo_distribution` redirect BEFORE
@@ -78,10 +101,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     );
 
     if (redirectResult && "redirect" in redirectResult) {
-      return applyResponseHeaders(
-        redirectResult.redirect,
-        context.locals.correlationId
-      );
+      return finalize(redirectResult.redirect);
     }
 
     const notFoundCapture =
@@ -95,7 +115,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       await recordPublicNotFound(context.request, notFoundCapture);
     }
 
-    return applyResponseHeaders(response, context.locals.correlationId);
+    return finalize(response);
   }
 
   const ssrContext = await resolveSsrContext(context.cookies, new Date());
@@ -106,5 +126,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   context.locals.ssrContext = ssrContext;
 
-  return applyResponseHeaders(await next(), context.locals.correlationId);
+  return finalize(await next());
 });
