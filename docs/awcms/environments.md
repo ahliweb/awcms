@@ -148,6 +148,61 @@ Setiap bug di lapisan ini melapor sukses sambil tidak bekerja. Yang sah hanya:
 | permintaan berikutnya             | `HIT` lagi        |
 | baris antrean                     | `done attempts=1` |
 
+## Cache tepi di produksi — mode `auto`
+
+Produksi memakai **`EDGE_CACHE_MODE=auto`**, bukan `on`: inilah perilaku
+"diaktifkan otomatis apabila diperlukan" yang diminta sejak awal. Saat origin
+santai, tidak ada yang di-cache dan pengunjung selalu dapat data segar; saat
+beban naik, TTL merambat naik dan database berhenti ditanyai pertanyaan publik
+yang sama berulang-ulang.
+
+Ambang: **≥5 permintaan/detik** dihitung atas jendela 60 detik (jadi ≥300
+observasi di jendela) **ATAU** rata-rata latensi origin ≥250 ms. Salah satu
+cukup. Sekali menyala, latch bertahan 3× jendela.
+
+Dibuktikan di produksi 2026-07-26 — bukan diasumsikan:
+
+| langkah                    | hasil                                            |
+| -------------------------- | ------------------------------------------------ |
+| saat santai                | `x-edge-cache-skip: auto_not_engaged`, tanpa TTL |
+| 120 permintaan (2 req/s)   | masih `auto_not_engaged` — di bawah ambang       |
+| 400 permintaan (>5 req/s)  | `surrogate-control: max-age=5` — ramp menyala    |
+| lewat Varnish              | `X-Cache: HIT`                                   |
+| purge lewat antrean+worker | `sent=1 failed=0` → `MISS` → baris `done`        |
+
+`max-age=5` itu `MIN_ACTIVATED_TTL_SECONDS`: rasio tekanan baru menyentuh 1,
+jadi TTL-nya paling pendek dan akan naik bila beban berlanjut.
+
+### Routing: prioritas Traefik, BUKAN mengosongkan FQDN
+
+Staging memindahkan domain dengan mengosongkan FQDN app. Produksi **tidak boleh**
+— itu berarti redeploy, dan selama redeploy backend Varnish hilang. Jadi router
+Varnish diberi `priority=100` (default Traefik = panjang rule):
+
+```
+traefik.http.routers.awcms-prod-varnish-https.priority=100
+```
+
+Router app tetap ada dengan rule `Host(...)` yang identik. Prioritas membuat
+cache **deterministik** — tanpanya kedua router seri dan pilihan Traefik
+sembarang, sehingga sebagian trafik diam-diam melewati cache — sekaligus
+menyisakan router app sebagai **fallback**. Itu terbukti berguna: selama
+container Varnish dibuat ulang, permintaan publik tetap dilayani app langsung,
+nol downtime.
+
+### Role least-privilege di produksi
+
+`awcms_worker` dan `awcms_setup` di produksi dulu `NOLOGIN` (jadi job apa pun
+jatuh ke `DATABASE_URL` = `awcms_app`). Keduanya kini punya LOGIN + password
+sendiri dan `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL` menunjuk ke sana. Worker
+purge berjalan sebagai `awcms_worker` — SELECT/UPDATE/DELETE saja atas antrean.
+
+Cron produksi:
+
+```
+* * * * * /home/admin1/awcms-prod-varnish/purge-runner.sh
+```
+
 ## Status nyata (2026-07-25)
 
 | Hal                                | Status                                                              |
@@ -254,8 +309,7 @@ policy yang menyaring dan policy yang inert.
 
 ## Yang masih terbuka
 
-- Varnish **belum** dipasang di depan produksi; `EDGE_CACHE_MODE` di sana masih
-  belum di-set (= `off`). Aktifkan hanya setelah `sql/070` diterapkan di
-  produksi — tanpa itu, menyalakan cache mematikan publish blog.
+- ~~Varnish belum dipasang di depan produksi.~~ **SUDAH**, 2026-07-26, mode
+  `auto` (lihat di bawah).
 - `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
   memang tidak pernah ada.

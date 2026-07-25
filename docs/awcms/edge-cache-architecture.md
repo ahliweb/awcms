@@ -135,11 +135,21 @@ atas `default.vcl`.
 
 ## Yang belum tersambung (jangan klaim ada)
 
-- ~~Emisi purge dari event konten.~~ **SUDAH** untuk `blog_content`: keempat
-  jalur tulis (create, update, soft-delete, scheduled publish) memanggil
-  `enqueueModuleContentPurge` di transaksi yang sama. Modul konten lain
-  (`news_portal`, `theming`, `media_library`) **belum** — suntingan di sana masih
-  menunggu TTL.
+- ~~Emisi purge dari event konten.~~ **SUDAH** untuk kedua modul yang memiliki
+  surface ter-deklarasi: `blog_content` (create, update, soft-delete, scheduled
+  publish) dan `theming` (publish, rollback, retire — pemilik
+  `theming-tokens`). Keduanya memanggil `enqueueModuleContentPurge` di transaksi
+  yang sama.
+
+  `news_portal` dan `media_library` **sengaja tidak** memanggilnya. Keduanya
+  tidak memiliki surface ter-deklarasi, jadi tidak ada objek ter-cache yang
+  bertanda `m:news_portal` atau `m:media_library` — ban untuk key itu **tidak
+  cocok dengan apa pun** sementara antrean melaporkan sukses. Menambahkannya
+  sekarang berarti menambah upacara yang terlihat seperti cakupan padahal nol.
+  Kewajibannya muncul sendiri begitu modulnya mendeklarasikan surface:
+  `bun run edge-cache:surfaces:check` menuntut emisi purge dari **setiap modul
+  yang memiliki surface**, dan gagal bila salah satu tidak punya.
+
 - **Surface discovery ber-resolusi-host** (`/robots.txt`, `/sitemap.xml`,
   `/feed.xml`, `/atom.xml`, `/feed.json`). Kandidat terbaik, tetapi
   `serveDiscovery(request, …)` tidak menerima `locals` sehingga rute tak bisa

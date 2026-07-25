@@ -5,6 +5,16 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #752 (epic #738 `platform-evolution`, Wave 3), Issue #739 / ADR-0013 §3 (data_exchange sudah dipre-klasifikasikan sebagai kandidat Official Optional Business Foundation), Issue #742 / domain_event_runtime (outbox/dispatcher generik yang dikonsumsi modul ini sebagai producer event), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
+> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
+> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
+> tidak ada `src/modules/data_exchange/`, tidak ada migrasi, tidak ada permission, dan
+> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
+> pengadaannya: Gelombang A
+> [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
+> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
+> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
+> modul masuk registry.
+
 ## Konteks
 
 ADR-0013 §3 (tabel lapisan ekstensi) sudah mem-pre-klasifikasikan `data_exchange` sebagai kandidat **Official Optional Business Foundation** (lapisan 3, baris "Official Optional Business Foundation") untuk Wave 2/3 epic #738 — bersama `organization_structure` (sudah diadmisi lewat ADR-0016), `reference_data`, dokumen/managed-files generik, dan `case_management`. Issue #752 sendiri secara eksplisit mensyaratkan sebagai acceptance criterion pertama: "Admission decision and ADR confirms module category, ownership, dependencies, and offline support before implementation" — ADR ini memenuhi syarat itu mengikuti preseden ADR-0016 (mengisi `module-proposal-template.md` inline) sebelum baris kode pertama modul ditulis, mengikuti pohon keputusan admission `docs/awcms/21_module_admission_governance.md` §3.

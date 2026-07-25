@@ -45,6 +45,15 @@ ketiga yang senyap.
 
 ## Jebakan yang sudah ditemukan (jangan diulang)
 
+- **Purge untuk modul TANPA surface ter-deklarasi tidak cocok dengan apa pun.**
+  Objek ter-cache hanya bertanda key modul PEMILIK surface — hari ini cuma
+  `blog_content` dan `theming`. Meng-enqueue `m:news_portal` atau
+  `m:media_library` menghasilkan ban yang tidak cocok dengan objek mana pun
+  sementara antrean melaporkan `sent=1`. Jangan tambahkan "untuk jaga-jaga".
+  Gate `edge-cache:surfaces:check` menuntut emisi purge dari setiap modul yang
+  MEMILIKI surface, jadi kewajibannya muncul otomatis pada hari surface-nya
+  dideklarasikan — dan tidak sedetik lebih awal.
+
 - **Bun TIDAK mengirim method HTTP non-standar.** `fetch`/`node:http` dengan
   `method: "BAN"` tiba di Varnish sebagai **`GET`** (diverifikasi Bun 1.3.14 lewat
   `varnishlog -i ReqMethod`; byte yang sama lewat raw socket tercatat `BAN` dan

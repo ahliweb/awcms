@@ -5,6 +5,16 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #751 (epic #738 `platform-evolution`, Wave 3), Issue #739 / ADR-0013 (extension layers, data-ownership matrix, no-shared-table-write), ADR-0016 (`organization_structure` admission — same template, same wave family), Issue #742 (`domain_event_runtime`, merged), Issue #745 (`data_lifecycle`, referenced but not hard-depended-on), Issue #747 (`workflow_approval`, referenced but not hard-depended-on), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
+> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
+> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
+> tidak ada `src/modules/document_infrastructure/`, tidak ada migrasi, tidak ada permission, dan
+> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
+> pengadaannya: Gelombang A
+> [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
+> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
+> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
+> modul masuk registry.
+
 ## Konteks
 
 ADR-0013 §1's extension-layer table already lists "dokumen/managed-files generik" as a Wave 2/3 Official Optional Business Foundation candidate. Issue #751 asks for exactly that: a reusable document METADATA registry (immutable versions, classification, evidence/attachment links, generic resource references, access/audit controls, concurrency-safe numbering) that any derived application can attach to ITS OWN domain documents (letters, invoices, purchase orders, journal batches, medical records, contracts) without this module ever importing or writing to those domains' tables — matching ADR-0013 §6's no-shared-table-write rule and the issue's own explicit out-of-scope list.

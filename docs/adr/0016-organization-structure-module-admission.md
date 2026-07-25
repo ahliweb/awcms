@@ -5,6 +5,16 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #749 (epic #738 `platform-evolution`, Wave 2), Issue #739 / ADR-0013 (extension layers, tenant vs legal entity vs organization unit vocabulary), Issue #746 (business-scope assignments + `BusinessScopeHierarchyPort`, PR #776), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
+> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
+> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
+> tidak ada `src/modules/organization_structure/`, tidak ada migrasi, tidak ada permission, dan
+> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
+> pengadaannya: Gelombang A
+> [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
+> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
+> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
+> modul masuk registry.
+
 ## Konteks
 
 ADR-0013 §1 sudah mem-pre-klasifikasikan `organization_structure` sebagai kandidat **Official Optional Business Foundation** (lapisan 3) untuk Wave 2 epic #738, dan §2 sudah mendefinisikan batas konsep tenant vs legal entity vs organization unit secara mengikat. Issue #749 sendiri secara eksplisit mensyaratkan sebagai acceptance criterion pertama: "Admission decision and ADR classify the module and dependencies before implementation" — ADR ini memenuhi syarat itu dengan mengisi `docs/awcms/templates/module-proposal-template.md` inline dan mengonfirmasi kategori/dependency/lifecycle/offline-compatibility/owner sebelum baris kode pertama modul ditulis, mengikuti pohon keputusan admission `docs/awcms/21_module_admission_governance.md` §3.
