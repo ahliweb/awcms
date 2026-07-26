@@ -63,6 +63,10 @@ Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms
 | [`module-composition-inventory.json`](module-composition-inventory.json)                               | Inventaris komposisi modul (artefak, regenerasi via tooling)                |
 | [`work-class-registry.generated.json`](work-class-registry.generated.json)                             | Registry work-class (artefak generated)                                     |
 
-Dua JSON di atas (`module-composition-inventory.json`, `work-class-registry.generated.json`) adalah **artefak yang di-generate** di repo acuan; nilainya masih mencerminkan modul awcms-mini dan akan diregenerasi oleh tooling repo ini begitu modul ERP terkait ada. Snapshot GitHub (`docs/awcms/github/`) belum diadaptasi — dihasilkan oleh skill `awcms-github-snapshot` saat dijalankan terhadap tracker repo ini.
+Kedua JSON di atas **di-generate dari kode repo ini sendiri** dan digerbangi kesegarannya di `bun run check`: `modules:composition:inventory:generate`/`:check` dan `db:work-class:generate`/`:check`. Jangan disunting tangan.
+
+> Sampai Issue #263, `work-class-registry.generated.json` tidak punya generator maupun check dan masih memuat ~284 rute awcms-mini — dengan `_disclaimer` yang ikut basi (menyebut "96 route nyata" untuk repo yang punya 221). `tests/generated-artifacts-have-tooling.test.ts` kini memerahkan berkas `.generated` mana pun yang tak punya pasangan generate/check, karena akhiran itu adalah klaim yang dipercaya pembaca.
+
+Snapshot GitHub (`docs/awcms/github/`) belum diadaptasi — dihasilkan oleh skill `awcms-github-snapshot` saat dijalankan terhadap tracker repo ini.
 
 Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, dan [`docs/adr/`](../adr/README.md) untuk keputusan arsitektural.
