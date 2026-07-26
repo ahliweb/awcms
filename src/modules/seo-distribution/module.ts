@@ -112,7 +112,18 @@ export const seoDistributionModule = defineModule({
   },
   api: {
     openApiPath: "openapi/modules/seo-distribution.openapi.yaml",
-    basePath: "/api/v1/seo"
+    basePath: "/api/v1/seo",
+    // The public discovery routes this module renders (ADR-0038). They are
+    // top-level by protocol convention, not under a prefix, so each is listed.
+    routes: [
+      "/api/v1/seo",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/sitemap-",
+      "/feed.xml",
+      "/feed.json",
+      "/atom.xml"
+    ]
   },
   permissions: [
     {

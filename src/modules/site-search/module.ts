@@ -76,7 +76,8 @@ export const siteSearchModule = defineModule({
   type: "domain",
   api: {
     openApiPath: "openapi/modules/site-search.openapi.yaml",
-    basePath: "/api/v1/site-search"
+    basePath: "/api/v1/site-search",
+    routes: ["/api/v1/site-search", "/search"]
   },
   permissions: [
     {

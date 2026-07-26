@@ -235,6 +235,31 @@ hal yang justru tidak boleh dilakukan laporan drift. Tetap jangan hapus baris
 `missing`/`orphaned` diperbaiki dengan menyelaraskan descriptor ATAU menambah
 migrasi seed, bukan dengan DELETE.
 
+## Kepemilikan rute: `api.routes`, bukan `basePath`
+
+`basePath` adalah prefix **tampilan**. Yang mengklaim kepemilikan adalah
+`api.routes` — daftar prefix, longest-prefix menang.
+
+Kenapa daftar: kepemilikan memang bukan satu prefix. `tenant_admin` memiliki
+`/api/v1/{offices,settings,setup}`, dan `/api/v1/tenant` **terbelah** antara
+`tenant_domain` (`/domains`) dan `module_management` (`/modules`). Permukaan
+publik non-API juga masuk (`/blog`, `/robots.txt`, `/search`, `/theming`) —
+sebelum Issue #256 ada 30 rute nyata yang tak diklaim siapa pun.
+
+> **JANGAN pernah menulis `basePath: "/api/v1"`.** Itu prefix setiap rute di
+> aplikasi; `tenant_admin` dulu menulisnya dan mencaplok 36 rute milik modul
+> lain (seluruh `/api/v1/{access,roles,users,abac,identity}` = `identity_access`,
+> `/api/v1/tenant/modules` = `module_management`). Gate menolak `/`, `/api`,
+> dan `/api/v1` secara eksplisit — **cek cakupan saja tidak cukup**: prefix yang
+> cocok dengan segalanya membuat nol rute tak-terklaim, jadi gerbang cakupan
+> hijau sementara jawabannya salah.
+
+`bun run modules:routes:check` menuntut tiap berkas di `src/pages` (kecuali
+`/admin/**`) dipetakan ke tepat SATU modul, atau ada di `PLATFORM_ROUTES`
+berikut alasan. `/admin/**` sengaja tidak di sini — sudah diikat
+`tests/admin-navigation-registry.test.ts`; mengklaimnya dua kali berarti dua
+sumber kebenaran untuk fakta yang sama.
+
 ## `navigation` = SATU sumber; sidebar dirender dari registry
 
 `ModuleDescriptor.navigation` dikonsumsi **empat** cara sekarang:

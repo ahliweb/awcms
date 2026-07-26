@@ -10,7 +10,12 @@ export const tenantAdminModule = defineModule({
   dependencies: [],
   api: {
     openApiPath: "openapi/modules/tenant-admin.openapi.yaml",
-    basePath: "/api/v1"
+    // `basePath` stays the primary display prefix; `routes` is what actually
+    // claims ownership. This descriptor used to say `basePath: "/api/v1"`,
+    // which is a prefix of EVERY route in the application — see
+    // `ModuleApiContract.routes` for the 36 routes that swallowed.
+    basePath: "/api/v1/offices",
+    routes: ["/api/v1/offices", "/api/v1/settings", "/api/v1/setup"]
   },
   navigation: [
     {

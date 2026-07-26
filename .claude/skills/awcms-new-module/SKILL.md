@@ -40,7 +40,17 @@ export const <camelCase>Module = defineModule({
   // Kontrak OpenAPI dipecah per modul (Issue #182, ADR-0026): modul ini MEMILIKI
   // fragmentnya sendiri; `openApiPath` menunjuk fragment, bukan bundle GENERATED.
   // Setelah edit fragment: `bun run openapi:bundle` + `bun run api:docs:generate`.
-  api: { openApiPath: "openapi/modules/<module>.openapi.yaml", basePath: "/api/v1" },
+  // `basePath` = prefix UTAMA modul (tampilan/dokumen). `routes` = SEMUA prefix
+  // yang dimilikinya, termasuk permukaan publik non-API. JANGAN pernah menulis
+  // `/api/v1` di sini: itu prefix SETIAP rute di aplikasi, dan `modules:routes:check`
+  // menolaknya (Issue #256 — `tenant_admin` dulu menulisnya dan mencaplok 36 rute
+  // milik modul lain). Boleh dihilangkan bila modul hanya punya satu prefix;
+  // absennya berarti `[basePath]`.
+  api: {
+    openApiPath: "openapi/modules/<module>.openapi.yaml",
+    basePath: "/api/v1/<module>",
+    routes: ["/api/v1/<module>"] // + prefix publik, mis. "/<module>"
+  },
   events: {
     // awcms memakai SATU berkas AsyncAPI (belum dipecah per modul seperti OpenAPI).
     asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",

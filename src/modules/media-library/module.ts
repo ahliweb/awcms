@@ -67,7 +67,10 @@ export const mediaLibraryModule = defineModule({
   },
   api: {
     openApiPath: "openapi/awcms-public-api.openapi.yaml",
-    basePath: "/api/v1/media/news-images"
+    basePath: "/api/v1/media/news-images",
+    // The whole `/api/v1/media` tree, not just the news-images sub-path —
+    // `/api/v1/media/enforcement` was falling to `tenant_admin`'s catch-all.
+    routes: ["/api/v1/media"]
   },
   permissions: [
     {

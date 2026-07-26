@@ -12,7 +12,10 @@ export const moduleManagementModule = defineModule({
   isCore: true,
   api: {
     openApiPath: "openapi/modules/module-management.openapi.yaml",
-    basePath: "/api/v1/modules"
+    basePath: "/api/v1/modules",
+    // `/api/v1/tenant` is SPLIT: `/modules` here, `/domains` in `tenant_domain`.
+    // Longest-prefix resolution handles that without a special case.
+    routes: ["/api/v1/modules", "/api/v1/tenant/modules"]
   },
   navigation: [
     {
