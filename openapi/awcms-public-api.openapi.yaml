@@ -1838,6 +1838,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/register:
+    post:
+      operationId: postAuthRegister
+      tags:
+        - Identity & Access
+      summary: Submit a self-registration request for admin review.
+      description: Records a request; it NEVER creates an account. Accepts no password and no privilege field — approval creates the account with an unusable credential and emails a password-reset link. Returns `404` when `AUTH_SELF_REGISTRATION_ENABLED` is not `true`, indistinguishable from a route that does not exist. When enabled, an address that already has an account, an address with a request already pending, and a freshly recorded request all return the identical 200.
+      security: []
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - displayName
+                - loginIdentifier
+              properties:
+                displayName:
+                  type: string
+                  maxLength: 120
+                loginIdentifier:
+                  type: string
+                  maxLength: 320
+                  description: Must be an email address — the approval link is sent to it.
+                turnstileToken:
+                  type: string
+                  description: "Cloudflare Turnstile response token (Issue #186), solved for the `register` action. Required only on a full-online deployment where Turnstile is enabled."
+      responses:
+        "200":
+          description: Request accepted. Says nothing about whether the address is already registered or already pending.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      requested:
+                        type: boolean
+                      message:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Self-registration is not enabled for this deployment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many registration attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/sso-policy:
     get:
       operationId: getSsoPolicy
@@ -8936,6 +9004,141 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/registration-requests:
+    get:
+      operationId: listRegistrationRequests
+      tags:
+        - Identity & Access
+      summary: Pending self-registration requests for this tenant.
+      description: Oldest first, bounded. Login identifiers are MASKED — a reviewer decides on a name and a domain, and this is the one response that would otherwise expose every applicant address at once.
+      responses:
+        "200":
+          description: The pending queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/RegistrationRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/registration-requests/{id}/approve:
+    post:
+      operationId: approveRegistrationRequest
+      tags:
+        - Identity & Access
+      summary: Approve a request, creating a real account.
+      description: The only path that materializes profile + identity + tenant_user, hence its own permission (`registration_requests.approve`), separate from `reject`. The account is created with an UNUSABLE password and the applicant is emailed a password-reset link; `delivery` reports whether that link could actually be queued. `roleIds` is optional and defaults to none — an approval never grants a role by default.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      approved:
+                        type: boolean
+                      identityId:
+                        type: string
+                        format: uuid
+                      tenantUserId:
+                        type: string
+                        format: uuid
+                      delivery:
+                        type: string
+                        enum:
+                          - queued
+                          - unavailable
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: An account with that login identifier already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/registration-requests/{id}/reject:
+    post:
+      operationId: rejectRegistrationRequest
+      tags:
+        - Identity & Access
+      summary: Reject a request. Creates nothing and notifies nobody.
+      description: A rejection email would confirm to an anonymous submitter that this tenant exists and reviewed them — the same disclosure the public submit endpoint refuses to make.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Request rejected.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      rejected:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/reports/access-audit:
     get:
       tags:
@@ -16330,6 +16533,20 @@ components:
         onlineWindowSeconds:
           type: integer
         lastUpdatedAt:
+          type: string
+          format: date-time
+    RegistrationRequest:
+      type: object
+      description: A pending self-registration request. The login identifier is masked — the raw address is never returned in a list.
+      properties:
+        id:
+          type: string
+          format: uuid
+        loginIdentifierMasked:
+          type: string
+        displayName:
+          type: string
+        requestedAt:
           type: string
           format: date-time
     RetentionPurgeResult:

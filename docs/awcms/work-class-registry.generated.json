@@ -662,6 +662,21 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/registration-requests/[id]/approve.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/registration-requests/[id]/reject.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/registration-requests/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/reports/access-audit.ts",
       "workClass": "reporting",
       "source": "factory"

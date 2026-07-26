@@ -394,7 +394,7 @@ Cron produksi:
 | App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`       |
 | TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS |
 | Health staging                     | ✅ `GET /api/v1/health` → 200, 21 modul                             |
-| Migrasi DB staging                 | ✅ `sql/001`–`sql/073`, 73 applied — sama dengan produksi & dev     |
+| Migrasi DB staging                 | ✅ `sql/001`–`sql/075`, 75 applied — sama dengan produksi & dev     |
 | Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`        |
 | Seed tenant pertama staging        | ✅ tenant `staging` + owner; `setup/status` → `locked:true`         |
 | Isolasi RLS staging                | ✅ dibuktikan di bawah `awcms_app` (lihat di bawah)                 |

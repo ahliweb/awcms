@@ -1,0 +1,344 @@
+/**
+ * Self-registration application service (Wave 2 delta auth, adapted from
+ * awcms-micro). Same posture as `password-reset.ts`: the public path is
+ * anti-enumeration by construction, and the real outcome survives only in the
+ * audit trail.
+ *
+ * ## Trust model
+ *
+ * - `submitRegistrationRequest` is reachable by anonymous callers. It NEVER
+ *   creates a login-eligible account — only a `pending` row. It accepts no
+ *   privilege input and no password.
+ * - `listPendingRegistrations` / `approve` / `reject` sit behind the admin ABAC
+ *   guard (`identity_access.registration_requests.{read,approve,reject}`).
+ *   Approval is the ONLY path that materializes profile + identity +
+ *   tenant_user, and therefore the single point at which a self-registered
+ *   applicant becomes able to sign in.
+ *
+ * ## Approval issues a credential the applicant must claim
+ *
+ * The identity is created with an UNUSABLE password — a hash of fresh CSPRNG
+ * bytes nobody ever sees — and the applicant receives a password-reset link
+ * through the same `requestPasswordReset` flow `/forgot-password` uses. So:
+ * no anonymous submitter's secret is ever stored, a rejected or abandoned
+ * request leaves no credential behind, and the applicant proves control of the
+ * mailbox before the account can be used. The alternative (micro's) stores an
+ * argon2id hash chosen by an unverified stranger for an account that may never
+ * exist.
+ *
+ * The consequence is stated rather than hidden: if delivery is unavailable
+ * (tenant has no active `auth.password_reset` template, or the address is
+ * suppressed) the account exists but has no way in. `approveRegistrationRequest`
+ * reports that as `delivery: "unavailable"` so the admin screen can say so, and
+ * the recovery is ordinary — the applicant uses `/forgot-password`, or the
+ * admin fixes the template and re-triggers it.
+ */
+import { generateResetToken } from "../../../lib/auth/reset-token";
+import { hashPassword } from "../../../lib/auth/password";
+import type { AuthNotificationPort } from "../../_shared/ports/auth-notification-port";
+import { isMailableLoginIdentifier } from "../domain/password-reset-policy";
+import {
+  requestPasswordReset,
+  type RequestPasswordResetOptions
+} from "./password-reset";
+
+/**
+ * Every reason a submission produced no row. Internal only — the endpoint
+ * answers identically for all of them, including `created`.
+ */
+export type SubmitRegistrationOutcome =
+  | "created"
+  | "tenant_inactive"
+  | "not_mailable"
+  | "identifier_taken"
+  | "duplicate_pending";
+
+export type SubmitRegistrationResult = {
+  outcome: SubmitRegistrationOutcome;
+  /** Set only when a row was written — never for a rejected submission. */
+  requestId?: string;
+};
+
+export async function submitRegistrationRequest(
+  tx: Bun.SQL,
+  tenantId: string,
+  input: { loginIdentifier: string; displayName: string }
+): Promise<SubmitRegistrationResult> {
+  const tenantRows = (await tx`
+    SELECT status FROM awcms_tenants WHERE id = ${tenantId}
+  `) as { status: string }[];
+
+  if (tenantRows[0]?.status !== "active") {
+    return { outcome: "tenant_inactive" };
+  }
+
+  // Re-checked here even though the validator already rejects it: this function
+  // is also reachable from tests and any future caller, and an unmailable
+  // identifier would produce an approved account that can never be claimed.
+  if (!isMailableLoginIdentifier(input.loginIdentifier)) {
+    return { outcome: "not_mailable" };
+  }
+
+  // An account already exists. No row is created, and the caller is told
+  // nothing — this is the single most valuable answer to an enumeration sweep,
+  // so it must be indistinguishable from success.
+  const existing = await tx`
+    SELECT 1 FROM awcms_identities
+    WHERE tenant_id = ${tenantId} AND login_identifier = ${input.loginIdentifier}
+  `;
+
+  if (existing[0]) {
+    return { outcome: "identifier_taken" };
+  }
+
+  // The partial unique index (sql/074) allows at most one PENDING row per
+  // identifier. `DO NOTHING` turns a second submit into "no row returned"
+  // rather than a 23505 the route would have to catch — and, critically, it
+  // does so INSIDE the transaction: a raised constraint error here would abort
+  // the transaction and take the audit row with it.
+  const inserted = (await tx`
+    INSERT INTO awcms_registration_requests
+      (tenant_id, login_identifier, display_name)
+    VALUES (${tenantId}, ${input.loginIdentifier}, ${input.displayName})
+    ON CONFLICT (tenant_id, login_identifier) WHERE status = 'pending'
+      DO NOTHING
+    RETURNING id
+  `) as { id: string }[];
+
+  if (!inserted[0]) {
+    return { outcome: "duplicate_pending" };
+  }
+
+  return { outcome: "created", requestId: inserted[0].id };
+}
+
+export type PendingRegistrationView = {
+  id: string;
+  /** Masked — this renders in an admin queue and the raw value is PII. */
+  loginIdentifierMasked: string;
+  displayName: string;
+  requestedAt: string;
+};
+
+const QUEUE_LIMIT = 200;
+
+export async function listPendingRegistrations(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<PendingRegistrationView[]> {
+  const rows = (await tx`
+    SELECT id, login_identifier, display_name, requested_at
+    FROM awcms_registration_requests
+    WHERE tenant_id = ${tenantId} AND status = 'pending'
+    ORDER BY requested_at ASC, id ASC
+    LIMIT ${QUEUE_LIMIT}
+  `) as {
+    id: string;
+    login_identifier: string;
+    display_name: string;
+    requested_at: Date;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    loginIdentifierMasked: maskAddress(row.login_identifier),
+    displayName: row.display_name,
+    requestedAt: row.requested_at.toISOString()
+  }));
+}
+
+/**
+ * Local mask rather than `profile-identity`'s `maskIdentifierValue`: these rows
+ * are not profile identifiers and never become one until approval, so reaching
+ * into that module's domain for a display helper would declare a dependency
+ * this file does not otherwise have.
+ */
+function maskAddress(value: string): string {
+  const atIndex = value.indexOf("@");
+
+  if (atIndex <= 0) {
+    return "***";
+  }
+
+  return `${value.slice(0, 1)}${"*".repeat(Math.max(atIndex - 1, 1))}${value.slice(atIndex)}`;
+}
+
+export type ApproveRegistrationResult =
+  | {
+      outcome: "approved";
+      identityId: string;
+      tenantUserId: string;
+      /** Whether the applicant's password-reset link was actually queued. */
+      delivery: "queued" | "unavailable";
+    }
+  | { outcome: "not_found" }
+  | { outcome: "identifier_taken" }
+  | { outcome: "unknown_role" };
+
+export type ApproveRegistrationOptions = {
+  roleIds: string[];
+  notifications: AuthNotificationPort;
+  /** Base URL for the claim link, e.g. `${APP_URL}/reset-password`. */
+  resetUrlBase: string;
+  tokenTtlMinutes: number;
+  correlationId?: string;
+};
+
+export async function approveRegistrationRequest(
+  tx: Bun.SQL,
+  tenantId: string,
+  requestId: string,
+  reviewerTenantUserId: string,
+  now: Date,
+  options: ApproveRegistrationOptions
+): Promise<ApproveRegistrationResult> {
+  // `FOR UPDATE`, with `status = 'pending'` in the predicate: two reviewers
+  // approving the same row concurrently would otherwise both read it as
+  // pending and both start creating an account. The database does stop the
+  // second one — `awcms_identities_tenant_login_key` raises 23505 — but it
+  // raises it mid-transaction, which aborts the whole thing and surfaces as a
+  // 500 to a reviewer who did nothing wrong. Mutation-proven: drop the lock and
+  // `two reviewers approving the same row` fails with exactly that error.
+  //
+  // The lock serializes them instead, so the second reviewer sees no pending
+  // row and gets a clean `not_found` → 404. Correctness was never at risk here;
+  // the failure MODE was.
+  const requestRows = (await tx`
+    SELECT id, login_identifier, display_name
+    FROM awcms_registration_requests
+    WHERE tenant_id = ${tenantId} AND id = ${requestId} AND status = 'pending'
+    FOR UPDATE
+  `) as { id: string; login_identifier: string; display_name: string }[];
+  const request = requestRows[0];
+
+  if (!request) {
+    return { outcome: "not_found" };
+  }
+
+  // An admin may have created the same account by hand since the request was
+  // filed. Checked before anything is written, so approval never half-succeeds.
+  const duplicate = await tx`
+    SELECT 1 FROM awcms_identities
+    WHERE tenant_id = ${tenantId} AND login_identifier = ${request.login_identifier}
+  `;
+
+  if (duplicate[0]) {
+    return { outcome: "identifier_taken" };
+  }
+
+  if (options.roleIds.length > 0) {
+    const found = (await tx`
+      SELECT id FROM awcms_roles
+      WHERE tenant_id = ${tenantId}
+        AND id = ANY(${tx.array(options.roleIds, "uuid")})
+        AND deleted_at IS NULL
+    `) as { id: string }[];
+
+    // All-or-nothing: a partially-valid role list must not silently grant the
+    // subset that happened to resolve.
+    if (found.length !== options.roleIds.length) {
+      return { outcome: "unknown_role" };
+    }
+  }
+
+  const profileRows = (await tx`
+    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name, status)
+    VALUES (${tenantId}, 'person', ${request.display_name}, 'active')
+    RETURNING id
+  `) as { id: string }[];
+
+  // An unusable credential: the hash of 32 CSPRNG bytes that are discarded
+  // immediately. The column is NOT NULL and login verifies against it, so there
+  // is no "no password" state to represent — this is the closest honest thing,
+  // and it is unguessable rather than a shared placeholder.
+  const unusablePasswordHash = await hashPassword(generateResetToken());
+
+  const identityRows = (await tx`
+    INSERT INTO awcms_identities
+      (tenant_id, profile_id, login_identifier, password_hash, status)
+    VALUES (
+      ${tenantId}, ${profileRows[0]!.id}, ${request.login_identifier},
+      ${unusablePasswordHash}, 'active'
+    )
+    RETURNING id
+  `) as { id: string }[];
+  const identityId = identityRows[0]!.id;
+
+  const tenantUserRows = (await tx`
+    INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
+    VALUES (${tenantId}, ${identityId}, 'active')
+    RETURNING id
+  `) as { id: string }[];
+  const tenantUserId = tenantUserRows[0]!.id;
+
+  if (options.roleIds.length > 0) {
+    await tx`
+      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
+      SELECT ${tenantId}, ${tenantUserId}, role_id, ${reviewerTenantUserId}
+      FROM unnest(${tx.array(options.roleIds, "uuid")}) AS role_id
+      ON CONFLICT (tenant_id, tenant_user_id, role_id) DO NOTHING
+    `;
+  }
+
+  await tx`
+    UPDATE awcms_registration_requests
+    SET status = 'approved',
+        reviewed_at = ${now},
+        reviewed_by_tenant_user_id = ${reviewerTenantUserId},
+        created_identity_id = ${identityId},
+        updated_at = ${now}
+    WHERE tenant_id = ${tenantId} AND id = ${requestId}
+  `;
+
+  // Now that the account exists and is active, the ordinary password-reset
+  // request path applies to it unchanged — including its own eligibility
+  // checks, its token supersession, and its audit-free generic result.
+  const resetOptions: RequestPasswordResetOptions = {
+    tokenTtlMinutes: options.tokenTtlMinutes,
+    resetUrlBase: options.resetUrlBase,
+    notifications: options.notifications,
+    correlationId: options.correlationId
+  };
+  const reset = await requestPasswordReset(
+    tx,
+    tenantId,
+    request.login_identifier,
+    now,
+    resetOptions
+  );
+
+  return {
+    outcome: "approved",
+    identityId,
+    tenantUserId,
+    delivery: reset.outcome === "enqueued" ? "queued" : "unavailable"
+  };
+}
+
+export type RejectRegistrationResult =
+  { outcome: "rejected"; requestId: string } | { outcome: "not_found" };
+
+/** Closes a pending request. Creates nothing, and is a no-op on an already-reviewed row. */
+export async function rejectRegistrationRequest(
+  tx: Bun.SQL,
+  tenantId: string,
+  requestId: string,
+  reviewerTenantUserId: string,
+  now: Date
+): Promise<RejectRegistrationResult> {
+  const rows = (await tx`
+    UPDATE awcms_registration_requests
+    SET status = 'rejected',
+        reviewed_at = ${now},
+        reviewed_by_tenant_user_id = ${reviewerTenantUserId},
+        updated_at = ${now}
+    WHERE tenant_id = ${tenantId} AND id = ${requestId} AND status = 'pending'
+    RETURNING id
+  `) as { id: string }[];
+
+  if (!rows[0]) {
+    return { outcome: "not_found" };
+  }
+
+  return { outcome: "rejected", requestId: rows[0].id };
+}

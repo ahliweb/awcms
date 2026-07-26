@@ -1112,7 +1112,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // `awcms_seo_not_found_observations` above. NO INSERT and NO UPDATE: issuing
   // a token and burning it are both request-path writes on awcms_app, and a
   // worker able to write here could mint a credential-recovery token.
-  awcms_password_reset_tokens: ["SELECT", "DELETE"]
+  awcms_password_reset_tokens: ["SELECT", "DELETE"],
+  // identity_access — the same generic data_lifecycle purge over reviewed
+  // self-registration requests (sql/074). SELECT + DELETE only: submitting is a
+  // public-path write on awcms_app and approving/rejecting is an admin action,
+  // so a worker with INSERT or UPDATE here could manufacture an approved
+  // registration — i.e. an account.
+  awcms_registration_requests: ["SELECT", "DELETE"]
 };
 
 /**

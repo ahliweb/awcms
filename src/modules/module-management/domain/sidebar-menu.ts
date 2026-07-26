@@ -168,7 +168,8 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_profiles": "Profiles",
   "admin.layout.nav_users": "Users",
   "admin.layout.nav_roles": "Roles",
-  "admin.layout.nav_abac_policies": "ABAC policies"
+  "admin.layout.nav_abac_policies": "ABAC policies",
+  "admin.layout.nav_registrations": "Registration requests"
 };
 
 /** Display name for the synthetic core group. Rendered as a module sub-label. */
