@@ -139,8 +139,8 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 `repo-inventory.md` saat ini **hand-maintained** (bukan hasil generate
 nyata) — `bun run repo:inventory:generate` dan
 `scripts/repo-inventory-generate.ts` belum ada di repo ini; lihat
-disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **65 file migration nyata** di
-`sql/` (`001`..`065`), dipetakan ke **20 modul terdaftar** (urutan
+disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **70 file migration nyata** di
+`sql/` (`001`..`070`), dipetakan ke **21 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,

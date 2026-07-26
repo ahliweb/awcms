@@ -82,9 +82,12 @@ spesifikasi untuk di-port, bukan sesuatu yang bisa langsung diimpor.
 7. **Draft client-side hanya data non-sensitif**, dan tidak persisten
    (tidak ada `localStorage`). Butuh resume lintas sesi/perangkat, atau
    payload mengandung apa pun yang lebih dari UX scratch state? Pola
-   target adalah server-side draft persistence — skill `awcms-form-drafts`
-   (juga BACAAN SAJA, modul `form_drafts` belum di-port — verifikasi
-   sendiri sebelum mengklaim endpointnya ada).
+   target adalah server-side draft persistence — skill `awcms-form-drafts`.
+   Modul `form_drafts` **SUDAH di-port** (`sql/062` schema + `sql/063`
+   permission, endpoint `/api/v1/form-drafts/*`), jadi skill itu **bukan**
+   bacaan-saja lagi. Yang masih belum ada adalah pustaka KOMPONEN wizard
+   (`WizardStepper`/`wizard-client.ts`) — itulah sebabnya skill INI tetap
+   bacaan-saja.
 
 ## Verifikasi (ada di awcms-mini — belum ada padanannya di repo ini)
 

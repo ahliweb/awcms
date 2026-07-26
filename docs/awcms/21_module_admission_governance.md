@@ -253,7 +253,7 @@ check`), dan di-deploy sebagai satu artefak — **tidak pernah** dimuat
 
 > **USANG per 2026-07-25 — judul dan tabel §8 ini adalah artefak perencanaan
 > awal.** Klaim "belum ada modul terimplementasi" / "registry itu belum ada sama
-> sekali" **tidak lagi benar**: `src/modules/index.ts` kini punya **20 modul
+> sekali" **tidak lagi benar**: `src/modules/index.ts` kini punya **21 modul
 > aktif** dan kolom "Belum diimplementasikan" di bawah salah untuk
 > `tenant_admin`, `identity_access`, `profile_identity`, `module_management`,
 > `sync_storage`, `reporting`, dan `workflow_approval` — ketujuhnya **sudah
