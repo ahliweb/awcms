@@ -293,7 +293,18 @@ jobs:
         # here made 26 of them fail (data collisions/ordering), while all 4
         # harness-based integration files passed cleanly. They run in their own
         # step below instead, in a fresh `bun test` process of their own.
-        run: bun test tests/integration/
+        #
+        # `--timeout 60000` is not decoration. `setupIntegrationDatabase()`
+        # creates an ephemeral database and applies EVERY file in `sql/` as a
+        # subprocess, inside `beforeAll` — which is subject to bun's 5000ms
+        # per-hook default. Thirteen files each do that, and the cost grows
+        # with every migration added, so the default is a deadline the suite
+        # was always going to cross: observed on PR #259 (run 30188228406),
+        # green on a re-run with no code change. Setup takes ~1-2s on an idle
+        # runner, so 60s is ~30x headroom and still far under the job timeout.
+        # Set here rather than per-hook in 13 files: one place to forget, not
+        # thirteen.
+        run: bun test tests/integration/ --timeout 60000
 
       - name: Run DB-gated integration tests (legacy ad-hoc suite)
         # These 9 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
