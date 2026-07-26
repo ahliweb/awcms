@@ -94,6 +94,22 @@ sendiri, bukan hasil merge dengan registry aplikasi:
   saat gate ini mendarat (#251). Sekarang tiap import lintas-modul wajib
   dideklarasikan sebagai `dependencies`, sebagai `capabilities.consumes`, atau
   dikecualikan eksplisit dengan alasan yang bisa dibantah reviewer.
+- **`modules:table-writes:check` menutup celah KEDUA: kopling lewat SQL, bukan
+  lewat `import`.** Dua modul bisa sepenuhnya bebas dari import satu sama lain
+  dan tetap menulis TABEL yang sama — coupling yang tak terlihat gate mana pun
+  di atas. `_shared/module-contract.ts` menyebut aturan "ADR-0013 §6 no
+  shared-table write" **empat kali** sebagai alasan tiap seam
+  (`dataLifecycle`/`searchSources`/`commentableResources`/`reportingProjections`)
+  mengoper METADATA ke engine pusat alih-alih menjangkau skema modul lain —
+  tapi SQL tulis-tangan di luar seam itu tak pernah diperiksa, dan enam tabel
+  ditulis lebih dari satu modul saat gate ini mendarat. Kepemilikan **diturunkan,
+  bukan dideklarasikan** (aturannya "paling banyak satu penulis", jadi
+  penulisnya sendiri adalah buktinya; tabel baru tak perlu didaftarkan untuk
+  ikut tercakup). Rute di `src/pages` diatribusikan lewat `api.routes`, jadi
+  `INSERT` di rute milik sebuah modul bukan penulis kedua. Tulis DINAMIS
+  (`${tableName}` milik engine `data_lifecycle`/`reporting`) sengaja di luar
+  cakupan — itu justru mekanisme yang diresepkan §6, dan sudah digerbangi
+  registry-check masing-masing.
 
 Komposisi build-time (modul apa yang ada di kode) dan tenant lifecycle
 enable/disable (`module_management`, state DB per tenant) adalah **dua lapis

@@ -23,6 +23,32 @@ Skema: `sql/003_awcms_central_profile_schema.sql`.
 
 Layar admin `admin/profiles.astro` kini punya form create profile ter-gate permission `profile_identity.profile_management.create` yang mem-POST ke `POST /api/v1/profiles` (cookie auth, script eksternal aman-CSP).
 
+## Profil untuk akun yang dibuat modul lain
+
+`awcms_identities.profile_id` `NOT NULL` mereferensikan `awcms_profiles`, jadi
+**membuat identity login secara struktural mengharuskan adanya profil**.
+`application/person-profile.ts` `createPersonProfileForIdentity` adalah
+satu-satunya jalan modul lain memperolehnya — modul ini tetap satu-satunya
+penulis tabelnya (ADR-0013 §6), ditegakkan
+`bun run modules:table-writes:check`.
+
+Sebelumnya tiap jalur pembuat identity menulis barisnya sendiri, dan keduanya
+**sudah menyimpang**: JIT provisioning SSO (#185) menyetel
+`verification_status='verified'`, sementara approval self-registration (#276)
+membiarkannya default — dua akun yang dibuat berselang menit mendapat postur
+verifikasi berbeda tanpa ada yang pernah memutuskannya. Sekarang argumennya
+eksplisit (`emailVerified`), dan `false` (default) berarti belum ada bukti
+kendali atas alamat: pengakuan reviewer bukan bukti, link reset yang dikirim
+approval itulah buktinya.
+
+Fungsi ini sengaja **tidak** menulis audit event — `createParty` (saudaranya
+untuk operator) melakukannya dan butuh `actorTenantUserId`; di sini pemanggilnya
+yang memegang audit atas keputusan sebenarnya (`registration_approved`, JIT
+login). `tenant_admin/application/platform-bootstrap.ts` **tidak** lewat sini
+(pengecualian ber-alasan di gate: wizard sekali-jalan yang membuat tenant →
+office → profil → identity → role dalam SATU transaksi, sebelum modul mana pun
+bisa dipanggil lewat permukaan normalnya).
+
 ## Belum tersedia
 
 Merge workflow (`awcms_profile_merge_requests` — tabel belum dibuat), channel komunikasi & alamat efektif-tanggal, restore/purge endpoint (permission `restore` sudah di-seed tapi belum ada konsumen), duplicate-candidate detection.
