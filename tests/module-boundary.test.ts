@@ -42,6 +42,11 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "bun:test";
 
 import { listModules } from "../src/modules";
+import {
+  collectClaims,
+  resolveOwner,
+  routeOf
+} from "../scripts/validate-module-routes";
 
 /**
  * Directory name to descriptor key, taken from the IMPORTED descriptor.
@@ -125,12 +130,28 @@ const DOCUMENTED_EXCEPTIONS: {
   }
 ];
 
-/** `from "../../<module-dir>/..."` — the only shape a cross-module import takes. */
+/** `from "../../<module-dir>/..."` — the shape a cross-module import takes from inside `src/modules`. */
 const CROSS_MODULE_IMPORT = /from\s+"\.\.\/\.\.\/([a-z][a-z0-9-]*)\//g;
+
+/** `from ".../modules/<module-dir>/..."` — the shape it takes from `src/pages`, at any depth. */
+const PAGES_MODULE_IMPORT = /from\s+"[^"]*?\/modules\/([a-z][a-z0-9-]*)\//g;
 
 type Edge = { from: string; to: string; file: string; line: number };
 
-async function collectEdges(): Promise<Edge[]> {
+/**
+ * Modules every ROUTE may import without declaring it.
+ *
+ * `identity_access` is here and nowhere else. `authorizeInTransaction` is the
+ * single authorization chokepoint (Issue #255) and is reached from 184 route
+ * files; requiring each owning module to declare an edge to it would add ~20
+ * edges that tell a reader nothing they did not already know, and would make
+ * `identity_access` a dependency of nearly the whole registry. Inside
+ * `src/modules` it is NOT foundational — a module reaching for the guard
+ * outside a route is a real coupling.
+ */
+const ROUTE_FOUNDATION_MODULES = new Set(["logging", "identity_access"]);
+
+async function collectModuleEdges(): Promise<Edge[]> {
   const edges: Edge[] = [];
   const keys = await directoryKeyMap();
   const glob = new Bun.Glob("src/modules/*/**/*.ts");
@@ -169,6 +190,66 @@ async function collectEdges(): Promise<Edge[]> {
   }
 
   return edges;
+}
+
+/**
+ * The same rule applied to `src/pages`, which is 38k lines — larger than the
+ * three biggest modules combined — and was scanned by nothing at all.
+ *
+ * This half could not be written until Issue #256: attributing a route to a
+ * module needed `api.routes`, because `tenant_admin`'s `basePath: "/api/v1"`
+ * made every route resolve to it and any accusation would have named the wrong
+ * module.
+ */
+async function collectRouteEdges(): Promise<Edge[]> {
+  const edges: Edge[] = [];
+  const keys = await directoryKeyMap();
+  const { claims } = collectClaims(listModules());
+  const glob = new Bun.Glob("src/pages/**/*.{ts,astro}");
+
+  for await (const file of glob.scan({ cwd: process.cwd(), dot: true })) {
+    // `/admin/**` renders the shell for every module by design; it is bound to
+    // descriptors by `tests/admin-navigation-registry.test.ts` instead.
+    const route = routeOf(file);
+
+    if (route === "/admin" || route.startsWith("/admin/")) {
+      continue;
+    }
+
+    const owner = resolveOwner(route, claims);
+
+    if (!owner) {
+      // Platform routes (`/api/v1/health`, `/[...path]`) belong to no module,
+      // so there is no declaration to check them against.
+      continue;
+    }
+
+    const body = await readFile(file, "utf8");
+
+    for (const [index, line] of body.split("\n").entries()) {
+      for (const match of line.matchAll(PAGES_MODULE_IMPORT)) {
+        const toDir = match[1]!;
+
+        if (toDir === "_shared") {
+          continue;
+        }
+
+        const to = keys.get(toDir);
+
+        if (!to || to === owner) {
+          continue;
+        }
+
+        edges.push({ from: owner, to, file, line: index + 1 });
+      }
+    }
+  }
+
+  return edges;
+}
+
+async function collectEdges(): Promise<Edge[]> {
+  return collectModuleEdges();
 }
 
 describe("cross-module imports match the declared module graph", () => {
@@ -253,6 +334,63 @@ describe("cross-module imports match the declared module graph", () => {
     }
 
     expect(stale).toEqual([]);
+  });
+
+  test("every route's cross-module import is declared by the route's OWNER", async () => {
+    // The half that was structurally impossible before Issue #256: attributing
+    // a route to a module needed `api.routes`, because `tenant_admin`'s
+    // `basePath: "/api/v1"` made every route resolve to it.
+    const byKey = new Map(listModules().map((module) => [module.key, module]));
+    const edges = await collectRouteEdges();
+
+    // `src/pages` is the largest layer in the repo; a scanner that silently
+    // stopped matching would make this pass while checking nothing.
+    expect(edges.length).toBeGreaterThan(50);
+
+    const offenders = new Set<string>();
+
+    for (const edge of edges) {
+      const module = byKey.get(edge.from);
+
+      if (!module) {
+        offenders.add(
+          `${edge.file}:${edge.line}: owner "${edge.from}" is not registered.`
+        );
+        continue;
+      }
+
+      const declared = new Set<string>([
+        ...(module.dependencies ?? []),
+        ...(module.capabilities?.consumes ?? []).map(
+          (entry) => entry.providedBy
+        )
+      ]);
+
+      if (declared.has(edge.to) || ROUTE_FOUNDATION_MODULES.has(edge.to)) {
+        continue;
+      }
+
+      offenders.add(
+        `${edge.from} -> ${edge.to} (first seen ${edge.file}:${edge.line}): a route ` +
+          `owned by "${edge.from}" imports "${edge.to}", which "${edge.from}" does not ` +
+          "declare. Add it to `dependencies` (lifecycle ordering) or " +
+          "`capabilities.consumes` (source-level, no ordering)."
+      );
+    }
+
+    expect([...offenders].sort()).toEqual([]);
+  });
+
+  test("the ROUTE foundation list stays exactly logging + identity_access", async () => {
+    // Wider than the module-layer list on purpose, and only that much wider.
+    // `identity_access` is excused because the authorization chokepoint is
+    // reached from 184 route files; anything else appearing here would mean the
+    // gate is being widened to fit a coupling rather than the coupling being
+    // declared.
+    expect([...ROUTE_FOUNDATION_MODULES].sort()).toEqual([
+      "identity_access",
+      "logging"
+    ]);
   });
 
   test("the foundation allow-list stays a list of one", async () => {

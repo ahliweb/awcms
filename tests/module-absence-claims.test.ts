@@ -14,7 +14,7 @@
  * - `awcms-theming`: "`media_library` di-drop — belum ada di base".
  * - `awcms-wizard-form`: "modul `form_drafts` belum di-port".
  *
- * The theming one had a twin in the CODE (`src/lib/theming/theme-media.ts`),
+ * The theming one had a twin in the CODE (`src/modules/theming/presentation/theme-media.ts`),
  * which is how it stayed invisible: the seam returns an empty asset map and
  * its header explained that the media module does not exist. It does. Theme
  * logos silently never render, and the file said that was correct.
@@ -155,7 +155,10 @@ describe("docs and skills do not deny registered modules", () => {
     // `tests/theme-media-resolution.test.ts`; what this adds is a structural
     // tripwire against the seam quietly reverting to a no-op that no longer
     // touches the port at all.
-    const seam = await readFile("src/lib/theming/theme-media.ts", "utf8");
+    const seam = await readFile(
+      "src/modules/theming/presentation/theme-media.ts",
+      "utf8"
+    );
 
     expect(listModules().some((module) => module.key === "media_library")).toBe(
       true
@@ -163,7 +166,12 @@ describe("docs and skills do not deny registered modules", () => {
     expect(seam).not.toMatch(
       /media_library.{0,80}is NOT part of the awcms base/s
     );
-    expect(seam).toMatch(/from "\.\.\/\.\.\/modules\/media-library\//);
+    // Relative depth changed with the file: it moved from `src/lib/theming/`
+    // to `src/modules/theming/presentation/` (Issue #257), so `media-library`
+    // is now a SIBLING module rather than a reach out of `src/lib`. The
+    // tripwire is that the seam imports the adapter at all; the exact number of
+    // `../` is an artefact of where the file lives.
+    expect(seam).toMatch(/from "[^"]*media-library\//);
     expect(seam).toMatch(/resolveMediaReferences\(/);
   });
 });

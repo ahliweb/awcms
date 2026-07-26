@@ -12,7 +12,7 @@ import {
 import {
   recordPublicNotFound,
   resolvePublicRedirectForRequest
-} from "./lib/seo/redirect-middleware";
+} from "./modules/seo-distribution/presentation/redirect-middleware";
 
 const PROTECTED_PREFIX = "/admin";
 const API_PREFIX = "/api/";

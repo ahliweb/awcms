@@ -29,7 +29,7 @@ import type {
   ResolvedMediaReferenceDTO
 } from "../src/modules/_shared/ports/media-library-port";
 import type { ThemeConfig } from "../src/modules/theming/domain/theme-config";
-import { resolveThemeAssetUrls } from "../src/lib/theming/theme-media";
+import { resolveThemeAssetUrls } from "../src/modules/theming/presentation/theme-media";
 
 const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TX = {} as Bun.SQL;

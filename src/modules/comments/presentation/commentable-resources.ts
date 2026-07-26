@@ -12,9 +12,9 @@
  * pure and lets tests drive the engine from a fixture registry instead of the
  * real one.
  */
-import { listModules } from "../../modules";
-import type { CommentableResourceDescriptor } from "../../modules/_shared/module-contract";
-import { collectCommentableResourceDescriptors } from "../../modules/comments/domain/commentable-resource-registry";
+import { listModules } from "../../index";
+import type { CommentableResourceDescriptor } from "../../_shared/module-contract";
+import { collectCommentableResourceDescriptors } from "../domain/commentable-resource-registry";
 
 /** Every reviewed, registered commentable-resource descriptor across the whole module registry. */
 export function getRegisteredCommentableResources(): CommentableResourceDescriptor[] {

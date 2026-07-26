@@ -12,18 +12,18 @@
  * carried in the token itself, this preview surface needs NO host/tenant-code
  * resolution (unlike the public `/theming/{tenantCode}/tokens.css` stylesheet).
  */
-import { getDatabaseClient } from "../database/client";
-import { withTenant } from "../database/tenant-context";
-import { fetchVersionById } from "../../modules/theming/application/theme-config-directory";
-import { findActivePreviewSession } from "../../modules/theming/application/theme-preview-directory";
-import { resolveVersionThemeCss } from "../../modules/theming/application/theme-render-resolver";
-import type { ThemeConfig } from "../../modules/theming/domain/theme-config";
-import type { ThemeDescriptor } from "../../modules/theming/domain/theme-descriptor";
+import { getDatabaseClient } from "../../../lib/database/client";
+import { withTenant } from "../../../lib/database/tenant-context";
+import { fetchVersionById } from "../application/theme-config-directory";
+import { findActivePreviewSession } from "../application/theme-preview-directory";
+import { resolveVersionThemeCss } from "../application/theme-render-resolver";
+import type { ThemeConfig } from "../domain/theme-config";
+import type { ThemeDescriptor } from "../domain/theme-descriptor";
 import {
   hashPreviewToken,
   parsePreviewUrlToken
-} from "../../modules/theming/domain/preview-token";
-import { getThemeDescriptor } from "../../modules/theming/theme-registry";
+} from "../domain/preview-token";
+import { getThemeDescriptor } from "../theme-registry";
 import { resolveThemeAssetUrls, type ResolvedThemeAsset } from "./theme-media";
 
 export type PreviewRenderContext = {

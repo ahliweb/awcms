@@ -18,7 +18,7 @@ import {
   isTrackablePath,
   sanitizePath
 } from "../src/modules/visitor-analytics/domain/path-sanitizer";
-import { extractReferrerDomain } from "../src/modules/visitor-analytics/domain/referrer";
+import { extractReferrerDomain } from "../src/modules/_shared/referrer";
 import { determineArea } from "../src/modules/visitor-analytics/domain/request-area";
 
 describe("user-agent parsing + bot detection", () => {
