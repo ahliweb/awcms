@@ -219,15 +219,18 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   surface ter-deklarasi WAJIB punya call-site purge. **BELUM:** surface discovery
   ber-resolusi-host (`serveDiscovery` tak menerima `locals`). Rinci di
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md).
-  - **Wave 2 — SEDANG BERJALAN:** delta auth/admin. **SUDAH:** penataan sidebar per-tenant
+  - **Wave 2 — INTI SELESAI:** delta auth/admin. **SUDAH:** penataan sidebar per-tenant
     (#272, `sql/071`–`072`); **password reset lewat email** (`sql/073`) — dua endpoint publik
     enumeration-safe + `/forgot-password`/`/reset-password`, single-use ditegakkan dengan row
     lock, reset mencabut semua sesi, identity SSO-only ditolak di jalur permintaan DAN
     penebusan, pengiriman lewat capability port `auth_notification` (bukan INSERT lintas-modul
     ke `awcms_email_messages`); **self-registration ber-persetujuan admin** (`sql/074`–`075`,
     default MATI, tak pernah menyimpan kredensial — approval membuat akun dengan password tak
-    terpakai lalu mengirim link reset). **Gelombang 2 SELESAI** begitu ketiganya + layar
-    `/admin/security` mendarat.
+    terpakai lalu mengirim link reset); layar `/admin/security` (postur deployment read-only +
+    policy autentikasi tenant + enforcement MFA + daftar provider OIDC read-only) —
+    endpoint-nya ada sejak #184/#185, layarnya tidak, jadi policy hanya bisa diubah lewat
+    `curl`. **Inti Gelombang 2 SELESAI**; sisa opsional: login OIDC Google spesifik, reframe
+    default `online-security-config`, paritas halaman admin modul Gelombang 0–1.
   - **Wave 3 — BELUM:** trajektori e-commerce/toko online (ADR sendiri).
   - Sebelum tiap port berikutnya: **cek inversi-vs-net-baru** (mis. media sudah jadi satu modul
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).

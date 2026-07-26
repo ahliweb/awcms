@@ -250,8 +250,43 @@ Diadaptasi dari awcms-micro. `POST /api/v1/auth/register` (publik) +
   lantai 7 hari agar audit `registration_approved` masih menunjuk sesuatu);
   grant worker `SELECT, DELETE` saja.
 
+## Layar admin `/admin/security` (Gelombang 2 delta auth)
+
+Endpoint policy autentikasi sudah ada sejak #184/#185; **layarnya belum**, jadi
+sampai sekarang satu-satunya cara mengubah policy tenant adalah `curl` tangan.
+
+- **Tidak menambah enforcement apa pun.** Setiap mutasi mem-POST ke endpoint
+  asli (`PATCH /api/v1/auth/sso-policy`, `PUT /api/v1/auth/mfa/policy`) dan
+  mewarisi guard ABAC, aturan break-glass, serta baris auditnya. Pengecekan
+  permission di halaman itu UX belaka.
+- **Gate memakai kunci permission PERSIS milik endpoint**, termasuk
+  `mfa_admin.reset` sebagai gate BACA MFA — terlihat seperti salah tapi memang
+  itu yang diminta `GET /api/v1/auth/mfa/policy`. Mengarang `mfa_admin.read`
+  yang tak di-seed migrasi mana pun = jebakan latent-authz yang sudah dua kali
+  menggigit repo ini; `tests/admin-security-page-contract.test.ts` memerahkan
+  3 test bila kunci halaman menyimpang dari kunci endpoint.
+- **Postur deployment ditampilkan read-only** (profil online-security,
+  Turnstile, saklar MFA/SSO). Tanpa itu, policy tenant tak bisa dinilai:
+  `ssoRequired` saat `AUTH_SSO_ENABLED=false` menghasilkan tenant yang tak bisa
+  login sama sekali — kontradiksi yang sekarang muncul sebagai peringatan,
+  bukan diam. Tak ada nilai secret yang dirender.
+- **Picker break-glass memakai IDENTITY id**, bukan tenant_user id (kolom
+  policy menyimpan identity id; keduanya uuid, jadi salah pilih akan diterima
+  endpoint lalu disaring jadi daftar kosong — no-op senyap tepat di tempat
+  operator berusaha menjaga dirinya tetap bisa masuk). `listBreakGlassCandidates`
+  memakai predikat yang identik dengan `fetchEligibleBreakGlassIdentityIds`;
+  `tests/integration/admin-security-policy.integration.test.ts` mengikat
+  keduanya (identity non-aktif, membership non-aktif, identity locked, lintas
+  tenant).
+- **`409 BREAK_GLASS_REQUIRED` ditampilkan spesifik**, bukan dikolaps jadi
+  "gagal menyimpan": pemanggilnya admin terautentikasi yang sudah memegang
+  `sso_policy.update`, jadi tak ada yang bocor — sementara pesan generik akan
+  membuatnya mencoba ulang perubahan yang tak akan pernah diterima server.
+- CRUD provider OIDC tetap API-only (daftar read-only di layar). Form yang
+  mem-POST client secret layak jadi perubahan tersendiri.
+
 ## Belum tersedia (Sprint 3+)
 
 Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:
 self-registration masih gerbang tingkat deployment (belum per-tenant), dan CRUD
-provider OIDC masih API-only.
+provider OIDC masih API-only (daftar read-only saja di `/admin/security`).
