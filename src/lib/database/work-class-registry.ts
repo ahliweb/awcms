@@ -84,11 +84,6 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Outbox dispatcher (sync:objects:dispatch) — the module's own module.ts already documents this as background/low-priority traffic."
   },
-  "scripts/social-publish-dispatch.ts": {
-    workClass: "background_sync",
-    rationale:
-      "Outbox dispatcher (social-publishing:dispatch) — same recurring dispatcher profile."
-  },
   "scripts/domain-events-dispatch.ts": {
     workClass: "background_sync",
     rationale:
@@ -119,21 +114,6 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Escalation/timeout sweep (workflow:escalations:dispatch, Issue #747), recommended every 1-5 minutes — same recurring dispatcher profile as domain-events/social-publish/object-sync dispatch, not a tolerant-of-delay maintenance sweep since it drives due-date/overdue task state operators rely on."
   },
-  "scripts/organization-structure-metrics-snapshot.ts": {
-    workClass: "maintenance",
-    rationale:
-      "Read-only per-tenant metrics snapshot (organization-structure:metrics-snapshot, Issue #749), recommended every 15-60 minutes — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; it never mutates a row, purely samples gauges."
-  },
-  "scripts/integration-hub-outbound-dispatch.ts": {
-    workClass: "background_sync",
-    rationale:
-      'Outbox dispatcher (integration-hub:outbound:dispatch, Issue #754), recommended every 1-2 minutes — same recurring dispatcher profile as email/object-sync/social-publish/domain-events dispatch; every withTenant call inside outbound-dispatch.ts already passes workClass: "background_sync" explicitly.'
-  },
-  "scripts/data-exchange-worker.ts": {
-    workClass: "background_sync",
-    rationale:
-      'Recurring worker (data-exchange:worker, Issue #752), recommended every 1-2 minutes — parses/validates/commits staged import batches and executes queued export jobs, driving user-visible batch/job status operators watch in the admin UI; same recurring dispatcher profile as domain-events-dispatch/workflow-escalations-dispatch, not a tolerant-of-delay maintenance sweep. Its own withTenant call (runDataExchangeWorkerPassForTenant) already passes workClass: "background_sync" explicitly.'
-  },
   "scripts/reporting-projections-refresh.ts": {
     workClass: "maintenance",
     rationale:
@@ -143,5 +123,33 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     workClass: "maintenance",
     rationale:
       "Scheduled projection export generation (reporting:exports:dispatch, Issue #753), recommended every 15 minutes — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; a delayed export run has no operational urgency."
+  },
+  // The four below were added when `db:work-class:generate` (Issue #263) first
+  // ran and REFUSED to, because they open a worker connection with no entry
+  // here — all four shipped with the awcms-micro absorption wave and were
+  // outside the capacity model entirely. The same run removed four entries for
+  // scripts that do not exist in this repo (`social-publish-dispatch`,
+  // `organization-structure-metrics-snapshot`,
+  // `integration-hub-outbound-dispatch`, `data-exchange-worker`), carried over
+  // from awcms-mini with their ADR-accepted-but-unimplemented modules.
+  "scripts/comments-retention.ts": {
+    workClass: "maintenance",
+    rationale:
+      "Scheduled retention sweep (comments:retention, ADR-0041) — tolerant of delay, never latency-sensitive; same profile as audit-log-purge/form-draft-purge."
+  },
+  "scripts/edge-cache-purge.ts": {
+    workClass: "background_sync",
+    rationale:
+      "Drains the durable invalidation queue (edge-cache:purge, ADR-0042, sql/068) every minute and issues one Varnish BAN per surrogate key — a recurring dispatcher, not a tolerant-of-delay sweep: lag here means stale content served to real visitors."
+  },
+  "scripts/site-search-reconcile.ts": {
+    workClass: "background_sync",
+    rationale:
+      "Recurring per-tenant search index reconciliation (site-search:reconcile, ADR-0040) — drives user-visible public search freshness, same dispatcher profile as domain-events-dispatch rather than a maintenance purge."
+  },
+  "scripts/tenant-domain-dns-sync.ts": {
+    workClass: "background_sync",
+    rationale:
+      "Reconciles active platform subdomains to serving DNS records (tenant-domain:dns:sync) — SELECT-only as awcms_worker, but a tenant waiting for its domain to resolve is waiting on this pass, so it is a dispatcher rather than a sweep."
   }
 };
