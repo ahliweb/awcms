@@ -286,6 +286,7 @@ export async function roleExists(roleName: string): Promise<boolean> {
  * header for why (migration 019's `ALTER ROLE ... SET app.current_tenant_id`).
  */
 async function applyMigrationsAsOwner(): Promise<void> {
+  const startedAt = Date.now();
   const proc = Bun.spawn(["bun", "scripts/db-migrate.ts"], {
     cwd: new URL("../..", import.meta.url).pathname,
     stdout: "pipe",
@@ -299,9 +300,48 @@ async function applyMigrationsAsOwner(): Promise<void> {
     const stderr = await new Response(proc.stderr).text();
 
     throw new Error(
-      `db:migrate failed against the ephemeral integration database (exit ${exitCode}).\n${stdout}\n${stderr}`
+      describeMigrationFailure(exitCode, Date.now() - startedAt, stdout, stderr)
     );
   }
+}
+
+/**
+ * Turns a non-zero `db:migrate` exit into a message that names the actual
+ * cause.
+ *
+ * Exported and pure so `tests/integration-harness-diagnostics.test.ts` can pin
+ * the SIGTERM branch without a database — the branch exists precisely because
+ * it fires on a CI runner nobody is watching.
+ */
+export function describeMigrationFailure(
+  exitCode: number,
+  elapsedMs: number,
+  stdout: string,
+  stderr: string
+): string {
+  // 143 = 128 + SIGTERM. The migration did NOT fail — it was KILLED, and in
+  // practice by exactly one thing: bun's per-hook timeout expiring while this
+  // subprocess was still applying migrations inside `beforeAll`.
+  //
+  // Worth its own branch because the generic message sent a reader hunting for
+  // a bug in `sql/` (observed on PR #259, run 30188228406: green on a re-run
+  // with no code change). Naming the real cause on the first line is most of
+  // the fix; the `--timeout` on the CI step is the rest.
+  if (exitCode === 143) {
+    return (
+      `db:migrate was KILLED (SIGTERM) after ${elapsedMs}ms against the ephemeral ` +
+      "integration database — it did NOT fail. Almost always bun's per-hook timeout " +
+      "expiring during setupIntegrationDatabase(): that applies every file in `sql/` " +
+      "to a fresh database inside `beforeAll`, and the cost grows with each migration " +
+      "added. Raise `--timeout` on the step that runs tests/integration/ " +
+      `(.github/workflows/{ci,release}.yml).\n${stdout}\n${stderr}`
+    );
+  }
+
+  return (
+    `db:migrate failed against the ephemeral integration database (exit ${exitCode}, ` +
+    `${elapsedMs}ms).\n${stdout}\n${stderr}`
+  );
 }
 
 async function dropEphemeralDatabase(): Promise<void> {
