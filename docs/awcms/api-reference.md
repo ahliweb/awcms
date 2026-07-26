@@ -870,6 +870,30 @@ On success the password is replaced, the lockout counters are cleared, the token
 | 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many password reset attempts from this source. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/register` — Submit a self-registration request for admin review.
+
+- **operationId**: `postAuthRegister`
+- **Security**: none (public endpoint)
+
+Records a request; it NEVER creates an account. Accepts no password and no privilege field — approval creates the account with an unusable credential and emails a password-reset link. Returns `404` when `AUTH_SELF_REGISTRATION_ENABLED` is not `true`, indistinguishable from a route that does not exist. When enabled, an address that already has an account, an address with a request already pending, and a freshly recorded request all return the identical 200.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                        | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Request accepted. Says nothing about whether the address is already registered or already pending. | object                                 |
+| 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Self-registration is not enabled for this deployment.                                              | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many registration attempts from this source.                                                   | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
 - **operationId**: `getSsoPolicy`
@@ -1324,6 +1348,69 @@ Revokes a previously approved exception, ending the override early (immediately 
 | 403    | Access denied by RBAC/ABAC.                                                                | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                                                        | [`ApiError`](#standard-error-envelope) |
 | 409    | The exception is not approved, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/registration-requests` — Pending self-registration requests for this tenant.
+
+- **operationId**: `listRegistrationRequests`
+- **Security**: bearerAuth + tenantHeader
+
+Oldest first, bounded. Login identifiers are MASKED — a reviewer decides on a name and a domain, and this is the one response that would otherwise expose every applicant address at once.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The pending queue.          | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/registration-requests/{id}/approve` — Approve a request, creating a real account.
+
+- **operationId**: `approveRegistrationRequest`
+- **Security**: bearerAuth + tenantHeader
+
+The only path that materializes profile + identity + tenant_user, hence its own permission (`registration_requests.approve`), separate from `reject`. The account is created with an UNUSABLE password and the applicant is emailed a password-reset link; `delivery` reports whether that link could actually be queued. `roleIds` is optional and defaults to none — an approval never grants a role by default.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                           | Schema                                 |
+| ------ | ----------------------------------------------------- | -------------------------------------- |
+| 200    | Account created.                                      | object                                 |
+| 400    | Validation error.                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | An account with that login identifier already exists. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/registration-requests/{id}/reject` — Reject a request. Creates nothing and notifies nobody.
+
+- **operationId**: `rejectRegistrationRequest`
+- **Security**: bearerAuth + tenantHeader
+
+A rejection email would confirm to an anonymous submitter that this tenant exists and reviewed them — the same disclosure the public submit endpoint refuses to make.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Request rejected.           | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/roles` — List the current tenant's (non-deleted) roles with a permission count.
 

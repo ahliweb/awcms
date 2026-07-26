@@ -68,6 +68,12 @@ export const SETUP_TURNSTILE_ACTION = "setup";
  * replay `verifyTurnstileToken`'s `action` check exists to stop.
  */
 export const PASSWORD_RESET_TURNSTILE_ACTION = "password_reset";
+/**
+ * Public self-registration. Its own action for the same reason as the one
+ * above: `/register` is unauthenticated and writes a row, so a token solved on
+ * any other form must not be spendable here.
+ */
+export const REGISTER_TURNSTILE_ACTION = "register";
 
 /**
  * Env vars required only when `TURNSTILE_ENABLED=true` (validated by

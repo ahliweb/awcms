@@ -166,6 +166,21 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  // Public self-registration (Wave 2 delta auth). Off by default; the two rate
+  // limit knobs apply to the public submit endpoint only.
+  { name: "AUTH_SELF_REGISTRATION_ENABLED", required: false, type: "bool" },
+  {
+    name: "AUTH_SELF_REGISTRATION_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "AUTH_SELF_REGISTRATION_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
   {
     name: "AUTH_URL_PARAM_ENCRYPTION_KEY",
     required: false,

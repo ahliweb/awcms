@@ -86,7 +86,9 @@ menyerialkan urutan commit. Kerjakan berurut per baris.
 
 ### Gelombang 2 — delta auth/admin + pengerasan online-first
 
-- **self-registration** (public registration request + approval admin) — verifikasi belum ada.
+- ~~**self-registration** (public registration request + approval admin)~~ — **SELESAI**
+  (`sql/074`–`075`, default MATI): submit publik tak pernah membuat akun & tak menerima
+  password; approval membuat akun dengan kredensial tak terpakai lalu mengirim link reset.
 - ~~**password reset** enumeration-safe~~ — **SELESAI** (`sql/073`): awcms terbukti belum
   punya sama sekali, jadi di-port + diadaptasi (SSO-only ditolak, pengiriman lewat capability
   port `auth_notification`, single-use dengan row lock). Lihat `identity-access/README.md`.
@@ -124,5 +126,5 @@ OpenAPI beku (add-only). Changeset wajib.
 | 1         | `social-publishing`                                                                                                                                                                                   | ⏳ belum                                                                                                                                                                                                                        | —              |
 | 1         | `visitor-analytics`                                                                                                                                                                                   | ✅ selesai                                                                                                                                                                                                                      | #220           |
 | 1         | `data-lifecycle` ([ADR-0037](../adr/0037-data-lifecycle-module-admission.md))                                                                                                                         | ✅ selesai                                                                                                                                                                                                                      | #222           |
-| 2         | Delta auth/admin                                                                                                                                                                                      | 🟡 sebagian — sidebar menu per-tenant (#272) dan password reset enumeration-safe (`sql/073`) sudah; self-registration + `/admin/security` belum                                                                                 | #272           |
+| 2         | Delta auth/admin                                                                                                                                                                                      | 🟡 sebagian — sidebar menu per-tenant (#272), password reset (`sql/073`) dan self-registration (`sql/074`–`075`) sudah; `/admin/security` menyusul di PR terpisah                                                               | #272           |
 | 3         | E-commerce/toko online                                                                                                                                                                                | ⏳ belum (butuh ADR)                                                                                                                                                                                                            | —              |
