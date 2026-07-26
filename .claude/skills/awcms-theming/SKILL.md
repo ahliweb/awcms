@@ -160,16 +160,27 @@ migrasi ini jalan (di-seed owner saat setup-wizard bootstrap).
 
 ## Port adaptations vs awcms-micro (ADR-0034 Fase 3)
 
-- **Resolusi URL asset masih no-op — TAPI bukan lagi karena modulnya tidak ada.**
-  `src/lib/theming/theme-media.ts` mengembalikan map kosong: asset dihilangkan
-  dari render, theme degrade aman, id asset tersimpan tetap DATA valid. Saat
-  seam ini ditulis `media_library` memang belum ada. **Sekarang sudah ada**
-  (ADR-0036; `sql/041`/`042`/`045`/`052`–`054`), lengkap dengan adapter nyata
-  `media-library/application/media-library-port-adapter.ts` yang sudah
-  di-inject `blog_content` dan `news_portal`. Yang tersisa murni **seam belum
-  di-wire**, bukan dependensi yang hilang — satu berkas, tanpa perubahan
-  pemanggil. Sampai itu dikerjakan, logo/asset theme **tidak pernah tampil**
-  meski tenant sudah mengunggahnya. Jangan mengklaim "media belum ada di base".
+- **Resolusi URL asset SUDAH ter-wire** (#251). `src/lib/theming/theme-media.ts`
+  me-resolve `config.assetRefs` (slotKey -> media object id) lewat
+  `MediaLibraryPort` — capability yang sama yang dikonsumsi `blog_content` dan
+  `news_portal` — dan `theming` mendeklarasikannya di `capabilities.consumes`.
+  Port-nya injectable (`media` parameter ke-4, default adapter nyata), jadi
+  jalur omission bisa diuji tanpa DB.
+
+  **Keamanan datang dari port, bukan dari berkas ini.**
+  `resolveMediaReferences` hanya mengembalikan id yang ADA, milik tenant ini,
+  dan `verified`/`attached`; id tak-aman/lintas-tenant/terhapus cuma ABSEN dari
+  map — tidak pernah dilempar. Jadi slot yang gagal resolve **dihilangkan**, dan
+  itu disengaja: halaman tema publik tidak boleh 500 karena satu id asset basi.
+  JANGAN menambah pengecekan kepemilikan/status di sini — itu menduplikasi
+  kontrak port di tempat kedua yang bisa menyimpang darinya.
+
+  Sebelum #251 fungsi ini mengembalikan map kosong tanpa syarat, dan header-nya
+  menerangkan itu karena `media_library` tidak ada — penjelasan yang berhenti
+  benar saat ADR-0036 mendarat. Akibatnya: logo yang diunggah tenant tidak
+  pernah tampil, dan kodenya menyatakan itu benar. Perilaku dikunci
+  `tests/theme-media-resolution.test.ts`.
+
 - **Resolusi tenant publik `tenantCode`-based** (ADR-0009), bukan Host-based —
   stylesheet publik di `/theming/{tenantCode}/tokens.css`.
 - **Tanpa migration/GRANT worker** — tabel mewarisi grant `awcms_app` dari

@@ -387,8 +387,8 @@ Tiap folder standar menyertakan `README.md` sebagai kontrak isi/aturan folder:
 
 ### Source modules
 
-23 modul terdaftar nyata di `src/modules/index.ts` (`ls -d src/modules/*/`,
-dikonfirmasi `bun run modules:dag:check` — "23 registered modules"),
+21 modul terdaftar nyata di `src/modules/index.ts` (`ls -d src/modules/*/`,
+dikonfirmasi `bun run modules:dag:check`),
 menggantikan daftar fiktif sebelumnya (`catalog-inventory`, `sales-pos`,
 `warehouse-management`, `accounting-tax`, `crm-communication`,
 `ai-analyst`, `observability-logging`, `database-connectivity`,
