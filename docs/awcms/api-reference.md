@@ -1715,6 +1715,29 @@ Database-backed module registry, tenant module lifecycle, settings, permission s
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/modules/{moduleKey}/audit` — Recent module-management activity for one module.
+
+- **operationId**: `getModuleAuditSummary`
+- **Security**: bearerAuth + tenantHeader
+
+Tenant enable/disable, settings updates, health checks and preset applies recorded against this module key. Guarded by `logging.audit_trail.read`, not a module-management permission: these are audit-log rows, and whoever may not read the audit log must not get a filtered view of it through another door. An unregistered `moduleKey` answers 404, because an empty list would read as "nothing happened".
+
+**Parameters**
+
+| Name        | In    | Required | Type    | Description |
+| ----------- | ----- | -------- | ------- | ----------- |
+| `moduleKey` | path  | yes      | string  |             |
+| `limit`     | query | no       | integer |             |
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | Recent activity, newest first. | object                                 |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.            | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/modules/{moduleKey}/health` — Passive, bounded module readiness signals (no live provider call).
 
 - **operationId**: `getModuleHealth`
@@ -1915,6 +1938,21 @@ Database-backed module registry, tenant module lifecycle, settings, permission s
 | 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/tenant/modules/matrix` — Every module by what matters for this tenant, in two queries.
+
+- **operationId**: `getTenantModuleMatrix`
+- **Security**: bearerAuth + tenantHeader
+
+Single-tenant scope, never cross-tenant. Adds two lifecycle warnings by re-running the real enable/disable validation for each module's actual current state: `dependencyWarning` only for a DISABLED module ("would enabling succeed now?") and `reverseDependencyWarning` only for an ENABLED one ("would disabling be blocked?"). No health column — this base has no batched health reader, and a per-row one would be an N+1.
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | Module matrix for the caller's tenant. | object                                 |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/tenant/modules/presets` — Named module profiles, and optionally a dry-run plan for one.
 

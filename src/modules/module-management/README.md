@@ -64,6 +64,31 @@ Ported and adapted from the awcms-mini module-management module.
   underlying calls already need. A new action would need a seed migration, and
   an unseeded action denies even the owner.
 
+- **Tenant-module matrix** (`application/module-matrix.ts`) — every module ×
+  what matters for this tenant, in TWO queries (catalog + tenant entries; the
+  rest is pure). Adds two lifecycle warnings by re-running the REAL
+  `evaluateModuleEnable`/`evaluateModuleDisable` against each module's actual
+  state, never a UI-side re-derivation that can drift from the endpoints.
+
+  One-directional on purpose: `dependencyWarning` only for a DISABLED module,
+  `reverseDependencyWarning` only for an ENABLED one. The other two combinations
+  cannot arise, and asking `evaluateModuleEnable` about an enabled module
+  short-circuits to `MODULE_ALREADY_ENABLED` — an answer that looks like a check
+  and is not one.
+
+  **No health column.** awcms-micro's matrix has one, fed by a BATCHED health
+  reader this base does not have; a per-row `fetchModuleHealthReport` would be
+  21 reads in one transaction. Health stays at
+  `GET /api/v1/modules/{moduleKey}/health` until a batched reader exists.
+
+- **Module audit summary** (`application/module-audit-summary.ts`) — recent
+  activity recorded against one module key (`tenant_module`, `module_settings`,
+  `module_health`, `module_preset`). Guarded by `logging.audit_trail.read`, not
+  a module-management permission: these are audit-log rows, and whoever may not
+  read the audit log must not get a filtered view of it through another door.
+  `module_registry` is excluded — descriptor sync's `resource_id` is not a
+  module key, so it would match nothing while implying it might.
+
 - **Job registry** (`application/job-registry.ts`) — documentation-only
   metadata about each module's operational commands. Never an execution
   surface.

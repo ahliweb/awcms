@@ -7542,6 +7542,68 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/modules/{moduleKey}/audit:
+    get:
+      operationId: getModuleAuditSummary
+      tags:
+        - Module Management
+      summary: Recent module-management activity for one module.
+      description: 'Tenant enable/disable, settings updates, health checks and preset applies recorded against this module key. Guarded by `logging.audit_trail.read`, not a module-management permission: these are audit-log rows, and whoever may not read the audit log must not get a filtered view of it through another door. An unregistered `moduleKey` answers 404, because an empty list would read as "nothing happened".'
+      parameters:
+        - name: moduleKey
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Recent activity, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      moduleKey:
+                        type: string
+                      limit:
+                        type: integer
+                      entries:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            action:
+                              type: string
+                            resourceType:
+                              type: string
+                            severity:
+                              type: string
+                            message:
+                              type: string
+                            createdAt:
+                              type: string
+                              format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/modules/{moduleKey}/health:
     get:
       operationId: getModuleHealth
@@ -12049,6 +12111,74 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/tenant/modules/matrix:
+    get:
+      operationId: getTenantModuleMatrix
+      tags:
+        - Module Management
+      summary: Every module by what matters for this tenant, in two queries.
+      description: 'Single-tenant scope, never cross-tenant. Adds two lifecycle warnings by re-running the real enable/disable validation for each module''s actual current state: `dependencyWarning` only for a DISABLED module ("would enabling succeed now?") and `reverseDependencyWarning` only for an ENABLED one ("would disabling be blocked?"). No health column — this base has no batched health reader, and a per-row one would be an N+1.'
+      responses:
+        "200":
+          description: Module matrix for the caller's tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      modules:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            moduleKey:
+                              type: string
+                            name:
+                              type: string
+                            version:
+                              type: string
+                            status:
+                              type: string
+                            isCore:
+                              type: boolean
+                            isProtected:
+                              type: boolean
+                            tenantEnabled:
+                              type: boolean
+                            disableReason:
+                              type: string
+                              nullable: true
+                            dependencies:
+                              type: array
+                              items:
+                                type: string
+                            dependencyWarning:
+                              nullable: true
+                              type: object
+                              properties:
+                                code:
+                                  type: string
+                                message:
+                                  type: string
+                            reverseDependencyWarning:
+                              nullable: true
+                              type: object
+                              properties:
+                                code:
+                                  type: string
+                                message:
+                                  type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/tenant/modules/presets:
     get:
       operationId: listTenantModulePresets

@@ -567,6 +567,11 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/modules/[moduleKey]/audit.ts",
+      "workClass": "reporting",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/modules/[moduleKey]/health.ts",
       "workClass": "interactive",
       "source": "default"
@@ -925,6 +930,11 @@
       "path": "src/pages/api/v1/tenant/modules/index.ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/tenant/modules/matrix/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/tenant/modules/presets/[presetName]/apply.ts",
