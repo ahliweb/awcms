@@ -45,6 +45,25 @@ Ported and adapted from the awcms-mini module-management module.
   needs a migration and is a separate increment; the model here is the default
   those overrides apply on top of, so it arrives without rework.
 
+- **Module presets** (`domain/module-presets.ts`, `application/module-presets.ts`)
+  — named profiles (`minimal`, `website`, `news_portal`, `back_office`) a tenant
+  can be brought TO in one action. A preset ENABLES what it lists and DISABLES
+  every enabled, unlisted, unprotected module; enable-only would make presets
+  useless as a way to reach a profile. Executed through the existing
+  `enableTenantModule`/`disableTenantModule` primitives, one call per planned
+  change, so a change can still be rejected and is reported rather than
+  swallowed (`complete: false` with per-module reasons).
+
+  "Protected" is not `isCore`: only `module_management` sets that flag, and the
+  rest are protected indirectly by the reverse-dependency check.
+  `resolveProtectedModuleKeys` makes that explicit for planning.
+
+  No new permission: an apply IS a sequence of enables and disables, so
+  `POST .../presets/{name}/apply` guards on
+  `module_management.tenant_modules.disable` — the stronger of the two the
+  underlying calls already need. A new action would need a seed migration, and
+  an unseeded action denies even the owner.
+
 - **Job registry** (`application/job-registry.ts`) — documentation-only
   metadata about each module's operational commands. Never an execution
   surface.

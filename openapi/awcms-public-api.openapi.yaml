@@ -12049,6 +12049,119 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/tenant/modules/presets:
+    get:
+      operationId: listTenantModulePresets
+      tags:
+        - Module Management
+      summary: Named module profiles, and optionally a dry-run plan for one.
+      description: "Applying a preset DISABLES every enabled, unlisted, unprotected module, so `?preset=<name>` returns the plan without writing anything — an operator switching a live tenant's profile sees the disable list before it happens. An unknown name returns the catalog with `plan: null`."
+      parameters:
+        - name: preset
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preset catalog, plus a plan when `preset` was supplied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      presets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            label:
+                              type: string
+                            description:
+                              type: string
+                            enabledModuleKeys:
+                              type: array
+                              items:
+                                type: string
+                      plan:
+                        nullable: true
+                        type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/tenant/modules/presets/{presetName}/apply:
+    post:
+      operationId: applyTenantModulePreset
+      tags:
+        - Module Management
+      summary: Bring the tenant's module state to a named profile.
+      description: "Enables every module the preset lists and disables every enabled, unlisted, unprotected module. Each change runs the real lifecycle validation, so a change can be rejected: `complete: false` with per-module reasons is a real outcome, not an error."
+      parameters:
+        - name: presetName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preset applied, completely or partially.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      presetName:
+                        type: string
+                      complete:
+                        type: boolean
+                      plan:
+                        type: object
+                      changes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            moduleKey:
+                              type: string
+                            action:
+                              type: string
+                              enum:
+                                - enable
+                                - disable
+                            outcome:
+                              type: string
+                              enum:
+                                - applied
+                                - rejected
+                            code:
+                              type: string
+                            message:
+                              type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/theming:
     get:
       tags:
