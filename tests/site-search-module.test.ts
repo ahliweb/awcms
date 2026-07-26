@@ -63,11 +63,36 @@ describe("site_search — registry wiring", () => {
     expect(listModules().map((m) => m.key)).toContain("site_search");
   });
 
-  test("depends ONLY on the two Core modules, so it never drags in a content module", () => {
+  test("declares exactly the modules it imports", () => {
     expect(siteSearchModule.dependencies).toEqual([
       "tenant_admin",
-      "identity_access"
+      "identity_access",
+      "module_management"
     ]);
+  });
+
+  test("never depends on a CONTENT module — the aggregator invariant", () => {
+    // The point of this guard was never the literal number two. It is that a
+    // consumer/aggregator must not depend on any module whose content it
+    // aggregates, or the dependency runs backwards and the module stops being
+    // generic. `module_management` was added 2026-07-26 (the public route gates
+    // on `fetchTenantModuleEntry`); it is infrastructure, not content, so the
+    // invariant holds. Asserting the invariant directly means adding another
+    // infrastructure dep does not require editing a test, while adding a
+    // content dep still fails.
+    const CONTENT_MODULES = [
+      "blog_content",
+      "news_portal",
+      "comments",
+      "media_library",
+      "site_search",
+      "seo_distribution"
+    ];
+    expect(
+      siteSearchModule.dependencies.filter((dep) =>
+        CONTENT_MODULES.includes(dep)
+      )
+    ).toEqual([]);
   });
 
   test("declares its own OpenAPI fragment and base path", () => {

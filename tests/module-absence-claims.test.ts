@@ -144,10 +144,17 @@ describe("docs and skills do not deny registered modules", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the theming media seam does not deny media_library either", async () => {
-    // The code twin of the skill claim above. Kept as its own assertion so the
-    // failure message points at the seam rather than at prose: the day someone
-    // wires the adapter, this is the file they touch.
+  test("the theming media seam resolves through media_library, not around it", async () => {
+    // The code twin of the skill claim above. The first version of this test
+    // asserted the header contained the phrase "now EXISTS" — a prose check,
+    // and the wrong thing to pin: it passed while the function still returned
+    // an unconditional empty map, and then failed the moment the seam was
+    // actually wired and the wording changed.
+    //
+    // Now it asserts the WIRING. Behaviour is covered by
+    // `tests/theme-media-resolution.test.ts`; what this adds is a structural
+    // tripwire against the seam quietly reverting to a no-op that no longer
+    // touches the port at all.
     const seam = await readFile("src/lib/theming/theme-media.ts", "utf8");
 
     expect(listModules().some((module) => module.key === "media_library")).toBe(
@@ -156,6 +163,7 @@ describe("docs and skills do not deny registered modules", () => {
     expect(seam).not.toMatch(
       /media_library.{0,80}is NOT part of the awcms base/s
     );
-    expect(seam).toMatch(/`media_library` now EXISTS|now EXISTS/);
+    expect(seam).toMatch(/from "\.\.\/\.\.\/modules\/media-library\//);
+    expect(seam).toMatch(/resolveMediaReferences\(/);
   });
 });

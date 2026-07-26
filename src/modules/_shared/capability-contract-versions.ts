@@ -6,8 +6,13 @@
  * Issue #681/ADR-0011) name capabilities as plain strings with NO version
  * — sufficient for the in-monolith ports-and-adapters pattern ADR-0011
  * defines, where a source-boundary test
- * (`tests/unit/module-boundary.test.ts`) is enough to keep provider and
- * consumer in sync, because both sides always ship in the same build. A
+ * (`tests/module-boundary.test.ts`) is enough to keep provider and
+ * consumer in sync, because both sides always ship in the same build. That
+ * test was named here before it existed in this repo — the sentence came over
+ * from awcms-mini with the registry, the test did not, and the stated safety
+ * net for this whole model was imaginary until 2026-07-26. It now exists, and
+ * asserts every cross-module import is declared as a dependency, declared as a
+ * capability consumption, or explicitly excused with a reason. A
  * derived repository's compatibility manifest (ADR-0015) needs something
  * ADR-0011 deliberately doesn't: a way to declare "I was written against
  * version X of capability Y" and have that checked against a NEWER base

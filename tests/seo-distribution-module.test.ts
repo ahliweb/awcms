@@ -11,17 +11,42 @@ describe("seo_distribution module descriptor (ADR-0038 discovery + ADR-0039 redi
     expect(getModuleByKey("seo_distribution")).toBe(seoDistributionModule);
   });
 
-  test("descriptor shape: domain module, v0.2.0 (redirect governance), Core-only deps", () => {
+  test("descriptor shape: domain module, v0.2.0 (redirect governance)", () => {
     expect(seoDistributionModule.key).toBe("seo_distribution");
     expect(seoDistributionModule.status).toBe("active");
     expect(seoDistributionModule.type).toBe("domain");
     // 0.1.0 = discovery (ADR-0038); 0.2.0 adds the redirect-governance scope
-    // (ADR-0039) — still a Core-only-deps consumer/aggregator module.
+    // (ADR-0039).
     expect(seoDistributionModule.version).toBe("0.2.0");
     expect(seoDistributionModule.dependencies).toEqual([
       "tenant_admin",
-      "identity_access"
+      "identity_access",
+      "module_management"
     ]);
+  });
+
+  test("never depends on a CONTENT module — the aggregator invariant", () => {
+    // The point of this guard was never the literal number two. It is that a
+    // consumer/aggregator must not depend on any module whose content it
+    // aggregates, or the dependency runs backwards and the module stops being
+    // generic. `module_management` was added 2026-07-26 (the public route gates
+    // on `fetchTenantModuleEntry`); it is infrastructure, not content, so the
+    // invariant holds. Asserting the invariant directly means adding another
+    // infrastructure dep does not require editing a test, while adding a
+    // content dep still fails.
+    const CONTENT_MODULES = [
+      "blog_content",
+      "news_portal",
+      "comments",
+      "media_library",
+      "site_search",
+      "seo_distribution"
+    ];
+    expect(
+      seoDistributionModule.dependencies.filter((dep) =>
+        CONTENT_MODULES.includes(dep)
+      )
+    ).toEqual([]);
   });
 
   test("CONSUMES seo_facts (blog_content) + media_library, both optional; PROVIDES nothing", () => {

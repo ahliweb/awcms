@@ -71,7 +71,23 @@ export const commentsModule = defineModule({
   status: "active",
   description:
     "Tenant-scoped, MODERATION-FIRST commenting over PUBLISHED, PUBLIC commentable resources (ADR-0041, ported from awcms-micro Issue #271). Owns threads, bounded-depth comments (sql/066 — RLS FORCE'd, privacy-minimized author fields: sha256 email hash + mask, hashed ip/ua, never raw), append-only moderation history + abuse reports, per-tenant settings, minimized anti-abuse telemetry, and minimized/encrypted double-opt-in reply-notify subscriptions. It is the CONSUMER/aggregator of reviewed, pure-data `CommentableResourceDescriptor`s that content modules declare via `ModuleDescriptor.commentableResources` (declarative table/column mapping + declarative publication filter — never an executable extractor or tenant SQL); the generic engine reads them through `listModules()`, so any content module's resources can accept comments without this module knowing any specific one and without a content module depending on `comments`. A comment is only ever accepted or shown against a resource that satisfies its source's declarative publicationFilter, so a draft/private/deleted/scheduled resource never receives or exposes comments. Comment bodies are stored as raw plain text and HTML-escaped on render (no stored HTML → no stored XSS), permitting only safe http(s) autolinks with rel=\"nofollow ugc noopener noreferrer\". The public list returns approved-only rows and NEVER moderation metadata (reason codes/actor/hashes). Anti-abuse is server-side: honeypot, submit-timing floor, per-comment link/length bounds, configurable blocked terms, duplicate fingerprinting, and per-IP rate limits. `turnstileEnabled` is PERSISTED as a tenant setting but NOT yet enforced on the submit path — wiring it is a documented follow-up, and the verification call must run OUTSIDE any DB transaction when it lands (ADR-0006). The admin moderation API (queue, approve/reject/spam, archive/restore/delete, bulk, settings) is ABAC-guarded, audited with reason codes, idempotency-keyed on high-risk mutations, and observable. Reply notifications go through the domain-event outbox with address-free payloads; the email dispatcher resolves the encrypted recipient at send time. Soft delete + append-only history + a legal-hold-aware retention/anonymization sweep (`bun run comments:retention`) keep content coherent and privacy-minimized. The commenting surface is never an authorization source for the underlying resource.",
-  dependencies: ["tenant_admin", "identity_access"],
+  // Three of these were imported without being declared until 2026-07-26
+  // (`tests/module-boundary.test.ts` now catches that class):
+  //   `domain_event_runtime` — reply notifications go through the outbox
+  //     (`application/reply-notifications.ts`), so the runtime must be present.
+  //   `module_management`    — the public route gates on `fetchTenantModuleEntry`
+  //     to confirm this module is enabled for the tenant before serving.
+  //   `profile_identity`     — `application/comment-service.ts` resolves the
+  //     commenter's profile.
+  // None introduces a cycle: all three depend only on `tenant_admin`/
+  // `identity_access`/`logging` and none references `comments`.
+  dependencies: [
+    "tenant_admin",
+    "identity_access",
+    "module_management",
+    "profile_identity",
+    "domain_event_runtime"
+  ],
   type: "domain",
   api: {
     openApiPath: "openapi/modules/comments.openapi.yaml",
