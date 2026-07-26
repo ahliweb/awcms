@@ -82,5 +82,10 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // `summarizePublicResourceFacts` roll-up + `offset`/`order` list options that
     // awcms-micro added as its own 1.1.0 minor, so declaring 1.0.0 would understate
     // the shape a consumer actually binds against. Not a stability milestone.
-    seo_facts: "1.1.0"
+    seo_facts: "1.1.0",
+    // email provides (Wave 2 delta auth) — consumed by `identity_access`'s
+    // password-reset flow, which cannot import `email`'s application tree
+    // directly (that would close a cycle: `email` depends on
+    // `identity_access`). First assigned number, not a stability milestone.
+    auth_notification: "1.0.0"
   });

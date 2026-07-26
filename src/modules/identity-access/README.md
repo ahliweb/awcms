@@ -150,6 +150,59 @@ Diport dari awcms-mini (Issue #590/#591), diadaptasi + dikeraskan. Feature switc
 
 Detail lengkap (auth flow, setup provider, break-glass SOP, privacy mapping, threat model): [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) dan [ADR-0028](../../../docs/adr/0028-oidc-sso-tenant-aware-account-linking-break-glass.md).
 
+## Password reset lewat email (Gelombang 2 delta auth)
+
+Diadaptasi dari awcms-micro Issue #496. Dua endpoint publik + dua halaman:
+`POST /api/v1/auth/password/forgot`, `POST /api/v1/auth/password/reset`,
+`/forgot-password`, `/reset-password`.
+
+- **Skema (`sql/073`)** — satu tabel tenant-scoped RLS `ENABLE`+`FORCE`:
+  `awcms_password_reset_tokens` (`token_hash` sha256 dari 32 byte CSPRNG —
+  token mentah TIDAK PERNAH disimpan, `expires_at`, `used_at` untuk single-use).
+  Grant `awcms_worker` hanya `SELECT, DELETE` (mesin purge `data_lifecycle`
+  `generic`; worker tak pernah menerbitkan maupun menebus token).
+- **Aman terhadap enumerasi akun, secara konstruksi** — `requestPasswordReset`
+  mengembalikan `outcome: "ineligible"` yang **identik** untuk identifier tak
+  dikenal, identity/tenant-user non-aktif, tenant non-aktif, identity SSO-only,
+  dan identifier yang bukan alamat email; route selalu membalas 200 dengan body
+  yang sama. Perbedaannya hanya hidup di audit log (tenant-scoped, RLS,
+  tak pernah jadi bagian response). `login.ts` sudah memakai prinsip yang sama
+  untuk 401-nya.
+- **Sisi gagal juga generik** — `PASSWORD_RESET_INVALID` untuk not-found,
+  expired, already-used, identity dinonaktifkan setelah token terbit, dan
+  password-login dimatikan setelah token terbit. Endpoint ini karena itu bukan
+  oracle status token.
+- **Single-use di DATABASE, bukan di JS** — pembacaan token memakai
+  `FOR UPDATE`. Tanpa row lock, dua penebusan link yang sama sama-sama membaca
+  `used_at IS NULL` dan **keduanya** berhasil me-reset password (terbukti merah
+  saat mutasi di `tests/integration/password-reset.integration.test.ts`). Pola
+  yang sama dengan counter anti-replay MFA (#184).
+- **Menghormati policy SSO-only** — `isPasswordLoginDisabledForIdentity`
+  dicek di JALUR PERMINTAAN **dan** dibaca ULANG saat penebusan, jadi link yang
+  masih hidup tidak selamat dari tenant yang mematikan password login. Tanpa
+  ini, reset password adalah cara resmi tanpa autentikasi untuk membuat password
+  yang berfungsi pada tenant yang sengaja mematikannya.
+- **Reset mencabut SEMUA sesi** — `revokeAllSessionsForIdentity`; sesi `aal2`
+  ikut mati karena `mfa-session-assurance.ts` memperlakukan `revoked_at` sebagai
+  hilang. Lockout (`failed_login_count`/`locked_until`) dibersihkan: pemegang
+  link sudah membuktikan kendali atas mailbox.
+- **Pengiriman lewat capability port** — `identity_access` TIDAK menulis ke
+  `awcms_email_messages` (tabel milik `email`, ADR-0013 §6; original micro
+  menulis langsung). Port `auth_notification`
+  (`_shared/ports/auth-notification-port.ts`), adapter dimiliki `email`, di-wire
+  di composition root (route). Bukan `dependencies`: `email` sudah bergantung
+  pada `identity_access`, jadi arah sebaliknya akan menutup siklus.
+  Tenant tanpa template `auth.password_reset` aktif → `delivery_unavailable`
+  (warning di log + audit), response tetap generik.
+- **Link** — `${APP_URL}/reset-password?token=…&tenantId=…`, atau satu `?p=`
+  opaque AES-256-GCM bila `AUTH_URL_PARAM_ENCRYPTION_KEY` diset
+  (`lib/security/secure-url-params.ts`). Fallback plain bukan kelemahan: token
+  sudah 256-bit CSPRNG dan tenant id bukan rahasia.
+- **Rate limit + Turnstile** — per `clientIp:tenantId` pada KEDUA endpoint,
+  dicek sebelum menyentuh DB; Turnstile memakai action `password_reset` sendiri
+  (token dari form login tidak bisa di-replay ke sini).
+
 ## Belum tersedia (Sprint 3+)
 
-Endpoint manajemen user/role lanjutan dan Turnstile (#186).
+Endpoint manajemen user/role lanjutan. Self-registration dan layar
+`/admin/security` (sisa Gelombang 2 delta auth) belum ada.

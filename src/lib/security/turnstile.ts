@@ -60,6 +60,14 @@ export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
  */
 export const LOGIN_TURNSTILE_ACTION = "login";
 export const SETUP_TURNSTILE_ACTION = "setup";
+/**
+ * Password recovery (Wave 2 delta auth). Its OWN action, not a reuse of
+ * `LOGIN_TURNSTILE_ACTION`: `/forgot-password` is an unauthenticated endpoint
+ * that writes a row and queues an email, so a token solved on the login form
+ * must not be replayable against it — which is precisely the cross-action
+ * replay `verifyTurnstileToken`'s `action` check exists to stop.
+ */
+export const PASSWORD_RESET_TURNSTILE_ACTION = "password_reset";
 
 /**
  * Env vars required only when `TURNSTILE_ENABLED=true` (validated by

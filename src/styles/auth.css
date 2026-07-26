@@ -1,0 +1,376 @@
+/*
+ * Shared unauthenticated auth-surface styles — `/login`, `/forgot-password`,
+ * `/reset-password`.
+ *
+ * These rules lived as an Astro-scoped `<style>` inside `login.astro` until the
+ * password-reset pages needed the same card. Scoped styles cannot be shared
+ * across pages (Astro rewrites the selectors per component), so the choice was
+ * one global stylesheet or three drifting copies of 300 lines. This file is the
+ * one owner; every `.auth-*` class name is unique to these three pages and
+ * appears nowhere in `admin.css`/`admin-screens.css`.
+ *
+ * Loaded via a normal `import` in each page's frontmatter, so with
+ * `build.inlineStylesheets: "never"` it is emitted as an EXTERNAL same-origin
+ * stylesheet — never an inline `<style>`, which the middleware CSP blocks.
+ * Tokens only (no literal colours/sizes) from `tokens.css`. Mobile-first: base
+ * rules target small screens, one min-width query enhances larger ones.
+ */
+
+.auth-body {
+  margin: 0;
+}
+
+.auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background:
+    radial-gradient(
+      120% 90% at 15% 0%,
+      var(--color-primary-soft) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      110% 80% at 100% 100%,
+      var(--color-surface-2) 0%,
+      transparent 60%
+    ),
+    var(--color-bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: var(--sp-6) var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  /* Transform-only entrance (never opacity — keeps text fully opaque so an
+     axe-core contrast scan can't flag it mid-animation; doc 14 §Motion).
+     Replaces the shared `.fade-in-up` utility, which fades from
+     `opacity: 0`. Neutralised by the reduced-motion block below. */
+  animation: auth-card-rise var(--motion-base) var(--ease-out);
+}
+
+@keyframes auth-card-rise {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.auth-head {
+  margin-bottom: var(--sp-5);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.auth-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    var(--color-primary-hover) 100%
+  );
+  color: var(--color-primary-contrast);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-lg);
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-wordmark {
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-md);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text);
+}
+
+.auth-title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text);
+}
+
+.auth-subtitle {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  line-height: var(--lh-snug);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.auth-field label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="email"],
+.auth-form input[type="password"],
+.auth-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.auth-form input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.auth-form input[type="text"]:hover,
+.auth-form input[type="email"]:hover,
+.auth-form input[type="password"]:hover,
+.auth-form select:hover {
+  border-color: var(--color-text-muted);
+}
+
+.auth-form input[type="text"]:focus-visible,
+.auth-form input[type="email"]:focus-visible,
+.auth-form input[type="password"]:focus-visible,
+.auth-form select:focus-visible {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+/* Tenant readout (single-tenant deployment). */
+.auth-tenant-context {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3);
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.auth-tenant-context-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted);
+}
+
+.auth-tenant-context-name {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+/* Select wrapper — CSS-drawn caret (no data: URI, CSP-safe). */
+.auth-select {
+  position: relative;
+}
+
+.auth-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--sp-6);
+  cursor: pointer;
+}
+
+.auth-select::after {
+  content: "";
+  position: absolute;
+  right: var(--sp-3);
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+/* Password field with inline show/hide toggle. */
+.auth-password {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-password input {
+  padding-right: 72px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: var(--sp-1);
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 36px;
+  min-width: 56px;
+  padding: 0 var(--sp-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.auth-password-toggle:hover {
+  background: var(--color-surface-hover);
+}
+
+.auth-error {
+  margin: 0;
+  padding: var(--sp-3);
+  background: var(--color-danger-strong);
+  color: var(--color-primary-contrast);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+/*
+ * Neutral confirmation banner (password-reset surfaces). Deliberately NOT a
+ * success-green variant of `.auth-error`: `/forgot-password` shows this same
+ * banner whether or not an account existed, and a "success" colour would be the
+ * one part of the page implying the address was recognised.
+ */
+.auth-notice {
+  margin: 0;
+  padding: var(--sp-3);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+
+.auth-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: var(--lh-snug);
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+}
+
+.auth-links a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+.auth-turnstile {
+  min-height: 65px;
+}
+
+.auth-submit {
+  margin-top: var(--sp-1);
+  min-height: 48px;
+  padding: 0 var(--sp-4);
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+.auth-submit:hover {
+  background: var(--color-primary-hover);
+}
+
+.auth-submit:active {
+  transform: translateY(1px);
+}
+
+.auth-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.auth-foot {
+  margin: var(--sp-5) 0 0;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+  .auth-card {
+    padding: var(--sp-7) var(--sp-6);
+  }
+}
+
+/*
+ * Non-essential motion: the submit's active-nudge is decorative and the card
+ * entrance (`auth-card-rise`) is transform-only. motion.css's global
+ * reduced-motion block only targets its own utility classes, so these
+ * animations/transitions/transforms are neutralised here as well so nothing
+ * moves for reduced-motion users.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .auth-card {
+    animation: none;
+  }
+  .auth-form input[type="text"],
+  .auth-form input[type="email"],
+  .auth-form input[type="password"],
+  .auth-form select,
+  .auth-submit {
+    transition: none;
+  }
+  .auth-submit:active {
+    transform: none;
+  }
+}

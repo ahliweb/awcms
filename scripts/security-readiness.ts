@@ -1105,7 +1105,14 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // The job's side effect is in Cloudflare, not here — it writes nothing back,
   // so the worker never gets write access to the hostname->tenant mapping that
   // decides whose content a visitor is served.
-  awcms_tenant_domains: ["SELECT"]
+  awcms_tenant_domains: ["SELECT"],
+  // identity_access — the generic data_lifecycle purge engine over spent
+  // password-reset tokens (sql/073, Gelombang 2 delta auth). SELECT (bounded
+  // cursor scan) + DELETE only, the same shape as
+  // `awcms_seo_not_found_observations` above. NO INSERT and NO UPDATE: issuing
+  // a token and burning it are both request-path writes on awcms_app, and a
+  // worker able to write here could mint a credential-recovery token.
+  awcms_password_reset_tokens: ["SELECT", "DELETE"]
 };
 
 /**

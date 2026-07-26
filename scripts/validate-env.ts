@@ -137,6 +137,42 @@ const RULES: readonly Rule[] = [
   },
   { name: "AUTH_SSO_ALLOW_INSECURE_HOSTS", required: false, type: "string" },
 
+  // Password recovery (Wave 2 delta auth). All optional: the flow ships on with
+  // safe defaults, because a recovery path that has to be switched on is a
+  // recovery path that is off when it is needed.
+  //
+  // `AUTH_URL_PARAM_ENCRYPTION_KEY` is the one exception to "optional means
+  // cosmetic": unset, the emailed link carries plain `?token=…&tenantId=…`;
+  // set (32 bytes base64, `openssl rand -base64 32`, SEPARATE from MFA's and
+  // SSO's), both are sealed into one opaque `?p=` value. Either way the token
+  // itself is a 256-bit CSPRNG value — this is defense-in-depth, not the
+  // primary control, which is why an invalid key degrades to plain params
+  // instead of failing closed.
+  {
+    name: "AUTH_PASSWORD_RESET_TOKEN_TTL_MIN",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "AUTH_PASSWORD_RESET_RATE_LIMIT_MAX",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "AUTH_PASSWORD_RESET_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
+  {
+    name: "AUTH_URL_PARAM_ENCRYPTION_KEY",
+    required: false,
+    type: "string",
+    secret: true
+  },
+
   // Full-online deployment-profile gate + Cloudflare Turnstile (Issue #186).
   // All optional/off by default so every LAN/offline deployment passes with
   // none of them set. `TURNSTILE_SITE_KEY` is public (embedded in the widget),

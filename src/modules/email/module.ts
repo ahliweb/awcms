@@ -8,6 +8,27 @@ export const emailModule = defineModule({
   description:
     "Reusable, provider-neutral email service (ported from awcms-mini epic #492): message/recipient/attachment DTOs, an `EmailProvider` port, Mailketing configuration, the tenant-scoped schema/RLS/delivery queue (`sql/014`), the real Mailketing adapter plus a safe `log` provider, the claim/send/finalize dispatcher (`bun run email:dispatch`, dispatch-time suppression re-check), template management (CRUD + soft-delete/restore, per-category variable allowlists, i18n locale variants, admin preview) at `/api/v1/email/templates`, bulk announcement/notification workflows (`/api/v1/email/announcements`, tenant/role/explicit-user targeting, two-tier ABAC, idempotent), and admin observability/ops (`/api/v1/email/messages` queue diagnostics + cancel, `/api/v1/email/suppressions` manual suppression CRUD). Generic infrastructure — analogous to `sync_storage`'s object-storage port — for password reset, system announcements, and workflow notifications; not a domain-specific 'send a receipt' feature.",
   dependencies: ["tenant_admin", "profile_identity", "identity_access"],
+  /**
+   * `auth_notification` (ADR-0011 capability port,
+   * `_shared/ports/auth-notification-port.ts`) — how `identity_access` delivers
+   * a password-reset link without importing this module's application tree, and
+   * without `awcms_email_messages` gaining a writer that does not own it
+   * (ADR-0013 §6).
+   *
+   * It has to be a capability rather than a `dependencies` edge in the other
+   * direction: `email` already depends on `identity_access`, so
+   * `identity_access → email` as a dependency would close a cycle.
+   * `capabilities.consumes` deliberately carries no lifecycle ordering, which is
+   * exactly the relationship here — the consumer degrades (reports
+   * `enqueued: false` and audits it) rather than failing.
+   *
+   * `workflow_notification` (`_shared/ports/workflow-notification-port.ts`) is
+   * NOT listed: its adapter exists but no composition root wires it yet, so
+   * declaring it would claim a relationship no import actually makes.
+   */
+  capabilities: {
+    provides: ["auth_notification"]
+  },
   api: {
     openApiPath: "openapi/modules/email.openapi.yaml",
     basePath: "/api/v1/email"

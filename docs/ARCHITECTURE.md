@@ -8,7 +8,7 @@ yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapa
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **21 modul aktif**, migration `sql/001`-`sql/072`, RLS
+bawah). Repo ini punya **21 modul aktif**, migration `sql/001`-`sql/073`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
@@ -35,7 +35,8 @@ src/modules/<module>/
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
 - **`profile_identity`** — profil person/organization kanonik, identifier bertipe (masking/hash), entity link lintas modul.
-- **`identity_access`** — login (sesi opaque token), tenant user membership, RBAC/ABAC dasar.
+- **`identity_access`** — login (sesi opaque token), password reset lewat email
+  (enumeration-safe, single-use, mencabut semua sesi), tenant user membership, RBAC/ABAC dasar.
 - **`module_management`** (`isCore`) — registry modul berbasis DB: sync descriptor, enable/disable per tenant, settings non-secret, sinkron permission, navigation, job registry, health/readiness.
 - **`domain_event_runtime`** — outbox/dispatcher domain event transaksional, versi, multi-consumer, dead-letter + replay ter-audit.
 - **`sync_storage`** — node sync offline-first, outbox/inbox HMAC-signed anti-replay, conflict tracking, antrian upload objek.

@@ -14,7 +14,9 @@ export const identityAccessModule = defineModule({
     // Reclaimed from `tenant_admin`'s former `/api/v1` catch-all (Issue #256):
     // access control, roles, users, ABAC policies and identity/business-scope
     // are this module's surfaces, and its permissions are what guard them.
-    // `/login` is the SSR page for the same session it issues.
+    // `/login` is the SSR page for the same session it issues, and
+    // `/forgot-password` + `/reset-password` are the recovery pages for the
+    // credential behind it — all three unauthenticated, all three this module's.
     routes: [
       "/api/v1/auth",
       "/api/v1/access",
@@ -22,7 +24,9 @@ export const identityAccessModule = defineModule({
       "/api/v1/users",
       "/api/v1/abac",
       "/api/v1/identity",
-      "/login"
+      "/login",
+      "/forgot-password",
+      "/reset-password"
     ]
   },
   // Issue #180 — the generic business-scope layer CONSUMES a hierarchy
@@ -39,12 +43,26 @@ export const identityAccessModule = defineModule({
   // test-support fixture `tests/fixtures/example-domain-modules/` provides a
   // working dummy resolver for the same capability to exercise the binding
   // end-to-end.
+  //
+  // Wave 2 delta auth — `auth_notification` (ADR-0011 capability port,
+  // `_shared/ports/auth-notification-port.ts`) is how the password-reset flow
+  // delivers its link. NOT optional and NOT a `dependencies` edge, for two
+  // different reasons: `email` ships in this base and the forgot-password route
+  // hard-imports its adapter, so a registry without a provider is a build error
+  // that `modules:compose:check` should catch; and `email` already declares
+  // `identity_access` as a dependency, so the reverse dependency edge would be a
+  // cycle. `capabilities.consumes` carries no lifecycle ordering, which is
+  // exactly right — nothing about issuing sessions waits on the mailer.
   capabilities: {
     consumes: [
       {
         capability: "business_scope_hierarchy",
         providedBy: "organization_structure",
         optional: true
+      },
+      {
+        capability: "auth_notification",
+        providedBy: "email"
       }
     ]
   },
@@ -192,6 +210,61 @@ export const identityAccessModule = defineModule({
       action: "update",
       description:
         "Update tenant authentication policy (password/SSO/break-glass)"
+    }
+  ],
+  /**
+   * `awcms_password_reset_tokens` (sql/073) is registered as a `generic`-execution
+   * descriptor: the `data_lifecycle` engine owns the DELETE outright, because
+   * unlike `form_drafts` or `comments` there is no module-owned sweep here to
+   * delegate to — a spent reset token has no lifecycle after redemption.
+   *
+   * Retention is short and its floor is 1 day rather than 0 for a reason: rows
+   * are what a `password_reset_failed` audit entry refers to, and purging them
+   * the same hour would leave an incident investigation with the audit trail and
+   * nothing it points at. The rows themselves hold no secret — `token_hash` is a
+   * one-way sha256 of a value that is single-use and expired anyway.
+   */
+  dataLifecycle: [
+    {
+      key: "identity_access.password_reset_tokens",
+      tableName: "awcms_password_reset_tokens",
+      ownerModuleKey: "identity_access",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 1,
+      retentionMaxDays: 90,
+      defaultRetentionDays: 7,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per password-reset request, superseded on re-request and purged within days — a volume profile orders of magnitude below the audit/analytics tables partitioning exists for."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A spent or expired single-use credential hash is not a business record. Archiving it would preserve a security artifact past the window its own short retention exists to close, with nothing recoverable from it — the raw token was never stored."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "There is no status to transition to and nothing to anonymize: `used_at` already marks redemption, and the row's only identifying columns are a tenant/identity FK pair the identity tables hold anyway."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_password_reset_tokens_tenant_created_idx (sql/073) — the engine's own cursor path (WHERE tenant_id = ? AND created_at < ?), added by this table's migration specifically for it rather than reused from a lookup index that happens to fit."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). Restoring an old backup can revive tokens that were already expired at backup time — they stay unusable, because expiry is evaluated against the clock, not against a flag.",
+      executionMode: "generic"
     }
   ]
 });
