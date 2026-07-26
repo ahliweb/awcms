@@ -146,8 +146,12 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   `bun run edge-cache:surfaces:check`, skill `awcms-edge-cache`, dokumen
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md). **Default `off` =
   no-op total.** Tiga lapis default-deny independen; sinyal tekanan hanya mengubah _berapa
-  lama_, tidak pernah _apa_ yang boleh di-cache. Emisi purge sudah terpasang di jalur tulis
-  `blog_content`; `news_portal`/`theming`/`media_library` **belum**.
+  lama_, tidak pernah _apa_ yang boleh di-cache. Emisi purge terpasang di jalur tulis
+  `blog_content` dan `theming` (publish/rollback/retire, #246). `news_portal`/`media_library`
+  sengaja TIDAK — keduanya tidak memiliki surface ter-deklarasi, jadi ban untuk key-nya tak
+  akan cocok apa pun sementara antrean melapor sukses. Gate `edge-cache:surfaces:check`
+  menuntut call-site purge dari tiap modul yang MEMILIKI surface, sehingga kewajibannya
+  muncul sendiri begitu salah satunya mendeklarasikan surface.
   **AKTIF di staging sejak 2026-07-26** (`EDGE_CACHE_MODE=on`, Varnish 7.5 di
   depan Traefik, worker purge tiap menit) — dan pengaktifan itulah yang
   membongkar TIGA bug yang lolos review dan `bun run check`: ekspresi ban
