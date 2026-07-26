@@ -220,18 +220,13 @@ masing-masing.
 
 `GET /api/v1/modules/{moduleKey}/permissions` (Issue #517) melaporkan
 `synced`/`missing`/`orphaned`/`mismatched_description` — **read-only**,
-tidak pernah menulis ke `awcms_permissions`. **17 modul** (dari 23)
-sudah mendeklarasikan `permissions` di descriptornya — `module_management`,
-`blog_content` (sejak Issue #543, 39-entry array), `idn_admin_regions`,
-`news_portal`, `social_publishing`, `tenant_domain`, `visitor_analytics`,
-`profile_identity`, `reporting`, `workflow_approval`, plus 7 modul
-platform-evolution epic #738: `data_exchange`, `data_lifecycle`,
-`document_infrastructure`, `domain_event_runtime`, `integration_hub`,
-`organization_structure`, `reference_data`. **6 modul** lain (email,
-form-drafts, identity-access, logging, sync-storage, tenant-admin) punya
-permission seed nyata (dari migration masing-masing) tapi belum
-ditambahkan ke descriptor — jadi permission mereka **legitimately** muncul
-`orphaned` hari ini, bukan insiden. Jangan hapus baris `awcms_permissions`
+tidak pernah menulis ke `awcms_permissions`.
+
+Per 2026-07-26 di repo INI: **20 dari 21 modul** sudah mendeklarasikan
+`permissions` di descriptornya. Satu-satunya yang belum adalah **`email`** —
+permission-nya di-seed migrasi tapi tidak ada di descriptor, jadi baris
+`awcms_permissions` miliknya **legitimately** muncul `orphaned` hari ini; itu
+bukan insiden. Jangan hapus baris `awcms_permissions`
 berdasarkan laporan ini tanpa keputusan admin eksplisit.
 
 ## Health check — GET pasif, POST eksplisit

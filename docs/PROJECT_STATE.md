@@ -40,7 +40,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi      | **6.2.0** (tag `v6.2.0`, 2026-07-26); 0 changeset menunggu                | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Versi      | **6.2.0** (tag `v6.2.0`, 2026-07-26); 7 changeset menunggu                | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
 | Migrasi    | **70** (`sql/001`–`070`)                                                  | `ls sql/`                                             |
 | ADR        | **43** (`0000`–`0042`)                                                    | `docs/adr/README.id.md` (indeks ter-gate)             |
@@ -196,20 +196,24 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
     `comments` ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`–`067`).
     **BELUM:** `newsletter`, `social-publishing` (mengaktifkan hook publish yang
     kini no-op di `blog-content`).
-- **Environment ter-deploy.** Produksi `awcms.ahlikoding.com` dan staging
-  `awcms-staging.ahlikoding.com` (dibuat 2026-07-25, app Coolify
-  `n3gg3qudm91kqdy62znmyxuq`, DB sendiri, R2/email/sync MATI). Health staging 200.
-  **BELUM:** migrasi DB staging — image produksi runtime-only sehingga
-  `db:migrate` harus dijalankan sebagai container one-shot; langkahnya ada di
+- **Environment ter-deploy — SELESAI, tiga fase setara.** Produksi
+  `awcms.ahlikoding.com`, staging `awcms-staging.ahlikoding.com`, dan
+  development lokal kini identik: migrasi **70**, 118 tabel, 197 permission, RLS
+  `ENABLE`+`FORCE` 109/118, runtime sebagai `awcms_app` (bukan superuser), owner
+  `admin@ahlikoding.com` dengan role `owner` 197/197, dan
+  `PUBLIC_DEFAULT_TENANT_*` di-pin per fase. Isolasi dibuktikan sebagai
+  `awcms_app` (`0 / 1 / 0`), bukan diasumsikan. Suite DB-gated jalan di dev
+  (harness 142 + legacy 64, nol gagal). Detail dan jebakannya di
   [`awcms/environments.md`](awcms/environments.md).
 - **Cache tepi Varnish ([ADR-0042](adr/0042-varnish-edge-cache-auto-activation.md), `sql/068`).**
   Tier cache OPSIONAL di depan aplikasi, default MATI dan no-op saat mati. Allow-list
   surface fail-closed (`src/lib/edge-cache/`), aktivasi otomatis berbasis tekanan origin,
   VCL default-deny (`infra/varnish/`), antrean invalidasi tahan-lama + worker
   `bun run edge-cache:purge`, gate `bun run edge-cache:surfaces:check`.
-  **BELUM:** emisi purge dari event konten (`enqueueEdgeCachePurge` siap dipanggil, belum ada
-  pemanggil — invalidasi masih bergantung TTL) dan surface discovery ber-resolusi-host
-  (`serveDiscovery` tak menerima `locals`). Rinci di
+  **SUDAH sejak #246:** emisi purge dari `theming` (publish/rollback/retire, satu
+  transaksi dengan perubahannya) dan gate kepemilikan — tiap modul yang memiliki
+  surface ter-deklarasi WAJIB punya call-site purge. **BELUM:** surface discovery
+  ber-resolusi-host (`serveDiscovery` tak menerima `locals`). Rinci di
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md).
   - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,
     sidebar menu per-tenant).

@@ -42,6 +42,33 @@ Product search < 300ms · add item < 300ms · post transaksi < 1.5s · receipt P
 
 Konvensi nyata repo ini (bukan sub-folder per domain): file **flat** langsung di `tests/`, satu file per area — `<area>.test.ts` (unit, tanpa DB) dan `tests/integration/<area>.integration.test.ts` (butuh `DATABASE_URL`, di-skip otomatis tanpanya — **jangan asumsikan `bun test` tanpa `DATABASE_URL` berarti semua test lulus**, integration test-nya cuma dilewati diam-diam). Contoh: `tests/access-control.test.ts`, `tests/module-management-tenant-lifecycle.test.ts`, `tests/integration/module-tenant-lifecycle.integration.test.ts`.
 
+### Menjalankan suite DB-gated di lokal (sejak 2026-07-26)
+
+Dev sudah setara produksi (migrasi 70, `awcms_app`, RLS FORCE) — lihat
+`docs/awcms/environments.md` §Development lokal. Tiga hal yang WAJIB diketahui
+sebelum menjalankan:
+
+1. **Keberadaan `.env` MENYALAKAN suite ini.** Bun memuat `.env` sendiri, jadi
+   `env -u DATABASE_URL bun test` **tidak** menonaktifkannya — nilai dari
+   `.env` mengisi lagi. Untuk mereproduksi job `quality` CI (yang jalan dengan
+   `DATABASE_URL` kosong), pindahkan `.env` sementara.
+2. **Harness butuh role PRIVILEGED, bukan `awcms_app`.** Ia `CREATE DATABASE`
+   dan `ALTER ROLE`; dengan `awcms_app` hasilnya `permission denied to alter
+role` (42501) — **bukan** skip, jadi mudah disalahartikan sebagai regresi.
+   Override eksplisit menang atas `.env`, dan override **ketiga-tiganya**:
+   ```bash
+   OWNER='postgres://awcms:<pw>@localhost:5433/awcms'
+   DATABASE_URL="$OWNER" SETUP_DATABASE_URL="$OWNER" WORKER_DATABASE_URL="$OWNER" \
+     bun test tests/integration/
+   ```
+   Kalau `SETUP_DATABASE_URL` dibiarkan bocor dari `.env`, harness memeriksa
+   klien app dan klien setup menunjuk database yang sama, gagal, lalu melapor
+   `Connection closed` — pesan yang sama sekali tidak menunjuk penyebabnya.
+3. **Dua suite DB-gated TIDAK boleh satu proses `bun test`** (tabrakan data —
+   lihat komentar di `ci.yml`). Jalankan terpisah, persis seperti CI: harness
+   (`tests/integration/`) lalu legacy ad-hoc (9 berkas `*-postgres.test.ts` dan
+   kawan-kawan).
+
 ## Aturan
 
 - Setiap fitur baru minimal punya unit test logic + satu integration/contract test.

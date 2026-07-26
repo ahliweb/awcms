@@ -19,15 +19,31 @@ import { EVENT_ACTIVITY_PROJECTOR_CONSUMER_NAME } from "../../reporting/domain/p
  * module).
  *
  * Port note (from awcms-mini): the awcms-mini registry also carries two
- * later-wave consumers that project into the `reporting` and
- * `integration_hub` modules. Those modules do not exist in this repo yet,
- * so those two consumers are intentionally NOT ported (they would import
- * modules that are absent). The two consumers below are fully
- * self-contained: the audit projector calls `logging`'s public
- * `recordAuditEvent` (a foundation module that DOES exist here), and the
- * activity-rollup projector writes only this module's OWN
- * `awcms_domain_event_activity_daily` table — neither imports an absent
- * module.
+ * later-wave consumers projecting into `reporting` and `integration_hub`.
+ * **That note is now only half true and the half that changed matters.**
+ * `integration_hub` is still absent, so its consumer is still not ported.
+ * `reporting` EXISTS, and a third consumer below (see
+ * `eventActivityProjectorConsumer`) does import it — lines 8-9 of this file.
+ *
+ * The first two consumers below remain fully self-contained: the audit
+ * projector calls `logging`'s public `recordAuditEvent`, and the
+ * activity-rollup projector writes only this module's own
+ * `awcms_domain_event_activity_daily` table.
+ *
+ * ## The import direction is worth knowing before you add a fourth
+ *
+ * `reporting`'s descriptor declares `domain_event_runtime` as a dependency,
+ * while this file imports `reporting`. At MODULE level that is a cycle. It is
+ * invisible to `bun run modules:dag:check`, which validates declared
+ * dependencies only (`listModules()`, no I/O by design) and therefore cannot
+ * see an import that was never declared — and declaring this one truthfully
+ * would make that gate fail with a cycle. There is no FILE-level cycle:
+ * `reporting` mentions this module only in comments and descriptor strings.
+ *
+ * Do not "fix" this by adding `reporting` to this module's `dependencies`
+ * without deciding the real question first: whether a runtime-level module
+ * should know a reporting module at all, or whether this consumer belongs in
+ * a composition root outside both.
  */
 
 const AUDIT_PROJECTOR_CONSUMER_NAME = "logging.sample_event_audit_projector";

@@ -89,6 +89,16 @@ Route admin di `src/pages/api/v1/theming/*`:
   **immutable** lalu jadikan tampilan live. Guard `theming.version.publish`.
 - **rollback** (`POST /api/v1/theming/rollback`, `rollback.ts`) — pindahkan
   active pointer ke versi published lebih awal. Guard `theming.version.restore`.
+
+> **Ketiganya WAJIB meng-enqueue purge cache tepi** (#246). `publish.ts`,
+> `rollback.ts`, dan `retire.ts` masing-masing memanggil
+> `enqueueModuleContentPurge(tx, tenantId, THEMING_MODULE_KEY, …)` **di dalam
+> transaksi yang sama** dengan perubahannya (disiplin outbox ADR-0006 — enqueue
+> di luar transaksi bisa mem-purge perubahan yang lalu di-rollback). Gate
+> `bun run edge-cache:surfaces:check` menegakkannya: tiap modul yang memiliki
+> surface ter-deklarasi wajib punya call-site purge, jadi menambah rute mutasi
+> theming baru tanpa purge = CI merah. Lihat `awcms-edge-cache`.
+
 - **retire** (`POST /api/v1/theming/retire`, `retire.ts`) — kosongkan active
   pointer; situs fallback ke theme default. Guard `theming.version.archive`.
 - **index** (`GET /api/v1/theming`, `index.ts`) — baca state, theme tersedia,
@@ -107,11 +117,18 @@ tak pernah menyentuh baris versi. "Sebuah perubahan = sebuah versi baru".
 
 ## Preview retention — read-filter, bukan purge job
 
-`awcms_theming_preview_sessions` TIDAK punya background purge (engine generik
-`data_lifecycle` tidak ada di base ini; GRANT worker awcms-micro sengaja
-di-drop — tak ada `awcms_worker`). Sesi tetap aman karena **setiap read
-memfilter `expires_at >= now()`** (`application/theme-preview-directory.ts`) —
-sesi kedaluwarsa jadi inert. Jangan asumsikan ada job pembersih.
+`awcms_theming_preview_sessions` TIDAK punya background purge. Sesi tetap aman
+karena **setiap read memfilter `expires_at >= now()`**
+(`application/theme-preview-directory.ts`) — sesi kedaluwarsa jadi inert.
+Jangan asumsikan ada job pembersih.
+
+> **Alasan aslinya sudah kedaluwarsa.** Versi sebelumnya menerangkan ketiadaan purge dengan "engine generik `data_lifecycle` tidak ada di base ini" dan "tak ada `awcms_worker`".
+> **Dua-duanya sekarang ada** — `data_lifecycle` modul
+> terdaftar (ADR-0037, `sql/055`–`056`) dengan 7 modul adopter, dan role
+> `awcms_worker` dibuat `sql/022`. Read-filter tetap desain yang sah dan tidak
+> perlu diubah; yang tidak sah adalah menyebut penyebabnya sesuatu yang keliru,
+> karena itu menutup opsi mendaftarkan deskriptor `dataLifecycle` di sini kalau
+> nanti memang diinginkan.
 
 ## Guard, idempotency, audit
 
@@ -143,10 +160,16 @@ migrasi ini jalan (di-seed owner saat setup-wizard bootstrap).
 
 ## Port adaptations vs awcms-micro (ADR-0034 Fase 3)
 
-- **`media_library` di-drop** — belum ada di base. Resolusi URL asset
-  (`src/lib/theming/theme-media.ts`) adalah no-op terdokumentasi (map kosong);
-  asset dihilangkan dari render, theme degrade dengan aman. Id asset tersimpan
-  tetap DATA valid.
+- **Resolusi URL asset masih no-op — TAPI bukan lagi karena modulnya tidak ada.**
+  `src/lib/theming/theme-media.ts` mengembalikan map kosong: asset dihilangkan
+  dari render, theme degrade aman, id asset tersimpan tetap DATA valid. Saat
+  seam ini ditulis `media_library` memang belum ada. **Sekarang sudah ada**
+  (ADR-0036; `sql/041`/`042`/`045`/`052`–`054`), lengkap dengan adapter nyata
+  `media-library/application/media-library-port-adapter.ts` yang sudah
+  di-inject `blog_content` dan `news_portal`. Yang tersisa murni **seam belum
+  di-wire**, bukan dependensi yang hilang — satu berkas, tanpa perubahan
+  pemanggil. Sampai itu dikerjakan, logo/asset theme **tidak pernah tampil**
+  meski tenant sudah mengunggahnya. Jangan mengklaim "media belum ada di base".
 - **Resolusi tenant publik `tenantCode`-based** (ADR-0009), bukan Host-based —
   stylesheet publik di `/theming/{tenantCode}/tokens.css`.
 - **Tanpa migration/GRANT worker** — tabel mewarisi grant `awcms_app` dari

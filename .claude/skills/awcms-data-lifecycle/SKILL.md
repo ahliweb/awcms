@@ -16,8 +16,27 @@ description: Modul data_lifecycle SUDAH di-port ke repo ini (ADR-0037, dari awcm
 > (script/route), tidak pernah di-import dari dalam pohon `application`/
 > `domain` modul konsumen. Konsumen aktif: `logging.audit_events`
 > (delegated, guard WAJIB) & `visitor_analytics.visit_events` (delegated,
-> guard menggerbangi step-1 DELETE saja). Konsumen `form_drafts`/
-> `newsletter`/`comments` DITUNDA (modul belum di-port).
+> guard menggerbangi step-1 DELETE saja).
+>
+> **Adopter nyata per 2026-07-26 — 7 modul, 10 deskriptor** (bukan 2; sumber
+> kebenaran `listModules()`, bukan daftar ini):
+>
+> | modul               | tabel                                | retentionClass        |
+> | ------------------- | ------------------------------------ | --------------------- |
+> | `logging`           | `awcms_audit_events`                 | `audit_security`      |
+> | `visitor_analytics` | `awcms_visit_events`                 | `analytics_telemetry` |
+> | `data_lifecycle`    | `awcms_data_lifecycle_runs`          | `operational_queue`   |
+> | `seo_distribution`  | `awcms_seo_not_found_observations`   | `analytics_telemetry` |
+> | `form_drafts`       | `awcms_form_drafts`                  | `operational_queue`   |
+> | `site_search`       | `awcms_site_search_query_log`        | `analytics_telemetry` |
+> | `site_search`       | `awcms_site_search_index_failures`   | `system_event`        |
+> | `comments`          | `awcms_comments_abuse_events`        | `system_event`        |
+> | `comments`          | `awcms_comments_reply_subscriptions` | `communication_log`   |
+> | `comments`          | `awcms_comments_comments`            | `communication_log`   |
+>
+> Versi sebelumnya menyatakan `form_drafts`/`comments` "DITUNDA (modul belum
+> di-port)". **Keduanya sudah di-port** (`sql/062`–`063`, `sql/066`–`067`) dan
+> keduanya `executionMode: "delegated"`. `newsletter` memang masih belum ada.
 
 Sumber kebenaran: `src/modules/_shared/module-contract.ts`
 (`HighVolumeTableDescriptor`), `src/modules/data-lifecycle/` (domain/
