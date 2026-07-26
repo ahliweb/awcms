@@ -7,7 +7,7 @@ import {
 import {
   parseDiscoveryLocaleParam,
   serveDiscovery
-} from "../lib/seo/discovery-route";
+} from "../modules/seo-distribution/presentation/discovery-route";
 import { buildFeedPayload } from "../modules/seo-distribution/application/seo-discovery-service";
 
 /**

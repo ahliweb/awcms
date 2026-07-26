@@ -64,8 +64,18 @@ describe("descriptor <-> permission seed parity", () => {
     expect(visitorAnalyticsModule.dependencies).toEqual([
       "tenant_admin",
       "identity_access",
-      "logging"
+      "logging",
+      // Added by Issue #257, when the boundary gate reached `src/pages`. Both
+      // were ALREADY imported by this module's own routes and neither was
+      // declared — the careful argument above about `reporting` was being made
+      // by a descriptor with two undeclared dependencies of its own.
+      "data_lifecycle",
+      "module_management"
     ]);
+
+    // The `reporting` claim above is the one that matters, so assert it
+    // directly rather than leaving it to the exact-array match.
+    expect(visitorAnalyticsModule.dependencies).not.toContain("reporting");
     expect(visitorAnalyticsModule.dependencies).not.toContain("reporting");
     expect(visitorAnalyticsModule.api?.basePath).toBe("/api/v1/analytics");
   });

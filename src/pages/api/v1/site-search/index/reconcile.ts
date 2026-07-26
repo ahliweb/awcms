@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { hashSessionToken } from "../../../../../lib/auth/session-token";
 import { getDatabaseClient } from "../../../../../lib/database/client";
 import { withTenant } from "../../../../../lib/database/tenant-context";
-import { getRegisteredSearchSources } from "../../../../../lib/search/search-sources";
+import { getRegisteredSearchSources } from "../../../../../modules/site-search/presentation/search-sources";
 import {
   fail,
   jsonResponse,

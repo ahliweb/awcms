@@ -14,7 +14,7 @@ import {
 } from "../../../../../lib/security/request-body-limit";
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { resolveOptionalRegisteredAuthor } from "../../../../../modules/comments/application/author-resolution";
-import { getRegisteredCommentableResources } from "../../../../../lib/comments/commentable-resources";
+import { getRegisteredCommentableResources } from "../../../../../modules/comments/presentation/commentable-resources";
 import { resolvePublishedCommentableResource } from "../../../../../modules/comments/application/commentable-resource-engine";
 import { submitComment } from "../../../../../modules/comments/application/comment-service";
 import { findThreadByComment } from "../../../../../modules/comments/application/comment-thread-directory";

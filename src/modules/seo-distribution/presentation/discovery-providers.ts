@@ -15,11 +15,11 @@
  * A tenant with a content module disabled simply contributes no facts / no
  * images — the aggregator degrades safely (`consumes` optional, ADR-0038 §2).
  */
-import { createBlogContentSeoFactsAdapter } from "../../modules/blog-content/application/seo-facts-port-adapter";
-import { mediaLibraryPortAdapter } from "../../modules/media-library/application/media-library-port-adapter";
-import { fetchTenantModuleEntry } from "../../modules/module-management/application/tenant-module-lifecycle";
-import type { MediaLibraryPort } from "../../modules/_shared/ports/media-library-port";
-import type { SeoFactsSource } from "../../modules/_shared/ports/seo-facts-port";
+import { createBlogContentSeoFactsAdapter } from "../../blog-content/application/seo-facts-port-adapter";
+import { mediaLibraryPortAdapter } from "../../media-library/application/media-library-port-adapter";
+import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
+import type { SeoFactsSource } from "../../_shared/ports/seo-facts-port";
 
 export type EnabledSeoProviders = {
   providers: SeoFactsSource[];

@@ -30,9 +30,9 @@
  * ownership or status check here would duplicate the port's contract in a
  * second place that could drift from it.
  */
-import type { MediaLibraryPort } from "../../modules/_shared/ports/media-library-port";
-import { mediaLibraryPortAdapter } from "../../modules/media-library/application/media-library-port-adapter";
-import type { ThemeConfig } from "../../modules/theming/domain/theme-config";
+import type { MediaLibraryPort } from "../../_shared/ports/media-library-port";
+import { mediaLibraryPortAdapter } from "../../media-library/application/media-library-port-adapter";
+import type { ThemeConfig } from "../domain/theme-config";
 
 export type ResolvedThemeAsset = { url: string; altText: string | null };
 

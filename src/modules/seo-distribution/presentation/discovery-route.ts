@@ -18,23 +18,23 @@
  * Errors never leak: a caught exception logs a generic event and returns the
  * fixed generic error body (no message/stack), same discipline as `/blog/{tenantCode}`.
  */
-import { getDatabaseClient } from "../database/client";
-import { log } from "../logging/logger";
-import { withSeoPublicTenant } from "../../modules/seo-distribution/application/public-seo-tenant-resolution";
+import { getDatabaseClient } from "../../../lib/database/client";
+import { log } from "../../../lib/logging/logger";
+import { withSeoPublicTenant } from "../application/public-seo-tenant-resolution";
 import {
   buildDiscoveryCacheControl,
   isNotModified,
   toHttpDate
-} from "../../modules/seo-distribution/domain/discovery-cache";
+} from "../domain/discovery-cache";
 import {
   DISCOVERY_CACHE_MAX_AGE_SECONDS,
   DISCOVERY_CACHE_S_MAXAGE_SECONDS,
   DISCOVERY_STALE_WHILE_REVALIDATE_SECONDS
-} from "../../modules/seo-distribution/domain/discovery-limits";
+} from "../domain/discovery-limits";
 import type {
   DiscoveryPayload,
   SeoDiscoveryContext
-} from "../../modules/seo-distribution/application/seo-discovery-service";
+} from "../application/seo-discovery-service";
 import { resolveEnabledSeoProviders } from "./discovery-providers";
 
 /** Build one discovery surface's payload from the resolved, provider-wired context. */

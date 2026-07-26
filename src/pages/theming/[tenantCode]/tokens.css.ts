@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { serveActiveThemeTokensCss } from "../../../lib/theming/theme-public-css";
+import { serveActiveThemeTokensCss } from "../../../modules/theming/presentation/theme-public-css";
 
 /**
  * `GET /theming/{tenantCode}/tokens.css` (ADR-0034 Fase 3; ported from

@@ -71,7 +71,24 @@ export const visitorAnalyticsModule = defineModule({
   status: "active",
   description:
     "Privacy-first human visitor statistics for admin and public routes, in both online and offline/LAN configurations (ported from awcms-micro epic #617-#624). VISITOR_ANALYTICS_ENABLED=false by default — a fresh install collects nothing until an operator opts in; raw IP, raw user-agent, and geolocation collection are each independently disabled unless explicitly enabled (see domain/visitor-analytics-config.ts). Visitor identifiers (visitor-key cookie, IP, user-agent) are stored only as salted HMAC-SHA256 hashes, never raw, unless the operator explicitly opts into raw collection. Ships the tenant-scoped awcms_visitor_sessions/awcms_visit_events/awcms_visitor_daily_rollups schema (migrations 049/050/051, RLS FORCE), the additive PUBLIC visit-ingest endpoint POST /api/v1/analytics/collect (anonymous beacon, resolves tenant from tenantCode, src/middleware.ts untouched), the authenticated ABAC-guarded read API (GET /api/v1/analytics/summary|realtime|sessions|events|pages|devices|locations|security|settings, PATCH .../settings), the high-risk POST /api/v1/analytics/retention/purge (Idempotency-Key + critical audit), the scheduled rollup and retention-purge jobs (bun run analytics:rollup / analytics:purge), and the /admin/analytics dashboard. The visit_events retention purge is gated by an active data_lifecycle legal hold (ADR-0037): the dataLifecycle descriptor and LegalHoldGuardPort coupling, dropped at the original port because data_lifecycle did not exist here yet, are now RE-WIRED. PORT DEFERRAL: the news_portal preset that enables this module in awcms-micro is not wired here.",
-  dependencies: ["tenant_admin", "identity_access", "logging"],
+  // `data_lifecycle` + `module_management` added by Issue #257, when the
+  // boundary gate reached `src/pages` for the first time. Both were already
+  // imported by this module's own routes and neither was declared:
+  // `/api/v1/analytics/retention/purge` runs behind the legal-hold guard
+  // (non-bypassable — the purge must not proceed with the lifecycle engine
+  // off), and `/api/v1/analytics/settings` reads and validates through the
+  // module-settings service.
+  //
+  // The header below argues carefully about why `reporting` is NOT a
+  // dependency. That argument stands; it was just made by a descriptor with two
+  // dependencies it had not written down.
+  dependencies: [
+    "tenant_admin",
+    "identity_access",
+    "logging",
+    "data_lifecycle",
+    "module_management"
+  ],
   type: "system",
   api: {
     openApiPath: "openapi/modules/visitor-analytics.openapi.yaml",

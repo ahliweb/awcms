@@ -8,7 +8,7 @@ import {
 } from "bun:test";
 
 import { withTenant } from "../../src/lib/database/tenant-context";
-import { getRegisteredCommentableResources } from "../../src/lib/comments/commentable-resources";
+import { getRegisteredCommentableResources } from "../../src/modules/comments/presentation/commentable-resources";
 import { resolvePublishedCommentableResource } from "../../src/modules/comments/application/commentable-resource-engine";
 import {
   listApprovedComments,
