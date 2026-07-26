@@ -1916,6 +1916,50 @@ Database-backed module registry, tenant module lifecycle, settings, permission s
 | 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/tenant/modules/presets` — Named module profiles, and optionally a dry-run plan for one.
+
+- **operationId**: `listTenantModulePresets`
+- **Security**: bearerAuth + tenantHeader
+
+Applying a preset DISABLES every enabled, unlisted, unprotected module, so `?preset=<name>` returns the plan without writing anything — an operator switching a live tenant's profile sees the disable list before it happens. An unknown name returns the catalog with `plan: null`.
+
+**Parameters**
+
+| Name     | In    | Required | Type   | Description |
+| -------- | ----- | -------- | ------ | ----------- |
+| `preset` | query | no       | string |             |
+
+**Responses**
+
+| Status | Description                                             | Schema                                 |
+| ------ | ------------------------------------------------------- | -------------------------------------- |
+| 200    | Preset catalog, plus a plan when `preset` was supplied. | object                                 |
+| 400    | Validation error.                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenant/modules/presets/{presetName}/apply` — Bring the tenant's module state to a named profile.
+
+- **operationId**: `applyTenantModulePreset`
+- **Security**: bearerAuth + tenantHeader
+
+Enables every module the preset lists and disables every enabled, unlisted, unprotected module. Each change runs the real lifecycle validation, so a change can be rejected: `complete: false` with per-module reasons is a real outcome, not an error.
+
+**Parameters**
+
+| Name         | In   | Required | Type   | Description |
+| ------------ | ---- | -------- | ------ | ----------- |
+| `presetName` | path | yes      | string |             |
+
+**Responses**
+
+| Status | Description                              | Schema                                 |
+| ------ | ---------------------------------------- | -------------------------------------- |
+| 200    | Preset applied, completely or partially. | object                                 |
+| 401    | Missing or invalid session.              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                      | [`ApiError`](#standard-error-envelope) |
+
 ## Sync Storage
 
 Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.
