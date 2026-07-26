@@ -12,56 +12,57 @@ Paket ini sekarang mengadaptasi **seluruh** dokumen teknis dari repo acuan awcms
 
 ## Indeks dokumen
 
-| Dokumen                                                                                                | Isi                                                                         |
-| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| [`01_canvas_induk.md`](01_canvas_induk.md)                                                             | Ringkasan produk, arsitektur tingkat tinggi, prinsip utama                  |
-| [`02_prd_detail_per_modul.md`](02_prd_detail_per_modul.md)                                             | PRD per modul (fondasi + ERP: finance, procurement, inventory, dst.)        |
-| [`03_srs_detail_per_modul.md`](03_srs_detail_per_modul.md)                                             | SRS/kebutuhan teknis per modul                                              |
-| [`04_erd_data_dictionary.md`](04_erd_data_dictionary.md)                                               | ERD & kamus data per modul                                                  |
-| [`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md)                                       | Detail kontrak API/event per modul                                          |
-| [`06_github_issues_detail.md`](06_github_issues_detail.md)                                             | Pola penataan epic/issue pengembangan (acuan dari repo awcms-mini)          |
-| [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)               | Strategi test berlapis & kesiapan produksi                                  |
-| [`08_sop_operasional_user_guide.md`](08_sop_operasional_user_guide.md)                                 | SOP operasional & panduan pengguna (acuan)                                  |
-| [`09_roadmap_repository_commit.md`](09_roadmap_repository_commit.md)                                   | Konvensi roadmap, repository, dan commit                                    |
-| [`10_template_kode_coding_standard.md`](10_template_kode_coding_standard.md)                           | Coding standard (struktur modul, Bun-only, konvensi)                        |
-| [`11_implementation_blueprint.md`](11_implementation_blueprint.md)                                     | Blueprint implementasi per sprint (14 sprint: foundation → ERP → integrasi) |
-| [`12_generator_prompt.md`](12_generator_prompt.md)                                                     | Prompt scaffolding modul per sprint                                         |
-| [`13_final_master_index_traceability.md`](13_final_master_index_traceability.md)                       | Master index & matriks traceability antar-dokumen                           |
-| [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md)                                               | Design system, token, state pattern, a11y                                   |
-| [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md)                   | Arsitektur frontend (Astro SSR, islands, hybrid online-first)               |
-| [`16_backend_data_access_integration.md`](16_backend_data_access_integration.md)                       | Arsitektur data access (repository, RLS, outbox, idempotency)               |
-| [`17_default_seed_rbac_abac.md`](17_default_seed_rbac_abac.md)                                         | Seed default role & policy RBAC/ABAC                                        |
-| [`18_configuration_env_reference.md`](18_configuration_env_reference.md)                               | Referensi variabel environment (fondasi + placeholder ERP)                  |
-| [`19_glossary_terminology.md`](19_glossary_terminology.md)                                             | Glosarium istilah arsitektur & domain ERP                                   |
-| [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md)                 | Threat model & arsitektur keamanan (+ ancaman spesifik ERP)                 |
-| [`21_module_admission_governance.md`](21_module_admission_governance.md)                               | Tata kelola admission modul baru                                            |
-| [`branch-protection.md`](branch-protection.md)                                                         | Kebijakan proteksi branch GitHub                                            |
-| [`database-migrations.md`](database-migrations.md)                                                     | Konvensi migration SQL                                                      |
-| [`database-pooling.md`](database-pooling.md)                                                           | Connection pooling & backpressure                                           |
-| [`database-capacity-runbook.md`](database-capacity-runbook.md)                                         | Runbook kapasitas database                                                  |
-| [`data-lifecycle.md`](data-lifecycle.md)                                                               | Retensi & purge data (termasuk pertimbangan retensi finansial/legal)        |
-| [`deployment-profiles.md`](deployment-profiles.md)                                                     | Profil deployment offline/LAN & online                                      |
-| [`deploy-coolify.md`](deploy-coolify.md)                                                               | Panduan deploy via Coolify                                                  |
-| [`release-process.md`](release-process.md)                                                             | Proses rilis SemVer + Changesets                                            |
-| [`observability-metrics.md`](observability-metrics.md)                                                 | Konvensi logging/metrics/observability                                      |
-| [`performance-suite.md`](performance-suite.md)                                                         | Suite test performa                                                         |
-| [`production-preflight-runbook.md`](production-preflight-runbook.md)                                   | Checklist preflight sebelum deploy produksi                                 |
-| [`production-readiness.md`](production-readiness.md)                                                   | Gate kesiapan produksi                                                      |
-| [`resilience-dr-verification.md`](resilience-dr-verification.md)                                       | Verifikasi disaster recovery                                                |
-| [`repo-inventory.md`](repo-inventory.md)                                                               | Tooling inventaris file repo                                                |
-| [`extension-compatibility-policy.md`](extension-compatibility-policy.md)                               | Kebijakan kompatibilitas versi kontrak/modul                                |
-| [`templates/module-proposal-template.md`](templates/module-proposal-template.md)                       | Template proposal modul baru                                                |
-| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | Checklist keputusan admission modul                                         |
-| [`examples/minimal-domain-module.md`](examples/minimal-domain-module.md)                               | Contoh minimal modul domain ERP (`expense-category`)                        |
-| [`api-reference.md`](api-reference.md)                                                                 | Referensi API gabungan (acuan format)                                       |
-| [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)                                       | Peta penyerapan klaster website/e-commerce awcms-micro (ADR-0035)           |
-| [`derived-application-guide.md`](derived-application-guide.md)                                         | **DEPRECATED** (ADR-0034) — panduan aplikasi turunan (jalur dicabut)        |
-| [`derived-app-pilot-plan.md`](derived-app-pilot-plan.md)                                               | **DEPRECATED** (ADR-0034) — rencana pilot aplikasi turunan (jalur dicabut)  |
-| [`erp-extension-contracts.md`](erp-extension-contracts.md)                                             | Kontrak kesiapan ekstensi ERP (lihat ADR-0020)                              |
-| [`visitor-analytics.md`](visitor-analytics.md)                                                         | Analitik pengunjung (acuan pola, asal produk CMS)                           |
-| [`AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md)                 | Audit kepatuhan standar pengembangan (acuan)                                |
-| [`module-composition-inventory.json`](module-composition-inventory.json)                               | Inventaris komposisi modul (artefak, regenerasi via tooling)                |
-| [`work-class-registry.generated.json`](work-class-registry.generated.json)                             | Registry work-class (artefak generated)                                     |
+| Dokumen                                                                                                | Isi                                                                          |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| [`01_canvas_induk.md`](01_canvas_induk.md)                                                             | Ringkasan produk, arsitektur tingkat tinggi, prinsip utama                   |
+| [`02_prd_detail_per_modul.md`](02_prd_detail_per_modul.md)                                             | PRD per modul (fondasi + ERP: finance, procurement, inventory, dst.)         |
+| [`03_srs_detail_per_modul.md`](03_srs_detail_per_modul.md)                                             | SRS/kebutuhan teknis per modul                                               |
+| [`04_erd_data_dictionary.md`](04_erd_data_dictionary.md)                                               | ERD & kamus data per modul                                                   |
+| [`05_openapi_asyncapi_detail.md`](05_openapi_asyncapi_detail.md)                                       | Detail kontrak API/event per modul                                           |
+| [`06_github_issues_detail.md`](06_github_issues_detail.md)                                             | Pola penataan epic/issue pengembangan (acuan dari repo awcms-mini)           |
+| [`07_sprint_testing_production_readiness.md`](07_sprint_testing_production_readiness.md)               | Strategi test berlapis & kesiapan produksi                                   |
+| [`08_sop_operasional_user_guide.md`](08_sop_operasional_user_guide.md)                                 | SOP operasional & panduan pengguna (acuan)                                   |
+| [`09_roadmap_repository_commit.md`](09_roadmap_repository_commit.md)                                   | Konvensi roadmap, repository, dan commit                                     |
+| [`10_template_kode_coding_standard.md`](10_template_kode_coding_standard.md)                           | Coding standard (struktur modul, Bun-only, konvensi)                         |
+| [`11_implementation_blueprint.md`](11_implementation_blueprint.md)                                     | Blueprint implementasi per sprint (14 sprint: foundation → ERP → integrasi)  |
+| [`12_generator_prompt.md`](12_generator_prompt.md)                                                     | Prompt scaffolding modul per sprint                                          |
+| [`13_final_master_index_traceability.md`](13_final_master_index_traceability.md)                       | Master index & matriks traceability antar-dokumen                            |
+| [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md)                                               | Design system, token, state pattern, a11y                                    |
+| [`15_frontend_architecture_integration.md`](15_frontend_architecture_integration.md)                   | Arsitektur frontend (Astro SSR, islands, hybrid online-first)                |
+| [`16_backend_data_access_integration.md`](16_backend_data_access_integration.md)                       | Arsitektur data access (repository, RLS, outbox, idempotency)                |
+| [`17_default_seed_rbac_abac.md`](17_default_seed_rbac_abac.md)                                         | Seed default role & policy RBAC/ABAC                                         |
+| [`18_configuration_env_reference.md`](18_configuration_env_reference.md)                               | Referensi variabel environment (fondasi + placeholder ERP)                   |
+| [`19_glossary_terminology.md`](19_glossary_terminology.md)                                             | Glosarium istilah arsitektur & domain ERP                                    |
+| [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md)                 | Threat model & arsitektur keamanan (+ ancaman spesifik ERP)                  |
+| [`21_module_admission_governance.md`](21_module_admission_governance.md)                               | Tata kelola admission modul baru                                             |
+| [`branch-protection.md`](branch-protection.md)                                                         | Kebijakan proteksi branch GitHub                                             |
+| [`database-migrations.md`](database-migrations.md)                                                     | Konvensi migration SQL                                                       |
+| [`database-pooling.md`](database-pooling.md)                                                           | Connection pooling & backpressure                                            |
+| [`database-capacity-runbook.md`](database-capacity-runbook.md)                                         | Runbook kapasitas database                                                   |
+| [`data-lifecycle.md`](data-lifecycle.md)                                                               | Retensi & purge data (termasuk pertimbangan retensi finansial/legal)         |
+| [`deployment-profiles.md`](deployment-profiles.md)                                                     | Profil deployment offline/LAN & online                                       |
+| [`deploy-coolify.md`](deploy-coolify.md)                                                               | Panduan deploy via Coolify                                                   |
+| [`release-process.md`](release-process.md)                                                             | Proses rilis SemVer + Changesets                                             |
+| [`observability-metrics.md`](observability-metrics.md)                                                 | Konvensi logging/metrics/observability                                       |
+| [`performance-suite.md`](performance-suite.md)                                                         | Suite test performa                                                          |
+| [`production-preflight-runbook.md`](production-preflight-runbook.md)                                   | Checklist preflight sebelum deploy produksi                                  |
+| [`production-readiness.md`](production-readiness.md)                                                   | Gate kesiapan produksi                                                       |
+| [`resilience-dr-verification.md`](resilience-dr-verification.md)                                       | Verifikasi disaster recovery                                                 |
+| [`repo-inventory.md`](repo-inventory.md)                                                               | Tooling inventaris file repo                                                 |
+| [`knowledge-graph.md`](knowledge-graph.md)                                                             | Membaca `graphify-out/` — apa yang dijawab graf, dan dua cara ia menyesatkan |
+| [`extension-compatibility-policy.md`](extension-compatibility-policy.md)                               | Kebijakan kompatibilitas versi kontrak/modul                                 |
+| [`templates/module-proposal-template.md`](templates/module-proposal-template.md)                       | Template proposal modul baru                                                 |
+| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | Checklist keputusan admission modul                                          |
+| [`examples/minimal-domain-module.md`](examples/minimal-domain-module.md)                               | Contoh minimal modul domain ERP (`expense-category`)                         |
+| [`api-reference.md`](api-reference.md)                                                                 | Referensi API gabungan (acuan format)                                        |
+| [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)                                       | Peta penyerapan klaster website/e-commerce awcms-micro (ADR-0035)            |
+| [`derived-application-guide.md`](derived-application-guide.md)                                         | **DEPRECATED** (ADR-0034) — panduan aplikasi turunan (jalur dicabut)         |
+| [`derived-app-pilot-plan.md`](derived-app-pilot-plan.md)                                               | **DEPRECATED** (ADR-0034) — rencana pilot aplikasi turunan (jalur dicabut)   |
+| [`erp-extension-contracts.md`](erp-extension-contracts.md)                                             | Kontrak kesiapan ekstensi ERP (lihat ADR-0020)                               |
+| [`visitor-analytics.md`](visitor-analytics.md)                                                         | Analitik pengunjung (acuan pola, asal produk CMS)                            |
+| [`AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`](AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md)                 | Audit kepatuhan standar pengembangan (acuan)                                 |
+| [`module-composition-inventory.json`](module-composition-inventory.json)                               | Inventaris komposisi modul (artefak, regenerasi via tooling)                 |
+| [`work-class-registry.generated.json`](work-class-registry.generated.json)                             | Registry work-class (artefak generated)                                      |
 
 Kedua JSON di atas **di-generate dari kode repo ini sendiri** dan digerbangi kesegarannya di `bun run check`: `modules:composition:inventory:generate`/`:check` dan `db:work-class:generate`/`:check`. Jangan disunting tangan.
 

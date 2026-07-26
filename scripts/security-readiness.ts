@@ -45,8 +45,14 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
+import { withTenant } from "../src/lib/database/tenant-context";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
+import {
+  fetchEligibleBreakGlassIdentityIds,
+  getTenantAuthPolicy
+} from "../src/modules/identity-access/application/tenant-auth-policy";
+import { evaluateBreakGlassRequirement } from "../src/modules/identity-access/domain/tenant-sso-policy";
 import {
   evaluateAccess,
   isHighRiskAction
@@ -1904,6 +1910,172 @@ export function checkOnlineAuthSecurityReady(
 }
 
 // ---------------------------------------------------------------------------
+// SSO break-glass accounts are STILL eligible for every locked-down tenant
+// (Issue #185 residual) — critical
+// ---------------------------------------------------------------------------
+
+/**
+ * The other half of the break-glass guarantee, and the half nothing enforced
+ * until now.
+ *
+ * `saveTenantAuthPolicy` refuses (409 `BREAK_GLASS_REQUIRED`) to store a policy
+ * with `sso_required=true` or `password_login_enabled=false` unless at least
+ * one named break-glass identity is eligible AT THAT MOMENT. That is a
+ * save-time check, and eligibility is not a property of the policy — it is a
+ * property of two other tables. Deactivating the identity (`/api/v1/users/{id}`
+ * → `status='inactive'`) or removing its tenant membership makes the stored
+ * policy false without the policy ever being touched, and both are ordinary
+ * user-administration actions that no one performing them would connect to SSO
+ * lockout. The tenant is then one IdP outage away from having no way in at all,
+ * and every existing check still reports green.
+ *
+ * So this re-derives eligibility from the live database at go-live time. It
+ * calls `fetchEligibleBreakGlassIdentityIds` and `evaluateBreakGlassRequirement`
+ * — the SAME functions the save path uses, not a second copy of the rule. A
+ * reimplementation here would be free to drift from the endpoint, which is the
+ * failure mode this check exists to catch, one level up.
+ *
+ * ## Why it runs one transaction per tenant
+ *
+ * `awcms_tenant_auth_policies` is FORCE RLS keyed on `app.current_tenant_id`,
+ * so there is no cross-tenant read for the app role — by design. Enumerating
+ * tenants from the RLS-free `awcms_tenants` and entering `withTenant` per
+ * tenant is not a workaround for that; it is the check running under exactly
+ * the isolation the application runs under. A version that could see every
+ * policy in one query would be a version connecting as a role that bypasses
+ * RLS, which `checkAppDbUserNotSuperuser` exists to forbid.
+ *
+ * ## Why every active tenant, uncapped
+ *
+ * A cap would mean a locked-out tenant past the limit goes unreported while
+ * the check prints PASS — the precise shape of "green gate, wrong answer".
+ * Inactive tenants are skipped because they have no live login surface to be
+ * locked out of; the count scanned is always reported.
+ *
+ * `critical`, for both triggers, because neither is a configuration the API
+ * will produce: `saveTenantAuthPolicy` returns 409 for both, so any occurrence
+ * is drift rather than intent. The two are not equally urgent, though, and the
+ * evidence says which one each tenant has — `password_login_enabled=false`
+ * leaves the tenant reachable only through the IdP right now, while
+ * `sso_required=true` alone is advisory (password login still works, see
+ * `docs/awcms/oidc-sso.md` §3) and is the same fault waiting for someone to
+ * turn password login off.
+ */
+export async function checkSsoBreakGlassReady(): Promise<SecurityCheckResult> {
+  const name =
+    "SSO break-glass accounts still eligible for locked-down tenants";
+  const severity: CheckSeverity = "critical";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const tenants = (await sql`
+      SELECT id FROM awcms_tenants WHERE status = 'active' ORDER BY id
+    `) as { id: string }[];
+
+    const lockedDown: string[] = [];
+    const stranded: string[] = [];
+
+    for (const tenant of tenants) {
+      const outcome = await withTenant(
+        sql,
+        tenant.id,
+        async (tx) => {
+          const policy = await getTenantAuthPolicy(tx, tenant.id);
+
+          if (policy.passwordLoginEnabled && !policy.ssoRequired) {
+            return "not_locked_down" as const;
+          }
+
+          const eligible = await fetchEligibleBreakGlassIdentityIds(
+            tx,
+            tenant.id,
+            policy.breakGlassIdentityIds
+          );
+
+          if (
+            evaluateBreakGlassRequirement({
+              passwordLoginEnabled: policy.passwordLoginEnabled,
+              ssoRequired: policy.ssoRequired,
+              breakGlassIdentityIds: policy.breakGlassIdentityIds,
+              eligibleBreakGlassCount: eligible.length
+            }).outcome === "ok"
+          ) {
+            return "covered" as const;
+          }
+
+          // Both triggers violate the invariant, but they do not hurt equally
+          // and an operator triaging a list needs to know which is which.
+          // `password_login_enabled=false` means local login is OFF right now:
+          // the tenant is reachable only through the IdP, and one outage from
+          // no way in at all. `sso_required=true` alone is advisory (see
+          // docs/awcms/oidc-sso.md §3) — password login still works, so this is
+          // a latent version of the same fault that becomes an outage the
+          // moment someone turns password login off. Reported, not downgraded:
+          // the save path refuses to create either, so both are drift.
+          return policy.passwordLoginEnabled
+            ? ("stranded_advisory" as const)
+            : ("stranded_no_local_login" as const);
+        },
+        { workClass: "maintenance" }
+      );
+
+      // `withTenant` RETURNS a `Response` (503 DATABASE_BUSY) when the circuit
+      // breaker is open rather than throwing, and casts it to the callback's
+      // own return type — so the compiler believes this is always one of the
+      // three strings and only a runtime guard can see otherwise. Treating that
+      // 503 as "this tenant is fine" is the worst answer this check could give,
+      // so it becomes an explicit inability to verify.
+      if (typeof outcome !== "string") {
+        throw new Error(
+          `the database circuit breaker is open (tenant ${tenant.id}) — no conclusion can be drawn`
+        );
+      }
+
+      if (outcome !== "not_locked_down") {
+        lockedDown.push(tenant.id);
+      }
+
+      if (outcome === "stranded_no_local_login") {
+        stranded.push(
+          `${tenant.id} (no local login: password_login_enabled=false)`
+        );
+      } else if (outcome === "stranded_advisory") {
+        stranded.push(
+          `${tenant.id} (sso_required=true; password login still on)`
+        );
+      }
+    }
+
+    if (stranded.length > 0) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `${stranded.length} of ${tenants.length} active tenant(s) have a policy that requires a break-glass local owner (sso_required=true or password_login_enabled=false) but NO currently-eligible break-glass identity — the named identity, or its tenant membership, was deactivated after the policy was saved. ${stranded.join("; ")}. Re-activate the identity/membership, or relax the policy via PATCH /api/v1/auth/sso-policy.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `${tenants.length} active tenant(s) scanned; ${lockedDown.length} require a break-glass local owner and every one of them still has at least one eligible break-glass identity (eligibility re-derived from awcms_identities/awcms_tenant_users, not trusted from the stored policy).`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not verify break-glass eligibility: ${errorMessage(error)}.`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cloudflare Turnstile configuration is complete when enabled (Issue #186) —
 // critical when misconfigured, informational when disabled intentionally
 // ---------------------------------------------------------------------------
@@ -2127,6 +2299,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkCommentsSecretsConfigured(),
     checkEdgeCacheConfigured(),
     checkOnlineAuthSecurityReady(),
+    await checkSsoBreakGlassReady(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt()
