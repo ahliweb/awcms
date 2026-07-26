@@ -12292,6 +12292,279 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/tenant/navigation/sidebar:
+    get:
+      operationId: getTenantSidebarArrangement
+      tags:
+        - Module Management
+      summary: This tenant's admin sidebar arrangement, plus the arrangeable entry set.
+      description: 'The entry set is code-derived (`listModules()` navigation plus the synthetic core items) and is returned for the editor to render; it is never writable. `arrangement` is the tenant''s stored delta — a tenant with no rows gets empty arrays, meaning "use the code default". Deliberately unfiltered by permission and by tenant-disabled module: this arranges the menu rather than previewing one operator''s view of it.'
+      responses:
+        "200":
+          description: Entry set plus the tenant's current overrides.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entryKey:
+                              type: string
+                            path:
+                              type: string
+                            moduleKey:
+                              type: string
+                            moduleName:
+                              type: string
+                            defaultTypeKey:
+                              type: string
+                            defaultLabel:
+                              type: string
+                      arrangement:
+                        type: object
+                        properties:
+                          types:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                typeKey:
+                                  type: string
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                hidden:
+                                  type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                entryKey:
+                                  type: string
+                                typeKey:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                hidden:
+                                  type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      operationId: saveTenantSidebarArrangement
+      tags:
+        - Module Management
+      summary: Replace this tenant's sidebar arrangement.
+      description: "A full replace, not a merge: the payload IS the arrangement, so an omitted override disappears. Only overrides are submitted — each is resolved by `entryKey` against the code-derived default and one that matches nothing is ignored, so a request can never introduce a menu link. Requires `module_management.navigation.configure`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - types
+                - items
+              properties:
+                types:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      typeKey:
+                        type: string
+                      labelOverride:
+                        type: string
+                        nullable: true
+                      position:
+                        type: integer
+                      hidden:
+                        type: boolean
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      entryKey:
+                        type: string
+                      typeKey:
+                        type: string
+                        nullable: true
+                      position:
+                        type: integer
+                      labelOverride:
+                        type: string
+                        nullable: true
+                      hidden:
+                        type: boolean
+      responses:
+        "200":
+          description: Arrangement saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entryKey:
+                              type: string
+                            path:
+                              type: string
+                            moduleKey:
+                              type: string
+                            moduleName:
+                              type: string
+                            defaultTypeKey:
+                              type: string
+                            defaultLabel:
+                              type: string
+                      arrangement:
+                        type: object
+                        properties:
+                          types:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                typeKey:
+                                  type: string
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                hidden:
+                                  type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                entryKey:
+                                  type: string
+                                typeKey:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                hidden:
+                                  type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/BadRequest"
+    delete:
+      operationId: resetTenantSidebarArrangement
+      tags:
+        - Module Management
+      summary: Drop every override, returning this tenant to the code default.
+      responses:
+        "200":
+          description: Arrangement reset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entryKey:
+                              type: string
+                            path:
+                              type: string
+                            moduleKey:
+                              type: string
+                            moduleName:
+                              type: string
+                            defaultTypeKey:
+                              type: string
+                            defaultLabel:
+                              type: string
+                      arrangement:
+                        type: object
+                        properties:
+                          types:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                typeKey:
+                                  type: string
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                hidden:
+                                  type: boolean
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                entryKey:
+                                  type: string
+                                typeKey:
+                                  type: string
+                                  nullable: true
+                                position:
+                                  type: integer
+                                labelOverride:
+                                  type: string
+                                  nullable: true
+                                hidden:
+                                  type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/theming:
     get:
       tags:

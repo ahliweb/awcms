@@ -1,0 +1,47 @@
+-- Permission catalog seed for per-tenant sidebar configuration (Issue #260).
+--
+-- Exactly one new permission: `module_management.navigation.configure`, which
+-- gates the save/reset mutations on `/api/v1/tenant/navigation/sidebar`. The
+-- passive read reuses `module_management.navigation.read`, already seeded with
+-- the rest of module_management's catalog in `sql/008` — not re-added here.
+--
+-- `configure` is an EXISTING `AccessAction` literal
+-- (`identity-access/domain/access-control.ts`). Inventing a `reorder` or
+-- `arrange` action would widen the union AND plant a latent-authz trap: an
+-- action nobody seeds into a role denies even the tenant owner while the guard
+-- reads perfectly well in review. This repo has hit that on the roles and ABAC
+-- write surfaces, and again in this very issue's sibling work (`audit_log` vs
+-- the real `audit_trail`).
+--
+-- ## Existing tenants do NOT gain this automatically
+--
+-- Same shape and same limitation as every prior permission-seed migration here
+-- (`sql/065`, `sql/067` precedents): this extends the GLOBAL catalog only. Only
+-- tenants created AFTER this migration get it, via
+-- `POST /api/v1/setup/initialize`'s
+-- `INSERT INTO awcms_role_permissions ... SELECT ... FROM awcms_permissions`.
+--
+-- OPERATOR NOTE. On an existing tenant the sidebar page is reachable (it is
+-- gated by the pre-existing `navigation.read`) but save/reset returns 403 until
+-- the owner role is granted this permission. There is no owner "implicit-all"
+-- bypass: `auth-context.ts` resolves permissions purely by the role_permissions
+-- join. Grant it either through the RBAC admin UI (`/admin/roles`, with
+-- `identity_access.access_control.configure`), or with a one-time backfill per
+-- affected tenant/role:
+--
+--   INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+--   SELECT r.tenant_id, r.id, p.id
+--   FROM awcms_roles r
+--   JOIN awcms_permissions p
+--     ON p.module_key = 'module_management'
+--    AND p.activity_code = 'navigation'
+--    AND p.action = 'configure'
+--   WHERE r.role_key = 'owner'
+--   ON CONFLICT DO NOTHING;
+--
+-- Deliberately NOT auto-backfilled here, to stay consistent with every prior
+-- permission-seed migration. Backfilling live tenants is a deployment step.
+INSERT INTO awcms_permissions (module_key, activity_code, action, description)
+VALUES
+  ('module_management', 'navigation', 'configure', 'Configure this tenant''s admin sidebar arrangement (reorder, hide, relabel, move between sections) — the item set itself stays code-derived and is never tenant-writable')
+ON CONFLICT (module_key, activity_code, action) DO NOTHING;

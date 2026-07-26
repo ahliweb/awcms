@@ -89,6 +89,26 @@ Ported and adapted from the awcms-mini module-management module.
   `module_registry` is excluded — descriptor sync's `resource_id` is not a
   module key, so it would match nothing while implying it might.
 
+- **Sidebar arrangement** (`domain/sidebar-menu.ts` override half,
+  `application/sidebar-menu-config.ts`, `sql/071`/`sql/072`) — per-tenant
+  reorder, hide, relabel, move-between-sections, and custom sections, applied on
+  top of the code-derived default.
+
+  Stored as a DELTA, never a snapshot. A tenant with no rows renders exactly the
+  code default, which is what makes a newly added module's nav entry appear
+  everywhere with no data migration; a snapshot would freeze each tenant's
+  sidebar at the moment they first touched it.
+
+  **A tenant can override, never inject.** Every stored row is resolved BY KEY
+  against `buildDefaultSidebarModel`, and one that matches nothing is ignored —
+  there is no code path from a request body to a new menu link. Overrides are
+  also applied BEFORE `composeSidebarSections`, so relabelling or moving an
+  entry can never carry it past `requiredPermission` or a disabled module.
+
+  `module_management.navigation.configure` (`sql/072`) gates the mutations; the
+  read reuses the pre-existing `navigation.read`. Existing tenants do NOT gain
+  the new permission automatically — see the migration's operator note.
+
 - **Job registry** (`application/job-registry.ts`) — documentation-only
   metadata about each module's operational commands. Never an execution
   surface.

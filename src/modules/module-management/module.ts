@@ -15,7 +15,11 @@ export const moduleManagementModule = defineModule({
     basePath: "/api/v1/modules",
     // `/api/v1/tenant` is SPLIT: `/modules` here, `/domains` in `tenant_domain`.
     // Longest-prefix resolution handles that without a special case.
-    routes: ["/api/v1/modules", "/api/v1/tenant/modules"]
+    routes: [
+      "/api/v1/modules",
+      "/api/v1/tenant/modules",
+      "/api/v1/tenant/navigation"
+    ]
   },
   navigation: [
     {
@@ -23,6 +27,17 @@ export const moduleManagementModule = defineModule({
       path: "/admin/modules",
       order: 31,
       requiredPermission: "module_management.tenant_modules.read"
+    },
+    {
+      // The sidebar editor is itself a sidebar entry — it has to be, because
+      // `tests/admin-navigation-registry.test.ts` requires every admin page to
+      // be claimed by exactly one descriptor. Gated on `navigation.read`, so an
+      // operator who cannot see the configuration cannot see the link to it
+      // either.
+      labelKey: "admin.layout.nav_sidebar_menu",
+      path: "/admin/sidebar-menu",
+      order: 33,
+      requiredPermission: "module_management.navigation.read"
     }
   ],
   permissions: [
@@ -70,6 +85,12 @@ export const moduleManagementModule = defineModule({
       activityCode: "navigation",
       action: "read",
       description: "Read the module admin navigation registry"
+    },
+    {
+      activityCode: "navigation",
+      action: "configure",
+      description:
+        "Configure this tenant's admin sidebar arrangement (reorder, hide, relabel, move between sections) — the item set itself stays code-derived and is never tenant-writable"
     },
     {
       activityCode: "jobs",
