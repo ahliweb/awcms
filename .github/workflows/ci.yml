@@ -96,6 +96,9 @@ jobs:
       - name: Logging redaction lint check
         run: bun run logging:lint:check
 
+      - name: Tenant-route factory check (Issue #255)
+        run: bun run api:tenant-route:check
+
       - name: Typecheck (tsc --noEmit)
         run: bun run typecheck
 
