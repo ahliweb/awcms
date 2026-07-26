@@ -1,189 +1,188 @@
 /**
- * `defineTenantRoute` carries the whole opening, in order, and short-circuits
- * at every point a hand-written route does.
+ * `defineTenantRoute` runs the opening in order and short-circuits at every
+ * point a hand-written route does.
  *
- * ## What this replaces
+ * ## Why there are no module mocks here
  *
- * Nothing — that is the point. The opening it encapsulates was copied into 204
- * route files and had no test anywhere, because there was no single thing to
- * test. Its correctness was asserted only indirectly, by whichever integration
- * test happened to exercise a route that had copied it correctly.
+ * The first version of this file mocked `tenant-context`, `client`,
+ * `session-token` and `access-guard` through `mock.module`, and restored them
+ * with `mock.restore()`. It passed locally and turned CI red in twelve places:
+ * `mock.restore()` does NOT undo `mock.module`, so the fake `withTenant` leaked
+ * into every later file in the process. `tests/tenant-context-circuit-breaker.
+ * test.ts` asked for a 503 and got the fake's 200.
  *
- * Four routes had copied it INcorrectly (`/api/v1/reports/*`, Issue #255) and
- * every integration test still passed, because each one asserted its own
- * route's happy path and none asserted the chain.
+ * It passed locally only because `tenant-context-circuit-breaker` sorts before
+ * `tenant-route-factory` on this filesystem and had already run. That is luck,
+ * not isolation — and a test whose correctness depends on readdir order is not
+ * a test.
  *
- * ## No database
+ * So: real modules throughout, following awcms-micro's own factory test. The
+ * circuit breaker is forced OPEN, which makes `withTenant` return its 503
+ * before it ever calls `sql.begin` — every assertion below therefore exercises
+ * the genuine `withTenant`, the genuine `resolveAuthInputs`, and the genuine
+ * pool gate, and no connection is ever opened.
  *
- * The factory's job is sequencing and short-circuiting: which checks run,
- * in what order, and what stops the request. Every collaborator is injected
- * through `mock.module`, so a fake can record the call order and a fake can
- * refuse. The real guard chain has its own DB-backed integration tests; what
- * has never been covered is the wiring between them.
+ * ## What this deliberately does NOT cover
+ *
+ * The allowed path — handler running inside a real transaction with a resolved
+ * `auth.context`. That needs a session row, a permission grant and a database;
+ * faking it is what produced the leak above. It belongs in the DB-gated suite,
+ * and the four migrated `/api/v1/reports/*` routes are covered there through
+ * their own endpoints.
  */
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test
+} from "bun:test";
+import type { APIContext, APIRoute, AstroCookies } from "astro";
+
+import {
+  getDatabaseCircuitBreaker,
+  resetDatabaseCircuitBreakerForTests
+} from "../src/lib/database/circuit-breaker";
+import {
+  acquireWorkClassSlot,
+  resetWorkClassGatesForTests,
+  type WorkClassSlot
+} from "../src/lib/database/work-class";
+import { defineTenantRoute } from "../src/modules/_shared/tenant-route";
+
+const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 
 const GUARD = {
   moduleKey: "reporting",
   activityCode: "dashboard",
-  action: "read" as const
-};
+  action: "read"
+} as const;
 
-const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+/** `resolveAuthInputs` only ever reads `cookies.get(name)?.value`. */
+const EMPTY_COOKIES = { get: () => undefined } as unknown as AstroCookies;
 
-type Calls = string[];
+async function call(
+  route: APIRoute,
+  headers: Record<string, string> = {}
+): Promise<{
+  status: number;
+  body: { error?: { code: string } };
+  response: Response;
+}> {
+  const url = new URL("http://unit.test/api/v1/reports/module-usage?x=1");
+  const response = (await route({
+    request: new Request(url.toString(), { method: "GET", headers }),
+    url,
+    params: {},
+    locals: {},
+    cookies: EMPTY_COOKIES
+  } as unknown as APIContext)) as Response;
+  const text = await response.text();
+
+  return {
+    status: response.status,
+    body: text.length > 0 ? JSON.parse(text) : {},
+    response
+  };
+}
+
+function authHeaders(): Record<string, string> {
+  return {
+    "x-awcms-tenant-id": TENANT_ID,
+    authorization: "Bearer unit-test-session-token"
+  };
+}
 
 /**
- * Rebuilds the module graph per test with the given fakes.
+ * The factory calls `getDatabaseClient()` before `withTenant`, and that needs a
+ * connection string to exist even though nothing ever connects (an open breaker
+ * short-circuits inside `withTenant`, before `sql.begin`).
  *
- * `mock.module` mutates the LIVE namespace for the whole process, so the
- * factory is re-imported after each set of mocks is installed and the mocks are
- * restored in `afterEach`. Without the restore, a later test file importing
- * `tenant-route.ts` would silently get this file's fakes.
+ * Only set when absent: a run WITH a real `DATABASE_URL` must keep using it,
+ * because the client is memoized per process — overwriting it here would hand a
+ * dead client to every later test in the run.
  */
-async function loadFactory(options: {
-  calls: Calls;
-  authInputs?: { tenantId: string | null; token: string | null };
-  authorize?: (guard: unknown) => unknown;
-}) {
-  const { calls } = options;
+const HAD_DATABASE_URL = Boolean(process.env.DATABASE_URL);
 
-  mock.module(
-    "../src/modules/identity-access/application/access-guard",
-    () => ({
-      resolveAuthInputs: () => {
-        calls.push("resolveAuthInputs");
-        return options.authInputs ?? { tenantId: TENANT, token: "tok" };
-      },
-      authorizeInTransaction: async (
-        _tx: unknown,
-        _tenantId: string,
-        _tokenHash: string,
-        _now: Date,
-        guard: unknown
-      ) => {
-        calls.push("authorizeInTransaction");
-        return (
-          options.authorize?.(guard) ?? {
-            allowed: true,
-            context: { tenantUserId: "user-1" },
-            grantedPermissionKeys: new Set<string>()
-          }
-        );
-      }
-    })
-  );
+/** Forces `withTenant` to return 503 before touching the connection. */
+function openTheBreaker(): void {
+  const breaker = getDatabaseCircuitBreaker();
 
-  mock.module("../src/lib/auth/session-token", () => ({
-    hashSessionToken: () => {
-      calls.push("hashSessionToken");
-      return "hash";
-    }
-  }));
+  for (let attempt = 0; attempt < 20; attempt++) {
+    breaker.recordFailure(new Date());
+  }
 
-  mock.module("../src/lib/database/client", () => ({
-    getDatabaseClient: () => {
-      calls.push("getDatabaseClient");
-      return {} as Bun.SQL;
-    }
-  }));
-
-  mock.module("../src/lib/database/tenant-context", () => ({
-    withTenant: async (
-      _sql: unknown,
-      _tenantId: string,
-      fn: (tx: unknown) => Promise<Response>,
-      opts?: { workClass?: string; queueTimeoutMs?: number }
-    ) => {
-      calls.push(`withTenant:${opts?.workClass}:${opts?.queueTimeoutMs}`);
-      return fn({} as Bun.TransactionSQL);
-    }
-  }));
-
-  return (await import("../src/modules/_shared/tenant-route"))
-    .defineTenantRoute;
+  expect(breaker.canAttempt(new Date())).toBe(false);
 }
 
-function invoke(route: ReturnType<Awaited<ReturnType<typeof loadFactory>>>) {
-  return route({
-    request: new Request("https://example.test/api/v1/reports/module-usage"),
-    cookies: {} as never,
-    url: new URL("https://example.test/api/v1/reports/module-usage"),
-    params: {},
-    locals: {}
-  } as never) as Promise<Response>;
-}
-
-afterEach(() => {
-  mock.restore();
+beforeAll(() => {
+  if (!HAD_DATABASE_URL) {
+    process.env.DATABASE_URL =
+      "postgres://unit:unit@127.0.0.1:1/unit-test-never-connected";
+  }
 });
 
-describe("defineTenantRoute sequencing", () => {
-  test("runs the opening in order and hands the handler an allowed auth", async () => {
-    const calls: Calls = [];
-    const defineTenantRoute = await loadFactory({ calls });
+afterAll(() => {
+  if (!HAD_DATABASE_URL) {
+    delete process.env.DATABASE_URL;
+  }
+});
 
-    const route = defineTenantRoute({
-      workClass: "reporting",
-      authorize: GUARD,
-      handler: async ({ auth, tenantId, tx }) => {
-        calls.push("handler");
-        expect(auth.allowed).toBe(true);
-        expect(auth.context.tenantUserId).toBe("user-1");
-        expect(tenantId).toBe(TENANT);
-        expect(tx).toBeDefined();
-        return new Response("ok", { status: 200 });
-      }
-    });
+beforeEach(() => {
+  resetDatabaseCircuitBreakerForTests();
+  resetWorkClassGatesForTests();
+});
 
-    const response = await invoke(route);
+afterEach(() => {
+  resetDatabaseCircuitBreakerForTests();
+  resetWorkClassGatesForTests();
+});
 
-    expect(response.status).toBe(200);
-    // The order IS the contract: no connection is taken before the token
-    // check, and the guard always runs before the handler.
-    expect(calls).toEqual([
-      "resolveAuthInputs",
-      "getDatabaseClient",
-      "hashSessionToken",
-      "withTenant:reporting:undefined",
-      "authorizeInTransaction",
-      "handler"
-    ]);
-  });
+describe("defineTenantRoute — the opening it replaces", () => {
+  test("a missing tenant header is 400 TENANT_REQUIRED", async () => {
+    let reached = false;
 
-  test("a missing tenant is 400 and never touches the database", async () => {
-    const calls: Calls = [];
-    const defineTenantRoute = await loadFactory({
-      calls,
-      authInputs: { tenantId: null, token: "tok" }
-    });
-
-    const response = await invoke(
+    const result = await call(
       defineTenantRoute({
         workClass: "interactive",
         authorize: GUARD,
         handler: async () => {
-          calls.push("handler");
+          reached = true;
           return new Response("unreachable");
         }
-      })
+      }),
+      { authorization: "Bearer t" }
     );
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "TENANT_REQUIRED" }
-    });
-    expect(calls).toEqual(["resolveAuthInputs"]);
+    expect(result.status).toBe(400);
+    expect(result.body.error?.code).toBe("TENANT_REQUIRED");
+    expect(reached).toBe(false);
   });
 
-  test("a missing token is 401 and never touches the database", async () => {
-    const calls: Calls = [];
-    const defineTenantRoute = await loadFactory({
-      calls,
-      authInputs: { tenantId: TENANT, token: null }
-    });
+  test("a missing token is 401 AUTH_REQUIRED", async () => {
+    const result = await call(
+      defineTenantRoute({
+        workClass: "interactive",
+        authorize: GUARD,
+        handler: async () => new Response("unreachable")
+      }),
+      { "x-awcms-tenant-id": TENANT_ID }
+    );
 
-    const response = await invoke(
+    expect(result.status).toBe(401);
+    expect(result.body.error?.code).toBe("AUTH_REQUIRED");
+  });
+
+  test("both guards run before anything else — an unauthenticated call never reaches the pool", async () => {
+    // Proven by the breaker: it is OPEN, so ANY call that got as far as
+    // `withTenant` would come back 503. A 401 therefore means the request
+    // stopped earlier — which is the property that keeps unauthenticated
+    // traffic off the connection pool entirely.
+    openTheBreaker();
+
+    const result = await call(
       defineTenantRoute({
         workClass: "interactive",
         authorize: GUARD,
@@ -191,112 +190,117 @@ describe("defineTenantRoute sequencing", () => {
       })
     );
 
-    expect(response.status).toBe(401);
-    expect(await response.json()).toMatchObject({
-      error: { code: "AUTH_REQUIRED" }
-    });
-    expect(calls).toEqual(["resolveAuthInputs"]);
-  });
-
-  test("a denied guard returns the guard's own response, handler never runs", async () => {
-    const calls: Calls = [];
-    const denied = new Response("denied", { status: 403 });
-    const defineTenantRoute = await loadFactory({
-      calls,
-      authorize: () => ({ allowed: false, denied })
-    });
-
-    const response = await invoke(
-      defineTenantRoute({
-        workClass: "reporting",
-        authorize: GUARD,
-        handler: async () => {
-          calls.push("handler");
-          return new Response("unreachable");
-        }
-      })
-    );
-
-    // The SAME response object — the factory must not re-wrap or re-word a
-    // denial, because `authorizeInTransaction` distinguishes 401 from 403 and
-    // MODULE_DISABLED from ACCESS_DENIED, and that detail is load-bearing.
-    expect(response).toBe(denied);
-    expect(calls).not.toContain("handler");
+    expect(result.status).toBe(400);
+    expect(result.body.error?.code).toBe("TENANT_REQUIRED");
   });
 });
 
-describe("defineTenantRoute prepare phase", () => {
-  test("a Response from prepare short-circuits before any connection is taken", async () => {
-    const calls: Calls = [];
-    const defineTenantRoute = await loadFactory({ calls });
+describe("defineTenantRoute — prepare runs before any database work", () => {
+  test("a Response from prepare short-circuits with that exact response", async () => {
+    openTheBreaker();
+    let authorizeCalled = false;
 
-    const response = await invoke(
+    const result = await call(
       defineTenantRoute<{ parsed: string }>({
         workClass: "interactive",
-        prepare: () => {
-          calls.push("prepare");
-          return new Response("bad request", { status: 400 });
+        prepare: () =>
+          new Response(
+            JSON.stringify({ error: { code: "VALIDATION_ERROR" } }),
+            {
+              status: 400
+            }
+          ),
+        authorize: () => {
+          authorizeCalled = true;
+          return GUARD;
         },
-        authorize: GUARD,
-        handler: async () => {
-          calls.push("handler");
-          return new Response("unreachable");
-        }
-      })
+        handler: async () => new Response("unreachable")
+      }),
+      authHeaders()
     );
 
-    expect(response.status).toBe(400);
-    // The whole reason `prepare` runs before `getDatabaseClient`: a malformed
-    // body must not cost a pool slot.
-    expect(calls).toEqual(["resolveAuthInputs", "prepare"]);
+    // 400, not the 503 an open breaker would produce: `prepare` short-circuited
+    // before the pool was ever consulted. That ordering is the whole point — a
+    // malformed body must not cost a connection.
+    expect(result.status).toBe(400);
+    expect(result.body.error?.code).toBe("VALIDATION_ERROR");
+    expect(authorizeCalled).toBe(false);
   });
 
-  test("prepare's value reaches the handler and the authorize callback", async () => {
-    const calls: Calls = [];
-    const defineTenantRoute = await loadFactory({ calls });
-    let seenByAuthorize: unknown;
+  test("prepare's value reaches the authorize callback", async () => {
+    openTheBreaker();
+    let seen: unknown;
 
-    const response = await invoke(
+    const result = await call(
       defineTenantRoute<{ action: "read" | "update" }>({
         workClass: "interactive",
         prepare: () => ({ action: "update" as const }),
         authorize: ({ prepared }) => {
-          seenByAuthorize = prepared;
+          seen = prepared;
           return { ...GUARD, action: prepared.action };
         },
-        handler: async ({ prepared }) => {
-          expect(prepared).toEqual({ action: "update" });
-          return new Response("ok");
-        }
-      })
+        handler: async () => new Response("unreachable")
+      }),
+      authHeaders()
     );
 
-    expect(response.status).toBe(200);
-    expect(seenByAuthorize).toEqual({ action: "update" });
+    expect(seen).toEqual({ action: "update" });
+    // The guard was built, then the open breaker stopped the request at the
+    // pool — the furthest a test can go here without a database.
+    expect(result.status).toBe(503);
   });
 });
 
-describe("work class is a decision, not a default", () => {
-  test("the declared work class reaches withTenant verbatim", async () => {
-    for (const workClass of [
-      "reporting",
-      "maintenance",
-      "interactive"
-    ] as const) {
-      const calls: Calls = [];
-      const defineTenantRoute = await loadFactory({ calls });
+describe("defineTenantRoute — the declared work class is really used", () => {
+  test("an open breaker yields 503 DATABASE_BUSY with Retry-After: 30", async () => {
+    openTheBreaker();
 
-      await invoke(
+    const result = await call(
+      defineTenantRoute({
+        workClass: "reporting",
+        authorize: GUARD,
+        handler: async () => new Response("unreachable")
+      }),
+      authHeaders()
+    );
+
+    expect(result.status).toBe(503);
+    expect(result.body.error?.code).toBe("DATABASE_BUSY");
+    expect(result.response.headers.get("Retry-After")).toBe("30");
+  });
+
+  test("the declared class picks the gate: a saturated `maintenance` stops a `maintenance` route at the pool", async () => {
+    // Breaker CLOSED here, deliberately. `withTenant` checks the breaker
+    // BEFORE the work-class gate, so an open breaker returns Retry-After 30 for
+    // every class and would make this assertion pass no matter what `workClass`
+    // said — the first draft of this test did exactly that and proved nothing.
+    //
+    // With the breaker closed and `maintenance`'s only slot (concurrency 1)
+    // held, a route that DECLARED `maintenance` fails at the gate with the
+    // work-class Retry-After of 2. Delete `workClass` from the route below and
+    // it defaults to `interactive`, whose gate is wide open — a different
+    // outcome entirely. That is what makes this a test of forwarding rather
+    // than a test of "some 503 happened".
+    let held: WorkClassSlot | undefined;
+
+    try {
+      held = await acquireWorkClassSlot("maintenance", 50);
+
+      const result = await call(
         defineTenantRoute({
-          workClass,
-          queueTimeoutMs: 1234,
+          workClass: "maintenance",
+          queueTimeoutMs: 20,
           authorize: GUARD,
-          handler: async () => new Response("ok")
-        })
+          handler: async () => new Response("unreachable")
+        }),
+        authHeaders()
       );
 
-      expect(calls).toContain(`withTenant:${workClass}:1234`);
-      mock.restore();
+      expect(result.status).toBe(503);
+      expect(result.body.error?.code).toBe("DATABASE_BUSY");
+      expect(result.response.headers.get("Retry-After")).toBe("2");
+    } finally {
+      held?.release();
     }
   });
 });
