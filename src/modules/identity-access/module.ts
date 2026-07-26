@@ -69,11 +69,12 @@ export const identityAccessModule = defineModule({
     ]
   },
   /**
-   * Three admin screens, all gating their read on the SAME key.
+   * The first THREE admin screens below all gate their read on the SAME key.
    * `access_control` seeds only `read`/`assign`/`configure` (no per-screen
    * action), so a finer-grained link gate would name a permission that is
    * never granted and hide all three from everyone — the latent-authz trap
-   * already recorded for the write surfaces on these pages.
+   * already recorded for the write surfaces on these pages. The two after them
+   * name their own seeded keys, and each says why at its entry.
    */
   navigation: [
     {
@@ -104,6 +105,15 @@ export const identityAccessModule = defineModule({
       path: "/admin/registrations",
       order: 23,
       requiredPermission: "identity_access.registration_requests.read"
+    },
+    // Same reasoning as the entry above, different key: `sso_policy` seeds its
+    // own `read`. A caller holding only `mfa_admin.*` reaches the page by URL
+    // and still sees its MFA section — the link is the coarser gate.
+    {
+      labelKey: "admin.layout.nav_security",
+      path: "/admin/security",
+      order: 24,
+      requiredPermission: "identity_access.sso_policy.read"
     }
   ],
   jobs: [

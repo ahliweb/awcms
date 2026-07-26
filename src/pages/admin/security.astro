@@ -1,0 +1,623 @@
+---
+/**
+ * Authentication & security screen (Wave 2 delta auth, adapting awcms-micro's
+ * `/admin/security`). Until now every authentication policy in this repo could
+ * only be changed with a hand-written `curl` — the endpoints have existed since
+ * #184/#185, the screen has not.
+ *
+ * ## It adds no enforcement of its own
+ *
+ * Every mutation posts to the REAL endpoint (`PATCH /api/v1/auth/sso-policy`,
+ * `PUT /api/v1/auth/mfa/policy`) and inherits its ABAC guard, its break-glass
+ * rule, and its audit row. The permission checks below are UX only — they
+ * decide what to render, never what is allowed.
+ *
+ * ## The gates reuse the endpoints' EXACT permission keys
+ *
+ * `sso_policy.read`/`update` and `mfa_admin.reset`/`configure` — including
+ * `mfa_admin.reset` as the MFA READ gate, which reads oddly but is exactly what
+ * `GET /api/v1/auth/mfa/policy` requires. Inventing a friendlier key here (an
+ * `mfa_admin.read` that no migration seeds) is the latent-authz trap this repo
+ * has already been bitten by twice: the screen would deny the owner, and no
+ * test would notice because the page is not exercised without a database.
+ *
+ * ## Deployment posture is read-only and env-derived
+ *
+ * The first section reports what the DEPLOYMENT decided (online-security
+ * profile, Turnstile, the MFA and SSO feature switches) — not tenant data, not
+ * editable here. It exists because the tenant policies below are meaningless
+ * without it: setting `ssoRequired` while `AUTH_SSO_ENABLED=false` produces a
+ * tenant that cannot log in at all, and that contradiction was previously
+ * invisible from any screen. No secret is rendered — only whether a key is
+ * configured, never its value.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { isMfaFeatureEnabled } from "../../lib/auth/mfa-config";
+import { isSsoEnabled } from "../../lib/auth/sso-config";
+import {
+  isFullOnlineSecurityActive,
+  resolveOnlineSecurityProfile
+} from "../../lib/auth/online-security-config";
+import {
+  isTurnstileEnabled,
+  isTurnstileRequired
+} from "../../lib/security/turnstile";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listAuthProviders,
+  type AuthProviderView
+} from "../../modules/identity-access/application/auth-provider-directory";
+import {
+  getTenantAuthPolicy,
+  listBreakGlassCandidates,
+  type BreakGlassCandidateView,
+  type TenantAuthPolicyView
+} from "../../modules/identity-access/application/tenant-auth-policy";
+import {
+  getTenantMfaPolicy,
+  type TenantMfaPolicyView
+} from "../../modules/identity-access/application/tenant-mfa-policy";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canReadPolicy = ssr.permissions.has(
+  permissionKey("identity_access", "sso_policy", "read")
+);
+const canUpdatePolicy = ssr.permissions.has(
+  permissionKey("identity_access", "sso_policy", "update")
+);
+// `reset` IS the read gate for `GET /api/v1/auth/mfa/policy`. See the header.
+const canReadMfa = ssr.permissions.has(
+  permissionKey("identity_access", "mfa_admin", "reset")
+);
+const canConfigureMfa = ssr.permissions.has(
+  permissionKey("identity_access", "mfa_admin", "configure")
+);
+const canReadProviders = ssr.permissions.has(
+  permissionKey("identity_access", "sso_providers", "read")
+);
+const canReadAnything = canReadPolicy || canReadMfa || canReadProviders;
+
+const deployment = {
+  onlineSecurityActive: isFullOnlineSecurityActive(),
+  onlineSecurityProfile: resolveOnlineSecurityProfile(),
+  turnstileEnabled: isTurnstileEnabled(),
+  turnstileActive: isTurnstileRequired(),
+  mfaEnrollmentEnabled: isMfaFeatureEnabled(),
+  ssoEnabled: isSsoEnabled()
+};
+
+let policy: TenantAuthPolicyView | null = null;
+let mfaPolicy: TenantMfaPolicyView | null = null;
+let breakGlassCandidates: BreakGlassCandidateView[] = [];
+let providers: AuthProviderView[] = [];
+let loadError = false;
+
+if (canReadAnything) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) => ({
+      // Each read is gated on its OWN permission, so a caller holding only one
+      // of the three does not silently pull the other two into memory.
+      policy: canReadPolicy
+        ? await getTenantAuthPolicy(tx, ssr.tenantId)
+        : null,
+      candidates: canUpdatePolicy
+        ? await listBreakGlassCandidates(tx, ssr.tenantId)
+        : [],
+      mfaPolicy: canReadMfa ? await getTenantMfaPolicy(tx, ssr.tenantId) : null,
+      providers: canReadProviders
+        ? await listAuthProviders(tx, ssr.tenantId)
+        : []
+    }));
+
+    // `withTenant` returns a 503 `Response` when the circuit breaker is open or
+    // a work-class queue is saturated — degrade to the error notice.
+    if (result instanceof Response) {
+      loadError = true;
+    } else {
+      policy = result.policy;
+      breakGlassCandidates = result.candidates;
+      mfaPolicy = result.mfaPolicy;
+      providers = result.providers;
+    }
+  } catch {
+    loadError = true;
+  }
+}
+
+const MFA_LEVELS = [
+  {
+    value: "optional",
+    label: "Optional",
+    hint: "Users may enrol a factor. Nothing is required."
+  },
+  {
+    value: "required_for_privileged",
+    label: "Required for privileged users",
+    hint: "Anyone holding a non-read permission must have a factor to sign in."
+  },
+  {
+    value: "required_for_all",
+    label: "Required for everyone",
+    hint: "Every user in this tenant must have a factor to sign in."
+  }
+] as const;
+
+const statusRows: { label: string; value: string; state: "on" | "off" }[] = [
+  {
+    label: "Online security gate",
+    value: deployment.onlineSecurityActive
+      ? `Active (profile: ${deployment.onlineSecurityProfile})`
+      : `Inactive (profile: ${deployment.onlineSecurityProfile})`,
+    state: deployment.onlineSecurityActive ? "on" : "off"
+  },
+  {
+    label: "Turnstile bot protection",
+    value: deployment.turnstileActive
+      ? "Enforced on login, setup and password recovery"
+      : deployment.turnstileEnabled
+        ? "Switched on, but inert — the online security gate is not active"
+        : "Off",
+    state: deployment.turnstileActive ? "on" : "off"
+  },
+  {
+    label: "MFA enrolment",
+    value: deployment.mfaEnrollmentEnabled
+      ? "Available to users"
+      : "Closed — an existing factor is still honoured at sign-in",
+    state: deployment.mfaEnrollmentEnabled ? "on" : "off"
+  },
+  {
+    label: "OIDC / SSO sign-in",
+    value: deployment.ssoEnabled
+      ? "Available"
+      : "Off — provider configuration is still reachable",
+    state: deployment.ssoEnabled ? "on" : "off"
+  }
+];
+
+/**
+ * The contradiction the deployment section exists to surface: a tenant policy
+ * that depends on a deployment switch that is off. Rendered as a warning rather
+ * than blocked — the operator may be staging the policy before flipping the
+ * env — but it is never silent.
+ */
+const ssoContradiction =
+  policy !== null && policy.ssoRequired && !deployment.ssoEnabled;
+const mfaContradiction =
+  mfaPolicy !== null &&
+  mfaPolicy.enforcementLevel !== "optional" &&
+  !deployment.mfaEnrollmentEnabled;
+---
+
+<AdminLayout title="Authentication & security">
+  <header class="page-header fade-in-up">
+    <h1 id="security-heading">Authentication &amp; security</h1>
+    <p class="page-description">
+      How this tenant signs in: password and SSO policy, break-glass accounts,
+      and MFA enforcement. Changes here go through the same guarded, audited
+      endpoints an API client would use.
+    </p>
+  </header>
+
+  {
+    !canReadAnything && (
+      <p class="state-notice fade-in-up" id="security-denied">
+        You do not have permission to view authentication settings.
+      </p>
+    )
+  }
+
+  {
+    canReadAnything && loadError && (
+      <p class="state-notice fade-in-up" id="security-load-error">
+        Could not load authentication settings. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canReadAnything && !loadError && (
+      <>
+        <section class="fade-in-up" aria-labelledby="security-deployment">
+          <h2 id="security-deployment">Deployment posture</h2>
+          <p class="page-description">
+            Decided by this deployment's environment, not by the tenant — shown
+            because the policies below depend on it. No key or secret value is
+            displayed.
+          </p>
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <thead>
+                <tr>
+                  <th scope="col">Control</th>
+                  <th scope="col">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusRows.map((row) => (
+                  <tr>
+                    <th scope="row" data-label="Control">
+                      {row.label}
+                    </th>
+                    <td data-label="State">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          row.state === "on" ? "success" : "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {row.value}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {canReadPolicy && policy && (
+          <section class="fade-in-up" aria-labelledby="security-auth-policy">
+            <h2 id="security-auth-policy">Tenant authentication policy</h2>
+
+            {ssoContradiction && (
+              <p class="state-notice" id="security-sso-contradiction">
+                SSO is required for this tenant, but SSO sign-in is switched off
+                for this deployment. Nobody outside the break-glass list can
+                sign in until <code>AUTH_SSO_ENABLED</code> is turned on.
+              </p>
+            )}
+
+            <form class="admin-create-form" id="security-policy-form">
+              <p class="form-legend">Sign-in methods</p>
+              <p
+                id="security-policy-error"
+                class="admin-create-error"
+                role="alert"
+                hidden
+              />
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="passwordLoginEnabled"
+                  checked={policy.passwordLoginEnabled}
+                  disabled={!canUpdatePolicy}
+                />
+                Allow password sign-in
+              </label>
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="ssoEnabled"
+                  checked={policy.ssoEnabled}
+                  disabled={!canUpdatePolicy}
+                />
+                Allow SSO sign-in
+              </label>
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="ssoRequired"
+                  checked={policy.ssoRequired}
+                  disabled={!canUpdatePolicy}
+                />
+                Require SSO (password sign-in refused except for break-glass
+                accounts)
+              </label>
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="autoLinkVerifiedEmail"
+                  checked={policy.autoLinkVerifiedEmail}
+                  disabled={!canUpdatePolicy}
+                />
+                Auto-link an SSO login to an existing account with the same
+                verified email
+              </label>
+
+              <label>
+                <input
+                  type="checkbox"
+                  name="jitProvisioningEnabled"
+                  checked={policy.jitProvisioningEnabled}
+                  disabled={!canUpdatePolicy}
+                />
+                Create an account on first SSO login (no roles granted)
+              </label>
+
+              <label for="security-allowed-domains">
+                Allowed email domains (comma separated; empty means any)
+              </label>
+              <input
+                id="security-allowed-domains"
+                name="allowedEmailDomains"
+                type="text"
+                autocomplete="off"
+                spellcheck={false}
+                value={policy.allowedEmailDomains.join(", ")}
+                disabled={!canUpdatePolicy}
+              />
+
+              <p class="form-legend">Break-glass accounts</p>
+              <p class="page-description">
+                Accounts that keep password sign-in even when SSO is required.
+                Turning off password sign-in, or requiring SSO, is refused
+                server-side unless at least one of these is still active — that
+                is what stops an identity-provider outage from locking everyone
+                out of the tenant permanently.
+              </p>
+
+              {canUpdatePolicy && breakGlassCandidates.length === 0 && (
+                <p class="state-notice" id="security-no-candidates">
+                  No active account is currently eligible.
+                </p>
+              )}
+
+              {canUpdatePolicy &&
+                breakGlassCandidates.map((candidate) => (
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="breakGlassIdentityIds"
+                      value={candidate.identityId}
+                      checked={policy!.breakGlassIdentityIds.includes(
+                        candidate.identityId
+                      )}
+                    />
+                    {candidate.loginIdentifierMasked}
+                  </label>
+                ))}
+
+              {!canUpdatePolicy && (
+                <p class="page-description" id="security-break-glass-count">
+                  {policy.breakGlassIdentityIds.length} account(s) configured.
+                </p>
+              )}
+
+              {canUpdatePolicy && (
+                <button type="submit" id="security-policy-submit">
+                  Save authentication policy
+                </button>
+              )}
+            </form>
+          </section>
+        )}
+
+        {canReadMfa && mfaPolicy && (
+          <section class="fade-in-up" aria-labelledby="security-mfa">
+            <h2 id="security-mfa">Multi-factor authentication</h2>
+
+            {mfaContradiction && (
+              <p class="state-notice" id="security-mfa-contradiction">
+                MFA is enforced for this tenant, but enrolment is closed for
+                this deployment (<code>AUTH_MFA_ENABLED=false</code>). A user
+                without a factor cannot enrol one, and cannot sign in.
+              </p>
+            )}
+
+            <form class="admin-create-form" id="security-mfa-form">
+              <p class="form-legend">Enforcement level</p>
+              <p
+                id="security-mfa-error"
+                class="admin-create-error"
+                role="alert"
+                hidden
+              />
+
+              {MFA_LEVELS.map((level) => (
+                <label>
+                  <input
+                    type="radio"
+                    name="enforcementLevel"
+                    value={level.value}
+                    checked={mfaPolicy!.enforcementLevel === level.value}
+                    disabled={!canConfigureMfa}
+                  />
+                  {level.label} — {level.hint}
+                </label>
+              ))}
+
+              {canConfigureMfa && (
+                <button type="submit" id="security-mfa-submit">
+                  Save MFA policy
+                </button>
+              )}
+            </form>
+          </section>
+        )}
+
+        {canReadProviders && (
+          <section class="fade-in-up" aria-labelledby="security-providers">
+            <h2 id="security-providers">OIDC providers</h2>
+            <p class="page-description">
+              Read-only here. Adding, editing and removing a provider stays on
+              <code>/api/v1/auth/sso-providers</code> — those writes carry a
+              client secret, and a form that posts one deserves its own change.
+            </p>
+
+            {providers.length === 0 ? (
+              <div class="empty-state" id="security-providers-empty">
+                <p class="empty-state-title">No provider configured</p>
+                <p class="empty-state-text">
+                  This tenant has no OIDC provider, so SSO sign-in cannot
+                  succeed regardless of the policy above.
+                </p>
+              </div>
+            ) : (
+              <div class="data-table-scroll">
+                <table class="data-table data-table--stack">
+                  <thead>
+                    <tr>
+                      <th scope="col">Key</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Issuer</th>
+                      <th scope="col">Secret</th>
+                      <th scope="col">State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providers.map((provider) => (
+                      <tr>
+                        <th scope="row" data-label="Key">
+                          <code class="cell-code">{provider.providerKey}</code>
+                        </th>
+                        <td data-label="Name">{provider.displayName}</td>
+                        <td data-label="Issuer">
+                          <code class="cell-code">{provider.issuerUrl}</code>
+                        </td>
+                        <td data-label="Secret">
+                          {provider.secretSource === "env"
+                            ? `Environment (${provider.clientSecretEnvVar})`
+                            : "Encrypted at rest"}
+                        </td>
+                        <td data-label="State">
+                          <span
+                            class="status-badge"
+                            data-variant={
+                              provider.enabled ? "success" : "neutral"
+                            }
+                          >
+                            <span class="status-dot" aria-hidden="true" />
+                            {provider.enabled ? "Enabled" : "Disabled"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it — an import-free script would inline and
+  // be blocked. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  function reveal(id: string, message: string): void {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = false;
+  }
+
+  function hide(id: string): void {
+    const box = document.getElementById(id);
+    if (box) box.hidden = true;
+  }
+
+  function checked(form: HTMLFormElement, name: string): boolean {
+    const input = form.elements.namedItem(name);
+    return input instanceof HTMLInputElement ? input.checked : false;
+  }
+
+  const policyForm = document.getElementById(
+    "security-policy-form"
+  ) as HTMLFormElement | null;
+
+  policyForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const submit = document.getElementById(
+      "security-policy-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+    hide("security-policy-error");
+
+    const domainsField = policyForm.elements.namedItem("allowedEmailDomains");
+    const allowedEmailDomains =
+      domainsField instanceof HTMLInputElement
+        ? domainsField.value
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0)
+        : [];
+
+    const breakGlassIdentityIds = Array.from(
+      policyForm.querySelectorAll<HTMLInputElement>(
+        'input[name="breakGlassIdentityIds"]:checked'
+      )
+    ).map((input) => input.value);
+
+    const unlock = lockElement(submit, "Please wait…");
+    const result = await sendJson("PATCH", "/api/v1/auth/sso-policy", {
+      passwordLoginEnabled: checked(policyForm, "passwordLoginEnabled"),
+      ssoEnabled: checked(policyForm, "ssoEnabled"),
+      ssoRequired: checked(policyForm, "ssoRequired"),
+      autoLinkVerifiedEmail: checked(policyForm, "autoLinkVerifiedEmail"),
+      jitProvisioningEnabled: checked(policyForm, "jitProvisioningEnabled"),
+      allowedEmailDomains,
+      breakGlassIdentityIds
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    // BREAK_GLASS_REQUIRED is surfaced specifically, and that is deliberate:
+    // this caller is already an authenticated admin holding `sso_policy.update`,
+    // so it leaks nothing they cannot read directly — and a generic "could not
+    // save" would leave them re-trying the one change the server will never
+    // accept without telling them what to fix.
+    reveal(
+      "security-policy-error",
+      result.errorCode === "BREAK_GLASS_REQUIRED"
+        ? "Refused: this would leave the tenant with no active break-glass account able to sign in with a password. Select at least one active account first."
+        : "Could not save the authentication policy. Please try again."
+    );
+    unlock();
+  });
+
+  const mfaForm = document.getElementById(
+    "security-mfa-form"
+  ) as HTMLFormElement | null;
+
+  mfaForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const submit = document.getElementById(
+      "security-mfa-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+    hide("security-mfa-error");
+
+    const selected = mfaForm.querySelector<HTMLInputElement>(
+      'input[name="enforcementLevel"]:checked'
+    );
+    if (!selected) return;
+
+    const unlock = lockElement(submit, "Please wait…");
+    const result = await sendJson("PUT", "/api/v1/auth/mfa/policy", {
+      enforcementLevel: selected.value
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    reveal(
+      "security-mfa-error",
+      "Could not save the MFA policy. Please try again."
+    );
+    unlock();
+  });
+</script>

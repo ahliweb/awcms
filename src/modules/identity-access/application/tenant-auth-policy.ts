@@ -15,6 +15,7 @@ import {
   evaluateBreakGlassRequirement,
   type UpdateTenantAuthPolicyInput
 } from "../domain/tenant-sso-policy";
+import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
 
 export type TenantAuthPolicyView = {
   tenantId: string;
@@ -90,6 +91,53 @@ export async function getTenantAuthPolicy(
   }
 
   return toView(tenantId, row);
+}
+
+export type BreakGlassCandidateView = {
+  /** Identity id — what `breakGlassIdentityIds` stores. NOT a tenant_user id. */
+  identityId: string;
+  /** Masked — `login_identifier` is PII, and this list renders in an admin screen. */
+  loginIdentifierMasked: string;
+};
+
+/**
+ * Every identity in this tenant that is CURRENTLY eligible to be named a
+ * break-glass account, for the `/admin/security` picker.
+ *
+ * The `WHERE` clause is deliberately identical to
+ * `fetchEligibleBreakGlassIdentityIds` below, minus the id filter: this list
+ * must never offer an option that `saveTenantAuthPolicy` would then silently
+ * drop as ineligible. `tests/integration/admin-security-policy.integration.test.ts`
+ * pins the two together by seeding an inactive identity and an inactive
+ * membership and asserting neither appears here NOR survives a save.
+ *
+ * The picker deals in IDENTITY ids because that is what the policy column
+ * stores. `listTenantUsers` returns tenant_user ids, which look identical (both
+ * uuid) and would be accepted by the endpoint, filtered out as ineligible, and
+ * saved as an empty list — a silent no-op right where the operator was trying
+ * to keep themselves able to log in.
+ */
+export async function listBreakGlassCandidates(
+  tx: Bun.SQL,
+  tenantId: string,
+  limit = 200
+): Promise<BreakGlassCandidateView[]> {
+  const rows = (await tx`
+    SELECT i.id, i.login_identifier
+    FROM awcms_identities i
+    JOIN awcms_tenant_users tu
+      ON tu.tenant_id = i.tenant_id AND tu.identity_id = i.id
+    WHERE i.tenant_id = ${tenantId}
+      AND i.status = 'active'
+      AND tu.status = 'active'
+    ORDER BY i.login_identifier
+    LIMIT ${limit}
+  `) as { id: string; login_identifier: string }[];
+
+  return rows.map((row) => ({
+    identityId: row.id,
+    loginIdentifierMasked: maskIdentifierValue(row.login_identifier)
+  }));
 }
 
 /**
