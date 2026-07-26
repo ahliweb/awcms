@@ -1,5 +1,91 @@
 # awcms
 
+## 6.4.0
+
+### Minor Changes
+
+- 85517b8: Tutup empat temuan analisis graph: wire resolusi asset theming, lengkapi
+  deklarasi permission `email`, jujurkan graf dependensi lintas-modul, dan
+  tambahkan gate batas modul yang selama ini SUDAH DIASUMSIKAN ADA.
+
+  **Logo tema akhirnya tampil.** `src/lib/theming/theme-media.ts` mengembalikan
+  map kosong tanpa syarat. Itu jujur saat ditulis — ADR-0034 Fase 3 mem-port
+  `theming` lebih dulu dan `media_library` belum ada — tapi header-nya tetap
+  berkata begitu setelah ADR-0036 mendaratkan modulnya, sehingga no-op itu terbaca
+  sebagai desain, bukan wiring yang belum selesai. Akibatnya tak pernah tercatat:
+  tenant mengunggah logo, id-nya tersimpan dan valid, dan `PublicThemeLayout`
+  selamanya merender fallback nama-tema. Kini resolusi lewat `MediaLibraryPort`
+  — capability yang sama yang sudah dikonsumsi `blog_content` dan `news_portal`.
+  Slot yang tidak resolve tetap DIHILANGKAN, bukan melempar: halaman tema publik
+  tidak boleh 500 karena satu id asset basi. `theming` sekarang mendeklarasikan
+  `capabilities.consumes` untuk `media_library`.
+
+  **`email` mendeklarasikan 12 permission-nya**, verbatim dari seed `sql/014`.
+  Ia satu-satunya dari 21 modul yang belum, sehingga seluruh barisnya permanen
+  tampil `orphaned` di `GET /api/v1/modules/email/permissions` — false positive
+  menetap yang melatih pembaca mengabaikan laporan drift. Kini 21/21.
+
+  **Enam edge lintas-modul tak-terdeklarasi dijujurkan.** `seo_distribution`,
+  `site_search`, dan `comments` meng-import modul yang tidak ada di descriptor-nya;
+  semuanya kini dideklarasikan, tanpa satu pun cycle.
+  `domain_event_runtime -> reporting` TIDAK bisa dideklarasikan — `reporting`
+  sudah mendeklarasikan arah sebaliknya, jadi mendeklarasikannya = cycle — dan
+  menjadi satu-satunya pengecualian tercatat, dengan alasan yang bisa dibantah
+  reviewer.
+
+  **`tests/module-boundary.test.ts`.** `capability-contract-versions.ts` selama
+  ini membenarkan capability tanpa versi dengan kalimat "a source-boundary test
+  (`tests/unit/module-boundary.test.ts`) is enough to keep provider and consumer
+  in sync". **Berkas itu tidak pernah ada di repo ini** — kalimatnya ikut ter-port
+  dari awcms-mini, test-nya tidak. Jaring pengaman yang dinyatakan untuk seluruh
+  model capability itu imajiner. Sekarang nyata: tiap import lintas-modul wajib
+  dideklarasikan sebagai dependency, sebagai capability consumption, atau
+  dikecualikan eksplisit dengan alasan.
+
+### Patch Changes
+
+- 1d49f37: Sinkronkan docs/skill dengan #251/#252, dan catat satu split-brain `navigation`
+  yang ditemukan lewat graph.
+
+  Lima skill mengklaim hal yang sudah tidak benar setelah #251:
+  `awcms-theming` masih menyebut resolusi URL asset "masih no-op" (sudah ter-wire
+  lewat `MediaLibraryPort`); `awcms-module-management` masih menyebut "20 dari 21
+  modul" mendeklarasikan `permissions` (kini 21/21, sehingga `orphaned` bukan lagi
+  kondisi normal dan setiap kemunculannya adalah sinyal nyata); dan
+  `awcms-comments`/`awcms-site-search`/`awcms-seo-distribution` masih mengiklankan
+  deps "Core-only" padahal ketiganya kini mendeklarasikan modul yang memang mereka
+  import.
+
+  `ARCHITECTURE.md` kini menyebut `tests/module-boundary.test.ts` di sebelah tiga
+  gate modul lainnya, dengan alasannya: ketiganya memvalidasi graf yang
+  DIDEKLARASIKAN dan tak satu pun membaca satu baris `import`.
+  `13_final_master_index_traceability.md` menyatakan "23 modul terdaftar" — angka
+  awcms-mini; nyatanya 21.
+
+  **Temuan graph — `navigation` punya dua sumber yang tidak pernah
+  direkonsiliasi.** `ModuleDescriptor.navigation` nyata dikonsumsi (disinkronkan
+  ke `awcms_module_navigation`, disajikan `navigation-registry.ts`, divalidasi
+  `module-composition.ts`) dan lima modul mendeklarasikannya — tetapi sidebar
+  admin merender `navSections`, array statis di `AdminLayout.astro`. Jadi
+  mendeklarasikan `navigation` menghasilkan baris DB dan entri API, **bukan** link
+  menu; sebaliknya `/admin/tenant` tampil di sidebar tanpa descriptor apa pun.
+  Dicatat di skill pemiliknya, tidak "diperbaiki" sepihak: sisi API sudah punya
+  konsumen, jadi menyatukannya adalah keputusan desain.
+
+  Graph di-refresh ke `deb43028` (7534 node, 21084 edge, 435 community, nol import
+  cycle level-berkas).
+
+- deb4302: Refresh knowledge graph ke `85517b8b` (7534 node, 21084 edge, 434 community; nol
+  import cycle level-berkas) dan koreksi satu klaim usang di `PROJECT_STATE.md`.
+
+  Dokumen itu masih menyatakan emisi purge cache tepi "belum" terpasang untuk
+  `theming` — padahal #246 sudah memasangnya di publish/rollback/retire. Sekaligus
+  menjelaskan kenapa `news_portal`/`media_library` sengaja TIDAK: keduanya tidak
+  memiliki surface ter-deklarasi, jadi ban untuk key-nya tak akan cocok apa pun
+  sementara antrean tetap melapor sukses — dan gate `edge-cache:surfaces:check`
+  akan memunculkan kewajibannya sendiri begitu salah satunya mendeklarasikan
+  surface.
+
 ## 6.3.0
 
 ### Minor Changes
