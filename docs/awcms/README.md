@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:736733ca04b3c07140715aee453329322e1125eaee8ce3816e11c463a8b005df -->
+<!-- i18n-source-hash: sha256:6745d95aef39057cb11f5abf7ed7d3dfcfda6ec1b68e48010ea2ed62d40797ce -->
 
 # AWCMS Technical Document Package
 
@@ -53,6 +53,7 @@ This package now adapts **the entire** technical document set from the awcms-min
 | [`production-readiness.md`](production-readiness.md)                                                   | Production readiness gate                                                          |
 | [`resilience-dr-verification.md`](resilience-dr-verification.md)                                       | Disaster-recovery verification                                                     |
 | [`repo-inventory.md`](repo-inventory.md)                                                               | Repo file inventory tooling                                                        |
+| [`knowledge-graph.md`](knowledge-graph.md)                                                             | Reading `graphify-out/` — what the graph answers, and the two ways it misleads     |
 | [`extension-compatibility-policy.md`](extension-compatibility-policy.md)                               | Contract/module version compatibility policy                                       |
 | [`templates/module-proposal-template.md`](templates/module-proposal-template.md)                       | New-module proposal template                                                       |
 | [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | Module admission decision checklist                                                |
