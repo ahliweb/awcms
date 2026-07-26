@@ -41,7 +41,13 @@
       "version": "0.1.0",
       "status": "active",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access"],
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "module_management",
+        "profile_identity",
+        "domain_event_runtime"
+      ],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 8,
@@ -92,7 +98,7 @@
       "dependencies": ["tenant_admin", "profile_identity", "identity_access"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
-      "permissionCount": 0,
+      "permissionCount": 12,
       "navigationCount": 0,
       "jobCount": 3,
       "hasHealthCheck": false,
@@ -261,7 +267,7 @@
       "version": "0.2.0",
       "status": "active",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access"],
+      "dependencies": ["tenant_admin", "identity_access", "module_management"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [
         {
@@ -288,7 +294,7 @@
       "version": "0.1.0",
       "status": "active",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access"],
+      "dependencies": ["tenant_admin", "identity_access", "module_management"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 6,
@@ -354,7 +360,13 @@
       "type": "domain",
       "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": [],
-      "capabilitiesConsumed": [],
+      "capabilitiesConsumed": [
+        {
+          "capability": "media_library",
+          "providedBy": "media_library",
+          "optional": false
+        }
+      ],
       "permissionCount": 6,
       "navigationCount": 0,
       "jobCount": 0,

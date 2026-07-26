@@ -12,6 +12,82 @@ export const emailModule = defineModule({
     openApiPath: "openapi/modules/email.openapi.yaml",
     basePath: "/api/v1/email"
   },
+  /**
+   * Mirrors `sql/014`'s seed EXACTLY — same twelve (activityCode, action) pairs,
+   * same descriptions. `GET /api/v1/modules/email/permissions` compares the two
+   * and reports `orphaned` for a seeded row with no descriptor entry and
+   * `mismatched_description` when the text drifts, so a paraphrase here is a
+   * reported defect, not a stylistic choice.
+   *
+   * `email` was the last module without this block: 20 of 21 declared theirs,
+   * and its twelve rows therefore showed as permanently `orphaned` — a standing
+   * false positive that trains readers to ignore the report, which is the one
+   * thing a drift report must not do.
+   */
+  permissions: [
+    {
+      activityCode: "template",
+      action: "read",
+      description: "Read tenant email templates"
+    },
+    {
+      activityCode: "template",
+      action: "create",
+      description: "Create an email template"
+    },
+    {
+      activityCode: "template",
+      action: "update",
+      description: "Update an email template"
+    },
+    {
+      activityCode: "template",
+      action: "delete",
+      description: "Delete (soft) an email template"
+    },
+    {
+      activityCode: "template",
+      action: "restore",
+      description: "Restore a soft-deleted email template"
+    },
+    {
+      activityCode: "message",
+      action: "read",
+      description: "Read/diagnose tenant email queue"
+    },
+    {
+      activityCode: "message",
+      action: "cancel",
+      description:
+        "Cancel a still-queued (queued/retry_wait) email message before it sends"
+    },
+    {
+      activityCode: "suppression",
+      action: "read",
+      description: "Read the email suppression list"
+    },
+    {
+      activityCode: "suppression",
+      action: "create",
+      description: "Manually suppress a recipient address"
+    },
+    {
+      activityCode: "suppression",
+      action: "delete",
+      description: "Remove a manual suppression entry"
+    },
+    {
+      activityCode: "notification",
+      action: "create",
+      description: "Enqueue an email notification to an explicit set of users"
+    },
+    {
+      activityCode: "announcement",
+      action: "create",
+      description:
+        "Enqueue a bulk email announcement to a role or the whole tenant"
+    }
+  ],
   events: {
     asyncApiPath: "asyncapi/awcms-domain-events.asyncapi.yaml",
     publishes: [

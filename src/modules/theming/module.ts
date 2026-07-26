@@ -47,13 +47,24 @@ import {
  * ## Dependencies / capabilities (port adaptations vs awcms-micro)
  *
  * Lifecycle `dependencies` are only the two Core modules (`tenant_admin`,
- * `identity_access`). The awcms-micro origin OPTIONALLY consumed `media_library`
- * (logo/favicon asset-id -> URL resolution) and registered a `data_lifecycle`
- * purge descriptor for the preview table; neither module exists in awcms, so
- * BOTH are dropped: asset-URL resolution is a documented no-op (assets are simply
- * omitted from render, degrading safely) and preview retention rides the
- * `expires_at >= now()` read filter instead of a purge job. `theming` `provides`
- * no capability and nothing depends on it, so the DAG is unchanged.
+ * `identity_access`).
+ *
+ * `media_library` is CONSUMED as a capability, not a lifecycle dependency: the
+ * adapter is wired at the composition root `src/lib/theming/theme-media.ts`, and
+ * a slot whose media id does not resolve is omitted from render rather than
+ * failing, so `theming` still functions with the capability unavailable. That is
+ * exactly what `capabilities.consumes` documents — a source-level relationship,
+ * not an ordering constraint (see `module-contract.ts`).
+ *
+ * This was dropped at port time on the grounds that `media_library` did not
+ * exist in awcms. It does now (ADR-0036), and leaving the drop in place meant
+ * uploaded logos silently never rendered. `data_lifecycle` also exists now
+ * (ADR-0037), but preview retention deliberately KEEPS the
+ * `expires_at >= now()` read filter rather than registering a purge descriptor:
+ * an expired session is already inert on read, so a purge job would reclaim rows
+ * without changing behaviour. Registering one is an open option, not a fix.
+ *
+ * `theming` `provides` no capability and nothing depends on it.
  *
  * ## Deliberately NOT here yet (documented follow-ups)
  *
@@ -71,6 +82,9 @@ export const themingModule = defineModule({
   description:
     "Tenant-selectable presentation via trusted, reviewed, BUILD-TIME theme descriptors (ADR-0034 Fase 3 — the first website module implemented directly in the awcms base). A theme is composed by `src/modules/theming/theme-registry.ts` from the reviewed in-repo base themes — NEVER a database row and NEVER an uploaded artifact (awcms has no derived-repo theme seam; the derived-application pathway was removed in ADR-0034 Fase 2). Only a tenant's DATA configuration of a theme lives in the database (`awcms_theming_config_versions` draft + immutable published versions, and `awcms_theming_tenant_state` active pointer, sql/033, RLS FORCE'd): bounded, schema-validated design-token overrides, slot variant selections, media asset ids (URL resolution is a no-op until a media module is ported), content-section order, and nav placement. The security spine (`domain/css-value-validation.ts`) validates every CSS token value by REJECTION against strict grammars (hex/rgb/hsl colors with numeric components, dimensions with an allowed-unit list, bounded numbers, font families from a per-theme allow-list whose emitted stack is descriptor-owned) — `url(...)`, `expression()`, `@import`, `javascript:`, comment breakouts, `;{}<>` and unbalanced tokens can never reach output. Token values ship as an EXTERNAL same-origin `text/css` stylesheet (`/theming/{tenantCode}/tokens.css`), so the app's `style-src 'self'` CSP is never weakened (no per-request inline style). Rendering is only through the trusted build-time `PublicThemeLayout.astro` (no DB-stored template, no tenant-authored Astro/JS/SQL/eval/raw HTML). Published versions are IMMUTABLE (INSERT-only engine + a sql/033 BEFORE UPDATE/DELETE trigger); lifecycle is draft → validate → preview → publish → rollback/retire, with rollback/retire moving the active pointer while history stays intact. Preview sessions (sql/033) are authorized (token stored hashed), short-lived, non-indexable (X-Robots-Tag: noindex), and isolated from the public cache (private, no-store + distinct URL namespace). Admin API under /api/v1/theming/* (selection, token edit, validate, preview, publish, version history, rollback, retire) is ABAC-gated, idempotency-keyed on high-risk mutations, and audited. A default theme (`aria`) ships in-repo.",
   dependencies: ["tenant_admin", "identity_access"],
+  capabilities: {
+    consumes: [{ capability: "media_library", providedBy: "media_library" }]
+  },
   api: {
     openApiPath: "openapi/modules/theming.openapi.yaml",
     basePath: "/api/v1/theming"
