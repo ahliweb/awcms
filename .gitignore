@@ -45,6 +45,13 @@ graphify-out/cache/
 graphify-out/.graphify_root
 graphify-out/.graphify_python
 
+# Build-time intermediate. The skill's own final step DELETES this file, so a
+# tracked copy can only ever be absent (dirty tree after every run) or left
+# over from a run that was interrupted before cleanup — i.e. stale, describing
+# a graph.json that has since moved. Everything in it is derivable from
+# graph.json, which IS tracked.
+graphify-out/.graphify_analysis.json
+
 # graphify keeps a dated backup of the curated graph on every rebuild.
 # The live artifacts beside it are the ones under review; a second full copy is
 # ~12 MB of duplicate JSON per run.

@@ -14,13 +14,15 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **63
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **67
 > script**, termasuk yang dulu ditandai belum ada (`openapi:bundle`,
-> `data-lifecycle:*`, `reporting:*`). Yang masih **benar-benar tidak ada**:
-> `repo:inventory:*`, `work-class`, `i18n:*`, dan `extension:check` (yang
-> terakhir **DIHAPUS** oleh ADR-0034, bukan tertunda — jangan merujuknya). Tetap
-> cek `package.json` sebelum mengeksekusi command dari sebuah skill; daftar ini
-> bergerak tiap kali modul baru mendarat.
+> `data-lifecycle:*`, `reporting:*`, dan — **koreksi 2026-07-27** —
+> `db:work-class:generate`/`db:work-class:check`, yang catatan sebelumnya masih
+> menyebut tidak ada). Yang masih **benar-benar tidak ada**: `repo:inventory:*`
+> (yang ada `modules:composition:inventory:*`, cakupannya lain), `i18n:*`, dan
+> `extension:check` (yang terakhir **DIHAPUS** oleh ADR-0034, bukan tertunda —
+> jangan merujuknya). Tetap cek `package.json` sebelum mengeksekusi command dari
+> sebuah skill; daftar ini bergerak tiap kali modul baru mendarat.
 
 ## Katalog
 
@@ -56,7 +58,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | `awcms-legacy-migration`                     | Migrasi data legacy aman (dry-run, backfill)                                                                                                                                       | 07, 06                                      |
 | `awcms-blog-content`                         | Kerjakan bagian mana pun epic blog_content (Issue #537-#543)                                                                                                                       | blog-content/README.md                      |
 | `awcms-tenant-domain-routing`                | Kerjakan bagian mana pun epic online public routing & tenant domain (Issue #556-#567)                                                                                              | tenant-domain-routing/SKILL.md              |
-| `awcms-auth-online-hardening`                | Kerjakan bagian mana pun epic full-online auth security hardening (Issue #587-#593)                                                                                                | auth-online-hardening/SKILL.md              |
+| `awcms-auth-online-hardening`                | Alasan desain pengerasan auth online (Turnstile/MFA/OIDC/admin policy UI). Kapabilitasnya SUDAH ADA (#184/#185/#186/#274); path & nomor issue di badannya milik micro — baca §Peta | auth-online-hardening/SKILL.md              |
 | `awcms-visitor-analytics`                    | Kerjakan bagian mana pun epic visitor analytics (Issue #617-#624)                                                                                                                  | visitor-analytics/SKILL.md                  |
 | `awcms-news-portal`                          | Kerjakan bagian mana pun epic news_portal full-online R2-only media (Issue #631-#642, #649)                                                                                        | news-portal/SKILL.md                        |
 | `awcms-idn-admin-regions`                    | Kerjakan bagian mana pun epic master data wilayah administratif Indonesia (Issue #655-#664)                                                                                        | idn-admin-regions/SKILL.md                  |

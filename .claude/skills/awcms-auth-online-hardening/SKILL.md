@@ -1,51 +1,71 @@
 ---
 name: awcms-auth-online-hardening
-description: BACAAN SAJA (SPEKULATIF) — seluruh epic "full-online auth security hardening" (Issue #587-#593) yang dirujuk di skill ini TIDAK ADA. Diverifikasi 2026-07-18 lewat `gh issue view 587` (GraphQL "could not resolve to an issue or pull request") dan pencarian kode menyeluruh (`online-security-config.ts`, `AUTH_ONLINE_SECURITY_*`, TOTP, OIDC — nol hasil di `src/`; hanya penyebutan Turnstile *insidental* di `login.astro`/`security-headers.ts` yang tak berkaitan dengan epic ini). Isi skill ini menandai semua 7 item sebagai "Selesai" — klaim itu SEPENUHNYA KELIRU: tak ada issue-nya di GitHub, tak ada baris kode. Jangan gunakan tabel status atau klaim "sudah ada" di bawah sebagai fakta. Bila epic ini benar-benar ingin dikerjakan, ajukan issue GitHub baru dan bangun dari nol — isi di bawah HANYA layak dibaca sebagai draft spesifikasi/ide desain yang belum diverifikasi, bukan rujukan implementasi.
+description: Konteks desain lintas-fitur untuk pengerasan auth online awcms (Turnstile, MFA/TOTP, OIDC/SSO, admin policy UI). PENTING — nomor issue #587-#593, nama file, nama tabel, nomor migrasi, dan path endpoint di badan skill ini milik repo LAIN (awcms-micro); di awcms semuanya bernama BEDA. Baca §Peta ke artefak nyata awcms lebih dulu, lalu perlakukan sisanya sebagai catatan alasan-desain, bukan rujukan path. Kapabilitasnya SENDIRI sudah ada di awcms per #184/#185/#186/#274 — jangan bangun ulang.
 ---
 
 # AWCMS — Full-Online Auth Security Hardening
 
-> **PERINGATAN ISI DOKUMEN INI FIKTIF (diverifikasi 2026-07-18).** Setiap
-> "Issue #587"–"#593" yang disebut di bawah TIDAK ADA di GitHub repo ini
-> (`gh issue view 587` → `GraphQL: Could not resolve to an issue or pull
-request`). Setiap file/fungsi/endpoint yang disebut "sudah ada" di bawah
-> (`online-security-config.ts`, `auth-security-status.ts`,
-> `src/pages/admin/security.astro`, endpoint `/api/v1/identity/sso/*`,
-> `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE`, TOTP, Google OIDC, generic
-> tenant OIDC SSO) **TIDAK DITEMUKAN** di manapun dalam `src/`, `sql/`,
-> `scripts/`, atau `.env.example` saat diverifikasi ulang secara menyeluruh.
-> Satu-satunya kecocokan nyata adalah penyebutan "Turnstile" di
-> `src/pages/login.astro`/`src/lib/security/security-headers.ts` — namun itu
-> pun tidak berkaitan dengan epic bertanda "Selesai" di bawah. **Jangan
-> pernah bangun di atas asumsi apa pun dari isi skill ini seolah-olah sudah
-> ada** — cek kode secara langsung dulu (`find src -iname "*online-security*"`,
-> `gh issue list --search "..."`) sebelum mempercayai satu klaim pun di sini.
-> Konten teknis di bawah dipertahankan HANYA sebagai draft ide desain yang
-> belum diverifikasi/belum diajukan sebagai issue nyata, bukan sebagai
-> catatan pekerjaan yang sudah selesai. Sebelum mengerjakan fitur ini,
-> ajukan issue GitHub yang sebenarnya dan verifikasi ulang setiap bagian di
-> bawah dari nol.
+> **BACA INI DULU — dokumen ini punya dua lapis, dan hanya satu yang bisa
+> dipercaya sebagai path.** Badan skill di bawah disalin dari epic
+> `awcms-micro` "full-online auth security hardening". **Setiap nomor issue
+> (#587–#593, #598, #605), nama file (`auth-security-status.ts`), nomor
+> migrasi (`036`), dan path endpoint (`/api/v1/identity/sso/*`,
+> `/api/v1/auth/providers/google/*`) di bawah adalah milik repo ITU, bukan
+> repo ini.** Audit 2026-07-18 benar saat menyimpulkan tak satu pun ditemukan
+> di `src/` awcms — tapi kesimpulan yang ditarik saat itu ("epic ini fiktif,
+> bangun dari nol") **kini keliru arah sebaliknya**: kapabilitasnya sudah
+> dibangun di awcms sejak itu, dengan nama sendiri.
 >
-> **Satu-satunya rujukan yang JUJUR soal status ini** adalah
-> [`docs/awcms/18_configuration_env_reference.md`](../../../docs/awcms/18_configuration_env_reference.md)
-> §"Full-online auth security hardening (opsional, target)" — ditulis
-> konsisten dalam bentuk "direncanakan"/"target", TIDAK mengklaim sudah
-> dibangun. Rujukan skill ini ke bagian senama di `deployment-profiles.md`
-> dan `identity-access/README.md` JUGA fiktif — kedua file itu tidak
-> punya section tersebut sama sekali (diverifikasi `grep`).
+> **Yang harus diambil dari dokumen ini adalah ALASAN DESAINNYA** (gate
+> gabungan, fail-closed, anti-enumerasi, blast radius circuit breaker,
+> batas MFA-vs-reset) — itu tetap berlaku dan sudah terbukti mahal untuk
+> di-derive ulang. **Yang TIDAK boleh diambil adalah path/nama/nomornya.**
+> Lihat §Peta ke artefak nyata awcms tepat di bawah, lalu verifikasi ke kode.
 
-Epic (BELUM DIAJUKAN, BELUM DIKERJAKAN) yang MENARGETKAN enam fitur hardening
-auth **online-only** (Cloudflare Turnstile, MFA/TOTP, Google OIDC login,
-generic tenant OIDC SSO, admin policy UI, plus penutup docs/kontrak) di atas
-login lokal/password + session opaque yang sudah ada, tanpa mengubah perilaku
-default offline/LAN/local sama sekali. Model yang DITARGETKAN (belum
-diimplementasikan):
+Enam fitur hardening auth **online-only** (Cloudflare Turnstile, MFA/TOTP,
+Google OIDC login, generic tenant OIDC SSO, admin policy UI, plus penutup
+docs/kontrak) di atas login lokal/password + session opaque, tanpa mengubah
+perilaku default offline/LAN/local. Model gate-nya di awcms:
 
 ```txt
 AUTH_ONLINE_SECURITY_ENABLED + AUTH_ONLINE_SECURITY_PROFILE=full_online
   -> isFullOnlineSecurityActive(env) === true
-    -> Turnstile / MFA / Google OIDC / generic SSO boleh aktif
+    -> Turnstile boleh aktif
 ```
+
+**Divergensi penting dari model micro di atas.** Di awcms hanya **Turnstile**
+yang tetap digerbangi profil deployment. MFA dan OIDC/SSO **melepas** gerbang
+itu saat di-port (#184/#185): keduanya digerakkan **state DB per tenant**
+(enrollment MFA, baris `awcms_tenant_auth_policies`), bukan env global —
+`AUTH_MFA_ENABLED` hanya menggerbangi _enrollment baru_, sementara challenge
+dan step-up jalan dari state. Membaca dokumen ini seolah "semua fitur
+digerbangi `isFullOnlineSecurityActive`" akan salah.
+
+## Peta ke artefak nyata awcms
+
+Kolom kiri = nama yang dipakai di badan skill ini (milik awcms-micro).
+Kolom kanan = yang benar-benar ada di repo ini. **Selalu pakai kolom kanan.**
+
+| Disebut di bawah (micro)             | Nyata di awcms                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `auth-security-status.ts`            | tidak ada padanan; postur dirakit langsung di `src/pages/admin/security.astro`       |
+| migration `036`                      | `sql/024` (MFA), `sql/025`+`sql/026` (OIDC/SSO + seed permission)                    |
+| `/api/v1/identity/sso/providers`     | `/api/v1/auth/sso-providers` (+ `/[id]`)                                             |
+| `/api/v1/identity/sso/policy`        | `/api/v1/auth/sso-policy` (`PATCH`)                                                  |
+| `/api/v1/auth/providers/google/*`    | **tidak ada** — awcms hanya punya OIDC generik `/api/v1/auth/sso/[providerKey]/*`    |
+| "admin policy UI #592"               | `src/pages/admin/security.astro` (#274) — lihat `identity-access/README.md`          |
+| Issue #587–#593, PR #598, Issue #605 | nomor micro; padanan awcms: #184 (MFA), #185 (OIDC/SSO), #186 (Turnstile), #274 (UI) |
+
+Yang **memang ada** dengan nama sama: `src/lib/auth/online-security-config.ts`,
+`src/lib/security/turnstile.ts`, `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE`,
+`isFullOnlineSecurityActive`, `checkOnlineAuthSecurityReady`,
+`awcms_auth_providers`, `awcms_tenant_auth_policies`.
+
+Fitur auth yang ada di awcms tapi **tidak** dibahas dokumen ini sama sekali
+(jangan simpulkan "belum ada" dari kebisuannya): password reset lewat email
+(`sql/073`), self-registration ber-persetujuan admin (`sql/074`–`075`),
+business-scope, SoD, dan ABAC DSL. Rujuk
+`src/modules/identity-access/README.md`.
 
 ## Kapan pakai skill ini vs skill generik
 
@@ -57,17 +77,20 @@ code semua data sensitif). Skill ini menyediakan konteks **cross-cutting
 epic ini spesifik**: gate bersama yang wajib dicek setiap fitur, dan
 keputusan desain yang mengikat semua issue di epic ini sekaligus.
 
-## Status per issue (jangan bangun ulang yang sudah ada)
+## Status di awcms (jangan bangun ulang yang sudah ada)
 
-| Issue | Scope                                                  | Status                                                                                                                                 |
-| ----- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| #587  | Gate bersama `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Gate bersama sebagai spesifikasi belum dikerjakan                     |
-| #588  | Cloudflare Turnstile untuk form auth publik            | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Cloudflare Turnstile sebagai spesifikasi belum dikerjakan             |
-| #589  | MFA/TOTP login challenge                               | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §MFA/TOTP sebagai spesifikasi belum dikerjakan                         |
-| #590  | Google OIDC login                                      | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Google OIDC login sebagai spesifikasi belum dikerjakan                |
-| #591  | Generic tenant OIDC SSO provider                       | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Generic tenant OIDC SSO provider sebagai spesifikasi belum dikerjakan |
-| #592  | Admin UI kebijakan auth security online                | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, lihat §Admin policy UI sebagai spesifikasi belum dikerjakan                  |
-| #593  | Docs/kontrak/readiness penutup epic                    | **FIKTIF (issue tidak ada, kode tidak ada)** — draft ide, bukan penutup epic nyata                                                     |
+Nomor issue di kolom kiri adalah penomoran **micro** yang dipakai badan skill
+ini; PR di kolom kanan adalah pekerjaan **awcms** yang sesungguhnya.
+
+| Scope (penomoran micro)                                       | Status di awcms                                                                                             |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Gate bersama `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` (#587) | ✅ ada — `src/lib/auth/online-security-config.ts`, `checkOnlineAuthSecurityReady`                           |
+| Cloudflare Turnstile untuk form auth publik (#588)            | ✅ ada (#186) — `src/lib/security/turnstile.ts`; **satu-satunya** fitur yang masih digerbangi profil        |
+| MFA/TOTP login challenge (#589)                               | ✅ ada (#184, `sql/024`) — enforcement dari state DB, BUKAN dari gate profil                                |
+| Google OIDC login (#590)                                      | ❌ **tidak ada, dan sengaja** — awcms punya OIDC generik; port Google-spesifik hanya bila diminta (roadmap) |
+| Generic tenant OIDC SSO provider (#591)                       | ✅ ada (#185, `sql/025`/`026`) — path & migrasi beda, lihat §Peta                                           |
+| Admin UI kebijakan auth security online (#592)                | ✅ ada (#274) — `src/pages/admin/security.astro`; CRUD provider masih API-only                              |
+| Docs/kontrak/readiness penutup epic (#593)                    | 🟡 sebagian — readiness check & threat-model awcms punya jalur sendiri; jangan pakai daftar audit micro     |
 
 ## Yang sudah ada — pakai ulang, jangan re-derive
 
@@ -636,25 +659,21 @@ role="status">` notice (same inline pattern `offices.astro`/`roles.astro`
 10. **MFA reset password tidak boleh jadi bypass MFA** — reset password
     yang berhasil tidak otomatis menonaktifkan MFA milik identity itu.
 
-## Epic #587-#593 selesai
+## Penutup epic — di micro vs di sini
 
-**Epic #587-#593 sekarang 100% selesai** (ditutup 2026-07-10) — gate
-bersama (#587), Cloudflare Turnstile (#588), MFA/TOTP (#589), Google OIDC
-login (#590), generic tenant OIDC SSO provider (#591, termasuk admin CRUD
-API-nya), admin policy UI (#592, `/admin/security`), DAN dokumentasi/
-kontrak/readiness penutup epic (#593) semuanya sudah ada di repo ini —
-jangan bangun ulang, jangan re-derive keputusan yang sudah dijelaskan di
-atas. `awcms_auth_providers`/`awcms_tenant_auth_policies`
-(migration 036), endpoint `/api/v1/auth/sso/*`, admin CRUD API
-`/api/v1/identity/sso/providers`/`/api/v1/identity/sso/policy`, DAN
-halaman admin `/admin/security` yang mengonsumsinya SUDAH ada.
-`/api/v1/auth/providers/google/*` SUDAH ada (#590) — jangan bangun ulang,
-dan #591 sengaja TIDAK mengubah/menggantinya (lihat §Generic tenant OIDC
-SSO provider di atas).
+> **Seluruh sub-bagian di bawah ini adalah catatan penutupan epic di
+> awcms-micro** (ditutup di sana 2026-07-10). Dipertahankan karena daftar
+> celah residual yang ditemukannya berlaku umum. **Path, nomor migrasi, dan
+> nomor issue-nya TIDAK berlaku di awcms** — lihat §Peta ke artefak nyata.
+>
+> Padanan di awcms: gate + Turnstile (#186), MFA/TOTP (#184, `sql/024`),
+> OIDC/SSO generik + admin CRUD (#185, `sql/025`/`026`, endpoint
+> `/api/v1/auth/sso/*` dan `/api/v1/auth/sso-providers`), admin policy UI
+> (#274, `src/pages/admin/security.astro`). **Google OIDC spesifik
+> (`/api/v1/auth/providers/google/*`) TIDAK ADA di awcms** dan itu memang
+> keputusan — jangan menyimpulkan sebaliknya dari paragraf mana pun di bawah.
 
-Issue #593 sendiri menutup loop dokumentasi/kontrak/readiness lintas
-#587-#592 (audit, bukan fitur baru) — konfirmasi/perbaikan konkret yang
-dihasilkan:
+Catatan audit penutup (micro) — celah konkret yang ditemukannya:
 
 - `docs/awcms/18_configuration_env_reference.md` dan
   `deployment-profiles.md` sebelumnya masih menulis "#592-#593 masih
