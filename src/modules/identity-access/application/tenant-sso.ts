@@ -47,6 +47,7 @@ import {
   parseOAuthStateParam
 } from "../../../lib/auth/oauth-state-token";
 import { generateSessionToken } from "../../../lib/auth/session-token";
+import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
 import {
   evaluateOAuthRequest,
   isEmailDomainAllowed,
@@ -486,17 +487,18 @@ export async function jitProvisionIdentity(
     return { ok: false };
   }
 
-  const profileRows = (await tx`
-    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name, verification_status)
-    VALUES (${input.tenantId}, 'person', ${input.email}, 'verified')
-    RETURNING id
-  `) as { id: string }[];
+  // `verified`: JIT only runs after the IdP asserted `email_verified` (see the
+  // auto-link guardrail), so the claim is evidenced rather than self-declared.
+  const profileId = await createPersonProfileForIdentity(tx, input.tenantId, {
+    displayName: input.email,
+    emailVerified: true
+  });
 
   const unusablePassword = await hashPassword(generateSessionToken());
 
   const identityRows = (await tx`
     INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash, status)
-    VALUES (${input.tenantId}, ${profileRows[0]!.id}, ${input.email}, ${unusablePassword}, 'active')
+    VALUES (${input.tenantId}, ${profileId}, ${input.email}, ${unusablePassword}, 'active')
     RETURNING id
   `) as { id: string }[];
   const identityId = identityRows[0]!.id;

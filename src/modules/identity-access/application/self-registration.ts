@@ -35,6 +35,7 @@
  */
 import { generateResetToken } from "../../../lib/auth/reset-token";
 import { hashPassword } from "../../../lib/auth/password";
+import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
 import type { AuthNotificationPort } from "../../_shared/ports/auth-notification-port";
 import { isMailableLoginIdentifier } from "../domain/password-reset-policy";
 import {
@@ -241,11 +242,13 @@ export async function approveRegistrationRequest(
     }
   }
 
-  const profileRows = (await tx`
-    INSERT INTO awcms_profiles (tenant_id, profile_type, display_name, status)
-    VALUES (${tenantId}, 'person', ${request.display_name}, 'active')
-    RETURNING id
-  `) as { id: string }[];
+  // Not `emailVerified`: an approving reviewer confirmed the person should have
+  // access, which is not the same as anyone having proved control of the
+  // address. The reset link this approval sends is what proves that, and it
+  // does so after the profile exists.
+  const profileId = await createPersonProfileForIdentity(tx, tenantId, {
+    displayName: request.display_name
+  });
 
   // An unusable credential: the hash of 32 CSPRNG bytes that are discarded
   // immediately. The column is NOT NULL and login verifies against it, so there
@@ -257,7 +260,7 @@ export async function approveRegistrationRequest(
     INSERT INTO awcms_identities
       (tenant_id, profile_id, login_identifier, password_hash, status)
     VALUES (
-      ${tenantId}, ${profileRows[0]!.id}, ${request.login_identifier},
+      ${tenantId}, ${profileId}, ${request.login_identifier},
       ${unusablePasswordHash}, 'active'
     )
     RETURNING id

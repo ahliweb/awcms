@@ -35,9 +35,9 @@
     "semantic_hash": "128569172b2983855b52fe176b81f762"
   },
   "package.json": {
-    "mtime": 1785054438.154171,
-    "ast_hash": "e8c88de3d01b82df404b49cb33bfc0db",
-    "semantic_hash": "e8c88de3d01b82df404b49cb33bfc0db"
+    "mtime": 1785108115.7361848,
+    "ast_hash": "2983831a1d32436d17248aeb6ac8f271",
+    "semantic_hash": "2983831a1d32436d17248aeb6ac8f271"
   },
   "playwright.config.ts": {
     "mtime": 1784351630.253553,
@@ -220,9 +220,9 @@
     "semantic_hash": "bf6b6c8aec56f451e43d2f199786afd4"
   },
   "scripts/security-readiness.ts": {
-    "mtime": 1785098295.9879234,
-    "ast_hash": "60e8c04c528e3b4f1c73edac3d983d82",
-    "semantic_hash": "60e8c04c528e3b4f1c73edac3d983d82"
+    "mtime": 1785106817.6214337,
+    "ast_hash": "97491f09760694e4f4e6e8a7ae2f37de",
+    "semantic_hash": "97491f09760694e4f4e6e8a7ae2f37de"
   },
   "scripts/validate-env.ts": {
     "mtime": 1785098295.9889233,
@@ -1260,9 +1260,9 @@
     "semantic_hash": "bc28acce8c541b38aee1478ec8c67e8c"
   },
   "src/modules/identity-access/application/tenant-sso.ts": {
-    "mtime": 1784429399.4260118,
-    "ast_hash": "43a90374851b955c97ba0099d5071d2e",
-    "semantic_hash": "43a90374851b955c97ba0099d5071d2e"
+    "mtime": 1785108015.6939232,
+    "ast_hash": "d5fd4190eb83b44de150549fe140001c",
+    "semantic_hash": "d5fd4190eb83b44de150549fe140001c"
   },
   "src/modules/identity-access/application/user-admin.ts": {
     "mtime": 1784365247.5104432,
@@ -4830,9 +4830,9 @@
     "semantic_hash": "dae8c2d681c28e7aec392d8d27267f8a"
   },
   "docs/ARCHITECTURE.md": {
-    "mtime": 1785098365.2659981,
-    "ast_hash": "1db3e23d9fdd74750c08cf61d8577ce3",
-    "semantic_hash": "1db3e23d9fdd74750c08cf61d8577ce3"
+    "mtime": 1785108258.4263456,
+    "ast_hash": "87ff8a9e6b36463d6659f1f0eaf55440",
+    "semantic_hash": "87ff8a9e6b36463d6659f1f0eaf55440"
   },
   "docs/PROJECT_STATE.md": {
     "mtime": 1785098295.9799232,
@@ -5160,14 +5160,14 @@
     "semantic_hash": "e35b268c7fa9f412e55a47fe8b0ad65e"
   },
   "docs/awcms/README.id.md": {
-    "mtime": 1785053552.5119896,
-    "ast_hash": "424f888b4d9f775c30e22153bdc3ba93",
-    "semantic_hash": "424f888b4d9f775c30e22153bdc3ba93"
+    "mtime": 1785106817.6194336,
+    "ast_hash": "07a33f9b0ba2b03cb375997df9e3a93d",
+    "semantic_hash": "07a33f9b0ba2b03cb375997df9e3a93d"
   },
   "docs/awcms/README.md": {
-    "mtime": 1785053552.5129898,
-    "ast_hash": "316f62c33d134bbdd889bef67a4d1c64",
-    "semantic_hash": "316f62c33d134bbdd889bef67a4d1c64"
+    "mtime": 1785106817.6194336,
+    "ast_hash": "4d3c76ad310d815cdb3f9064c7a72d04",
+    "semantic_hash": "4d3c76ad310d815cdb3f9064c7a72d04"
   },
   "docs/awcms/absorb-awcms-micro-roadmap.md": {
     "mtime": 1785098295.9799232,
@@ -5280,9 +5280,9 @@
     "semantic_hash": "ae1deefca4d326ec9b56d099b74578e6"
   },
   "docs/awcms/oidc-sso.md": {
-    "mtime": 1784429399.4230118,
-    "ast_hash": "8d8147faf0ffeaa349d6d4abc7325538",
-    "semantic_hash": "8d8147faf0ffeaa349d6d4abc7325538"
+    "mtime": 1785106817.6204338,
+    "ast_hash": "4967876e72d411137a4eb016e3e7a308",
+    "semantic_hash": "4967876e72d411137a4eb016e3e7a308"
   },
   "docs/awcms/performance-suite.md": {
     "mtime": 1784153182.975899,
@@ -5480,9 +5480,9 @@
     "semantic_hash": "0a260c220cc87ab7e90ececed231e1be"
   },
   "src/modules/identity-access/README.md": {
-    "mtime": 1785098295.9899232,
-    "ast_hash": "73f6c11e736596a2d0d430a3ffb070af",
-    "semantic_hash": "73f6c11e736596a2d0d430a3ffb070af"
+    "mtime": 1785106817.6224337,
+    "ast_hash": "4312d4e4a7ad95525ebfa1bf03ffdf67",
+    "semantic_hash": "4312d4e4a7ad95525ebfa1bf03ffdf67"
   },
   "src/modules/media-library/README.md": {
     "mtime": 1784884237.5886233,
@@ -5500,9 +5500,9 @@
     "semantic_hash": "416c4f8d52a3b50465f9c8e4099434b3"
   },
   "src/modules/profile-identity/README.md": {
-    "mtime": 1784359494.3854399,
-    "ast_hash": "6e95cd62c62616a6efa07debeecb97fc",
-    "semantic_hash": "6e95cd62c62616a6efa07debeecb97fc"
+    "mtime": 1785108281.664609,
+    "ast_hash": "e135e7afa520273a93bde3a4659bb925",
+    "semantic_hash": "e135e7afa520273a93bde3a4659bb925"
   },
   "src/modules/reporting/README.md": {
     "mtime": 1784321396.5619738,
@@ -6585,9 +6585,9 @@
     "semantic_hash": "aec8e565cbaed6ffe71c90cb6d7eec24"
   },
   "src/modules/identity-access/application/self-registration.ts": {
-    "mtime": 1785098295.9909234,
-    "ast_hash": "eb22dd4e763bfd77c4350318827cd0a3",
-    "semantic_hash": "eb22dd4e763bfd77c4350318827cd0a3"
+    "mtime": 1785108229.5115757,
+    "ast_hash": "f42899fce2efa49c70b8631a92c3694d",
+    "semantic_hash": "f42899fce2efa49c70b8631a92c3694d"
   },
   "src/modules/identity-access/application/session-revocation.ts": {
     "mtime": 1785098295.9909234,
@@ -7013,5 +7013,50 @@
     "mtime": 1784963359.6869986,
     "ast_hash": "e093d0e92284c571bad99b1fcb83a67e",
     "semantic_hash": "e093d0e92284c571bad99b1fcb83a67e"
+  },
+  "scripts/table-write-ownership-check.ts": {
+    "mtime": 1785108307.1977553,
+    "ast_hash": "b46b351981c189016dba8836b2745487",
+    "semantic_hash": "b46b351981c189016dba8836b2745487"
+  },
+  "src/modules/profile-identity/application/person-profile.ts": {
+    "mtime": 1785107973.4054673,
+    "ast_hash": "d1df5506693721b984429fb1ee97967c",
+    "semantic_hash": "d1df5506693721b984429fb1ee97967c"
+  },
+  "tests/integration/sso-break-glass-readiness.integration.test.ts": {
+    "mtime": 1785106817.6224337,
+    "ast_hash": "69ee8a6fdff31024e42a66e5c4e107d5",
+    "semantic_hash": "69ee8a6fdff31024e42a66e5c4e107d5"
+  },
+  "tests/sso-break-glass-readiness-contract.test.ts": {
+    "mtime": 1785106817.6224337,
+    "ast_hash": "6077e304f3b593dc7657e679dfc8ef94",
+    "semantic_hash": "6077e304f3b593dc7657e679dfc8ef94"
+  },
+  "tests/table-write-ownership.test.ts": {
+    "mtime": 1785108307.229753,
+    "ast_hash": "bcb3542f2104266c620a948ed219fbd8",
+    "semantic_hash": "bcb3542f2104266c620a948ed219fbd8"
+  },
+  ".changeset/docs-skills-graph-sync.md": {
+    "mtime": 1785104697.0601885,
+    "ast_hash": "99dab75fd4cb860252d9a782fedc7a12",
+    "semantic_hash": "99dab75fd4cb860252d9a782fedc7a12"
+  },
+  ".changeset/sso-break-glass-readiness.md": {
+    "mtime": 1785106817.6194336,
+    "ast_hash": "bf400bad115e015eba812cd40831989b",
+    "semantic_hash": "bf400bad115e015eba812cd40831989b"
+  },
+  ".changeset/table-write-ownership-gate.md": {
+    "mtime": 1785108300.4852374,
+    "ast_hash": "5f22cef226159b8ab6901d0cbcb9a6ce",
+    "semantic_hash": "5f22cef226159b8ab6901d0cbcb9a6ce"
+  },
+  "docs/awcms/knowledge-graph.md": {
+    "mtime": 1785106817.6204338,
+    "ast_hash": "112eb1a7027faf3c4d4982f4ff1a325c",
+    "semantic_hash": "112eb1a7027faf3c4d4982f4ff1a325c"
   }
 }
