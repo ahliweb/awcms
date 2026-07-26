@@ -85,6 +85,13 @@ sendiri, bukan hasil merge dengan registry aplikasi:
 - Gate yang menegakkannya di `bun run check` dan CI: `modules:dag:check`,
   `modules:compose:check`, dan `modules:composition:inventory:generate`/`:check`
   (inventory deterministik `docs/awcms/module-composition-inventory.json`).
+- **`tests/module-boundary.test.ts` menutup celah yang tak bisa dilihat ketiganya.**
+  Gate di atas memvalidasi graf yang **DIDEKLARASIKAN** — dari `listModules()`
+  saja, tanpa I/O. Tak satu pun membaca satu baris `import`, jadi sebuah modul
+  bisa meng-import apa pun asal tidak menuliskannya. Tujuh edge seperti itu ada
+  saat gate ini mendarat (#251). Sekarang tiap import lintas-modul wajib
+  dideklarasikan sebagai `dependencies`, sebagai `capabilities.consumes`, atau
+  dikecualikan eksplisit dengan alasan yang bisa dibantah reviewer.
 
 Komposisi build-time (modul apa yang ada di kode) dan tenant lifecycle
 enable/disable (`module_management`, state DB per tenant) adalah **dua lapis

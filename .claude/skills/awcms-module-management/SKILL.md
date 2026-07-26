@@ -222,12 +222,39 @@ masing-masing.
 `synced`/`missing`/`orphaned`/`mismatched_description` — **read-only**,
 tidak pernah menulis ke `awcms_permissions`.
 
-Per 2026-07-26 di repo INI: **20 dari 21 modul** sudah mendeklarasikan
-`permissions` di descriptornya. Satu-satunya yang belum adalah **`email`** —
-permission-nya di-seed migrasi tapi tidak ada di descriptor, jadi baris
-`awcms_permissions` miliknya **legitimately** muncul `orphaned` hari ini; itu
-bukan insiden. Jangan hapus baris `awcms_permissions`
-berdasarkan laporan ini tanpa keputusan admin eksplisit.
+Per 2026-07-26 di repo INI: **SEMUA 21 modul** mendeklarasikan `permissions` di
+descriptornya (#251 menutup `email`, yang terakhir). Artinya `orphaned` sekarang
+BUKAN lagi kondisi normal untuk modul mana pun — kalau laporan menampilkannya,
+itu sinyal nyata, bukan latar belakang yang bisa diabaikan.
+
+Sebelum #251, dua belas baris `email` permanen tampil `orphaned` karena
+permission-nya di-seed `sql/014` tapi tak pernah masuk descriptor. False
+positive menetap seperti itu melatih pembaca mengabaikan laporan drift — satu
+hal yang justru tidak boleh dilakukan laporan drift. Tetap jangan hapus baris
+`awcms_permissions` berdasarkan laporan ini tanpa keputusan admin eksplisit;
+`missing`/`orphaned` diperbaiki dengan menyelaraskan descriptor ATAU menambah
+migrasi seed, bukan dengan DELETE.
+
+## `navigation` punya DUA sumber yang tidak pernah direkonsiliasi
+
+`ModuleDescriptor.navigation` **nyata dikonsumsi** — `descriptor-sync.ts`
+menuliskannya ke `awcms_module_navigation`, `navigation-registry.ts`
+menyajikannya, dan `module-composition.ts` memvalidasi konflik path. Lima modul
+mendeklarasikannya (`blog_content`, `news_portal`, `tenant_domain`,
+`visitor_analytics`, `comments`).
+
+**Tapi sidebar admin tidak membacanya.** `src/layouts/AdminLayout.astro`
+merender `navSections` — array statis di kode, dan header-nya menyatakan itu
+disengaja ("awcms groups in code"). Jadi mendeklarasikan `navigation` hari ini
+menghasilkan baris DB dan entri API, **bukan** link di sidebar; sebaliknya ada
+layar admin (mis. `/admin/tenant`) yang tampil di sidebar tanpa descriptor
+apa pun.
+
+Konsekuensi praktis saat menambah modul: jangan berasumsi `navigation`
+memunculkan menu. Kalau layarnya harus terlihat, tambahkan ke `navSections`
+JUGA. Menyatukan keduanya (render sidebar dari registry, atau hapus field-nya)
+adalah keputusan desain yang belum diambil — bukan bug yang boleh "diperbaiki"
+diam-diam di satu sisi saja, karena sisi API sudah punya konsumen.
 
 ## Health check — GET pasif, POST eksplisit
 
