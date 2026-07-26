@@ -15,6 +15,38 @@ flowchart LR
   Idem -->|Tidak| Svc
 ```
 
+## Pembukaan rute: `defineTenantRoute` WAJIB untuk rute baru
+
+Rute tenant-scoped **tidak lagi** menulis sendiri
+`resolveAuthInputs → cek tenant/token → getDatabaseClient → hashSessionToken →
+withTenant → authorizeInTransaction → auth.denied`. Semua itu hidup satu kali di
+`src/modules/_shared/tenant-route.ts`.
+
+```ts
+export const GET = defineTenantRoute({
+  workClass: "reporting", // WAJIB — tanpa default, lihat di bawah
+  authorize: { moduleKey: "reporting", activityCode: "dashboard", action: "read" },
+  prepare: async ({ request, url }) => {
+    // body/query/cursor — SEBELUM koneksi diambil, jadi request cacat
+    // tidak memakan slot pool. Kembalikan `Response` untuk short-circuit.
+  },
+  handler: async ({ tx, auth, tenantId, prepared }) => ok(...)
+});
+```
+
+- **`workClass` wajib, tanpa default.** 176 dari 204 berkas rute lama tidak
+  meneruskannya, jadi berbagi budget pool dengan login karena kelalaian, bukan
+  keputusan. Menegaskan ulang `"interactive"` jawaban yang sah.
+- **Bentuk callback `authorize`:** tulis `prepare` SEBELUM `authorize` di object
+  literal. TypeScript menyimpulkan `TPrepared` menurut urutan sumber; `authorize`
+  duluan mem-pin-nya ke `undefined` dan errornya menyesatkan.
+- **Gate `bun run api:tenant-route:check`** menolak rute BARU yang memanggil
+  `withTenant` langsung. 204 rute lama ada di `NOT_YET_MIGRATED` — daftar yang
+  **hanya boleh menyusut**; entri basi juga menggagalkan gate. **Jangan pernah
+  menambah baris ke daftar itu.**
+- Migrasi rute lama: satu modul per PR, tanpa perubahan perilaku, hapus barisnya
+  dari daftar.
+
 ## Aturan
 
 1. Route hanya orkestrasi; business logic di service, query di repository.

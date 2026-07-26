@@ -1,0 +1,230 @@
+import type { APIContext, APIRoute, AstroCookies } from "astro";
+
+import { fail } from "./api-response";
+import type { BusinessScopeHierarchyPort } from "./ports/business-scope-hierarchy-port";
+import type { SoDRuleDescriptor } from "./module-contract";
+import { hashSessionToken } from "../../lib/auth/session-token";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import type { WorkClass } from "../../lib/database/work-class";
+import {
+  authorizeInTransaction,
+  resolveAuthInputs,
+  type AuthorizeResult
+} from "../identity-access/application/access-guard";
+import type { AccessRequest } from "../identity-access/domain/access-control";
+
+/**
+ * `defineTenantRoute` (Issue #255) — the ONE place the auth/tenant opening that
+ * 184 of 221 `src/pages/api` route files copy verbatim is written down:
+ *
+ * ```
+ * resolveAuthInputs → tenantId? (400 TENANT_REQUIRED) → token? (401 AUTH_REQUIRED)
+ *   → getDatabaseClient → hashSessionToken → withTenant(workClass)
+ *   → authorizeInTransaction → short-circuit auth.denied → handler
+ * ```
+ *
+ * Ported from awcms-micro's `_shared/tenant-route.ts`, adapted where this
+ * repo's `withTenant` differs (see "One difference from micro" below).
+ *
+ * ## Why a factory and not "just a helper"
+ *
+ * Because the copy was already wrong in four places and nothing noticed.
+ * `/api/v1/reports/{module-usage,access-audit,sync-health,tenant-activity}.ts`
+ * hand-rolled the chain and called `evaluateAccess` with **three arguments of
+ * five**, so those endpoints skipped `resolveModuleEnabled` (a tenant that
+ * disabled `reporting` was still served) and skipped dynamic ABAC policies (a
+ * `deny` authored through `/api/v1/access/policies` was silently inert).
+ *
+ * Copy-paste was the only enforcement mechanism there was. It worked 184 times
+ * and failed 4, and no type, gate or reviewer could tell the difference from a
+ * diff. Everything below is stated once so the NEXT invariant does not have to
+ * be copied 293 times.
+ *
+ * ## `workClass` is REQUIRED, deliberately
+ *
+ * `withTenant`'s own `workClass` is optional and defaults to `"interactive"`.
+ * Measured over `src/pages/api` at the time of writing: **176 of the 204 route
+ * files** that call `withTenant` directly pass no work class at all. Only 28 do
+ * (19 `interactive`, 7 `background_sync`, 6 `reporting`). So 176 routes share
+ * login's pool budget because nobody passed the argument, not because anybody
+ * decided.
+ *
+ * Here it has no default: omitting it is a compile error. Re-affirming
+ * `"interactive"` is a perfectly good answer; leaving it unsaid is not.
+ *
+ * Do NOT cite `docs/awcms/work-class-registry.generated.json` for this. That
+ * file is a copied awcms-mini artifact — its own `_disclaimer` says so, listing
+ * ghost routes and a route count that was already wrong. There is no generator
+ * and no freshness gate behind it in this repo, so it can only rot.
+ *
+ * ## One difference from micro: no `unavailableBehavior`
+ *
+ * micro's factory pins `unavailableBehavior: "response"` because its
+ * `withTenant` can be told to throw instead. This repo's cannot — `withTenant`
+ * ALWAYS returns the 503 `DATABASE_BUSY` `Response`, cast to the caller's `T`
+ * (see its header: "type-safe in practice, even though the generic signature
+ * doesn't statically enforce `T = Response`").
+ *
+ * For a route that is exactly right, and pinning `withTenant<Response>` below
+ * makes the assumption explicit rather than inferred. For NON-`Response`
+ * callers it is a live hazard in this repo, which is why
+ * `layouts/AdminLayout.astro` shape-checks the result instead of trusting it.
+ * Nothing here fixes that; a route is simply never the caller that suffers it.
+ */
+
+/** Everything available BEFORE the transaction opens. */
+export type TenantRouteRequestContext = {
+  request: Request;
+  cookies: AstroCookies;
+  url: URL;
+  params: APIContext["params"];
+  locals: APIContext["locals"];
+  /** Already validated non-null (a missing one produced `400 TENANT_REQUIRED`). */
+  tenantId: string;
+  /** One clock for the whole request — the same instant the guard chain sees. */
+  now: Date;
+};
+
+/** The `allowed: true` half of {@link AuthorizeResult}, so `auth.context.tenantUserId` reads exactly as in a hand-written route. */
+export type AuthorizedAccess = Extract<AuthorizeResult, { allowed: true }>;
+
+export type TenantRouteHandlerContext<TPrepared> = TenantRouteRequestContext & {
+  /**
+   * The tenant transaction, with `app.current_tenant_id` already set.
+   *
+   * `tx` is ONE reserved connection. Never run two queries on it concurrently
+   * — no `Promise.all([queryA(tx), queryB(tx)])` and no
+   * `Promise.all(items.map((item) => query(tx, item)))`. Concurrent queries on
+   * one connection desync it, the transaction never commits, and the session
+   * is stranded holding its work-class slot. `await` in sequence, or use a
+   * plain `for` loop.
+   */
+  tx: Bun.TransactionSQL;
+  /** Already narrowed to allowed — a deny was returned before `handler` ran. */
+  auth: AuthorizedAccess;
+  /** Whatever `prepare` returned (`undefined` when there is no `prepare`). */
+  prepared: TPrepared;
+};
+
+export type TenantRouteConfig<TPrepared> = {
+  /**
+   * REQUIRED — no default. See this file's header: the whole point is that an
+   * implicit `"interactive"` becomes a written, reviewable classification.
+   */
+  workClass: WorkClass;
+  /** Forwarded verbatim to `withTenant` (which defaults to its own 2000ms). */
+  queueTimeoutMs?: number;
+  /**
+   * The guard. A plain `AccessRequest` for the usual static case, or a function
+   * when it depends on what `prepare` parsed (e.g. an action that differs by
+   * request body).
+   *
+   * INFERENCE ORDER, when using the callback form: write `prepare` BEFORE
+   * `authorize` in the object literal. TypeScript infers `TPrepared` from
+   * object-literal properties in source order, so an unannotated `authorize`
+   * callback appearing first pins `TPrepared` to its `undefined` default before
+   * `prepare` is looked at. The symptom is a confusing "`prepare` is not
+   * assignable to ..." error, not a silent wrong type.
+   */
+  authorize:
+    | AccessRequest
+    | ((
+        context: TenantRouteRequestContext & { prepared: TPrepared }
+      ) => AccessRequest);
+  /** Forwarded verbatim to `authorizeInTransaction`. */
+  authorizeOptions?: {
+    hierarchyPort?: BusinessScopeHierarchyPort;
+    sodRules?: readonly SoDRuleDescriptor[];
+  };
+  /**
+   * Runs AFTER the tenant/token checks and BEFORE any database work — the slot
+   * for everything hand-written routes do between the 401 guard and
+   * `withTenant`: body parsing, query-parameter validation, cursor decoding,
+   * `Idempotency-Key` handling. Returning a `Response` short-circuits with it,
+   * so a malformed request still costs no connection and no pool slot;
+   * returning anything else hands that value to `handler` as `prepared`.
+   */
+  prepare?: (
+    context: TenantRouteRequestContext
+  ) => TPrepared | Response | Promise<TPrepared | Response>;
+  /** Runs inside the tenant transaction, only when access was ALLOWED. */
+  handler: (
+    context: TenantRouteHandlerContext<TPrepared>
+  ) => Response | Promise<Response>;
+};
+
+export function defineTenantRoute<TPrepared = undefined>(
+  config: TenantRouteConfig<TPrepared>
+): APIRoute {
+  return async ({ request, cookies, url, params, locals }) => {
+    const { tenantId, token } = resolveAuthInputs(request, cookies);
+
+    if (!tenantId) {
+      return fail(400, "TENANT_REQUIRED", "Tenant header is required.");
+    }
+
+    if (!token) {
+      return fail(401, "AUTH_REQUIRED", "Authentication required.");
+    }
+
+    const requestContext: TenantRouteRequestContext = {
+      request,
+      cookies,
+      url,
+      params,
+      locals,
+      tenantId,
+      now: new Date()
+    };
+
+    let prepared = undefined as TPrepared;
+
+    if (config.prepare) {
+      const prepareResult = await config.prepare(requestContext);
+
+      if (prepareResult instanceof Response) {
+        return prepareResult;
+      }
+
+      prepared = prepareResult;
+    }
+
+    const guard =
+      typeof config.authorize === "function"
+        ? config.authorize({ ...requestContext, prepared })
+        : config.authorize;
+
+    const sql = getDatabaseClient();
+    const tokenHash = hashSessionToken(token);
+
+    // `withTenant<Response>` — pinned, not inferred. This repo's `withTenant`
+    // returns its 503 `DATABASE_BUSY` cast to `T` on breaker-open / queue-full,
+    // so `T = Response` is the assumption that makes that correct. Stated here
+    // so a future edit has to break it on purpose.
+    return withTenant<Response>(
+      sql,
+      tenantId,
+      async (tx) => {
+        const auth = await authorizeInTransaction(
+          tx,
+          tenantId,
+          tokenHash,
+          requestContext.now,
+          guard,
+          config.authorizeOptions
+        );
+
+        if (!auth.allowed) {
+          return auth.denied;
+        }
+
+        return config.handler({ ...requestContext, tx, auth, prepared });
+      },
+      {
+        workClass: config.workClass,
+        queueTimeoutMs: config.queueTimeoutMs
+      }
+    );
+  };
+}
