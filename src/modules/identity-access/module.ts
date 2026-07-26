@@ -35,6 +35,33 @@ export const identityAccessModule = defineModule({
       }
     ]
   },
+  /**
+   * Three admin screens, all gating their read on the SAME key.
+   * `access_control` seeds only `read`/`assign`/`configure` (no per-screen
+   * action), so a finer-grained link gate would name a permission that is
+   * never granted and hide all three from everyone — the latent-authz trap
+   * already recorded for the write surfaces on these pages.
+   */
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_users",
+      path: "/admin/users",
+      order: 20,
+      requiredPermission: "identity_access.access_control.read"
+    },
+    {
+      labelKey: "admin.layout.nav_roles",
+      path: "/admin/roles",
+      order: 21,
+      requiredPermission: "identity_access.access_control.read"
+    },
+    {
+      labelKey: "admin.layout.nav_abac_policies",
+      path: "/admin/abac-policies",
+      order: 22,
+      requiredPermission: "identity_access.access_control.read"
+    }
+  ],
   jobs: [
     {
       command: "bun run identity-access:business-scope:expiry",

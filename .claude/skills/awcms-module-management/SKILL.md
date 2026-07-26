@@ -235,26 +235,47 @@ hal yang justru tidak boleh dilakukan laporan drift. Tetap jangan hapus baris
 `missing`/`orphaned` diperbaiki dengan menyelaraskan descriptor ATAU menambah
 migrasi seed, bukan dengan DELETE.
 
-## `navigation` punya DUA sumber yang tidak pernah direkonsiliasi
+## `navigation` = SATU sumber; sidebar dirender dari registry
 
-`ModuleDescriptor.navigation` **nyata dikonsumsi** — `descriptor-sync.ts`
-menuliskannya ke `awcms_module_navigation`, `navigation-registry.ts`
-menyajikannya, dan `module-composition.ts` memvalidasi konflik path. Lima modul
-mendeklarasikannya (`blog_content`, `news_portal`, `tenant_domain`,
-`visitor_analytics`, `comments`).
+`ModuleDescriptor.navigation` dikonsumsi **empat** cara sekarang:
+`descriptor-sync.ts` menuliskannya ke `awcms_module_navigation`,
+`navigation-registry.ts` menyajikannya lewat `GET /api/v1/modules`,
+`module-composition.ts` memvalidasi konflik path, dan
+`src/layouts/AdminLayout.astro` **merender sidebar dari situ** lewat
+`module-management/domain/sidebar-menu.ts`.
 
-**Tapi sidebar admin tidak membacanya.** `src/layouts/AdminLayout.astro`
-merender `navSections` — array statis di kode, dan header-nya menyatakan itu
-disengaja ("awcms groups in code"). Jadi mendeklarasikan `navigation` hari ini
-menghasilkan baris DB dan entri API, **bukan** link di sidebar; sebaliknya ada
-layar admin (mis. `/admin/tenant`) yang tampil di sidebar tanpa descriptor
-apa pun.
+> **Versi sebelumnya dari bagian ini SALAH sejak sidebar direwire.** Ia
+> menyuruh menambahkan link ke array statis `navSections` "JUGA". Array itu
+> sudah tidak ada. Yang memakai instruksi lama akan menambahkan link ke berkas
+> yang tak ada lagi, lalu mengira menu-nya rusak.
 
-Konsekuensi praktis saat menambah modul: jangan berasumsi `navigation`
-memunculkan menu. Kalau layarnya harus terlihat, tambahkan ke `navSections`
-JUGA. Menyatukan keduanya (render sidebar dari registry, atau hapus field-nya)
-adalah keputusan desain yang belum diambil — bukan bug yang boleh "diperbaiki"
-diam-diam di satu sisi saja, karena sisi API sudah punya konsumen.
+Cara kerjanya:
+
+- `buildDefaultSidebarModel(listModules())` menyusun model default = entri core
+  sintetis (`CORE_NAV_ENTRIES`, hanya `/admin` di base ini) + `navigation` tiap
+  modul non-`disabled`.
+- Penempatan section diambil dari `DEFAULT_MODULE_TYPE` (peta modul→type), yang
+  **menang atas** `group` di entri nav. Modul baru WAJIB masuk peta ini — gate
+  menolak kalau tidak.
+- `composeSidebarSections` menyaring per pemanggil: modul yang di-disable tenant
+  dibuang, `requiredPermission` menentukan link terlihat atau tidak. Section
+  kosong tidak dirender.
+- Label: base ini tak punya katalog gettext, jadi `labelKey` di-resolve lewat
+  tabel `SIDEBAR_LABELS` di berkas yang sama. Tambah entri nav = tambah label.
+
+**Gate `tests/admin-navigation-registry.test.ts`** menegakkan dua arah: tiap
+`navigation[].path` harus punya halaman nyata di `src/pages/admin/**`, dan tiap
+halaman `/admin/**` harus diklaim tepat satu descriptor atau ada di
+`CORE_NAV_ENTRIES`. Sudah dibuktikan merah untuk ketiga kelas pelanggaran
+(path mati, halaman tak terdaftar, label hilang).
+
+Konsekuensi praktis saat menambah modul: deklarasikan `navigation` **dan**
+buat halamannya di PR yang sama. Mendeklarasikan lebih dulu kini gagal di CI —
+sebelumnya itu diam-diam mengirim 404 ke DB dan ke API.
+
+Yang **belum** ada: lapisan override per-tenant milik awcms-micro
+(`sidebar_menu_types`/`sidebar_menu_items` + editor admin) — reorder, hide,
+relabel, pindah type per tenant. Itu butuh migrasi dan increment tersendiri.
 
 ## Health check — GET pasif, POST eksplisit
 

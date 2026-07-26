@@ -52,20 +52,17 @@ export const newsPortalModule = defineModule({
     openApiPath: "openapi/awcms-public-api.openapi.yaml",
     basePath: "/api/v1/news-portal"
   },
-  navigation: [
-    {
-      labelKey: "admin.layout.nav_news_portal_homepage_sections",
-      path: "/admin/news-portal/homepage-sections",
-      order: 80,
-      requiredPermission: "news_portal.homepage_sections.read"
-    },
-    {
-      labelKey: "admin.layout.nav_news_portal_ad_placements",
-      path: "/admin/news-portal/ad-placements",
-      order: 81,
-      requiredPermission: "news_portal.ad_placements.read"
-    }
-  ],
+  /**
+   * No `navigation` yet — same reason as `blog_content`.
+   *
+   * `/admin/news-portal/homepage-sections` and
+   * `/admin/news-portal/ad-placements` came over with the descriptor from
+   * awcms-mini; neither page was ported. Both were being synced to
+   * `awcms_module_navigation` and served by `GET /api/v1/modules` as valid menu
+   * items pointing at 404s. The APIs behind them are real
+   * (`/api/v1/news-portal/**`) — only the admin screens are missing, so these
+   * return with the screens.
+   */
   permissions: [
     {
       activityCode: "homepage_sections",

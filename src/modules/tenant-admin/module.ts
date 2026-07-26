@@ -12,6 +12,14 @@ export const tenantAdminModule = defineModule({
     openApiPath: "openapi/modules/tenant-admin.openapi.yaml",
     basePath: "/api/v1"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_offices",
+      path: "/admin/offices",
+      order: 30,
+      requiredPermission: "tenant_admin.office_management.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "office_management",

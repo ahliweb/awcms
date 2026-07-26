@@ -62,14 +62,21 @@ export const blogContentModule = defineModule({
       }
     ]
   },
-  navigation: [
-    {
-      labelKey: "admin.layout.nav_blog",
-      path: "/admin/blog",
-      order: 40,
-      requiredPermission: "blog_content.posts.read"
-    }
-  ],
+  /**
+   * No `navigation` yet — deliberately.
+   *
+   * This module declared `/admin/blog` when it was ported from awcms-mini,
+   * where that page exists. It does not exist here: the port brought the API
+   * and the public routes, not the authoring screens. Nothing rendered
+   * descriptor navigation at the time, so the entry was invisible; once
+   * `AdminLayout.astro` started rendering from the registry it would have been
+   * a 404 in the sidebar, and `descriptor-sync` had already been publishing it
+   * to `awcms_module_navigation` and `GET /api/v1/modules` as a valid item.
+   *
+   * `tests/admin-navigation-registry.test.ts` now fails on any entry whose path
+   * has no page, so this comes back in the same change that adds the screen —
+   * not before.
+   */
   permissions: [
     { activityCode: "posts", action: "read", description: "Read blog posts" },
     {

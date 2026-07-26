@@ -45,20 +45,16 @@ describe("news_portal module descriptor (ported from awcms-mini; ADR-0036 media 
       basePath: "/api/v1/news-portal"
     });
 
-    expect(newsPortalModule.navigation).toEqual([
-      {
-        labelKey: "admin.layout.nav_news_portal_homepage_sections",
-        path: "/admin/news-portal/homepage-sections",
-        order: 80,
-        requiredPermission: "news_portal.homepage_sections.read"
-      },
-      {
-        labelKey: "admin.layout.nav_news_portal_ad_placements",
-        path: "/admin/news-portal/ad-placements",
-        order: 81,
-        requiredPermission: "news_portal.ad_placements.read"
-      }
-    ]);
+    // This assertion used to pin the two literal nav entries
+    // (`/admin/news-portal/homepage-sections`, `.../ad-placements`). Neither
+    // page was ever ported into this base, so what it actually locked in was
+    // two permanent 404s that `descriptor-sync` published to
+    // `awcms_module_navigation` and `GET /api/v1/modules` as valid menu items.
+    //
+    // The rule, not the literal: a declared entry must lead somewhere, and
+    // `tests/admin-navigation-registry.test.ts` enforces that against the
+    // filesystem for every module. These two return with their screens.
+    expect(newsPortalModule.navigation).toBeUndefined();
 
     expect(newsPortalModule.permissions).toBeDefined();
   });
