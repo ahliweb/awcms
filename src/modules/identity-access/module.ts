@@ -24,9 +24,11 @@ export const identityAccessModule = defineModule({
       "/api/v1/users",
       "/api/v1/abac",
       "/api/v1/identity",
+      "/api/v1/registration-requests",
       "/login",
       "/forgot-password",
-      "/reset-password"
+      "/reset-password",
+      "/register"
     ]
   },
   // Issue #180 — the generic business-scope layer CONSUMES a hierarchy
@@ -91,6 +93,17 @@ export const identityAccessModule = defineModule({
       path: "/admin/abac-policies",
       order: 22,
       requiredPermission: "identity_access.access_control.read"
+    },
+    // Gated on `registration_requests.read`, NOT the `access_control.read` the
+    // three above share: this activity seeds its own `read`, so naming it is a
+    // real gate rather than the never-granted invention the comment above warns
+    // about — and an onboarding reviewer should reach this screen without also
+    // being handed the RBAC catalog.
+    {
+      labelKey: "admin.layout.nav_registrations",
+      path: "/admin/registrations",
+      order: 23,
+      requiredPermission: "identity_access.registration_requests.read"
     }
   ],
   jobs: [
@@ -210,6 +223,27 @@ export const identityAccessModule = defineModule({
       action: "update",
       description:
         "Update tenant authentication policy (password/SSO/break-glass)"
+    },
+    // Self-registration review (Wave 2 delta auth, sql/075). A separate
+    // activity from `access_control` because approval is the only admin path
+    // in this repo that materializes an identity, and `approve`/`reject` are
+    // separate actions because only one of them creates an account.
+    {
+      activityCode: "registration_requests",
+      action: "read",
+      description: "Read the pending self-registration queue for this tenant"
+    },
+    {
+      activityCode: "registration_requests",
+      action: "approve",
+      description:
+        "Approve a self-registration request, creating a real account that can sign in — audited"
+    },
+    {
+      activityCode: "registration_requests",
+      action: "reject",
+      description:
+        "Reject a self-registration request (no account is created) — audited"
     }
   ],
   /**
@@ -264,6 +298,58 @@ export const identityAccessModule = defineModule({
       batchLimit: 5000,
       backupRestoreNotes:
         "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). Restoring an old backup can revive tokens that were already expired at backup time — they stay unusable, because expiry is evaluated against the clock, not against a flag.",
+      executionMode: "generic"
+    },
+    /**
+     * `awcms_registration_requests` (sql/074). Also `generic`: once a request
+     * is reviewed there is no module-owned sweep to delegate to.
+     *
+     * The retention window is longer than the reset tokens' above (90d default
+     * vs 7d) and deliberately so — a rejected applicant re-applying, or a
+     * dispute about who was admitted and when, is answered by this table, and
+     * the `registration_approved` audit row points AT it. It holds an email
+     * address supplied by an anonymous submitter, which is exactly why it is
+     * purged rather than kept indefinitely.
+     */
+    {
+      key: "identity_access.registration_requests",
+      tableName: "awcms_registration_requests",
+      ownerModuleKey: "identity_access",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 730,
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per applicant, bounded by a public rate limit and purged within months — nowhere near the volume profile partitioning exists for."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A reviewed request is an onboarding decision whose durable record is the audit event, not this row. Archiving would preserve an anonymous submitter's email address past the window this retention exists to close, duplicating what the audit trail already states without the address."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "`status` already records the decision and there is nothing further to transition to; the row's only sensitive column is the submitted address, which anonymization would empty rather than preserve."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_registration_requests_tenant_created_idx (sql/074) — the engine's own cursor path (WHERE tenant_id = ? AND created_at < ?), added by this table's migration for it rather than borrowed from the pending-queue index, whose leading `status` column does not serve a cursor scan."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). A restored backup can revive already-reviewed rows — harmless: `status` is not `pending`, so they never re-enter the queue.",
       executionMode: "generic"
     }
   ]

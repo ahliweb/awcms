@@ -78,7 +78,19 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // request. An identity whose tenant disabled password login is refused on
   // BOTH paths, so this is not a way around that policy.
   "postAuthPasswordForgot",
-  "postAuthPasswordReset"
+  "postAuthPasswordReset",
+  // Self-registration (Wave 2 delta auth) — unauthenticated by definition: an
+  // applicant has no account yet, which is the point of the endpoint.
+  //
+  // What keeps it safe is not authentication: it is OFF unless
+  // `AUTH_SELF_REGISTRATION_ENABLED=true` (and answers 404 when off, so the
+  // switch is not discoverable), tenant-bound, per-IP + per-tenant rate
+  // limited, and Turnstile-gated on the full-online profile. It creates NO
+  // account and accepts NO password and NO privilege field — approval is a
+  // separate, permissioned admin action. An already-registered address, an
+  // already-pending request and a fresh one all return the identical 200, so it
+  // is not an account-existence oracle.
+  "postAuthRegister"
 ]);
 
 /**

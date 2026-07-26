@@ -202,7 +202,56 @@ Diadaptasi dari awcms-micro Issue #496. Dua endpoint publik + dua halaman:
   dicek sebelum menyentuh DB; Turnstile memakai action `password_reset` sendiri
   (token dari form login tidak bisa di-replay ke sini).
 
+## Self-registration ber-persetujuan admin (Gelombang 2 delta auth)
+
+Diadaptasi dari awcms-micro. `POST /api/v1/auth/register` (publik) +
+`/register`, antrean `/admin/registrations`, dan tiga endpoint admin
+(`GET /api/v1/registration-requests`, `.../{id}/approve`, `.../{id}/reject`).
+
+- **MATI secara default** (`AUTH_SELF_REGISTRATION_ENABLED`, `sql/074`–`075`).
+  Endpoint publik yang selalu hidup dan menulis baris adalah permukaan spam yang
+  akan diwarisi SETIAP deployment. Saat mati endpoint menjawab `404` — jawaban
+  yang sama dengan rute yang tidak ada, jadi saklarnya tak bisa ditemukan lewat
+  probing. Ini gerbang tingkat DEPLOYMENT (seperti `AUTH_MFA_ENABLED`), jadi
+  menyalakannya membuka registrasi untuk SEMUA tenant; granularitas per-tenant
+  adalah follow-up yang dicatat, bukan yang dipura-purakan ada.
+- **Tidak pernah membuat akun.** Submit publik hanya menulis baris `pending` di
+  `awcms_registration_requests`; ia menolak field privilese apa pun (`roleIds`,
+  `status`, `tenantUserId`) dan TIDAK menerima password sama sekali.
+  Validator mengembalikan tepat dua field, dan itu ditegakkan dua arah (runtime
+  key-set + struktural "field apa saja yang dibaca dari body").
+- **TIDAK menyimpan kredensial — menyimpang dari micro secara sengaja.** Versi
+  micro menyimpan hash argon2id yang dipilih penyubmit anonim tak terverifikasi
+  untuk akun yang mungkin tak pernah ada. Di sini approval membuat identity
+  dengan **password tak terpakai** (hash dari 32 byte CSPRNG yang langsung
+  dibuang) lalu menerbitkan link password-reset lewat jalur `requestPasswordReset`
+  yang sama dengan `/forgot-password`. Pelamar membuktikan kendali mailbox
+  sebelum bisa masuk; request yang ditolak/terbengkalai tak meninggalkan
+  kredensial apa pun; dan banjir spam tak lagi berarti banjir hash argon2id.
+- **Aman terhadap enumerasi.** Alamat yang sudah punya akun, request yang sudah
+  pending, tenant non-aktif, dan request baru semuanya membalas 200 identik.
+  "Alamat ini sudah terdaftar" adalah kalimat paling berguna yang bisa didapat
+  penyerang di sini — justru itu tak pernah diucapkan. Audit mencatat mana yang
+  terjadi (TANPA alamatnya, untuk submit yang gagal).
+- **`approve` dan `reject` permission TERPISAH** (`registration_requests.*`,
+  activity baru — `access_control` adalah katalog RBAC, bukan otoritas menerima
+  orang; `/api/v1/users` di repo ini read-only, jadi approval adalah jalur admin
+  PERTAMA yang memunculkan identity). Hanya salah satunya membuat akun.
+- **Approval anti-balapan.** Baris dikunci `FOR UPDATE` dengan predikat
+  `status = 'pending'`. Tanpa lock, dua reviewer bersamaan memicu 23505 di
+  tengah transaksi → 500 bagi reviewer yang tak salah apa-apa; dengan lock yang
+  kedua dapat `not_found` → 404 yang bersih. Terbukti lewat mutasi.
+- **`roleIds` opsional dan default kosong** — approval tak pernah memberi role
+  diam-diam. Role tak dikenal menolak SELURUH approval, bukan memberi subset.
+- **Reject tak memberi tahu siapa pun** — email penolakan mengonfirmasi ke
+  penyubmit anonim bahwa tenant ini ada dan me-review mereka, yaitu justru
+  pengungkapan yang ditolak endpoint publiknya.
+- Baris ter-review dipurge mesin `data_lifecycle` GENERIC (default 90 hari,
+  lantai 7 hari agar audit `registration_approved` masih menunjuk sesuatu);
+  grant worker `SELECT, DELETE` saja.
+
 ## Belum tersedia (Sprint 3+)
 
-Endpoint manajemen user/role lanjutan. Self-registration dan layar
-`/admin/security` (sisa Gelombang 2 delta auth) belum ada.
+Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:
+self-registration masih gerbang tingkat deployment (belum per-tenant), dan CRUD
+provider OIDC masih API-only.
