@@ -12,6 +12,14 @@ export const emailModule = defineModule({
     openApiPath: "openapi/modules/email.openapi.yaml",
     basePath: "/api/v1/email"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_email_templates",
+      path: "/admin/email-templates",
+      order: 32,
+      requiredPermission: "email.template.read"
+    }
+  ],
   /**
    * Mirrors `sql/014`'s seed EXACTLY — same twelve (activityCode, action) pairs,
    * same descriptions. `GET /api/v1/modules/email/permissions` compares the two

@@ -86,9 +86,12 @@ tempat yang boleh memanggil `listModules()`. Semua isi `domain/` dan
   `commentableResources` mendeklarasikan `publicationFilter` yang **sama
   persis**. Ada test yang menegakkannya (sudah dibuktikan merah saat di-drift).
   Kalau kamu mengubah satu, ubah keduanya.
-- **`labelKey` navigasi tidak dirender.** Sidebar admin di
-  `layouts/AdminLayout.astro` adalah daftar statis (#229 menolak subsistem
-  sidebar per-tenant micro). Descriptor + sidebar harus diperbarui berpasangan.
+- **`labelKey` navigasi kini DIRENDER.** Sidebar admin dibangun dari
+  `listModules()` lewat `module-management/domain/sidebar-menu.ts`; tidak ada
+  lagi daftar statis untuk disinkronkan. `admin.layout.nav_comments` di-resolve
+  lewat `SIDEBAR_LABELS`. `group: "content"` dibuang dari descriptor karena
+  `DEFAULT_MODULE_TYPE` menempatkan `comments` di `engagement` dan peta itu
+  menang — nilai yang tak pernah berlaku lebih buruk dari tidak ada nilai.
 
 ## Perintah
 

@@ -29,7 +29,22 @@ Ported and adapted from the awcms-mini module-management module.
   `awcms_permissions`. Never writes to the catalog.
 - **Navigation registry** (`application/navigation-registry.ts`) — filters
   module-declared nav entries by module status, tenant enablement, and
-  required permission. Navigation filtering is **not** authorization.
+  required permission, as a flat list for `GET /api/v1/modules`. Navigation
+  filtering is **not** authorization.
+- **Sidebar model** (`domain/sidebar-menu.ts`) — the same declarations, grouped
+  into the admin shell's `type -> module -> entries` tree.
+  `src/layouts/AdminLayout.astro` renders from this; it previously kept its own
+  hand-written array, which had drifted into three entries pointing at pages
+  that do not exist and eight pages the registry had never heard of.
+  `tests/admin-navigation-registry.test.ts` binds declarations to the
+  filesystem in both directions.
+
+  Ported from awcms-micro's `domain/sidebar-menu.ts` **minus the per-tenant
+  override layer** — its `sidebar_menu_types`/`sidebar_menu_items` tables and
+  admin editor let a tenant reorder, hide, relabel and re-bucket entries. That
+  needs a migration and is a separate increment; the model here is the default
+  those overrides apply on top of, so it arrives without rework.
+
 - **Job registry** (`application/job-registry.ts`) — documentation-only
   metadata about each module's operational commands. Never an execution
   surface.

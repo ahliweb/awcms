@@ -103,16 +103,19 @@ export const commentsModule = defineModule({
   },
   navigation: [
     {
-      // Key-style string matching this base's convention (`blog_content` uses
-      // `admin.layout.nav_blog`). NOTE: nothing renders `labelKey` today — the
-      // admin sidebar in `layouts/AdminLayout.astro` is a static list (#229
-      // declined micro's per-tenant sidebar subsystem, which is a capability
-      // rather than a UI detail). This descriptor is the module's DECLARATION of
-      // where it belongs; the sidebar entry is added there by hand. Both must be
-      // kept in step until that subsystem exists.
+      // `labelKey` is now genuinely rendered: `AdminLayout.astro` builds the
+      // sidebar from `listModules()` via
+      // `module-management/domain/sidebar-menu.ts`, and the key resolves
+      // through `SIDEBAR_LABELS` there. The previous note here — "the sidebar
+      // entry is added there by hand. Both must be kept in step" — described
+      // the drift accurately; keeping two lists in step by hand is what let
+      // three sibling modules ship nav entries pointing at 404s.
+      //
+      // `group: "content"` was dropped rather than corrected. `comments` sits
+      // in `DEFAULT_MODULE_TYPE` as `engagement`, and that map wins over
+      // `group`, so the value could never take effect.
       labelKey: "admin.layout.nav_comments",
       path: "/admin/comments",
-      group: "content",
       order: 60,
       requiredPermission: "comments.moderation.read"
     }

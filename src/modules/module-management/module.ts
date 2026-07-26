@@ -14,6 +14,14 @@ export const moduleManagementModule = defineModule({
     openApiPath: "openapi/modules/module-management.openapi.yaml",
     basePath: "/api/v1/modules"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_modules",
+      path: "/admin/modules",
+      order: 31,
+      requiredPermission: "module_management.tenant_modules.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "modules",

@@ -41,6 +41,16 @@
  *     The grouping below is static; the DB-backed reordering is a separate
  *     capability, not a UI/UX detail.
  *
+ * SUPERSEDED: the sidebar is no longer a static array
+ * ---------------------------------------------------
+ * It is composed from `listModules()` by
+ * `module-management/domain/sidebar-menu.ts` — micro's default model, ported
+ * without its per-tenant override tables. The "grouping below is static" note
+ * above described the state that let three modules ship sidebar entries
+ * pointing at pages that do not exist. Tenant-level module disable and the
+ * caller's permissions now both filter it; reordering and relabelling per
+ * tenant remain the separate capability that note was right about.
+ *
  * Auth is NOT enforced here — `src/middleware.ts` already guards `/admin/*`
  * (resolves the session, redirects to `/login` when absent, and sets
  * `Astro.locals.ssrContext`). This layout only READS that context; a missing
@@ -63,31 +73,30 @@ import LocaleBadge from "../components/LocaleBadge.astro";
 import { getDatabaseClient } from "../lib/database/client";
 import { withTenant } from "../lib/database/tenant-context";
 import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
+import { fetchTenantModuleEntries } from "../modules/module-management/application/tenant-module-lifecycle";
+import {
+  buildDefaultSidebarModel,
+  composeSidebarSections
+} from "../modules/module-management/domain/sidebar-menu";
+import { listModules } from "../modules";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
 import packageJson from "../../package.json";
 
 /** Shown in the sidebar footer; single source of truth is package.json. */
 const appVersion = packageJson.version;
 
-type NavKey =
-  | "dashboard"
-  | "offices"
-  | "profiles"
-  | "users"
-  | "roles"
-  | "abac-policies"
-  | "modules"
-  | "email-templates"
-  | "tenant-domains"
-  | "analytics";
-
 interface Props {
   title: string;
-  /** Sidebar key to mark `aria-current="page"`. */
-  active?: NavKey;
 }
 
-const { title, active } = Astro.props;
+/**
+ * The `active` prop is gone. It named a sidebar key by hand on every page, so
+ * marking the current link depended on the page and the layout agreeing — and
+ * `/admin/comments` proved they need not: it never passed one, and was never
+ * highlighted. The current entry is now derived from `Astro.url.pathname`,
+ * which cannot disagree with itself.
+ */
+const { title } = Astro.props;
 const ssr = Astro.locals.ssrContext;
 
 if (!ssr) {
@@ -99,9 +108,14 @@ if (!ssr) {
 const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
 
 /**
- * Topbar chrome: tenant name + whether any sync node is active. Both are
- * cosmetic on a page that renders for EVERY `/admin/*` request, so a database
- * hiccup must degrade rather than 500 the whole admin area.
+ * Topbar chrome: tenant name, whether any sync node is active, and which
+ * modules this tenant switched off. All three are cosmetic on a page that
+ * renders for EVERY `/admin/*` request, so a database hiccup must degrade
+ * rather than 500 the whole admin area.
+ *
+ * The disabled-module set joins the SAME transaction rather than adding a
+ * second round trip — the one-query-per-render property this block was built
+ * for is the reason the sidebar can be tenant-aware at all.
  *
  * Note the shape check rather than a truthiness check: this repo's
  * `withTenant` RETURNS a `Response` (503 `DATABASE_BUSY`) when the circuit
@@ -112,6 +126,13 @@ const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
  */
 let tenantName = "Tenant";
 let syncActive = false;
+/**
+ * Empty on failure, which shows the full sidebar. Deliberate: hiding a link is
+ * not a security control (the target page guards itself), so degrading toward
+ * MORE links costs nothing, while degrading toward fewer would make a database
+ * hiccup look like a tenant losing modules.
+ */
+let disabledModuleKeys: ReadonlySet<string> = new Set<string>();
 
 try {
   const sql = getDatabaseClient();
@@ -124,7 +145,13 @@ try {
       tenantName: rows[0]?.tenant_name ?? null,
       // Bounded EXISTS, not the full sync-health aggregation — the topbar
       // needs one boolean and this runs on every `/admin/*` request.
-      syncActive: await fetchSyncIndicatorActive(tx, ssr.tenantId)
+      syncActive: await fetchSyncIndicatorActive(tx, ssr.tenantId),
+      // Read through the owning module's service rather than querying
+      // `awcms_tenant_modules` here, so the "row absent = enabled" convention
+      // stays defined in exactly one place.
+      disabledModuleKeys: (await fetchTenantModuleEntries(tx, ssr.tenantId))
+        .filter((entry) => !entry.tenantEnabled)
+        .map((entry) => entry.moduleKey)
     };
   });
 
@@ -139,128 +166,40 @@ try {
     }
 
     syncActive = chrome.syncActive === true;
+    disabledModuleKeys = new Set(chrome.disabledModuleKeys);
   }
 } catch {
   // Chrome falls back to generic label + inactive — never a broken admin page.
 }
 
 /**
- * Static grouped navigation (micro renders the same shape from its per-tenant
- * sidebar subsystem; awcms groups in code — see the header note).
+ * The sidebar, built from the module registry.
  *
- * This is presentation only. It is NOT a permission gate: every target route
- * runs its own ABAC guard server-side, so a link being visible never grants
- * anything. Hiding links by permission would need `ssr.permissions`, and a
- * hidden link is not a security control regardless.
+ * Previously a hand-maintained array here. It had drifted apart from
+ * `ModuleDescriptor.navigation` in both directions — three declared entries
+ * pointed at pages that do not exist while eight pages that do exist were
+ * unknown to the registry — and nothing compared the two. See
+ * `module-management/domain/sidebar-menu.ts` for the model and why the type
+ * taxonomy looks the way it does.
+ *
+ * Still presentation only, and still NOT a permission gate: every target route
+ * runs its own server-side guard, so a visible link grants nothing. What
+ * changed is that `requiredPermission` is now honoured for VISIBILITY, which
+ * the old array could not do — an operator no longer sees links to screens
+ * that will only deny them. The header note claiming this "would need
+ * `ssr.permissions`" was stale: `resolveSsrContext` has populated that set
+ * since it was written.
  */
-const navSections: Array<{
-  /** Uppercase top-level category. */
-  label: string;
-  modules: Array<{
-    /**
-     * Owning module's display name, rendered as a muted sub-label. `null` for
-     * core entries that belong to no single module (micro does the same via
-     * its `CORE_MODULE_KEY` check) — those links sit directly under the
-     * section heading with no sub-label.
-     */
-    label: string | null;
-    items: Array<{ key: NavKey; href: string; label: string }>;
-  }>;
-}> = [
+const navSections = composeSidebarSections(
+  buildDefaultSidebarModel(listModules()),
   {
-    label: "General",
-    modules: [
-      {
-        label: null,
-        items: [{ key: "dashboard", href: "/admin", label: "Dashboard" }]
-      }
-    ]
-  },
-  {
-    label: "Identity",
-    modules: [
-      {
-        label: "Profile Identity",
-        items: [{ key: "profiles", href: "/admin/profiles", label: "Profiles" }]
-      },
-      {
-        label: "Identity & Access",
-        items: [
-          { key: "users", href: "/admin/users", label: "Users" },
-          { key: "roles", href: "/admin/roles", label: "Roles" },
-          {
-            key: "abac-policies",
-            href: "/admin/abac-policies",
-            label: "ABAC policies"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    label: "System",
-    modules: [
-      {
-        label: "Tenant Admin",
-        items: [{ key: "offices", href: "/admin/offices", label: "Offices" }]
-      },
-      {
-        label: "Tenant Domain",
-        items: [
-          {
-            key: "tenant-domains",
-            href: "/admin/tenant/domains",
-            label: "Tenant domains"
-          }
-        ]
-      },
-      {
-        label: "Module Management",
-        items: [{ key: "modules", href: "/admin/modules", label: "Modules" }]
-      },
-      {
-        label: "Email",
-        items: [
-          {
-            key: "email-templates",
-            href: "/admin/email-templates",
-            label: "Email templates"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    label: "Content",
-    modules: [
-      {
-        label: "Comments",
-        items: [
-          {
-            key: "comments",
-            href: "/admin/comments",
-            label: "Moderation queue"
-          }
-        ]
-      }
-    ]
-  },
-  {
-    label: "Operations",
-    modules: [
-      {
-        label: "Visitor Analytics",
-        items: [
-          {
-            key: "analytics",
-            href: "/admin/analytics",
-            label: "Visitor analytics"
-          }
-        ]
-      }
-    ]
+    grantedPermissionKeys: ssr.permissions,
+    tenantDisabledModuleKeys: disabledModuleKeys,
+    // Exact match. Every admin page in this base is a leaf path, so no prefix
+    // logic is needed; a nested screen would have to revisit this.
+    currentPath: Astro.url.pathname
   }
-];
+);
 
 /** Decorative topbar avatar (aria-hidden). Static SVG — no CSP cost. */
 const ICON_USER =
@@ -336,23 +275,23 @@ const ICON_USER =
                       {section.label}
                     </span>
                     <ul class="admin-sidebar-modules">
-                      {section.modules.map((module) => (
+                      {section.groups.map((group) => (
                         <li class="admin-sidebar-module">
-                          {module.label !== null && (
+                          {group.moduleLabel !== null && (
                             <span class="admin-sidebar-module-label">
-                              {module.label}
+                              {group.moduleLabel}
                             </span>
                           )}
                           <ul class="admin-sidebar-links">
-                            {module.items.map((item) => (
+                            {group.entries.map((entry) => (
                               <li>
                                 <a
-                                  href={item.href}
+                                  href={entry.path}
                                   aria-current={
-                                    active === item.key ? "page" : undefined
+                                    entry.isCurrent ? "page" : undefined
                                   }
                                 >
-                                  {item.label}
+                                  {entry.label}
                                 </a>
                               </li>
                             ))}
