@@ -61,7 +61,24 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "editPublicComment",
   "submitPublicCommentReply",
   "reportPublicComment",
-  "requestPublicCommentDeletion"
+  "requestPublicCommentDeletion",
+  // Password recovery (Wave 2 delta auth, adapted from awcms-micro Issue #496)
+  // — unauthenticated by definition: the caller cannot sign in, which is the
+  // entire premise of the flow. Requiring a session would make it unusable for
+  // the only case it exists to serve.
+  //
+  // What keeps it safe is not authentication: both are tenant-bound, per-IP +
+  // per-tenant rate limited, and Turnstile-gated on the full-online profile.
+  // `postAuthPasswordForgot` returns ONE fixed 200 body for every outcome, so
+  // it is not an account-existence oracle; `postAuthPasswordReset` returns ONE
+  // generic rejection for every invalid-token reason, so it is not a
+  // token-state oracle. Redemption requires a 256-bit CSPRNG token that is
+  // stored only as a sha256 hash, is single-use (enforced with a row lock, not
+  // a read-then-write), expires in minutes, and is superseded by the next
+  // request. An identity whose tenant disabled password login is refused on
+  // BOTH paths, so this is not a way around that policy.
+  "postAuthPasswordForgot",
+  "postAuthPasswordReset"
 ]);
 
 /**

@@ -50,6 +50,11 @@ contracts:
     # options (awcms-micro's own 1.1.0 minor), so 1.0.0 would understate the shape a
     # consumer binds against.
     seo_facts: "1.1.0"
+    # auth_notification is owned (provided) by the base `email` module and consumed
+    # by `identity_access`'s password-reset flow (Gelombang 2 delta auth). It exists
+    # because the reverse edge is impossible: `email` already depends on
+    # `identity_access`, so a direct import would close a module cycle.
+    auth_notification: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

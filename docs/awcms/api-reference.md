@@ -824,6 +824,52 @@ Authenticated by possession of the mfaChallengeToken from POST /auth/login, not 
 | 429    | Too many verification attempts from this source. | [`ApiError`](#standard-error-envelope) |
 | 500    | MFA misconfigured.                               | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/password/forgot` — Request a password reset link (account-enumeration-safe).
+
+- **operationId**: `postAuthPasswordForgot`
+- **Security**: none (public endpoint)
+
+Always returns the same 200 body regardless of whether the identifier matched an eligible account. An unknown identifier, an inactive identity or tenant-user, an identity the tenant has taken off password login, and a successfully queued email are indistinguishable to the caller by response body, status code, or error code. Rate limited per client IP and tenant.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | Request accepted. Says nothing about whether an account exists. | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many password reset requests from this source.              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/password/reset` — Complete a password reset with a single-use token.
+
+- **operationId**: `postAuthPasswordReset`
+- **Security**: none (public endpoint)
+
+On success the password is replaced, the lockout counters are cleared, the token is burned, and every session belonging to that identity is revoked. Every rejection — unknown token, expired, already used, the identity deactivated since issue, or password login disabled for it — returns the same `PASSWORD_RESET_INVALID` error, so the endpoint cannot be used to fingerprint the state of a token.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                        | Schema                                 |
+| ------ | -------------------------------------------------- | -------------------------------------- |
+| 200    | Password changed and all sessions revoked.         | object                                 |
+| 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many password reset attempts from this source. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
 - **operationId**: `getSsoPolicy`

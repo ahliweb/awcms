@@ -42,7 +42,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
-| Migrasi    | **72** (`sql/001`–`072`)                                                  | `ls sql/`                                             |
+| Migrasi    | **73** (`sql/001`–`073`)                                                  | `ls sql/`                                             |
 | ADR        | **43** (`0000`–`0042`)                                                    | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
@@ -219,8 +219,13 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   surface ter-deklarasi WAJIB punya call-site purge. **BELUM:** surface discovery
   ber-resolusi-host (`serveDiscovery` tak menerima `locals`). Rinci di
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md).
-  - **Wave 2 — BELUM:** delta auth/admin (self-registration, password reset, admin security UI,
-    sidebar menu per-tenant).
+  - **Wave 2 — SEDANG BERJALAN:** delta auth/admin. **SUDAH:** penataan sidebar per-tenant
+    (#272, `sql/071`–`072`); **password reset lewat email** (`sql/073`) — dua endpoint publik
+    enumeration-safe + `/forgot-password`/`/reset-password`, single-use ditegakkan dengan row
+    lock, reset mencabut semua sesi, identity SSO-only ditolak di jalur permintaan DAN
+    penebusan, pengiriman lewat capability port `auth_notification` (bukan INSERT lintas-modul
+    ke `awcms_email_messages`). **BELUM:** self-registration, admin security UI
+    (`/admin/security`).
   - **Wave 3 — BELUM:** trajektori e-commerce/toko online (ADR sendiri).
   - Sebelum tiap port berikutnya: **cek inversi-vs-net-baru** (mis. media sudah jadi satu modul
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).

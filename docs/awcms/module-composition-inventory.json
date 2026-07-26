@@ -96,7 +96,7 @@
       "status": "active",
       "type": null,
       "dependencies": ["tenant_admin", "profile_identity", "identity_access"],
-      "capabilitiesProvided": [],
+      "capabilitiesProvided": ["auth_notification"],
       "capabilitiesConsumed": [],
       "permissionCount": 12,
       "navigationCount": 1,
@@ -134,6 +134,11 @@
           "capability": "business_scope_hierarchy",
           "providedBy": "organization_structure",
           "optional": true
+        },
+        {
+          "capability": "auth_notification",
+          "providedBy": "email",
+          "optional": false
         }
       ],
       "permissionCount": 20,

@@ -48,7 +48,7 @@
  *
  * ## CSP (strict, single-owner)
  * `default-src 'self'` with NO `'unsafe-inline'`. Everything on this page obeys
- * it: `tokens.css`/`motion.css` and the Astro-scoped `<style>` below are all
+ * it: `tokens.css`/`motion.css`/`auth.css` are all
  * emitted as external same-origin `<link>`s (`build.inlineStylesheets:
  * "never"`, see astro.config.mjs), the login client is an Astro-BUNDLED module
  * script (not `is:inline`), animations are pure CSS, and no third-party origin
@@ -57,53 +57,23 @@
  */
 import "../styles/tokens.css";
 import "../styles/motion.css";
+import "../styles/auth.css";
 import {
   isTurnstileRequired,
   resolveTurnstileSiteKey,
   LOGIN_TURNSTILE_ACTION
 } from "../lib/security/turnstile";
-import { getDatabaseClient } from "../lib/database/client";
+import { loadTenantPickerModel } from "../modules/tenant-admin/application/tenant-picker-directory";
 
 const turnstileActive = isTurnstileRequired();
 const turnstileSiteKey = turnstileActive ? resolveTurnstileSiteKey() : null;
 
 // --- Auto tenant picker (read-only SSR read of the root tenant registry) ---
-type TenantOption = { id: string; name: string };
-type TenantPickerMode = "manual" | "single" | "select";
-
-/**
- * Hard cap on the public dropdown. `LIMIT +1` lets us detect "more than this"
- * without counting the whole table; past the cap we render the manual input
- * instead of a giant enumerable list.
- */
-const TENANT_PICKER_LIMIT = 50;
-
-let tenantOptions: TenantOption[] = [];
-let tenantPickerMode: TenantPickerMode = "manual";
-
-try {
-  const sql = getDatabaseClient();
-  // No `withTenant` — `awcms_tenants` is the RLS-free root table and there is
-  // no tenant context to set before the user has chosen one.
-  const rows = (await sql`
-    SELECT id, tenant_name
-    FROM awcms_tenants
-    WHERE status = 'active'
-    ORDER BY tenant_name ASC
-    LIMIT ${TENANT_PICKER_LIMIT + 1}
-  `) as Array<{ id: string; tenant_name: string }>;
-
-  if (rows.length >= 1 && rows.length <= TENANT_PICKER_LIMIT) {
-    tenantOptions = rows.map((row) => ({ id: row.id, name: row.tenant_name }));
-    tenantPickerMode = tenantOptions.length === 1 ? "single" : "select";
-  }
-  // rows.length === 0 (pre-setup) or > cap → keep the manual input.
-} catch {
-  // No DB / placeholder DATABASE_URL / not migrated / breaker open — degrade to
-  // the manual Tenant ID field so /login always renders.
-  tenantPickerMode = "manual";
-}
-
+// Shared with `/forgot-password` — the cap, the status filter, and the
+// degrade-to-manual behaviour all live in `tenant-picker-directory.ts`.
+const picker = await loadTenantPickerModel();
+const tenantOptions = picker.options;
+const tenantPickerMode = picker.mode;
 const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
 ---
 
@@ -235,6 +205,10 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
           </button>
         </form>
 
+        <nav class="auth-links" aria-label="Account recovery">
+          <a href="/forgot-password">Forgot your password?</a>
+        </nav>
+
         <p class="auth-foot">Secured workspace access · AWCMS</p>
       </div>
     </main>
@@ -354,327 +328,5 @@ const singleTenant = tenantPickerMode === "single" ? tenantOptions[0]! : null;
         }
       });
     </script>
-
-    <style>
-      /*
-       * Login surface styles — Astro-scoped, so emitted as an EXTERNAL
-       * same-origin stylesheet (build.inlineStylesheets: "never"); never an
-       * inline <style> the middleware CSP would block. Tokens only (no literal
-       * colours/sizes) from tokens.css. Mobile-first: base rules target small
-       * screens, one min-width query enhances larger ones.
-       */
-      .auth-body {
-        margin: 0;
-      }
-
-      .auth {
-        min-height: 100vh;
-        min-height: 100dvh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--sp-4);
-        background:
-          radial-gradient(
-            120% 90% at 15% 0%,
-            var(--color-primary-soft) 0%,
-            transparent 55%
-          ),
-          radial-gradient(
-            110% 80% at 100% 100%,
-            var(--color-surface-2) 0%,
-            transparent 60%
-          ),
-          var(--color-bg);
-      }
-
-      .auth-card {
-        width: 100%;
-        max-width: 400px;
-        padding: var(--sp-6) var(--sp-5);
-        background: var(--color-surface);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-lg);
-        /* Transform-only entrance (never opacity — keeps text fully opaque so an
-           axe-core contrast scan can't flag it mid-animation; doc 14 §Motion).
-           Replaces the shared `.fade-in-up` utility, which fades from
-           `opacity: 0`. Neutralised by the reduced-motion block below. */
-        animation: auth-card-rise var(--motion-base) var(--ease-out);
-      }
-
-      @keyframes auth-card-rise {
-        from {
-          transform: translateY(10px);
-        }
-        to {
-          transform: none;
-        }
-      }
-
-      .auth-head {
-        margin-bottom: var(--sp-5);
-      }
-
-      .auth-brand {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-2);
-        margin-bottom: var(--sp-4);
-      }
-
-      .auth-mark {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-        border-radius: var(--radius-md);
-        background: linear-gradient(
-          135deg,
-          var(--color-primary) 0%,
-          var(--color-primary-hover) 100%
-        );
-        color: var(--color-primary-contrast);
-        font-weight: var(--fw-bold);
-        font-size: var(--fs-lg);
-        line-height: 1;
-        box-shadow: var(--shadow-sm);
-      }
-
-      .auth-wordmark {
-        font-weight: var(--fw-bold);
-        font-size: var(--fs-md);
-        letter-spacing: var(--tracking-wide);
-        color: var(--color-text);
-      }
-
-      .auth-title {
-        margin: 0;
-        font-size: var(--fs-2xl);
-        font-weight: var(--fw-bold);
-        line-height: var(--lh-tight);
-        letter-spacing: var(--tracking-tight);
-        color: var(--color-text);
-      }
-
-      .auth-subtitle {
-        margin: var(--sp-2) 0 0;
-        font-size: var(--fs-sm);
-        color: var(--color-text-muted);
-        line-height: var(--lh-snug);
-      }
-
-      .auth-form {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-4);
-      }
-
-      .auth-field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--sp-1);
-      }
-
-      .auth-field label {
-        font-size: var(--fs-sm);
-        font-weight: var(--fw-medium);
-        color: var(--color-text);
-      }
-
-      .auth-form input[type="text"],
-      .auth-form input[type="password"],
-      .auth-form select {
-        width: 100%;
-        min-height: 44px;
-        padding: 0 var(--sp-3);
-        background: var(--color-surface);
-        color: var(--color-text);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        font-size: var(--fs-base);
-        transition:
-          border-color var(--motion-fast) var(--ease-standard),
-          box-shadow var(--motion-fast) var(--ease-standard);
-      }
-
-      .auth-form input::placeholder {
-        color: var(--color-text-muted);
-      }
-
-      .auth-form input[type="text"]:hover,
-      .auth-form input[type="password"]:hover,
-      .auth-form select:hover {
-        border-color: var(--color-text-muted);
-      }
-
-      .auth-form input[type="text"]:focus-visible,
-      .auth-form input[type="password"]:focus-visible,
-      .auth-form select:focus-visible {
-        outline: none;
-        border-color: var(--color-focus);
-        box-shadow: 0 0 0 3px var(--color-primary-soft);
-      }
-
-      /* Tenant readout (single-tenant deployment). */
-      .auth-tenant-context {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        padding: var(--sp-3);
-        background: var(--color-primary-soft);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-      }
-
-      .auth-tenant-context-label {
-        font-size: var(--fs-xs);
-        text-transform: uppercase;
-        letter-spacing: var(--tracking-wide);
-        color: var(--color-text-muted);
-      }
-
-      .auth-tenant-context-name {
-        font-size: var(--fs-base);
-        font-weight: var(--fw-semibold);
-        color: var(--color-text);
-      }
-
-      /* Select wrapper — CSS-drawn caret (no data: URI, CSP-safe). */
-      .auth-select {
-        position: relative;
-      }
-
-      .auth-select select {
-        appearance: none;
-        -webkit-appearance: none;
-        padding-right: var(--sp-6);
-        cursor: pointer;
-      }
-
-      .auth-select::after {
-        content: "";
-        position: absolute;
-        right: var(--sp-3);
-        top: 50%;
-        width: 8px;
-        height: 8px;
-        border-right: 2px solid var(--color-text-muted);
-        border-bottom: 2px solid var(--color-text-muted);
-        transform: translateY(-70%) rotate(45deg);
-        pointer-events: none;
-      }
-
-      /* Password field with inline show/hide toggle. */
-      .auth-password {
-        position: relative;
-        display: flex;
-        align-items: center;
-      }
-
-      .auth-password input {
-        padding-right: 72px;
-      }
-
-      .auth-password-toggle {
-        position: absolute;
-        right: var(--sp-1);
-        top: 50%;
-        transform: translateY(-50%);
-        min-height: 36px;
-        min-width: 56px;
-        padding: 0 var(--sp-2);
-        background: transparent;
-        border: none;
-        border-radius: var(--radius-sm);
-        color: var(--color-primary);
-        font-size: var(--fs-sm);
-        font-weight: var(--fw-medium);
-        cursor: pointer;
-      }
-
-      .auth-password-toggle:hover {
-        background: var(--color-surface-hover);
-      }
-
-      .auth-error {
-        margin: 0;
-        padding: var(--sp-3);
-        background: var(--color-danger-strong);
-        color: var(--color-primary-contrast);
-        border-radius: var(--radius-md);
-        font-size: var(--fs-sm);
-        line-height: var(--lh-snug);
-      }
-
-      .auth-turnstile {
-        min-height: 65px;
-      }
-
-      .auth-submit {
-        margin-top: var(--sp-1);
-        min-height: 48px;
-        padding: 0 var(--sp-4);
-        background: var(--color-primary-strong);
-        color: var(--color-primary-contrast);
-        border: none;
-        border-radius: var(--radius-md);
-        font-size: var(--fs-base);
-        font-weight: var(--fw-semibold);
-        cursor: pointer;
-        transition:
-          background-color var(--motion-fast) var(--ease-standard),
-          transform var(--motion-fast) var(--ease-standard);
-      }
-
-      .auth-submit:hover {
-        background: var(--color-primary-hover);
-      }
-
-      .auth-submit:active {
-        transform: translateY(1px);
-      }
-
-      .auth-submit:disabled {
-        cursor: not-allowed;
-        opacity: 0.7;
-      }
-
-      .auth-foot {
-        margin: var(--sp-5) 0 0;
-        text-align: center;
-        font-size: var(--fs-xs);
-        color: var(--color-text-muted);
-      }
-
-      @media (min-width: 640px) {
-        .auth-card {
-          padding: var(--sp-7) var(--sp-6);
-        }
-      }
-
-      /*
-       * Non-essential motion: the submit's active-nudge is decorative and the
-       * card entrance (`auth-card-rise`) is transform-only. motion.css's global
-       * reduced-motion block only targets its own utility classes, so this
-       * scoped animation + the local transitions/transforms are neutralised
-       * here so nothing moves for reduced-motion users.
-       */
-      @media (prefers-reduced-motion: reduce) {
-        .auth-card {
-          animation: none;
-        }
-        .auth-form input[type="text"],
-        .auth-form input[type="password"],
-        .auth-form select,
-        .auth-submit {
-          transition: none;
-        }
-        .auth-submit:active {
-          transform: none;
-        }
-      }
-    </style>
   </body>
 </html>
