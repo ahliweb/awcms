@@ -157,9 +157,27 @@ tenant-aware dengan account linking fail-closed + SSRF guard + break-glass**
 protection sadar profil deployment** (`src/lib/security/turnstile.ts`, LAN/offline
 exempt). JWT diverifikasi native (RS256+ES256) tanpa dependensi.
 
-**Admin shell (Issue #166, #171).** `src/pages/login.astro` + `src/pages/admin/*.astro`
-(dashboard, offices, profiles, users, roles, abac-policies, modules,
-email-templates) memakai `AdminLayout` + design token doc 14. Layar-layar ini
+Gelombang 2 (delta auth/admin, `sql/073`–`075`) menambah tiga permukaan yang
+seluruhnya duduk di atas jalur di atas, tanpa mengubahnya: **password reset
+lewat email** (`/api/v1/auth/password/{forgot,reset}` + `/forgot-password`,
+`/reset-password`) — enumeration-safe secara konstruksi, single-use ditegakkan
+lewat row lock `FOR UPDATE` di DB (bukan read-modify-write JS), mencabut semua
+sesi, dan menolak identity SSO-only di jalur permintaan **dan** penebusan;
+**self-registration ber-persetujuan admin** (`/register`,
+`/api/v1/registration-requests/*`) — default MATI, jalur publiknya tak pernah
+menyimpan kredensial maupun membuat akun, approval yang membuat identity dengan
+password tak terpakai lalu mengirim link reset; dan layar **`/admin/security`**
+yang memberi policy tenant (SSO/MFA/break-glass) sebuah UI — endpoint-nya sudah
+ada sejak #184/#185, layarnya tidak, jadi sebelumnya policy hanya bisa diubah
+lewat `curl`. Pengiriman email keduanya lewat capability port
+`auth_notification` (adapter dimiliki `email`), bukan INSERT lintas-modul.
+
+**Admin shell (Issue #166, #171).** Halaman auth publik `login`,
+`forgot-password`, `reset-password`, `register` (tiga terakhir menyusul di
+Gelombang 2 — lihat §Auth) + 13 layar `src/pages/admin/*.astro` (dashboard,
+offices, profiles, users, roles, abac-policies, registrations, security,
+modules, sidebar-menu, email-templates, comments, analytics) memakai
+`AdminLayout` + design token doc 14. Layar-layar ini
 bukan lagi read-only: roles/abac-policies/users/modules/email-templates punya
 form tulis (create/update/enable-disable/assign) yang memanggil endpoint
 `authorizeInTransaction`-gated yang sama dengan API — gate UI hanya UX,
@@ -305,6 +323,10 @@ Sudah live dan diverifikasi terhadap kode (bukan rencana):
   (`sql/057`–`061`, ADR-0038/0039), `form-drafts` (`sql/062`–`063`), dan
   `site-search` (`sql/064`–`065`, ADR-0040), dan `comments` (`sql/066`–`067`,
   ADR-0041) — semuanya modul aktif.
+- **Delta auth/admin `awcms-micro` (Gelombang 2)** — penataan sidebar
+  per-tenant (`sql/071`–`072`), password reset lewat email (`sql/073`),
+  self-registration ber-persetujuan admin (`sql/074`–`075`), dan layar
+  `/admin/security`. Lihat §Auth.
 
 Gap yang genuinely masih ada (jangan diklaim selesai):
 
