@@ -87,7 +87,9 @@ export const themingModule = defineModule({
   },
   api: {
     openApiPath: "openapi/modules/theming.openapi.yaml",
-    basePath: "/api/v1/theming"
+    basePath: "/api/v1/theming",
+    // Public token CSS + preview surfaces.
+    routes: ["/api/v1/theming", "/theming"]
   },
   permissions: [
     {

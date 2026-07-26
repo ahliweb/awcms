@@ -47,10 +47,18 @@ describe("media_library module descriptor (ADR-0036)", () => {
   });
 
   test("owns the media upload basePath that moved off news_portal", () => {
-    expect(mediaLibraryModule.api).toEqual({
-      openApiPath: "openapi/awcms-public-api.openapi.yaml",
-      basePath: "/api/v1/media/news-images"
-    });
+    expect(mediaLibraryModule.api?.openApiPath).toBe(
+      "openapi/awcms-public-api.openapi.yaml"
+    );
+    expect(mediaLibraryModule.api?.basePath).toBe("/api/v1/media/news-images");
+  });
+
+  test("claims the whole /api/v1/media tree, not just the news-images sub-path", () => {
+    // Issue #256. `basePath` is the display prefix; `routes` is the ownership
+    // claim. Before it existed, `/api/v1/media/enforcement` fell through to
+    // `tenant_admin`'s `/api/v1` catch-all — a route this module owns,
+    // attributed to a module that has nothing to do with media.
+    expect(mediaLibraryModule.api?.routes).toEqual(["/api/v1/media"]);
   });
 
   test("owns the news-media:reconcile job that moved off news_portal (command name kept, ADR-0036 §3)", () => {

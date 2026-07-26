@@ -10,7 +10,20 @@ export const identityAccessModule = defineModule({
   dependencies: ["tenant_admin", "profile_identity"],
   api: {
     openApiPath: "openapi/modules/identity-access.openapi.yaml",
-    basePath: "/api/v1/auth"
+    basePath: "/api/v1/auth",
+    // Reclaimed from `tenant_admin`'s former `/api/v1` catch-all (Issue #256):
+    // access control, roles, users, ABAC policies and identity/business-scope
+    // are this module's surfaces, and its permissions are what guard them.
+    // `/login` is the SSR page for the same session it issues.
+    routes: [
+      "/api/v1/auth",
+      "/api/v1/access",
+      "/api/v1/roles",
+      "/api/v1/users",
+      "/api/v1/abac",
+      "/api/v1/identity",
+      "/login"
+    ]
   },
   // Issue #180 — the generic business-scope layer CONSUMES a hierarchy
   // resolver from a DERIVED application (ADR-0011 capability port,

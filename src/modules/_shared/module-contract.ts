@@ -17,7 +17,40 @@ export type ModuleLifecycleStatus =
 
 export type ModuleApiContract = {
   openApiPath: string;
+  /**
+   * The module's primary API prefix — for display, docs and the
+   * `openapi_documented` readiness signal. NOT a claim of ownership on its own:
+   * see `routes`.
+   */
   basePath: string;
+  /**
+   * Every route prefix this module owns, API and public alike.
+   *
+   * Added by Issue #256. `basePath` alone could not express ownership, and one
+   * module proved it: `tenant_admin` declared `basePath: "/api/v1"`, which is a
+   * prefix of every route in the application. Resolve a route to the
+   * longest-matching `basePath` and `tenant_admin` swallowed 36 it does not own
+   * — all of `/api/v1/access`, `/api/v1/roles`, `/api/v1/users`, `/api/v1/abac`
+   * and `/api/v1/identity` (`identity_access`), plus `/api/v1/tenant/modules`
+   * (`module_management`). Ownership was therefore not derivable at all, and
+   * any gate built on it would have accused the wrong module.
+   *
+   * A list, because ownership genuinely is not one prefix: `tenant_admin` owns
+   * `/api/v1/{offices,settings,setup}`, and `/api/v1/tenant` is SPLIT between
+   * `tenant_domain` (`/domains`) and `module_management` (`/modules`).
+   * Longest-prefix wins, so a split like that resolves without special cases.
+   *
+   * Public non-API surfaces belong here too (`/blog/{tenantCode}`, `robots.txt`,
+   * `/search`, `/theming`) — they are routes a module owns just as much as its
+   * `/api/v1` ones, and leaving them out is what let 30 real routes belong to
+   * nobody.
+   *
+   * Omitted means "`[basePath]`", so every existing descriptor keeps working.
+   * `modules:routes:check` requires the resulting map to cover every file under
+   * `src/pages` exactly once, or name it in a reviewed platform/public
+   * allow-list.
+   */
+  routes?: string[];
 };
 
 export type ModuleEventContract = {
@@ -701,7 +734,7 @@ export type HighVolumeTableDescriptor = {
  * every base `module.ts` that omits `commentableResources` stays valid
  * unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "2.3.0";
+export const MODULE_CONTRACT_VERSION = "2.4.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

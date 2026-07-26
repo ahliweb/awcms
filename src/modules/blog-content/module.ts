@@ -272,7 +272,10 @@ export const blogContentModule = defineModule({
   ],
   api: {
     openApiPath: "openapi/awcms-public-api.openapi.yaml",
-    basePath: "/api/v1/blog"
+    basePath: "/api/v1/blog",
+    // The public path-based tenant routes (ADR-0009) are this module's surface
+    // too; before Issue #256 no descriptor claimed them at all.
+    routes: ["/api/v1/blog", "/blog"]
   },
   // Public search-source contribution to `site_search` (ADR-0040 §3, ported
   // from awcms-micro Issue #270). Pure DATA — no executable extractor, no SQL:

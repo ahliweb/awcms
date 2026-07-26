@@ -78,6 +78,9 @@ jobs:
       - name: Module dependency graph check
         run: bun run modules:dag:check
 
+      - name: Module route ownership check (Issue #256)
+        run: bun run modules:routes:check
+
       - name: Module composition check (Issue #178)
         run: bun run modules:compose:check
 

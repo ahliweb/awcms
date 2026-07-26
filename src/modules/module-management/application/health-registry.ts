@@ -244,17 +244,22 @@ async function openApiDocumentedSignal(
     paths?: Record<string, unknown>;
   } | null;
   const paths = document?.paths ? Object.keys(document.paths) : [];
-  const hasBasePathEntry = paths.some((p) =>
-    p.startsWith(descriptor.api!.basePath)
+  // Issue #256: check every prefix the module OWNS, not just its display
+  // `basePath`. That distinction was invisible while `tenant_admin` declared
+  // `basePath: "/api/v1"` — a prefix every path in any fragment matches, so
+  // this signal passed for it no matter what the fragment contained.
+  const owned = descriptor.api.routes ?? [descriptor.api.basePath];
+  const hasOwnedEntry = paths.some((p) =>
+    owned.some((prefix) => p.startsWith(prefix))
   );
 
   return {
     name: "openapi_documented",
-    status: document && hasBasePathEntry ? "pass" : "fail",
+    status: document && hasOwnedEntry ? "pass" : "fail",
     detail:
-      document && hasBasePathEntry
+      document && hasOwnedEntry
         ? undefined
-        : "No OpenAPI path found under the module's declared basePath."
+        : "No OpenAPI path found under any route prefix the module declares."
   };
 }
 
