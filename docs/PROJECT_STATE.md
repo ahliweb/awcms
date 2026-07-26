@@ -40,7 +40,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi      | **6.2.0** (tag `v6.2.0`, 2026-07-26); 7 changeset menunggu                | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Versi      | **6.3.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
 | Migrasi    | **70** (`sql/001`–`070`)                                                  | `ls sql/`                                             |
 | ADR        | **43** (`0000`–`0042`)                                                    | `docs/adr/README.id.md` (indeks ter-gate)             |

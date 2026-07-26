@@ -1,5 +1,190 @@
 # awcms
 
+## 6.3.0
+
+### Minor Changes
+
+- 156a7b6: Emit edge-cache invalidation from `theming`, and enforce the obligation by
+  surface ownership.
+
+  `theming` owns the `theming-tokens` surface (`/theming/{tenantCode}/tokens.css`),
+  so publish, rollback, and retire each change what a cached object contains.
+  All three now call `enqueueModuleContentPurge` inside the same transaction as
+  the change (ADR-0042 §9 / ADR-0006).
+
+  **`news_portal` and `media_library` deliberately do not.** Neither owns a
+  declared surface, so nothing cached is tagged `m:news_portal` or
+  `m:media_library` — a ban for those keys matches no object while the queue
+  records `sent=1`. Adding them now would be ceremony that reads as coverage and
+  provides none.
+
+  `bun run edge-cache:surfaces:check` now demands a purge call site from **every
+  module that owns a declared surface**, resolving `*_MODULE_KEY` constants across
+  files. Framing it by ownership rather than by a hand-kept module list means the
+  obligation appears on its own the day `news_portal` or `media_library` declares
+  a surface, and stays silent until then.
+
+  The asymmetry this closes: declaring a surface is one line and takes effect
+  immediately; wiring its invalidation is a separate edit in another file that
+  nothing forced. Miss it and the surface caches correctly, serves correctly, and
+  never updates — with no error anywhere.
+
+### Patch Changes
+
+- 156a7b6: Stop `Accepted` admission ADRs from reading as shipped modules.
+
+  Five ADRs — 0016 `organization_structure`, 0017 `document_infrastructure`, 0018
+  `data_exchange`, 0019 `integration_hub`, 0021 `reference_data` — are `Accepted`
+  for modules with no code in this repository. `Accepted` is a decision status, not
+  a delivery status, but nothing said so, and the roadmap already named the
+  consequence: someone reading `docs/adr/` "will conclude `organization_structure`
+  can be called. It cannot."
+
+  Not hypothetical. ADR-0020 asserted `reference_data` is `status: "active"` in the
+  registry, citing a merged PR number — true of `awcms-mini`, where the sentence
+  came from, and false here. Corrected.
+
+  Each of the five now carries an unmissable not-implemented block naming what is
+  absent and pointing at Wave A of the absorption roadmap.
+
+  `tests/adr-admission-implementation-status.test.ts` binds the two facts, which
+  otherwise live in different places and move independently: an admitted module
+  must be in `listModules()` **or** its ADR must carry the marker. It fails in both
+  directions — landing a module while the marker remains is caught too — and it
+  asserts separately that no ADR claims an absent module is active in the registry,
+  since prose copied between family repos is the likely source of the next
+  instance. No database, so it runs on every PR.
+
+- bfd9638: Pin the default tenant per environment, and state the owner-account convention
+  for all three phases.
+
+  `PUBLIC_DEFAULT_TENANT_ID`/`_CODE` are now set in staging and production rather
+  than left to the end of the resolution chain. Unset still worked — the chain
+  terminates at `awcms_setup_state.tenant_id` — but that makes "which tenant does
+  an unmatched host resolve to?" an implicit answer living in a table rather than a
+  stated one, and it silently becomes the wrong answer the moment a second tenant
+  exists. The consumers are real: `seo_distribution` (`/robots.txt`, sitemap, feeds)
+  and `site_search`.
+
+  `PUBLIC_TENANT_RESOLUTION_MODE` is deliberately left unset. Production does have
+  an `awcms_tenant_domains` row for `awcms.ahlikoding.com`, so `host_default` would
+  work — but enabling host lookup widens the reachable surface and is its own
+  decision, not part of "set the default tenant".
+
+  Documents the owner convention across development, staging and production: the
+  login identifier `admin@ahlikoding.com` is shared, the password never is.
+  `awcms_identities` is unique on `(tenant_id, login_identifier)`, so one address in
+  three environments is three unrelated accounts with three password hashes and
+  three `AUTH_JWT_SECRET`s.
+
+  Also records the permission-seed gap where it will actually be read, with the
+  backfill SQL: a seed migration reaches only tenants created after it, so landing a
+  module does not grant its permissions to an existing owner — the symptom is a 403
+  on a module that is plainly installed. Plus the queries that show whether "full
+  access" is genuinely full, since RBAC 197/197 means nothing if an ABAC deny, an
+  SoD rule, or a business-scope constraint is in play.
+
+- 2e907a5: Samakan environment development dengan staging/produksi, dan buang variabel env
+  hantu dari dokumentasi.
+
+  Development sebelumnya bukan versi kecil produksi melainkan environment yang
+  berbeda secara diam-diam: skema berhenti di migrasi 30 (produksi 70), nol
+  tenant, tanpa `.env`, dan satu-satunya role ber-LOGIN adalah superuser milik
+  container — sehingga `FORCE RLS` inert dan justru bug termahal (kebocoran
+  tenant, 403 permission) yang paling mustahil direproduksi di sana. Dev kini
+  cocok baris per baris: migrasi 70, 118 tabel, 197 permission, RLS `ENABLE`+`FORCE`
+  109/118, runtime sebagai `awcms_app`, owner `owner` 197/197 — dengan perbedaan
+  yang disengaja (`AUTH_COOKIE_SECURE`, `TRUSTED_PROXY_ENABLED`, `EDGE_CACHE_MODE`)
+  dicatat beserta alasannya.
+
+  Dokumentasi menyebut `AUTH_JWT_SECRET` sebagai variabel wajib di lima berkas.
+  **Variabel itu tidak ada di awcms** — tidak dibaca kode mana pun, dan tidak ada
+  JWT di jalur sesi (token acak buram ber-hash sha256 di `awcms_sessions`).
+  Klaimnya bukan sekadar usang: ia menopang pernyataan keamanan bahwa tiga
+  environment terisolasi sebagian karena masing-masing punya JWT secret sendiri.
+  Operator yang mengikutinya akan menyetel variabel yang tidak berefek apa pun.
+  `APP_TIMEZONE` juga tercantum wajib dan sama-sama tidak ada.
+
+  `tests/env-required-vars-doc.test.ts` mengikat daftar wajib di
+  `deployment-profiles.md` ke `RULES` di `scripts/validate-env.ts`, menolak
+  kemunculan ulang `AUTH_JWT_SECRET` sebagai variabel hidup, dan memverifikasi
+  kedua nama itu memang tak pernah dibaca kode — empat mutasi terbukti merah.
+
+- 4c2459d: Sapu drift docs/skill terhadap kode, dan pasang dua gate supaya kelasnya tidak
+  kembali.
+
+  Lima klaim yang **salah**, bukan sekadar usang:
+
+  - `awcms-data-lifecycle` menyebut `form_drafts`/`comments` "DITUNDA (modul belum
+    di-port)" — keduanya sudah di-port dan keduanya adopter `delegated`. Skill itu
+    juga menyebut 2 adopter padahal ada **10 deskriptor di 7 modul**; agen yang
+    mengikutinya akan melewatkan guard legal-hold pada tabel yang mewajibkannya.
+  - `awcms-theming` menyebut `media_library` "di-drop — belum ada di base", dan
+    menerangkan ketiadaan purge preview dengan "`data_lifecycle` tidak ada di base
+    ini; tak ada `awcms_worker`". Ketiganya ada.
+  - `awcms-wizard-form` menyebut `form_drafts` belum di-port.
+  - `awcms-module-management` melaporkan "17 modul (dari 23)" mendeklarasikan
+    `permissions`, dengan daftar yang tujuh di antaranya milik awcms-mini. Angka
+    nyata: **20 dari 21**, dan satu-satunya pengecualian adalah `email`.
+  - Lima dokumen menyatakan total yang tertinggal (`sql/001`–`067`, "65 migrasi",
+    "20 modul") — termasuk paragraf di `repo-inventory.md` yang tugasnya justru
+    MENGOREKSI klaim usang. Koreksi yang ikut usang lebih buruk dari aslinya: ia
+    terbaca seperti baru saja diverifikasi.
+
+  `src/lib/theming/theme-media.ts` punya kembaran klaim itu **di kode** — header
+  seam-nya menerangkan resolusi asset no-op karena `media_library` tidak ada.
+  Modulnya ada, lengkap dengan adapter nyata yang sudah dipakai `blog_content` dan
+  `news_portal`. Akibat yang terlihat pengguna dan sebelumnya tidak tercatat di
+  mana pun: tenant bisa mengunggah logo, id-nya tersimpan, dan tema tetap merender
+  fallback nama-tema. Header-nya kini menyatakan itu; wiring adapternya tetap
+  pekerjaan tersendiri.
+
+  `domain-event-runtime/infrastructure/consumer-registry.ts` juga: header-nya
+  menyatakan consumer `reporting` "intentionally NOT ported (they would import
+  modules that are absent)" sementara berkas yang sama meng-import `reporting` di
+  baris 8. Sekaligus mencatat cycle level-modul yang tak terlihat gate mana pun —
+  `reporting` mendeklarasikan `domain_event_runtime`, dan modul ini meng-import
+  `reporting`; `modules:dag:check` memvalidasi deklarasi saja (registry murni,
+  tanpa I/O by design), jadi import tak-terdeklarasi tak terlihat, dan
+  mendeklarasikannya secara jujur justru membuat gate itu merah karena cycle.
+
+  Dua gate baru, keduanya mutation-proven:
+  `tests/module-absence-claims.test.ts` (tidak ada dokumen/skill yang boleh
+  menyangkal modul terdaftar) dan `tests/doc-inventory-counts.test.ts` (total modul
+  dan rentang `sql/001`–`NNN` harus cocok dengan repo).
+
+- c44d4ee: Stop tracking graphify's dated backup directories.
+
+  Every `graphify` rebuild writes a full copy of the curated graph to
+  `graphify-out/<YYYY-MM-DD>/` — roughly 12 MB of duplicate JSON per run. The
+  previous refresh happened not to commit one; `.gitignore` now makes that a rule
+  rather than something whoever stages the change has to notice.
+
+  The live artifacts beside it (`graph.json`, `graph.html`, `GRAPH_REPORT.md`,
+  `manifest.json`) stay tracked — those are the reviewable output.
+
+- 156a7b6: Make the migration layer visible to the knowledge graph, and stop tracking
+  `graph.html`.
+
+  `tree_sitter_sql` was missing, so all 70 files in `sql/` contributed **nothing**
+  to the graph — the layer that holds every RLS policy, every grant, and every
+  tenant-isolation predicate was simply absent. Three defects fixed this week lived
+  there, and the graph could not have helped find any of them. With the grammar
+  installed the graph gains 179 nodes and 153 edges, including the tables
+  themselves (`awcms_tenants`, `awcms_offices`, …) rather than just file names.
+
+  Note for anyone rebuilding: graphify keys its cache on `manifest.json`, not on
+  `cache/stat-index.json`. Installing a new grammar does not invalidate anything,
+  so `--update` reports every file unchanged and the new grammar never runs. The
+  entries have to be dropped from `manifest.json` to force re-extraction.
+
+  `graph.html` is no longer tracked. It silently stops being emitted once the
+  corpus passes graphify's viz node limit — the committed copy then rots while
+  `graph.json` beside it stays current, which is precisely the failure mode this
+  repo keeps getting bitten by. It is also ~8.7 MB per rebuild on top of
+  `graph.json`'s ~10 MB, doubling what each refresh adds to history permanently.
+  Regenerating is one command, documented in `.gitignore` next to the rule.
+
 ## 6.2.0
 
 ### Minor Changes
