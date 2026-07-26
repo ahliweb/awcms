@@ -5,6 +5,32 @@ setiap modul ERP sehingga pengembangan modul fokus pada logika bisnis, bukan
 menulis ulang idempotency/pooling/observability. Diadaptasi dari
 [awcms-mini](https://github.com/ahliweb/awcms-mini).
 
+## Batas: infrastruktur teknis saja (ADR-0043, Issue #257)
+
+`src/lib` **hanya** untuk infrastruktur teknis yang **tidak menyandang nama
+domain**. Kode presentasi/pengiriman milik sebuah modul — composition root rute,
+glue middleware, skrip klien browser — tinggal di
+`src/modules/<modul>/presentation/`.
+
+Kenapa aturannya perlu ditegakkan mesin: `src/lib` sempat tumbuh jadi **sistem
+modul kedua yang tidak dijaga gerbang mana pun**. Empat namespace (`seo`,
+`theming`, `comments`, `search`) menyandang nama modul yang sudah ada dan berisi
+kode milik modul itu, dan `seo_distribution` bahkan merujuk ke ATAS ke
+`src/lib/seo/` lewat jalur yang validator DAG tidak bisa lihat. Penyebabnya
+struktural, bukan disiplin: kontrak modul tak punya tempat bagi kode presentasi,
+jadi `src/lib/<nama-modul>/` adalah satu-satunya rumah yang tersedia.
+
+`bun run modules:dag:check` kini GAGAL bila sebuah namespace `src/lib/<x>/`
+bertabrakan nama dengan `moduleKey` — persis, atau lewat alias domain terdaftar
+(`seo`→`seo_distribution`, `search`→`site_search`, dst.). Tanpa alias, dua dari
+empat kasus nyata akan lolos.
+
+Satu pengecualian tercatat: **`logging/`** — primitif logger bebas-database yang
+dipakai ~139 berkas termasuk `src/lib` sendiri; modul `logging` adalah layanan
+jejak audit, hal berbeda yang kebetulan sekata.
+`tests/lib-namespace-ownership.test.ts` membuktikan `logging` **TERDETEKSI** dan
+hanya disenyapkan tabel pengecualian, bukan titik buta deteksi.
+
 ## Subsistem
 
 | Folder           | Isi                                                                                                                                                                                                                                                |

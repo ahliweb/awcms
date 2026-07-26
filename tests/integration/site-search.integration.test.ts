@@ -38,7 +38,7 @@ import {
   teardownIntegrationDatabase
 } from "./harness";
 import { withTenant } from "../../src/lib/database/tenant-context";
-import { getRegisteredSearchSources } from "../../src/lib/search/search-sources";
+import { getRegisteredSearchSources } from "../../src/modules/site-search/presentation/search-sources";
 import {
   rebuildTenantSearchIndex,
   reconcileTenantSearchIndex,

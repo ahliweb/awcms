@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { serveThemePreviewTokensCss } from "../../../lib/theming/theme-preview";
+import { serveThemePreviewTokensCss } from "../../../modules/theming/presentation/theme-preview";
 
 /**
  * `GET /theming/preview-tokens/{token}.css` (Issue #269, ADR-0029 §6) — the DRAFT

@@ -25,7 +25,7 @@
 import { withTenant } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { isTrackablePath, sanitizePath } from "../domain/path-sanitizer";
-import { extractReferrerDomain } from "../domain/referrer";
+import { extractReferrerDomain } from "../../_shared/referrer";
 import { determineArea, type RequestArea } from "../domain/request-area";
 import {
   classifyHumanStatus,

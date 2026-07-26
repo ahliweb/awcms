@@ -358,7 +358,7 @@
       "version": "1.0.0",
       "status": "active",
       "type": "domain",
-      "dependencies": ["tenant_admin", "identity_access"],
+      "dependencies": ["tenant_admin", "identity_access", "module_management"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [
         {
@@ -380,7 +380,13 @@
       "version": "0.1.0",
       "status": "active",
       "type": "system",
-      "dependencies": ["tenant_admin", "identity_access", "logging"],
+      "dependencies": [
+        "tenant_admin",
+        "identity_access",
+        "logging",
+        "data_lifecycle",
+        "module_management"
+      ],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 8,

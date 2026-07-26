@@ -18,7 +18,7 @@
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
 import { withTenant } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
-import { getRegisteredSearchSources } from "../src/lib/search/search-sources";
+import { getRegisteredSearchSources } from "../src/modules/site-search/presentation/search-sources";
 import {
   rebuildTenantSearchIndex,
   reconcileTenantSearchIndex

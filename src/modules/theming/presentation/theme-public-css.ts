@@ -21,16 +21,16 @@
  * `style-src 'self'` without any inline `<style>` — the whole reason token values
  * ship as an external stylesheet (ADR-0029 §7: never weaken CSP).
  */
-import { getDatabaseClient } from "../database/client";
-import { withTenant } from "../database/tenant-context";
-import { resolvePublicTenantByCode } from "../tenant/public-tenant-resolver";
-import { fetchTenantModuleEntry } from "../../modules/module-management/application/tenant-module-lifecycle";
-import { THEMING_MODULE_KEY } from "../../modules/theming/domain/theme-permissions";
+import { getDatabaseClient } from "../../../lib/database/client";
+import { withTenant } from "../../../lib/database/tenant-context";
+import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
+import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
+import { THEMING_MODULE_KEY } from "../domain/theme-permissions";
 import {
   defaultThemeCss,
   resolveActiveThemeCssForTenant,
   type ResolvedThemeCss
-} from "../../modules/theming/application/theme-render-resolver";
+} from "../application/theme-render-resolver";
 
 /** ETag from a render fingerprint (strong validator). */
 function etagFor(css: ResolvedThemeCss): string {

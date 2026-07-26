@@ -9,9 +9,9 @@
  * keeping the aggregator functions pure and passing `modules` as a parameter (the
  * `reporting`/`data_lifecycle` registry convention).
  */
-import { listModules } from "../../modules";
-import type { SearchSourceDescriptor } from "../../modules/_shared/module-contract";
-import { collectSearchSourceDescriptors } from "../../modules/site-search/domain/search-source-registry";
+import { listModules } from "../../index";
+import type { SearchSourceDescriptor } from "../../_shared/module-contract";
+import { collectSearchSourceDescriptors } from "../domain/search-source-registry";
 
 /** Every reviewed, registered search-source descriptor across the whole module registry. */
 export function getRegisteredSearchSources(): SearchSourceDescriptor[] {

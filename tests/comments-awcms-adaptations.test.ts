@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test";
 
 import { buildCommentableResourceUrl } from "../src/modules/comments/application/commentable-resource-engine";
 import { applyModerationAction } from "../src/modules/comments/domain/comment-status";
-import { getRegisteredCommentableResources } from "../src/lib/comments/commentable-resources";
+import { getRegisteredCommentableResources } from "../src/modules/comments/presentation/commentable-resources";
 import { listModules } from "../src/modules";
 import { WORKER_ROLE_GRANTS } from "../scripts/security-readiness";
 import type { CommentableResourceDescriptor } from "../src/modules/_shared/module-contract";

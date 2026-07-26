@@ -4,7 +4,7 @@ import {
   notFoundXmlResponse,
   serverErrorXmlResponse
 } from "../lib/html/error-responses";
-import { serveDiscovery } from "../lib/seo/discovery-route";
+import { serveDiscovery } from "../modules/seo-distribution/presentation/discovery-route";
 import { buildSitemapIndexPayload } from "../modules/seo-distribution/application/seo-discovery-service";
 
 /**

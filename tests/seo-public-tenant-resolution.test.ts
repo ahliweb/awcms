@@ -4,7 +4,7 @@ import { buildPublicHostResolverConfigFromEnv } from "../src/modules/seo-distrib
 import {
   finalizeDiscoveryResponse,
   parseDiscoveryLocaleParam
-} from "../src/lib/seo/discovery-route";
+} from "../src/modules/seo-distribution/presentation/discovery-route";
 import {
   resolvePublicTenantFromRequest,
   type PublicHostResolverDeps,
