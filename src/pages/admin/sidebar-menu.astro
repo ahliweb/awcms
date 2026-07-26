@@ -1,0 +1,412 @@
+---
+/**
+ * `/admin/sidebar-menu` — arrange this tenant's admin sidebar (Issue #260).
+ *
+ * One row per code-derived menu entry: which section it sits in, its position,
+ * an optional label override, and whether it is hidden. The ENTRY SET itself is
+ * not editable and is not submitted — a save carries overrides keyed by
+ * `entryKey`, and the server resolves each one against
+ * `buildDefaultSidebarModel`. There is no path from this form to a new link.
+ *
+ * Deliberately a plain table with number/text/checkbox inputs, not drag and
+ * drop. Reordering is a `position` integer, which works with a keyboard and a
+ * screen reader, needs no dependency, and cannot be broken by this repo's CSP.
+ * awcms-micro's editor is richer; parity there is a UI question, not the
+ * capability this issue is about.
+ *
+ * Unfiltered by permission and by tenant-disabled module, unlike the rendered
+ * sidebar: this screen ARRANGES the menu rather than previewing one operator's
+ * view of it. Hiding an entry from the arranger would silently make it
+ * unarrangeable, which reads as data loss to whoever can see it.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenant } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  buildSidebarEditorModel,
+  fetchSidebarArrangement,
+  type SidebarEditorModel
+} from "../../modules/module-management/application/sidebar-menu-config";
+import {
+  DEFAULT_MENU_TYPES,
+  resolveSidebarLabel
+} from "../../modules/module-management/domain/sidebar-menu";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "sidebar-menu.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const canRead = ssr.permissions.has(
+  permissionKey("module_management", "navigation", "read")
+);
+const canConfigure = ssr.permissions.has(
+  permissionKey("module_management", "navigation", "configure")
+);
+
+let model: SidebarEditorModel | null = null;
+let loadFailed = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenant(sql, ssr.tenantId, async (tx) =>
+      buildSidebarEditorModel(await fetchSidebarArrangement(tx, ssr.tenantId))
+    );
+
+    // Shape check, not truthiness: `withTenant` RETURNS a 503 `Response` on
+    // circuit-open rather than throwing, and a `Response` is truthy.
+    model =
+      result && typeof result === "object" && "entries" in result
+        ? (result as SidebarEditorModel)
+        : null;
+    loadFailed = model === null;
+  } catch (error) {
+    loadFailed = true;
+    logAdminPageError("/admin/sidebar-menu", error);
+  }
+}
+
+const itemOverrides = new Map(
+  (model?.arrangement.items ?? []).map((item) => [item.entryKey, item])
+);
+const typeOverrides = new Map(
+  (model?.arrangement.types ?? []).map((type) => [type.typeKey, type])
+);
+
+/** Code taxonomy plus any custom type the tenant already added. */
+const typeOptions = [
+  ...DEFAULT_MENU_TYPES.map((type) => ({
+    typeKey: type.typeKey,
+    label: resolveSidebarLabel(type.labelKey)
+  })),
+  ...(model?.arrangement.types ?? [])
+    .filter(
+      (type) =>
+        !DEFAULT_MENU_TYPES.some((known) => known.typeKey === type.typeKey)
+    )
+    .map((type) => ({
+      typeKey: type.typeKey,
+      label: type.labelOverride ?? type.typeKey
+    }))
+];
+---
+
+<AdminLayout title="Sidebar menu">
+  <section class="admin-section">
+    <h1>Sidebar menu</h1>
+    <p class="admin-section-lead">
+      Rearrange this tenant&rsquo;s admin sidebar. The list of links comes from
+      the installed modules and cannot be added to here &mdash; you can reorder,
+      rename, move between sections, or hide an entry.
+    </p>
+
+    {
+      !canRead && (
+        <p class="admin-empty">
+          You do not have permission to view the sidebar configuration.
+        </p>
+      )
+    }
+
+    {
+      canRead && loadFailed && (
+        <p class="admin-empty">
+          Could not load the sidebar configuration right now.
+        </p>
+      )
+    }
+
+    {
+      canRead && model && !canConfigure && (
+        <p class="admin-empty">
+          Read-only: you do not have permission to change the sidebar
+          arrangement.
+        </p>
+      )
+    }
+
+    {
+      canRead && model && (
+        <form id="sidebar-form">
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Link</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Section</th>
+                  <th scope="col">Position</th>
+                  <th scope="col">Label override</th>
+                  <th scope="col">Hidden</th>
+                </tr>
+              </thead>
+              <tbody>
+                {model.entries.map((entry) => {
+                  const override = itemOverrides.get(entry.entryKey);
+
+                  return (
+                    <tr data-entry-key={entry.entryKey}>
+                      <td>
+                        <code>{entry.path}</code>
+                        <span class="admin-muted">
+                          {resolveSidebarLabel(entry.defaultLabel)}
+                        </span>
+                      </td>
+                      <td>{entry.moduleName}</td>
+                      <td>
+                        <select
+                          name="typeKey"
+                          disabled={!canConfigure}
+                          aria-label={`Section for ${entry.path}`}
+                        >
+                          {typeOptions.map((option) => (
+                            <option
+                              value={option.typeKey}
+                              selected={
+                                (override?.typeKey ?? entry.defaultTypeKey) ===
+                                option.typeKey
+                              }
+                            >
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          name="position"
+                          value={String(override?.position ?? 0)}
+                          disabled={!canConfigure}
+                          aria-label={`Position for ${entry.path}`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          name="labelOverride"
+                          maxlength="120"
+                          value={override?.labelOverride ?? ""}
+                          placeholder={resolveSidebarLabel(entry.defaultLabel)}
+                          disabled={!canConfigure}
+                          aria-label={`Label override for ${entry.path}`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          name="hidden"
+                          checked={override?.hidden === true}
+                          disabled={!canConfigure}
+                          aria-label={`Hide ${entry.path}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <h2>Sections</h2>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Section</th>
+                  <th scope="col">Position</th>
+                  <th scope="col">Label override</th>
+                  <th scope="col">Hidden</th>
+                </tr>
+              </thead>
+              <tbody>
+                {typeOptions.map((option, index) => {
+                  const override = typeOverrides.get(option.typeKey);
+
+                  return (
+                    <tr data-type-key={option.typeKey}>
+                      <td>
+                        <code>{option.typeKey}</code>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          name="typePosition"
+                          value={String(override?.position ?? index)}
+                          disabled={!canConfigure}
+                          aria-label={`Position for section ${option.typeKey}`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          name="typeLabelOverride"
+                          maxlength="120"
+                          value={override?.labelOverride ?? ""}
+                          placeholder={option.label}
+                          disabled={!canConfigure}
+                          aria-label={`Label override for section ${option.typeKey}`}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          name="typeHidden"
+                          checked={override?.hidden === true}
+                          disabled={!canConfigure}
+                          aria-label={`Hide section ${option.typeKey}`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p id="sidebar-error" class="admin-error" hidden />
+
+          {canConfigure && (
+            <div class="admin-form-actions">
+              <button type="submit" id="sidebar-save">
+                Save arrangement
+              </button>
+              <button type="button" id="sidebar-reset" class="admin-secondary">
+                Reset to default
+              </button>
+            </div>
+          )}
+        </form>
+      )
+    }
+  </section>
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time), and
+  // harmless without the configure permission: the buttons only render when
+  // `canConfigure`, so the listeners never bind. The import is deliberate — it
+  // forces Astro to emit this EXTERNAL, and an inline script would be blocked
+  // by this app's CSP. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "sidebar-form"
+  ) as HTMLFormElement | null;
+  const errorBox = document.getElementById("sidebar-error");
+  const saveButton = document.getElementById(
+    "sidebar-save"
+  ) as HTMLButtonElement | null;
+  const resetButton = document.getElementById(
+    "sidebar-reset"
+  ) as HTMLButtonElement | null;
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function collect() {
+    const items = [...(form?.querySelectorAll("tr[data-entry-key]") ?? [])].map(
+      (row) => ({
+        entryKey: row.getAttribute("data-entry-key") ?? "",
+        typeKey:
+          (row.querySelector('[name="typeKey"]') as HTMLSelectElement | null)
+            ?.value ?? null,
+        position: Number(
+          (row.querySelector('[name="position"]') as HTMLInputElement | null)
+            ?.value ?? 0
+        ),
+        labelOverride:
+          (
+            row.querySelector(
+              '[name="labelOverride"]'
+            ) as HTMLInputElement | null
+          )?.value.trim() || null,
+        hidden:
+          (row.querySelector('[name="hidden"]') as HTMLInputElement | null)
+            ?.checked === true
+      })
+    );
+
+    const types = [...(form?.querySelectorAll("tr[data-type-key]") ?? [])].map(
+      (row) => ({
+        typeKey: row.getAttribute("data-type-key") ?? "",
+        position: Number(
+          (
+            row.querySelector(
+              '[name="typePosition"]'
+            ) as HTMLInputElement | null
+          )?.value ?? 0
+        ),
+        labelOverride:
+          (
+            row.querySelector(
+              '[name="typeLabelOverride"]'
+            ) as HTMLInputElement | null
+          )?.value.trim() || null,
+        hidden:
+          (row.querySelector('[name="typeHidden"]') as HTMLInputElement | null)
+            ?.checked === true
+      })
+    );
+
+    return { types, items };
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!saveButton || saveButton.disabled) return;
+    const unlock = lockElement(saveButton, "Saving…");
+
+    if (errorBox) errorBox.hidden = true;
+
+    const result = await sendJson(
+      "PUT",
+      "/api/v1/tenant/navigation/sidebar",
+      collect()
+    );
+
+    unlock();
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showError(
+      result.errorCode === "ACCESS_DENIED"
+        ? "You do not have permission to change the sidebar arrangement."
+        : "Could not save the sidebar arrangement."
+    );
+  });
+
+  resetButton?.addEventListener("click", async () => {
+    if (resetButton.disabled) return;
+    const unlock = lockElement(resetButton, "Resetting…");
+
+    if (errorBox) errorBox.hidden = true;
+
+    const result = await sendJson(
+      "DELETE",
+      "/api/v1/tenant/navigation/sidebar"
+    );
+
+    unlock();
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showError("Could not reset the sidebar arrangement.");
+  });
+</script>

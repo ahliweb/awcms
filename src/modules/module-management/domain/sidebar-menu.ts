@@ -161,6 +161,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_offices": "Offices",
   "admin.layout.nav_tenant_domains": "Tenant domains",
   "admin.layout.nav_modules": "Modules",
+  "admin.layout.nav_sidebar_menu": "Sidebar menu",
   "admin.layout.nav_email_templates": "Email templates",
   "admin.layout.nav_comments": "Moderation queue",
   "admin.layout.nav_visitor_analytics": "Visitor analytics",
@@ -374,4 +375,255 @@ export function composeSidebarSections(
       typeRank(a.typeKey) - typeRank(b.typeKey) ||
       a.typeKey.localeCompare(b.typeKey)
   );
+}
+
+/* ===========================================================================
+ * Per-tenant override layer (Issue #260)
+ * ===========================================================================
+ *
+ * Everything above computes the DEFAULT model from the registry. What follows
+ * lets a tenant reorder, hide, relabel and re-bucket that default, and add
+ * custom sections.
+ *
+ * The security boundary is the same one this file opens with, and it is why
+ * overrides are stored as a delta rather than a snapshot: the ITEM SET stays
+ * trusted build-time data. A tenant can only override an entry that
+ * `buildDefaultSidebarModel` already produced — `applySidebarOverrides` looks
+ * every override up BY KEY against the default model and ignores anything that
+ * does not match. There is no code path that turns a stored row into a new
+ * link, so a malicious or corrupted write cannot inject one.
+ */
+
+/** Bounds mirrored by `sql/071`'s CHECK constraints — validated before a write reaches the database. */
+export const MAX_TYPE_KEY_LENGTH = 64;
+export const MAX_ENTRY_KEY_LENGTH = 256;
+export const MAX_LABEL_OVERRIDE_LENGTH = 120;
+
+/**
+ * Coarse ceiling on how many rows one save may submit. Defence against a
+ * pathological payload, not a product limit: the default model is about a dozen
+ * entries, so anything near this is already not a sidebar.
+ */
+export const MAX_SIDEBAR_ROWS = 500;
+
+/**
+ * A custom type key: lowercase slug only. Narrow so a custom key can never
+ * collide structurally with a code type, and can never smuggle markup into a
+ * rendered section heading.
+ */
+const TYPE_KEY_PATTERN = /^[a-z0-9_]+$/;
+
+export type SidebarTypeOverride = {
+  typeKey: string;
+  labelOverride: string | null;
+  position: number;
+  hidden: boolean;
+};
+
+export type SidebarItemOverride = {
+  entryKey: string;
+  /** The type this item is placed under; `null` keeps its code default. */
+  typeKey: string | null;
+  position: number;
+  labelOverride: string | null;
+  hidden: boolean;
+};
+
+export type SidebarArrangement = {
+  types: SidebarTypeOverride[];
+  items: SidebarItemOverride[];
+};
+
+export type SidebarValidationIssue = { field: string; message: string };
+
+/**
+ * Validate a submitted arrangement before it reaches the database.
+ *
+ * The CHECK constraints in `sql/071` are the floor; this layer can say WHICH
+ * field is wrong. It also enforces two things SQL cannot express as cheaply:
+ * intra-payload duplicate keys — the save path is a full DELETE-then-INSERT
+ * replace, so a duplicate would otherwise trip a unique violation
+ * mid-transaction and surface as a server error — and the total row ceiling.
+ */
+export function validateSidebarArrangement(
+  input: SidebarArrangement
+): SidebarValidationIssue[] {
+  const issues: SidebarValidationIssue[] = [];
+
+  if (input.types.length + input.items.length > MAX_SIDEBAR_ROWS) {
+    issues.push({
+      field: "arrangement",
+      message: `At most ${MAX_SIDEBAR_ROWS} rows may be submitted in one save.`
+    });
+  }
+
+  const seenTypes = new Set<string>();
+
+  for (const [index, type] of input.types.entries()) {
+    if (!TYPE_KEY_PATTERN.test(type.typeKey)) {
+      issues.push({
+        field: `types[${index}].typeKey`,
+        message:
+          "Type key must be a lowercase slug (letters, digits, underscore)."
+      });
+    }
+
+    if (type.typeKey.length > MAX_TYPE_KEY_LENGTH) {
+      issues.push({
+        field: `types[${index}].typeKey`,
+        message: `Type key must be at most ${MAX_TYPE_KEY_LENGTH} characters.`
+      });
+    }
+
+    if (
+      type.labelOverride !== null &&
+      type.labelOverride.length > MAX_LABEL_OVERRIDE_LENGTH
+    ) {
+      issues.push({
+        field: `types[${index}].labelOverride`,
+        message: `Label must be at most ${MAX_LABEL_OVERRIDE_LENGTH} characters.`
+      });
+    }
+
+    if (seenTypes.has(type.typeKey)) {
+      issues.push({
+        field: `types[${index}].typeKey`,
+        message: `Duplicate type key "${type.typeKey}" in this payload.`
+      });
+    }
+
+    seenTypes.add(type.typeKey);
+  }
+
+  const seenEntries = new Set<string>();
+
+  for (const [index, item] of input.items.entries()) {
+    if (item.entryKey === "" || item.entryKey.length > MAX_ENTRY_KEY_LENGTH) {
+      issues.push({
+        field: `items[${index}].entryKey`,
+        message: `Entry key must be 1-${MAX_ENTRY_KEY_LENGTH} characters.`
+      });
+    }
+
+    if (item.typeKey !== null && !TYPE_KEY_PATTERN.test(item.typeKey)) {
+      issues.push({
+        field: `items[${index}].typeKey`,
+        message:
+          "Type key must be a lowercase slug (letters, digits, underscore)."
+      });
+    }
+
+    if (
+      item.labelOverride !== null &&
+      item.labelOverride.length > MAX_LABEL_OVERRIDE_LENGTH
+    ) {
+      issues.push({
+        field: `items[${index}].labelOverride`,
+        message: `Label must be at most ${MAX_LABEL_OVERRIDE_LENGTH} characters.`
+      });
+    }
+
+    if (seenEntries.has(item.entryKey)) {
+      issues.push({
+        field: `items[${index}].entryKey`,
+        message: `Duplicate entry key "${item.entryKey}" in this payload.`
+      });
+    }
+
+    seenEntries.add(item.entryKey);
+  }
+
+  return issues;
+}
+
+/**
+ * Apply a tenant's overrides on top of the default model.
+ *
+ * Returns a NEW default-entry list, so the existing `composeSidebarSections`
+ * does the grouping, permission filtering and ordering unchanged — the override
+ * layer changes what entries SAY, never how they are assembled or who may see
+ * them.
+ *
+ * An override whose `entryKey` matches no default entry is IGNORED. That is the
+ * injection boundary: the item set is build-time data, and a stored row can
+ * only ever modify an entry the registry already produced.
+ *
+ * A hidden entry is dropped here rather than flagged, because
+ * `composeSidebarSections` already drops empty groups and empty types — so
+ * hiding the last item in a section removes the section too, with no extra
+ * rule.
+ */
+export function applySidebarOverrides(
+  defaultEntries: readonly SidebarDefaultEntry[],
+  arrangement: SidebarArrangement
+): SidebarDefaultEntry[] {
+  const itemByKey = new Map(
+    arrangement.items.map((item) => [item.entryKey, item])
+  );
+  const hiddenTypes = new Set(
+    arrangement.types.filter((type) => type.hidden).map((type) => type.typeKey)
+  );
+
+  const applied: SidebarDefaultEntry[] = [];
+
+  for (const entry of defaultEntries) {
+    const override = itemByKey.get(entry.path);
+
+    if (override?.hidden) {
+      continue;
+    }
+
+    const typeKey = override?.typeKey ?? entry.typeKey;
+
+    if (hiddenTypes.has(typeKey)) {
+      continue;
+    }
+
+    applied.push({
+      ...entry,
+      typeKey,
+      order: override ? override.position : entry.order,
+      // A label override replaces the resolved label, carried as a pre-resolved
+      // string through `labelKey` — `resolveSidebarLabel` falls back to the key
+      // itself when it is not in the catalog, which is exactly what is wanted.
+      labelKey: override?.labelOverride ?? entry.labelKey
+    });
+  }
+
+  return applied;
+}
+
+/**
+ * Section ordering and labelling after overrides.
+ *
+ * Separate from `applySidebarOverrides` because it operates on the COMPOSED
+ * result: a type's position and label belong to the section, not to any entry,
+ * so they cannot be folded into the entry list.
+ */
+export function applySidebarTypeOverrides(
+  sections: readonly ComposedType[],
+  arrangement: SidebarArrangement
+): ComposedType[] {
+  const byKey = new Map(
+    arrangement.types.map((type) => [type.typeKey, type] as const)
+  );
+
+  return [...sections]
+    .map((section) => {
+      const override = byKey.get(section.typeKey);
+
+      return {
+        ...section,
+        label: override?.labelOverride ?? section.label
+      };
+    })
+    .sort((a, b) => {
+      // A type with no override keeps its taxonomy position, expressed on the
+      // same scale so overridden and default sections interleave predictably
+      // instead of the overridden ones all jumping to the front.
+      const aRank = byKey.get(a.typeKey)?.position ?? typeRank(a.typeKey);
+      const bRank = byKey.get(b.typeKey)?.position ?? typeRank(b.typeKey);
+
+      return aRank - bRank || a.typeKey.localeCompare(b.typeKey);
+    });
 }

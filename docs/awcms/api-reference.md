@@ -1998,6 +1998,53 @@ Enables every module the preset lists and disables every enabled, unlisted, unpr
 | 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                      | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/tenant/navigation/sidebar` — This tenant's admin sidebar arrangement, plus the arrangeable entry set.
+
+- **operationId**: `getTenantSidebarArrangement`
+- **Security**: bearerAuth + tenantHeader
+
+The entry set is code-derived (`listModules()` navigation plus the synthetic core items) and is returned for the editor to render; it is never writable. `arrangement` is the tenant's stored delta — a tenant with no rows gets empty arrays, meaning "use the code default". Deliberately unfiltered by permission and by tenant-disabled module: this arranges the menu rather than previewing one operator's view of it.
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | Entry set plus the tenant's current overrides. | object                                 |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+
+### `PUT /api/v1/tenant/navigation/sidebar` — Replace this tenant's sidebar arrangement.
+
+- **operationId**: `saveTenantSidebarArrangement`
+- **Security**: bearerAuth + tenantHeader
+
+A full replace, not a merge: the payload IS the arrangement, so an omitted override disappears. Only overrides are submitted — each is resolved by `entryKey` against the code-derived default and one that matches nothing is ignored, so a request can never introduce a menu link. Requires `module_management.navigation.configure`.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Arrangement saved.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 413    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/tenant/navigation/sidebar` — Drop every override, returning this tenant to the code default.
+
+- **operationId**: `resetTenantSidebarArrangement`
+- **Security**: bearerAuth + tenantHeader
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Arrangement reset.          | object                                 |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
 ## Sync Storage
 
 Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.

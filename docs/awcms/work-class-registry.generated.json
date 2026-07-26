@@ -947,6 +947,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/tenant/navigation/sidebar.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/theming/draft.ts",
       "workClass": "interactive",
       "source": "default"

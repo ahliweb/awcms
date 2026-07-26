@@ -75,9 +75,13 @@ import { withTenant } from "../lib/database/tenant-context";
 import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
 import { fetchTenantModuleEntries } from "../modules/module-management/application/tenant-module-lifecycle";
 import {
+  applySidebarOverrides,
+  applySidebarTypeOverrides,
   buildDefaultSidebarModel,
-  composeSidebarSections
+  composeSidebarSections,
+  type SidebarArrangement
 } from "../modules/module-management/domain/sidebar-menu";
+import { fetchSidebarArrangement } from "../modules/module-management/application/sidebar-menu-config";
 import { listModules } from "../modules";
 import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
 import packageJson from "../../package.json";
@@ -133,6 +137,12 @@ let syncActive = false;
  * hiccup look like a tenant losing modules.
  */
 let disabledModuleKeys: ReadonlySet<string> = new Set<string>();
+/**
+ * Empty on failure — the code default. Same degrade-toward-MORE reasoning as
+ * `disabledModuleKeys`: a database hiccup must not look like a tenant losing
+ * their menu customization.
+ */
+let arrangement: SidebarArrangement = { types: [], items: [] };
 
 try {
   const sql = getDatabaseClient();
@@ -151,7 +161,11 @@ try {
       // stays defined in exactly one place.
       disabledModuleKeys: (await fetchTenantModuleEntries(tx, ssr.tenantId))
         .filter((entry) => !entry.tenantEnabled)
-        .map((entry) => entry.moduleKey)
+        .map((entry) => entry.moduleKey),
+      // Issue #260 — the tenant's sidebar overrides, joining the SAME
+      // transaction. A tenant with no rows gets `{types: [], items: []}`,
+      // which `applySidebarOverrides` treats as "use the code default".
+      arrangement: await fetchSidebarArrangement(tx, ssr.tenantId)
     };
   });
 
@@ -167,6 +181,7 @@ try {
 
     syncActive = chrome.syncActive === true;
     disabledModuleKeys = new Set(chrome.disabledModuleKeys);
+    arrangement = chrome.arrangement;
   }
 } catch {
   // Chrome falls back to generic label + inactive — never a broken admin page.
@@ -190,15 +205,22 @@ try {
  * `ssr.permissions`" was stale: `resolveSsrContext` has populated that set
  * since it was written.
  */
-const navSections = composeSidebarSections(
-  buildDefaultSidebarModel(listModules()),
-  {
-    grantedPermissionKeys: ssr.permissions,
-    tenantDisabledModuleKeys: disabledModuleKeys,
-    // Exact match. Every admin page in this base is a leaf path, so no prefix
-    // logic is needed; a nested screen would have to revisit this.
-    currentPath: Astro.url.pathname
-  }
+const navSections = applySidebarTypeOverrides(
+  composeSidebarSections(
+    // Issue #260: overrides are applied FIRST, so a relabelled or re-bucketed
+    // entry still passes through exactly the same permission and
+    // tenant-disable filtering. An override can never be a way around
+    // `requiredPermission` or a disabled module.
+    applySidebarOverrides(buildDefaultSidebarModel(listModules()), arrangement),
+    {
+      grantedPermissionKeys: ssr.permissions,
+      tenantDisabledModuleKeys: disabledModuleKeys,
+      // Exact match. Every admin page in this base is a leaf path, so no prefix
+      // logic is needed; a nested screen would have to revisit this.
+      currentPath: Astro.url.pathname
+    }
+  ),
+  arrangement
 );
 
 /** Decorative topbar avatar (aria-hidden). Static SVG — no CSP cost. */
