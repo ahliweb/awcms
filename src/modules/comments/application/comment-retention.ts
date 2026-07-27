@@ -25,6 +25,19 @@ import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-po
 import { COMMENTS_CONTENT_LIFECYCLE_KEY } from "../module";
 
 export const COMMENTS_DEFAULT_ANONYMIZE_DAYS = 365;
+
+/**
+ * The one place a retention cutoff is computed here, shared by the real sweeps
+ * and by `--dry-run`'s preview, so a preview cannot drift from what a real run
+ * treats as past retention (same reason `logging`'s
+ * `resolveAuditRetentionCutoff` exists).
+ */
+export function resolveCommentsRetentionCutoff(
+  now: Date,
+  retentionDays: number
+): Date {
+  return new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+}
 export const COMMENTS_UNCONFIRMED_SUBSCRIPTION_DAYS = 7;
 
 export type AnonymizeResult = {
@@ -41,9 +54,7 @@ export async function anonymizeAgedComments(
   options: { retentionDays: number; now?: Date; batchLimit?: number }
 ): Promise<AnonymizeResult> {
   const now = options.now ?? new Date();
-  const cutoff = new Date(
-    now.getTime() - options.retentionDays * 24 * 60 * 60 * 1000
-  );
+  const cutoff = resolveCommentsRetentionCutoff(now, options.retentionDays);
 
   const held = await legalHoldGuard.isDescriptorHeld(
     tx,
@@ -112,7 +123,7 @@ export async function purgeUnconfirmedReplySubscriptions(
   const now = options.now ?? new Date();
   const days =
     options.unconfirmedDays ?? COMMENTS_UNCONFIRMED_SUBSCRIPTION_DAYS;
-  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const cutoff = resolveCommentsRetentionCutoff(now, days);
   const batchLimit = Math.min(Math.max(1, options.batchLimit ?? 1000), 5000);
 
   const rows = (await tx`
@@ -131,4 +142,72 @@ export async function purgeUnconfirmedReplySubscriptions(
   `) as { id: string }[];
 
   return { purgedCount: rows.length, cutoff };
+}
+
+export type CommentsRetentionPreview = {
+  wouldAnonymize: number;
+  skippedForLegalHold: boolean;
+  wouldPurgeSubscriptions: number;
+  anonymizeCutoff: Date;
+  subscriptionCutoff: Date;
+};
+
+/**
+ * Read-only preview for `--dry-run`. Counts what each pass would touch and
+ * changes nothing — no UPDATE, no DELETE, and no `anonymize` moderation event.
+ *
+ * Asks the SAME legal-hold guard the real sweep asks, and reports the answer:
+ * a held descriptor makes a real run anonymize nothing, so a preview that
+ * ignored the hold would report a backlog no run would ever act on. Unbounded
+ * by `batchLimit` on purpose — an operator wants the backlog, not one batch.
+ */
+export async function previewCommentsRetention(
+  tx: Bun.SQL,
+  tenantId: string,
+  legalHoldGuard: LegalHoldGuardPort,
+  options: { retentionDays: number; unconfirmedDays?: number; now?: Date }
+): Promise<CommentsRetentionPreview> {
+  const now = options.now ?? new Date();
+  const anonymizeCutoff = resolveCommentsRetentionCutoff(
+    now,
+    options.retentionDays
+  );
+  const subscriptionCutoff = resolveCommentsRetentionCutoff(
+    now,
+    options.unconfirmedDays ?? COMMENTS_UNCONFIRMED_SUBSCRIPTION_DAYS
+  );
+
+  const held = await legalHoldGuard.isDescriptorHeld(
+    tx,
+    tenantId,
+    COMMENTS_CONTENT_LIFECYCLE_KEY
+  );
+
+  const anonymizeRows = held
+    ? [{ count: 0 }]
+    : ((await tx`
+        SELECT count(*)::int AS count
+        FROM awcms_comments_comments
+        WHERE tenant_id = ${tenantId}
+          AND created_at < ${anonymizeCutoff}
+          AND (author_email_hash IS NOT NULL
+               OR author_ip_hash IS NOT NULL
+               OR author_display_name IS NOT NULL)
+      `) as { count: number }[]);
+
+  const subscriptionRows = (await tx`
+    SELECT count(*)::int AS count
+    FROM awcms_comments_reply_subscriptions
+    WHERE tenant_id = ${tenantId}
+      AND confirmed = false
+      AND created_at < ${subscriptionCutoff}
+  `) as { count: number }[];
+
+  return {
+    wouldAnonymize: anonymizeRows[0]?.count ?? 0,
+    skippedForLegalHold: held,
+    wouldPurgeSubscriptions: subscriptionRows[0]?.count ?? 0,
+    anonymizeCutoff,
+    subscriptionCutoff
+  };
 }
