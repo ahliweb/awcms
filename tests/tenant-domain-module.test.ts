@@ -119,8 +119,27 @@ describe("tenant_domain module descriptor (ported from awcms-micro)", () => {
     expect(defaults).not.toHaveProperty("cloudflareApiToken");
   });
 
-  test("the module declares no jobs or health", () => {
-    expect(tenantDomainModule.jobs).toBeUndefined();
+  test("the DNS sync job is declared, with a schedule an operator can act on", () => {
+    // This used to assert `jobs` was UNDEFINED, pinning the defect in place:
+    // `scripts/tenant-domain-dns-sync.ts` was already in
+    // `JOB_WORK_CLASS_REGISTRY` (so it was fully inside the capacity model)
+    // while `GET /api/v1/modules/tenant_domain/jobs` returned nothing — the
+    // one surface an operator reads to learn a job needs scheduling. A job
+    // nobody schedules never runs, and nothing says so. `modules:jobs:check`
+    // now compares the two registries; this pins the module's own half.
+    const job = tenantDomainModule.jobs?.find(
+      (entry) => entry.command === "bun run tenant-domain:dns:sync"
+    );
+
+    expect(job).toBeDefined();
+    expect(job!.recommendedSchedule?.trim()).toBeTruthy();
+    // The outbound-call condition belongs in the descriptor, not only in the
+    // script: `safeInOfflineLan` is how an offline/LAN operator decides.
+    expect(job!.environmentNotes).toContain("TENANT_DOMAIN_DNS_PROVIDER");
+    expect(job!.safeInOfflineLan).toBe(true);
+  });
+
+  test("the module declares no health contract", () => {
     expect(tenantDomainModule.health).toBeUndefined();
   });
 });

@@ -214,19 +214,45 @@ Catatan operasional (standar wajib untuk setiap dispatcher yang dibangun):
 
 ## Job registry
 
-Setiap modul (ERP maupun fondasi) yang mendaftarkan command operasional terjadwal (dispatcher, purge retensi, rekonsiliasi) direncanakan mengikuti registry metadata trusted per modul (`ModuleDescriptor.jobs`), dibaca lewat `GET /api/v1/modules/{moduleKey}/jobs` — pola yang sama dipertahankan dari basis. Contoh kategori job yang direncanakan untuk ERP:
+Setiap modul yang mendaftarkan command operasional terjadwal (dispatcher, purge
+retensi, rekonsiliasi) mendeklarasikannya di `ModuleDescriptor.jobs`. **Itu
+sumber kebenarannya, bukan dokumen ini** — tiap entri membawa `purpose`,
+`recommendedSchedule`, `environmentNotes`, dan `safeInOfflineLan`, dan disajikan
+langsung ke operator lewat:
 
-| Command (contoh)               | Kategori                                               | Jadwal disarankan                         |
-| ------------------------------ | ------------------------------------------------------ | ----------------------------------------- |
-| `sync:objects:dispatch`        | Sync storage/object queue                              | Setiap 1-2 menit                          |
-| `logs:audit:purge`             | Audit retention                                        | Harian                                    |
-| `finance:posting:dispatch`     | Posting transaksi finansial ke ledger/Coretax (outbox) | Setiap 1-2 menit                          |
-| `payroll:run:dispatch`         | Eksekusi payroll run terjadwal                         | Sesuai periode payroll (bulanan/mingguan) |
-| `inventory:sync:dispatch`      | Sinkronisasi stok ke marketplace/warehouse eksternal   | Setiap 1-5 menit                          |
-| `domain-events:dispatch`       | Domain event runtime (fan-out lintas modul)            | Setiap 30-60 detik                        |
-| `data-lifecycle:archive-purge` | Arsip/purge retensi data lintas modul                  | Harian                                    |
+```
+GET /api/v1/modules/{moduleKey}/jobs
+```
 
-Semua bersifat operasi database murni kecuali yang secara eksplisit menyentuh provider eksternal (bila fiturnya aktif) — aman dijadwalkan di profil offline/LAN sekalipun untuk job yang murni internal (audit purge, domain events, data lifecycle).
+Dokumen ini sengaja TIDAK menyalin daftarnya. Versi sebelumnya menyalin, dan
+salinan itu menua persis seperti yang diperkirakan: memuat tiga command ERP yang
+tak pernah ada (`finance:posting:dispatch`, `payroll:run:dispatch`,
+`inventory:sync:dispatch`) sementara sepuluh job yang benar-benar dikirim tak
+disebut sama sekali. Satu-satunya perbaikan yang bertahan adalah berhenti
+menyalinnya.
+
+Yang dijamin gate, bukan kebiasaan:
+
+- **`modules:jobs:check`** — tiap skrip di `JOB_WORK_CLASS_REGISTRY` wajib punya
+  `ModuleJobDescriptor` dengan `recommendedSchedule` yang tak kosong, atau
+  pengecualian ber-alasan STRUKTURAL. Job worker baru yang lupa deskriptornya
+  memerahkan CI di PR yang menambahkannya — tak bisa lagi mendarat lalu tak
+  pernah dijadwalkan siapa pun.
+- **`db:work-class:check`** — tiap skrip yang membuka koneksi worker/setup wajib
+  punya work class terdeklarasi; generatornya MENOLAK jalan saat peta dan disk
+  berselisih.
+
+Satu pengecualian tercatat hari ini: **`edge-cache:purge`**. Tak ada modul
+`edge_cache` untuk menggantungkan deskriptornya — edge cache adalah infrastruktur
+di `src/lib/edge-cache/` (ADR-0043), dan `ModuleDescriptor.jobs` di-key per
+modul. Jadwalnya: **setiap 10–30 detik**, cukup rapat supaya publikasi editor
+segera terlihat di edge. Alasan lengkapnya ada di
+`scripts/module-job-registry-check.ts`.
+
+Semua job bersifat operasi database murni kecuali yang secara eksplisit menyentuh
+provider eksternal (bila fiturnya aktif) — `safeInOfflineLan` di tiap deskriptor
+yang menyatakannya per job, jadi profil offline/LAN bisa diperiksa lewat API yang
+sama alih-alih menebak dari nama command.
 
 **On-demand/manual (bukan cron berulang)** — dijalankan operator sesuai kebutuhan:
 
@@ -237,11 +263,25 @@ Semua bersifat operasi database murni kecuali yang secara eksplisit menyentuh pr
 
 `src/lib/jobs/` SUDAH ada dan dipakai nyata — `job-runner.ts`, `batching.ts`,
 `retry-classification.ts`, dan `advisory-lock.ts` adalah implementasi
-berjalan, bukan rencana. Ketujuh dispatcher script yang sudah ada di
-`package.json` (`domain-events:dispatch`, `sync:objects:dispatch`,
-`workflow:escalations:dispatch`, `logs:audit:purge`, `email:dispatch`,
-`reporting:projections:refresh`, `reporting:exports:dispatch`) semuanya
-dibangun di atas shared runner ini. Ia menyediakan:
+berjalan, bukan rencana.
+
+**Dua model konkurensi, keduanya sah — pilih menurut bentuk jobnya, bukan menurut
+tahap migrasi.**
+
+| model                                                | job                                                                                                                                                                                                                                                                                                            | mekanisme                                                                                                                                |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **`runJob`** — advisory lock per nama job            | `domain-events:dispatch`, `workflow:escalations:dispatch`, `logs:audit:purge`, `reporting:projections:refresh`, `reporting:exports:dispatch`, `data-lifecycle:archive-purge`, `analytics:rollup`, `analytics:purge`, `news-media:reconcile`, `blog:publish:scheduled`, `identity-access:business-scope:expiry` | satu instance sekali jalan; cocok untuk sapuan seluruh tenant yang tak punya klaim per-baris                                             |
+| **claim-lease per baris** (`FOR UPDATE SKIP LOCKED`) | `email:dispatch`, `sync:objects:dispatch`, `edge-cache:purge`                                                                                                                                                                                                                                                  | aman dijalankan paralel — lihat §Catatan operasional di atas; antrean baris-per-baris tak butuh kunci selebar job                        |
+| **belum bermigrasi — tanpa kunci lintas-instance**   | `comments:retention`, `form-drafts:purge`, `site-search:reconcile`, `tenant-domain:dns:sync`                                                                                                                                                                                                                   | jadwalkan dari **satu** entri cron saja; adopsi `runJob` untuk keempatnya dilacak di [#291](https://github.com/ahliweb/awcms/issues/291) |
+
+Versi sebelumnya dokumen ini menyatakan ketujuh dispatcher "semuanya dibangun di
+atas shared runner ini". Itu tidak benar untuk `email:dispatch` dan
+`sync:objects:dispatch`, dan salahnya ke arah yang menyesatkan: pembacanya akan
+menyimpulkan advisory lock sudah mencegah tumpang tindih di dalam aplikasi,
+padahal jaminannya datang dari klaim baris — mekanisme berbeda dengan sifat
+operasional berbeda (yang satu justru MENGIZINKAN worker paralel).
+
+`runJob` menyediakan:
 
 - **Advisory lock per nama job** (`pg_try_advisory_lock`, non-blocking, session-level, reserved connection terpisah dari handler) — mencegah dua instance job yang sama berjalan tumpang tindih.
 - **Bounded batching per tenant/entitas** (`iterateTenantsInBatches`/`runBoundedBatches`) dengan safety bound (`maxPasses`).
