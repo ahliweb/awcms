@@ -1,63 +1,139 @@
 # Scripts AWCMS
 
 Skrip tooling/ops repo, dijalankan lewat Bun (`bun scripts/<x>.ts` atau target
-`bun run <name>` di `package.json`). Basis dasar ini diadaptasi dari repo acuan
-[awcms-mini](https://github.com/ahliweb/awcms-mini) dan dipangkas ke apa yang
-**benar-benar bisa berjalan** di atas fondasi Sprint 1–2 saat ini — skrip
-worker per-modul menyusul begitu modul ERP-nya ada.
+`bun run <name>` di `package.json`).
 
-## Aktif (fondasi)
+## Inventaris
 
-| Target                    | Skrip                        | Fungsi                                                                                 | Di `check`?                                                  |
-| ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `db:migrate`              | `db-migrate.ts`              | Runner migration SQL (checksum + advisory lock)                                        | —                                                            |
-| `check:docs`              | `check-docs.mjs`             | Mermaid, tautan internal, penamaan (sisa `awcms_mini_`), nama service docker compose   | ✅                                                           |
-| `check:docs:translation`  | `check-docs-translation.mjs` | Staleness terjemahan docs: `*.id.md` (sumber ID) vs `*.md` (Inggris, ADR-0023)         | ✅                                                           |
-| `api:spec:check`          | `api-spec-check.ts`          | Validasi OpenAPI/AsyncAPI + route parity `src/pages/api/v1`                            | ✅                                                           |
-| `modules:dag:check`       | `validate-module-graph.ts`   | Validasi seluruh registry modul membentuk DAG (no cycle/self/dup/missing dependency)   | ✅                                                           |
-| `logging:lint:check`      | `logging-lint-check.ts`      | Gate: tak ada error/console.error mentah tanpa redaksi di `src/**`, `scripts/**`       | ✅                                                           |
-| `security:readiness`      | `security-readiness.ts`      | Gate go-live: RLS enabled+FORCED, role app tak bypass RLS, dll (butuh DB termigrasi)   | — (butuh DB)                                                 |
-| `logs:audit:purge`        | `audit-log-purge.ts`         | Purge `awcms_audit_events` melampaui `AUDIT_LOG_RETENTION_DAYS` (batched, self-audit)  | — (butuh DB)                                                 |
-| `config:validate`         | `validate-env.ts`            | Validasi kontrak env (`process.env` atau `--file <path>`) sebelum boot/deploy          | — (butuh env)                                                |
-| `db:pool:health`          | `db-pool-health.ts`          | Probe `GET /api/v1/database/pool/health` (pool/work-class/circuit-breaker)             | — (butuh server)                                             |
-| `changesets:policy:check` | `changeset-policy-check.ts`  | Wajibkan changeset baru untuk PR yang mengubah file non-docs/non-agent-tooling         | — (PR-diff-shaped, lihat `.github/workflows/changesets.yml`) |
-| `release:verify`          | `release-verify.ts`          | Tag rilis == versi package.json, CHANGELOG.md punya section, tak ada changeset pending | — (tag-shaped, lihat `.github/workflows/release.yml`)        |
+Tabel di bawah **dihasilkan dari `package.json`** oleh
+`bun run scripts:inventory:generate`, dan `bun run scripts:inventory:check`
+(di rantai `check`) menolak kalau ia basi.
 
-`bun run check` — untuk rantai lengkap & urutan yang otoritatif, lihat script
-`check` di `package.json` langsung; tidak diduplikasi di sini agar tidak drift.
+Alasannya bukan kerapian. Versi tulis-tangan sebelumnya mendaftar 12 dari 52
+skrip sebagai aktif, dan tabel pendampingnya menyebut lima belas tooling sebagai
+"belum diport" padahal semuanya sudah mendarat — sebagian bahkan sudah ada di
+rantai `bun run check` (`api:docs:check`, `modules:compose:check`,
+`db:work-class:check`, dan seluruh worker per-modul). Klaim **negatif** adalah
+jenis yang berbahaya: "X belum ada" makin salah seiring waktu dan tak pernah
+gagal sendiri, tak seperti klaim positif yang langsung pecah begitu kodenya
+berubah. Pembacanya akan menyimpulkan `db:work-class:check` masih perlu dibangun,
+lalu membangun duplikatnya.
 
-`config:validate` tidak masuk `check` karena membutuhkan environment nyata;
-jalankan manual sebelum deploy, mis. `bun run config:validate` (membaca
-`process.env`) atau `bun scripts/validate-env.ts --file .env.example`.
+<!-- BEGIN GENERATED: script-inventory -->
 
-`changesets:policy:check` tidak masuk `check` karena berbentuk PR-diff
-(membandingkan `origin/main...HEAD`) — dijalankan sebagai workflow CI
-terpisah (`.github/workflows/changesets.yml`), bukan bagian dari check yang
-aman dijalankan di satu checkout lokal mana pun.
+<!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-`release:verify` tidak masuk `check` karena hanya bermakna tepat pada
-commit yang di-tag `vX.Y.Z` (real release) — dijalankan sebagai bagian
-`validate` job `.github/workflows/release.yml`, bukan pada checkout biasa.
+58 target menjalankan berkas di `scripts/`; 23 di antaranya
+ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
+terjadwal, atau oleh workflow CI tertentu.
 
-## Ditunda (butuh infrastruktur yang belum ada)
+| Target                                   | Skrip                                      | Gate |
+| ---------------------------------------- | ------------------------------------------ | ---- |
+| `analytics:purge`                        | `visitor-analytics-purge.ts`               | —    |
+| `analytics:rollup`                       | `visitor-analytics-rollup.ts`              | —    |
+| `api:docs:check`                         | `api-docs-check.ts`                        | ✅   |
+| `api:docs:generate`                      | `api-docs-generate.ts`                     | —    |
+| `api:spec:check`                         | `api-spec-check.ts`                        | ✅   |
+| `api:tenant-route:check`                 | `tenant-route-factory-check.ts`            | ✅   |
+| `blog:publish:scheduled`                 | `blog-scheduled-publish.ts`                | —    |
+| `changesets:policy:check`                | `changeset-policy-check.ts`                | —    |
+| `check:docs`                             | `check-docs.mjs`                           | ✅   |
+| `check:docs:translation`                 | `check-docs-translation.mjs`               | ✅   |
+| `comments:resources:check`               | `comments-resources-check.ts`              | ✅   |
+| `comments:retention`                     | `comments-retention.ts`                    | —    |
+| `config:env:coverage:check`              | `env-contract-coverage-check.ts`           | ✅   |
+| `config:validate`                        | `validate-env.ts`                          | —    |
+| `data-lifecycle:archive-purge`           | `data-lifecycle-archive-purge.ts`          | —    |
+| `data-lifecycle:registry:check`          | `data-lifecycle-registry-check.ts`         | ✅   |
+| `db:migrate`                             | `db-migrate.ts`                            | —    |
+| `db:pool:health`                         | `db-pool-health.ts`                        | —    |
+| `db:tenant-context:check`                | `tenant-context-usage-check.ts`            | ✅   |
+| `db:work-class:check`                    | `work-class-registry-check.ts`             | ✅   |
+| `db:work-class:generate`                 | `work-class-registry-generate.ts`          | —    |
+| `domain-events:dispatch`                 | `domain-events-dispatch.ts`                | —    |
+| `edge-cache:purge`                       | `edge-cache-purge.ts`                      | —    |
+| `edge-cache:surfaces:check`              | `edge-cache-surfaces-check.ts`             | ✅   |
+| `email:dispatch`                         | `email-dispatch.ts`                        | —    |
+| `email:provider:health`                  | `email-provider-health.ts`                 | —    |
+| `email:templates:seed-defaults`          | `email-templates-seed-defaults.ts`         | —    |
+| `family:conformance:check`               | `family-conformance-check.ts`              | ✅   |
+| `form-drafts:purge`                      | `form-draft-purge.ts`                      | —    |
+| `identity-access:business-scope:expiry`  | `identity-access-business-scope-expiry.ts` | —    |
+| `identity-access:sod-registry:check`     | `identity-access-sod-registry-check.ts`    | ✅   |
+| `logging:lint:check`                     | `logging-lint-check.ts`                    | ✅   |
+| `logs:audit:purge`                       | `audit-log-purge.ts`                       | —    |
+| `memory:docs:check`                      | `sync-agent-memory.ts`                     | —    |
+| `memory:docs:restore`                    | `sync-agent-memory.ts`                     | —    |
+| `memory:docs:sync`                       | `sync-agent-memory.ts`                     | —    |
+| `modules:compose:check`                  | `validate-module-composition.ts`           | ✅   |
+| `modules:composition:inventory:check`    | `module-composition-inventory-check.ts`    | ✅   |
+| `modules:composition:inventory:generate` | `module-composition-inventory-generate.ts` | —    |
+| `modules:dag:check`                      | `validate-module-graph.ts`                 | ✅   |
+| `modules:jobs:check`                     | `module-job-registry-check.ts`             | ✅   |
+| `modules:routes:check`                   | `validate-module-routes.ts`                | ✅   |
+| `modules:table-writes:check`             | `table-write-ownership-check.ts`           | ✅   |
+| `news-media:reconcile`                   | `news-media-r2-reconcile.ts`               | —    |
+| `openapi:bundle`                         | `openapi-bundle.ts`                        | —    |
+| `redis:health`                           | `redis-health.ts`                          | —    |
+| `release:verify`                         | `release-verify.ts`                        | —    |
+| `reporting:exports:dispatch`             | `reporting-exports-dispatch.ts`            | —    |
+| `reporting:projections:refresh`          | `reporting-projections-refresh.ts`         | —    |
+| `reporting:projections:registry:check`   | `reporting-projection-registry-check.ts`   | ✅   |
+| `scripts:inventory:check`                | `scripts-inventory.ts`                     | ✅   |
+| `scripts:inventory:generate`             | `scripts-inventory.ts`                     | —    |
+| `security:readiness`                     | `security-readiness.ts`                    | —    |
+| `site-search:reconcile`                  | `site-search-reconcile.ts`                 | —    |
+| `site-search:sources:check`              | `site-search-sources-check.ts`             | ✅   |
+| `sync:objects:dispatch`                  | `object-sync-dispatch.ts`                  | —    |
+| `tenant-domain:dns:sync`                 | `tenant-domain-dns-sync.ts`                | —    |
+| `workflow:escalations:dispatch`          | `workflow-escalations-dispatch.ts`         | —    |
 
-Skrip acuan berikut belum diport karena bergantung pada arsitektur/modul yang
-belum dibangun di repo ini. Diadaptasi begitu prasyaratnya ada:
+<!-- END GENERATED: script-inventory -->
 
-| Target acuan                                                                                                                                                                                                                                                                            | Prasyarat yang belum ada                                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `openapi:bundle`, `api:docs:generate`, `api:docs:check`                                                                                                                                                                                                                                 | Pemecahan OpenAPI jadi fragment per-modul (`openapi/modules/*.yaml`) — kini 1 file   |
-| `repo:inventory:generate` / `:check`                                                                                                                                                                                                                                                    | Bergantung pada `openapi:bundle` + `module-composition` (Module Management)          |
-| `config:docs:check`                                                                                                                                                                                                                                                                     | Rekonsiliasi 3-arah `.env.example` ↔ doc 18 (butuh doc 18 disamakan ke env repo ini) |
-| `modules:sync`, `modules:compose:check`, `modules:composition:inventory:*`                                                                                                                                                                                                              | Modul Module Management (validasi registry base)                                     |
-| `db:work-class:generate` / `:check`                                                                                                                                                                                                                                                     | Tabel/registry work-class                                                            |
-| `database:capacity:check`                                                                                                                                                                                                                                                               | Validasi kapasitas lintas-instance (preflight)                                       |
-| `domain-events:dispatch`, `sync:objects:dispatch`                                                                                                                                                                                                                                       | Modul domain-event-runtime + outbox                                                  |
-| `i18n:extract` / `:pot:check` / `:parity:check`                                                                                                                                                                                                                                         | Setup i18n (`.po`/`.pot`) + UI                                                       |
-| `production:preflight`, `resilience:dr-drill`, `performance:*`                                                                                                                                                                                                                          | Mengagregasi gate/modul di atas + server berjalan                                    |
-| Worker per-modul (`email:*`, `blog:*`, `news-media:*`, `social-publishing:*`, `analytics:*`, `reporting:*`, `workflow:*`, `integration-hub:*`, `data-exchange:*`, `reference-data:*`, `organization-structure:*`, `form-drafts:*`, `identity-access:business-scope:*`/`sod-registry:*`) | Modul ERP/CMS terkait                                                                |
+## Yang tidak masuk `check`, dan kenapa
+
+Rantai `check` harus aman dijalankan di checkout lokal mana pun tanpa database,
+tanpa server, dan tanpa konteks PR. Yang di luar rantai ada karena melanggar
+salah satu syarat itu:
+
+| Target                                                                  | Kenapa di luar `check`                                                                                         |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `security:readiness`                                                    | Butuh database termigrasi — memeriksa RLS `FORCE`, role app non-superuser, grant worker/setup                  |
+| `config:validate`                                                       | Butuh environment nyata (`process.env`, atau `--file <path>`). Jalankan sebelum deploy                         |
+| `db:migrate`, `db:pool:health`, `redis:health`, `email:provider:health` | Butuh database/Redis/provider yang berjalan                                                                    |
+| Seluruh worker terjadwal                                                | Butuh database, dan dijalankan cron/systemd — lihat `ModuleDescriptor.jobs` + `GET /api/v1/modules/{key}/jobs` |
+| `changesets:policy:check`                                               | Berbentuk PR-diff (`origin/main...HEAD`); dijalankan `.github/workflows/changesets.yml`                        |
+| `release:verify`                                                        | Hanya bermakna pada commit ber-tag `vX.Y.Z`; dijalankan job `validate` di `.github/workflows/release.yml`      |
+| `*:generate`                                                            | Pasangan tulis dari sebuah `*:check`. Yang menggerbangi CI adalah `:check`-nya                                 |
+
+Urutan otoritatif rantai `check` ada di `package.json` langsung — sengaja tidak
+diduplikasi di sini supaya tidak drift.
+
+## Jadwal job
+
+Tidak didaftar di sini. Sumber kebenarannya `ModuleDescriptor.jobs` (per modul,
+membawa `purpose`, `recommendedSchedule`, `environmentNotes`,
+`safeInOfflineLan`), disajikan lewat `GET /api/v1/modules/{moduleKey}/jobs` dan
+digerbangi `bun run modules:jobs:check`. Lihat
+[`docs/awcms/deployment-profiles.md`](../docs/awcms/deployment-profiles.md)
+§Job registry.
+
+## Ditunda (belum ada di repo ini)
+
+Skrip acuan berikut belum diport karena bergantung pada arsitektur yang belum
+dibangun. `scripts:inventory:check` **menolak** kalau salah satu dari nama di
+bawah ternyata sudah terdaftar di `package.json` — itu tepat cara tabel
+sebelumnya membusuk.
+
+| Target acuan                                    | Prasyarat yang belum ada                                                    |
+| ----------------------------------------------- | --------------------------------------------------------------------------- |
+| `repo:inventory:generate` / `:check`            | Generator inventaris repo lintas-artefak (OpenAPI + komposisi modul + docs) |
+| `config:docs:check`                             | Rekonsiliasi tiga-arah `.env.example` ↔ doc 18 ↔ `validate-env.ts`          |
+| `i18n:extract` / `:pot:check` / `:parity:check` | Setup i18n (`.po`/`.pot`) + UI                                              |
+| `database:capacity:check`                       | Validasi kapasitas lintas-instance (preflight)                              |
+| `production:preflight`, `resilience:dr-drill`   | Mengagregasi gate di atas + server berjalan                                 |
+| `performance:*`                                 | Harness beban + environment berukuran produksi                              |
 
 Lihat peta sprint di
 [`docs/awcms/11_implementation_blueprint.md`](../docs/awcms/11_implementation_blueprint.md)
-dan skill terkait di [`.claude/skills/`](../.claude/skills/README.md)
-(`awcms-new-migration`, `awcms-new-endpoint`, `awcms-module-management`, dst.).
+dan skill terkait di [`.claude/skills/`](../.claude/skills/README.md).

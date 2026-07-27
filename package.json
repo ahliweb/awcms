@@ -91,6 +91,8 @@
     "db:work-class:check": "bun scripts/work-class-registry-check.ts",
     "config:env:coverage:check": "bun scripts/env-contract-coverage-check.ts",
     "config:validate": "bun scripts/validate-env.ts",
+    "scripts:inventory:generate": "bun scripts/scripts-inventory.ts",
+    "scripts:inventory:check": "bun scripts/scripts-inventory.ts --check",
     "security:readiness": "bun scripts/security-readiness.ts",
     "lint": "prettier --check \"**/*.md\" \"**/*.{json,yml,yaml}\" \"**/*.{ts,mjs,astro}\"",
     "format": "prettier --write \"**/*.md\" \"**/*.{json,yml,yaml}\" \"**/*.{ts,mjs,astro}\"",
@@ -99,7 +101,7 @@
     "test:coverage": "bun test --coverage",
     "test:e2e": "bun --bun playwright test",
     "test:e2e:install": "bun --bun playwright install --with-deps chromium",
-    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run config:env:coverage:check && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:routes:check && bun run modules:table-writes:check && bun run modules:jobs:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run data-lifecycle:registry:check && bun run site-search:sources:check && bun run comments:resources:check && bun run edge-cache:surfaces:check && bun run family:conformance:check && bun run logging:lint:check && bun run api:tenant-route:check && bun run db:tenant-context:check && bun run db:work-class:check && bun run typecheck && bun run test && bun run build",
+    "check": "bun run lint && bun run check:docs && bun run check:docs:translation && bun run scripts:inventory:check && bun run config:env:coverage:check && bun run api:spec:check && bun run api:docs:check && bun run modules:dag:check && bun run modules:routes:check && bun run modules:table-writes:check && bun run modules:jobs:check && bun run modules:compose:check && bun run modules:composition:inventory:check && bun run reporting:projections:registry:check && bun run identity-access:sod-registry:check && bun run data-lifecycle:registry:check && bun run site-search:sources:check && bun run comments:resources:check && bun run edge-cache:surfaces:check && bun run family:conformance:check && bun run logging:lint:check && bun run api:tenant-route:check && bun run db:tenant-context:check && bun run db:work-class:check && bun run typecheck && bun run test && bun run build",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:status": "changeset status"
