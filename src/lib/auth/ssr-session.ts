@@ -57,11 +57,12 @@ export async function resolveSsrContext(
     });
 
     // When the DB circuit breaker is open / a work-class queue is saturated,
-    // `withTenant` returns a `503` `Response` (cast to the callback's return
-    // type) instead of running the callback. For SSR session resolution that
-    // means "can't confirm the session right now" — degrade to unauthenticated
-    // (the SSR guard then redirects to /login) rather than leaking a Response
-    // where an SsrContext is expected.
+    // `withTenant` answers with a `503` `Response` instead of running the
+    // callback — which the return type now says out loud, so this branch is
+    // checked rather than remembered. For SSR session resolution it means
+    // "can't confirm the session right now": degrade to unauthenticated (the
+    // SSR guard then redirects to /login) rather than leak a `Response` where
+    // an `SsrContext` is expected.
     if (result instanceof Response) return null;
 
     return result;

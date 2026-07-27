@@ -74,7 +74,7 @@ import type {
   ProjectionCursorStream,
   ProjectionDescriptor
 } from "../../_shared/module-contract";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   fetchActiveTenants,
   runBoundedBatches
@@ -171,7 +171,7 @@ export async function runCursorStreamPass(
   );
   const selectColumns = Array.from(new Set([cursorColumn, ...matchColumns]));
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -303,7 +303,7 @@ export async function runIncrementalUpdateForTenant(
       };
     }
 
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => recordProjectionSuccess(tx, tenantId, descriptor.key),
@@ -320,7 +320,7 @@ export async function runIncrementalUpdateForTenant(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => recordProjectionFailure(tx, tenantId, descriptor.key, message),

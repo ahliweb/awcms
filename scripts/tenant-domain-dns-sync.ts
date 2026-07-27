@@ -28,7 +28,7 @@
  * says that. `--dry-run` reports what would change without writing.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import {
   reconcileServingRecords,
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
     `) as TenantRow[];
 
     for (const tenant of tenants) {
-      const rows = await withTenant(
+      const rows = await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>

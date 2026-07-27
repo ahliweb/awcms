@@ -34,7 +34,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { isMfaFeatureEnabled } from "../../lib/auth/mfa-config";
 import { isSsoEnabled } from "../../lib/auth/sso-config";
 import {
@@ -99,7 +99,7 @@ let loadError = false;
 if (canReadAnything) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) => ({
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => ({
       // Each read is gated on its OWN permission, so a caller holding only one
       // of the three does not silently pull the other two into memory.
       policy: canReadPolicy

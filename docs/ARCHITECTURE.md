@@ -130,6 +130,26 @@ membandingkan `tenant_id` dengan `current_setting('app.current_tenant_id')`.
 RLS adalah lapis kedua — query tetap wajib memfilter `tenant_id` secara
 eksplisit. State pool/breaker diekspos di `GET /api/v1/database/pool/health`.
 
+**Penolakan pool BUKAN sebuah nilai — dua bentuk, dipilih compiler.**
+`withTenant()` mengembalikan `T | Response`: pemanggil di jalur request
+meneruskan `503`-nya apa adanya (`if (result instanceof Response) return
+result;`), dan ~390 handler yang callback-nya memang mengembalikan `Response`
+tak berubah sama sekali. Segala sesuatu yang BUKAN handler HTTP — worker, job
+terjadwal, frontmatter SSR, resolver tenant, fixture test — memakai
+`withTenantOrThrow()`, yang melempar `DatabaseBusyError` (membawa `response`
+`503` yang identik, jadi kedua bentuk tak bisa menyimpang) dan diklasifikasi
+`retryable` oleh job runner. Sebelumnya satu fungsi generik meng-`as T`
+penolakan itu menjadi tipe apa pun yang diminta pemanggil: `purgeExpiredAuditEvents`
+berjanji `Promise<number>` tapi mengembalikan `Response`, `runBoundedBatches`
+berhenti pada `count === 0` yang tak pernah cocok, dan job yang seluruh tujuannya
+mengalah justru menjalankan 50 pass per tenant ke database yang baru saja
+menolak — lalu melaporkan sukses dengan total berupa string
+`"0[object Response]…"` (karena `number + Response` itu konkatenasi).
+`db:tenant-context:check` menutup dua sisa yang tak terlihat compiler: hasil
+`withTenant` yang **dibuang** (`await withTenant(...)` sebagai statement —
+`503`-nya hilang tanpa jejak) dan pemanggilan dari `.astro`, yang tak pernah
+dibaca `tsc --noEmit`.
+
 **Pengecualian RLS yang disengaja (allow-list eksplisit).** Dua tabel global
 sengaja tanpa RLS: `awcms_tenants` (root multi-tenant — endpoint wajib
 `WHERE id = <tenantId>` eksplisit) dan `awcms_setup_state` (singleton

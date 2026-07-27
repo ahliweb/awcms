@@ -10,7 +10,10 @@ import {
 } from "../../../../modules/identity-access/application/login-policy";
 import { recordAuditEvent } from "../../../../modules/logging/application/audit-log";
 import { getDatabaseClient } from "../../../../lib/database/client";
-import { withTenant } from "../../../../lib/database/tenant-context";
+import {
+  withTenant,
+  withTenantOrThrow
+} from "../../../../lib/database/tenant-context";
 import {
   generateSessionToken,
   hashSessionToken
@@ -188,7 +191,11 @@ async function recordLoginFailureOutOfBand(
   }
 ): Promise<void> {
   try {
-    await withTenant(sql, input.tenantId, async (tx) => {
+    // `withTenantOrThrow`: this whole helper is best-effort and already
+    // wrapped in the `catch` below. With `withTenant` a pool refusal would be
+    // returned as a `503` and then discarded by the bare `await`, so the
+    // failure audit would go unwritten with nothing logged about it.
+    await withTenantOrThrow(sql, input.tenantId, async (tx) => {
       // Re-checked here rather than threaded in: this runs after the login
       // transaction unwound, so nothing it computed can be trusted to still
       // hold. Without it an unknown-tenant header would trip the audit table's

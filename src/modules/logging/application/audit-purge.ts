@@ -1,4 +1,4 @@
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "./audit-log";
 import { LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY } from "../module";
 import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
@@ -122,7 +122,7 @@ export async function purgeExpiredAuditEvents(
   const now = options.now ?? new Date();
   const cutoff = resolveAuditRetentionCutoff(now, retentionDays);
 
-  const purgedCount = await withTenant(
+  const purgedCount = await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -196,7 +196,7 @@ export async function countPurgeableAuditEvents(
   tenantId: string,
   cutoff: Date
 ): Promise<number> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {

@@ -71,7 +71,7 @@ import ThemeToggle from "../components/ThemeToggle.astro";
 import SyncIndicator from "../components/SyncIndicator.astro";
 import LocaleBadge from "../components/LocaleBadge.astro";
 import { getDatabaseClient } from "../lib/database/client";
-import { withTenant } from "../lib/database/tenant-context";
+import { withTenantOrThrow } from "../lib/database/tenant-context";
 import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
 import { fetchTenantModuleEntries } from "../modules/module-management/application/tenant-module-lifecycle";
 import {
@@ -146,7 +146,7 @@ let arrangement: SidebarArrangement = { types: [], items: [] };
 
 try {
   const sql = getDatabaseClient();
-  const chrome = await withTenant(sql, ssr.tenantId, async (tx) => {
+  const chrome = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
     const rows = (await tx`
       SELECT tenant_name FROM awcms_tenants WHERE id = ${ssr.tenantId}
     `) as Array<{ tenant_name: string | null }>;

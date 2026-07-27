@@ -137,6 +137,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     return { ok: true as const, actorTenantUserId: auth.context.tenantUserId };
   });
 
+  // Pool-gate refusal — forwarded as-is (see the note on `withTenant`).
+  if (preCheck instanceof Response) {
+    return preCheck;
+  }
+
   if (!preCheck.ok) {
     return preCheck.response;
   }

@@ -65,7 +65,7 @@ import { POST as enableModule } from "../../src/pages/api/v1/tenant/modules/[mod
 import { POST as disableModule } from "../../src/pages/api/v1/tenant/modules/[moduleKey]/disable";
 import { GET as listWorkflowTasks } from "../../src/pages/api/v1/workflows/tasks/index";
 import { fetchTenantModuleEntry } from "../../src/modules/module-management/application/tenant-module-lifecycle";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 
 const OWNER_PASSWORD = "integration-test-owner-password";
 const TENANT_B_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -351,7 +351,7 @@ suite("tenant module lifecycle (Issue #154)", () => {
       expect(result.status).toBe(200);
       expect(result.body.data!.tenantEnabled).toBe(false);
 
-      const entry = await withTenant(
+      const entry = await withTenantOrThrow(
         getHandlerDatabaseClient(),
         owner.tenantId,
         (tx) => fetchTenantModuleEntry(tx, owner.tenantId, DISABLABLE_MODULE)

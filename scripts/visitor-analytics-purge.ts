@@ -25,7 +25,7 @@
  * deleting/clearing anything.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import {
   applyJobExitCode,
   formatJobOutcomeLine,
@@ -79,7 +79,7 @@ export async function runVisitorAnalyticsPurge(
       break;
     }
 
-    const result = await withTenant(sql, tenant.id, (tx) =>
+    const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
       purgeVisitorAnalyticsData(
         tx,
         tenant.id,

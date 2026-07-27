@@ -2,7 +2,10 @@ import type { APIRoute } from "astro";
 
 import { fail } from "../../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../../lib/database/client";
-import { withTenant } from "../../../../../../lib/database/tenant-context";
+import {
+  withTenant,
+  withTenantOrThrow
+} from "../../../../../../lib/database/tenant-context";
 import {
   createSessionWithAssurance,
   setSessionCookies
@@ -89,7 +92,11 @@ export const GET: APIRoute = async ({ cookies, url, params, locals }) => {
   }
 
   if (result.outcome === "mfa_required") {
-    await withTenant(sql, result.tenantId, (tx) =>
+    // `withTenantOrThrow` — a discarded `503` here would drop a security audit
+    // record and still answer as though it had been written. Any OTHER failure
+    // of this same write already propagates; a pool refusal now behaves the
+    // same way instead of being the one failure that passes silently.
+    await withTenantOrThrow(sql, result.tenantId, (tx) =>
       recordAuditEvent(tx, {
         tenantId: result.tenantId,
         moduleKey: "identity_access",
@@ -116,7 +123,7 @@ export const GET: APIRoute = async ({ cookies, url, params, locals }) => {
   }
 
   if (result.outcome === "linked") {
-    await withTenant(sql, result.tenantId, (tx) =>
+    await withTenantOrThrow(sql, result.tenantId, (tx) =>
       recordAuditEvent(tx, {
         tenantId: result.tenantId,
         moduleKey: "identity_access",

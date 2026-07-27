@@ -58,7 +58,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 
 const TENANT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -227,7 +227,7 @@ suite(
         await seedTwoTenants();
         const sql = getOwnerSql();
 
-        const asTenantA = await withTenant(sql, TENANT_A, async (tx) => {
+        const asTenantA = await withTenantOrThrow(sql, TENANT_A, async (tx) => {
           return (await tx`
           SELECT office_code FROM awcms_offices ORDER BY office_code
         `) as { office_code: string }[];
@@ -240,7 +240,7 @@ suite(
         // And an explicit, adversarial `WHERE tenant_id = <B>` — the shape a
         // buggy service layer or a parameter-injection would produce — still
         // yields nothing, because Postgres ANDs the policy in itself.
-        const targeted = await withTenant(sql, TENANT_A, async (tx) => {
+        const targeted = await withTenantOrThrow(sql, TENANT_A, async (tx) => {
           return (await tx`
           SELECT office_code FROM awcms_offices WHERE tenant_id = ${TENANT_B}
         `) as { office_code: string }[];
@@ -252,11 +252,15 @@ suite(
       test("CONTROL: the same OWNER connection DOES see both tenants in awcms_tenants (no RLS there), proving the zero-row results are RLS and not a dead connection", async () => {
         await seedTwoTenants();
 
-        const rows = await withTenant(getOwnerSql(), TENANT_A, async (tx) => {
-          return (await tx`
+        const rows = await withTenantOrThrow(
+          getOwnerSql(),
+          TENANT_A,
+          async (tx) => {
+            return (await tx`
           SELECT tenant_code FROM awcms_tenants ORDER BY tenant_code
         `) as { tenant_code: string }[];
-        });
+          }
+        );
 
         expect(rows.map((row) => row.tenant_code)).toEqual([
           "rls-tenant-a",
@@ -267,7 +271,7 @@ suite(
       test("cross-tenant UPDATE and DELETE are blocked too, not just SELECT", async () => {
         await seedTwoTenants();
 
-        await withTenant(getOwnerSql(), TENANT_A, async (tx) => {
+        await withTenantOrThrow(getOwnerSql(), TENANT_A, async (tx) => {
           const updated = await tx`
           UPDATE awcms_offices SET office_name = 'HIJACKED' WHERE tenant_id = ${TENANT_B}
         `;
@@ -293,14 +297,17 @@ suite(
       test("INSERTing a row for another tenant is rejected outright (the policy's USING supplies the WITH CHECK)", async () => {
         await seedTwoTenants();
 
-        const error = await withTenant(getOwnerSql(), TENANT_A, async (tx) =>
-          assertRejected(
-            tx`
+        const error = await withTenantOrThrow(
+          getOwnerSql(),
+          TENANT_A,
+          async (tx) =>
+            assertRejected(
+              tx`
             INSERT INTO awcms_offices (tenant_id, office_code, office_name)
             VALUES (${TENANT_B}, 'smuggled', 'Smuggled')
           `,
-            "an INSERT of a tenant-B row from tenant A's context"
-          )
+              "an INSERT of a tenant-B row from tenant A's context"
+            )
         );
 
         expect(error.message).toMatch(/row-level security/i);
@@ -416,11 +423,15 @@ suite(
         if (skipUnlessAppRole()) return;
         await seedTwoTenants();
 
-        const rows = await withTenant(getAppRoleSql(), TENANT_A, async (tx) => {
-          return (await tx`
+        const rows = await withTenantOrThrow(
+          getAppRoleSql(),
+          TENANT_A,
+          async (tx) => {
+            return (await tx`
           SELECT office_code FROM awcms_offices ORDER BY office_code
         `) as { office_code: string }[];
-        });
+          }
+        );
 
         expect(rows.map((row) => row.office_code)).toEqual(["hq-a"]);
       });

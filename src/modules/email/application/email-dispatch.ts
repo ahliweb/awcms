@@ -33,7 +33,7 @@
  * feature-flag rule: provider off never touches the provider at all).
  */
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { fetchActiveEmailTemplateByKey } from "./email-template-directory";
 import { resolveEmailSendMaxRetries } from "../domain/email-config";
@@ -131,7 +131,7 @@ async function claimEligibleEntries(
     now.getTime() + EMAIL_DISPATCH_LEASE_MINUTES * 60_000
   );
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -194,7 +194,7 @@ async function recordDeliveryAttempt(
   providerResponseSnippet: string | null,
   errorMessage: string | null
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
@@ -218,7 +218,7 @@ async function finalizeSent(
   providerName: string,
   providerMessageId: string | undefined
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
@@ -246,7 +246,7 @@ async function finalizeSuppressed(
   tenantId: string,
   id: string
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
@@ -274,7 +274,7 @@ async function finalizeFailure(
     : { eligible: false as const };
 
   if (evaluation.eligible) {
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => tx`
@@ -289,7 +289,7 @@ async function finalizeFailure(
     return { eligible: true };
   }
 
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
@@ -329,7 +329,7 @@ function createTemplateLoader(
       return cached;
     }
 
-    const template = await withTenant(
+    const template = await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => fetchActiveEmailTemplateByKey(tx, tenantId, templateKey),
@@ -402,7 +402,7 @@ export async function dispatchEmailQueue(
   const fromName = options.fromName ?? env.EMAIL_FROM_NAME ?? "";
   const renderLocale = await fetchTenantDefaultLocale(sql, tenantId);
   const loadTemplate = createTemplateLoader(sql, tenantId);
-  const suppressedHashes = await withTenant(
+  const suppressedHashes = await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => fetchSuppressedRecipientHashes(tx, tenantId),

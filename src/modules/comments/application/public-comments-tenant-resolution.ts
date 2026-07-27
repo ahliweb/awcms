@@ -9,7 +9,7 @@
  * response by the caller — never leak WHY), cost-normalized against a timing
  * side-channel.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   resolvePublicTenantFromRequest,
   type PublicHostResolverConfig,
@@ -57,7 +57,7 @@ export async function padUnresolvedCommentsTenantLatency(
   sql: Bun.SQL,
   _env: NodeJS.ProcessEnv = process.env
 ): Promise<void> {
-  await withTenant(sql, TIMING_PAD_TENANT_ID, async (tx) => {
+  await withTenantOrThrow(sql, TIMING_PAD_TENANT_ID, async (tx) => {
     await checkCommentsGate(tx, TIMING_PAD_TENANT_ID);
   });
 }
@@ -81,7 +81,7 @@ export async function withCommentsTenant<T>(
     return null;
   }
 
-  return withTenant(sql, tenant.tenantId, async (tx) => {
+  return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
     const { enabled, settings } = await checkCommentsGate(tx, tenant.tenantId);
     if (!enabled) return null;
     return handler(tx, tenant, settings);

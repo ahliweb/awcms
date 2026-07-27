@@ -60,7 +60,7 @@
  * hold created between passes takes effect on the very next pass, not just the
  * next invocation.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   fetchActiveTenants,
   runBoundedBatches,
@@ -139,7 +139,7 @@ async function runGenericArchivePass(
   );
   const cursorColumn = assertSafeIdentifier(descriptor.cursorColumn, "column");
 
-  const selection = await withTenant(
+  const selection = await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -183,7 +183,7 @@ async function runGenericArchivePass(
   }
 
   if (selection.rows.length === 0) {
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) =>
@@ -210,7 +210,7 @@ async function runGenericArchivePass(
     cursorRangeEnd: newCursorValue
   });
 
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -266,7 +266,7 @@ async function runGenericPurgePass(
   );
   const cursorColumn = assertSafeIdentifier(descriptor.cursorColumn, "column");
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -404,7 +404,7 @@ export async function runDataLifecycleArchivePurge(
       break;
     }
 
-    const activeHolds: LegalHoldRecord[] = await withTenant(
+    const activeHolds: LegalHoldRecord[] = await withTenantOrThrow(
       sql,
       tenant.id,
       (tx) => fetchActiveLegalHoldsForPlanning(tx, tenant.id),
@@ -413,7 +413,7 @@ export async function runDataLifecycleArchivePurge(
 
     for (const descriptor of delegatedDescriptors) {
       const startedAt = new Date();
-      const snapshot = await withTenant(
+      const snapshot = await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>
@@ -422,7 +422,7 @@ export async function runDataLifecycleArchivePurge(
       );
       totalDryRunEligible += snapshot.eligibleCount;
 
-      await withTenant(
+      await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>
@@ -456,7 +456,7 @@ export async function runDataLifecycleArchivePurge(
       // re-fetches holds fresh inside every single batch pass
       // (`runGenericArchivePass`/`runGenericPurgePass` themselves) — see the
       // TOCTOU fix comment on those functions.
-      const snapshot = await withTenant(
+      const snapshot = await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>
@@ -507,7 +507,7 @@ export async function runDataLifecycleArchivePurge(
         tenantsHitPassLimit.push(tenant.id);
       }
 
-      await withTenant(
+      await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>

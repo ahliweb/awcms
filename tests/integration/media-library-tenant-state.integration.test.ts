@@ -39,7 +39,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   isManagedMediaEnforcedForTenant,
   markManagedMediaEnforced
@@ -88,7 +88,7 @@ suite("media_library tenant state (ADR-0036)", () => {
   test("markManagedMediaEnforced round-trips inside a tenant-scoped transaction", async () => {
     const tenantId = await provisionTenant("acme");
 
-    await withTenant(getRuntimeSql(), tenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
       expect(await isManagedMediaEnforcedForTenant(tx, tenantId)).toBe(false);
       await markManagedMediaEnforced(tx, tenantId);
       expect(await isManagedMediaEnforcedForTenant(tx, tenantId)).toBe(true);
@@ -99,11 +99,11 @@ suite("media_library tenant state (ADR-0036)", () => {
     const enforcedTenantId = await provisionTenant("acme");
     const otherTenantId = await provisionTenant("globex");
 
-    await withTenant(getRuntimeSql(), enforcedTenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), enforcedTenantId, async (tx) => {
       await markManagedMediaEnforced(tx, enforcedTenantId);
     });
 
-    await withTenant(getRuntimeSql(), otherTenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), otherTenantId, async (tx) => {
       // Fail-closed for the tenant that never opted in — and, critically, asking
       // about ANOTHER tenant's id from inside this tenant's context must not leak
       // that tenant's state either.
@@ -124,7 +124,7 @@ suite("media_library tenant state (ADR-0036)", () => {
     }
 
     const enforcedTenantId = await provisionTenant("acme");
-    await withTenant(getRuntimeSql(), enforcedTenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), enforcedTenantId, async (tx) => {
       await markManagedMediaEnforced(tx, enforcedTenantId);
     });
 
@@ -195,7 +195,7 @@ suite("media_library tenant state (ADR-0036)", () => {
   test("a brochure-site tenant gets managed media with NO news_portal state at all — the product gap ADR-0036 closes", async () => {
     const tenantId = await provisionTenant("acme");
 
-    await withTenant(getRuntimeSql(), tenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
       // Before opting in: enforcement off, even though the deployment's media R2
       // is fully configured. Deployment readiness alone must never opt a tenant in.
       expect(
@@ -231,7 +231,7 @@ suite("media_library tenant state (ADR-0036)", () => {
   test("enforcement fails closed when the deployment's media R2 is not configured, even for an opted-in tenant", async () => {
     const tenantId = await provisionTenant("acme");
 
-    await withTenant(getRuntimeSql(), tenantId, async (tx) => {
+    await withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
       await markManagedMediaEnforced(tx, tenantId);
 
       // The tenant flag alone must never enforce registry-backed references on a

@@ -82,6 +82,11 @@ export const GET: APIRoute = async ({ request, cookies, params }) => {
     return { ok: true as const, run };
   });
 
+  // Pool-gate refusal — forwarded as-is (see the note on `withTenant`).
+  if (outcome instanceof Response) {
+    return outcome;
+  }
+
   if (!outcome.ok) {
     return outcome.response;
   }

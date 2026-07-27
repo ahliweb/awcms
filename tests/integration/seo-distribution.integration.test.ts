@@ -34,7 +34,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   fetchSeoTenantSettings,
   updateSeoTenantSettings
@@ -113,7 +113,7 @@ suite("seo_distribution module (integration)", () => {
 
   test("config round-trip: write then read is tenant-scoped", async () => {
     const runtime = getRuntimeSql();
-    const saved = await withTenant(runtime, TENANT_A, (tx) =>
+    const saved = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       updateSeoTenantSettings(
         tx,
         TENANT_A,
@@ -130,14 +130,14 @@ suite("seo_distribution module (integration)", () => {
     expect(saved.siteName).toBe("Tenant A Site");
     expect(saved.defaultRobotsNoindex).toBe(true);
 
-    const read = await withTenant(runtime, TENANT_A, (tx) =>
+    const read = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchSeoTenantSettings(tx, TENANT_A)
     );
     expect(read.siteName).toBe("Tenant A Site");
     expect(read.includedResourceTypes).toEqual(["blog_post"]);
 
     // Tenant B has no row → the neutral default object, not tenant A's config.
-    const readB = await withTenant(runtime, TENANT_B, (tx) =>
+    const readB = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       fetchSeoTenantSettings(tx, TENANT_B)
     );
     expect(readB.siteName).toBeNull();
@@ -151,7 +151,7 @@ suite("seo_distribution module (integration)", () => {
       return;
     }
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       updateSeoTenantSettings(
         tx,
         TENANT_A,
@@ -169,7 +169,7 @@ suite("seo_distribution module (integration)", () => {
     expect(noContext).toHaveLength(0);
 
     // Tenant B's context sees none of tenant A's config.
-    const asB = await withTenant(app, TENANT_B, async (tx) => {
+    const asB = await withTenantOrThrow(app, TENANT_B, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_seo_tenant_settings
       `) as { n: number }[];
@@ -178,7 +178,7 @@ suite("seo_distribution module (integration)", () => {
     expect(asB).toBe(0);
 
     // Tenant A's own context DOES see its config.
-    const asA = await withTenant(app, TENANT_A, async (tx) => {
+    const asA = await withTenantOrThrow(app, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_seo_tenant_settings
       `) as { n: number }[];
@@ -190,7 +190,7 @@ suite("seo_distribution module (integration)", () => {
   test("public discovery build returns PUBLISHED blog facts (host-absolute) and never a draft", async () => {
     const runtime = getRuntimeSql();
 
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await seedPrimaryDomain(tx, TENANT_A, "example.com");
       await seedBlogPost(tx, TENANT_A, {
         slug: "public-post",
@@ -226,7 +226,7 @@ suite("seo_distribution module (integration)", () => {
       now: NOW
     });
 
-    const sitemap = await withTenant(runtime, TENANT_A, (tx) =>
+    const sitemap = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildSitemapPagePayload(ctx(tx), 1)
     );
     expect(sitemap).not.toBeNull();
@@ -241,7 +241,7 @@ suite("seo_distribution module (integration)", () => {
     expect(sitemap!.body).not.toContain("draft-post");
     expect(sitemap!.body).not.toContain("private-post");
 
-    const rss = await withTenant(runtime, TENANT_A, (tx) =>
+    const rss = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildFeedPayload(ctx(tx), "rss")
     );
     expect(rss).not.toBeNull();
@@ -255,7 +255,7 @@ suite("seo_distribution module (integration)", () => {
 
   test("tenant-wide default_robots_noindex suppresses sitemap AND feeds (auditor MEDIUM-1), not just robots.txt", async () => {
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await seedPrimaryDomain(tx, TENANT_A, "example.com");
       await seedBlogPost(tx, TENANT_A, {
         slug: "public-post",
@@ -286,15 +286,15 @@ suite("seo_distribution module (integration)", () => {
     // Even with a verified primary host + a published post, the machine-readable
     // discovery surfaces return null (route → 404), mirroring robots.txt's
     // `Disallow: /`. Non-compliant scrapers/aggregators get no URL enumeration.
-    const sitemap = await withTenant(runtime, TENANT_A, (tx) =>
+    const sitemap = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildSitemapPagePayload(ctx(tx), 1)
     );
     expect(sitemap).toBeNull();
-    const index = await withTenant(runtime, TENANT_A, (tx) =>
+    const index = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildSitemapIndexPayload(ctx(tx))
     );
     expect(index).toBeNull();
-    const rss = await withTenant(runtime, TENANT_A, (tx) =>
+    const rss = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildFeedPayload(ctx(tx), "rss")
     );
     expect(rss).toBeNull();
@@ -302,7 +302,7 @@ suite("seo_distribution module (integration)", () => {
 
   test("no primary domain: sitemap/feed 404 (null), but discovery does not crash", async () => {
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       seedBlogPost(tx, TENANT_A, {
         slug: "orphan",
         title: "Orphan",
@@ -324,12 +324,12 @@ suite("seo_distribution module (integration)", () => {
 
     // No verified primary host → a sitemap/feed's <loc>/<guid> MUST be absolute,
     // so the builders return null (the route maps that to a generic 404).
-    const sitemap = await withTenant(runtime, TENANT_A, (tx) =>
+    const sitemap = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildSitemapPagePayload(ctx(tx), 1)
     );
     expect(sitemap).toBeNull();
 
-    const rss = await withTenant(runtime, TENANT_A, (tx) =>
+    const rss = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       buildFeedPayload(ctx(tx), "rss")
     );
     expect(rss).toBeNull();

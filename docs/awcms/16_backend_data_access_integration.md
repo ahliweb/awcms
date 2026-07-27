@@ -88,6 +88,24 @@ async function withTenant<T>(
 }
 ```
 
+Sketsa di atas sengaja minimal (tanpa work class/circuit breaker). Yang **tidak**
+boleh disederhanakan dari implementasi nyata (`src/lib/database/tenant-context.ts`):
+gate pool bisa **menolak sebelum `fn` jalan sama sekali**, dan penolakan itu
+bukan nilai yang boleh menyamar sebagai hasil. Karena itu ada dua bentuk:
+
+- **`withTenant(...)` → `Promise<T | Response>`** untuk jalur request. Penolakan
+  datang sebagai `503 DATABASE_BUSY` + `Retry-After` yang tinggal diteruskan
+  (`if (result instanceof Response) return result;`).
+- **`withTenantOrThrow<T>(...)` → `Promise<T>`** untuk semua yang bukan handler
+  HTTP — worker, job terjadwal, frontmatter SSR, resolver tenant, fixture test.
+  Melempar `DatabaseBusyError` (membawa response `503` yang identik), yang
+  diklasifikasi `retryable` oleh job runner.
+
+Aturannya bukan gaya: sebuah worker yang menerima `Response` sebagai "hasil"
+membacanya sebagai nol baris dan melaporkan sukses. `db:tenant-context:check`
+menegakkan dua sisa yang tak terlihat compiler — hasil `withTenant` yang dibuang,
+dan pemanggilan dari `.astro` (tak pernah dibaca `tsc --noEmit`).
+
 ## Transaction wrapper dan locking
 
 1. Transaction untuk semua mutation multi-table.

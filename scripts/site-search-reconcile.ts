@@ -16,7 +16,7 @@
  * never leaks. `--tenant=<uuid>` limits the run to a single tenant.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { getRegisteredSearchSources } from "../src/modules/site-search/presentation/search-sources";
 import {
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
     let totalFailures = 0;
 
     for (const tenant of tenants) {
-      const result = await withTenant(
+      const result = await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) =>

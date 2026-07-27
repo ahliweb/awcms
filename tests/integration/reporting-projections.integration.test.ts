@@ -55,7 +55,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import type {
   ProjectionCursorStream,
   ProjectionDescriptor
@@ -128,7 +128,7 @@ async function readMetric(
   projectionKey: string,
   metricKey: string
 ): Promise<number> {
-  const metrics = await withTenant(getRuntimeSql(), tenantId, (tx) =>
+  const metrics = await withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     getProjectionMetrics(tx, tenantId, projectionKey)
   );
 
@@ -267,13 +267,17 @@ suite("reporting projections (Issue #154)", () => {
       // And prove the isolation is RLS, not just the application filter:
       // reading A's metric key from INSIDE B's tenant context returns
       // nothing, even though the admin connection can see both rows.
-      const leaked = await withTenant(getRuntimeSql(), TENANT_B, async (tx) => {
-        return (await tx`
+      const leaked = await withTenantOrThrow(
+        getRuntimeSql(),
+        TENANT_B,
+        async (tx) => {
+          return (await tx`
           SELECT tenant_id, metric_value
           FROM awcms_reporting_projection_metrics
           WHERE projection_key = ${PROJECTION_KEY}
         `) as { tenant_id: string; metric_value: number }[];
-      });
+        }
+      );
 
       expect(leaked.map((row) => row.tenant_id)).toEqual([TENANT_B]);
 
@@ -302,7 +306,7 @@ suite("reporting projections (Issue #154)", () => {
       tenantId: string,
       at: Date
     ): Promise<void> {
-      await withTenant(getRuntimeSql(), tenantId, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
         upsertStreamCursor(
           tx,
           tenantId,
@@ -314,7 +318,7 @@ suite("reporting projections (Issue #154)", () => {
     }
 
     test("with NO rebuild watermark, every event increments the metric (the ordinary steady state)", async () => {
-      await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         applyEventActivityProjectionIncrement(tx, TENANT_A, new Date())
       );
 
@@ -327,14 +331,14 @@ suite("reporting projections (Issue #154)", () => {
 
       // Strictly before, and exactly at, the watermark: both are "already
       // covered by the rebuild" and must be dropped.
-      await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         applyEventActivityProjectionIncrement(
           tx,
           TENANT_A,
           new Date(watermark.getTime() - 1000)
         )
       );
-      await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         applyEventActivityProjectionIncrement(tx, TENANT_A, watermark)
       );
 
@@ -345,7 +349,7 @@ suite("reporting projections (Issue #154)", () => {
       const watermark = new Date();
       await setRebuildWatermark(TENANT_A, watermark);
 
-      await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         applyEventActivityProjectionIncrement(
           tx,
           TENANT_A,
@@ -364,10 +368,10 @@ suite("reporting projections (Issue #154)", () => {
 
       // Same timestamp, two tenants: dropped for A (covered), counted for B
       // (B has no watermark of its own).
-      await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         applyEventActivityProjectionIncrement(tx, TENANT_A, beforeWatermark)
       );
-      await withTenant(getRuntimeSql(), TENANT_B, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
         applyEventActivityProjectionIncrement(tx, TENANT_B, beforeWatermark)
       );
 

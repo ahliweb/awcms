@@ -81,7 +81,7 @@ export async function serveActiveThemeTokensCss(
   if (!tenant) {
     resolved = defaultThemeCss();
   } else {
-    resolved = await withTenant(sql, tenant.tenantId, async (tx) => {
+    const lookup = await withTenant(sql, tenant.tenantId, async (tx) => {
       const entry = await fetchTenantModuleEntry(
         tx,
         tenant.tenantId,
@@ -90,6 +90,14 @@ export async function serveActiveThemeTokensCss(
       if (!(entry?.tenantEnabled ?? false)) return defaultThemeCss();
       return resolveActiveThemeCssForTenant(tx, tenant.tenantId);
     });
+
+    // A refused transaction must not become a stylesheet. Falling back to
+    // `defaultThemeCss()` here would be worse than the 503: this response is
+    // CACHEABLE, so one saturated moment would pin the wrong tokens in every
+    // downstream cache for the whole max-age.
+    if (lookup instanceof Response) return lookup;
+
+    resolved = lookup;
   }
 
   const ifNoneMatch = request.headers.get("if-none-match");

@@ -22,7 +22,7 @@
  * created inside its own tenant-scoped transaction, never from a raw
  * client-supplied UUID — closing the cross-tenant existence-oracle risk.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { isTrackablePath, sanitizePath } from "../domain/path-sanitizer";
 import { extractReferrerDomain } from "../../_shared/referrer";
@@ -248,7 +248,7 @@ export async function collectVisitorTelemetry(
     const rawIpAddress = config.rawIpEnabled ? ipAddress : null;
     const referrerDomain = extractReferrerDomain(referrerHeader);
 
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       async (tx) => {

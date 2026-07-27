@@ -45,7 +45,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { getDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
 import {
@@ -1980,7 +1980,7 @@ export async function checkSsoBreakGlassReady(): Promise<SecurityCheckResult> {
     const stranded: string[] = [];
 
     for (const tenant of tenants) {
-      const outcome = await withTenant(
+      const outcome = await withTenantOrThrow(
         sql,
         tenant.id,
         async (tx) => {

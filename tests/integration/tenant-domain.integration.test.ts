@@ -37,7 +37,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   createTenantDomain,
   fetchActiveTenantDomain,
@@ -95,7 +95,7 @@ suite("tenant_domain module (integration)", () => {
 
   test("create -> fetch -> list, verification_token_hash never returned", async () => {
     const runtime = getRuntimeSql();
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(tx, TENANT_A, ACTOR, createInput("A.Example.com"))
     );
     expect(created.hostname).toBe("A.Example.com");
@@ -103,12 +103,12 @@ suite("tenant_domain module (integration)", () => {
     expect(created.status).toBe("pending_verification");
     expect(created).not.toHaveProperty("verificationTokenHash");
 
-    const fetched = await withTenant(runtime, TENANT_A, (tx) =>
+    const fetched = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchActiveTenantDomain(tx, TENANT_A, created.id)
     );
     expect(fetched?.id).toBe(created.id);
 
-    const page = await withTenant(runtime, TENANT_A, (tx) =>
+    const page = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       listTenantDomains(tx, TENANT_A)
     );
     expect(page.domains).toHaveLength(1);
@@ -117,11 +117,11 @@ suite("tenant_domain module (integration)", () => {
 
   test("normalized_hostname is globally unique across tenants (case-insensitive)", async () => {
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(tx, TENANT_A, ACTOR, createInput("shared.example.com"))
     );
     const error = await assertRejected(
-      withTenant(runtime, TENANT_B, (tx) =>
+      withTenantOrThrow(runtime, TENANT_B, (tx) =>
         createTenantDomain(
           tx,
           TENANT_B,
@@ -138,22 +138,22 @@ suite("tenant_domain module (integration)", () => {
 
   test("soft delete frees the normalized hostname for reuse (even by another tenant)", async () => {
     const runtime = getRuntimeSql();
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(tx, TENANT_A, ACTOR, createInput("reuse.example.com"))
     );
-    const deleted = await withTenant(runtime, TENANT_A, (tx) =>
+    const deleted = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       softDeleteTenantDomain(tx, TENANT_A, ACTOR, created.id, "moved off")
     );
     expect(deleted).toBe(true);
 
     // A soft-deleted row no longer resolves through the directory.
-    const gone = await withTenant(runtime, TENANT_A, (tx) =>
+    const gone = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchActiveTenantDomain(tx, TENANT_A, created.id)
     );
     expect(gone).toBeNull();
 
     // The hostname is now reusable by a different tenant.
-    const recreated = await withTenant(runtime, TENANT_B, (tx) =>
+    const recreated = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       createTenantDomain(tx, TENANT_B, ACTOR, createInput("reuse.example.com"))
     );
     expect(recreated.tenantId).toBe(TENANT_B);
@@ -161,23 +161,23 @@ suite("tenant_domain module (integration)", () => {
 
   test("verify: needs a method, is idempotent at active, refuses suspended", async () => {
     const runtime = getRuntimeSql();
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(tx, TENANT_A, ACTOR, createInput("v.example.com"))
     );
 
     // No verification_method configured yet.
-    const noMethod = await withTenant(runtime, TENANT_A, (tx) =>
+    const noMethod = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
     );
     expect(noMethod.outcome).toBe("missing_verification_method");
 
     // Configure a method, then verify -> active.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       updateTenantDomain(tx, TENANT_A, ACTOR, created.id, {
         verificationMethod: "manual"
       })
     );
-    const verified = await withTenant(runtime, TENANT_A, (tx) =>
+    const verified = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
     );
     expect(verified.outcome).toBe("verified");
@@ -185,18 +185,18 @@ suite("tenant_domain module (integration)", () => {
     expect(verified.entry.status).toBe("active");
 
     // Idempotent at active.
-    const again = await withTenant(runtime, TENANT_A, (tx) =>
+    const again = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
     );
     expect(again.outcome).toBe("verified");
 
     // Suspended cannot be verified back to active.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       updateTenantDomain(tx, TENANT_A, ACTOR, created.id, {
         status: "suspended"
       })
     );
-    const suspended = await withTenant(runtime, TENANT_A, (tx) =>
+    const suspended = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
     );
     expect(suspended.outcome).toBe("not_verifiable");
@@ -204,7 +204,7 @@ suite("tenant_domain module (integration)", () => {
 
   test("set-primary: only an active domain, at most one primary per tenant", async () => {
     const runtime = getRuntimeSql();
-    const first = await withTenant(runtime, TENANT_A, (tx) =>
+    const first = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(
         tx,
         TENANT_A,
@@ -212,7 +212,7 @@ suite("tenant_domain module (integration)", () => {
         createInput("one.example.com", "manual")
       )
     );
-    const second = await withTenant(runtime, TENANT_A, (tx) =>
+    const second = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(
         tx,
         TENANT_A,
@@ -222,28 +222,28 @@ suite("tenant_domain module (integration)", () => {
     );
 
     // A pending domain cannot become primary.
-    const notActive = await withTenant(runtime, TENANT_A, (tx) =>
+    const notActive = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       setPrimaryTenantDomain(tx, TENANT_A, ACTOR, first.id)
     );
     expect(notActive.outcome).toBe("not_active");
 
     // Verify both, set first primary, then switch to second — only one primary.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, first.id)
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, second.id)
     );
-    const setFirst = await withTenant(runtime, TENANT_A, (tx) =>
+    const setFirst = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       setPrimaryTenantDomain(tx, TENANT_A, ACTOR, first.id)
     );
     expect(setFirst.outcome).toBe("set");
-    const setSecond = await withTenant(runtime, TENANT_A, (tx) =>
+    const setSecond = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       setPrimaryTenantDomain(tx, TENANT_A, ACTOR, second.id)
     );
     expect(setSecond.outcome).toBe("set");
 
-    const page = await withTenant(runtime, TENANT_A, (tx) =>
+    const page = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       listTenantDomains(tx, TENANT_A)
     );
     const primaries = page.domains.filter((d) => d.isPrimary);
@@ -253,10 +253,10 @@ suite("tenant_domain module (integration)", () => {
 
   test("cross-tenant isolation: tenant A cannot read tenant B's domain by id", async () => {
     const runtime = getRuntimeSql();
-    const bDomain = await withTenant(runtime, TENANT_B, (tx) =>
+    const bDomain = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       createTenantDomain(tx, TENANT_B, ACTOR, createInput("b-only.example.com"))
     );
-    const asA = await withTenant(runtime, TENANT_A, (tx) =>
+    const asA = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchActiveTenantDomain(tx, TENANT_A, bDomain.id)
     );
     expect(asA).toBeNull();
@@ -271,7 +271,7 @@ suite("tenant_domain module (integration)", () => {
 
     const runtime = getRuntimeSql();
     // Create an active, verified domain for the active tenant A.
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(
         tx,
         TENANT_A,
@@ -279,7 +279,7 @@ suite("tenant_domain module (integration)", () => {
         createInput("live.example.com", "manual")
       )
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       verifyTenantDomain(tx, TENANT_A, ACTOR, created.id)
     );
 
@@ -312,7 +312,7 @@ suite("tenant_domain module (integration)", () => {
     const runtime = getRuntimeSql();
 
     // Pending domain under an active tenant -> not resolved.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createTenantDomain(
         tx,
         TENANT_A,
@@ -321,7 +321,7 @@ suite("tenant_domain module (integration)", () => {
       )
     );
     // Active domain under an INACTIVE tenant -> not resolved.
-    const onInactive = await withTenant(runtime, TENANT_INACTIVE, (tx) =>
+    const onInactive = await withTenantOrThrow(runtime, TENANT_INACTIVE, (tx) =>
       createTenantDomain(
         tx,
         TENANT_INACTIVE,
@@ -329,7 +329,7 @@ suite("tenant_domain module (integration)", () => {
         createInput("inactive-tenant.example.com", "manual")
       )
     );
-    await withTenant(runtime, TENANT_INACTIVE, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_INACTIVE, (tx) =>
       verifyTenantDomain(tx, TENANT_INACTIVE, ACTOR, onInactive.id)
     );
 

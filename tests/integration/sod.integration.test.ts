@@ -42,7 +42,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { collectSoDRuleDescriptors } from "../../src/modules/identity-access/domain/sod-rule-registry";
 import { exampleDomainModules } from "../fixtures/example-domain-modules";
 import { createBusinessScopeAssignment } from "../../src/modules/identity-access/application/business-scope-assignment-service";
@@ -224,7 +224,7 @@ suite("segregation of duties (Issue #181)", () => {
       [["payment", "approve"]]
     );
 
-    const result = await withTenant(runtime, TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -253,7 +253,7 @@ suite("segregation of duties (Issue #181)", () => {
     ).toBe(true);
 
     // An append-only evaluation row was written.
-    const logged = await withTenant(
+    const logged = await withTenantOrThrow(
       runtime,
       TENANT_A,
       (tx) =>
@@ -272,7 +272,7 @@ suite("segregation of duties (Issue #181)", () => {
       [["payment", "approve"]]
     );
 
-    const result = await withTenant(runtime, TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -306,7 +306,7 @@ suite("segregation of duties (Issue #181)", () => {
       A_SUBJECT
     );
 
-    const result = await withTenant(runtime, TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -327,7 +327,7 @@ suite("segregation of duties (Issue #181)", () => {
   test("ACTION-time mutation proof: without the conflicting fact, the action is NOT blocked", async () => {
     const runtime = getRuntimeSql();
     // Subject holds nothing conflicting.
-    const result = await withTenant(runtime, TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -381,7 +381,7 @@ suite("segregation of duties (Issue #181)", () => {
       VALUES (${TENANT_A}, ${identityRows[0]!.identity_id}, ${hashSessionToken(token)}, ${new Date(Date.now() + 3_600_000)})
     `;
 
-    const denied = await withTenant(runtime, TENANT_A, (tx) =>
+    const denied = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       authorizeInTransaction(
         tx,
         TENANT_A,
@@ -415,7 +415,7 @@ suite("segregation of duties (Issue #181)", () => {
     );
 
     // Blocked before any exception.
-    const before = await withTenant(runtime, TENANT_A, (tx) =>
+    const before = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -432,7 +432,7 @@ suite("segregation of duties (Issue #181)", () => {
     expect(before.blocked).toBe(true);
 
     // A_ACTOR requests an exception for the subject; blanket (null scope).
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createSoDConflictException(
         tx,
         TENANT_A,
@@ -455,7 +455,7 @@ suite("segregation of duties (Issue #181)", () => {
     const exceptionId = created.exception.id;
 
     // Self-approval (the requester A_ACTOR) is denied.
-    const selfApprove = await withTenant(runtime, TENANT_A, (tx) =>
+    const selfApprove = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       approveSoDConflictException(tx, TENANT_A, A_ACTOR, exceptionId, "self")
     );
     expect(selfApprove.ok).toBe(false);
@@ -467,15 +467,24 @@ suite("segregation of duties (Issue #181)", () => {
     // (A_ACTOR) filed the request (the create route accepts an arbitrary
     // subject). Without the subject!=approver guard, A_SUBJECT here holds the
     // conflicting permission AND could self-clear their own block.
-    const beneficiaryApprove = await withTenant(runtime, TENANT_A, (tx) =>
-      approveSoDConflictException(tx, TENANT_A, A_SUBJECT, exceptionId, "self")
+    const beneficiaryApprove = await withTenantOrThrow(
+      runtime,
+      TENANT_A,
+      (tx) =>
+        approveSoDConflictException(
+          tx,
+          TENANT_A,
+          A_SUBJECT,
+          exceptionId,
+          "self"
+        )
     );
     expect(beneficiaryApprove.ok).toBe(false);
     if (beneficiaryApprove.ok) throw new Error("unreachable");
     expect(beneficiaryApprove.reason).toBe("self_approval_denied");
 
     // A DIFFERENT user (A_APPROVER) approves.
-    const approved = await withTenant(runtime, TENANT_A, (tx) =>
+    const approved = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       approveSoDConflictException(
         tx,
         TENANT_A,
@@ -487,7 +496,7 @@ suite("segregation of duties (Issue #181)", () => {
     expect(approved.ok).toBe(true);
 
     // Now the conflict is covered.
-    const after = await withTenant(runtime, TENANT_A, (tx) =>
+    const after = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -514,7 +523,7 @@ suite("segregation of duties (Issue #181)", () => {
     );
 
     // Approved exception, then revoke -> immediately blocked again.
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createSoDConflictException(
         tx,
         TENANT_A,
@@ -532,7 +541,7 @@ suite("segregation of duties (Issue #181)", () => {
       )
     );
     if (!created.ok) throw new Error("unreachable");
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       approveSoDConflictException(
         tx,
         TENANT_A,
@@ -541,7 +550,7 @@ suite("segregation of duties (Issue #181)", () => {
         null
       )
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       revokeSoDConflictException(
         tx,
         TENANT_A,
@@ -552,7 +561,7 @@ suite("segregation of duties (Issue #181)", () => {
         }
       )
     );
-    const afterRevoke = await withTenant(runtime, TENANT_A, (tx) =>
+    const afterRevoke = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -577,7 +586,7 @@ suite("segregation of duties (Issue #181)", () => {
       VALUES (${TENANT_A}, ${RULE_VENDOR_PAYMENT}, ${A_SUBJECT}, 'expired override',
         ${A_ACTOR}, ${A_APPROVER}, 'approved', ${new Date(Date.now() - 100000)}, ${new Date(Date.now() - 1000)})
     `;
-    const afterExpired = await withTenant(runtime, TENANT_A, (tx) =>
+    const afterExpired = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_A,
@@ -615,7 +624,7 @@ suite("segregation of duties (Issue #181)", () => {
 
     // Tenant B's subject, same rule, still blocked (the tenant-A exception is
     // invisible/inapplicable across the tenant boundary).
-    const blockedInB = await withTenant(runtime, TENANT_B, (tx) =>
+    const blockedInB = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       checkHighRiskSoDConflicts(
         tx,
         TENANT_B,
@@ -648,7 +657,7 @@ suite("segregation of duties (Issue #181)", () => {
 
     const app = getAppRoleSql();
     // Control: scoped to tenant A, the row IS visible.
-    const visibleInA = await withTenant(
+    const visibleInA = await withTenantOrThrow(
       app,
       TENANT_A,
       (tx) => tx`SELECT count(*)::int AS n FROM awcms_sod_conflict_exceptions`
@@ -656,7 +665,7 @@ suite("segregation of duties (Issue #181)", () => {
     expect((visibleInA[0] as { n: number }).n).toBe(1);
 
     // Scoped to tenant B, tenant A's row is INVISIBLE.
-    const visibleInB = await withTenant(
+    const visibleInB = await withTenantOrThrow(
       app,
       TENANT_B,
       (tx) => tx`SELECT count(*)::int AS n FROM awcms_sod_conflict_exceptions`
@@ -682,10 +691,10 @@ suite("segregation of duties (Issue #181)", () => {
     // status='pending', not by one racer being rejected at the self-approval
     // guard.
     const settled = await Promise.allSettled([
-      withTenant(runtime, TENANT_A, (tx) =>
+      withTenantOrThrow(runtime, TENANT_A, (tx) =>
         approveSoDConflictException(tx, TENANT_A, A_APPROVER, exceptionId, "r1")
       ),
-      withTenant(runtime, TENANT_A, (tx) =>
+      withTenantOrThrow(runtime, TENANT_A, (tx) =>
         approveSoDConflictException(
           tx,
           TENANT_A,
@@ -716,7 +725,7 @@ suite("segregation of duties (Issue #181)", () => {
     );
 
     const countQueries = async (subject: string): Promise<number> =>
-      withTenant(runtime, TENANT_A, async (tx) => {
+      withTenantOrThrow(runtime, TENANT_A, async (tx) => {
         let count = 0;
         const counting = new Proxy(tx, {
           apply(target, thisArg, args) {

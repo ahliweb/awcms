@@ -18,7 +18,7 @@
  */
 import { getDatabaseClient } from "../src/lib/database/client";
 import { logScriptFailure } from "../src/lib/logging/error-log";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { recordAuditEvent } from "../src/modules/logging/application/audit-log";
 import { DEFAULT_EMAIL_TEMPLATES } from "../src/modules/email/domain/email-default-templates";
 import { seedDefaultEmailTemplates } from "../src/modules/email/application/email-template-directory";
@@ -44,7 +44,7 @@ async function main() {
   const correlationId = crypto.randomUUID();
 
   try {
-    const result = await withTenant(sql, tenantId, async (tx) => {
+    const result = await withTenantOrThrow(sql, tenantId, async (tx) => {
       const seeded = await seedDefaultEmailTemplates(
         tx,
         tenantId,

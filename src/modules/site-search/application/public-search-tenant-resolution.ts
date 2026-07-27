@@ -16,7 +16,7 @@
  * tenant lifecycle (the module registry authority), the neutral tenant resolver,
  * and `site_search`'s own settings table.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   resolvePublicTenantFromRequest,
   type PublicHostResolverConfig,
@@ -77,7 +77,7 @@ async function checkSiteSearchGate(
 export async function padUnresolvedSearchTenantLatency(
   sql: Bun.SQL
 ): Promise<void> {
-  await withTenant(sql, TIMING_PAD_TENANT_ID, async (tx) => {
+  await withTenantOrThrow(sql, TIMING_PAD_TENANT_ID, async (tx) => {
     await checkSiteSearchGate(tx, TIMING_PAD_TENANT_ID);
   });
 }
@@ -103,7 +103,7 @@ export async function withSiteSearchTenant<T>(
     return null;
   }
 
-  return withTenant(sql, tenant.tenantId, async (tx) => {
+  return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
     const { enabled, settings } = await checkSiteSearchGate(
       tx,
       tenant.tenantId

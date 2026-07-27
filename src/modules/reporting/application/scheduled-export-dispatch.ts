@@ -7,7 +7,7 @@
  * `generateProjectionExport` a manual `POST .../export` API call uses —
  * no separate/divergent scheduled-only code path.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { fetchActiveTenants } from "../../../lib/jobs/batching";
 import { generateProjectionExport } from "./export-generation";
 import { findProjectionDescriptor } from "./projection-directory";
@@ -28,7 +28,7 @@ export async function dispatchDueScheduledExports(
   let exportsFailed = 0;
 
   for (const tenant of tenants) {
-    const due = await withTenant(
+    const due = await withTenantOrThrow(
       sql,
       tenant.id,
       (tx) => listDueScheduledExports(tx, tenant.id, now),

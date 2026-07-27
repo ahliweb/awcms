@@ -33,7 +33,7 @@
  * immediately regardless of when this job runs.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   recordCounter,
   recordGauge
@@ -56,7 +56,7 @@ async function expireAssignmentsPass(
   tenantId: string,
   now: Date
 ): Promise<ExpiryPassResult> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -110,7 +110,7 @@ async function expireSoDConflictExceptionsPass(
   tenantId: string,
   now: Date
 ): Promise<ExpiryPassResult> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -170,7 +170,7 @@ async function refreshAssignmentGauges(
   sql: Bun.SQL,
   tenantId: string
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -215,7 +215,7 @@ async function countExpiredBacklogForTenant(
   tenantId: string,
   now: Date
 ): Promise<{ assignments: number; exceptions: number }> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {

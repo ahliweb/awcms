@@ -34,7 +34,7 @@ import {
 } from "bun:test";
 
 import { hashPassword } from "../../src/lib/auth/password";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { saveTenantAuthPolicy } from "../../src/modules/identity-access/application/tenant-auth-policy";
 import { checkSsoBreakGlassReady } from "../../scripts/security-readiness";
 import {
@@ -108,7 +108,7 @@ async function lockDownTenant(
   // table's CHECK forbids a row with neither login method.
   mode: "sso_required" | "password_login_disabled" = "sso_required"
 ): Promise<void> {
-  const result = await withTenant(
+  const result = await withTenantOrThrow(
     getHandlerDatabaseClient(),
     tenantId,
     (tx) =>

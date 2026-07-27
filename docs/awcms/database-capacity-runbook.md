@@ -288,9 +288,11 @@ without a reviewable diff to that file.
 **Two halves, two sources of truth.** Routes are GENERATED, because every route
 already declares its class inline — via `defineTenantRoute({ workClass })`
 (Issue #255, where omitting it is a compile error), via an explicit literal on
-`withTenant(...)`, or by relying on the documented `"interactive"` default. Jobs
-are DECLARED in `src/lib/database/work-class-registry.ts`, because worker
-scripts never call `withTenant` and there is nothing to generate from; the
+`withTenant(...)`/`withTenantOrThrow(...)`, or by relying on the documented
+`"interactive"` default. Jobs are DECLARED in
+`src/lib/database/work-class-registry.ts`, because a worker script's class is a
+property of the SCRIPT, not of any one transaction inside it, so there is
+nothing to generate from; the
 generator discovers them by ground truth (`getWorkerDatabaseClient(` /
 `getSetupDatabaseClient(` in `scripts/*.ts`) and **refuses to run** — not merely
 to check — when the declared map and the scripts on disk disagree.
@@ -303,7 +305,7 @@ repo (`social-publish-dispatch`, `organization-structure-metrics-snapshot`,
 `integration-hub-outbound-dispatch`, `data-exchange-worker`), carried over from
 awcms-mini with their ADR-accepted-but-unimplemented modules.
 
-**What the snapshot says today: 208 routes, 18 jobs.** Of the routes, **176 still
+**What the snapshot says today: 216 routes, 18 jobs.** Of the routes, **176 still
 rely on `withTenant`'s `"interactive"` default** — they share login's pool budget
 by omission rather than by decision. 28 pass an explicit literal and 4 go through
 `defineTenantRoute`. Shrinking that 176 is the migration tracked in Issue #255;

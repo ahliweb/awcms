@@ -8,7 +8,10 @@ import {
   acquireWorkClassSlot,
   resetWorkClassGatesForTests
 } from "../src/lib/database/work-class";
-import { withTenant } from "../src/lib/database/tenant-context";
+import {
+  withTenant,
+  withTenantOrThrow
+} from "../src/lib/database/tenant-context";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -28,7 +31,7 @@ function fakeSql(): Bun.SQL {
   } as unknown as Bun.SQL;
 }
 
-describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () => {
+describe("tenant transaction circuit breaker (Issue #599, extended by Issue #601)", () => {
   beforeEach(() => {
     resetDatabaseCircuitBreakerForTests();
     resetWorkClassGatesForTests();
@@ -48,7 +51,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     for (let i = 0; i < 10; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw violation;
         })
       ).rejects.toBe(violation);
@@ -71,7 +74,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     for (let i = 0; i < 10; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw violation;
         })
       ).rejects.toBe(violation);
@@ -92,7 +95,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     for (let i = 0; i < 10; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw violation;
         })
       ).rejects.toBe(violation);
@@ -110,7 +113,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     for (let i = 0; i < 10; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw violation;
         })
       ).rejects.toBe(violation);
@@ -129,7 +132,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
     // Default failure threshold is 5 consecutive failures (circuit-breaker.ts).
     for (let i = 0; i < 5; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw connectionError;
         })
       ).rejects.toBe(connectionError);
@@ -144,7 +147,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     for (let i = 0; i < 5; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw genericError;
         })
       ).rejects.toBe(genericError);
@@ -156,7 +159,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
   test("a success still resets recorded state (no regression)", async () => {
     const sql = fakeSql();
 
-    const result = await withTenant(sql, TENANT_ID, async () => "ok");
+    const result = await withTenantOrThrow(sql, TENANT_ID, async () => "ok");
 
     expect(result).toBe("ok");
     expect(getDatabaseCircuitBreaker().canAttempt(new Date())).toBe(true);
@@ -177,7 +180,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
     try {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw violation;
         })
       ).rejects.toBe(violation);
@@ -199,7 +202,7 @@ describe("withTenant circuit breaker (Issue #599, extended by Issue #601)", () =
 
 // Issue #743 — every 503 DATABASE_BUSY withTenant can return now carries a
 // Retry-After header ("controlled 503 instead of cascading timeouts").
-describe("withTenant graceful saturation and Retry-After (Issue #743)", () => {
+describe("graceful saturation and Retry-After (Issue #743)", () => {
   beforeEach(() => {
     resetDatabaseCircuitBreakerForTests();
     resetWorkClassGatesForTests();
@@ -216,7 +219,7 @@ describe("withTenant graceful saturation and Retry-After (Issue #743)", () => {
 
     for (let i = 0; i < 5; i++) {
       await expect(
-        withTenant(sql, TENANT_ID, async () => {
+        withTenantOrThrow(sql, TENANT_ID, async () => {
           throw genericError;
         })
       ).rejects.toBe(genericError);

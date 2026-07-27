@@ -20,7 +20,7 @@
  * `--dry-run` reports the tenant count without writing any rollup row.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import {
   applyJobExitCode,
   formatJobOutcomeLine,
@@ -94,7 +94,7 @@ export async function runVisitorAnalyticsRollup(
       break;
     }
 
-    const result = await withTenant(sql, tenant.id, (tx) =>
+    const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
       rollupVisitorAnalyticsForDate(tx, tenant.id, date)
     );
 

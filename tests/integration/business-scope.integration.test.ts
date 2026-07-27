@@ -38,7 +38,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   createBusinessScopeAssignment,
   listBusinessScopeAssignments,
@@ -144,7 +144,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     const now = new Date();
     const runtime = getRuntimeSql();
 
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -165,7 +165,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     );
     expect(created.ok).toBe(true);
 
-    const list = await withTenant(runtime, TENANT_A, (tx) =>
+    const list = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       listBusinessScopeAssignments(tx, TENANT_A, {})
     );
     expect(list.length).toBe(1);
@@ -180,7 +180,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     expect(events.map((e) => e.event_type)).toEqual(["granted"]);
 
     const assignmentId = list[0]!.id;
-    const revoked = await withTenant(runtime, TENANT_A, (tx) =>
+    const revoked = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       revokeBusinessScopeAssignment(tx, TENANT_A, A_ACTOR, assignmentId, {
         revokeReason: "left the office"
       })
@@ -191,7 +191,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
 
   test("self-grant is denied", async () => {
     const now = new Date();
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -219,7 +219,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     // The base no-op resolver returns resolved:false for OFFICE_A, so if the
     // self-grant check ran AFTER resolveScope the result would be
     // SCOPE_UNRESOLVED. It must be SELF_GRANT_DENIED (identity guard first).
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -247,7 +247,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
 
   test("F2: the reserved 'tenant' scope_type cannot be stored as an assignment", async () => {
     const now = new Date();
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -280,7 +280,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
   test("cross-tenant SCOPE reference is denied at the app layer (port resolves nothing for the wrong tenant)", async () => {
     const now = new Date();
     // tenant A subject, but a scope id that only exists under tenant B.
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -304,7 +304,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
   });
 
   test("cross-tenant SUBJECT reference is denied by the composite (tenant_id, tenant_user_id) FK (raw INSERT bypassing the app)", async () => {
-    const error = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const error = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       assertRejected(
         tx`
           INSERT INTO awcms_business_scope_assignments
@@ -320,7 +320,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
   });
 
   test("cross-tenant ROLE reference is denied by the composite (tenant_id, role_id) FK (raw INSERT bypassing the app)", async () => {
-    const error = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const error = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       assertRejected(
         tx`
           INSERT INTO awcms_business_scope_assignments
@@ -344,7 +344,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     }
     const now = new Date();
     // Seed one tenant-A assignment through the owner/app runtime.
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -366,7 +366,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
 
     const app = getAppRoleSql();
     // Control: with the GUC on tenant A, awcms_app sees the row.
-    const visible = await withTenant(app, TENANT_A, (tx) =>
+    const visible = await withTenantOrThrow(app, TENANT_A, (tx) =>
       tx`SELECT id FROM awcms_business_scope_assignments`.then(
         (r) => r as { id: string }[]
       )
@@ -374,7 +374,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     expect(visible.length).toBe(1);
 
     // Isolation: with the GUC on tenant B, awcms_app sees ZERO tenant-A rows.
-    const hidden = await withTenant(app, TENANT_B, (tx) =>
+    const hidden = await withTenantOrThrow(app, TENANT_B, (tx) =>
       tx`SELECT id FROM awcms_business_scope_assignments`.then(
         (r) => r as { id: string }[]
       )
@@ -386,7 +386,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     const now = new Date();
     const runtime = getRuntimeSql();
 
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -424,7 +424,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     const granted = new Set(["sales.orders.read"]);
 
     // Before revoke — the subject's facts cover the required scope.
-    const factsBefore = await withTenant(runtime, TENANT_A, (tx) =>
+    const factsBefore = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       resolveBusinessScopeFacts(
         tx,
         TENANT_A,
@@ -438,16 +438,16 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
     ).toBe(true);
 
     // Revoke, then re-resolve facts at the same instant — coverage is gone.
-    const list = await withTenant(runtime, TENANT_A, (tx) =>
+    const list = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       listBusinessScopeAssignments(tx, TENANT_A, {})
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       revokeBusinessScopeAssignment(tx, TENANT_A, A_ACTOR, list[0]!.id, {
         revokeReason: "immediate"
       })
     );
 
-    const factsAfter = await withTenant(runtime, TENANT_A, (tx) =>
+    const factsAfter = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       resolveBusinessScopeFacts(
         tx,
         TENANT_A,
@@ -469,7 +469,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
   test("descendant coverage resolves end-to-end through the dummy port (assigned parent office covers a child office)", async () => {
     const now = new Date();
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createBusinessScopeAssignment(
         tx,
         TENANT_A,
@@ -489,7 +489,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
       )
     );
 
-    const facts = await withTenant(runtime, TENANT_A, (tx) =>
+    const facts = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       resolveBusinessScopeFacts(
         tx,
         TENANT_A,

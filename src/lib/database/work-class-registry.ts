@@ -87,7 +87,7 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
   "scripts/domain-events-dispatch.ts": {
     workClass: "background_sync",
     rationale:
-      'Outbox dispatcher (domain-events:dispatch, Issue #742), recommended every 30-60 seconds — same recurring dispatcher profile as email/object-sync/social-publish dispatch; its own internal withTenant calls already pass workClass: "background_sync" explicitly.'
+      'Outbox dispatcher (domain-events:dispatch, Issue #742), recommended every 30-60 seconds — same recurring dispatcher profile as email/object-sync/social-publish dispatch; its own internal withTenantOrThrow calls already pass workClass: "background_sync" explicitly.'
   },
   "scripts/blog-scheduled-publish.ts": {
     workClass: "background_sync",
@@ -102,12 +102,12 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
   "scripts/data-lifecycle-archive-purge.ts": {
     workClass: "maintenance",
     rationale:
-      'Scheduled bounded archive/purge (data-lifecycle:archive-purge, Issue #745) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/form-draft-purge; every withTenant call inside archive-purge-job.ts already passes workClass: "maintenance" explicitly.'
+      'Scheduled bounded archive/purge (data-lifecycle:archive-purge, Issue #745) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/form-draft-purge; every withTenantOrThrow call inside archive-purge-job.ts already passes workClass: "maintenance" explicitly.'
   },
   "scripts/identity-access-business-scope-expiry.ts": {
     workClass: "maintenance",
     rationale:
-      'Scheduled expiry sweep for business-scope assignments/SoD conflict exceptions (identity-access:business-scope:expiry, Issue #746) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenant call inside business-scope-expiry-job.ts already passes workClass: "maintenance" explicitly.'
+      'Scheduled expiry sweep for business-scope assignments/SoD conflict exceptions (identity-access:business-scope:expiry, Issue #746) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenantOrThrow call inside business-scope-expiry-job.ts already passes workClass: "maintenance" explicitly.'
   },
   "scripts/workflow-escalations-dispatch.ts": {
     workClass: "background_sync",
@@ -117,7 +117,7 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
   "scripts/reporting-projections-refresh.ts": {
     workClass: "maintenance",
     rationale:
-      'Incremental cursor_table projection updates + rebuild-continuation sweep (reporting:projections:refresh, Issue #753), recommended every 2 minutes — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenant call inside projection-incremental-worker.ts/projection-rebuild.ts already passes workClass: "maintenance" explicitly.'
+      'Incremental cursor_table projection updates + rebuild-continuation sweep (reporting:projections:refresh, Issue #753), recommended every 2 minutes — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenantOrThrow call inside projection-incremental-worker.ts/projection-rebuild.ts already passes workClass: "maintenance" explicitly.'
   },
   "scripts/reporting-exports-dispatch.ts": {
     workClass: "maintenance",

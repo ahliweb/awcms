@@ -37,7 +37,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { getRegisteredSearchSources } from "../../src/modules/site-search/presentation/search-sources";
 import {
   rebuildTenantSearchIndex,
@@ -98,7 +98,7 @@ async function insertPost(tenantId: string, seed: PostSeed): Promise<string> {
 }
 
 async function docCount(tenantId: string): Promise<number> {
-  return withTenant(getRuntimeSql(), tenantId, async (tx) => {
+  return withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
     const rows = (await tx`
       SELECT count(*)::int AS count FROM awcms_site_search_documents
     `) as { count: number }[];
@@ -155,12 +155,12 @@ suite("site_search module (integration, ADR-0040)", () => {
       publishedAt: new Date(Date.now() + 86_400_000)
     });
 
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
 
     expect(await docCount(TENANT_A)).toBe(1);
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, { query: "fox", locale: "en", limit: 20 })
     );
     expect(result.items).toHaveLength(1);
@@ -177,10 +177,10 @@ suite("site_search module (integration, ADR-0040)", () => {
       slug: "draft",
       status: "draft"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "unpublishedwombat",
         locale: "en",
@@ -196,7 +196,7 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "panther body",
       slug: "rem"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(await docCount(TENANT_A)).toBe(1);
@@ -204,12 +204,12 @@ suite("site_search module (integration, ADR-0040)", () => {
     await getAdminSql()`
       UPDATE awcms_blog_posts SET status = 'draft', updated_at = now() WHERE id = ${id}
     `;
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(await docCount(TENANT_A)).toBe(0);
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "panther",
         locale: "en",
@@ -225,7 +225,7 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "lynx body",
       slug: "lynx"
     });
-    const first = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const first = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reindexSearchResource(tx, TENANT_A, SOURCES[0]!, id)
     );
     expect(first).toBe("indexed");
@@ -234,7 +234,7 @@ suite("site_search module (integration, ADR-0040)", () => {
     await getAdminSql()`
       UPDATE awcms_blog_posts SET status = 'archived', updated_at = now() WHERE id = ${id}
     `;
-    const second = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const second = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reindexSearchResource(tx, TENANT_A, SOURCES[0]!, id)
     );
     expect(second).toBe("removed");
@@ -249,7 +249,7 @@ suite("site_search module (integration, ADR-0040)", () => {
         slug: `p-${i}`
       });
     }
-    const first = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const first = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       rebuildTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(first.status).toBe("succeeded");
@@ -257,13 +257,13 @@ suite("site_search module (integration, ADR-0040)", () => {
     expect(await docCount(TENANT_A)).toBe(5);
 
     // Rebuild again — end state identical regardless of prior state.
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       rebuildTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(await docCount(TENANT_A)).toBe(5);
 
     // Reconcile a third time with no source change: every document unchanged.
-    const third = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const third = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(third.results[0]!.unchanged).toBe(5);
@@ -278,13 +278,13 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "marmot body",
       slug: "marmot"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     await getAdminSql()`
       UPDATE awcms_blog_posts SET title = 'Renamed marmot', updated_at = now() WHERE id = ${id}
     `;
-    const run = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const run = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
     expect(run.results[0]!.updated).toBe(1);
@@ -303,14 +303,14 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "b body",
       slug: "b"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
-    await withTenant(getRuntimeSql(), TENANT_B, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_B, SOURCES)
     );
 
-    const aResult = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const aResult = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "aardvark",
         locale: "en",
@@ -322,12 +322,16 @@ suite("site_search module (integration, ADR-0040)", () => {
 
     // RLS also blocks a RAW cross-tenant read of the index table — the query
     // below has no tenant predicate at all.
-    const visible = await withTenant(getRuntimeSql(), TENANT_A, async (tx) => {
-      const rows = (await tx`
+    const visible = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_A,
+      async (tx) => {
+        const rows = (await tx`
         SELECT count(*)::int AS c FROM awcms_site_search_documents
       `) as { c: number }[];
-      return rows[0]!.c;
-    });
+        return rows[0]!.c;
+      }
+    );
     expect(visible).toBe(1);
   });
 
@@ -344,11 +348,11 @@ suite("site_search module (integration, ADR-0040)", () => {
       slug: "en-cat",
       locale: "en"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
 
-    const enResult = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const enResult = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "kucing",
         locale: "en",
@@ -357,7 +361,7 @@ suite("site_search module (integration, ADR-0040)", () => {
     );
     expect(enResult.items).toHaveLength(0);
 
-    const idResult = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const idResult = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "kucing",
         locale: "id",
@@ -373,10 +377,10 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "hello <script>alert(document.cookie)</script> wolverine world",
       slug: "xss"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "wolverine",
         locale: "en",
@@ -398,10 +402,10 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "gopher body",
       slug: "g"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "gopher'; DROP TABLE awcms_site_search_documents; --",
         locale: "en",
@@ -424,19 +428,22 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "secret",
       slug: "cham-b"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
-    await withTenant(getRuntimeSql(), TENANT_B, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_B, SOURCES)
     );
 
-    const suggestions = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
-      suggestSiteContent(tx, TENANT_A, {
-        query: "chamele",
-        locale: "en",
-        limit: 8
-      })
+    const suggestions = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_A,
+      (tx) =>
+        suggestSiteContent(tx, TENANT_A, {
+          query: "chamele",
+          locale: "en",
+          limit: 8
+        })
     );
     expect(suggestions.length).toBeGreaterThanOrEqual(1);
     expect(suggestions.every((s) => s.title.includes("Chameleon"))).toBe(true);
@@ -449,11 +456,11 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "capybara body",
       slug: "cap"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
 
-    const included = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const included = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "capybara",
         locale: "en",
@@ -463,7 +470,7 @@ suite("site_search module (integration, ADR-0040)", () => {
     );
     expect(included.items).toHaveLength(1);
 
-    const excluded = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const excluded = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       searchSiteContent(tx, TENANT_A, {
         query: "capybara",
         locale: "en",
@@ -482,7 +489,7 @@ suite("site_search module (integration, ADR-0040)", () => {
         slug: `nb-${i}`
       });
     }
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES)
     );
 
@@ -491,7 +498,7 @@ suite("site_search module (integration, ADR-0040)", () => {
     for (let page = 0; page < 10; page += 1) {
       // The cursor is opaque to callers; a real client round-trips the string
       // through the query param, which is exactly what decodeSearchCursor does.
-      const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+      const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
         searchSiteContent(tx, TENANT_A, {
           query: "numbat",
           locale: "en",
@@ -513,13 +520,13 @@ suite("site_search module (integration, ADR-0040)", () => {
       body: "quokka body",
       slug: "quokka"
     });
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       reconcileTenantSearchIndex(tx, TENANT_A, SOURCES, {
         trigger: "scheduled"
       })
     );
 
-    const status = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const status = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       fetchIndexStatus(tx, TENANT_A)
     );
     expect(status.documentCount).toBe(1);
@@ -531,7 +538,7 @@ suite("site_search module (integration, ADR-0040)", () => {
     expect(status.lastRun?.trigger).toBe("scheduled");
     expect(status.latestIndexedAt).not.toBeNull();
 
-    const runs = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const runs = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       fetchRecentRuns(tx, TENANT_A, 10)
     );
     expect(runs).toHaveLength(1);
