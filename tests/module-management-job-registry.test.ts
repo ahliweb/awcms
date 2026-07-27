@@ -101,6 +101,7 @@ describe("fetchModuleJobs", () => {
         "bun run reporting:projections:refresh",
         "bun run site-search:reconcile",
         "bun run sync:objects:dispatch",
+        "bun run tenant-domain:dns:sync",
         "bun run workflow:escalations:dispatch"
       ].sort()
     );
