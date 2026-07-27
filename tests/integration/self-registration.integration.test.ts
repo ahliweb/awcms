@@ -24,7 +24,7 @@ import {
 } from "bun:test";
 
 import { verifyPassword } from "../../src/lib/auth/password";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import type {
   AuthNotificationPort,
   AuthNotificationRequest
@@ -99,7 +99,7 @@ function submit(
   loginIdentifier = APPLICANT,
   displayName = "Ada Lovelace"
 ) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     submitRegistrationRequest(tx, tenantId, { loginIdentifier, displayName })
   );
 }
@@ -111,7 +111,7 @@ function approve(
   roleIds: string[] = [],
   enqueued = true
 ) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     approveRegistrationRequest(tx, tenantId, requestId, REVIEWER, NOW, {
       roleIds,
       notifications: stubPort(sent, enqueued),
@@ -183,7 +183,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
   test("the queue masks the address", async () => {
     await submit(TENANT_A);
 
-    const queue = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const queue = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       listPendingRegistrations(tx, TENANT_A)
     );
 
@@ -290,7 +290,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
   test("rejection creates nothing and closes the queue entry", async () => {
     const request = await submit(TENANT_A);
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       rejectRegistrationRequest(tx, TENANT_A, request.requestId!, REVIEWER, NOW)
     );
 
@@ -302,7 +302,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
     `) as { n: number }[];
     expect(identities[0]!.n).toBe(0);
 
-    const queue = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const queue = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       listPendingRegistrations(tx, TENANT_A)
     );
     expect(queue).toEqual([]);
@@ -311,7 +311,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
   test("a rejected applicant can apply again", async () => {
     // The partial unique index covers PENDING rows only, and this is why.
     const first = await submit(TENANT_A);
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       rejectRegistrationRequest(tx, TENANT_A, first.requestId!, REVIEWER, NOW)
     );
 
@@ -324,7 +324,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
   test("approving an already-reviewed request is a no-op", async () => {
     const sent: Sent = [];
     const request = await submit(TENANT_A);
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       rejectRegistrationRequest(tx, TENANT_A, request.requestId!, REVIEWER, NOW)
     );
 
@@ -339,7 +339,7 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
     const sent: Sent = [];
 
     expect(
-      await withTenant(getRuntimeSql(), TENANT_B, (tx) =>
+      await withTenantOrThrow(getRuntimeSql(), TENANT_B, (tx) =>
         listPendingRegistrations(tx, TENANT_B)
       )
     ).toEqual([]);

@@ -1,5 +1,5 @@
 import { enqueueModuleContentPurge } from "../../../lib/edge-cache/content-purge";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { fetchPostTermIds } from "./blog-taxonomy-directory";
@@ -102,7 +102,7 @@ export async function publishDueScheduledPosts(
   const now = options.now ?? new Date();
   const correlationId = options.correlationId;
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {

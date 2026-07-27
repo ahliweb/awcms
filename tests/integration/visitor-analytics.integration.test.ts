@@ -37,7 +37,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { collectVisitorTelemetry } from "../../src/modules/visitor-analytics/application/collector";
 import {
   fetchAnalyticsSummary,
@@ -118,7 +118,7 @@ suite("visitor_analytics module (integration)", () => {
     const runtime = getRuntimeSql();
     await collectHuman(TENANT_A, "/blog/acme/post-1");
 
-    const counts = await withTenant(runtime, TENANT_A, async (tx) => {
+    const counts = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const sessions = (await tx`
         SELECT count(*) AS n FROM awcms_visitor_sessions WHERE tenant_id = ${TENANT_A}
       `) as { n: string }[];
@@ -133,7 +133,7 @@ suite("visitor_analytics module (integration)", () => {
     expect(counts.sessions).toBe(1);
     expect(counts.events).toBe(1);
 
-    const summary = await withTenant(runtime, TENANT_A, (tx) =>
+    const summary = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchAnalyticsSummary(
         tx,
         TENANT_A,
@@ -145,7 +145,7 @@ suite("visitor_analytics module (integration)", () => {
     expect(summary.humanUniqueVisitors).toBe(1);
     expect(summary.botPageviews).toBe(0);
 
-    const realtime = await withTenant(runtime, TENANT_A, (tx) =>
+    const realtime = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchRealtimeStats(tx, TENANT_A, CONFIG.onlineWindowSeconds)
     );
     expect(realtime.onlineHumanCount).toBe(1);
@@ -156,7 +156,7 @@ suite("visitor_analytics module (integration)", () => {
     const runtime = getRuntimeSql();
     await collectHuman(TENANT_A, "/");
 
-    const row = await withTenant(runtime, TENANT_A, async (tx) => {
+    const row = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT ip_address, ip_hash, user_agent_hash, visitor_key_hash, identity_id
         FROM awcms_visitor_sessions WHERE tenant_id = ${TENANT_A} LIMIT 1
@@ -181,7 +181,7 @@ suite("visitor_analytics module (integration)", () => {
     const runtime = getRuntimeSql();
     await collectHuman(TENANT_A, "/only-a");
 
-    const asB = await withTenant(runtime, TENANT_B, async (tx) => {
+    const asB = await withTenantOrThrow(runtime, TENANT_B, async (tx) => {
       const rows = (await tx`
         SELECT count(*) AS n FROM awcms_visit_events
       `) as { n: string }[];
@@ -213,7 +213,7 @@ suite("visitor_analytics module (integration)", () => {
     const runtime = getRuntimeSql();
     await collectHuman(TENANT_A, "/");
 
-    const sessionId = await withTenant(runtime, TENANT_A, async (tx) => {
+    const sessionId = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT id FROM awcms_visitor_sessions WHERE tenant_id = ${TENANT_A} LIMIT 1
       `) as { id: string }[];
@@ -224,7 +224,7 @@ suite("visitor_analytics module (integration)", () => {
     // (tenant_id, visitor_session_id) composite FK — (B, A_session) does not
     // exist in awcms_visitor_sessions(tenant_id, id).
     await assertRejected(
-      withTenant(
+      withTenantOrThrow(
         runtime,
         TENANT_B,
         (tx) =>
@@ -243,7 +243,7 @@ suite("visitor_analytics module (integration)", () => {
     const oldTs = "2000-01-01T00:00:00Z";
 
     // Seed one deliberately-ancient session + event directly.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const sessionRows = (await tx`
         INSERT INTO awcms_visitor_sessions
           (tenant_id, visitor_key_hash, area, first_seen_at, last_seen_at)
@@ -258,7 +258,7 @@ suite("visitor_analytics module (integration)", () => {
       `;
     });
 
-    const result = await withTenant(runtime, TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       purgeVisitorAnalyticsData(tx, TENANT_A, CONFIG, new Date(), NEVER_HELD)
     );
     if (result instanceof Response)
@@ -267,7 +267,7 @@ suite("visitor_analytics module (integration)", () => {
     expect(result.eventsDeleted).toBe(1);
     expect(result.sessionsDeleted).toBe(1);
 
-    const remaining = await withTenant(runtime, TENANT_A, async (tx) => {
+    const remaining = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT count(*) AS n FROM awcms_visit_events WHERE tenant_id = ${TENANT_A}
       `) as { n: string }[];

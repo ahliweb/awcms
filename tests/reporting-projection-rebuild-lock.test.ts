@@ -39,7 +39,7 @@ import type {
   ProjectionCursorStream,
   ProjectionDescriptor
 } from "../src/modules/_shared/module-contract";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { runIncrementalUpdateForTenant } from "../src/modules/reporting/application/projection-incremental-worker";
 import { lockProjectionForWrite } from "../src/modules/reporting/application/projection-lock";
 import { getProjectionMetrics } from "../src/modules/reporting/application/projection-metric-store";
@@ -179,7 +179,7 @@ describeWithDatabase(
     }
 
     async function readMetric(): Promise<number> {
-      const metrics = await withTenant(sql, tenantId, (tx) =>
+      const metrics = await withTenantOrThrow(sql, tenantId, (tx) =>
         getProjectionMetrics(tx, tenantId, PROJECTION_KEY)
       );
 
@@ -320,7 +320,7 @@ describeWithDatabase(
       // its transaction (and, after the fix, the projection lock) open.
       await sleep(500);
 
-      const triggerRun = withTenant(sql, tenantId, (tx) =>
+      const triggerRun = withTenantOrThrow(sql, tenantId, (tx) =>
         triggerOrResumeRebuild(tx, tenantId, DESCRIPTOR, {
           requestedBy: null,
           reason: "Issue #151 reset-mid-pass probe"
@@ -348,7 +348,7 @@ describeWithDatabase(
 
       // Once everything drains, exactly one rebuild owns the projection and
       // the reset it performed is intact.
-      const running = await withTenant(sql, tenantId, (tx) =>
+      const running = await withTenantOrThrow(sql, tenantId, (tx) =>
         findRunningRebuild(tx, tenantId, PROJECTION_KEY)
       );
       expect(running).not.toBeNull();

@@ -15,7 +15,7 @@
  * this function skips it — never double-escalates, and never throws (a
  * lost race is an expected, silent no-op, not a failure).
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   recordCounter,
   recordGauge
@@ -50,7 +50,7 @@ export async function escalateDueTasksForTenant(
   batchLimit: number = DEFAULT_ESCALATION_BATCH_LIMIT,
   correlationId?: string
 ): Promise<EscalateDueTasksResult> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -145,7 +145,7 @@ export async function recordWorkflowBacklogGauges(
   tenantId: string,
   now: Date
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {

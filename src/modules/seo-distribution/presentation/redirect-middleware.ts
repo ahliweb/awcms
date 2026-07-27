@@ -14,7 +14,7 @@
  * SEO composition roots (`discovery-route.ts` / `discovery-providers.ts`).
  */
 import { getDatabaseClient } from "../../../lib/database/client";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { isRedirectEligiblePath } from "../domain/redirect-eligibility";
 import {
@@ -121,7 +121,11 @@ export async function recordPublicNotFound(
       request.headers.get("referer")
     );
 
-    await withTenant(sql, capture.tenantId, async (tx) => {
+    // `withTenantOrThrow`, because this result is DISCARDED. `withTenant`
+    // would hand back a `503` that a bare `await` throws away, and the 404
+    // observation would go unrecorded with nothing said about it — the same
+    // silent-drop shape this whole change exists to remove.
+    await withTenantOrThrow(sql, capture.tenantId, async (tx) => {
       await recordNotFoundObservation(tx, capture.tenantId, {
         normalizedPath: capture.normalizedPath,
         referrerDomain,

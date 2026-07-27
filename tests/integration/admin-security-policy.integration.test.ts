@@ -21,7 +21,7 @@ import {
 } from "bun:test";
 
 import { hashPassword } from "../../src/lib/auth/password";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   fetchEligibleBreakGlassIdentityIds,
   getTenantAuthPolicy,
@@ -86,13 +86,13 @@ async function seedAccount(
 }
 
 function candidates(tenantId: string) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     listBreakGlassCandidates(tx, tenantId)
   );
 }
 
 function eligible(tenantId: string, identityIds: string[]) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     fetchEligibleBreakGlassIdentityIds(tx, tenantId, identityIds)
   );
 }
@@ -148,7 +148,7 @@ suite("admin security break-glass picker (Wave 2 delta auth)", () => {
       identityStatus: "inactive"
     });
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       saveTenantAuthPolicy(tx, TENANT_A, active.tenantUserId, {
         breakGlassIdentityIds: [active.identityId, inactive.identityId]
       })
@@ -156,7 +156,7 @@ suite("admin security break-glass picker (Wave 2 delta auth)", () => {
 
     expect(result.outcome).toBe("saved");
 
-    const stored = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const stored = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       getTenantAuthPolicy(tx, TENANT_A)
     );
 
@@ -166,7 +166,7 @@ suite("admin security break-glass picker (Wave 2 delta auth)", () => {
   test("requiring SSO with no eligible break-glass account is refused", async () => {
     const active = await seedAccount(TENANT_A, "owner@example.com");
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       saveTenantAuthPolicy(tx, TENANT_A, active.tenantUserId, {
         ssoEnabled: true,
         ssoRequired: true,
@@ -179,7 +179,7 @@ suite("admin security break-glass picker (Wave 2 delta auth)", () => {
     // the server will never accept.
     expect(result.outcome).toBe("break_glass_required");
 
-    const stored = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const stored = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       getTenantAuthPolicy(tx, TENANT_A)
     );
     expect(stored.ssoRequired).toBe(false);
@@ -188,7 +188,7 @@ suite("admin security break-glass picker (Wave 2 delta auth)", () => {
   test("requiring SSO succeeds once an eligible account is named", async () => {
     const active = await seedAccount(TENANT_A, "owner@example.com");
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       saveTenantAuthPolicy(tx, TENANT_A, active.tenantUserId, {
         ssoEnabled: true,
         ssoRequired: true,

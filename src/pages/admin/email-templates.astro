@@ -17,7 +17,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listEmailTemplates } from "../../modules/email/application/email-template-directory";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../../modules/email/domain/email-template-categories";
@@ -42,7 +42,7 @@ let loadError = false;
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
       return (await listEmailTemplates(tx, ssr.tenantId, {
         includeInactive: true
       })) as TemplateRow[];

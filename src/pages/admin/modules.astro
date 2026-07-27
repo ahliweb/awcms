@@ -23,7 +23,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { fetchTenantModuleEntries } from "../../modules/module-management/application/tenant-module-lifecycle";
 
@@ -53,7 +53,7 @@ let loadError = false;
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
       return (await fetchTenantModuleEntries(tx, ssr.tenantId)) as ModuleRow[];
     });
     if (result instanceof Response) loadError = true;

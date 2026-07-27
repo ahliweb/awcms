@@ -13,7 +13,10 @@
  * resolution (unlike the public `/theming/{tenantCode}/tokens.css` stylesheet).
  */
 import { getDatabaseClient } from "../../../lib/database/client";
-import { withTenant } from "../../../lib/database/tenant-context";
+import {
+  withTenant,
+  withTenantOrThrow
+} from "../../../lib/database/tenant-context";
 import { fetchVersionById } from "../application/theme-config-directory";
 import { findActivePreviewSession } from "../application/theme-preview-directory";
 import { resolveVersionThemeCss } from "../application/theme-render-resolver";
@@ -49,7 +52,11 @@ export async function resolvePreviewContext(
   const sql = getDatabaseClient();
   const tokenHash = hashPreviewToken(parsed.rawToken);
 
-  return withTenant(sql, parsed.tenantId, async (tx) => {
+  // `withTenantOrThrow`, not a narrow-to-null: `null` here means "no such
+  // preview" and the page turns it into a 404. A refused transaction is not
+  // that, and telling an operator their draft expired when the database is
+  // shedding load sends them to debug the wrong thing.
+  return withTenantOrThrow(sql, parsed.tenantId, async (tx) => {
     const session = await findActivePreviewSession(tx, tokenHash, now);
     if (!session) return null;
     const version = await fetchVersionById(
@@ -106,6 +113,10 @@ export async function serveThemePreviewTokensCss(
     return resolveVersionThemeCss(version).css;
   });
 
+  // Same reasoning as `resolvePreviewContext`, expressed the other way: here
+  // the function DOES return a `Response`, so the 503 is simply forwarded
+  // rather than collapsed into the 404 that means "expired".
+  if (css instanceof Response) return css;
   if (css === null) return notFound();
 
   return new Response(css, {

@@ -56,7 +56,7 @@ import {
   type OAuthRequestDenyReason
 } from "../domain/oidc-policy";
 import { isAutoLinkAllowedForProvider } from "../domain/tenant-sso-policy";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolveChallengeTtlSec } from "../../../lib/auth/mfa-config";
 import { createMfaChallenge, findActiveMfaFactor } from "./mfa";
 import {
@@ -629,7 +629,7 @@ export async function completeTenantSsoCallback(
 
   // Resolve the provider first (need its id to look up the state row keyed by
   // provider_id, and to re-check enabled).
-  const provider = await withTenant(sql, tenantId, (tx) =>
+  const provider = await withTenantOrThrow(sql, tenantId, (tx) =>
     fetchAuthProviderRowByKey(tx, tenantId, providerKey)
   );
 
@@ -639,7 +639,7 @@ export async function completeTenantSsoCallback(
 
   const providerId = provider.id;
 
-  const consumeResult = await withTenant(sql, tenantId, (tx) =>
+  const consumeResult = await withTenantOrThrow(sql, tenantId, (tx) =>
     consumeSsoOAuthRequest(tx, tenantId, providerId, token, now)
   );
 
@@ -701,7 +701,7 @@ export async function completeTenantSsoCallback(
     return { outcome: "error", code: verifyResult.code };
   }
 
-  const finalResult = await withTenant(sql, tenantId, async (tx) => {
+  const finalResult = await withTenantOrThrow(sql, tenantId, async (tx) => {
     if (consumeResult.purpose === "link") {
       const linkIdentityId = consumeResult.identityId;
 

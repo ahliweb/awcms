@@ -36,7 +36,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   fetchThemeTenantState,
   insertPublishedVersion,
@@ -113,10 +113,10 @@ suite("theming module (integration)", () => {
     const runtime = getRuntimeSql();
 
     // Save a draft, then publish it (version 1).
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       saveThemeDraft(tx, TENANT_A, ACTOR, defaultTheme, validConfig(), noAudit)
     );
-    const pub1 = await withTenant(runtime, TENANT_A, (tx) =>
+    const pub1 = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
     expect(pub1.ok).toBe(true);
@@ -124,7 +124,7 @@ suite("theming module (integration)", () => {
     expect(pub1.version.versionNumber).toBe(1);
 
     // A fresh draft + publish → version 2.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       saveThemeDraft(
         tx,
         TENANT_A,
@@ -134,7 +134,7 @@ suite("theming module (integration)", () => {
         noAudit
       )
     );
-    const pub2 = await withTenant(runtime, TENANT_A, (tx) =>
+    const pub2 = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
     expect(pub2.ok).toBe(true);
@@ -142,30 +142,30 @@ suite("theming module (integration)", () => {
     expect(pub2.version.versionNumber).toBe(2);
 
     // The active pointer is the latest published version.
-    const state = await withTenant(runtime, TENANT_A, (tx) =>
+    const state = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchThemeTenantState(tx, TENANT_A)
     );
     expect(state.activeThemeKey).toBe("aria");
     expect(state.activeVersionId).toBe(pub2.version.id);
 
     // rollback to v1, then retire.
-    const roll = await withTenant(runtime, TENANT_A, (tx) =>
+    const roll = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       rollbackThemeVersion(tx, TENANT_A, ACTOR, pub1.version.id, noAudit)
     );
     expect(roll.ok).toBe(true);
     if (!roll.ok) return;
     expect(roll.version.id).toBe(pub1.version.id);
 
-    const rolledState = await withTenant(runtime, TENANT_A, (tx) =>
+    const rolledState = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchThemeTenantState(tx, TENANT_A)
     );
     expect(rolledState.activeVersionId).toBe(pub1.version.id);
 
-    const retire = await withTenant(runtime, TENANT_A, (tx) =>
+    const retire = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       retireActiveTheme(tx, TENANT_A, ACTOR, noAudit)
     );
     expect(retire.previousThemeKey).toBe("aria");
-    const retiredState = await withTenant(runtime, TENANT_A, (tx) =>
+    const retiredState = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchThemeTenantState(tx, TENANT_A)
     );
     expect(retiredState.activeVersionId).toBeNull();
@@ -173,13 +173,13 @@ suite("theming module (integration)", () => {
 
   test("rollback to a foreign/nonexistent version id is refused (INVALID_TARGET)", async () => {
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       saveThemeDraft(tx, TENANT_A, ACTOR, defaultTheme, validConfig(), noAudit)
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
-    const bad = await withTenant(runtime, TENANT_A, (tx) =>
+    const bad = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       rollbackThemeVersion(
         tx,
         TENANT_A,
@@ -193,10 +193,10 @@ suite("theming module (integration)", () => {
 
   test("a PUBLISHED version row is IMMUTABLE — UPDATE and DELETE both raise (sql/033 trigger)", async () => {
     const runtime = getRuntimeSql();
-    const versionNumber = await withTenant(runtime, TENANT_A, (tx) =>
+    const versionNumber = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       nextPublishedVersionNumber(tx, TENANT_A)
     );
-    const published = await withTenant(runtime, TENANT_A, (tx) =>
+    const published = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       insertPublishedVersion(
         tx,
         TENANT_A,
@@ -210,7 +210,7 @@ suite("theming module (integration)", () => {
     );
 
     await assertRejected(
-      withTenant(
+      withTenantOrThrow(
         runtime,
         TENANT_A,
         (tx) =>
@@ -219,7 +219,7 @@ suite("theming module (integration)", () => {
       "UPDATE of a published version row"
     );
     await assertRejected(
-      withTenant(
+      withTenantOrThrow(
         runtime,
         TENANT_A,
         (tx) =>
@@ -244,15 +244,15 @@ suite("theming module (integration)", () => {
     const app = getAppRoleSql();
 
     // Tenant A publishes a version (writes config_version + state rows).
-    await withTenant(app, TENANT_A, (tx) =>
+    await withTenantOrThrow(app, TENANT_A, (tx) =>
       saveThemeDraft(tx, TENANT_A, ACTOR, defaultTheme, validConfig(), noAudit)
     );
-    await withTenant(app, TENANT_A, (tx) =>
+    await withTenantOrThrow(app, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
 
     // A really did write its own rows.
-    const aVersions = (await withTenant(
+    const aVersions = (await withTenantOrThrow(
       app,
       TENANT_A,
       (tx) => tx`SELECT count(*)::int AS c FROM awcms_theming_config_versions`
@@ -260,13 +260,13 @@ suite("theming module (integration)", () => {
     expect(aVersions[0]!.c).toBeGreaterThan(0);
 
     // Under B's tenant context, A's version + state rows are simply not visible.
-    const bVersions = (await withTenant(
+    const bVersions = (await withTenantOrThrow(
       app,
       TENANT_B,
       (tx) => tx`SELECT count(*)::int AS c FROM awcms_theming_config_versions`
     )) as { c: number }[];
     expect(bVersions[0]!.c).toBe(0);
-    const bState = (await withTenant(
+    const bState = (await withTenantOrThrow(
       app,
       TENANT_B,
       (tx) => tx`SELECT count(*)::int AS c FROM awcms_theming_tenant_state`
@@ -279,7 +279,7 @@ suite("theming module (integration)", () => {
     const now = new Date();
 
     // A draft version to attach the preview to.
-    const draft = await withTenant(runtime, TENANT_A, (tx) =>
+    const draft = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       upsertDraftVersion(
         tx,
         TENANT_A,
@@ -294,7 +294,7 @@ suite("theming module (integration)", () => {
     // A live session resolves; an expired one is filtered out by `expires_at`.
     const liveRaw = "1".repeat(64);
     const expiredRaw = "2".repeat(64);
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await createPreviewSession(
         tx,
         TENANT_A,
@@ -313,18 +313,18 @@ suite("theming module (integration)", () => {
       );
     });
 
-    const live = await withTenant(runtime, TENANT_A, (tx) =>
+    const live = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       findActivePreviewSession(tx, hashPreviewToken(liveRaw), now)
     );
     expect(live?.versionId).toBe(draft.id);
 
-    const expired = await withTenant(runtime, TENANT_A, (tx) =>
+    const expired = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       findActivePreviewSession(tx, hashPreviewToken(expiredRaw), now)
     );
     expect(expired).toBeNull();
 
     // A preview session created for A is invisible under B's tenant context.
-    const crossTenant = await withTenant(runtime, TENANT_B, (tx) =>
+    const crossTenant = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       findActivePreviewSession(tx, hashPreviewToken(liveRaw), now)
     );
     expect(crossTenant).toBeNull();
@@ -332,13 +332,13 @@ suite("theming module (integration)", () => {
 
   test("published version history lists newest-first and only published rows", async () => {
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       saveThemeDraft(tx, TENANT_A, ACTOR, defaultTheme, validConfig(), noAudit)
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       saveThemeDraft(
         tx,
         TENANT_A,
@@ -348,10 +348,10 @@ suite("theming module (integration)", () => {
         noAudit
       )
     );
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       publishThemeDraft(tx, TENANT_A, ACTOR, noAudit)
     );
-    const history = await withTenant(runtime, TENANT_A, (tx) =>
+    const history = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       listPublishedVersions(tx, TENANT_A, 50)
     );
     expect(history.map((v) => v.versionNumber)).toEqual([2, 1]);

@@ -123,6 +123,13 @@ export const GET: APIRoute = async ({ request, cookies }) => {
     };
   });
 
+  // The pool gate refused before the transaction ran — forward its own
+  // `503 DATABASE_BUSY` (`Retry-After` included) rather than reading fields
+  // off it. Narrowing here is what the widened return type is for.
+  if (result instanceof Response) {
+    return result;
+  }
+
   if (result.kind === "response") {
     return result.response;
   }

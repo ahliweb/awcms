@@ -21,7 +21,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
@@ -55,7 +55,7 @@ let loadFailed = false;
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) =>
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
       buildSidebarEditorModel(await fetchSidebarArrangement(tx, ssr.tenantId))
     );
 

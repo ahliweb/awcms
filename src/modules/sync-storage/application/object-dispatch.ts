@@ -36,7 +36,7 @@
  * "provider opsional... fitur off tidak menghentikan aplikasi").
  */
 import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import { evaluateObjectRetry } from "../domain/object-queue";
 import {
@@ -86,7 +86,7 @@ async function claimEligibleEntries(
     now.getTime() + OBJECT_DISPATCH_LEASE_MINUTES * 60_000
   );
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -138,7 +138,7 @@ async function finalizeSent(
   tenantId: string,
   id: string
 ): Promise<void> {
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`
@@ -161,7 +161,7 @@ async function finalizeFailure(
   const evaluation = evaluateObjectRetry(currentRetryCount, now);
 
   if (evaluation.eligible) {
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => tx`
@@ -176,7 +176,7 @@ async function finalizeFailure(
     return { eligible: true };
   }
 
-  await withTenant(
+  await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`

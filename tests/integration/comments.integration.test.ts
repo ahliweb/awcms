@@ -7,7 +7,7 @@ import {
   test
 } from "bun:test";
 
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { getRegisteredCommentableResources } from "../../src/modules/comments/presentation/commentable-resources";
 import { resolvePublishedCommentableResource } from "../../src/modules/comments/application/commentable-resource-engine";
 import {
@@ -79,7 +79,7 @@ async function submit(
   postId: string,
   body: string
 ): Promise<string | null> {
-  return withTenant(getRuntimeSql(), tenantId, async (tx) => {
+  return withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
     const resolved = await resolvePublishedCommentableResource(
       tx,
       tenantId,
@@ -117,7 +117,7 @@ async function submit(
 }
 
 async function publicList(tenantId: string, postId: string): Promise<number> {
-  return withTenant(getRuntimeSql(), tenantId, async (tx) => {
+  return withTenantOrThrow(getRuntimeSql(), tenantId, async (tx) => {
     const resolved = await resolvePublishedCommentableResource(
       tx,
       tenantId,
@@ -159,7 +159,7 @@ suite("comments integration (ADR-0041)", () => {
     // Not public until approved.
     expect(await publicList(TENANT_A, post)).toBe(0);
 
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       moderateComment(
         tx,
         TENANT_A,
@@ -171,21 +171,30 @@ suite("comments integration (ADR-0041)", () => {
     );
 
     // Now visible, and body is escaped safe HTML (no raw <b>).
-    const items = await withTenant(getRuntimeSql(), TENANT_A, async (tx) => {
-      const resolved = await resolvePublishedCommentableResource(
-        tx,
-        TENANT_A,
-        {
-          resourceType: "blog_post",
-          resourceId: post,
-          locale: "en",
-          tenantCode: "tenant-a"
-        },
-        getRegisteredCommentableResources()
-      );
-      const thread = await getOrCreateThread(tx, TENANT_A, resolved!, settings);
-      return (await listApprovedComments(tx, TENANT_A, thread.id, {})).items;
-    });
+    const items = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_A,
+      async (tx) => {
+        const resolved = await resolvePublishedCommentableResource(
+          tx,
+          TENANT_A,
+          {
+            resourceType: "blog_post",
+            resourceId: post,
+            locale: "en",
+            tenantCode: "tenant-a"
+          },
+          getRegisteredCommentableResources()
+        );
+        const thread = await getOrCreateThread(
+          tx,
+          TENANT_A,
+          resolved!,
+          settings
+        );
+        return (await listApprovedComments(tx, TENANT_A, thread.id, {})).items;
+      }
+    );
     expect(items).toHaveLength(1);
     expect(items[0]!.bodyHtml).toContain("&lt;b&gt;");
     expect(items[0]!.bodyHtml).not.toContain("<b>");
@@ -212,7 +221,7 @@ suite("comments integration (ADR-0041)", () => {
   test("RLS: tenant B cannot see tenant A's comments (IDOR/cross-tenant)", async () => {
     const postA = await insertPost(TENANT_A, { slug: "a1" });
     const commentId = await submit(TENANT_A, postA, "tenant a comment");
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       moderateComment(
         tx,
         TENANT_A,
@@ -223,19 +232,23 @@ suite("comments integration (ADR-0041)", () => {
       )
     );
     // Scoped to tenant B, the comment row is invisible under RLS.
-    const seenByB = await withTenant(getRuntimeSql(), TENANT_B, async (tx) => {
-      const rows = (await tx`
+    const seenByB = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_B,
+      async (tx) => {
+        const rows = (await tx`
         SELECT count(*)::int AS count FROM awcms_comments_comments
       `) as { count: number }[];
-      return rows[0]!.count;
-    });
+        return rows[0]!.count;
+      }
+    );
     expect(seenByB).toBe(0);
   }, 20000);
 
   test("approve writes a same-commit domain-event outbox row", async () => {
     const post = await insertPost(TENANT_A, { slug: "evt" });
     const commentId = await submit(TENANT_A, post, "event body");
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       moderateComment(
         tx,
         TENANT_A,
@@ -245,20 +258,24 @@ suite("comments integration (ADR-0041)", () => {
         async () => {}
       )
     );
-    const events = await withTenant(getRuntimeSql(), TENANT_A, async (tx) => {
-      const rows = (await tx`
+    const events = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_A,
+      async (tx) => {
+        const rows = (await tx`
         SELECT event_type FROM awcms_domain_events
         WHERE event_type = 'awcms.comments.comment.approved'
       `) as { event_type: string }[];
-      return rows.length;
-    });
+        return rows.length;
+      }
+    );
     expect(events).toBeGreaterThanOrEqual(1);
   }, 20000);
 
   test("author self-delete within window soft-deletes (row retained, hidden)", async () => {
     const post = await insertPost(TENANT_A, { slug: "sd" });
     const commentId = await submit(TENANT_A, post, "delete me");
-    await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       moderateComment(
         tx,
         TENANT_A,
@@ -270,7 +287,7 @@ suite("comments integration (ADR-0041)", () => {
     );
     expect(await publicList(TENANT_A, post)).toBe(1);
 
-    const del = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const del = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       requestCommentDeletion(tx, TENANT_A, commentId!, {
         userId: null,
         ipHash: "iphash"
@@ -280,12 +297,16 @@ suite("comments integration (ADR-0041)", () => {
     expect(await publicList(TENANT_A, post)).toBe(0);
 
     // Row retained (soft delete), status = deleted.
-    const status = await withTenant(getRuntimeSql(), TENANT_A, async (tx) => {
-      const rows = (await tx`
+    const status = await withTenantOrThrow(
+      getRuntimeSql(),
+      TENANT_A,
+      async (tx) => {
+        const rows = (await tx`
         SELECT status FROM awcms_comments_comments WHERE id = ${commentId}
       `) as { status: string }[];
-      return rows[0]?.status;
-    });
+        return rows[0]?.status;
+      }
+    );
     expect(status).toBe("deleted");
   }, 20000);
 });

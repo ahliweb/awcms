@@ -50,8 +50,14 @@ const ROUTES_ROOT = "src/pages/api";
 const SCRIPTS_ROOT = "scripts";
 export const REGISTRY_PATH = "docs/awcms/work-class-registry.generated.json";
 
-/** `withTenant(` and `withTenant<T>(` — the generic form is what the factory itself writes. */
-const WITH_TENANT_CALL = /\bwithTenant\s*(?:<[^()]*>)?\s*\(/;
+/**
+ * `withTenant(`, `withTenant<T>(` (the generic form is what the factory itself
+ * writes), and `withTenantOrThrow(`. Both names open the same tenant
+ * transaction through the same pool gate, so both declare a work class and
+ * both belong in the registry — a pattern that matched only one of them would
+ * make a route or job disappear from the snapshot by renaming its call.
+ */
+const WITH_TENANT_CALL = /\bwithTenant(?:OrThrow)?\s*(?:<[^()]*>)?\s*\(/;
 const DEFINE_TENANT_ROUTE_CALL = /\bdefineTenantRoute\s*(?:<[^()]*>)?\s*\(/;
 const WORK_CLASS_LITERAL = /workClass\s*:\s*"([a-z_]+)"/g;
 

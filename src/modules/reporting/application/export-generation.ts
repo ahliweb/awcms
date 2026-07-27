@@ -11,7 +11,7 @@
  * silence (same "freshness must reflect reality" principle this issue
  * applies to projections applies here too).
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import type { ProjectionDescriptor } from "../../_shared/module-contract";
 import { getProjectionMetrics } from "./projection-metric-store";
 import { recordExportRun, type ExportRunRow } from "./export-run-store";
@@ -48,7 +48,7 @@ export async function generateProjectionExport(
   input: GenerateExportInput,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ExportRunRow> {
-  const metrics = await withTenant(sql, input.tenantId, (tx) =>
+  const metrics = await withTenantOrThrow(sql, input.tenantId, (tx) =>
     getProjectionMetrics(tx, input.tenantId, input.descriptor.key)
   );
 
@@ -76,7 +76,7 @@ export async function generateProjectionExport(
       Date.now() + retentionDays * 24 * 60 * 60 * 1000
     );
 
-    return withTenant(sql, input.tenantId, (tx) =>
+    return withTenantOrThrow(sql, input.tenantId, (tx) =>
       recordExportRun(tx, input.tenantId, {
         scheduledExportId: input.scheduledExportId,
         projectionKey: input.descriptor.key,
@@ -94,7 +94,7 @@ export async function generateProjectionExport(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    return withTenant(sql, input.tenantId, (tx) =>
+    return withTenantOrThrow(sql, input.tenantId, (tx) =>
       recordExportRun(tx, input.tenantId, {
         scheduledExportId: input.scheduledExportId,
         projectionKey: input.descriptor.key,

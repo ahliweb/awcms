@@ -31,7 +31,7 @@
  * see nothing rather than crossing tenants.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import {
   COMMENTS_DEFAULT_ANONYMIZE_DAYS,
@@ -86,7 +86,7 @@ async function main() {
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await withTenant(sql, tenant.id, (tx) =>
+        const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
           anonymizeAgedComments(tx, tenant.id, legalHoldGuardPortAdapter, {
             retentionDays,
             now
@@ -108,7 +108,7 @@ async function main() {
       }
 
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const result = await withTenant(sql, tenant.id, (tx) =>
+        const result = await withTenantOrThrow(sql, tenant.id, (tx) =>
           purgeUnconfirmedReplySubscriptions(tx, tenant.id, { now })
         );
 

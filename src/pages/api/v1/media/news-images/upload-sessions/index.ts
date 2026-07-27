@@ -135,6 +135,11 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     }
   );
 
+  // Pool-gate refusal — forwarded as-is (see the note on `withTenant`).
+  if (txResult instanceof Response) {
+    return txResult;
+  }
+
   if (txResult.kind === "response") {
     return txResult.response;
   }

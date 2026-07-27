@@ -42,7 +42,7 @@ import {
   resetHandlerDatabase,
   teardownHandlerDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import { loadActivePolicies } from "../../src/modules/identity-access/application/policy-cache";
 import { resetPolicyCache } from "../../src/modules/identity-access/application/policy-cache";
@@ -394,7 +394,7 @@ suite("dynamic ABAC policy evaluator (Issue #179)", () => {
       // And the compiler/cache loads ZERO policies for the tenant — the flat row
       // is never even loaded.
       const client = getHandlerDatabaseClient();
-      const active = await withTenant(client, owner.tenantId, (tx) =>
+      const active = await withTenantOrThrow(client, owner.tenantId, (tx) =>
         loadActivePolicies(tx, owner.tenantId)
       );
       expect(active.length).toBe(0);
@@ -457,10 +457,10 @@ suite("dynamic ABAC policy evaluator (Issue #179)", () => {
       `;
 
       const client = getHandlerDatabaseClient();
-      const aPolicies = await withTenant(client, owner.tenantId, (tx) =>
+      const aPolicies = await withTenantOrThrow(client, owner.tenantId, (tx) =>
         loadActivePolicies(tx, owner.tenantId)
       );
-      const bPolicies = await withTenant(client, TENANT_B_ID, (tx) =>
+      const bPolicies = await withTenantOrThrow(client, TENANT_B_ID, (tx) =>
         loadActivePolicies(tx, TENANT_B_ID)
       );
 

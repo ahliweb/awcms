@@ -63,7 +63,7 @@
  *    pass and both paths would apply the same delta. See
  *    `projection-lock.ts`'s header for the full argument.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   fetchActiveTenants,
   runBoundedBatches
@@ -234,7 +234,7 @@ async function runRebuildStreamPass(
   );
   const selectColumns = Array.from(new Set([cursorColumn, ...matchColumns]));
 
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -335,7 +335,7 @@ export async function continueRebuildPasses(
   runId: string,
   maxPasses?: number
 ): Promise<ContinueRebuildResult> {
-  const run = await withTenant(
+  const run = await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => getRebuildRunById(tx, tenantId, runId),
@@ -380,7 +380,7 @@ export async function continueRebuildPasses(
       return { status: "in_progress", rowsProcessedThisInvocation };
     }
 
-    const stillRunning = await withTenant(
+    const stillRunning = await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => getRebuildRunById(tx, tenantId, runId),
@@ -394,7 +394,7 @@ export async function continueRebuildPasses(
       };
     }
 
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => completeRebuildRun(tx, tenantId, runId),
@@ -403,7 +403,7 @@ export async function continueRebuildPasses(
     return { status: "completed", rowsProcessedThisInvocation };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await withTenant(
+    await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => failRebuildRun(tx, tenantId, runId, message),
@@ -432,7 +432,7 @@ export async function continueAllRunningRebuilds(
 
   for (const tenant of tenants) {
     for (const descriptor of descriptors) {
-      const running = await withTenant(
+      const running = await withTenantOrThrow(
         sql,
         tenant.id,
         (tx) => findRunningRebuild(tx, tenant.id, descriptor.key),

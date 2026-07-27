@@ -46,8 +46,11 @@ import path from "node:path";
 
 const ROUTES_ROOT = "src/pages/api";
 
-/** Matches `withTenant(` AND `withTenant<T>(`. */
-const WITH_TENANT_CALL_PATTERN = /\bwithTenant\s*(?:<[^()]*>)?\s*\(/;
+/** Matches `withTenant(`, `withTenant<T>(` AND `withTenantOrThrow(` — a route
+ * that opens its own tenant transaction bypasses the factory under either
+ * name, so neither may slip past this gate. */
+const WITH_TENANT_CALL_PATTERN =
+  /\bwithTenant(?:OrThrow)?\s*(?:<[^()]*>)?\s*\(/;
 
 /**
  * Routes that still open their own transaction, measured at `b9931594`.

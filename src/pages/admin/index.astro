@@ -37,7 +37,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { fetchTenantActivityReport } from "../../modules/reporting/application/tenant-activity-report";
 import { fetchAccessAuditReport } from "../../modules/reporting/application/access-audit-report";
@@ -65,7 +65,7 @@ let loadError = false;
 
 if (hasDashboardAccess) {
   try {
-    const result = await withTenant(
+    const result = await withTenantOrThrow(
       getDatabaseClient(),
       ssr.tenantId,
       async (tx) => ({

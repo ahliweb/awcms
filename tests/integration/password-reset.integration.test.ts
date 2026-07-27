@@ -34,7 +34,7 @@ import {
 
 import { hashPassword, verifyPassword } from "../../src/lib/auth/password";
 import { hashResetToken } from "../../src/lib/auth/reset-token";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import type {
   AuthNotificationPort,
   AuthNotificationRequest
@@ -156,7 +156,7 @@ function request(
   notifications: AuthNotificationPort,
   now: Date = NOW
 ) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     requestPasswordReset(tx, tenantId, loginIdentifier, now, {
       tokenTtlMinutes: 30,
       resetUrlBase: "https://awcms.test/reset-password",
@@ -166,7 +166,7 @@ function request(
 }
 
 function complete(tenantId: string, token: string, now: Date = NOW) {
-  return withTenant(getRuntimeSql(), tenantId, (tx) =>
+  return withTenantOrThrow(getRuntimeSql(), tenantId, (tx) =>
     completePasswordReset(tx, tenantId, token, NEW_PASSWORD, now)
   );
 }
@@ -515,7 +515,7 @@ suite("password reset integration (Wave 2 delta auth)", () => {
       )
     `;
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       requestPasswordReset(tx, TENANT_A, IDENTIFIER, NOW, {
         tokenTtlMinutes: 30,
         resetUrlBase: "https://awcms.test/reset-password",
@@ -550,7 +550,7 @@ suite("password reset integration (Wave 2 delta auth)", () => {
     // told nothing, and the operator gets a distinct outcome to act on.
     await seedAccount(TENANT_A);
 
-    const result = await withTenant(getRuntimeSql(), TENANT_A, (tx) =>
+    const result = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       requestPasswordReset(tx, TENANT_A, IDENTIFIER, NOW, {
         tokenTtlMinutes: 30,
         resetUrlBase: "https://awcms.test/reset-password",

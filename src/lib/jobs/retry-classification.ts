@@ -25,7 +25,13 @@
  * (class `08`), insufficient-resources (class `53`), and operator
  * intervention (class `57`, e.g. `57P03` cannot_connect_now during a
  * restart) as retryable — transient infra conditions, not data problems.
+ *
+ * `DatabaseBusyError` is imported rather than duplicated, unlike the SQLSTATE
+ * lists above: it is an exported type with one construction site, so there is
+ * no internal detail to leak and nothing that could drift out of step.
  */
+import { DatabaseBusyError } from "../database/tenant-context";
+
 export type RetryClassification = "retryable" | "not_retryable" | "unknown";
 
 /** Specific SQLSTATEs known to be safe/expected to retry, regardless of class. */
@@ -57,6 +63,14 @@ const RETRYABLE_NETWORK_ERROR_PATTERN =
  * "we don't have a rule for this yet".
  */
 export function classifyError(error: unknown): RetryClassification {
+  // The database itself declined to start the work and named a `Retry-After`.
+  // Nothing about the job's own data is wrong, so this is the most clearly
+  // retryable condition the runner can see — and it must not fall through to
+  // `"unknown"`, which is what an operator reads as "no rule for this yet".
+  if (error instanceof DatabaseBusyError) {
+    return "retryable";
+  }
+
   if (error instanceof Bun.SQL.PostgresError) {
     const sqlstate = String(error.errno ?? error.code ?? "");
 

@@ -72,7 +72,7 @@
  * for one candidate is deferred (counted, logged, left for the next run) —
  * it never aborts the rest of that tenant's cleanup loop.
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { fetchActiveTenants } from "../../../lib/jobs/batching";
 import {
   categorizeNewsMediaReconciliation,
@@ -235,7 +235,7 @@ async function cleanupExpiredPending(
       // already moved this row out of pending_upload/uploaded, the guarded
       // UPDATE matches zero rows and we skip it entirely: never touch R2
       // for a row that is genuinely still in flight.
-      const claimed = await withTenant(
+      const claimed = await withTenantOrThrow(
         sql,
         tenantId,
         (tx) =>
@@ -258,7 +258,7 @@ async function cleanupExpiredPending(
       continue;
     }
 
-    const purged = await withTenant(
+    const purged = await withTenantOrThrow(
       sql,
       tenantId,
       (tx) =>
@@ -304,7 +304,7 @@ async function cleanupStaleOrphaned(
       continue;
     }
 
-    const softDeleted = await withTenant(
+    const softDeleted = await withTenantOrThrow(
       sql,
       tenantId,
       (tx) =>
@@ -345,7 +345,7 @@ async function cleanupOrphanInR2(
     // `objectKeyExistsForTenant` header for exactly why this MUST be a
     // fresh, targeted point lookup immediately before deleting, not a reuse
     // of the earlier bulk snapshot.
-    const stillOrphan = !(await withTenant(
+    const stillOrphan = !(await withTenantOrThrow(
       sql,
       tenantId,
       (tx) => objectKeyExistsForTenant(tx, tenantId, entry.objectKey),
@@ -390,7 +390,7 @@ export async function reconcileNewsMediaForTenant(
   const dryRun = options.dryRun ?? false;
   const signal = options.signal;
 
-  const snapshotRows = await withTenant(
+  const snapshotRows = await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => fetchNewsMediaObjectsForReconciliation(tx, tenantId),

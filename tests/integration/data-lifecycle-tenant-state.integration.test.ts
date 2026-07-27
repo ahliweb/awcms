@@ -33,7 +33,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import {
   createLegalHold,
   fetchActiveLegalHoldsForPlanning,
@@ -96,7 +96,7 @@ suite("data_lifecycle module (integration)", () => {
 
   test("create + list + fetchActive round-trip, tenant-scoped", async () => {
     const runtime = getRuntimeSql();
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
     );
     if (created instanceof Response || !created.ok) {
@@ -105,7 +105,7 @@ suite("data_lifecycle module (integration)", () => {
     expect(created.hold.status).toBe("active");
     expect(created.hold.tenantId).toBe(TENANT_A);
 
-    const active = await withTenant(runtime, TENANT_A, (tx) =>
+    const active = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchActiveLegalHoldsForPlanning(tx, TENANT_A)
     );
     if (active instanceof Response) throw new Error("unexpected 503");
@@ -119,7 +119,7 @@ suite("data_lifecycle module (integration)", () => {
       return;
     }
     const runtime = getRuntimeSql();
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
     );
 
@@ -131,7 +131,7 @@ suite("data_lifecycle module (integration)", () => {
     expect(noContext).toHaveLength(0);
 
     // Tenant B's context sees none of tenant A's holds.
-    const asB = await withTenant(app, TENANT_B, async (tx) => {
+    const asB = await withTenantOrThrow(app, TENANT_B, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_data_lifecycle_legal_holds
       `) as { n: number }[];
@@ -140,7 +140,7 @@ suite("data_lifecycle module (integration)", () => {
     expect(asB).toBe(0);
 
     // Tenant A's own context DOES see its hold.
-    const asA = await withTenant(app, TENANT_A, async (tx) => {
+    const asA = await withTenantOrThrow(app, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_data_lifecycle_legal_holds
       `) as { n: number }[];
@@ -153,7 +153,7 @@ suite("data_lifecycle module (integration)", () => {
     const runtime = getRuntimeSql();
 
     // Seed one session + one old visit event for tenant A (past the 90d cutoff).
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const oldTs = daysAgo(200);
       const sessionRows = (await tx`
         INSERT INTO awcms_visitor_sessions
@@ -169,7 +169,7 @@ suite("data_lifecycle module (integration)", () => {
     });
 
     // Create an ACTIVE hold scoped to visitor_analytics.visit_events.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createLegalHold(
         tx,
         TENANT_A,
@@ -179,7 +179,7 @@ suite("data_lifecycle module (integration)", () => {
     );
 
     // Purge while held: step-1 events DELETE is skipped.
-    const held = await withTenant(runtime, TENANT_A, (tx) =>
+    const held = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       purgeVisitorAnalyticsData(
         tx,
         TENANT_A,
@@ -191,16 +191,20 @@ suite("data_lifecycle module (integration)", () => {
     if (held instanceof Response) throw new Error("unexpected 503 (held run)");
     expect(held.eventsDeleted).toBe(0);
 
-    const stillThere = await withTenant(runtime, TENANT_A, async (tx) => {
-      const rows = (await tx`
+    const stillThere = await withTenantOrThrow(
+      runtime,
+      TENANT_A,
+      async (tx) => {
+        const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_visit_events WHERE tenant_id = ${TENANT_A}
       `) as { n: number }[];
-      return rows[0]!.n;
-    });
+        return rows[0]!.n;
+      }
+    );
     expect(stillThere).toBe(1);
 
     // Release every active hold for A, then re-run: the event is now purged.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const active = await fetchActiveLegalHoldsForPlanning(tx, TENANT_A);
       for (const hold of active) {
         await releaseLegalHold(tx, TENANT_A, ACTOR, hold.id, {
@@ -209,7 +213,7 @@ suite("data_lifecycle module (integration)", () => {
       }
     });
 
-    const unblocked = await withTenant(runtime, TENANT_A, (tx) =>
+    const unblocked = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       purgeVisitorAnalyticsData(
         tx,
         TENANT_A,
@@ -231,7 +235,7 @@ suite("data_lifecycle module (integration)", () => {
     // rollup — absent a hold, step 2 clears the PII, step 3 deletes the session,
     // step 4 deletes the rollup. (No event, so this is distinct from the prior
     // test where the event transitively protected the session.)
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await tx`
         INSERT INTO awcms_visitor_sessions
           (tenant_id, visitor_key_hash, area, first_seen_at, last_seen_at,
@@ -247,11 +251,11 @@ suite("data_lifecycle module (integration)", () => {
 
     // A TENANT-WIDE hold (descriptorKey null) must cover visit_events too, so
     // the whole purge is skipped.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
     );
 
-    const held = await withTenant(runtime, TENANT_A, (tx) =>
+    const held = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       purgeVisitorAnalyticsData(
         tx,
         TENANT_A,
@@ -269,7 +273,7 @@ suite("data_lifecycle module (integration)", () => {
     });
 
     // The PII column is physically untouched, and both rows still exist.
-    const preserved = await withTenant(runtime, TENANT_A, async (tx) => {
+    const preserved = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const s = (await tx`
         SELECT ip_address, login_identifier_snapshot
         FROM awcms_visitor_sessions WHERE tenant_id = ${TENANT_A}
@@ -288,7 +292,7 @@ suite("data_lifecycle module (integration)", () => {
     expect(preserved.rollups).toBe(1);
 
     // Release → normal retention resumes: PII cleared, session + rollup deleted.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const active = await fetchActiveLegalHoldsForPlanning(tx, TENANT_A);
       for (const hold of active) {
         await releaseLegalHold(tx, TENANT_A, ACTOR, hold.id, {
@@ -296,7 +300,7 @@ suite("data_lifecycle module (integration)", () => {
         });
       }
     });
-    const after = await withTenant(runtime, TENANT_A, (tx) =>
+    const after = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       purgeVisitorAnalyticsData(
         tx,
         TENANT_A,
@@ -316,7 +320,7 @@ suite("data_lifecycle module (integration)", () => {
     const oldTs = daysAgo(900); // past the 730d audit default cutoff
 
     // Seed 3 old audit events for tenant A.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       for (let i = 0; i < 3; i += 1) {
         await tx`
           INSERT INTO awcms_audit_events
@@ -327,7 +331,7 @@ suite("data_lifecycle module (integration)", () => {
     });
 
     // A tenant-wide hold (descriptorKey null) covers logging.audit_events too.
-    await withTenant(runtime, TENANT_A, (tx) =>
+    await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createLegalHold(tx, TENANT_A, ACTOR, validHoldInput(null))
     );
 
@@ -339,17 +343,21 @@ suite("data_lifecycle module (integration)", () => {
     );
     expect(held.purgedCount).toBe(0);
 
-    const oldRemaining = await withTenant(runtime, TENANT_A, async (tx) => {
-      const rows = (await tx`
+    const oldRemaining = await withTenantOrThrow(
+      runtime,
+      TENANT_A,
+      async (tx) => {
+        const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_audit_events
         WHERE tenant_id = ${TENANT_A} AND created_at < ${held.cutoff}
       `) as { n: number }[];
-      return rows[0]!.n;
-    });
+        return rows[0]!.n;
+      }
+    );
     expect(oldRemaining).toBe(3);
 
     // Release the hold, then re-run: the 3 old events are purged.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       const active = await fetchActiveLegalHoldsForPlanning(tx, TENANT_A);
       for (const hold of active) {
         await releaseLegalHold(tx, TENANT_A, ACTOR, hold.id, {

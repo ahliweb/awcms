@@ -36,7 +36,7 @@
  * never match a locale, only the all-locales (`locale_scope IS NULL`) rules do.
  */
 import { assertSafeRedirectTarget } from "../domain/redirect-target-classification";
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import {
   normalizePublicHost,
@@ -112,7 +112,7 @@ async function resolveLegacyBlogRedirect(
   const tenant = await resolvePublicTenantByCode(sql, parsed.tenantCode);
   if (!tenant) return null;
 
-  return withTenant(sql, tenant.tenantId, async (tx) => {
+  return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
     if (!(await isSeoDistributionEnabled(tx, tenant.tenantId))) return null;
 
     const settings = await fetchRedirectSettings(tx, tenant.tenantId);
@@ -164,7 +164,7 @@ async function resolveHostBasedRedirect(
   const requestHost = rawHost ? normalizePublicHost(rawHost) : null;
   const now = options.now ?? new Date();
 
-  return withTenant(sql, tenant.tenantId, async (tx) => {
+  return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
     if (!(await isSeoDistributionEnabled(tx, tenant.tenantId))) {
       return { kind: "skip" };
     }

@@ -10,7 +10,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listParties } from "../../modules/profile-identity/application/party-directory";
 
@@ -36,7 +36,7 @@ let loadError = false;
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) => {
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
       const page = await listParties(tx, ssr.tenantId, {});
       return page.items as PartyRow[];
     });

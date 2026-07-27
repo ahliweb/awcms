@@ -62,7 +62,7 @@ describe("the break-glass readiness check", () => {
     expect(check).not.toMatch(/\b(FROM|JOIN)\s+awcms_tenant_users\b/);
   });
 
-  test("reads policies through withTenant, so RLS is exercised rather than sidestepped", async () => {
+  test("reads policies through withTenantOrThrow, so RLS is exercised rather than sidestepped", async () => {
     const source = await readFile(SCRIPT, "utf8");
     const check = source.slice(
       source.indexOf("export async function checkSsoBreakGlassReady"),
@@ -72,7 +72,7 @@ describe("the break-glass readiness check", () => {
     // A direct `SELECT ... FROM awcms_tenant_auth_policies` would return zero
     // rows under FORCE RLS without the tenant GUC — and zero rows reads as
     // "no tenant is locked down", i.e. a silent unconditional PASS.
-    expect(check).toContain("withTenant(");
+    expect(check).toContain("withTenantOrThrow(");
     expect(check).not.toContain("FROM awcms_tenant_auth_policies");
   });
 

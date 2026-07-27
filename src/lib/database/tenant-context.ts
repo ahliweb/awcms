@@ -74,39 +74,93 @@ export type WithTenantOptions = {
 };
 
 /**
+ * Thrown by `withTenantOrThrow` when the transaction was REFUSED before `fn`
+ * ever ran — the circuit breaker was open, or the work class's bounded queue
+ * rejected/timed out. Carries everything the HTTP shape carries, so a caller
+ * that does sit on a request path can still answer `503` + `Retry-After`.
+ *
+ * The distinction that matters to a worker: this is "the database declined to
+ * start the work", never "the work ran and found nothing". Those two are the
+ * same value under the old `as T` cast, and that is the bug this type exists
+ * to make unrepresentable.
+ */
+export class DatabaseBusyError extends Error {
+  readonly code = "DATABASE_BUSY";
+  readonly workClass: WorkClass;
+  readonly retryAfterSeconds: number;
+  /**
+   * The very `503` {@link withTenant} would have returned for this refusal —
+   * carried rather than rebuilt, so a caller on a request path that catches
+   * this error answers with the identical status, body and `Retry-After` and
+   * the two forms cannot drift apart.
+   */
+  readonly response: Response;
+
+  constructor(
+    message: string,
+    workClass: WorkClass,
+    retryAfterSeconds: number,
+    response: Response
+  ) {
+    super(message);
+    this.name = "DatabaseBusyError";
+    this.workClass = workClass;
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.response = response;
+  }
+}
+
+/**
+ * What the shared core produced. `rejected` covers every path that answers the
+ * CALLER without running `fn` to completion: the two saturation refusals and
+ * the idempotency race. Each carries both the HTTP form (for `withTenant`) and
+ * the cause (for `withTenantOrThrow`), so neither wrapper has to reconstruct
+ * what the other one knows.
+ */
+type TenantWorkOutcome<T> =
+  | { status: "ok"; value: T }
+  | { status: "rejected"; response: Response; cause: RejectionCause };
+
+type RejectionCause =
+  | { kind: "busy"; message: string; retryAfterSeconds: number }
+  | { kind: "idempotency"; error: IdempotencyRaceLostError };
+
+/**
  * Runs `fn` inside a tenant-scoped transaction, protected by the Issue 10.2
  * pool gate + circuit breaker (doc 16). This is the single highest-leverage
- * integration point: every existing endpoint already calls `withTenant`, so
- * extending it here protects all of them without touching ~25 route files.
+ * integration point: every existing endpoint already calls it, so extending it
+ * here protects all of them without touching ~25 route files.
  *
- * `T` is generic for backward compatibility, but in practice every real call
- * site uses `T = Response` (every existing endpoint returns the result of
- * `withTenant` directly from its handler, matching how Issue 8.1/9.1's
- * endpoints already implicitly assume this). The `fail(...)` calls below are
- * therefore cast to `T` — this is type-safe in practice, even though the
- * generic signature doesn't statically enforce `T = Response`.
+ * Private, because its return type is the honest one and therefore awkward:
+ * both public wrappers exist to turn `TenantWorkOutcome` into the shape their
+ * own callers can actually handle.
  */
-export async function withTenant<T>(
+async function runTenantWork<T>(
   sql: Bun.SQL,
   tenantId: string,
   fn: (tx: Bun.TransactionSQL) => Promise<T>,
   options?: WithTenantOptions
-): Promise<T> {
+): Promise<TenantWorkOutcome<T>> {
   const safeTenantId = assertUuid(tenantId);
   const workClass = options?.workClass ?? "interactive";
   const queueTimeoutMs = options?.queueTimeoutMs ?? DEFAULT_QUEUE_TIMEOUT_MS;
   const breaker = getDatabaseCircuitBreaker();
   const now = new Date();
 
+  const busy = (message: string, retryAfterSeconds: number) =>
+    ({
+      status: "rejected",
+      response: fail(503, "DATABASE_BUSY", message, {}, undefined, {
+        "Retry-After": String(retryAfterSeconds)
+      }),
+      cause: { kind: "busy", message, retryAfterSeconds }
+    }) satisfies TenantWorkOutcome<T>;
+
   if (!breaker.canAttempt(now)) {
-    return fail(
-      503,
-      "DATABASE_BUSY",
+    return busy(
       "Database circuit breaker is open.",
-      {},
-      undefined,
-      { "Retry-After": String(CIRCUIT_OPEN_RETRY_AFTER_SECONDS) }
-    ) as T;
+      CIRCUIT_OPEN_RETRY_AFTER_SECONDS
+    );
   }
 
   let slot;
@@ -126,14 +180,10 @@ export async function withTenant<T>(
         saturation: getWorkClassSaturation()
       });
 
-      return fail(
-        503,
-        "DATABASE_BUSY",
+      return busy(
         `Database work-class "${workClass}" queue is full; rejected immediately.`,
-        {},
-        undefined,
-        { "Retry-After": String(WORK_CLASS_BUSY_RETRY_AFTER_SECONDS) }
-      ) as T;
+        WORK_CLASS_BUSY_RETRY_AFTER_SECONDS
+      );
     }
 
     if (error instanceof WorkClassTimeoutError) {
@@ -144,14 +194,10 @@ export async function withTenant<T>(
         saturation: getWorkClassSaturation()
       });
 
-      return fail(
-        503,
-        "DATABASE_BUSY",
+      return busy(
         `Database work-class "${workClass}" is saturated.`,
-        {},
-        undefined,
-        { "Retry-After": String(WORK_CLASS_BUSY_RETRY_AFTER_SECONDS) }
-      ) as T;
+        WORK_CLASS_BUSY_RETRY_AFTER_SECONDS
+      );
     }
 
     throw error;
@@ -166,7 +212,7 @@ export async function withTenant<T>(
 
     breaker.recordSuccess(new Date());
 
-    return result;
+    return { status: "ok", value: result };
   } catch (error) {
     if (error instanceof IdempotencyRaceLostError) {
       // Benign concurrency outcome, not a database/infra failure — skip the
@@ -179,21 +225,23 @@ export async function withTenant<T>(
         replayed: error.replay !== null
       });
 
-      if (error.replay) {
+      return {
+        status: "rejected",
         // Same key + same request hash as the winner — honor the ordinary
         // "hash sama -> replay" rule even under the race, instead of forcing
         // a same-payload retry into a 409 it wouldn't have gotten had it lost
         // the race by a few milliseconds less.
-        return jsonResponse(error.replay.responseBody, {
-          status: error.replay.responseStatus
-        }) as T;
-      }
-
-      return fail(
-        409,
-        "IDEMPOTENCY_CONFLICT",
-        "Idempotency-Key was already used with a different request."
-      ) as T;
+        response: error.replay
+          ? jsonResponse(error.replay.responseBody, {
+              status: error.replay.responseStatus
+            })
+          : fail(
+              409,
+              "IDEMPOTENCY_CONFLICT",
+              "Idempotency-Key was already used with a different request."
+            ),
+        cause: { kind: "idempotency", error }
+      };
     }
 
     if (isPostgresClientInputError(error)) {
@@ -210,4 +258,83 @@ export async function withTenant<T>(
   } finally {
     slot.release();
   }
+}
+
+/**
+ * The request-path form. A refusal comes back AS the `503`/`409` `Response` it
+ * should be sent as, so the ~390 handlers whose `fn` already returns a
+ * `Response` are unchanged: `Response | Response` is `Response`.
+ *
+ * ## Why the return type grew a `| Response`
+ *
+ * The signature used to be `Promise<T>`, and the header said "in practice
+ * every real call site uses `T = Response`". That stopped being true long
+ * before anyone noticed, and the `as T` casts handed a refusal back as a value
+ * of whatever type the caller asked for — invisibly, since a cast is precisely
+ * the instruction "stop checking".
+ *
+ * The damage was not hypothetical. `purgeExpiredAuditEvents` declares
+ * `Promise<number>`; under a saturated `maintenance` class (ONE slot) it
+ * returned a `Response`. `runBoundedBatches` loops "until a pass returns
+ * `count: 0`" — and a `Response` is never `=== 0`, so a job whose entire
+ * purpose is to back off ran its full 50 passes per tenant AGAINST AN
+ * ALREADY-REFUSING DATABASE, then reported `totalCount` as the string
+ * `"0[object Response]…"`, because `number + Response` is concatenation.
+ * Backpressure inverted into load, and the run reported success.
+ *
+ * A handler whose `fn` returns data now has to narrow, and narrowing is also
+ * the fix — `if (result instanceof Response) return result;` forwards the
+ * `503` with its `Retry-After` intact. Callers that are not serving a request
+ * want {@link withTenantOrThrow}: for them a `Response` is not an answer, and
+ * discarding an ignored return value would put the hole straight back.
+ */
+export async function withTenant<T>(
+  sql: Bun.SQL,
+  tenantId: string,
+  fn: (tx: Bun.TransactionSQL) => Promise<T>,
+  options?: WithTenantOptions
+): Promise<T | Response> {
+  const outcome = await runTenantWork(sql, tenantId, fn, options);
+
+  return outcome.status === "ok" ? outcome.value : outcome.response;
+}
+
+/**
+ * The form for everything that is not an HTTP handler — workers, scheduled
+ * jobs, SSR page frontmatter, tenant resolvers, test fixtures. `fn`'s value
+ * comes back as `T` and nothing else ever does: a refusal throws.
+ *
+ * Throwing is the correct shape for these callers, not a lesser one. A job
+ * runner already classifies a thrown error as a retryable failure with
+ * backoff, which is precisely what "the database is shedding load" should
+ * mean; the alternative — a value the caller silently mistakes for an empty
+ * result — is how a purge that ran zero times reports that it drained the
+ * backlog.
+ *
+ * `IdempotencyRaceLostError` is re-thrown rather than converted. Idempotency
+ * keys are a request-scoped concern; a caller that is not serving a request
+ * has no use for the `409` and should see the original error.
+ */
+export async function withTenantOrThrow<T>(
+  sql: Bun.SQL,
+  tenantId: string,
+  fn: (tx: Bun.TransactionSQL) => Promise<T>,
+  options?: WithTenantOptions
+): Promise<T> {
+  const outcome = await runTenantWork(sql, tenantId, fn, options);
+
+  if (outcome.status === "ok") {
+    return outcome.value;
+  }
+
+  if (outcome.cause.kind === "idempotency") {
+    throw outcome.cause.error;
+  }
+
+  throw new DatabaseBusyError(
+    outcome.cause.message,
+    options?.workClass ?? "interactive",
+    outcome.cause.retryAfterSeconds,
+    outcome.response
+  );
 }

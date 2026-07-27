@@ -19,7 +19,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenant } from "../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
 import { isSelfRegistrationEnabled } from "../../lib/auth/self-registration-config";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listRoles } from "../../modules/identity-access/application/access-directory";
@@ -49,7 +49,7 @@ let loadError = false;
 if (canRead) {
   try {
     const sql = getDatabaseClient();
-    const result = await withTenant(sql, ssr.tenantId, async (tx) => ({
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => ({
       requests: await listPendingRegistrations(tx, ssr.tenantId),
       // Only needed to render the optional role picker on the approve control.
       roles: canApprove ? await listRoles(tx, ssr.tenantId) : []

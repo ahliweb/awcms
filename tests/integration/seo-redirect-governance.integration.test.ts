@@ -42,7 +42,7 @@ import {
   setupIntegrationDatabase,
   teardownIntegrationDatabase
 } from "./harness";
-import { withTenant } from "../../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../../src/lib/database/tenant-context";
 import { validateRedirectInput } from "../../src/modules/seo-distribution/domain/redirect-rule";
 import {
   createRedirect,
@@ -121,7 +121,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
     const runtime = getRuntimeSql();
 
     // Seed one live rule + settings + a 404 observation for tenant A.
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await createRedirect(
         tx,
         TENANT_A,
@@ -155,7 +155,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
     }
 
     // Tenant B's context sees none of tenant A's redirect rules.
-    const asB = await withTenant(app, TENANT_B, async (tx) => {
+    const asB = await withTenantOrThrow(app, TENANT_B, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_seo_redirects
       `) as { n: number }[];
@@ -164,7 +164,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
     expect(asB).toBe(0);
 
     // Tenant A's own context DOES see its rule.
-    const asA = await withTenant(app, TENANT_A, async (tx) => {
+    const asA = await withTenantOrThrow(app, TENANT_A, async (tx) => {
       const rows = (await tx`
         SELECT count(*)::int AS n FROM awcms_seo_redirects
       `) as { n: number }[];
@@ -181,7 +181,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
     }
     const runtime = getRuntimeSql();
 
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await seedPrimaryDomain(tx, TENANT_A, HOST_A);
       await createRedirect(
         tx,
@@ -214,7 +214,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
     }
     const runtime = getRuntimeSql();
 
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await seedPrimaryDomain(tx, TENANT_A, HOST_A);
       // Insert a malicious rule DIRECTLY, bypassing write-time validation — this is
       // the "host removed / rule tampered after write" case the resolve-time
@@ -262,7 +262,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
       domainHost: HOST_A
     };
 
-    await withTenant(runtime, TENANT_A, async (tx) => {
+    await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       await recordNotFoundObservation(tx, TENANT_A, { ...capture, at: NOW });
       await recordNotFoundObservation(tx, TENANT_A, {
         ...capture,
@@ -270,7 +270,7 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
       });
     });
 
-    const rows = await withTenant(runtime, TENANT_A, async (tx) => {
+    const rows = await withTenantOrThrow(runtime, TENANT_A, async (tx) => {
       return (await tx`
         SELECT normalized_path, hit_count::int AS hit_count
         FROM awcms_seo_not_found_observations
@@ -287,16 +287,16 @@ suite("seo_distribution redirect governance (ADR-0039, integration)", () => {
   test("a redirect created for tenant A is not readable by getRedirectById under tenant B's context", async () => {
     const runtime = getRuntimeSql();
 
-    const created = await withTenant(runtime, TENANT_A, (tx) =>
+    const created = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       createRedirect(tx, TENANT_A, ACTOR, relativeRedirectInput("/a", "/b"))
     );
 
-    const seenByB = await withTenant(runtime, TENANT_B, (tx) =>
+    const seenByB = await withTenantOrThrow(runtime, TENANT_B, (tx) =>
       getRedirectById(tx, TENANT_B, created.id)
     );
     expect(seenByB).toBeNull();
 
-    const seenByA = await withTenant(runtime, TENANT_A, (tx) =>
+    const seenByA = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       getRedirectById(tx, TENANT_A, created.id)
     );
     expect(seenByA?.normalizedSourcePath).toBe("/a");

@@ -1,4 +1,4 @@
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { sanitizeErrorForLog } from "../../../lib/logging/error-sanitizer";
 import { log } from "../../../lib/logging/logger";
 import {
@@ -71,7 +71,7 @@ async function isConsumerPaused(
   tenantId: string,
   consumerName: string
 ): Promise<boolean> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -93,7 +93,7 @@ async function selectHeadOfLineDeliveries(
   now: Date,
   limit: number
 ): Promise<HeadOfLineCandidate[]> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -147,7 +147,7 @@ async function recordDeliveryFailure(
   now: Date,
   correlationId: string
 ): Promise<"retried" | "dead_letter" | "superseded"> {
-  return withTenant(
+  return withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -233,7 +233,7 @@ async function processOneDelivery(
   fallbackCorrelationId: string
 ): Promise<ProcessDeliveryOutcome> {
   try {
-    const outcome = await withTenant(
+    const outcome = await withTenantOrThrow(
       sql,
       tenantId,
       async (tx) => {
@@ -430,7 +430,7 @@ export async function recordDomainEventBacklogGauges(
   sql: Bun.SQL,
   tenantId: string
 ): Promise<void> {
-  const rows = await withTenant(
+  const rows = await withTenantOrThrow(
     sql,
     tenantId,
     (tx) => tx`

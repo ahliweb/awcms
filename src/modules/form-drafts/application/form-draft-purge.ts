@@ -1,4 +1,4 @@
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { FORM_DRAFTS_LIFECYCLE_KEY } from "../module";
 import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-port";
@@ -65,7 +65,7 @@ export async function expireOverdueFormDrafts(
   const now = options.now ?? new Date();
   const batchLimit = options.batchLimit ?? FORM_DRAFT_PURGE_BATCH_LIMIT;
 
-  const expiredCount = await withTenant(
+  const expiredCount = await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {
@@ -130,7 +130,7 @@ export async function purgeExpiredFormDrafts(
   const now = options.now ?? new Date();
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
 
-  const purgedCount = await withTenant(
+  const purgedCount = await withTenantOrThrow(
     sql,
     tenantId,
     async (tx) => {

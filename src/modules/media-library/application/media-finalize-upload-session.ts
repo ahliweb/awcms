@@ -39,7 +39,10 @@
  * forever.
  */
 import { fail, jsonResponse, ok } from "../../_shared/api-response";
-import { withTenant } from "../../../lib/database/tenant-context";
+import {
+  withTenant,
+  withTenantOrThrow
+} from "../../../lib/database/tenant-context";
 import { authorizeInTransaction } from "../../identity-access/application/access-guard";
 import { log } from "../../../lib/logging/logger";
 import { recordAuditEvent } from "../../logging/application/audit-log";
@@ -234,6 +237,13 @@ export async function finalizeNewsMediaUploadSession(
     }
   );
 
+  // The pool gate refused before `fn` ever ran (`503 DATABASE_BUSY`, or the
+  // idempotency race's own answer). Forwarded as-is: it is already the exact
+  // response this endpoint should send, `Retry-After` included.
+  if (precheck instanceof Response) {
+    return precheck;
+  }
+
   if (precheck.kind === "response") {
     return precheck.response;
   }
@@ -255,7 +265,7 @@ export async function finalizeNewsMediaUploadSession(
   // fails, that failure is only logged — it never masks/replaces the
   // caller's own error path.
   const revertClaim = async () => {
-    await withTenant(sql, tenantId, (tx) =>
+    await withTenantOrThrow(sql, tenantId, (tx) =>
       revertNewsMediaObjectUploadClaim(tx, tenantId, precheck.objectId)
     ).catch((revertError) => {
       log("error", "news-portal.upload-session.finalize.revert_claim_failed", {

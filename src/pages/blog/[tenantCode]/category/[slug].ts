@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { getDatabaseClient } from "../../../../lib/database/client";
-import { withTenant } from "../../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../../lib/html/escape";
 import {
@@ -40,7 +40,7 @@ export const GET: APIRoute = async ({ params, url }) => {
 
     const page = parsePageParam(url.searchParams.get("page"));
 
-    return await withTenant(sql, tenant.tenantId, async (tx) => {
+    return await withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
       if (!(await isLegacyTenantRouteEnabled(tx, tenant.tenantId))) {
         return notFoundHtmlResponse();
       }

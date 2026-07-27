@@ -25,7 +25,7 @@
  * unconditionally across deployments that have not adopted the edge cache.
  */
 import { getWorkerDatabaseClient } from "../src/lib/database/client";
-import { withTenant } from "../src/lib/database/tenant-context";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { logScriptFailure } from "../src/lib/logging/error-log";
 import { loadEdgeCacheConfig } from "../src/lib/edge-cache/config";
 import {
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 
     for (const tenant of tenants) {
       for (let pass = 0; pass < MAX_PASSES_PER_TENANT; pass += 1) {
-        const claimed = await withTenant(sql, tenant.id, (tx) =>
+        const claimed = await withTenantOrThrow(sql, tenant.id, (tx) =>
           claimEdgeCachePurges(tx, tenant.id, config.purgeBatchSize, new Date())
         );
 
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
 
           // Each outcome is committed on its own so a crash mid-batch loses at
           // most one row's status, not the whole pass's progress.
-          await withTenant(sql, tenant.id, (tx) =>
+          await withTenantOrThrow(sql, tenant.id, (tx) =>
             outcome.ok
               ? markEdgeCachePurgeDone(tx, row.id, new Date())
               : markEdgeCachePurgeFailed(
@@ -109,7 +109,7 @@ async function main(): Promise<void> {
         }
       }
 
-      pruned += await withTenant(sql, tenant.id, (tx) =>
+      pruned += await withTenantOrThrow(sql, tenant.id, (tx) =>
         pruneCompletedEdgeCachePurges(
           tx,
           tenant.id,

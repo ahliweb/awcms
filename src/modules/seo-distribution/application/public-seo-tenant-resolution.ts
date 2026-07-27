@@ -26,7 +26,7 @@
  * resolver — never `blog_content`/`news_portal` internals. The content providers
  * are injected at the route composition root (`src/lib/seo/discovery-providers.ts`).
  */
-import { withTenant } from "../../../lib/database/tenant-context";
+import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import {
   resolvePublicTenantFromRequest,
   type PublicHostResolverConfig,
@@ -78,7 +78,7 @@ async function isSeoDistributionEnabled(
 export async function padUnresolvedSeoTenantLatency(
   sql: Bun.SQL
 ): Promise<void> {
-  await withTenant(sql, TIMING_PAD_TENANT_ID, async (tx) => {
+  await withTenantOrThrow(sql, TIMING_PAD_TENANT_ID, async (tx) => {
     await isSeoDistributionEnabled(tx, TIMING_PAD_TENANT_ID);
   });
 }
@@ -104,7 +104,7 @@ export async function withSeoPublicTenant<T>(
     return null;
   }
 
-  return withTenant(sql, tenant.tenantId, async (tx) => {
+  return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
     if (!(await isSeoDistributionEnabled(tx, tenant.tenantId))) {
       return null;
     }
