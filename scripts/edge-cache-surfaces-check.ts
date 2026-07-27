@@ -33,7 +33,7 @@ const PURGE_CALLER_ROOTS = ["src/pages", "src/modules"];
  * statically, and a purge whose target is unknown at review time is exactly the
  * thing this gate exists to prevent.
  */
-async function collectPurgedModuleKeys(): Promise<Set<string>> {
+export async function collectPurgedModuleKeys(): Promise<Set<string>> {
   const keys = new Set<string>();
   const constants = new Map<string, string>();
   const pattern =
@@ -111,7 +111,7 @@ async function collectPurgedModuleKeys(): Promise<Set<string>> {
  * encoding shapes, because a pattern that is safe against a clean path is not
  * necessarily safe against a hostile one.
  */
-const MUST_NEVER_MATCH = [
+export const MUST_NEVER_MATCH = [
   "/admin",
   "/admin/",
   "/admin/users",
@@ -137,12 +137,30 @@ const SAFE_SURFACE_KEY = /^[A-Za-z0-9._-]{1,128}$/;
 
 const MAX_DECLARED_TTL_SECONDS = 86_400;
 
-async function main(): Promise<void> {
+/**
+ * Shape of one registry entry, kept structural so a test can plant a violation
+ * without constructing a whole `PublicCacheSurface`.
+ */
+export type SurfaceLike = {
+  key: string;
+  pattern: RegExp;
+  ttlSeconds: number;
+  requiresTenant: boolean;
+  allowedQueryParams: readonly string[];
+  /** `null` in the live registry for a surface no module owns. */
+  moduleKey?: string | null;
+  rationale?: string;
+};
+
+/** Every per-entry rule. Pure: no filesystem, no registry import. */
+export function validateSurfaces(
+  surfaces: readonly SurfaceLike[],
+  moduleKeys: ReadonlySet<string>
+): string[] {
   const failures: string[] = [];
   const seenKeys = new Set<string>();
-  const moduleKeys = new Set(listModules().map((module) => module.key));
 
-  for (const surface of PUBLIC_CACHE_SURFACES) {
+  for (const surface of surfaces) {
     if (!SAFE_SURFACE_KEY.test(surface.key)) {
       failures.push(
         `Surface key "${surface.key}" is not a safe surrogate-key segment (allowed: A-Z a-z 0-9 . _ -).`
@@ -215,8 +233,23 @@ async function main(): Promise<void> {
     }
   }
 
-  for (const path of MUST_NEVER_MATCH) {
-    const matched = matchPublicCacheSurface(path);
+  return failures;
+}
+
+/**
+ * The check that earns this file's existence. Takes the matcher as an argument
+ * so a test can drive it with a planted pattern instead of the live registry —
+ * without that seam, the only observable behaviour is "the current registry
+ * passes", which proves nothing about the rule.
+ */
+export function findCacheableForbiddenPaths(
+  paths: readonly string[],
+  match: (path: string) => { key: string } | null | undefined
+): string[] {
+  const failures: string[] = [];
+
+  for (const path of paths) {
+    const matched = match(path);
 
     if (matched) {
       failures.push(
@@ -225,38 +258,54 @@ async function main(): Promise<void> {
     }
   }
 
-  // ---------------------------------------------------------------------
-  // Every module that OWNS a cacheable surface must emit purges for it.
-  //
-  // This is the asymmetry that makes stale content silent. Declaring a surface
-  // is one line in the registry and takes effect immediately; wiring the
-  // invalidation is a separate edit in a different file that nothing forces.
-  // Miss it and the surface caches correctly, serves correctly, and never
-  // updates — with no error anywhere.
-  //
-  // Framed by OWNERSHIP rather than by module list on purpose. Modules with no
-  // declared surface (`news_portal`, `media_library` today) are correctly
-  // silent: a ban for a module key that tags no cached object matches nothing
-  // while the queue reports success, so demanding a purge from them would add
-  // ceremony that looks like coverage and provides none. The obligation appears
-  // by itself on the day they declare a surface.
-  // ---------------------------------------------------------------------
+  return failures;
+}
+
+/**
+ * Every module that OWNS a cacheable surface must emit purges for it.
+ *
+ * This is the asymmetry that makes stale content silent. Declaring a surface is
+ * one line in the registry and takes effect immediately; wiring the
+ * invalidation is a separate edit in a different file that nothing forces. Miss
+ * it and the surface caches correctly, serves correctly, and never updates —
+ * with no error anywhere.
+ *
+ * Framed by OWNERSHIP rather than by module list on purpose. Modules with no
+ * declared surface (`news_portal`, `media_library` today) are correctly silent:
+ * a ban for a module key that tags no cached object matches nothing while the
+ * queue reports success, so demanding a purge from them would add ceremony that
+ * looks like coverage and provides none. The obligation appears by itself on
+ * the day they declare a surface.
+ */
+export function findOwnersWithoutPurges(
+  surfaces: readonly SurfaceLike[],
+  purgedKeys: ReadonlySet<string>
+): string[] {
   const declaredOwners = new Set(
-    PUBLIC_CACHE_SURFACES.map((surface) => surface.moduleKey).filter(
-      (key): key is string => Boolean(key)
-    )
+    surfaces
+      .map((surface) => surface.moduleKey)
+      .filter((key): key is string => Boolean(key))
   );
+
+  return [...declaredOwners]
+    .filter((owner) => !purgedKeys.has(owner))
+    .map(
+      (owner) =>
+        `Module "${owner}" owns a cacheable surface but no code calls ` +
+        `enqueueModuleContentPurge(..., "${owner}", ...). Its cached pages ` +
+        `would go stale until TTL with nothing reporting a problem.`
+    );
+}
+
+async function main(): Promise<void> {
+  const moduleKeys = new Set(listModules().map((module) => module.key));
   const purgedKeys = await collectPurgedModuleKeys();
 
-  for (const owner of declaredOwners) {
-    if (!purgedKeys.has(owner)) {
-      failures.push(
-        `Module "${owner}" owns a cacheable surface but no code calls ` +
-          `enqueueModuleContentPurge(..., "${owner}", ...). Its cached pages ` +
-          `would go stale until TTL with nothing reporting a problem.`
-      );
-    }
-  }
+  const failures = [
+    ...validateSurfaces(PUBLIC_CACHE_SURFACES, moduleKeys),
+    ...findCacheableForbiddenPaths(MUST_NEVER_MATCH, matchPublicCacheSurface),
+    ...findOwnersWithoutPurges(PUBLIC_CACHE_SURFACES, purgedKeys)
+  ];
 
   if (failures.length > 0) {
     console.error("edge-cache:surfaces:check FAILED");
@@ -265,8 +314,13 @@ async function main(): Promise<void> {
       console.error(`  - ${failure}`);
     }
 
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
+
+  const declaredOwners = new Set(
+    PUBLIC_CACHE_SURFACES.map((surface) => surface.moduleKey).filter(Boolean)
+  );
 
   console.log(
     `edge-cache:surfaces:check OK — ${PUBLIC_CACHE_SURFACES.length} declared surfaces, ` +
@@ -275,4 +329,10 @@ async function main(): Promise<void> {
   );
 }
 
-await main();
+// Guarded so a test can import the pure validators above without executing the
+// gate — the reason this file had no tests: a bare `await main()` at module
+// scope ran the check on import, and its `process.exit(1)` would have taken the
+// test runner with it.
+if (import.meta.main) {
+  await main();
+}
