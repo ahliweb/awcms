@@ -42,6 +42,19 @@ import type { LegalHoldGuardPort } from "../../_shared/ports/legal-hold-guard-po
 export const FORM_DRAFT_DEFAULT_RETENTION_DAYS = 30;
 export const FORM_DRAFT_PURGE_BATCH_LIMIT = 5000;
 
+/**
+ * The one place the retention cutoff is computed, shared by the real purge and
+ * by `--dry-run`'s preview. Extracted rather than repeated so a dry run cannot
+ * drift from what a real run treats as "past retention" — the same reason
+ * `logging`'s `resolveAuditRetentionCutoff` exists.
+ */
+export function resolveFormDraftRetentionCutoff(
+  now: Date,
+  retentionDays: number
+): Date {
+  return new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+}
+
 export type ExpireFormDraftsOptions = {
   /** Defaults to `new Date()`. Injectable for deterministic tests. */
   now?: Date;
@@ -128,7 +141,7 @@ export async function purgeExpiredFormDrafts(
     options.retentionDays ?? FORM_DRAFT_DEFAULT_RETENTION_DAYS;
   const batchLimit = options.batchLimit ?? FORM_DRAFT_PURGE_BATCH_LIMIT;
   const now = options.now ?? new Date();
-  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const cutoff = resolveFormDraftRetentionCutoff(now, retentionDays);
 
   const purgedCount = await withTenantOrThrow(
     sql,
@@ -179,4 +192,72 @@ export async function purgeExpiredFormDrafts(
   );
 
   return { purgedCount, cutoff };
+}
+
+/**
+ * Read-only preview for `--dry-run`: how many drafts step 1 would flip to
+ * `expired`. Same predicate as the real pass, unbounded by `batchLimit` on
+ * purpose — the operator wants the backlog, not one batch of it.
+ */
+export async function countExpirableFormDrafts(
+  sql: Bun.SQL,
+  tenantId: string,
+  now: Date
+): Promise<number> {
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const rows = (await tx`
+        SELECT count(*)::int AS count
+        FROM awcms_form_drafts
+        WHERE tenant_id = ${tenantId} AND status = 'draft'
+          AND expires_at IS NOT NULL AND expires_at < ${now}
+      `) as { count: number }[];
+
+      return rows[0]?.count ?? 0;
+    },
+    { workClass: "maintenance" }
+  );
+}
+
+/**
+ * Read-only preview for `--dry-run`: how many rows step 2 would DELETE.
+ *
+ * Takes the legal-hold guard for the same reason the real purge does. A held
+ * descriptor makes a real run delete nothing, so a preview that ignored the
+ * hold would report a backlog that no run would ever touch — the one number an
+ * operator is most likely to act on.
+ */
+export async function countPurgeableFormDrafts(
+  sql: Bun.SQL,
+  tenantId: string,
+  legalHoldGuard: LegalHoldGuardPort,
+  cutoff: Date
+): Promise<number> {
+  return withTenantOrThrow(
+    sql,
+    tenantId,
+    async (tx) => {
+      const held = await legalHoldGuard.isDescriptorHeld(
+        tx,
+        tenantId,
+        FORM_DRAFTS_LIFECYCLE_KEY
+      );
+      if (held) {
+        return 0;
+      }
+
+      const rows = (await tx`
+        SELECT count(*)::int AS count
+        FROM awcms_form_drafts
+        WHERE tenant_id = ${tenantId}
+          AND status IN ('expired', 'abandoned')
+          AND updated_at < ${cutoff}
+      `) as { count: number }[];
+
+      return rows[0]?.count ?? 0;
+    },
+    { workClass: "maintenance" }
+  );
 }
