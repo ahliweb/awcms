@@ -52,6 +52,17 @@ export const tenantDomainModule = defineModule({
     openApiPath: "openapi/modules/tenant-domain.openapi.yaml",
     basePath: "/api/v1/tenant/domains"
   },
+  jobs: [
+    {
+      command: "bun run tenant-domain:dns:sync",
+      purpose:
+        "Reconciles pending/active domain rows against the configured DNS provider so a verification record that was created but never propagated does not leave a tenant stuck at pending_verification forever. Read-only against the provider unless TENANT_DOMAIN_DNS_PROVIDER names a real adapter; with the default 'manual' it makes no outbound call at all.",
+      recommendedSchedule: "Every 15 minutes via cron/systemd timer.",
+      environmentNotes:
+        "Reaches an external DNS provider ONLY when TENANT_DOMAIN_DNS_PROVIDER=cloudflare (plus TENANT_DOMAIN_CLOUDFLARE_*). Default 'manual' keeps it purely local.",
+      safeInOfflineLan: true
+    }
+  ],
   navigation: [
     {
       labelKey: "admin.layout.nav_tenant_domains",
