@@ -58,6 +58,49 @@ export type ContentBlock =
   | { type: "gallery"; items: GalleryItem[] }
   | ({ type: "video_news" } & VideoNewsItem);
 
+/**
+ * The block vocabulary as a RUNTIME value.
+ *
+ * `ContentBlock` above is a type, and a type cannot be read by a test, a
+ * schema generator, or anything outside `tsc`. So every consumer of
+ * `content_json` — this repo's own renderer, the OpenAPI contract, and any
+ * separate front-end that fetches posts — has had to re-derive the vocabulary
+ * from prose. `awcms-astro` did exactly that and got it wrong in three ways at
+ * once, silently: it invented an `ordered_list` type this union does not have,
+ * and dropped `gallery` and `video_news` entirely because they carry no `text`
+ * field. Nothing failed. The pages simply rendered wrongly or lost a section.
+ *
+ * This constant is the single source those consumers can actually be held to.
+ * The assertion below makes it impossible for it to drift from the union: add
+ * a variant to `ContentBlock` without adding it here (or vice versa) and the
+ * TYPECHECK fails, not a test somebody might not run.
+ */
+export const CONTENT_BLOCK_TYPES = [
+  "paragraph",
+  "heading",
+  "list",
+  "quote",
+  "gallery",
+  "video_news"
+] as const;
+
+export type ContentBlockType = (typeof CONTENT_BLOCK_TYPES)[number];
+
+/**
+ * Mutual assignability between the union's discriminants and the constant.
+ * Either direction failing is a real defect: a type in the union but not the
+ * constant is a block no consumer knows to render; a type in the constant but
+ * not the union is a promise nothing here can keep.
+ */
+type ContentBlockTypesMatchUnion = ContentBlock["type"] extends ContentBlockType
+  ? ContentBlockType extends ContentBlock["type"]
+    ? true
+    : never
+  : never;
+
+const CONTENT_BLOCK_TYPES_MATCH_UNION: ContentBlockTypesMatchUnion = true;
+void CONTENT_BLOCK_TYPES_MATCH_UNION;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

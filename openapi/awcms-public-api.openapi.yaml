@@ -14715,6 +14715,146 @@ components:
           type: string
           format: uuid
           nullable: true
+    BlogContentBlock:
+      description: |
+        One block of `content_json`. The vocabulary is closed: a value outside
+        the six variants below is not stored and not rendered.
+
+        This schema exists because the vocabulary previously lived only in a
+        TypeScript type and one prose sentence, so every consumer re-derived it
+        by reading. One did, and disagreed with it in three ways at once —
+        silently, because a wrong block type raises no error anywhere. It
+        renders wrongly, or the section disappears.
+
+        Held to `blog-content/domain/content-block-rendering.ts`'s
+        `CONTENT_BLOCK_TYPES` by `tests/content-block-contract.test.ts`, which
+        also holds that constant to the renderer's own switch.
+
+        Note two shapes that are easy to guess wrong:
+          - Ordering is a FIELD on `list` (`ordered: true`), not a separate
+            `ordered_list` type.
+          - `gallery` and `video_news` carry NO `text` field. A renderer that
+            falls back to "render `text` as a paragraph" drops them entirely.
+      oneOf:
+        - type: object
+          required:
+            - type
+            - text
+          properties:
+            type:
+              type: string
+              enum:
+                - paragraph
+            text:
+              type: string
+        - type: object
+          required:
+            - type
+            - level
+            - text
+          properties:
+            type:
+              type: string
+              enum:
+                - heading
+            level:
+              type: integer
+              minimum: 1
+              maximum: 6
+            text:
+              type: string
+        - type: object
+          required:
+            - type
+            - items
+          properties:
+            type:
+              type: string
+              enum:
+                - list
+            ordered:
+              description: Absent or false means an unordered list. There is no separate `ordered_list` type.
+              type: boolean
+            items:
+              type: array
+              items:
+                type: string
+        - type: object
+          required:
+            - type
+            - text
+          properties:
+            type:
+              type: string
+              enum:
+                - quote
+            text:
+              type: string
+        - type: object
+          required:
+            - type
+            - items
+          properties:
+            type:
+              type: string
+              enum:
+                - gallery
+            items:
+              type: array
+              items:
+                type: object
+                required:
+                  - mediaType
+                properties:
+                  mediaType:
+                    type: string
+                    enum:
+                      - image
+                      - video
+                  url:
+                    description: Direct absolute URL. Legacy shape — absent when the item uses `mediaObjectId`.
+                    type: string
+                  mediaObjectId:
+                    description: Verified media registry object id. Resolving it to a URL requires a media lookup; a consumer that cannot perform one must show a placeholder rather than dropping the item.
+                    type: string
+                    format: uuid
+                  caption:
+                    type: string
+        - type: object
+          required:
+            - type
+            - provider
+            - videoId
+          properties:
+            type:
+              type: string
+              enum:
+                - video_news
+            provider:
+              description: Allowlisted provider. Only `youtube` is recognised today; an unknown provider must not be turned into a URL by guesswork.
+              type: string
+            videoId:
+              description: Provider video id, validated server-side against the provider's own id shape before storage.
+              type: string
+            title:
+              type: string
+            caption:
+              type: string
+            thumbnailMediaObjectId:
+              type: string
+              format: uuid
+            durationSeconds:
+              type: integer
+            sourceLabel:
+              type: string
+    BlogContentJson:
+      description: "Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, by construction: there is no block variant that carries markup."
+      type: object
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlogContentBlock"
     BlogInternalTagLinkSettings:
       type: object
       required:
@@ -14795,7 +14935,7 @@ components:
           type: string
           nullable: true
         contentJson:
-          type: object
+          $ref: "#/components/schemas/BlogContentJson"
         contentText:
           type: string
         status:
@@ -14868,7 +15008,7 @@ components:
           type: string
           nullable: true
         contentJson:
-          type: object
+          $ref: "#/components/schemas/BlogContentJson"
         contentText:
           type: string
         locale:
@@ -14936,7 +15076,7 @@ components:
           type: string
           nullable: true
         contentJson:
-          type: object
+          $ref: "#/components/schemas/BlogContentJson"
         contentText:
           type: string
         status:
@@ -15011,8 +15151,7 @@ components:
           type: string
           nullable: true
         contentJson:
-          type: object
-          description: "{ blocks: ContentBlock[] } — whitelisted block types only (paragraph, heading, list, quote, gallery, video_news); never raw HTML."
+          $ref: "#/components/schemas/BlogContentJson"
         contentText:
           type: string
         locale:
@@ -15084,7 +15223,7 @@ components:
         title:
           type: string
         contentJson:
-          type: object
+          $ref: "#/components/schemas/BlogContentJson"
         contentText:
           type: string
         excerpt:
