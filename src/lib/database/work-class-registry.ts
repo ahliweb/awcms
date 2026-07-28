@@ -94,6 +94,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled-publish dispatcher (blog:publish:scheduled) — recurring, not latency-sensitive, but more time-relevant than a maintenance purge."
   },
+  "scripts/blog-ads-ingest.ts": {
+    workClass: "maintenance",
+    rationale:
+      "One-shot operator-run data migration (blog:ads:ingest, ADR-0044 §4 Fase 2) — not recurring at all, which makes it the most delay-tolerant profile in this map: it runs once during a planned migration window with an operator watching, never on a timer alongside request traffic."
+  },
   "scripts/news-media-r2-reconcile.ts": {
     workClass: "maintenance",
     rationale:

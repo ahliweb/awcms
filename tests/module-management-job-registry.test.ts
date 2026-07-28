@@ -85,6 +85,11 @@ describe("fetchModuleJobs", () => {
       [
         "bun run analytics:purge",
         "bun run analytics:rollup",
+        // ADR-0044 §4 Fase 2. The only entry here that is NOT scheduled: a
+        // one-shot operator-run migration whose descriptor exists so the job is
+        // discoverable at all, and which is retired along with the legacy ad
+        // tables it reads.
+        "bun run blog:ads:ingest",
         "bun run blog:publish:scheduled",
         "bun run comments:retention",
         "bun run config:validate",
