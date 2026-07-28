@@ -18,14 +18,14 @@ import {
   fetchHomepageSectionById,
   softDeleteHomepageSection,
   updateHomepageSection
-} from "../../../../../modules/news-portal/application/homepage-section-directory";
-import { validateHomepageSectionReferences } from "../../../../../modules/news-portal/application/homepage-section-reference-validation";
+} from "../../../../../modules/blog-content/application/homepage-section-directory";
+import { validateHomepageSectionReferences } from "../../../../../modules/blog-content/application/homepage-section-reference-validation";
 import { publicContentPortAdapter } from "../../../../../modules/blog-content/application/public-content-port-adapter";
-import { validateUpdateHomepageSectionInput } from "../../../../../modules/news-portal/domain/homepage-section-policy";
+import { validateUpdateHomepageSectionInput } from "../../../../../modules/blog-content/domain/homepage-section-policy";
 import { validateDeleteReasonInput } from "../../../../../modules/blog-content/domain/content-validation";
 
 const CONFIGURE_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "homepage_sections",
   action: "configure" as const
 };
@@ -127,7 +127,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     await recordAuditEvent(tx, {
       tenantId,
       actorTenantUserId: auth.context.tenantUserId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       action: "news_portal.homepage_section.updated",
       resourceType: "news_portal_homepage_section",
       resourceId: id,
@@ -139,7 +139,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     log("info", "news-portal.homepage_section.updated", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       sectionId: id
     });
 
@@ -223,7 +223,7 @@ export const DELETE: APIRoute = async ({
     await recordAuditEvent(tx, {
       tenantId,
       actorTenantUserId: auth.context.tenantUserId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       action: "news_portal.homepage_section.deleted",
       resourceType: "news_portal_homepage_section",
       resourceId: id,
@@ -236,7 +236,7 @@ export const DELETE: APIRoute = async ({
     log("info", "news-portal.homepage_section.deleted", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       sectionId: id
     });
 

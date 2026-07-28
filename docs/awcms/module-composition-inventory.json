@@ -1,12 +1,12 @@
 {
-  "moduleCount": 21,
+  "moduleCount": 20,
   "valid": true,
   "issueCount": 0,
   "modules": [
     {
       "key": "blog_content",
       "name": "Blog Content",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "status": "active",
       "type": "domain",
       "dependencies": [
@@ -20,7 +20,7 @@
         {
           "capability": "media_library",
           "providedBy": "media_library",
-          "optional": true
+          "optional": false
         },
         {
           "capability": "social_publishing",
@@ -28,7 +28,7 @@
           "optional": true
         }
       ],
-      "permissionCount": 39,
+      "permissionCount": 43,
       "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
@@ -192,38 +192,6 @@
       "permissionCount": 13,
       "navigationCount": 2,
       "jobCount": 1,
-      "hasHealthCheck": false,
-      "hasReadinessCheck": false,
-      "deploymentProfiles": null
-    },
-    {
-      "key": "news_portal",
-      "name": "News Portal",
-      "version": "0.4.0",
-      "status": "active",
-      "type": "domain",
-      "dependencies": [
-        "tenant_admin",
-        "identity_access",
-        "module_management",
-        "logging"
-      ],
-      "capabilitiesProvided": [],
-      "capabilitiesConsumed": [
-        {
-          "capability": "public_content",
-          "providedBy": "blog_content",
-          "optional": false
-        },
-        {
-          "capability": "media_library",
-          "providedBy": "media_library",
-          "optional": false
-        }
-      ],
-      "permissionCount": 4,
-      "navigationCount": 0,
-      "jobCount": 0,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

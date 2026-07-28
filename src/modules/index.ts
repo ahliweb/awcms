@@ -12,7 +12,6 @@ import { reportingModule } from "./reporting/module";
 import { themingModule } from "./theming/module";
 import { mediaLibraryModule } from "./media-library/module";
 import { blogContentModule } from "./blog-content/module";
-import { newsPortalModule } from "./news-portal/module";
 import { tenantDomainModule } from "./tenant-domain/module";
 import { visitorAnalyticsModule } from "./visitor-analytics/module";
 import { dataLifecycleModule } from "./data-lifecycle/module";
@@ -62,7 +61,6 @@ const baseModules: ModuleDescriptor[] = [
   // ad placements FK a media object) + blog_content's `public_content`, but
   // capability edges are not DAG edges, so the graph stays acyclic. See
   // src/modules/news-portal/module.ts's `description` for what was ported/moved.
-  newsPortalModule,
   // Ported from awcms-micro (epic #555): tenant hostname/subdomain -> tenant
   // mapping for host-based public routing, plus a SECURITY DEFINER host-lookup
   // bootstrap function and the additive public host resolver. Depends only on

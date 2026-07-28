@@ -8,20 +8,27 @@
  * Issue #634 added the first real upload code (presigned upload session
  * create/finalize/cancel) — its route handlers live under
  * `src/pages/api/v1/media/news-images/` (Astro's file-based routing
- * requires routes to live outside `src/modules/`), so this test now scans
- * BOTH directories. Its job is to keep failing loudly the moment any PR
- * introduces a local-disk write for news media bytes anywhere in either
- * tree — see architecture doc §3.3/§3.4 and Keputusan kunci #2 in
- * `.claude/skills/awcms-news-portal/SKILL.md`.
+ * requires routes to live outside `src/modules/`), so this test scans the
+ * route tree too. Its job is to keep failing loudly the moment any PR
+ * introduces a local-disk write for media bytes anywhere in these trees.
+ *
+ * ADR-0044 retired the `news_portal` module. The scanned module directory
+ * moved to the two modules that now actually touch media: `media_library`
+ * (which owns the registry, the R2 client, and the upload sessions since
+ * ADR-0036) and `blog_content` (which absorbed the FK-holding ad placements
+ * and already owned the media reference gate). That is a WIDENING, not a
+ * relocation — the guarantee is about media bytes, not about a module name,
+ * and scanning only the retired module's former files would have quietly
+ * stopped covering the code that does the uploading.
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-const NEWS_PORTAL_SRC_DIR = path.join(
-  import.meta.dir,
-  "../src/modules/news-portal"
-);
+const MEDIA_OWNING_MODULE_DIRS = [
+  path.join(import.meta.dir, "../src/modules/media-library"),
+  path.join(import.meta.dir, "../src/modules/blog-content")
+];
 
 const NEWS_MEDIA_ROUTES_DIR = path.join(
   import.meta.dir,
@@ -72,12 +79,14 @@ function findOffenders(rootDir: string, files: string[]): string[] {
   return offenders;
 }
 
-describe("news_portal module — no local filesystem fallback for news media", () => {
-  test("no source file under src/modules/news-portal writes bytes to local disk or references a local-upload flag", () => {
-    const files = listTsFiles(NEWS_PORTAL_SRC_DIR);
-    expect(files.length).toBeGreaterThan(0);
+describe("media modules — no local filesystem fallback for media bytes", () => {
+  test("no source file under the media-owning modules writes bytes to local disk or references a local-upload flag", () => {
+    for (const dir of MEDIA_OWNING_MODULE_DIRS) {
+      const files = listTsFiles(dir);
+      expect(files.length).toBeGreaterThan(0);
 
-    expect(findOffenders(NEWS_PORTAL_SRC_DIR, files)).toEqual([]);
+      expect(findOffenders(dir, files)).toEqual([]);
+    }
   });
 
   test("no source file under src/pages/api/v1/media/news-images (Issue #634's upload-session routes) writes bytes to local disk or references a local-upload flag", () => {

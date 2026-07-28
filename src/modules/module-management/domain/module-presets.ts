@@ -117,12 +117,19 @@ export const MODULE_PRESETS: readonly ModulePresetDefinition[] = [
     name: "news_portal",
     label: "News portal",
     description:
-      "The public website profile plus the editorial news portal and visitor analytics.",
+      "The public website profile plus editorial homepage sections, advertising, and visitor analytics.",
+    // ADR-0044 retired the `news_portal` MODULE; this PRESET keeps its name.
+    // A preset names an intent ("run this tenant as a news portal"), not a
+    // module, and the intent is unchanged — the editorial homepage composer and
+    // ad placements it used to pull in now ship inside `blog_content`, which is
+    // already listed. Renaming the preset would break every caller that stores
+    // the name for no gain. What WOULD be a bug is leaving `"news_portal"` in
+    // the key list below: `computeModulePresetPlan` would report it as an
+    // `unknownModuleKey` on every single apply.
     enabledModuleKeys: [
       "tenant_domain",
       "blog_content",
       "media_library",
-      "news_portal",
       "seo_distribution",
       "site_search",
       "theming",

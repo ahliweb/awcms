@@ -383,7 +383,7 @@ Card metadata. New pure modules:
 `domain/social-share-links.ts` (`buildSocialShareLinks` — six-platform
 fixed allowlist, every URL `encodeURIComponent`-encoded;
 `renderSocialShareButtonsHtml` — full widget markup) and
-`src/modules/news-portal/domain/news-share-config.ts`
+`src/modules/blog-content/domain/news-share-config.ts`
 (`resolveNewsShareConfig` — per-platform `NEWS_SHARE_*_ENABLED` env
 flags, all defaulting `true`; see that file's header comment for why this
 deviates from this repo's usual "opt-in, default off" feature-flag
@@ -715,7 +715,7 @@ Satu permission `configure` menggerbangi create/update/delete sekaligus (pola sa
 
 `listActiveAdsForPlacement` (query publik-aman: `is_active=true` + jendela jadwal + tenant scope) dan `renderAdHtml` sudah tersedia dan diuji, tapi **belum dipasang ke rute mana pun** — precedent yang sama seperti `searchPublicBlogContent` di Issue #539 ("helper teruji, pemasangannya issue lain").
 
-**Catatan (Issue #638, epic `news_portal`)**: sistem ads di atas TETAP TIDAK BERUBAH dan tetap berlaku untuk `image_url` bebas URL http(s) — `news_portal` epic menambah sistem ad placement TERPISAH yang R2-only (`awcms_news_portal_ad_placements`, dimiliki modul `news_portal`, bukan modul ini) untuk tenant full-online-R2 yang butuh gambar iklan berasal dari objek media R2 terverifikasi, bukan URL bebas. Lihat `.claude/skills/awcms-news-portal/SKILL.md` §638 dan `src/modules/news-portal/README.md`.
+**Catatan (Issue #638, diperbarui ADR-0044)**: sistem ads di atas untuk sementara TETAP berlaku untuk `image_url` bebas URL http(s), berdampingan dengan sistem ad placement R2-only (`awcms_news_portal_ad_placements`) yang **kini juga dimiliki modul ini** setelah `news_portal` dilebur. Dua sistem untuk satu fitur adalah keadaan sementara, bukan desain: `awcms_blog_ads.image_url` menerima URL apa pun, yang persis lubang media tak-terkelola yang enforcement `media_library` (ADR-0036) ada untuk menutupnya. ADR-0044 §4 memutuskan keduanya disatukan ke tabel ber-FK media terverifikasi — setelah tabel itu diperlebar dengan penargetan `post`/`page` yang hanya dimiliki sistem lama, supaya penyatuannya tidak diam-diam menghapus kemampuan. Sampai migrasi penyatuan itu mendarat, jangan tambahkan pemakai baru untuk `awcms_blog_ads`.
 
 ### Theme mode — override tenant, bukan engine baru
 
@@ -838,6 +838,46 @@ bun run production:preflight           # gate go-live penuh (lihat §Known limit
 - [ ] Verifikasi `rssEnabled`/`sitemapEnabled` di `/admin/blog/settings`: matikan salah satu -> `feed.xml`/`sitemap-blog.xml` tenant itu mengembalikan 404.
 - [ ] `bun run blog:publish:scheduled` tetap dijadwalkan cron/systemd timer terpisah (Issue #541, tidak berubah oleh issue ini) — bukan dipicu dari UI mana pun.
 - [ ] Audit log (`/admin` -> module audit summary atau `GET /api/v1/logs/audit`) menunjukkan `blog.post.*`/`blog.settings.updated` setelah aksi lifecycle/settings dari UI baru ini.
+
+## Diserap dari `news_portal` (ADR-0044)
+
+Modul `news_portal` dipensiunkan; dua fitur yang tersisa hidup di sini sekarang.
+Yang dilebur adalah **kepemilikan**, bukan bentuknya: nama tabel dan path API
+sengaja TIDAK diubah, mengikuti preseden ADR-0036 yang memindahkan registry
+media ke `media_library` tanpa me-rename `awcms_news_media_objects`.
+
+| Fitur                                                                                                                                        | Tabel                                             | Rute                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Composer section homepage editorial (6 tipe: `headline`, `latest_posts`, `featured_posts`, `editor_picks`, `category_grid`, `gallery_block`) | `awcms_news_portal_homepage_sections` (`sql/044`) | `GET`/`POST /api/v1/news-portal/homepage-sections`, `PATCH`/`DELETE .../{id}` |
+| Ad placement R2-only (12 `placement_key`, 4 `rotation_mode`, `priority`, jadwal)                                                             | `awcms_news_portal_ad_placements` (`sql/045`)     | `GET`/`POST /api/v1/news-portal/ad-placements`, `PATCH`/`DELETE .../{id}`     |
+
+Berkas yang pindah: `domain/ad-placement-policy.ts`,
+`domain/ad-placement-rotation.ts`, `domain/homepage-section-policy.ts`,
+`domain/news-portal-preset-readiness.ts`,
+`application/ad-placement-directory.ts`,
+`application/ad-placement-reference-validation.ts`,
+`application/homepage-section-directory.ts`,
+`application/homepage-section-reference-validation.ts`.
+
+Empat permission (`homepage_sections`/`ad_placements` × `read`/`configure`)
+di-repoint dari `news_portal` ke `blog_content` oleh `sql/076`, dengan urutan
+insert → repoint grant → delete supaya tidak ada tenant yang kehilangan
+kapabilitasnya. `tests/news-portal-merge.test.ts` menjaga setiap potongan di
+atas tetap ada.
+
+**Yang ikut dihapus, dan alasannya**: `awcms_news_portal_tenant_state`
+(`sql/043`) beserta helper bacanya. Penulisnya —
+`apply-news-portal-preset.ts` — tidak pernah diport ke base ini, jadi tabelnya
+inert; enforcement managed-media dinyalakan per-tenant lewat
+`POST /api/v1/media/enforcement` milik `media_library`. `sql/077`
+men-DROP-nya. Mempertahankan tabel FORCE-RLS tanpa pemilik dan tanpa penulis
+hanya membuat setiap gerbang inventori melaporkan sesuatu yang tidak dijaga
+siapa pun.
+
+`capabilities.consumes` untuk `media_library` **berubah dari `optional: true`
+menjadi wajib**: ad placement memegang FK nyata ke objek media terverifikasi,
+dan itulah alasan `news_portal` dulu mendeklarasikannya non-optional. Menyerap
+kodenya berarti menyerap batasannya.
 
 ## Belum tersedia (backlog eksplisit, bukan kelalaian)
 

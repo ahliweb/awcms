@@ -8,7 +8,7 @@ yang di-ship, base menyediakan **modul fondasi reusable + kontrak netral kesiapa
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **21 modul aktif**, migration `sql/001`-`sql/075`, RLS
+bawah). Repo ini punya **20 modul aktif**, migration `sql/001`-`sql/077`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
@@ -30,7 +30,7 @@ src/modules/<module>/
   api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
 ```
 
-21 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+20 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
 
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.

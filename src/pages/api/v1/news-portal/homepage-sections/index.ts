@@ -17,19 +17,19 @@ import { recordAuditEvent } from "../../../../../modules/logging/application/aud
 import {
   createHomepageSection,
   listHomepageSections
-} from "../../../../../modules/news-portal/application/homepage-section-directory";
-import { validateHomepageSectionReferences } from "../../../../../modules/news-portal/application/homepage-section-reference-validation";
+} from "../../../../../modules/blog-content/application/homepage-section-directory";
+import { validateHomepageSectionReferences } from "../../../../../modules/blog-content/application/homepage-section-reference-validation";
 import { publicContentPortAdapter } from "../../../../../modules/blog-content/application/public-content-port-adapter";
-import { validateCreateHomepageSectionInput } from "../../../../../modules/news-portal/domain/homepage-section-policy";
+import { validateCreateHomepageSectionInput } from "../../../../../modules/blog-content/domain/homepage-section-policy";
 
 const READ_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "homepage_sections",
   action: "read" as const
 };
 
 const CONFIGURE_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "homepage_sections",
   action: "configure" as const
 };
@@ -163,7 +163,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     await recordAuditEvent(tx, {
       tenantId,
       actorTenantUserId: auth.context.tenantUserId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       action: "news_portal.homepage_section.created",
       resourceType: "news_portal_homepage_section",
       resourceId: section.id,
@@ -175,7 +175,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     log("info", "news-portal.homepage_section.created", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       sectionId: section.id
     });
 
