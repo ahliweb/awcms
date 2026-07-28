@@ -752,6 +752,34 @@ export async function objectKeyExistsForTenant(
   return rows.length > 0;
 }
 
+/**
+ * Point lookup by object key returning the row itself, for ADR-0044 §4's
+ * legacy advertisement ingest (`scripts/blog-ads-ingest.ts`). That job holds a
+ * public URL it has already decomposed into an object key for this tenant, and
+ * needs the id and status of whatever registry row claims it.
+ *
+ * Distinct from `objectKeyExistsForTenant` in the one way that matters: this
+ * EXCLUDES soft-deleted rows. That function deliberately ignores `deleted_at`
+ * because its question is "is this key tracked at all" before a destructive
+ * R2 delete. The question here is the opposite — "may a new advertisement be
+ * pointed at this" — and a soft-deleted media object is precisely what must
+ * not acquire a fresh public reference.
+ */
+export async function fetchNewsMediaObjectByObjectKey(
+  tx: Bun.SQL,
+  tenantId: string,
+  objectKey: string
+): Promise<{ id: string; status: NewsMediaObjectStatus } | null> {
+  const rows = (await tx`
+    SELECT id, status FROM awcms_news_media_objects
+    WHERE tenant_id = ${tenantId} AND object_key = ${objectKey}
+      AND deleted_at IS NULL
+    LIMIT 1
+  `) as { id: string; status: NewsMediaObjectStatus }[];
+
+  return rows[0] ?? null;
+}
+
 export type NewsMediaReconciliationSnapshotRow = {
   id: string;
   objectKey: string;

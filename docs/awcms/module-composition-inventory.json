@@ -6,7 +6,7 @@
     {
       "key": "blog_content",
       "name": "Blog Content",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "status": "active",
       "type": "domain",
       "dependencies": [
@@ -30,7 +30,7 @@
       ],
       "permissionCount": 43,
       "navigationCount": 0,
-      "jobCount": 1,
+      "jobCount": 2,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

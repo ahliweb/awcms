@@ -1034,6 +1034,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_blog_posts: ["SELECT", "UPDATE"],
   awcms_blog_post_terms: ["SELECT"],
   awcms_blog_settings: ["SELECT"],
+  // blog_content — blog:ads:ingest (sql/079, ADR-0044 §4 Fase 2). SELECT-only
+  // on both legacy ad tables: the job reads them and never edits or deletes
+  // them, because retiring them is the NEXT step's decision, taken by a human
+  // who has read the residue report. SELECT + INSERT on the successor table —
+  // it may add rows and read back what it already added (idempotency), never
+  // rewrite one.
+  awcms_blog_ads: ["SELECT"],
+  awcms_blog_ad_placements: ["SELECT"],
+  awcms_news_portal_ad_placements: ["SELECT", "INSERT"],
   // news_portal — news-media:reconcile (sql/041): SELECT the reconciliation
   // snapshot, UPDATE claiming pending_upload/uploaded rows to `failed` and
   // soft-deleting stale `orphaned` rows, DELETE hard-deleting expired `failed`
