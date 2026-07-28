@@ -16,18 +16,18 @@ import { log } from "../../../../../lib/logging/logger";
 import {
   createAdPlacement,
   listAdPlacements
-} from "../../../../../modules/news-portal/application/ad-placement-directory";
-import { validateAdPlacementMediaReference } from "../../../../../modules/news-portal/application/ad-placement-reference-validation";
-import { validateCreateAdPlacementInput } from "../../../../../modules/news-portal/domain/ad-placement-policy";
+} from "../../../../../modules/blog-content/application/ad-placement-directory";
+import { validateAdPlacementMediaReference } from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
+import { validateCreateAdPlacementInput } from "../../../../../modules/blog-content/domain/ad-placement-policy";
 
 const READ_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "ad_placements",
   action: "read" as const
 };
 
 const CONFIGURE_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "ad_placements",
   action: "configure" as const
 };
@@ -157,7 +157,7 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     log("info", "news-portal.ad_placement.created", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       adPlacementId: placement.id
     });
 

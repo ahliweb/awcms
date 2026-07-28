@@ -1,0 +1,39 @@
+-- ADR-0044 (merge `news_portal` into `blog_content`) — drop the inert
+-- `awcms_news_portal_tenant_state` marker table created by `sql/043`.
+--
+-- ## Why this is not a feature loss
+--
+-- The table's only writer was `application/apply-news-portal-preset.ts`, the
+-- `news_portal_full_online_r2` preset activation path. That file was never
+-- ported to this base — `module_management`'s preset ACTIVATION subsystem is
+-- not here — which `news-portal/module.ts` recorded in its own description:
+-- the table and its read helper "ARE retained (forward-compatible), but with no
+-- writer they are inert".
+--
+-- Verified before writing this file: `isFullOnlineR2ModeAppliedForTenant` and
+-- `markFullOnlineR2ModeApplied` had no importer anywhere in `src/`, `tests/`,
+-- or `scripts/`. The single remaining mention in
+-- `blog-content/application/news-media-reference-gate.ts` is a historical
+-- comment describing an import that Issue #681 had already removed.
+--
+-- What actually turns managed-media enforcement on per tenant is
+-- `media_library`'s own switch, `POST /api/v1/media/enforcement`
+-- (`sql/053`/`sql/054`, ADR-0036). Nothing reads this table to decide anything.
+--
+-- ## Why drop rather than leave it
+--
+-- A FORCE-RLS, tenant-scoped table with no owning module and no writer is a
+-- standing false claim to every inventory and readiness gate that enumerates
+-- tenant tables: it reports as a governed data surface while nothing governs
+-- it. Once `news_portal` stops existing as a module (ADR-0044), the table has
+-- no descriptor to belong to at all.
+--
+-- ## Data loss
+--
+-- None that can exist. A row here could only have been written by a code path
+-- this base has never shipped, so the table is empty in any database built from
+-- this repo's migrations. `DROP TABLE` (not `IF EXISTS ... CASCADE`) is
+-- deliberate: nothing holds a foreign key to this table, and if something
+-- somehow did, failing loudly is the correct outcome.
+
+DROP TABLE IF EXISTS awcms_news_portal_tenant_state;

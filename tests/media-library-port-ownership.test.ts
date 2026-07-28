@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 
+import { listModules } from "../src/modules";
 import { mediaLibraryModule } from "../src/modules/media-library/module";
 import { blogContentModule } from "../src/modules/blog-content/module";
-import { newsPortalModule } from "../src/modules/news-portal/module";
 import { CAPABILITY_CONTRACT_VERSIONS } from "../src/modules/_shared/capability-contract-versions";
 
 /**
@@ -25,18 +25,16 @@ describe("media capability ownership (ADR-0036)", () => {
     expect(mediaLibraryModule.capabilities?.provides).toEqual([
       "media_library"
     ]);
-    expect(newsPortalModule.capabilities?.provides ?? []).toEqual([]);
+    // `news_portal` used to be asserted here as "provides nothing". ADR-0044
+    // retired the module entirely, which is a stronger form of the same fact.
+    expect(listModules().some((m) => m.key === "news_portal")).toBe(false);
   });
 
   test("RETIREMENT: `news_media` is gone from the version registry, `media_library` is present, and nobody declares news_media", () => {
     expect(CAPABILITY_CONTRACT_VERSIONS.news_media).toBeUndefined();
     expect(CAPABILITY_CONTRACT_VERSIONS.media_library).toBe("1.0.0");
 
-    for (const module of [
-      mediaLibraryModule,
-      blogContentModule,
-      newsPortalModule
-    ]) {
+    for (const module of [mediaLibraryModule, blogContentModule]) {
       expect(module.capabilities?.provides ?? []).not.toContain("news_media");
       for (const consumed of module.capabilities?.consumes ?? []) {
         expect(consumed.capability).not.toBe("news_media");
@@ -45,7 +43,7 @@ describe("media capability ownership (ADR-0036)", () => {
   });
 
   test("every declared consumer of `media_library` names media_library as the provider — never news_portal", () => {
-    for (const module of [blogContentModule, newsPortalModule]) {
+    for (const module of [blogContentModule]) {
       const entry = (module.capabilities?.consumes ?? []).find(
         (c) => c.capability === "media_library"
       );
@@ -82,7 +80,13 @@ describe("media capability ownership (ADR-0036)", () => {
   test("the deleted news_media port and its adapters stay deleted", () => {
     for (const path of [
       "src/modules/_shared/ports/news-media-port.ts",
+      // Both the historical `news_portal` home of this adapter and the
+      // `blog_content` path it would land on after ADR-0044's merge. The
+      // module directory is gone, so the first path can no longer collide with
+      // anything — asserting it anyway keeps the deletion recorded rather than
+      // making it look like the merge is what removed it.
       "src/modules/news-portal/application/news-media-port-adapter.ts",
+      "src/modules/blog-content/application/news-media-port-adapter.ts",
       "src/modules/blog-content/application/news-media-port-noop-adapter.ts"
     ]) {
       expect(existsSync(path)).toBe(false);

@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   selectAdsForRotation,
   type AdRotationCandidate
-} from "../src/modules/news-portal/domain/ad-placement-rotation";
+} from "../src/modules/blog-content/domain/ad-placement-rotation";
 
 function candidate(
   id: string,

@@ -140,7 +140,7 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 nyata) — `bun run repo:inventory:generate` dan
 `scripts/repo-inventory-generate.ts` belum ada di repo ini; lihat
 disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **70 file migration nyata** di
-`sql/` (`001`..`070`), dipetakan ke **21 modul terdaftar** (urutan
+`sql/` (`001`..`070`), dipetakan ke **20 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
@@ -387,7 +387,7 @@ Tiap folder standar menyertakan `README.md` sebagai kontrak isi/aturan folder:
 
 ### Source modules
 
-21 modul terdaftar nyata di `src/modules/index.ts` (`ls -d src/modules/*/`,
+20 modul terdaftar nyata di `src/modules/index.ts` (`ls -d src/modules/*/`,
 dikonfirmasi `bun run modules:dag:check`),
 menggantikan daftar fiktif sebelumnya (`catalog-inventory`, `sales-pos`,
 `warehouse-management`, `accounting-tax`, `crm-communication`,

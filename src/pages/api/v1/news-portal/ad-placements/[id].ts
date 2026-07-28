@@ -17,13 +17,13 @@ import {
   fetchAdPlacementById,
   softDeleteAdPlacement,
   updateAdPlacement
-} from "../../../../../modules/news-portal/application/ad-placement-directory";
-import { validateAdPlacementMediaReference } from "../../../../../modules/news-portal/application/ad-placement-reference-validation";
-import { validateUpdateAdPlacementInput } from "../../../../../modules/news-portal/domain/ad-placement-policy";
+} from "../../../../../modules/blog-content/application/ad-placement-directory";
+import { validateAdPlacementMediaReference } from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
+import { validateUpdateAdPlacementInput } from "../../../../../modules/blog-content/domain/ad-placement-policy";
 import { validateDeleteReasonInput } from "../../../../../modules/blog-content/domain/content-validation";
 
 const CONFIGURE_GUARD = {
-  moduleKey: "news_portal",
+  moduleKey: "blog_content",
   activityCode: "ad_placements",
   action: "configure" as const
 };
@@ -127,7 +127,7 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
     log("info", "news-portal.ad_placement.updated", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       adPlacementId: id
     });
 
@@ -212,7 +212,7 @@ export const DELETE: APIRoute = async ({
     log("info", "news-portal.ad_placement.deleted", {
       correlationId,
       tenantId,
-      moduleKey: "news_portal",
+      moduleKey: "blog_content",
       adPlacementId: id
     });
 

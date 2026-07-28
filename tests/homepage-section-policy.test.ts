@@ -6,7 +6,7 @@ import {
   validateCreateHomepageSectionInput,
   validateHomepageSectionConfig,
   validateUpdateHomepageSectionInput
-} from "../src/modules/news-portal/domain/homepage-section-policy";
+} from "../src/modules/blog-content/domain/homepage-section-policy";
 
 const VALID_ID = "11111111-1111-1111-1111-111111111111";
 const VALID_ID_2 = "22222222-2222-2222-2222-222222222222";

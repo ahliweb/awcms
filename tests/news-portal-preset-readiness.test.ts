@@ -4,7 +4,7 @@ import {
   evaluateNewsPortalFullOnlineR2Readiness,
   isKnownNewsPortalProfile,
   NEWS_PORTAL_PROFILES
-} from "../src/modules/news-portal/domain/news-portal-preset-readiness";
+} from "../src/modules/blog-content/domain/news-portal-preset-readiness";
 
 const FULLY_CONFIGURED_ENV = {
   NEWS_PORTAL_ENABLED: "true",

@@ -3,10 +3,10 @@ import { defineModule } from "../_shared/module-contract";
 export const blogContentModule = defineModule({
   key: "blog_content",
   name: "Blog Content",
-  version: "0.9.0",
+  version: "0.10.0",
   status: "active",
   description:
-    "Tenant-scoped blog/content management, ported from awcms-mini (epic #536, issues #537-#543 plus the later #636-#649/#681 hardening lineage — see README.md for the full port-adaptation notes). Admin CRUD + lifecycle for posts/pages (draft -> review -> scheduled/published -> archived, soft delete/restore/purge), hierarchical categories/tags with post-term relations, PostgreSQL full-text search, append-only revision history (restore never overwrites, it appends a new revision), presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements with placement targeting/scheduling, a per-tenant theme override falling back to `awcms_tenants.default_theme`), an optional `translation_group_id` linking locale-variants of one post, a whitelisted `gallery`/`video_news` content_json block type (no raw HTML, no new media table), per-tenant blog settings (title/description/RSS/sitemap flags), and automatic internal tag linking (a pure render-time transform, `domain/internal-tag-linking.ts`, gated by a deployment-wide config plus a per-tenant policy table and a per-post opt-out column). Public (anonymous) routes under `/blog/{tenantCode}/...` per ADR-0009 (index, post detail, category/tag archive, search, RSS feed, sitemap) reuse the `resolvePublicTenantByCode` resolver theming's own public preview route already established in this base. PORT-TIME DROPS (documented in the port PR, not silent): the host-resolved `/news/**` route family (Issue #560/#564, epic `news_portal`) is NOT ported — it requires `lib/tenant/public-host-tenant-resolver.ts` (custom-domain-based tenant resolution) and `PUBLIC_TENANT_RESOLUTION_MODE`/`PUBLIC_TRUST_PROXY` env plumbing that belong to the `tenant_domain` routing module, which is not yet ported to this base; the three `/news`-only settings keys (`publicRouteMode`/`publicBasePath`/`publicLabel`) are dropped from `settings.defaults` for the same reason, keeping only `legacyTenantRouteEnabled` (the `/blog/{tenantCode}` on/off switch). The managed-media-reference enforcement (Issue #636/#639/#640/#649, gated by the `media_library` capability below — ADR-0036 ownership inversion; formerly `news_media`) and the publish-time social-publishing outbox trigger (Issue #643, gated by the `social_publishing` capability below) both consume a REQUIRED port parameter at their call sites. The media gate now injects `media_library`'s real adapter (`media-library/application/media-library-port-adapter.ts`) at every composition root: managed-media enforcement reports inactive (a safe no-op) for any tenant that has not enabled it, and enabling it no longer requires a news portal. `social_publishing` is still not ported to this base, so its call sites inject this module's own no-op adapter (`application/social-publishing-port-noop-adapter.ts`), which always reports `{ jobsCreated: 0 }`. Swapping in a real social-publishing adapter is a pure composition-root change (no `blog_content` file touched) once that module is ported.",
+    "Tenant-scoped blog/content management, ported from awcms-mini (epic #536, issues #537-#543 plus the later #636-#649/#681 hardening lineage — see README.md for the full port-adaptation notes). Admin CRUD + lifecycle for posts/pages (draft -> review -> scheduled/published -> archived, soft delete/restore/purge), hierarchical categories/tags with post-term relations, PostgreSQL full-text search, append-only revision history (restore never overwrites, it appends a new revision), presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements with placement targeting/scheduling, a per-tenant theme override falling back to `awcms_tenants.default_theme`), an optional `translation_group_id` linking locale-variants of one post, a whitelisted `gallery`/`video_news` content_json block type (no raw HTML, no new media table), per-tenant blog settings (title/description/RSS/sitemap flags), and automatic internal tag linking (a pure render-time transform, `domain/internal-tag-linking.ts`, gated by a deployment-wide config plus a per-tenant policy table and a per-post opt-out column). Public (anonymous) routes under `/blog/{tenantCode}/...` per ADR-0009 (index, post detail, category/tag archive, search, RSS feed, sitemap) reuse the `resolvePublicTenantByCode` resolver theming's own public preview route already established in this base. PORT-TIME DROPS (documented in the port PR, not silent): the host-resolved `/news/**` route family (Issue #560/#564, epic `news_portal`) is NOT ported — it requires `lib/tenant/public-host-tenant-resolver.ts` (custom-domain-based tenant resolution) and `PUBLIC_TENANT_RESOLUTION_MODE`/`PUBLIC_TRUST_PROXY` env plumbing that belong to the `tenant_domain` routing module, which is not yet ported to this base; the three `/news`-only settings keys (`publicRouteMode`/`publicBasePath`/`publicLabel`) are dropped from `settings.defaults` for the same reason, keeping only `legacyTenantRouteEnabled` (the `/blog/{tenantCode}` on/off switch). The managed-media-reference enforcement (Issue #636/#639/#640/#649, gated by the `media_library` capability below — ADR-0036 ownership inversion; formerly `news_media`) and the publish-time social-publishing outbox trigger (Issue #643, gated by the `social_publishing` capability below) both consume a REQUIRED port parameter at their call sites. The media gate now injects `media_library`'s real adapter (`media-library/application/media-library-port-adapter.ts`) at every composition root: managed-media enforcement reports inactive (a safe no-op) for any tenant that has not enabled it, and enabling it no longer requires a news portal. `social_publishing` is still not ported to this base, so its call sites inject this module's own no-op adapter (`application/social-publishing-port-noop-adapter.ts`), which always reports `{ jobsCreated: 0 }`. Swapping in a real social-publishing adapter is a pure composition-root change (no `blog_content` file touched) once that module is ported. ADR-0044 MERGE: the `news_portal` module is retired and its two surviving features are absorbed here — the editorial homepage section composer (`GET/POST /api/v1/news-portal/homepage-sections`, `PATCH/DELETE .../{id}`, `awcms_news_portal_homepage_sections`, migration 044) and R2-only advertisement placements (`GET/POST /api/v1/news-portal/ad-placements`, `PATCH/DELETE .../{id}`, `awcms_news_portal_ad_placements`, migration 045, every row holding a real FK to a verified media object). Table names and API paths are deliberately UNCHANGED (ADR-0044 §3/§6, following ADR-0036's precedent of not renaming `awcms_news_media_objects` when its ownership moved): a rename costs every foreign key, policy, index, and consumer while buying nothing that the descriptor and inventory do not already record. The `public_content` capability this module PROVIDES was `news_portal`'s only reason to consume it, so that consumption is now an internal call; the capability itself stays declared because `seo_distribution` and future consumers still read it. Dropped in the same change, not absorbed: `awcms_news_portal_tenant_state` (migration 043) and its read helper, which had no writer in this base — the preset ACTIVATION path that would have written it was never ported, and managed-media enforcement is turned on per tenant by `media_library`'s `POST /api/v1/media/enforcement` instead (`sql/077` drops the table). The four absorbed permissions (`homepage_sections`/`ad_placements` x `read`/`configure`, seeded under `news_portal` by migrations 044/045) are repointed to this module's key by `sql/076`, which moves every existing role grant before deleting the old catalog rows so no tenant loses the capability.",
   // `module_management` + `logging` are real value imports this module
   // already makes — `application/public-route-settings.ts` calls
   // `module_management`'s tenant-module/settings helpers, and
@@ -50,10 +50,19 @@ export const blogContentModule = defineModule({
     // posts but owns no standalone public resource, so it is not a second provider.
     provides: ["public_content", "seo_facts"],
     consumes: [
+      // ADR-0044 flipped this from `optional: true`. Before the merge, this
+      // module's own media handling genuinely degraded safely: managed-media
+      // enforcement reports inactive for a tenant that has not enabled it, and
+      // everything keeps rendering. That is no longer the whole story. The
+      // absorbed ad placements hold a REAL foreign key to a verified media
+      // object (`awcms_news_portal_ad_placements.media_object_id`, migration
+      // 045), which is exactly why `news_portal` declared this capability
+      // non-optional. Absorbing the code has to absorb the constraint too —
+      // leaving it `optional` would silently downgrade a declared guarantee to
+      // match the weaker of the two merged modules.
       {
         capability: "media_library",
-        providedBy: "media_library",
-        optional: true
+        providedBy: "media_library"
       },
       {
         capability: "social_publishing",
@@ -268,6 +277,34 @@ export const blogContentModule = defineModule({
       action: "preview",
       description:
         "Preview automatic internal tag links for a post before publishing"
+    },
+    // ADR-0044 — absorbed from the retired `news_portal` module. `sql/044`/
+    // `sql/045` seeded these under `news_portal`; `sql/076` repoints both the
+    // catalog rows and every existing role grant onto this module's key, in
+    // the insert -> repoint -> delete order `sql/052` established, so no tenant
+    // loses the capability. The descriptions here are byte-identical to that
+    // migration's on purpose.
+    {
+      activityCode: "homepage_sections",
+      action: "read",
+      description: "Read editorial homepage section configuration"
+    },
+    {
+      activityCode: "homepage_sections",
+      action: "configure",
+      description:
+        "Create, update, reorder, enable/disable, or delete editorial homepage sections"
+    },
+    {
+      activityCode: "ad_placements",
+      action: "read",
+      description: "Read advertisement placement configuration"
+    },
+    {
+      activityCode: "ad_placements",
+      action: "configure",
+      description:
+        "Create, update, enable/disable, or delete advertisement placements"
     }
   ],
   api: {
@@ -275,7 +312,14 @@ export const blogContentModule = defineModule({
     basePath: "/api/v1/blog",
     // The public path-based tenant routes (ADR-0009) are this module's surface
     // too; before Issue #256 no descriptor claimed them at all.
-    routes: ["/api/v1/blog", "/blog"]
+    //
+    // ADR-0044 §6: `/api/v1/news-portal` is claimed here because the merge
+    // moved OWNERSHIP without renaming the paths. Renaming them in the same
+    // change would produce one diff that is reviewable as neither an ownership
+    // move nor an API change, and every consumer would have to absorb both at
+    // once. Consolidating under `/api/v1/blog` is a separate, redirect-carrying
+    // decision.
+    routes: ["/api/v1/blog", "/blog", "/api/v1/news-portal"]
   },
   // Public search-source contribution to `site_search` (ADR-0040 §3, ported
   // from awcms-micro Issue #270). Pure DATA — no executable extractor, no SQL:

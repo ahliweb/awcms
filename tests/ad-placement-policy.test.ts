@@ -9,7 +9,7 @@ import {
   isSafeAdLinkUrl,
   validateCreateAdPlacementInput,
   validateUpdateAdPlacementInput
-} from "../src/modules/news-portal/domain/ad-placement-policy";
+} from "../src/modules/blog-content/domain/ad-placement-policy";
 
 const VALID_MEDIA_ID = "11111111-1111-1111-1111-111111111111";
 

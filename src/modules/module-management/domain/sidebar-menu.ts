@@ -76,10 +76,12 @@ const DEFAULT_TYPE_INDEX = new Map(
 
 /**
  * Default type placement per module key, so a module lands in a sensible
- * section without every `module.ts` having to carry a `group`. Covers all 21
+ * section without every `module.ts` having to carry a `group`. Covers all 20
  * registered modules; `tests/admin-navigation-registry.test.ts` fails when a
- * module is added without a placement, so the fallback below stays a genuine
- * fallback rather than the silent default.
+ * module is added without a placement — and, as ADR-0044 proved, also when a
+ * RETIRED module keeps its placement. `news_portal` merged into `blog_content`
+ * and its line was removed here; the assertion caught it, which is the second
+ * direction of the completeness check earning its place.
  *
  * This map WINS over a nav entry's own `group` — the same precedence
  * awcms-micro uses. `comments` previously declared `group: "content"`; that
@@ -99,7 +101,6 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   logging: "system",
   // Content authoring & media.
   blog_content: "content",
-  news_portal: "content",
   media_library: "content",
   // Audience engagement.
   comments: "engagement",
