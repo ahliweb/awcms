@@ -3,6 +3,8 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import type {
   AdPlacementKey,
   AdRotationMode,
+  AdTarget,
+  AdTargetType,
   CreateAdPlacementInput,
   UpdateAdPlacementInput
 } from "../domain/ad-placement-policy";
@@ -33,6 +35,8 @@ export type AdPlacementView = {
   isActive: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
+  targetType: AdTargetType;
+  targetId: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -52,6 +56,8 @@ type AdPlacementRow = {
   is_active: boolean;
   starts_at: Date | null;
   ends_at: Date | null;
+  target_type: AdTargetType;
+  target_id: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -72,6 +78,8 @@ function toView(row: AdPlacementRow): AdPlacementView {
     isActive: row.is_active,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
+    targetType: row.target_type,
+    targetId: row.target_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     deletedAt: row.deleted_at,
@@ -93,15 +101,15 @@ export async function createAdPlacement(
   const rows = (await tx`
     INSERT INTO awcms_news_portal_ad_placements
       (tenant_id, placement_key, name, media_object_id, link_url, rotation_mode,
-       priority, is_active, starts_at, ends_at)
+       priority, is_active, starts_at, ends_at, target_type, target_id)
     VALUES (
       ${tenantId}, ${input.placementKey}, ${input.name}, ${input.mediaObjectId},
       ${input.linkUrl}, ${input.rotationMode}, ${input.priority}, ${input.isActive},
-      ${input.startsAt}, ${input.endsAt}
+      ${input.startsAt}, ${input.endsAt}, ${input.targetType}, ${input.targetId}
     )
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, created_at,
-      updated_at, deleted_at, deleted_by, delete_reason
+      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
+      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
   `) as AdPlacementRow[];
 
   const created = toView(rows[0]!);
@@ -129,8 +137,8 @@ export async function fetchAdPlacementById(
 ): Promise<AdPlacementView | null> {
   const rows = (await tx`
     SELECT id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, created_at,
-      updated_at, deleted_at, deleted_by, delete_reason
+      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
+      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
     FROM awcms_news_portal_ad_placements
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
   `) as AdPlacementRow[];
@@ -146,8 +154,8 @@ export async function listAdPlacements(
 ): Promise<AdPlacementView[]> {
   const rows = (await tx`
     SELECT id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, created_at,
-      updated_at, deleted_at, deleted_by, delete_reason
+      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
+      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
     FROM awcms_news_portal_ad_placements
     WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
     ORDER BY placement_key ASC, priority DESC, created_at DESC
@@ -157,6 +165,13 @@ export async function listAdPlacements(
   return rows.map(toView);
 }
 
+/**
+ * `target_id` is gated on `targetType === undefined`, NOT on
+ * `targetId === undefined`. The domain validator hands over both target
+ * fields or neither, and switching an ad to `global` means writing NULL over
+ * an existing target — a `targetId`-based guard would leave the old id in
+ * place and trip migration 078's pairing CHECK.
+ */
 export async function updateAdPlacement(
   tx: Bun.SQL,
   tenantId: string,
@@ -176,11 +191,13 @@ export async function updateAdPlacement(
         is_active = COALESCE(${input.isActive ?? null}, is_active),
         starts_at = CASE WHEN ${input.startsAt === undefined} THEN starts_at ELSE ${input.startsAt ?? null} END,
         ends_at = CASE WHEN ${input.endsAt === undefined} THEN ends_at ELSE ${input.endsAt ?? null} END,
+        target_type = COALESCE(${input.targetType ?? null}, target_type),
+        target_id = CASE WHEN ${input.targetType === undefined} THEN target_id ELSE ${input.targetId ?? null} END,
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
     RETURNING id, tenant_id, placement_key, name, media_object_id, link_url,
-      rotation_mode, priority, is_active, starts_at, ends_at, created_at,
-      updated_at, deleted_at, deleted_by, delete_reason
+      rotation_mode, priority, is_active, starts_at, ends_at, target_type,
+      target_id, created_at, updated_at, deleted_at, deleted_by, delete_reason
   `) as AdPlacementRow[];
 
   const updated = rows[0] ? toView(rows[0]) : null;
@@ -263,6 +280,19 @@ type ActiveAdPlacementRow = {
  * `tenant_id = $1` predicate, RLS FORCE'd defense in depth, same convention
  * `ads-directory.ts`'s `listActiveAdsForPlacement` uses), `is_active =
  * true`, within the schedule window (`starts_at`/`ends_at` NULL-permissive),
+ *
+ * `target` (ADR-0044 §4, migration 078) is the page being rendered, and the
+ * match is a UNION, not an equality: a slot is filled by the ads scoped to
+ * this specific post/page/widget PLUS every `global` ad for that slot. That
+ * differs deliberately from the retired `listActiveAdsForPlacement`, which
+ * matched one scope exactly and left the caller to make two queries and merge
+ * them — an editor who sets a site-wide banner expects it on the article page
+ * too, and every caller that wanted otherwise had to remember to ask twice.
+ *
+ * Passing `null` (the default) means "a page with no specific target", which
+ * returns global ads only — precisely what this function returned for every
+ * caller before targeting existed, since migration 078 defaults every
+ * pre-existing row to `global`.
  * AND joined against the media registry so only a `verified`/`attached`
  * (i.e. `isNewsMediaObjectSafeForPublicReference`) media object's
  * server-generated `public_url` is ever returned — never a client-supplied
@@ -284,8 +314,12 @@ export async function listActiveAdPlacementsForRendering(
   tx: Bun.SQL,
   tenantId: string,
   placementKey: AdPlacementKey,
+  target: AdTarget | null = null,
   now: Date = new Date()
 ): Promise<ActiveAdPlacementForRendering[]> {
+  const targetType = target?.targetType ?? "global";
+  const targetId = target?.targetId ?? null;
+
   const rows = (await tx`
     SELECT p.id, p.name, p.link_url, p.rotation_mode, p.priority, p.created_at,
       m.public_url AS media_public_url, m.alt_text AS media_alt_text,
@@ -295,6 +329,10 @@ export async function listActiveAdPlacementsForRendering(
       ON m.id = p.media_object_id AND m.tenant_id = p.tenant_id
     WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL AND p.is_active = true
       AND p.placement_key = ${placementKey}
+      AND (
+        p.target_type = 'global'
+        OR (p.target_type = ${targetType} AND p.target_id = ${targetId})
+      )
       AND (p.starts_at IS NULL OR p.starts_at <= ${now})
       AND (p.ends_at IS NULL OR p.ends_at >= ${now})
       AND m.deleted_at IS NULL
@@ -363,12 +401,14 @@ export async function selectAndRenderActiveAdsForPlacement(
   tx: Bun.SQL,
   tenantId: string,
   placementKey: AdPlacementKey,
+  target: AdTarget | null = null,
   now: Date = new Date()
 ): Promise<string[]> {
   const eligible = await listActiveAdPlacementsForRendering(
     tx,
     tenantId,
     placementKey,
+    target,
     now
   );
 

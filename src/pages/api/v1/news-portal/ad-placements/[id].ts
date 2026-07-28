@@ -18,7 +18,10 @@ import {
   softDeleteAdPlacement,
   updateAdPlacement
 } from "../../../../../modules/blog-content/application/ad-placement-directory";
-import { validateAdPlacementMediaReference } from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
+import {
+  validateAdPlacementMediaReference,
+  validateAdPlacementTargetReference
+} from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
 import { validateUpdateAdPlacementInput } from "../../../../../modules/blog-content/domain/ad-placement-policy";
 import { validateDeleteReasonInput } from "../../../../../modules/blog-content/domain/content-validation";
 
@@ -107,6 +110,29 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
           "Ad placement references an invalid or inaccessible media object.",
           {},
           referenceValidation.errors
+        );
+      }
+    }
+
+    // Only when the patch actually moves the target. The domain validator
+    // guarantees `targetType` and `targetId` arrive together, so this needs no
+    // fallback to the stored row the way the media check above does — an
+    // untouched target was already validated when it was written.
+    if (input.targetType !== undefined) {
+      const targetValidation = await validateAdPlacementTargetReference(
+        tx,
+        tenantId,
+        input.targetType,
+        input.targetId ?? null
+      );
+
+      if (!targetValidation.valid) {
+        return fail(
+          422,
+          "AD_PLACEMENT_TARGET_INVALID",
+          "Ad placement targets a resource that does not exist in this tenant.",
+          {},
+          targetValidation.errors
         );
       }
     }
