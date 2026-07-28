@@ -30,7 +30,7 @@
       ],
       "permissionCount": 43,
       "navigationCount": 0,
-      "jobCount": 2,
+      "jobCount": 3,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

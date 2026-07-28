@@ -5985,4 +5985,5 @@ for the full policy.
 **Currently deprecated** (derived from `deprecated: true` on any operation,
 schema, or event channel in the bundled contracts):
 
-_None — nothing in the bundled contracts is currently marked deprecated._
+- REST: `POST /api/v1/blog/ads` (`blogCreateAd`)
+- REST: `PATCH /api/v1/blog/ads/{id}` (`blogUpdateAd`)

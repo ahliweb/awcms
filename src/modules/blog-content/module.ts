@@ -477,6 +477,16 @@ export const blogContentModule = defineModule({
       environmentNotes:
         "Reads `NEWS_MEDIA_R2_PUBLIC_BASE_URL` to recognise this deployment's own media URLs; with it unset every ad is reported as residue rather than migrated, which is loud and lossless. Makes no network call of any kind — it never fetches an image, and deliberately so (see `domain/legacy-ad-ingest.ts`).",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run blog:ads:drop-readiness",
+      purpose:
+        "ADR-0044 §4 Fase 2: answers whether `awcms_blog_ads` and `awcms_blog_ad_placements` may be dropped yet, and exits non-zero while the answer is no. A legacy ad is accounted for when a successor row names it via `source_legacy_ad_id` (migration 079) or when it is soft-deleted — an operator read the residue report and decided it does not come along. Anything else blocks, and there is deliberately no override flag. Read-only: it issues no INSERT, UPDATE or DELETE, so it is safe to run against production at any time, including before the ingest has ever run.",
+      recommendedSchedule:
+        "NOT scheduled. Run it by hand before writing the drop migration, and re-run it after each round of `blog:ads:ingest`. Retired together with the legacy tables it inspects.",
+      environmentNotes:
+        "No configuration and no external call — a pure database read. Answers only 'is there a legacy row whose fate nobody has decided'; whether the successor rows are editorially correct is human judgement it does not pretend to check.",
+      safeInOfflineLan: true
     }
   ]
 });
