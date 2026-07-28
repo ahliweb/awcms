@@ -94,6 +94,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled-publish dispatcher (blog:publish:scheduled) — recurring, not latency-sensitive, but more time-relevant than a maintenance purge."
   },
+  "scripts/blog-ads-drop-readiness.ts": {
+    workClass: "maintenance",
+    rationale:
+      "Read-only readiness report (blog:ads:drop-readiness, ADR-0044 §4 Fase 2) — issues no write at all and is run by an operator deciding whether the drop migration may be written, so it is as delay-tolerant as work gets."
+  },
   "scripts/blog-ads-ingest.ts": {
     workClass: "maintenance",
     rationale:

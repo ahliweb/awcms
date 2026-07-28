@@ -2468,61 +2468,18 @@ paths:
       tags:
         - Blog Content
       operationId: blogCreateAd
-      summary: Create an advertisement
-      description: Gated by blog_content.ads.configure. imageUrl/linkUrl must be absolute http(s) URLs (never raw HTML/embed markup). Optionally seeds its initial placements (global|widget|post|page; targetId required except for global).
+      summary: Create an advertisement (RETIRED — always 410)
+      deprecated: true
+      description: RETIRED by ADR-0044 §4. Always responds 410 ENDPOINT_RETIRED, without auth or any database access. This endpoint stored a free-text imageUrl — any URL an admin typed, rendered straight into a public img src — which is the managed-media bypass ADR-0036 closed. Upload the image through the media library, then use POST /api/v1/news-portal/ad-placements, which requires a verified media object. GET and DELETE on this resource still work, so the ingest job's residue report stays resolvable.
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - name
-                - imageUrl
-              properties:
-                name:
-                  type: string
-                imageUrl:
-                  type: string
-                linkUrl:
-                  type: string
-                  nullable: true
-                isActive:
-                  type: boolean
-                startsAt:
-                  type: string
-                  format: date-time
-                  nullable: true
-                endsAt:
-                  type: string
-                  format: date-time
-                  nullable: true
-                placements:
-                  type: array
-                  items:
-                    $ref: "#/components/schemas/BlogAdPlacement"
       responses:
-        "200":
-          description: Ad created.
+        "410":
+          description: Endpoint retired. The successor is named in the error message.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
+                $ref: "#/components/schemas/ApiError"
   /api/v1/blog/ads/{id}:
     parameters:
       - name: id
@@ -2535,60 +2492,18 @@ paths:
       tags:
         - Blog Content
       operationId: blogUpdateAd
-      summary: Update an advertisement (and/or its placements)
-      description: Gated by blog_content.ads.configure. Providing placements replaces the whole set.
+      summary: Update an advertisement (RETIRED — always 410)
+      deprecated: true
+      description: "RETIRED by ADR-0044 §4. Always responds 410 ENDPOINT_RETIRED, without auth or any database access. Closing POST alone would not have sufficed: this endpoint could rewrite imageUrl on an existing ad, the same free-URL bypass by a quieter route that creates no new row. Use PATCH /api/v1/news-portal/ad-placements/{id}, which requires a verified media object."
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                imageUrl:
-                  type: string
-                linkUrl:
-                  type: string
-                  nullable: true
-                isActive:
-                  type: boolean
-                startsAt:
-                  type: string
-                  format: date-time
-                  nullable: true
-                endsAt:
-                  type: string
-                  format: date-time
-                  nullable: true
-                placements:
-                  type: array
-                  items:
-                    $ref: "#/components/schemas/BlogAdPlacement"
       responses:
-        "200":
-          description: Ad updated.
+        "410":
+          description: Endpoint retired. The successor is named in the error message.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum:
-                      - true
-                  data:
-                    type: object
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: "#/components/schemas/ApiError"
     delete:
       tags:
         - Blog Content

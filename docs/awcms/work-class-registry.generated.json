@@ -1090,6 +1090,12 @@
       "rationale": "Scheduled retention purge (logs:audit:purge) — tolerant of delay, never latency-sensitive."
     },
     {
+      "path": "scripts/blog-ads-drop-readiness.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Read-only readiness report (blog:ads:drop-readiness, ADR-0044 §4 Fase 2) — issues no write at all and is run by an operator deciding whether the drop migration may be written, so it is as delay-tolerant as work gets."
+    },
+    {
       "path": "scripts/blog-ads-ingest.ts",
       "workClass": "maintenance",
       "source": "registry",

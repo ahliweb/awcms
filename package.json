@@ -43,6 +43,7 @@
     "identity-access:business-scope:expiry": "bun scripts/identity-access-business-scope-expiry.ts",
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",
     "blog:ads:ingest": "bun scripts/blog-ads-ingest.ts",
+    "blog:ads:drop-readiness": "bun scripts/blog-ads-drop-readiness.ts",
     "news-media:reconcile": "bun scripts/news-media-r2-reconcile.ts",
     "logs:audit:purge": "bun scripts/audit-log-purge.ts",
     "data-lifecycle:archive-purge": "bun scripts/data-lifecycle-archive-purge.ts",

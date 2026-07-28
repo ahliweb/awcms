@@ -8,32 +8,12 @@ import {
   resolveAuthInputs
 } from "../../../../../modules/identity-access/application/access-guard";
 import { hashSessionToken } from "../../../../../lib/auth/session-token";
-import {
-  bodyTooLargeResponse,
-  readJsonBody
-} from "../../../../../lib/security/request-body-limit";
-import { log } from "../../../../../lib/logging/logger";
-import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
-import {
-  createAd,
-  listAds,
-  syncAdPlacements
-} from "../../../../../modules/blog-content/application/ads-directory";
-import {
-  validateAdPlacementsInput,
-  validateCreateAdInput
-} from "../../../../../modules/blog-content/domain/ad-policy";
+import { listAds } from "../../../../../modules/blog-content/application/ads-directory";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
   activityCode: "ads",
   action: "read" as const
-};
-
-const CONFIGURE_GUARD = {
-  moduleKey: "blog_content",
-  activityCode: "ads",
-  action: "configure" as const
 };
 
 /** `GET /api/v1/blog/ads` (Issue #542) — list this tenant's non-deleted ads. */
@@ -71,96 +51,34 @@ export const GET: APIRoute = async ({ request, cookies }) => {
   });
 };
 
-/** `POST /api/v1/blog/ads` (Issue #542) — create an ad, optionally with its initial `placements`. Not idempotent. */
-export const POST: APIRoute = async ({ request, cookies, locals }) => {
-  const { tenantId, token } = resolveAuthInputs(request, cookies);
-
-  if (!tenantId) {
-    return fail(400, "TENANT_REQUIRED", "Tenant header is required.");
-  }
-
-  if (!token) {
-    return fail(401, "AUTH_REQUIRED", "Authentication required.");
-  }
-
-  const bodyRead = await readJsonBody<Record<string, unknown>>(request);
-
-  if (bodyRead.tooLarge) {
-    return bodyTooLargeResponse(bodyRead.limitBytes);
-  }
-
-  const body = bodyRead.value;
-  const validation = validateCreateAdInput(body);
-
-  if (!validation.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Ad is invalid.",
-      {},
-      validation.errors
-    );
-  }
-
-  const placementsInput = (body ?? {}).placements ?? [];
-  const placementsResult = validateAdPlacementsInput(placementsInput);
-
-  if (!placementsResult.valid) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "Ad placements are invalid.",
-      {},
-      placementsResult.errors
-    );
-  }
-
-  const input = validation.value;
-  const sql = getDatabaseClient();
-  const tokenHash = hashSessionToken(token);
-  const now = new Date();
-  const correlationId = locals.correlationId;
-
-  return withTenant(sql, tenantId, async (tx) => {
-    const auth = await authorizeInTransaction(
-      tx,
-      tenantId,
-      tokenHash,
-      now,
-      CONFIGURE_GUARD
-    );
-
-    if (!auth.allowed) {
-      return auth.denied;
-    }
-
-    const ad = await createAd(tx, tenantId, input);
-    const placements = await syncAdPlacements(
-      tx,
-      tenantId,
-      ad.id,
-      placementsResult.value
-    );
-
-    await recordAuditEvent(tx, {
-      tenantId,
-      actorTenantUserId: auth.context.tenantUserId,
-      moduleKey: "blog_content",
-      action: "blog.ad.created",
-      resourceType: "blog_ad",
-      resourceId: ad.id,
-      severity: "info",
-      message: `Blog ad created: ${ad.name}.`,
-      correlationId
-    });
-
-    log("info", "blog-content.ad.created", {
-      correlationId,
-      tenantId,
-      moduleKey: "blog_content",
-      adId: ad.id
-    });
-
-    return ok({ ...ad, placements });
-  });
-};
+/**
+ * `POST /api/v1/blog/ads` — **retired** (ADR-0044 §4 Fase 2, step three).
+ *
+ * This endpoint created an advertisement from a free-text `imageUrl`: any URL
+ * an admin typed, stored verbatim and rendered into an `<img src>` on a public
+ * page. That is the managed-media bypass ADR-0036 inverted media ownership to
+ * close, and it is the reason the merged module keeps only the media-backed
+ * advertisement system.
+ *
+ * It is closed BEFORE the tables are dropped, not with them, and the ordering
+ * is the point: the ingest job (`bun run blog:ads:ingest`) moves what exists at
+ * the moment it runs. Leaving this open would let an editor create a free-URL
+ * ad in the window between the ingest and the drop — an ad that migrates
+ * nowhere and disappears when the table goes, with nothing in any report saying
+ * it ever existed.
+ *
+ * `GET` and `DELETE` deliberately survive. An operator has to be able to read
+ * the residue report's rows and retire the ones they do not want to re-create;
+ * removing the read path would leave them resolving a report against data they
+ * can no longer see.
+ *
+ * 410 rather than 404: the resource existed, its absence is permanent, and the
+ * successor is named in the message. Deliberately answered before any auth or
+ * database work — there is nothing left here to authorize.
+ */
+export const POST: APIRoute = async () =>
+  fail(
+    410,
+    "ENDPOINT_RETIRED",
+    "Free-URL advertisements are retired (ADR-0044). Upload the image through the media library, then create the advertisement via POST /api/v1/news-portal/ad-placements, which requires a verified media object instead of an arbitrary URL."
+  );
