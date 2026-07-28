@@ -4,8 +4,10 @@ import {
   AD_PLACEMENT_KEYS,
   AD_PLACEMENT_PRESETS,
   AD_ROTATION_MODES,
+  AD_TARGET_TYPES,
   isAdPlacementKey,
   isAdRotationMode,
+  isAdTargetType,
   isSafeAdLinkUrl,
   validateCreateAdPlacementInput,
   validateUpdateAdPlacementInput
@@ -111,7 +113,11 @@ describe("validateCreateAdPlacementInput (Issue #638)", () => {
       priority: 0,
       isActive: true,
       startsAt: null,
-      endsAt: null
+      endsAt: null,
+      // ADR-0044 §4: an ad with no stated target is site-wide, which is also
+      // what every row written before migration 078 means.
+      targetType: "global",
+      targetId: null
     });
   });
 
@@ -252,5 +258,108 @@ describe("validateUpdateAdPlacementInput (Issue #638)", () => {
       linkUrl: "javascript:alert(1)"
     });
     expect(result.valid).toBe(false);
+  });
+});
+
+/**
+ * Targeting (ADR-0044 §4, migration 078). The whole point of these columns is
+ * that dropping `awcms_blog_ads` must not silently destroy per-post and
+ * per-page ad targeting, so the first test here is the equivalence claim: the
+ * vocabulary the retired system could express is exactly the vocabulary this
+ * one accepts. If a future edit narrows it, that test fails and the drop stops
+ * being safe.
+ */
+describe("ad placement targeting (ADR-0044 §4)", () => {
+  const VALID_TARGET_ID = "22222222-2222-2222-2222-222222222222";
+
+  function createWith(extra: Record<string, unknown>) {
+    return validateCreateAdPlacementInput({
+      placementKey: "sidebar_top",
+      name: "Sidebar promo",
+      mediaObjectId: VALID_MEDIA_ID,
+      ...extra
+    });
+  }
+
+  test("accepts exactly the target vocabulary the retired free-URL system had", () => {
+    expect(AD_TARGET_TYPES).toEqual(["global", "widget", "post", "page"]);
+
+    for (const targetType of AD_TARGET_TYPES) {
+      expect(isAdTargetType(targetType)).toBe(true);
+    }
+
+    expect(isAdTargetType("category")).toBe(false);
+    expect(isAdTargetType("")).toBe(false);
+    expect(isAdTargetType(undefined)).toBe(false);
+  });
+
+  test("a scoped target carries its id through", () => {
+    for (const targetType of ["widget", "post", "page"] as const) {
+      const result = createWith({ targetType, targetId: VALID_TARGET_ID });
+
+      expect(result.valid).toBe(true);
+      if (!result.valid) return;
+      expect(result.value.targetType).toBe(targetType);
+      expect(result.value.targetId).toBe(VALID_TARGET_ID);
+    }
+  });
+
+  test("a scoped target without an id is rejected, not silently made global", () => {
+    const result = createWith({ targetType: "post" });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((error) => error.field)).toContain("targetId");
+  });
+
+  test("a global target carrying an id is rejected", () => {
+    const result = createWith({
+      targetType: "global",
+      targetId: VALID_TARGET_ID
+    });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((error) => error.field)).toContain("targetId");
+  });
+
+  test("an unknown target type is rejected", () => {
+    const result = createWith({ targetType: "category" });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((error) => error.field)).toContain("targetType");
+  });
+
+  test("PATCH moves the target as a pair — an id alone names no type", () => {
+    const result = validateUpdateAdPlacementInput({
+      targetId: VALID_TARGET_ID
+    });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.map((error) => error.field)).toContain("targetType");
+  });
+
+  test("PATCH to global clears the id, so the stored target cannot survive", () => {
+    const result = validateUpdateAdPlacementInput({ targetType: "global" });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value.targetType).toBe("global");
+    // Present and null, NOT absent: `updateAdPlacement` gates the `target_id`
+    // write on `targetType`, and a row left as `global` with a stale id
+    // violates migration 078's pairing CHECK.
+    expect("targetId" in result.value).toBe(true);
+    expect(result.value.targetId).toBe(null);
+  });
+
+  test("PATCH that names no target at all leaves both fields untouched", () => {
+    const result = validateUpdateAdPlacementInput({ name: "Renamed" });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect("targetType" in result.value).toBe(false);
+    expect("targetId" in result.value).toBe(false);
   });
 });

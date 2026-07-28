@@ -6,7 +6,7 @@
     {
       "key": "blog_content",
       "name": "Blog Content",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "status": "active",
       "type": "domain",
       "dependencies": [

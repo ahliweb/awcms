@@ -17,7 +17,10 @@ import {
   createAdPlacement,
   listAdPlacements
 } from "../../../../../modules/blog-content/application/ad-placement-directory";
-import { validateAdPlacementMediaReference } from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
+import {
+  validateAdPlacementMediaReference,
+  validateAdPlacementTargetReference
+} from "../../../../../modules/blog-content/application/ad-placement-reference-validation";
 import { validateCreateAdPlacementInput } from "../../../../../modules/blog-content/domain/ad-placement-policy";
 
 const READ_GUARD = {
@@ -143,6 +146,23 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         "Ad placement references an invalid or inaccessible media object.",
         {},
         referenceValidation.errors
+      );
+    }
+
+    const targetValidation = await validateAdPlacementTargetReference(
+      tx,
+      tenantId,
+      input.targetType,
+      input.targetId
+    );
+
+    if (!targetValidation.valid) {
+      return fail(
+        422,
+        "AD_PLACEMENT_TARGET_INVALID",
+        "Ad placement targets a resource that does not exist in this tenant.",
+        {},
+        targetValidation.errors
       );
     }
 

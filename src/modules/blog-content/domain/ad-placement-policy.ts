@@ -69,6 +69,88 @@ export function isAdRotationMode(value: unknown): value is AdRotationMode {
 }
 
 /**
+ * Targeting scope (ADR-0044 §4, migration 078). Orthogonal to
+ * `placementKey`: the key says WHERE on the page the ad sits, this says WHICH
+ * pages the slot is filled on. `sidebar_top` + `global` is the top sidebar
+ * slot everywhere; `sidebar_top` + `post:<uuid>` is the same slot on one
+ * article only.
+ *
+ * The vocabulary is carried over verbatim from the retired free-URL system's
+ * `ad-policy.ts` (`AdPlacementType`) so nothing an editor could express there
+ * becomes inexpressible here — that equivalence is the precondition ADR-0044
+ * §4 sets before `awcms_blog_ads` may be dropped. It is redeclared here rather
+ * than imported because `ad-policy.ts` is retired by that same drop; this file
+ * is the survivor.
+ */
+export type AdTargetType = "global" | "widget" | "post" | "page";
+
+export const AD_TARGET_TYPES: readonly AdTargetType[] = [
+  "global",
+  "widget",
+  "post",
+  "page"
+];
+
+export function isAdTargetType(value: unknown): value is AdTargetType {
+  return (
+    typeof value === "string" && (AD_TARGET_TYPES as string[]).includes(value)
+  );
+}
+
+export type AdTarget = {
+  targetType: AdTargetType;
+  targetId: string | null;
+};
+
+/**
+ * `targetId` is required for `widget`/`post`/`page` and forbidden for
+ * `global` — the same "type gates which reference is meaningful" convention
+ * `menu-policy.ts` and the retired `ad-policy.ts` use. Migration 078 enforces
+ * the identical pairing as a CHECK constraint, so a caller that bypasses this
+ * validator gets a database error rather than an unrenderable row; the rule
+ * lives in both places on purpose.
+ *
+ * Absent input means `global` with no target, which is what every row written
+ * before migration 078 means.
+ */
+export function validateAdTarget(
+  record: Record<string, unknown>,
+  errors: ValidationError[]
+): AdTarget {
+  if (record.targetType !== undefined && !isAdTargetType(record.targetType)) {
+    errors.push({
+      field: "targetType",
+      message: `targetType must be one of ${AD_TARGET_TYPES.join(", ")}.`
+    });
+    return { targetType: "global", targetId: null };
+  }
+
+  const targetType =
+    (record.targetType as AdTargetType | undefined) ?? "global";
+
+  if (targetType === "global") {
+    if (record.targetId !== undefined && record.targetId !== null) {
+      errors.push({
+        field: "targetId",
+        message: "targetId must be omitted for a global target."
+      });
+    }
+
+    return { targetType, targetId: null };
+  }
+
+  if (!isUuid(record.targetId)) {
+    errors.push({
+      field: "targetId",
+      message: `targetId is required and must be a UUID for a ${targetType} target.`
+    });
+    return { targetType, targetId: null };
+  }
+
+  return { targetType, targetId: record.targetId };
+}
+
+/**
  * Same base raster allow-list `NEWS_MEDIA_R2_KNOWN_MIME_TYPES`
  * (`news-media-r2-config.ts`) sniffs for (`news-media-mime-sniffer.ts`) —
  * SVG is excluded by design (Keputusan kunci #5). Duplicated here as a
@@ -253,6 +335,8 @@ export type CreateAdPlacementInput = {
   isActive: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
+  targetType: AdTargetType;
+  targetId: string | null;
 };
 
 export type CreateAdPlacementValidationResult =
@@ -341,6 +425,8 @@ export function validateCreateAdPlacementInput(
     errors.push({ field: "endsAt", message: "endsAt must be after startsAt." });
   }
 
+  const target = validateAdTarget(record, errors);
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -356,7 +442,9 @@ export function validateCreateAdPlacementInput(
       priority,
       isActive: record.isActive !== false,
       startsAt,
-      endsAt
+      endsAt,
+      targetType: target.targetType,
+      targetId: target.targetId
     }
   };
 }
@@ -371,6 +459,8 @@ export type UpdateAdPlacementInput = {
   isActive?: boolean;
   startsAt?: Date | null;
   endsAt?: Date | null;
+  targetType?: AdTargetType;
+  targetId?: string | null;
 };
 
 export type UpdateAdPlacementValidationResult =
@@ -491,6 +581,23 @@ export function validateUpdateAdPlacementInput(
     value.endsAt <= value.startsAt
   ) {
     errors.push({ field: "endsAt", message: "endsAt must be after startsAt." });
+  }
+
+  // The target is patched as a PAIR or not at all. `targetId` alone cannot be
+  // valid: keeping the stored `targetType` and swapping only the id either
+  // leaves `global` carrying a target (rejected by migration 078's pairing
+  // CHECK) or silently retargets an ad to a resource the caller never named a
+  // type for. Rejecting it here turns a would-be database error into a field
+  // error that says which field is missing.
+  if (record.targetType !== undefined) {
+    const target = validateAdTarget(record, errors);
+    value.targetType = target.targetType;
+    value.targetId = target.targetId;
+  } else if (record.targetId !== undefined) {
+    errors.push({
+      field: "targetType",
+      message: "targetType is required when targetId is provided."
+    });
   }
 
   if (errors.length > 0) {

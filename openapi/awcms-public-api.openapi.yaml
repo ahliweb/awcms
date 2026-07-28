@@ -14533,6 +14533,20 @@ components:
           type: string
           format: date-time
           nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Omit for a site-wide ad.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+          default: global
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be omitted for `global`.
+          type: string
+          format: uuid
+          nullable: true
     AdPlacementItem:
       type: object
       required:
@@ -14599,6 +14613,19 @@ components:
           type: string
           format: date-time
           nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Orthogonal to `placementKey`, which says WHERE on the page the ad sits — this says WHICH pages the slot is filled on. Rendering a page returns its own targeted ads UNIONED with every `global` ad for that slot.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be absent for `global`. Validated at write time as an existing, non-deleted resource of that type in this tenant; not a foreign key, so a target deleted later simply stops matching rather than erroring.
+          type: string
+          format: uuid
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -14650,6 +14677,19 @@ components:
         endsAt:
           type: string
           format: date-time
+          nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Must be sent whenever `targetId` is sent — the pair moves together or not at all, so that switching to `global` also clears the stored target.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be omitted for `global`. Sending it without `targetType` is a validation error.
+          type: string
+          format: uuid
           nullable: true
     AnalyticsSummary:
       type: object
