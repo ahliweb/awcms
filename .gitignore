@@ -42,18 +42,25 @@ blob-report/
 # graphify skill: track the shareable graph output, but never the
 # regenerable cache nor the machine/user-specific path markers.
 graphify-out/cache/
-graphify-out/.graphify_root
-graphify-out/.graphify_python
 
-# Build-time intermediates. The skill's own final step DELETES both, so a
-# tracked copy can only ever be absent (dirty tree after every run) or left
-# over from a run that was interrupted before cleanup — i.e. stale, describing
-# a graph.json that has since moved. Everything in them is derivable from
-# graph.json, which IS tracked: `.graphify_labels.json` holds the community
-# labels that GRAPH_REPORT.md §Community Hubs already renders, and it only
-# needs to survive long enough for a `--wiki` export in the same run.
-graphify-out/.graphify_analysis.json
-graphify-out/.graphify_labels.json
+# EVERY dotted file inside graphify-out is a build intermediate or a
+# machine-specific marker; the shareable output is the undotted set
+# (`graph.json`, `manifest.json`, `cost.json`, `GRAPH_REPORT.md`). The skill's
+# own final step deletes the intermediates, so a tracked copy can only ever be
+# absent (dirty tree after every run) or left over from a run interrupted
+# before cleanup — i.e. stale, describing a graph.json that has since moved.
+#
+# A blanket rule, not an enumeration: an INTERRUPTED run leaves files no list
+# anticipates. The sibling awcms-astro repo was carrying seven of them
+# (`.graphify_ast.json`, `.graphify_chunk_NN.json`, `.graphify_detect.json`,
+# `.graphify_uncached.txt`, `.detect_err.txt`, plus the two path markers) —
+# enumeration only guards the runs that finish cleanly, and those are not the
+# runs that leave rubbish behind.
+#
+# Nothing shareable is lost: `.graphify_labels.json` holds the community labels
+# GRAPH_REPORT.md §Community Hubs already renders, and it only needs to survive
+# long enough for a `--wiki` export inside the same run.
+graphify-out/.*
 
 # graphify keeps a dated backup of the curated graph on every rebuild.
 # The live artifacts beside it are the ones under review; a second full copy is
