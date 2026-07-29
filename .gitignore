@@ -45,12 +45,15 @@ graphify-out/cache/
 graphify-out/.graphify_root
 graphify-out/.graphify_python
 
-# Build-time intermediate. The skill's own final step DELETES this file, so a
+# Build-time intermediates. The skill's own final step DELETES both, so a
 # tracked copy can only ever be absent (dirty tree after every run) or left
 # over from a run that was interrupted before cleanup — i.e. stale, describing
-# a graph.json that has since moved. Everything in it is derivable from
-# graph.json, which IS tracked.
+# a graph.json that has since moved. Everything in them is derivable from
+# graph.json, which IS tracked: `.graphify_labels.json` holds the community
+# labels that GRAPH_REPORT.md §Community Hubs already renders, and it only
+# needs to survive long enough for a `--wiki` export in the same run.
 graphify-out/.graphify_analysis.json
+graphify-out/.graphify_labels.json
 
 # graphify keeps a dated backup of the curated graph on every rebuild.
 # The live artifacts beside it are the ones under review; a second full copy is
