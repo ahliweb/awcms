@@ -178,6 +178,20 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 
 ## 4. Backlog / langkah berikutnya
 
+- **Kontrak OpenAPI masih menamai modul yang sudah pensiun (temuan graphify 2026-07-29,
+  BELUM diperbaiki).** Katalog tag root `openapi/awcms-public-api.openapi.yaml` masih
+  mengumumkan `News Portal Homepage Sections` + `News Portal Ad Placements` padahal
+  `news_portal` dilebur ke `blog_content` (ADR-0044) — dan **tidak ada tag `Blog Content`
+  sama sekali**. Akibatnya `docs/awcms/api-reference.md` yang ter-generate **tidak punya
+  satu pun seksi REST Blog Content** meski bundel memuat 32 path `/api/v1/blog/*`; sisi
+  AsyncAPI-nya justru mencantumkan channel `awcms.blog-content.*`. `api:docs:check` tidak
+  menangkapnya karena generator mengelompokkan menurut tag root yang **dideklarasikan**,
+  jadi surface tanpa tag hilang tanpa memerahkan apa pun. `blog_content.api.openApiPath`
+  juga menunjuk BUNDEL, bukan fragmen modulnya, sementara `openapi/modules/blog-content.openapi.yaml`
+  dan `openapi/modules/news-portal.openapi.yaml` dua-duanya masih ada. Memperbaikinya =
+  mengubah nama tag publik → PR tersendiri dengan changeset (dan pertimbangkan gate yang
+  menuntut setiap path ber-tag milik modul terdaftar, karena kelas cacat ini akan
+  terulang).
 - **Keluarga kini Bun-only tanpa pengecualian (2026-07-29).** `awcms-astro` —
   template situs statis keluarga, repo keempat — dipindahkan dari Node 22 + npm ke
   Bun (ADR-0015 di repo itu): `bun.lock`, `bun:test`, `oven/bun` di image,
