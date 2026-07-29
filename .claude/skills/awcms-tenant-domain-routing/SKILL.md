@@ -165,7 +165,8 @@ Keputusan mengikat:
 - `verify`/`set_primary` wajib `Idempotency-Key` (scope
   `tenant_domain_verify`/`tenant_domain_set_primary`) dan diaudit, meski
   keduanya **tidak** `HIGH_RISK` (union `AccessAction` diperluas dengan
-  `set_primary`; `verify` sudah ada dari news_portal). `verify` manual-first,
+  `set_primary`; `verify` sudah ada dari news_portal — modul itu kini dilebur ke
+  `blog_content`, ADR-0044/#300). `verify` manual-first,
   tanpa panggilan DNS/HTTP keluar.
 - ⚠️ **RISIKO RESIDUAL M1 (dangling-DNS takeover) — gerbangi sebelum
   self-service custom domain tak-tepercaya.** `verify` mengaktifkan domain tanpa
@@ -244,8 +245,9 @@ tapi tidak lagi untuk record **serving**.
 - **Rute konten publik ber-resolusi host** (permukaan gaya `/news`). Resolver +
   fungsi lookup + directory + admin API sudah lengkap & teruji, tapi belum ada
   rute publik yang mengonsumsi `resolvePublicTenantFromRequest` — butuh rute
-  render publik blog_content/news_portal di-plumb lewatnya (news_portal
-  men-defer `/news/**`-nya sendiri dengan alasan sama). Wiring-nya follow-up
+  render publik `blog_content` di-plumb lewatnya (rute `/news/**` tetap
+  di-defer; sejak ADR-0044/#300 pemiliknya `blog_content`, bukan modul
+  terpisah). Wiring-nya follow-up
   bersih; seam stabil. Env `PUBLIC_TENANT_RESOLUTION_MODE`/`PUBLIC_TRUST_PROXY`/
   `PUBLIC_DEFAULT_TENANT_ID`/`PUBLIC_DEFAULT_TENANT_CODE` belum divalidasi
   `scripts/validate-env.ts` (belum ada konsumen runtime) — tambahkan saat

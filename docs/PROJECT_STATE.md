@@ -178,6 +178,15 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 
 ## 4. Backlog / langkah berikutnya
 
+- **Keluarga kini Bun-only tanpa pengecualian (2026-07-29).** `awcms-astro` —
+  template situs statis keluarga, repo keempat — dipindahkan dari Node 22 + npm ke
+  Bun (ADR-0015 di repo itu): `bun.lock`, `bun:test`, `oven/bun` di image,
+  `setup-bun` di CI, Dependabot `package-ecosystem: bun`. Jebakan yang tertangkap
+  saat migrasi dan berlaku untuk SETIAP repo keluarga: `bun run` menyelesaikan
+  nama ke script `package.json` **sebelum** `node_modules/.bin`, jadi script
+  bernama sama dengan binernya (mis. `"astro": "bun --bun astro"`) menghasilkan
+  rekursi tak terbatas yang mati sebagai `E2BIG: Argument list too long` — pesan
+  yang tidak menyebut sebabnya sama sekali.
 - **Porting Jualanku.info ([ADR-0045](adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md), 2026-07-29).**
   `awcms` = system of record + admin internal; `awcms-astro` = experience layer + BFF.
   Blueprint lengkap (arsitektur, otorisasi merchant, model data, kontrak API, kontrak

@@ -47,7 +47,9 @@ di `awcms-family-compatibility.yaml`, atau `bun run family:conformance:check` me
 **Sudah ada (JANGAN port ulang):** `tenant-admin`, `identity-access` (login, sesi, RBAC,
 ABAC DSL, MFA TOTP + step-up, OIDC/SSO generik + break-glass, business-scope, SoD, Turnstile),
 `profile-identity`, `logging`, `module-management`, `sync-storage`, `workflow-approval`,
-`reporting`, `email`, `domain-event-runtime`, **`theming`, `blog-content`, `news-portal`**.
+`reporting`, `email`, `domain-event-runtime`, **`theming`, `blog-content`**
+(yang sejak [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) juga
+memiliki seluruh bekas `news-portal`).
 
 **Diserap dari awcms-micro (lingkup penuh; status per-modul di §5):** pustaka UI
 `src/components/ui/`, seam kontribusi konten, `media-library` ✅, `tenant-domain` ✅,

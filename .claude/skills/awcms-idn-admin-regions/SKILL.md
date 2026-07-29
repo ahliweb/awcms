@@ -25,7 +25,7 @@ Epic #654 (Issue #655-#664): master data wilayah administratif Indonesia
 `cahyadsn/wilayah` (MIT License). Modul ini didaftarkan **langsung** di
 repo base ini (bukan aplikasi turunan) karena master data wilayah relevan
 untuk hampir semua aplikasi turunan (POS, portal, sistem pengaduan, dsb.)
-— sama alasan `blog-content`/`news-portal`/`tenant-domain`/
+— sama alasan `blog-content`/`tenant-domain`/
 `visitor-analytics` terdaftar langsung, tapi `idn_admin_regions` sendiri
 `type: "base"` (bukan `domain`/`system`) karena ini reference data murni,
 bukan fitur bisnis tenant atau infrastruktur platform.
@@ -161,7 +161,8 @@ DO NOTHING`, tidak ada mekanisme baru yang ditemukan. Migration ini HANYA
    mekanisme baru.
 6. **Tidak `api`/`navigation`/`jobs`/`health`/`settings`/`events` di
    descriptor** — sama pola `visitor_analytics` (Issue #617) dan
-   `news_portal` (Issue #632) sebelum fitur nyatanya ada: descriptor hanya
+   `news_portal` (Issue #632, modul itu kini dilebur ke `blog_content`)
+   sebelum fitur nyatanya ada: descriptor hanya
    mengklaim capability yang benar-benar sudah ada. `api.basePath` untuk
    #662 kemungkinan `/api/v1/idn-regions` (sesuai daftar endpoint issue
    #662's body), tapi TIDAK di-pre-declare di sini — implementor #662

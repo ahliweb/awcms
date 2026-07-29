@@ -81,7 +81,9 @@ export const <camelCase>Module = defineModule({
 
 Domain retail/POS contoh (aspirational, belum tentu ada di base generik ini): `tenant-admin`, `identity-access`, `profile-identity`, `catalog-inventory`, `sales-pos`, `shared-stock-routing`, `warehouse-management`, `accounting-tax`, `crm-communication`, `sync-storage`, `ai-analyst`, `localization-ui`, `observability-logging`, `database-connectivity`, `workflow-approval`, `management-reporting`, `ui-experience`, `production-security-readiness`.
 
-Modul base generik yang **sudah nyata terdaftar** di repo ini (`src/modules/index.ts`, 23 modul): `tenant-admin`, `profile-identity`, `identity-access`, `sync-storage`, `reporting`, `logging`, `workflow-approval`, `form-drafts`, `email`, `module-management`, `blog-content`, `tenant-domain`, `visitor-analytics`, `news-portal`, `social-publishing`, `idn-admin-regions`, plus 7 modul platform-evolution epic #738: `data-exchange`, `data-lifecycle`, `document-infrastructure`, `domain-event-runtime`, `integration-hub`, `organization-structure`, `reference-data`.
+Modul yang **sudah nyata terdaftar** di repo ini — urutan `src/modules/index.ts`, **20 modul**, verifikasi dengan `listModules()` dan jangan mengutip angka dari dokumen mana pun: `logging`, `tenant-admin`, `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`, `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`, `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`.
+
+**Yang TIDAK ada di registry** meski ADR-nya `Accepted` atau skill-nya ada: `data-exchange`, `document-infrastructure`, `integration-hub`, `organization-structure`, `reference-data`, `social-publishing`, `idn-admin-regions` (belum di-port), dan `news-portal` (**dilebur** ke `blog_content` — ADR-0044/#300).
 
 ## Sebelum scaffold modul baru: cek kebijakan admission
 

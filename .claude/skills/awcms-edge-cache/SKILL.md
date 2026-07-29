@@ -47,7 +47,8 @@ ketiga yang senyap.
 
 - **Purge untuk modul TANPA surface ter-deklarasi tidak cocok dengan apa pun.**
   Objek ter-cache hanya bertanda key modul PEMILIK surface — hari ini cuma
-  `blog_content` dan `theming`. Meng-enqueue `m:news_portal` atau
+  `blog_content` dan `theming` (`news_portal` DILEBUR ke `blog_content` —
+  ADR-0044/#300). Meng-enqueue `m:news_portal` atau
   `m:media_library` menghasilkan ban yang tidak cocok dengan objek mana pun
   sementara antrean melaporkan `sent=1`. Jangan tambahkan "untuk jaga-jaga".
   Gate `edge-cache:surfaces:check` menuntut emisi purge dari setiap modul yang

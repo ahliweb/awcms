@@ -128,8 +128,8 @@ lifecycle di atas — `dependencies` tetap satu-satunya field yang dibaca
 `hasDependencyCycle`/`validateModuleDependencyGraph`/`evaluateModuleEnable`/
 `evaluateModuleDisable`. `capabilities` murni mendokumentasikan hubungan
 IMPORT SOURCE-LEVEL lewat pola ports-and-adapters (`_shared/ports/*.ts`)
-— lihat ADR-0011 dan skill `awcms-news-portal`'s §681 untuk contoh
-nyata (`blog_content`/`news_portal`). Modul yang butuh kapabilitas dari
+— lihat ADR-0011 dan skill `awcms-news-portal` §681 untuk contoh
+nyata (`blog_content`/`news_portal`), yang kini **historis** (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan). Modul yang butuh kapabilitas dari
 modul lain TIDAK PERNAH meng-import `application`/`domain` modul itu
 langsung — hanya port interface (`_shared/ports/`) di layer
 `application`/`domain`, dengan adapter konkret disuntikkan pemanggil
@@ -141,7 +141,9 @@ selalu ikut ter-bundle).
 
 **Dua varian composition-root sudah ada di repo ini — pilih sesuai
 taruhan keamanan fitur, bukan template tunggal.** Varian #1
-(`blog_content` konsumsi `NewsMediaPort` dari `news_portal`, Issue #681):
+(`blog_content` konsumsi `NewsMediaPort` dari `news_portal`, Issue #681 —
+**contoh historis**: keduanya kini satu modul, dan port yang setara hari ini
+adalah `MediaLibraryPort` dari `media_library`):
 route handler SELALU inject adapter konkret, TANPA cek enable/disable
 tenant di call site — port itu sendiri yang didesain fail-closed/no-op
 aman untuk setiap kasus "tidak berlaku". Varian #2 (`identity_access`
@@ -222,7 +224,7 @@ masing-masing.
 `synced`/`missing`/`orphaned`/`mismatched_description` — **read-only**,
 tidak pernah menulis ke `awcms_permissions`.
 
-Per 2026-07-26 di repo INI: **SEMUA 21 modul** mendeklarasikan `permissions` di
+Per 2026-07-29 di repo INI: **SEMUA 20 modul** mendeklarasikan `permissions` di
 descriptornya (#251 menutup `email`, yang terakhir). Artinya `orphaned` sekarang
 BUKAN lagi kondisi normal untuk modul mana pun — kalau laporan menampilkannya,
 itu sinyal nyata, bukan latar belakang yang bisa diabaikan.
@@ -351,7 +353,7 @@ offline/LAN vs full-online-only, dan pemetaan 23 modul ke kategori tersebut
 konsisten diisi — lihat doc 21 §8).
 
 > **Jangan baca "23 modul" sebagai isi registry.** `listModules()` mengembalikan
-> **21** modul; jalankan itu bila butuh angka pasti, jangan kutip doc 21. Dari
+> **20** modul (`news_portal` dilebur ke `blog_content` oleh ADR-0044/#300); jalankan itu bila butuh angka pasti, jangan kutip doc 21. Dari
 > 7 modul platform-evolution epic #738 yang dipetakan doc 21, hanya
 > **`data_lifecycle` dan `domain_event_runtime`** yang benar-benar terdaftar.
 > `organization_structure`, `document_infrastructure`, `data_exchange`,

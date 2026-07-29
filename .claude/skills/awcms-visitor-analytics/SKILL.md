@@ -95,8 +95,9 @@ config, now, legalHoldGuard)` — param ke-5 WAJIB. Hold yang mencakup
   root (`POST /api/v1/analytics/retention/purge`,
   `scripts/visitor-analytics-purge.ts`). Const kunci:
   `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` di `module.ts`.
-- **DEFER** wiring preset `news_portal_full_online_r2` → JANGAN sentuh modul
-  `news_portal`. Modul ini standalone.
+- **DEFER** wiring preset `news_portal_full_online_r2`. Modul ini standalone.
+  Catatan (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan): preset itu kini urusan `blog_content`, dan tetap tidak
+  disentuh dari sini.
 - **Admin** = SSR-render (`admin/offices.astro` pattern), bukan client-fetch
   SPA micro (base ini tak punya i18n framework / `components/ui`).
 

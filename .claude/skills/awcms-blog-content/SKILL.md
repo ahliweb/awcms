@@ -1,6 +1,6 @@
 ---
 name: awcms-blog-content
-description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules/blog-content`, migrasi `sql/035`–`sql/040`, 15 tabel `awcms_blog_*` FORCE RLS). Panduan untuk MENGUBAH/menambah ke `src/modules/blog-content`, `src/pages/blog`, mengubah schema blog, atau mengerjakan issue susulan. CATATAN adaptasi awcms (beda dari spesifikasi mini di bawah): rute publik PATH-based `/blog/{tenantCode}` (ADR-0009), BUKAN `/news/**` host-resolved (DI-DROP saat port karena `tenant_domain` belum ada; modul itu kini SUDAH di-port (#219) tapi rute `/news/**` tetap belum diadopsi); capability media kini `media_library` (INVERSI ADR-0036 — dulu `news_media` dari news_portal; kini modul `media_library` sendiri, adapter NYATA `mediaLibraryPortAdapter`, method `isManagedMediaEnforcementActiveForTenant`); hook `social_publishing` masih no-op (modul itu belum di-port); admin UI blog (`src/pages/admin/blog`) TIDAK di-port. Nomor `sql/NNN` di badan skill memakai penomoran awcms-mini — migrasi nyata di awcms adalah `sql/035`–`sql/040` (lihat README modul + `sql/` nyata). Gunakan saat menambah endpoint/logic blog, mengubah schema, atau issue lanjutan.
+description: Modul blog_content SUDAH di-port ke repo ini (PR #214) dan sejak **ADR-0044 (PR #300) ia MENYERAP SELURUH `news_portal`** — homepage-section composer + ad placement ber-`media_object_id` terverifikasi kini miliknya, `src/modules/news-portal/` tidak ada lagi, dan nama tabel `awcms_news_portal_*` DIPERTAHANKAN (FK komposit keras) sehingga nama tabel bukan petunjuk kepemilikan. Jalur tulis iklan free-URL (`awcms_blog_ads.image_url`) DITUTUP (#303) setelah penargetan dilebarkan (#301) dan job ingest iklan lama mendarat (#302); kosakata blok konten kini kontrak ter-gerbang (#304). (PR #214; `src/modules/blog-content`, migrasi `sql/035`–`sql/040`, 15 tabel `awcms_blog_*` FORCE RLS). Panduan untuk MENGUBAH/menambah ke `src/modules/blog-content`, `src/pages/blog`, mengubah schema blog, atau mengerjakan issue susulan. CATATAN adaptasi awcms (beda dari spesifikasi mini di bawah): rute publik PATH-based `/blog/{tenantCode}` (ADR-0009), BUKAN `/news/**` host-resolved (DI-DROP saat port karena `tenant_domain` belum ada; modul itu kini SUDAH di-port (#219) tapi rute `/news/**` tetap belum diadopsi); capability media kini `media_library` (INVERSI ADR-0036 — dulu `news_media` dari news_portal; kini modul `media_library` sendiri, adapter NYATA `mediaLibraryPortAdapter`, method `isManagedMediaEnforcementActiveForTenant`); hook `social_publishing` masih no-op (modul itu belum di-port); admin UI blog (`src/pages/admin/blog`) TIDAK di-port. Nomor `sql/NNN` di badan skill memakai penomoran awcms-mini — migrasi nyata di awcms adalah `sql/035`–`sql/040` (lihat README modul + `sql/` nyata). Gunakan saat menambah endpoint/logic blog, mengubah schema, atau issue lanjutan.
 ---
 
 # AWCMS — Blog Content Module
@@ -14,6 +14,27 @@ description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules
 > **panduan mengubah/menambah kode nyata**, bukan spesifikasi target port.
 > Baca `src/modules/blog-content/README.md` + `sql/` untuk detail nomor/tabel
 > yang akurat.
+>
+> **PENYERAPAN `news_portal` (ADR-0044, PR #300) — BACA SEBELUM MENYENTUH IKLAN ATAU HOMEPAGE:**
+>
+> - Modul `news_portal` **dilebur ke sini**. `src/modules/news-portal/` dihapus dan
+>   registry turun ke **20 modul**. Skill `awcms-news-portal` kini historis.
+> - Yang pindah dan **hidup di modul ini**: homepage-section composer + ad
+>   placement ber-`media_object_id` **terverifikasi** (12 slot `placement_key`,
+>   `rotation_mode`, `priority`), plus penargetan `placement_type`
+>   global/widget/post/page + `target_id` yang **dilebarkan** ke tabel R2 (#301).
+> - **Nama tabel `awcms_news_portal_*` DIPERTAHANKAN** (preseden ADR-0036 — FK
+>   komposit keras). Jangan me-rename, dan jangan menyimpulkan kepemilikan modul
+>   dari nama tabel.
+> - **Jalur tulis `awcms_blog_ads.image_url` DITUTUP (#303).** Ia adalah lubang
+>   unmanaged-media yang `media_library` + enforcement-nya ada untuk menutup:
+>   tenant bisa meng-ON-kan managed-media dan tetap menerbitkan gambar remote
+>   sembarang lewat tabel itu. Iklan baru **wajib** `media_object_id`. Data lama
+>   dipindahkan job ingest (#302, `bun run blog:ads:ingest` — pratinjau dulu,
+>   residu dilaporkan) dan kesiapan drop-nya diperiksa
+>   `bun run blog:ads:drop-readiness`.
+> - Kosakata blok konten (`content_json`) kini **kontrak ter-gerbang** (#304) —
+>   menambah tipe blok berarti menyentuh gerbang itu, bukan hanya renderer.
 >
 > **DELTA PORT AWCMS (beda dari spesifikasi mini di badan skill — WAJIB diperhatikan):**
 >
@@ -31,9 +52,12 @@ description: Modul blog_content SUDAH di-port ke repo ini (PR #214; `src/modules
 >   descriptor itu **wajib ikut diperbarui** atau gate `site-search:sources:check`
 >   merah dan indeks pencarian jadi bohong. Jangan menulis ke tabel
 >   `awcms_site_search_*` dari sini.
-> - Capability `news_media` kini **adapter NYATA** (`news_portal` sudah di-port,
->   PR #214) — bukan lagi no-op. Hook `social_publishing` **masih no-op**
->   (`social_publishing` belum di-port).
+> - Capability **`news_media` sudah PENSIUN**. Penggantinya `media_library`
+>   (ADR-0036), dengan adapter NYATA `media-library/application/media-library-port-adapter.ts`
+>   yang di-inject di setiap composition root — bukan no-op. Kunci lama
+>   `news_media` sengaja TIDAK dipakai ulang supaya konsumen yang masih
+>   memintanya gagal keras, bukan diam-diam terikat ke port yang berbeda.
+>   Hook `social_publishing` **masih no-op** (modulnya belum di-port).
 > - **Admin UI blog (`src/pages/admin/blog`) TIDAK di-port** — base ini hanya
 >   punya layar admin yang sudah ada di `src/pages/admin/*`. Modul blog di sini
 >   API-first + rute publik.
@@ -85,7 +109,8 @@ lintas-mode adalah spesifikasi awcms-mini, bukan kode awcms.
 **Juga di luar epic #536**: Issue #636 (epic `news_portal` #631-#642/#649)
 menambah validasi KONDISIONAL — hanya aktif ketika full-online R2-only
 mode aktif UNTUK TENANT PEMANGGIL (`isNewsPortalFullOnlineR2ModeActiveForTenant`,
-`application/news-portal-r2-mode-gate.ts`) — yang mewajibkan
+`application/news-media-reference-gate.ts` — nama berkasnya berubah saat
+merge ADR-0044; `news-portal-r2-mode-gate.ts` tidak ada) — yang mewajibkan
 `featuredMediaId` dan item gallery bertipe image mereferensikan baris
 `verified`/`attached` di media registry `news_portal` (#633), bukan lagi
 UUID/URL bebas TANPA verifikasi. **Rule #18 di bawah ("tidak ada base
@@ -154,7 +179,7 @@ Admin UI: `src/pages/admin/blog/internal-tag-links.astro` (layar ke-15).
 17. **Sub-resource full-replace butuh `id` client-supplied kalau ada hierarki/self-reference dalam satu payload** (`menu items`' `parentItemId`, lihat `menu-directory.ts`'s `syncMenuItems` docblock) — karena `DELETE`-lalu-`INSERT` membuang id lama sebelum baris baru ditulis, referensi ke sibling di payload yang sama HANYA bisa diselesaikan kalau klien sendiri yang menyuplai id-nya (bukan `gen_random_uuid()` DB). Sub-resource _tanpa_ hierarki (ad placements) tetap boleh pakai id DB-generated biasa.
 18. **Tidak ada base media library** — jangan bangun tabel/endpoint media baru untuk kebutuhan galeri/attachment. Tambahkan tipe block baru di `content-block-rendering.ts`'s whitelist (pola `gallery`, Issue #542) atau simpan sebagai UUID/URL longgar (pola `featuredMediaId`), tergantung kebutuhan — jangan re-derive konsep "media library" dari nol. **Sejak Issue #636** (lihat catatan "Di luar epic #536" di atas): saat full-online R2-only mode aktif untuk tenant, UUID/URL longgar itu WAJIB divalidasi menunjuk baris registry `news_portal` (#633) yang aman — tetap bukan media library baru di `blog_content` sendiri, hanya validasi referensi ke registry modul lain.
 19. **Theme mode adalah override, bukan engine baru** — `awcms_tenants.default_theme` (migration 002) tetap satu-satunya sumber default. Tabel/endpoint theme modul manapun (blog atau modul lain di masa depan) harus fallback ke situ saat tidak ada override, sama seperti `theme-settings-directory.ts`'s `fetchBlogThemeSettings`.
-20. **Kolaborasi dengan `news_portal` lewat capability port, BUKAN import langsung** (Issue #681, epic #679 — lihat ADR-0011 dan skill `awcms-news-portal`'s §681 untuk detail penuh). `application`/`domain` file `blog_content` DILARANG `import ... from` tree `application`/`domain` milik `news_portal` — kapabilitas apa pun yang dibutuhkan dari `news_portal` (mis. validasi/resolusi media R2) diterima lewat parameter port (`_shared/ports/news-media-port.ts`'s `NewsMediaPort`), disuntikkan pemanggil (route handler). Dijaga otomatis oleh `tests/unit/module-boundary.test.ts` — PR yang menambah import lintas-modul baru akan gagal test ini.
+20. **HISTORIS sejak ADR-0044/#300** — `news_portal` kini SATU modul dengan ini, jadi tidak ada lagi kolaborasi lintas-modul yang perlu port di antara keduanya; pola port-nya tetap berlaku untuk `media_library`. (Aslinya: kolaborasi dengan `news_portal` lewat capability port, BUKAN import langsung — Issue #681, epic #679, lihat ADR-0011 dan skill `awcms-news-portal` §681 untuk detail penuh). `application`/`domain` file `blog_content` DILARANG `import ... from` tree `application`/`domain` milik `news_portal` — kapabilitas apa pun yang dibutuhkan dari `news_portal` (mis. validasi/resolusi media R2) diterima lewat parameter port (`_shared/ports/news-media-port.ts`'s `NewsMediaPort`), disuntikkan pemanggil (route handler). Dijaga otomatis oleh `tests/unit/module-boundary.test.ts` — PR yang menambah import lintas-modul baru akan gagal test ini.
 21. **Setiap handler yang MENGUBAH konten blog wajib meng-enqueue purge cache tepi** (ADR-0042). Panggil `enqueueModuleContentPurge(tx, tenantId, "blog_content", "<alasan>")` dari `src/lib/edge-cache/content-purge.ts` **di dalam transaksi yang sama** dengan perubahannya — itulah inti pola outbox (ADR-0006): publish yang di-rollback tidak meninggalkan purge nyasar, dan publish yang commit tidak bisa kehilangan purge-nya. Sudah terpasang di `posts/index.ts` (create), `posts/[id].ts` (update + delete), dan `blog-scheduled-publish.ts`. Lingkupnya **modul, bukan resource** — respons ter-cache ditandai key tenant/surface/modul saja, jadi ban ber-scope resource tidak akan cocok dengan objek apa pun sementara antrean melaporkan sukses. No-op saat `EDGE_CACHE_MODE=off`, jadi aman dipanggil tanpa syarat. `tests/edge-cache-content-purge.test.ts` mengunci hitungan pemanggilan **di tingkat sumber** untuk ketiga berkas itu: menambah handler mutasi keempat tanpa enqueue tidak akan memerahkan test handler mana pun — tetapi akan menyajikan halaman basi sampai TTL habis. Perbarui daftar test itu bersama handler barunya.
 
 ## Belum ada — jangan asumsikan sudah dikerjakan

@@ -164,6 +164,7 @@ migrasi ini jalan (di-seed owner saat setup-wizard bootstrap).
   me-resolve `config.assetRefs` (slotKey -> media object id) lewat
   `MediaLibraryPort` — capability yang sama yang dikonsumsi `blog_content` dan
   `news_portal` — dan `theming` mendeklarasikannya di `capabilities.consumes`.
+  Catatan (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan).
   Port-nya injectable (`media` parameter ke-4, default adapter nyata), jadi
   jalur omission bisa diuji tanpa DB.
 
