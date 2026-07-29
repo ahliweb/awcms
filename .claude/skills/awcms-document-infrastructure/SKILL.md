@@ -118,7 +118,7 @@ yang didukung: `{SEQ}`/`{SEQ:n}` (n=1-12), `{YYYY}`, `{YY}`, `{MM}`, `{DD}`.
 `linkDocumentToResource`/`unlinkDocumentFromResource`/
 `listRelationsForResource`/`listRelationsForDocument` — modul LAIN
 meng-IMPOR dan MEMANGGIL fungsi ini langsung (in-process, pola ADR-0011
-yang sama dengan `blog_content`↔`news_portal`) untuk menautkan dokumen ke
+yang sama dengan `blog_content`↔`media_library`) untuk menautkan dokumen ke
 resource milik mereka sendiri. Modul ini tidak pernah membaca/menulis
 tabel modul pemanggil, dan modul pemanggil tidak pernah menulis langsung
 ke `awcms_document_resource_relations` (ADR-0013 §6

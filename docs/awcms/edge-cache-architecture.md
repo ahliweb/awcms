@@ -141,9 +141,10 @@ atas `default.vcl`.
   `theming-tokens`). Keduanya memanggil `enqueueModuleContentPurge` di transaksi
   yang sama.
 
-  `news_portal` dan `media_library` **sengaja tidak** memanggilnya. Keduanya
-  tidak memiliki surface ter-deklarasi, jadi tidak ada objek ter-cache yang
-  bertanda `m:news_portal` atau `m:media_library` — ban untuk key itu **tidak
+  `media_library` **sengaja tidak** memanggilnya (dan `news_portal`, sebelum
+  [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) meleburnya ke
+  `blog_content`, juga tidak). Ia tidak memiliki surface ter-deklarasi, jadi
+  tidak ada objek ter-cache yang bertanda `m:media_library` — ban untuk key itu **tidak
   cocok dengan apa pun** sementara antrean melaporkan sukses. Menambahkannya
   sekarang berarti menambah upacara yang terlihat seperti cakupan padahal nol.
   Kewajibannya muncul sendiri begitu modulnya mendeklarasikan surface:

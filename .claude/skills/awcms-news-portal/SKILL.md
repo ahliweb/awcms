@@ -1,14 +1,35 @@
 ---
 name: awcms-news-portal
-description: Modul news_portal SUDAH di-port ke repo ini (PR #214; `src/modules/news-portal`, migrasi `sql/043`–`sql/045`). **INVERSI ADR-0036 (migrasi 052-054):** registry media R2 + presigned upload + MIME sniffing + verifikasi + job `news-media:reconcile` sudah DIEKSTRAK KELUAR ke modul baru `media_library` (lihat skill `awcms-media-library`); tabel `awcms_news_media_objects` tetap bernama sama (FK komposit keras dari ad placements). news_portal kini TIDAK provides `news_media` (pensiun) — ia CONSUMES `media_library` (wajib, untuk FK ad placement) + `public_content`; basePath `/api/v1/news-portal`. Yang MASIH milik news_portal di sini: homepage section composer + ad placements (`sql/044`/`045`). Panduan untuk mengubah homepage/ad placements. Untuk media (upload/registry/reconcile/enforcement) pakai skill `awcms-media-library`. DROPPED saat port (WAJIB tahu): rute publik `/news/**` host-resolved + helper render; aktivasi preset `news_portal_full_online_r2` — `awcms_news_portal_tenant_state` (`sql/043`) ada tapi tanpa writer (inert). `news-portal-preset-readiness.ts` kini COMPOSE `evaluateManagedMediaReadiness` milik media_library. Nomor `sql/NNN` di badan skill penomoran awcms-mini.
+description: "BACAAN SAJA / HISTORIS — modul `news_portal` SUDAH TIDAK ADA di repo ini. [ADR-0044](../../../docs/adr/0044-merge-news-portal-into-blog-content.md) (PR #300) MELEBURNYA ke `blog_content`: `src/modules/news-portal/` dihapus, `src/modules/index.ts` tidak lagi memuatnya, dan tidak ada `basePath` `/api/v1/news-portal`. Fiturnya HIDUP dan dimiliki `blog_content`: homepage-section composer + ad placement ber-`media_object_id` terverifikasi; nama tabel `awcms_news_portal_*` DIPERTAHANKAN (preseden ADR-0036 — FK komposit keras). Untuk MENGUBAH fitur itu pakai skill `awcms-blog-content`; untuk media pakai `awcms-media-library`. Badan skill di bawah adalah SPESIFIKASI PRA-MERGE (penomoran & path awcms-mini/news-portal) — dipertahankan karena §640 masih menjadi rujukan aturan content-quality checklist yang dipakai kode nyata; perlakukan setiap path file di dalamnya sebagai sejarah, bukan lokasi kode hari ini."
 ---
 
 # AWCMS — News Portal (full-online R2-only media)
 
 <!-- sql-refs: awcms-mini — nomor `sql/NNN` di badan skill ini memakai penomoran awcms-mini; modul SUDAH di-port ke awcms sebagai `sql/041`–`sql/045` (lihat README modul + `sql/` nyata untuk nomor sebenarnya) -->
 
-> **STATUS — SUDAH di-port ke repo ini (PR #214).**
-> `news_portal` kini nyata di sini: `src/modules/news-portal`, migrasi
+> **STATUS — MODUL INI SUDAH TIDAK ADA (ADR-0044, PR #300).**
+> `news_portal` DILEBUR ke `blog_content`. Yang berubah, dan wajib dibaca sebelum
+> satu baris pun kode ditulis dari skill ini:
+>
+> - `src/modules/news-portal/` **dihapus**; `src/modules/index.ts` **tidak**
+>   memuatnya (registry = 20 modul). Tidak ada `basePath /api/v1/news-portal`.
+> - Fiturnya **tidak hilang**: homepage-section composer dan ad placement
+>   ber-`media_object_id` terverifikasi kini **dimiliki `blog_content`**, dengan
+>   penargetan yang dilebarkan (#301), job ingest iklan lama (#302), jalur tulis
+>   iklan free-URL yang ditutup (#303), dan kosakata blok konten ter-gerbang (#304).
+> - **Nama tabel `awcms_news_portal_*` DIPERTAHANKAN** (preseden ADR-0036: FK
+>   komposit keras dari ad placements). Nama tabel karena itu BUKAN petunjuk
+>   kepemilikan modul di sini.
+> - Untuk mengubah fitur itu: skill **`awcms-blog-content`**. Untuk media:
+>   **`awcms-media-library`**. Skill ini tidak lagi punya kode untuk diubah.
+> - Badan di bawah **dipertahankan sebagai spesifikasi pra-merge** karena §640
+>   masih dirujuk `src/modules/blog-content/README.md` untuk aturan
+>   content-quality checklist. Setiap path file di dalamnya adalah **sejarah**.
+>
+> <details>
+> <summary>Status port lama (pra-ADR-0044, dipertahankan untuk konteks)</summary>
+>
+> `news_portal` dulu nyata di sini: `src/modules/news-portal`, migrasi
 > `sql/041_awcms_news_media_object_registry_schema.sql`–`sql/045_awcms_news_portal_ad_placements_schema.sql`,
 > 4 tabel `awcms_news_*` (semua `FORCE ROW LEVEL SECURITY`). Skill ini kini
 > **panduan mengubah/menambah kode nyata**. Baca `src/modules/news-portal/README.md`
@@ -70,6 +91,8 @@ pada fondasi arsitektur epic ini (khususnya media registry #633 untuk
 gambar yang dibagikan ke platform sosial) tapi **bukan** bagian tabel
 status di bawah — lihat skill/dokumentasi terpisah begitu epic itu
 mulai dikerjakan.
+
+> </details>
 
 ## Kapan pakai skill ini vs skill generik
 

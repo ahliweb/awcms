@@ -23,7 +23,7 @@ decision `docs/adr/0019-integration-hub-module-admission.md`) adalah
 event (via `domain_event_runtime`), outbound event subscription (delivery
 reliable dengan retry/dead-letter), dan provider health tracking — mekanisme
 yang HARUSNYA sudah dipakai ulang tiap modul provider-owning baru
-(Mailketing/`email`, R2/`sync_storage`+`news_portal`, Cloudflare DNS/
+(Mailketing/`email`, R2/`sync_storage`+`media_library`, Cloudflare DNS/
 `tenant_domain`, Telegram/Meta/`social_publishing`) daripada masing-masing
 reinvent. Baca `src/modules/integration-hub/README.md` untuk detail lengkap.
 

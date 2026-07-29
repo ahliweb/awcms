@@ -281,7 +281,9 @@ adalah TEST HELPER YANG DITULIS DENGAN BENAR tapi tidak pernah dipanggil
 — masing-masing menunjuk ke satu jalur test yang seharusnya ada tapi
 hilang:
 
-- `createCategoryTerm` (`news-portal-homepage-sections.integration.test.ts`)
+- `createCategoryTerm` (`news-portal-homepage-sections.integration.test.ts` —
+  **berkas ini sudah tidak ada**; test homepage-section ikut pindah saat
+  `news_portal` dilebur ke `blog_content`, ADR-0044/#300)
   — hanya ada test REJECT untuk `category_grid` (categorySlug tidak ada),
   tidak ada test ACCEPT (categorySlug valid) — helper-nya sudah ditulis
   lengkap, cuma tidak pernah dipanggil dari sebuah test.

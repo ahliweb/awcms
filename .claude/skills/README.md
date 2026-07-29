@@ -14,7 +14,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **67
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **75
 > script**, termasuk yang dulu ditandai belum ada (`openapi:bundle`,
 > `data-lifecycle:*`, `reporting:*`, dan — **koreksi 2026-07-27** —
 > `db:work-class:generate`/`db:work-class:check`, yang catatan sebelumnya masih
@@ -60,7 +60,8 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | `awcms-tenant-domain-routing`                | Kerjakan bagian mana pun epic online public routing & tenant domain (Issue #556-#567)                                                                                              | tenant-domain-routing/SKILL.md              |
 | `awcms-auth-online-hardening`                | Alasan desain pengerasan auth online (Turnstile/MFA/OIDC/admin policy UI). Kapabilitasnya SUDAH ADA (#184/#185/#186/#274); path & nomor issue di badannya milik micro — baca §Peta | auth-online-hardening/SKILL.md              |
 | `awcms-visitor-analytics`                    | Kerjakan bagian mana pun epic visitor analytics (Issue #617-#624)                                                                                                                  | visitor-analytics/SKILL.md                  |
-| `awcms-news-portal`                          | Kerjakan bagian mana pun epic news_portal full-online R2-only media (Issue #631-#642, #649)                                                                                        | news-portal/SKILL.md                        |
+| `awcms-jualanku-porting`                     | **RENCANA** — porting Jualanku.info (ADR-0045): merchant = business scope, BFF, 5 bounded context. Belum ada kode                                                                  | docs/awcms/jualanku/                        |
+| `awcms-news-portal`                          | **HISTORIS** — modul dilebur ke `blog_content` (ADR-0044/#300); spesifikasi pra-merge, pakai `awcms-blog-content`                                                                  | news-portal/SKILL.md                        |
 | `awcms-idn-admin-regions`                    | Kerjakan bagian mana pun epic master data wilayah administratif Indonesia (Issue #655-#664)                                                                                        | idn-admin-regions/SKILL.md                  |
 | `awcms-social-publishing`                    | Kerjakan bagian mana pun epic social_publishing auto-posting outbox foundation (Issue #643-#647)                                                                                   | social-publishing/SKILL.md                  |
 | `awcms-data-lifecycle`                       | Daftarkan tabel bervolume tinggi ke registry retensi/partisi/arsip/legal hold/purge (Issue #745)                                                                                   | data-lifecycle/README.md, data-lifecycle.md |

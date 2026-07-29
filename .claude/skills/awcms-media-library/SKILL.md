@@ -1,6 +1,6 @@
 ---
 name: awcms-media-library
-description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql/052`–`sql/054`). System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) yang MEMILIKI registry media per-tenant `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verifikasi, lifecycle orphan, job `news-media:reconcile`, dan penyalaan enforcement (`GET/POST /api/v1/media/enforcement`, satu arah). Menyediakan capability `media_library` (`_shared/ports/media-library-port.ts`) yang dikonsumsi `blog_content` (opsional) & `news_portal` (wajib). Gunakan saat mengubah/menambah upload media, registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, atau enforcement. Env var `NEWS_MEDIA_R2_*` + nama tabel + command `news-media:reconcile` DIPERTAHANKAN (ADR-0036 §3/§4). Step 5b/5c/5d micro (`/admin/media`, srcset, PDF) BELUM di-port.
+description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql/052`–`sql/054`). System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) yang MEMILIKI registry media per-tenant `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verifikasi, lifecycle orphan, job `news-media:reconcile`, dan penyalaan enforcement (`GET/POST /api/v1/media/enforcement`, satu arah). Menyediakan capability `media_library` (`_shared/ports/media-library-port.ts`) yang dikonsumsi `blog_content` — konsumen kedua `news_portal` DILEBUR ke `blog_content` (ADR-0044/#300), jadi nama tabel `awcms_news_*` di sini bukan lagi petunjuk modul mana pun. Gunakan saat mengubah/menambah upload media, registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, atau enforcement. Env var `NEWS_MEDIA_R2_*` + nama tabel + command `news-media:reconcile` DIPERTAHANKAN (ADR-0036 §3/§4). Step 5b/5c/5d micro (`/admin/media`, srcset, PDF) BELUM di-port.
 ---
 
 # AWCMS — Media Library (registry media per-tenant, ADR-0036 ownership inversion)
@@ -8,7 +8,9 @@ description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql
 <!-- sql-refs: awcms — nomor `sql/NNN` di skill ini adalah penomoran awcms NYATA -->
 
 > **STATUS — modul `media_library` ADA (inversi ADR-0036).** Ia lahir dari
-> pemindahan registry media KELUAR dari `news_portal` (bukan port aditif). Baca
+> pemindahan registry media KELUAR dari `news_portal` (bukan port aditif); modul
+> asal itu sendiri kemudian DILEBUR ke `blog_content` (ADR-0044/#300), jadi
+> konsumen `media_library` untuk ad placement kini `blog_content`. Baca
 > `docs/adr/0036-media-library-module-admission-ownership-inversion.md` +
 > `src/modules/media-library/README.md` + `sql/` nyata sebelum mengubah.
 
@@ -35,7 +37,8 @@ description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql
   `isManagedMediaEnforcementActiveForTenant`, `isMediaReferenceSafe`,
   `resolveMediaReferences`. Adapter `media-library-port-adapter.ts`
   (`mediaLibraryPortAdapter`, import HANYA dari `media_library` — jangan pernah
-  import `news-portal`/`blog-content`, itu inversi ADR-0013 §1 yang dihapus).
+  import `blog-content`, itu inversi ADR-0013 §1 yang dihapus; direktori
+  `news-portal/` sendiri sudah tidak ada — ADR-0044/#300).
 
 ## Enforcement per-tenant (step 5a) — SATU ARAH, jangan "lengkapi API"
 
@@ -65,8 +68,9 @@ description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql
 4. Perubahan endpoint → OpenAPI fragment `openapi/modules/media-library.openapi.yaml`
    - `bun run openapi:bundle` (skill `awcms-new-endpoint`).
 5. High-risk (finalize/enforcement) → audit log (moduleKey `media_library`).
-6. Jangan sentuh `news_portal`/`blog_content` untuk urusan media kecuali rewire
-   composition-root (mereka konsumen via port).
+6. Jangan sentuh `blog_content` untuk urusan media kecuali rewire
+   composition-root (ia konsumen via port; `news_portal` sudah dilebur ke
+   dalamnya).
 
 ## Belum di-port (aditif, gelombang lanjutan)
 
