@@ -41,10 +41,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
+| Modul base | **20** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
 | Migrasi    | **79** (`sql/001`–`079`)                                                  | `ls sql/`                                             |
-| ADR        | **43** (`0000`–`0042`)                                                    | `docs/adr/README.id.md` (indeks ter-gate)             |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.3.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
+| ADR        | **0000**–**0045** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -57,12 +57,15 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > job pause di "Waiting for review" sebelum sign/attest/publish (lihat
 > [`release-process.md`](awcms/release-process.md) §Environment approval).
 
-Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
-`module-management`, `sync-storage`, `workflow-approval`, `reporting`, `email`,
-`domain-event-runtime`, `theming`, `blog-content`, `news-portal`, **`tenant-domain`**,
-**`visitor-analytics`**, **`media-library`**, **`data-lifecycle`**, **`seo-distribution`**,
-**`form-drafts`**, **`site-search`**, **`comments`**.
-(Delapan terakhir = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.)
+Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
+`profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`,
+`sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
+**`media-library`**, `blog-content`, **`tenant-domain`**, **`visitor-analytics`**,
+**`data-lifecycle`**, **`seo-distribution`**, **`form-drafts`**, **`site-search`**,
+**`comments`**.
+(Delapan yang di-bold = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.
+`news-portal` **tidak lagi ada**: dilebur ke `blog-content` oleh
+[ADR-0044](adr/0044-merge-news-portal-into-blog-content.md), #300.)
 
 > Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
 > [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
@@ -79,13 +82,14 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 - **Authorization**: ABAC dinamis berbasis DSL (`sql/031`/`032`), business-scope hierarchy
   (`sql/027`/`028`), SoD conflict enforcement (`sql/029`/`030`).
 - **`theming`** — modul website pertama di base (`sql/033`/`034`, ADR-0034 Fase 3).
-- **`blog-content` + `news-portal`** — modul konten publik pertama, di-port dari mini
-  (PR #214, `sql/035`–`sql/045`, 19 tabel FORCE RLS). Rute publik path-based
-  `/blog/{tenantCode}` (ADR-0009); `news-portal` menyediakan capability `news_media`
-  (registry R2 + presigned upload) yang dikonsumsi `blog-content` via adapter nyata.
-  DI-DROP saat port (butuh modul lain yang belum ada): rute `/news/**` host-resolved
-  (`tenant_domain`), aktivasi preset full-online-R2 (`module_management` preset subsystem).
-  Lihat skill `awcms-blog-content` / `awcms-news-portal` (kini panduan kode nyata) §DELTA PORT.
+- **`blog-content`** — modul konten publik, di-port dari mini (PR #214,
+  `sql/035`–`sql/045`, 19 tabel FORCE RLS). Rute publik path-based
+  `/blog/{tenantCode}` (ADR-0009). Sejak [ADR-0044](adr/0044-merge-news-portal-into-blog-content.md)
+  (#300) modul ini **menyerap seluruh `news-portal`** (homepage-section composer +
+  ad placement ber-media terverifikasi); registry media tetap milik `media_library`
+  (ADR-0036). DI-DROP saat port (butuh modul lain yang belum ada): rute `/news/**`
+  host-resolved, aktivasi preset full-online-R2 (`module_management` preset subsystem).
+  Lihat skill `awcms-blog-content` §DELTA PORT.
 - **UI/UX overhaul** (PR #215) — login + 8 layar admin + blog publik: mobile-first,
   animasi CSS-only, a11y AA, auto tenant picker di `/login` (sembunyi saat 1 tenant).
   Presentasi-only; jaminan CSP single-owner "zero third-party origin" dipertahankan.
@@ -147,8 +151,8 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md). **Default `off` =
   no-op total.** Tiga lapis default-deny independen; sinyal tekanan hanya mengubah _berapa
   lama_, tidak pernah _apa_ yang boleh di-cache. Emisi purge terpasang di jalur tulis
-  `blog_content` dan `theming` (publish/rollback/retire, #246). `news_portal`/`media_library`
-  sengaja TIDAK — keduanya tidak memiliki surface ter-deklarasi, jadi ban untuk key-nya tak
+  `blog_content` dan `theming` (publish/rollback/retire, #246). `media_library`
+  sengaja TIDAK — ia tidak memiliki surface ter-deklarasi, jadi ban untuk key-nya tak
   akan cocok apa pun sementara antrean melapor sukses. Gate `edge-cache:surfaces:check`
   menuntut call-site purge dari tiap modul yang MEMILIKI surface, sehingga kewajibannya
   muncul sendiri begitu salah satunya mendeklarasikan surface.
@@ -174,6 +178,16 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
 
 ## 4. Backlog / langkah berikutnya
 
+- **Porting Jualanku.info ([ADR-0045](adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md), 2026-07-29).**
+  `awcms` = system of record + admin internal; `awcms-astro` = experience layer + BFF.
+  Blueprint lengkap (arsitektur, otorisasi merchant, model data, kontrak API, kontrak
+  sesi lintas-origin, UI/UX, roadmap & kepatuhan) di [`awcms/jualanku/`](awcms/jualanku/README.md).
+  **Status: P0 — belum ada satu pun modul/tabel/rute `jualanku_*` di kode.** Lima bounded
+  context yang direncanakan (`jualanku_directory`, `jualanku_catalog_growth`,
+  `jualanku_affiliate`, `jualanku_commercial`, `jualanku_trust_operations`) masing-masing
+  masih butuh ADR admission. Dua keputusan yang mengikat implementasi: **merchant =
+  business scope** (mengisi resolver NO-OP fail-closed, bukan menambah atribut ABAC baru)
+  dan **browser tidak pernah memanggil `awcms` langsung** (BFF di `awcms-astro`).
 - **Serap tulang punggung awcms-mini → awcms (fondasi bisnis + SaaS control plane).**
   Peta eksekusi di
   [`awcms/absorb-awcms-mini-backbone-roadmap.md`](awcms/absorb-awcms-mini-backbone-roadmap.md).
@@ -234,7 +248,7 @@ Modul (21): `tenant-admin`, `identity-access`, `profile-identity`, `logging`,
   - **Wave 3 — BELUM:** trajektori e-commerce/toko online (ADR sendiri).
   - Sebelum tiap port berikutnya: **cek inversi-vs-net-baru** (mis. media sudah jadi satu modul
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).
-    (`blog-content` + `news-portal` SUDAH di-port — PR #214.)
+    (`blog-content` SUDAH di-port — PR #214; `news-portal` dilebur ke dalamnya, ADR-0044.)
 - **Rute publik host-resolved**: `tenant-domain` sudah mendarat; adopsi rute `/news/**` +
   rute konten host-based `/blog/{slug}` (agar `<loc>` sitemap SEO resolve tanpa tenantCode)
   masih follow-up (lihat README `seo-distribution` §follow-up).
