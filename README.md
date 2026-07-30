@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:19dadca4e60924c2e784150d7d61d87c98b09ca41a3437e9eb5f8612ce1d7cd9 -->
+<!-- i18n-source-hash: sha256:e43f369a9cbec3d517c478ff66e686386b832c80c4778934b96aea50c02588e6 -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -105,7 +105,7 @@ These foundation modules do not implement ERP logic — they only provide neutra
 
 ```mermaid
 flowchart LR
-  Tx[Operational action] -->|online (primary)| Server[(Central server / SaaS)]
+  Tx[Operational action] -->|"online (primary)"| Server[(Central server / SaaS)]
   Tx -.->|when offline/LAN| Local[(Local / LAN DB)]
   Local --> Outbox[Outbox event + object queue]
   Outbox -->|when back online| Sync[Sync push/pull<br/>HMAC signed]
