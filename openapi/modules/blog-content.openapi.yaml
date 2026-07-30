@@ -12,6 +12,16 @@
 # text/html/xml routes under src/pages/**, not src/pages/api/v1/**, so they
 # are outside the api-spec-check route tree).
 #
+# ADR-0044 (news_portal merged into blog_content): this fragment ALSO owns the
+# two absorbed surfaces — `/api/v1/news-portal/homepage-sections*` (tag
+# `News Portal Homepage Sections`) and `/api/v1/news-portal/ad-placements*`
+# (tag `News Portal Ad Placements`) — and their schemas, moved here verbatim
+# from the deleted openapi/modules/news-portal.openapi.yaml. Paths and tag
+# NAMES are deliberately unchanged (ADR-0044 §3/§6: the merge moved ownership,
+# not the public surface); what changes here is which module's fragment file
+# declares them, so `openapi/modules/*` stays one-file-per-REGISTERED-module
+# (ADR-0026) instead of carrying a file for a module that no longer exists.
+#
 # NOT independently valid OpenAPI -- $ref targets pointing at shared
 # components only resolve after `bun run openapi:bundle` merges this file
 # with the root and every sibling module fragment. Edit this file (or the
@@ -2012,6 +2022,356 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/news-portal/homepage-sections:
+    get:
+      tags:
+        - News Portal Homepage Sections
+      summary: List this tenant's homepage sections (admin view)
+      description: Gated by news_portal.homepage_sections.read.
+      operationId: newsPortalHomepageSectionsList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Homepage sections.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      sections:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - News Portal Homepage Sections
+      summary: Create a homepage section
+      description: Gated by news_portal.homepage_sections.configure. `config` is validated per `sectionType`; every referenced post/category/media object must already exist for this tenant (and gallery_block media must be a verified R2 media object).
+      operationId: newsPortalHomepageSectionsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomepageSectionCreateRequest"
+      responses:
+        "200":
+          description: Homepage section created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: sectionKey is already in use for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/news-portal/homepage-sections/{id}:
+    patch:
+      tags:
+        - News Portal Homepage Sections
+      summary: Update a homepage section (title/config/sortOrder/isEnabled/schedule) — sectionType is immutable
+      description: Gated by news_portal.homepage_sections.configure.
+      operationId: newsPortalHomepageSectionsUpdate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomepageSectionUpdateRequest"
+      responses:
+        "200":
+          description: Homepage section updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/HomepageSectionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: config references content that does not exist, does not belong to this tenant, or (for gallery_block) is not a verified R2 media object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - News Portal Homepage Sections
+      summary: Soft-delete a homepage section
+      description: Gated by news_portal.homepage_sections.configure.
+      operationId: newsPortalHomepageSectionsDelete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Homepage section deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/news-portal/ad-placements:
+    get:
+      tags:
+        - News Portal Ad Placements
+      summary: List this tenant's ad placements (admin view)
+      description: Gated by news_portal.ad_placements.read.
+      operationId: newsPortalAdPlacementsList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Ad placements.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      placements:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - News Portal Ad Placements
+      summary: Create an ad placement (R2-only image, verified media object required)
+      description: Gated by news_portal.ad_placements.configure. `mediaObjectId` must reference a verified (`verified`/`attached`) R2 media object for this tenant.
+      operationId: newsPortalAdPlacementsCreate
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdPlacementCreateRequest"
+      responses:
+        "200":
+          description: Ad placement created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/news-portal/ad-placements/{id}:
+    patch:
+      tags:
+        - News Portal Ad Placements
+      summary: Update an ad placement (media reference/link/rotation/schedule/active)
+      description: Gated by news_portal.ad_placements.configure.
+      operationId: newsPortalAdPlacementsUpdate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdPlacementUpdateRequest"
+      responses:
+        "200":
+          description: Ad placement updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/AdPlacementItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: mediaObjectId does not exist, does not belong to this tenant, is not a verified R2 media object, or is not an allowed mime type for the target placement.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags:
+        - News Portal Ad Placements
+      summary: Soft-delete an ad placement
+      description: Gated by news_portal.ad_placements.configure.
+      operationId: newsPortalAdPlacementsDelete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Ad placement deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      deleted:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   schemas:
     BlogPostWriteInput:
@@ -2598,3 +2958,329 @@ components:
           type: array
           items:
             type: object
+    HomepageSectionConfig:
+      description: "Shape depends on sectionType — headline: {postId}; latest_posts: {limit?, categorySlug?}; featured_posts/editor_picks: {postIds: []}; category_grid: {categorySlugs: [], postsPerCategory?}; gallery_block: {mediaObjectIds: [], caption?}. Validated server-side per sectionType; every id/slug must already exist for the same tenant, and gallery_block's mediaObjectIds must each be a verified R2 media object."
+      type: object
+      additionalProperties: true
+    HomepageSectionCreateRequest:
+      type: object
+      required:
+        - sectionKey
+        - sectionType
+        - config
+      properties:
+        sectionKey:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,63}$
+        sectionType:
+          type: string
+          enum:
+            - headline
+            - latest_posts
+            - featured_posts
+            - editor_picks
+            - category_grid
+            - gallery_block
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+    HomepageSectionItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - sectionKey
+        - sectionType
+        - config
+        - sortOrder
+        - isEnabled
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        sectionKey:
+          type: string
+        sectionType:
+          type: string
+          enum:
+            - headline
+            - latest_posts
+            - featured_posts
+            - editor_picks
+            - category_grid
+            - gallery_block
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    HomepageSectionUpdateRequest:
+      description: sectionType cannot be changed after creation — omit it, do not send the old or a new value.
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/HomepageSectionConfig"
+        sortOrder:
+          type: integer
+        isEnabled:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+    AdPlacementItem:
+      type: object
+      required:
+        - id
+        - tenantId
+        - placementKey
+        - name
+        - mediaObjectId
+        - rotationMode
+        - priority
+        - isActive
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          description: Must reference a verified (`verified`/`attached`) R2 media object belonging to this tenant (`awcms_news_media_objects`) — never a local path or arbitrary external URL.
+          type: string
+          format: uuid
+        linkUrl:
+          description: Optional, possibly external, link — validated server-side as an absolute http(s) URL only.
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+        priority:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Orthogonal to `placementKey`, which says WHERE on the page the ad sits — this says WHICH pages the slot is filled on. Rendering a page returns its own targeted ads UNIONED with every `global` ad for that slot.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be absent for `global`. Validated at write time as an existing, non-deleted resource of that type in this tenant; not a foreign key, so a target deleted later simply stops matching rather than erroring.
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AdPlacementCreateRequest:
+      type: object
+      required:
+        - placementKey
+        - name
+        - mediaObjectId
+      properties:
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          type: string
+          format: uuid
+        linkUrl:
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+          default: latest
+        priority:
+          type: integer
+          minimum: 0
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Omit for a site-wide ad.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+          default: global
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be omitted for `global`.
+          type: string
+          format: uuid
+          nullable: true
+    AdPlacementUpdateRequest:
+      type: object
+      properties:
+        placementKey:
+          type: string
+          enum:
+            - header_banner
+            - below_headline
+            - homepage_middle
+            - homepage_bottom
+            - article_top
+            - article_middle
+            - article_bottom
+            - sidebar_top
+            - sidebar_middle
+            - sidebar_bottom
+            - category_archive_top
+            - search_result_top
+        name:
+          type: string
+        mediaObjectId:
+          type: string
+          format: uuid
+        linkUrl:
+          type: string
+          nullable: true
+        rotationMode:
+          type: string
+          enum:
+            - latest
+            - priority
+            - random_safe
+            - weighted
+        priority:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        targetType:
+          description: Targeting scope (ADR-0044). Must be sent whenever `targetId` is sent — the pair moves together or not at all, so that switching to `global` also clears the stored target.
+          type: string
+          enum:
+            - global
+            - widget
+            - post
+            - page
+        targetId:
+          description: Required for `widget`/`post`/`page`, must be omitted for `global`. Sending it without `targetType` is a validation error.
+          type: string
+          format: uuid
+          nullable: true

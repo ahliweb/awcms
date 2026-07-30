@@ -30,7 +30,8 @@ import {
  * media without switching on a news portal — the product gap this inversion was
  * written to close.
  *
- * `dependencies` excludes `news_portal`/`blog_content` permanently, not
+ * `dependencies` excludes `blog_content` — today's only consumer, and since
+ * ADR-0044 the owner of what `news_portal` used to hold — permanently, not
  * incidentally: media must never depend on its own consumers.
  *
  * PORT NOTES vs awcms-micro: this base ports the ownership inversion + the
@@ -47,16 +48,17 @@ export const mediaLibraryModule = defineModule({
   version: "0.1.0",
   status: "active",
   description:
-    "Tenant-scoped media object registry and upload flow, reusable by every website module (ADR-0036, System Foundation). Owns `awcms_news_media_objects` (migrations 041/042/045) — a generic registry keyed by `module_key` with `owner_resource_type`/`owner_resource_id` references, direct-to-R2 presigned upload with real magic-byte MIME sniffing and server-side SHA-256 checksum verification, orphan lifecycle, and R2 reconciliation (the `news-media:reconcile` job). The table keeps its `news_media` name deliberately (ADR-0036 §3): it is referenced by three migrations and a hard composite FK from `awcms_news_portal_ad_placements`, so renaming would trade a cosmetic annoyance for real risk. Provides the `media_library` capability (`_shared/ports/media-library-port.ts`) consumed by `blog_content` (optional — its media handling no-ops when enforcement is off) and `news_portal` (required — its ad placements hold a real FK to a media object): media reference safety, resolution, and whether managed-media enforcement is active for a tenant (this module's own readiness plus its own per-tenant flag, migration 053) — so a brochure site gets managed media without a news portal. Turning that flag ON is a dedicated, readiness-gated, one-way switch (`POST /api/v1/media/enforcement`, migration 054). `news_portal` retains only what is genuinely its own: homepage sections, ad placements, and (where ported) the R2-only editorial preset. This module never transcodes bytes inside a DB transaction (ADR-0006), and is deliberately not a CDN, image proxy, or DAM. PORT DROPS vs awcms-micro: the media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media`), responsive `srcset` render, and PDF media type are not ported to this base.",
+    "Tenant-scoped media object registry and upload flow, reusable by every website module (ADR-0036, System Foundation). Owns `awcms_news_media_objects` (migrations 041/042/045) — a generic registry keyed by `module_key` with `owner_resource_type`/`owner_resource_id` references, direct-to-R2 presigned upload with real magic-byte MIME sniffing and server-side SHA-256 checksum verification, orphan lifecycle, and R2 reconciliation (the `news-media:reconcile` job). The table keeps its `news_media` name deliberately (ADR-0036 §3): it is referenced by three migrations and a hard composite FK from `awcms_news_portal_ad_placements`, so renaming would trade a cosmetic annoyance for real risk. Provides the `media_library` capability (`_shared/ports/media-library-port.ts`), whose sole consumer since ADR-0044 is `blog_content` — required, because the ad placements it absorbed from the retired `news_portal` module hold a real FK to a media object, while its post/page media handling no-ops for any tenant that has not switched enforcement on: media reference safety, resolution, and whether managed-media enforcement is active for a tenant (this module's own readiness plus its own per-tenant flag, migration 053) — so a brochure site gets managed media without a news portal. Turning that flag ON is a dedicated, readiness-gated, one-way switch (`POST /api/v1/media/enforcement`, migration 054). This module never transcodes bytes inside a DB transaction (ADR-0006), and is deliberately not a CDN, image proxy, or DAM. PORT DROPS vs awcms-micro: the media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media`), responsive `srcset` render, and PDF media type are not ported to this base.",
   dependencies: ["tenant_admin", "identity_access"],
   type: "system",
   isCore: false,
   // ADR-0036 — sole provider of the `media_library` capability
   // (`_shared/ports/media-library-port.ts`, implemented by
   // `application/media-library-port-adapter.ts`, wired at each route's
-  // composition root). Consumed by `blog_content` (optional — its media handling
-  // no-ops when enforcement is off) and by `news_portal` (required — its ad
-  // placements hold a real FK to a media object).
+  // composition root). Since ADR-0044 there is exactly one consumer,
+  // `blog_content`, and it declares the capability REQUIRED: the ad placements
+  // it absorbed from the retired `news_portal` module hold a real FK to a media
+  // object. Its post/page media handling still no-ops when enforcement is off.
   //
   // `consumes` stays empty and must remain so: this module answers media
   // questions from its own registry, its own readiness, and its own per-tenant
@@ -66,7 +68,9 @@ export const mediaLibraryModule = defineModule({
     provides: ["media_library"]
   },
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    // ADR-0026: this module's own fragment, not the generated bundle (see the
+    // same correction in blog-content/module.ts).
+    openApiPath: "openapi/modules/media-library.openapi.yaml",
     basePath: "/api/v1/media/news-images",
     // The whole `/api/v1/media` tree, not just the news-images sub-path —
     // `/api/v1/media/enforcement` was falling to `tenant_admin`'s catch-all.

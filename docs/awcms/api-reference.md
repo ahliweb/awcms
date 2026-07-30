@@ -364,6 +364,186 @@ Clears the delete stamps and records restored_at/restored_by. 404 when the id is
 | ------ | ----------------- | ------ |
 | 200    | Setup lock state. | object |
 
+## Tenant Domains
+
+Tenant domain/subdomain mapping for host-based public routing (tenant_domain module, ported from awcms-micro) — tenant-scoped, RLS-protected CRUD over hostname mappings plus verification (dns_txt/dns_cname/file/manual) and primary-host selection. A hostname only serves a tenant once it is verified and active; the optional DNS provider adapter is env-gated and never stores a provider credential in the database. verify and set-primary change which host answers for a tenant, so both are ABAC-gated, idempotency-keyed, and audited.
+
+### `GET /api/v1/tenant/domains` — List this tenant's domain/subdomain mappings
+
+- **operationId**: `tenantDomainsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.read. Non-deleted mappings only, keyset-paginated newest first (limit 100).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                               |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------- |
+| `cursor`           | query  | no       | string | Opaque keyset cursor from a previous page's `nextCursor`. |
+| `X-Correlation-ID` | header | no       | string |                                                           |
+
+**Responses**
+
+| Status | Description                       | Schema                                 |
+| ------ | --------------------------------- | -------------------------------------- |
+| 200    | A page of tenant domain mappings. | object                                 |
+| 400    | Validation error.                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.       | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenant/domains` — Add a tenant domain/subdomain mapping
+
+- **operationId**: `tenantDomainsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.create. A duplicate normalized hostname always returns a generic 409 (never reveals whether the hostname belongs to another tenant). Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`CreateTenantDomainRequest`](#schema-createtenantdomainrequest)
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | Mapping created.                                                | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The hostname is already mapped to a tenant (HOSTNAME_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/tenant/domains/{id}` — Read one tenant domain mapping
+
+- **operationId**: `tenantDomainsGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.read. Unknown/cross-tenant/soft-deleted id all return a generic 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant domain mapping.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/tenant/domains/{id}` — Partially update a tenant domain mapping
+
+- **operationId**: `tenantDomainsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.update. Idempotent by construction. `hostname`/`is_primary` are immutable here and `status` can never be set to `active` (use POST .../verify). Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`UpdateTenantDomainRequest`](#schema-updatetenantdomainrequest)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Mapping updated.            | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/tenant/domains/{id}` — Soft-delete a tenant domain mapping
+
+- **operationId**: `tenantDomainsDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.delete. Reason-required soft delete; never hard-deletes, and frees the normalized hostname for reuse. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`DeleteTenantDomainRequest`](#schema-deletetenantdomainrequest)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Mapping soft-deleted.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenant/domains/{id}/set-primary` — Set a tenant domain as the active primary
+
+- **operationId**: `tenantDomainsSetPrimary`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.set_primary. Requires Idempotency-Key. Atomically makes the domain this tenant's single primary, unsetting any previous primary. Only an `active` (verified) domain is eligible. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Domain set as primary, or replay of a prior identical request.                                                                                                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Domain is not `active` (INVALID_STATUS_TRANSITION), a concurrent request already changed the primary (CONCURRENT_UPDATE), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenant/domains/{id}/verify` — Verify a tenant domain (manual-first)
+
+- **operationId**: `tenantDomainsVerify`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_domain.domains.verify. Requires Idempotency-Key. Manual-first: flips status to `active` based on the row's own `verification_method`/`verification_record_*` — no outbound DNS/HTTP call. Audited.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                           | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Domain verified (status `active`), or replay of a prior identical request.                                                                            | object                                 |
+| 400    | Validation error.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 409    | Cannot verify from the current status (INVALID_STATUS_TRANSITION), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ## Identity & Access
 
 Login identity, session authentication, and tenant user membership.
@@ -3908,7 +4088,7 @@ Read-only: validate a proposed theme config against its theme descriptor and, wh
 
 ## News Media
 
-Direct-to-R2 presigned upload flow for news images (news_portal module, ported from awcms-mini) — create an upload session (server-generated object key + short-lived presigned PUT URL), finalize (real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum, never a bare HEAD), and cancel a still-pending_upload session. R2 credentials are never exposed to the browser; only a scoped, expiring presigned URL is returned.
+Direct-to-R2 presigned upload flow for news images (media_library module, ADR-0036 ownership inversion — the registry moved out of the retired news_portal module and the tag/path names were deliberately kept) — create an upload session (server-generated object key + short-lived presigned PUT URL), finalize (real R2 GET + magic-byte MIME sniffing + server-side SHA-256 checksum, never a bare HEAD), and cancel a still-pending_upload session. R2 credentials are never exposed to the browser; only a scoped, expiring presigned URL is returned.
 
 ### `GET /api/v1/media/enforcement` — Read whether managed-media enforcement is active for this tenant
 
@@ -4036,9 +4216,1179 @@ Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifi
 | 422    | Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`. | [`ApiError`](#standard-error-envelope) |
 | 502    | Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
 
+## Blog Content
+
+Tenant-scoped blog/content administration (blog_content module, ported from awcms-mini) — posts and pages with their full lifecycle (draft → review → scheduled/published → archived, soft delete/restore/purge), hierarchical categories/tags, append-only revision history (restore APPENDS a revision, never overwrites), PostgreSQL full-text search, presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements), per-tenant blog settings, internal tag-link policy, and the editorial content-quality checklist. The public, anonymous reader surface (`/blog/{tenantCode}/...` index/detail/archive/search/feed/sitemap, ADR-0009) is served by Astro text/html/xml routes and is deliberately NOT part of this REST contract. Publish/unpublish/purge and settings writes are ABAC-gated, idempotency-keyed, and audited.
+
+### `GET /api/v1/blog/ads` — List this tenant's advertisements
+
+- **operationId**: `blogListAds`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.ads.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching ads.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/ads` — Create an advertisement (RETIRED — always 410)
+
+- **operationId**: `blogCreateAd`
+- **Security**: bearerAuth + tenantHeader
+
+RETIRED by ADR-0044 §4. Always responds 410 ENDPOINT_RETIRED, without auth or any database access. This endpoint stored a free-text imageUrl — any URL an admin typed, rendered straight into a public img src — which is the managed-media bypass ADR-0036 closed. Upload the image through the media library, then use POST /api/v1/news-portal/ad-placements, which requires a verified media object. GET and DELETE on this resource still work, so the ingest job's residue report stays resolvable.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 410    | Endpoint retired. The successor is named in the error message. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/ads/{id}` — Update an advertisement (RETIRED — always 410)
+
+- **operationId**: `blogUpdateAd`
+- **Security**: bearerAuth + tenantHeader
+
+RETIRED by ADR-0044 §4. Always responds 410 ENDPOINT_RETIRED, without auth or any database access. Closing POST alone would not have sufficed: this endpoint could rewrite imageUrl on an existing ad, the same free-URL bypass by a quieter route that creates no new row. Use PATCH /api/v1/news-portal/ad-placements/{id}, which requires a verified media object.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 410    | Endpoint retired. The successor is named in the error message. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/ads/{id}` — Soft delete an advertisement
+
+- **operationId**: `blogDeleteAd`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.ads.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Ad soft-deleted.            | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/internal-tag-links/settings` — Read this tenant's automatic internal tag linking policy
+
+- **operationId**: `blogGetInternalTagLinkSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.internal_links.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The policy.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/internal-tag-links/settings` — Update this tenant's automatic internal tag linking policy
+
+- **operationId**: `blogUpdateInternalTagLinkSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.internal_links.configure. disabledTagIds are validated against this tenant's own tag catalog.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Policy updated.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/menus` — List this tenant's navigation menus (with items)
+
+- **operationId**: `blogListMenus`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.menus.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching menus.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/menus` — Create a navigation menu
+
+- **operationId**: `blogCreateMenu`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.menus.configure. Optionally seeds its initial items tree (one level of nesting; link_type post|page|url gates target_id/url).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | Menu created.                       | object                                 |
+| 400    | Validation error.                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+| 409    | A menu already exists for this key. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/menus/{id}` — Update a navigation menu (name and/or its items tree)
+
+- **operationId**: `blogUpdateMenu`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.menus.configure. Providing items replaces the whole tree.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Menu updated.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/menus/{id}` — Soft delete a navigation menu
+
+- **operationId**: `blogDeleteMenu`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.menus.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Menu soft-deleted.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/pages` — List this tenant's non-deleted blog pages
+
+- **operationId**: `blogListPages`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.read. Optional ?status= filter, ?limit= bounded.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                          | Description |
+| ------------------ | ------ | -------- | ------------------------------------------------------------- | ----------- |
+| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |             |
+| `limit`            | query  | no       | integer                                                       |             |
+| `X-Correlation-ID` | header | no       | string                                                        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching pages.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/pages` — Create a draft blog page
+
+- **operationId**: `blogCreatePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.create. Not idempotency-keyed (caught by the (tenant_id, locale, slug) partial unique index).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogPageWriteInput`](#schema-blogpagewriteinput)
+
+**Responses**
+
+| Status | Description                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page created.                                                                            | object                                 |
+| 400    | Validation error.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | A page already exists for this slug/locale.                                              | [`ApiError`](#standard-error-envelope) |
+| 422    | One or more image references are not valid R2 media objects in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/pages/{id}` — Read one blog page
+
+- **operationId**: `blogGetPage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The page.                   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/pages/{id}` — Update a blog page
+
+- **operationId**: `blogUpdatePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.update. Only fields present in the body are changed. A significant change snapshots an append-only revision first.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogPageWriteInput`](#schema-blogpagewriteinput)
+
+**Responses**
+
+| Status | Description                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page updated.                                                                            | object                                 |
+| 400    | Validation error.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                      | [`ApiError`](#standard-error-envelope) |
+| 422    | One or more image references are not valid R2 media objects in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/pages/{id}` — Soft delete a blog page
+
+- **operationId**: `blogDeletePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.delete.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Page soft-deleted.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/pages/{id}/quality-checklist` — Preview the content quality checklist for a page
+
+- **operationId**: `blogGetPageQualityChecklist`
+- **Security**: bearerAuth + tenantHeader
+
+Read-only preview for the admin editor. Gated by blog_content.pages.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The checklist result.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts` — List this tenant's non-deleted blog posts
+
+- **operationId**: `blogListPosts`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                          | Description |
+| ------------------ | ------ | -------- | ------------------------------------------------------------- | ----------- |
+| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |             |
+| `limit`            | query  | no       | integer                                                       |             |
+| `X-Correlation-ID` | header | no       | string                                                        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching posts.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts` — Create a draft blog post
+
+- **operationId**: `blogCreatePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.create. Not idempotency-keyed (a retry duplicating a create is caught by the (tenant_id, locale, slug) partial unique index).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogPostWriteInput`](#schema-blogpostwriteinput)
+
+**Responses**
+
+| Status | Description                                                                                                                              | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post created.                                                                                                                            | object                                 |
+| 400    | Validation error.                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | A post already exists for this slug/locale, or the referenced media is not R2-verified in full-online R2-only mode (422 for the latter). | [`ApiError`](#standard-error-envelope) |
+| 422    | One or more image/video-thumbnail references are not valid R2 media objects in full-online R2-only mode.                                 | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts/{id}` — Read one blog post
+
+- **operationId**: `blogGetPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The post.                   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/posts/{id}` — Update a blog post
+
+- **operationId**: `blogUpdatePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.update (with an ownership carve-out — a draft's own author may update it without the broader permission). Only fields present in the body are changed. A significant title/contentJson/contentText change snapshots an append-only revision first.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogPostWriteInput`](#schema-blogpostwriteinput)
+
+**Responses**
+
+| Status | Description                                                                                              | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post updated.                                                                                            | object                                 |
+| 400    | Validation error.                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 422    | One or more image/video-thumbnail references are not valid R2 media objects in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/posts/{id}` — Soft delete a blog post
+
+- **operationId**: `blogDeletePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.delete. Soft delete only (deleted_at/deleted_by/delete_reason) — see POST .../purge for the permanent, high-risk purge.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Post soft-deleted.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/archive` — Archive a blog post
+
+- **operationId**: `blogArchivePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.archive. High-risk, requires Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post archived (or an idempotent replay).                                                     | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Invalid status transition, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts/{id}/internal-links/preview` — Preview automatic internal tag linking for a post
+
+- **operationId**: `blogPreviewPostInternalLinks`
+- **Security**: bearerAuth + tenantHeader
+
+Read-only preview of which tags would be automatically linked in this post's rendered content before publishing. Gated by blog_content.internal_links.preview.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The preview result.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/publish` — Publish a blog post
+
+- **operationId**: `blogPublishPost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.publish (no ownership carve-out). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. On success, also invokes the social-publishing outbox hook (a documented no-op in this base — social_publishing is not ported).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post published (or an idempotent replay).                                                    | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Invalid status transition, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+| 422    | Publish is blocked by the content quality checklist.                                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/purge` — Permanently purge a soft-deleted blog post
+
+- **operationId**: `blogPurgePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.purge. High-risk, irreversible, requires Idempotency-Key. Only a previously soft-deleted post may be purged.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                     | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post purged (or an idempotent replay).                                                          | object                                 |
+| 400    | Validation error.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The post is not soft-deleted, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts/{id}/quality-checklist` — Preview the content quality checklist for a post
+
+- **operationId**: `blogGetPostQualityChecklist`
+- **Security**: bearerAuth + tenantHeader
+
+Read-only preview for the admin editor — runs the exact same evaluator POST .../publish and .../schedule enforce. Gated by blog_content.posts.read (no separate permission).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The checklist result.       | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/restore` — Restore a soft-deleted blog post
+
+- **operationId**: `blogRestorePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.restore. High-risk, requires Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post restored (or an idempotent replay).                       | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts/{id}/revisions` — List a post's revision history
+
+- **operationId**: `blogListPostRevisions`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.revisions.read. Newest first.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The revision list.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/posts/{id}/revisions/{revisionId}` — Read one revision of a post
+
+- **operationId**: `blogGetPostRevision`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.revisions.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The revision.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/revisions/{revisionId}/restore` — Restore a post to an earlier revision
+
+- **operationId**: `blogRestorePostRevision`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.revisions.restore. High-risk, requires Idempotency-Key. Restoring APPENDS a new revision snapshot of the restored content — it never overwrites or removes the revision being restored from.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                                                      | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post restored to the given revision (or an idempotent replay).                                                                   | object                                 |
+| 400    | Validation error.                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request.                                                                   | [`ApiError`](#standard-error-envelope) |
+| 422    | One or more image/video-thumbnail references in the restored content are not valid R2 media objects in full-online R2-only mode. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/schedule` — Schedule a blog post for future publishing
+
+- **operationId**: `blogSchedulePost`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.posts.schedule. High-risk, requires Idempotency-Key. Same content quality checklist gate as publish. The blog:publish:scheduled job later performs the actual publish once scheduledAt <= now().
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Post scheduled (or an idempotent replay).                                                    | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Invalid status transition, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+| 422    | Scheduling is blocked by the content quality checklist.                                      | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/posts/{id}/submit-review` — Submit a draft post for review
+
+- **operationId**: `blogSubmitPostForReview`
+- **Security**: bearerAuth + tenantHeader
+
+Transitions draft -> review. Gated by blog_content.posts.update (same ownership carve-out as PATCH .../{id}). Not idempotency-keyed — the status transition is naturally idempotent.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                            | Schema                                 |
+| ------ | ------------------------------------------------------ | -------------------------------------- |
+| 200    | Post submitted for review.                             | object                                 |
+| 400    | Validation error.                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                            | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | The post's current status cannot transition to review. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/search` — Full-text search across posts and pages
+
+- **operationId**: `blogSearchContent`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.search.read. May return content of any status per the caller's granted permission. Keyset-paginated (?cursor=).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                          | Description |
+| ------------------ | ------ | -------- | ------------------------------------------------------------- | ----------- |
+| `q`                | query  | yes      | string                                                        |             |
+| `resourceType`     | query  | no       | enum(`post`, `page`)                                          |             |
+| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |             |
+| `cursor`           | query  | no       | string                                                        |             |
+| `limit`            | query  | no       | integer                                                       |             |
+| `X-Correlation-ID` | header | no       | string                                                        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching results.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/settings` — Read this tenant's blog settings
+
+- **operationId**: `blogGetSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.settings.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The tenant's blog settings. | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/settings` — Update this tenant's blog settings
+
+- **operationId**: `blogUpdateSettings`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.settings.configure. Only fields present in the body are changed.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Settings updated.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/templates` — List this tenant's presentation templates
+
+- **operationId**: `blogListTemplates`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.templates.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching templates.         | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/templates` — Create a presentation template
+
+- **operationId**: `blogCreateTemplate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.templates.configure. layoutJson is a whitelisted shape: { columns: 1|2|3, sidebarPosition: left|right|none }.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                             | Schema                                 |
+| ------ | --------------------------------------- | -------------------------------------- |
+| 200    | Template created.                       | object                                 |
+| 400    | Validation error.                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.             | [`ApiError`](#standard-error-envelope) |
+| 409    | A template already exists for this key. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/templates/{id}` — Update a presentation template
+
+- **operationId**: `blogUpdateTemplate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.templates.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Template updated.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/templates/{id}` — Soft delete a presentation template
+
+- **operationId**: `blogDeleteTemplate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.templates.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Template soft-deleted.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/terms` — List this tenant's categories/tags
+
+- **operationId**: `blogListTerms`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.taxonomies.read. Optional ?taxonomyType= filter.
+
+**Parameters**
+
+| Name               | In     | Required | Type                    | Description |
+| ------------------ | ------ | -------- | ----------------------- | ----------- |
+| `taxonomyType`     | query  | no       | enum(`category`, `tag`) |             |
+| `X-Correlation-ID` | header | no       | string                  |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching terms.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/terms` — Create a category or tag
+
+- **operationId**: `blogCreateTerm`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.taxonomies.configure. A tag must never carry a parentId.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogTermWriteInput`](#schema-blogtermwriteinput)
+
+**Responses**
+
+| Status | Description                                       | Schema                                 |
+| ------ | ------------------------------------------------- | -------------------------------------- |
+| 200    | Term created.                                     | object                                 |
+| 400    | Validation error.                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                       | [`ApiError`](#standard-error-envelope) |
+| 409    | A term already exists for this taxonomyType/slug. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/terms/{id}` — Update a category or tag
+
+- **operationId**: `blogUpdateTerm`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.taxonomies.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`BlogTermWriteInput`](#schema-blogtermwriteinput)
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Term updated.               | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/terms/{id}` — Soft delete a category or tag
+
+- **operationId**: `blogDeleteTerm`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.taxonomies.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Term soft-deleted.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/theme` — Read this tenant's blog theme mode setting
+
+- **operationId**: `blogGetTheme`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.theme.read. Absence of a row means "inherit the tenant's default_theme".
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The theme setting.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/theme` — Update this tenant's blog theme mode setting
+
+- **operationId**: `blogUpdateTheme`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.theme.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Theme setting updated.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/blog/widgets` — List this tenant's widgets
+
+- **operationId**: `blogListWidgets`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.widgets.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Matching widgets.           | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/widgets` — Create a widget
+
+- **operationId**: `blogCreateWidget`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.widgets.configure. bodyText is plain text, escaped at render time (no raw-HTML field).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Widget created.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/blog/widgets/{id}` — Update a widget
+
+- **operationId**: `blogUpdateWidget`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.widgets.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Widget updated.             | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/blog/widgets/{id}` — Soft delete a widget
+
+- **operationId**: `blogDeleteWidget`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.widgets.configure.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Widget soft-deleted.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
 ## News Portal Homepage Sections
 
-Editorial homepage section composer (news_portal module) — tenant-scoped, RLS-protected CRUD for configurable homepage sections (headline, latest_posts, featured_posts, editor_picks, category_grid, gallery_block). config shape is validated per sectionType server-side; every referenced post/category/media object must already exist for the same tenant (and gallery_block media must be a verified R2 media object). sectionType is immutable after creation; reordering is just a patchable sortOrder field.
+Editorial homepage section composer (blog_content module — absorbed from the retired news_portal module by ADR-0044, which moved ownership without renaming the paths or this tag) — tenant-scoped, RLS-protected CRUD for configurable homepage sections (headline, latest_posts, featured_posts, editor_picks, category_grid, gallery_block). config shape is validated per sectionType server-side; every referenced post/category/media object must already exist for the same tenant (and gallery_block media must be a verified R2 media object). sectionType is immutable after creation; reordering is just a patchable sortOrder field.
 
 ### `GET /api/v1/news-portal/homepage-sections` — List this tenant's homepage sections (admin view)
 
@@ -4143,7 +5493,7 @@ Gated by news_portal.homepage_sections.configure.
 
 ## News Portal Ad Placements
 
-R2-only advertisement placement presets for the news portal (news_portal module) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
+R2-only advertisement placement presets for the news portal (blog_content module — absorbed from the retired news_portal module by ADR-0044, which moved ownership without renaming the paths or this tag) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
 
 ### `GET /api/v1/news-portal/ad-placements` — List this tenant's ad placements (admin view)
 
@@ -4244,6 +5594,442 @@ Gated by news_portal.ad_placements.configure.
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+## Visitor Analytics
+
+Privacy-first human visitor statistics for admin and public routes (visitor_analytics module, ported from awcms-micro) — the anonymous public visit-ingest beacon plus the authenticated, ABAC-guarded read API (summary/realtime/sessions/events/pages/devices/locations/security), tenant analytics settings, and the high-risk retention purge. Collection is OFF until an operator opts in, and raw IP/user-agent/geolocation are each independently disabled unless explicitly enabled: visitor identifiers are stored as salted HMAC-SHA256 hashes, never raw. The retention purge is idempotency-keyed, critically audited, and refused while a data_lifecycle legal hold is active.
+
+### `POST /api/v1/analytics/collect` — Public visitor page-view beacon (anonymous)
+
+- **operationId**: `analyticsCollect`
+- **Security**: none (public endpoint)
+
+PUBLIC, unauthenticated visit-ingest beacon. Resolves the tenant from the request body's `tenantCode` (the RLS-free tenant root), records a privacy-preserving page-view for `public`-area paths only (IP/user-agent stored as salted hashes; anonymous — no identity). Fire-and-forget: always 202 for a well-formed request whether or not anything was recorded (module disabled, unknown tenant, non-public/non-trackable path all still return 202 without leaking tenant existence). Requires no auth.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`CollectVisitBeaconRequest`](#schema-collectvisitbeaconrequest)
+
+**Responses**
+
+| Status | Description                                                                | Schema                                 |
+| ------ | -------------------------------------------------------------------------- | -------------------------------------- |
+| 202    | Beacon accepted (recorded or intentionally ignored — never distinguished). | object                                 |
+| 400    | Validation error.                                                          | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeds the size limit (BODY_TOO_LARGE).                      | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/devices` — Browser + device-type breakdown
+
+- **operationId**: `analyticsDevices`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.dashboard.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type                            | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------- | ---------------------------------------------- |
+| `range`            | query  | no       | enum(`24h`, `7d`, `30d`, `12m`) | Time window for the aggregate. Defaults to 7d. |
+| `X-Correlation-ID` | header | no       | string                          |                                                |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | Browser and device breakdown. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/events` — List visit events (keyset-paginated)
+
+- **operationId**: `analyticsEventsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.events.read. Newest first. Raw detail (ipHash/userAgentHash) is returned only when the caller ALSO holds visitor_analytics.raw_detail.read — otherwise those fields are null.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                               |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------- |
+| `cursor`           | query  | no       | string | Opaque keyset cursor from a previous page's `nextCursor`. |
+| `X-Correlation-ID` | header | no       | string |                                                           |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of visit events.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/locations` — Country breakdown
+
+- **operationId**: `analyticsLocations`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.dashboard.read. Empty until geolocation enrichment is enabled (VISITOR_ANALYTICS_GEO_ENABLED + VISITOR_ANALYTICS_TRUST_CLOUDFLARE) — not an error, just no data yet.
+
+**Parameters**
+
+| Name               | In     | Required | Type                            | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------- | ---------------------------------------------- |
+| `range`            | query  | no       | enum(`24h`, `7d`, `30d`, `12m`) | Time window for the aggregate. Defaults to 7d. |
+| `X-Correlation-ID` | header | no       | string                          |                                                |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Country breakdown.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/pages` — Top pages by human pageviews
+
+- **operationId**: `analyticsPages`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.dashboard.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type                            | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------- | ---------------------------------------------- |
+| `range`            | query  | no       | enum(`24h`, `7d`, `30d`, `12m`) | Time window for the aggregate. Defaults to 7d. |
+| `X-Correlation-ID` | header | no       | string                          |                                                |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Top pages.                  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/realtime` — Online-now presence counts
+
+- **operationId**: `analyticsRealtime`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.realtime.read. Sessions active within the online window (VISITOR_ANALYTICS_ONLINE_WINDOW_SECONDS), split by area.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Realtime presence.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/analytics/retention/purge` — Purge visitor analytics data past retention
+
+- **operationId**: `analyticsRetentionPurge`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.retention.purge. Destructive, high-risk: requires Idempotency-Key, audited `critical`. Deletes events past eventRetentionDays, clears session raw detail past rawDetailRetentionDays, deletes orphaned sessions, and deletes rollups past rollupRetentionDays.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Purge complete (or replay of a prior identical request).                        | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/security` — Bot/crawler traffic breakdown
+
+- **operationId**: `analyticsSecurity`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.dashboard.read.
+
+**Parameters**
+
+| Name               | In     | Required | Type                            | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------- | ---------------------------------------------- |
+| `range`            | query  | no       | enum(`24h`, `7d`, `30d`, `12m`) | Time window for the aggregate. Defaults to 7d. |
+| `X-Correlation-ID` | header | no       | string                          |                                                |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Bot traffic breakdown.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/sessions` — List visitor sessions (keyset-paginated)
+
+- **operationId**: `analyticsSessionsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.sessions.read. Newest-active-first. Raw detail (ipAddress/ipHash/userAgentHash/loginIdentifierSnapshot) is returned only when the caller ALSO holds visitor_analytics.raw_detail.read — otherwise those fields are null.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                               |
+| ------------------ | ------ | -------- | ------ | --------------------------------------------------------- |
+| `cursor`           | query  | no       | string | Opaque keyset cursor from a previous page's `nextCursor`. |
+| `X-Correlation-ID` | header | no       | string |                                                           |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of visitor sessions. | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/settings` — Read visitor analytics module settings
+
+- **operationId**: `analyticsSettingsGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.settings.read. Thin wrapper around Module Management's generic per-tenant settings storage under this module's own permission.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Effective module settings.  | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/analytics/settings` — Update visitor analytics module settings
+
+- **operationId**: `analyticsSettingsUpdate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.settings.update. Shallow JSON-merge patch. Secret-shaped keys/values are rejected before storage. Audited (changed key names only, never values).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                           | Schema                                 |
+| ------ | ----------------------------------------------------- | -------------------------------------- |
+| 200    | Settings updated.                                     | object                                 |
+| 400    | Validation error.                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                           | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                   | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeds the size limit (BODY_TOO_LARGE). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/analytics/summary` — Aggregate visitor summary for a range
+
+- **operationId**: `analyticsSummary`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by visitor_analytics.dashboard.read. Human unique visitors, pageviews, bot pageviews, and top paths/browsers/devices/countries over the selected range.
+
+**Parameters**
+
+| Name               | In     | Required | Type                            | Description                                    |
+| ------------------ | ------ | -------- | ------------------------------- | ---------------------------------------------- |
+| `range`            | query  | no       | enum(`24h`, `7d`, `30d`, `12m`) | Time window for the aggregate. Defaults to 7d. |
+| `X-Correlation-ID` | header | no       | string                          |                                                |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Aggregate summary.          | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+## Data Lifecycle
+
+Module-contributed high-volume table registry and safe lifecycle engine (data_lifecycle module, ADR-0037, ported from awcms-micro) — read the code-declared retention/partition/archive/purge descriptors and past run history, plan a dry run, and manage legal holds. Real archive/purge execution is deliberately NOT exposed over HTTP; it runs only as a bounded worker job. A legal hold overrides ordinary retention and is non-bypassable: it is enforced through a port that logging and visitor_analytics consume at their own purge composition roots, and placing/releasing one is a maker-checker SoD-guarded, audited action. The registry endpoint returns code-declared metadata only, never row contents.
+
+### `POST /api/v1/data-lifecycle/dry-run` — Compute an on-demand, read-only dry-run lifecycle plan
+
+- **operationId**: `dataLifecycleDryRunCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.plan.analyze. Zero mutation and zero persistence — no Idempotency-Key required. Legal hold is checked first and unconditionally: a held descriptor reports every eligible row as `heldCount`, nothing purgeable.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`DataLifecycleDryRunRequest`](#schema-datalifecycledryrunrequest)
+
+**Responses**
+
+| Status | Description                                | Schema                                 |
+| ------ | ------------------------------------------ | -------------------------------------- |
+| 200    | The dry-run plan for the named descriptor. | object                                 |
+| 400    | Validation error.                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                        | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/data-lifecycle/legal-holds` — List legal holds
+
+- **operationId**: `dataLifecycleLegalHoldsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.legal_hold.read. Optionally filtered by status/descriptorKey. Newest first (limit 200).
+
+**Parameters**
+
+| Name               | In     | Required | Type                       | Description |
+| ------------------ | ------ | -------- | -------------------------- | ----------- |
+| `status`           | query  | no       | enum(`active`, `released`) |             |
+| `descriptorKey`    | query  | no       | string                     |             |
+| `X-Correlation-ID` | header | no       | string                     |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of legal holds.      | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/data-lifecycle/legal-holds` — Create a legal hold
+
+- **operationId**: `dataLifecycleLegalHoldsCreate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.legal_hold.create. High-risk mutation: requires Idempotency-Key, reason-required (min 10 chars), audited critical. Creating a hold does NOT grant the ability to release one (default-deny release).
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`DataLifecycleCreateLegalHoldRequest`](#schema-datalifecyclecreatelegalholdrequest)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Legal hold created, or replay of a prior identical request.                     | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/data-lifecycle/legal-holds/{id}/release` — Release (end) an active legal hold
+
+- **operationId**: `dataLifecycleLegalHoldsRelease`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.legal_hold.release — a DISTINCT permission from create (default-deny release). High-risk mutation: requires Idempotency-Key, releaseReason-required (min 10 chars), audited critical.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`DataLifecycleReleaseLegalHoldRequest`](#schema-datalifecyclereleaselegalholdrequest)
+
+**Responses**
+
+| Status | Description                                                                                                                         | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Legal hold released, or replay of a prior identical request.                                                                        | object                                 |
+| 400    | Validation error.                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | The hold is already released (ALREADY_RELEASED), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/data-lifecycle/registry` — List the high-volume table lifecycle registry
+
+- **operationId**: `dataLifecycleRegistryList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.registry.read. Code-declared descriptor metadata only (table/owner/scope/cursor/retention bounds/execution mode) — never row contents, never a live count. The response body is identical for every tenant; auth/ABAC still applies.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                   | Schema                                 |
+| ------ | --------------------------------------------- | -------------------------------------- |
+| 200    | The registered high-volume table descriptors. | object                                 |
+| 400    | Validation error.                             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                   | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/data-lifecycle/runs` — Read lifecycle run history
+
+- **operationId**: `dataLifecycleRunsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.runs.read. Categorized AGGREGATE counts only — never row contents or PII. Optionally filtered by descriptorKey/runType. Newest first (limit 100).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                | Description |
+| ------------------ | ------ | -------- | ----------------------------------- | ----------- |
+| `descriptorKey`    | query  | no       | string                              |             |
+| `runType`          | query  | no       | enum(`dry_run`, `archive`, `purge`) |             |
+| `X-Correlation-ID` | header | no       | string                              |             |
+
+**Responses**
+
+| Status | Description                      | Schema                                 |
+| ------ | -------------------------------- | -------------------------------------- |
+| 200    | A page of lifecycle run history. | object                                 |
+| 400    | Validation error.                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.      | [`ApiError`](#standard-error-envelope) |
 
 ## SEO & Distribution
 
@@ -5459,6 +7245,218 @@ A bounded, deterministic condition AST (Issue #179). A node is either a composit
 }
 ```
 
+### Schema: BlogContentBlock
+
+One block of `content_json`. The vocabulary is closed: a value outside
+the six variants below is not stored and not rendered.
+
+This schema exists because the vocabulary previously lived only in a
+TypeScript type and one prose sentence, so every consumer re-derived it
+by reading. One did, and disagreed with it in three ways at once —
+silently, because a wrong block type raises no error anywhere. It
+renders wrongly, or the section disappears.
+
+Held to `blog-content/domain/content-block-rendering.ts`'s
+`CONTENT_BLOCK_TYPES` by `tests/content-block-contract.test.ts`, which
+also holds that constant to the renderer's own switch.
+
+Note two shapes that are easy to guess wrong:
+
+- Ordering is a FIELD on `list` (`ordered: true`), not a separate
+  `ordered_list` type.
+- `gallery` and `video_news` carry NO `text` field. A renderer that
+  falls back to "render `text` as a paragraph" drops them entirely.
+
+One block of `content_json`. The vocabulary is closed: a value outside
+the six variants below is not stored and not rendered.
+
+This schema exists because the vocabulary previously lived only in a
+TypeScript type and one prose sentence, so every consumer re-derived it
+by reading. One did, and disagreed with it in three ways at once —
+silently, because a wrong block type raises no error anywhere. It
+renders wrongly, or the section disappears.
+
+Held to `blog-content/domain/content-block-rendering.ts`'s
+`CONTENT_BLOCK_TYPES` by `tests/content-block-contract.test.ts`, which
+also holds that constant to the renderer's own switch.
+
+Note two shapes that are easy to guess wrong:
+
+- Ordering is a FIELD on `list` (`ordered: true`), not a separate
+  `ordered_list` type.
+- `gallery` and `video_news` carry NO `text` field. A renderer that
+  falls back to "render `text` as a paragraph" drops them entirely.
+
+**Example**
+
+```json
+{
+  "type": "paragraph",
+  "text": "string"
+}
+```
+
+### Schema: BlogContentJson
+
+Structured post/page body. `{ blocks: BlogContentBlock[] }` — never raw HTML, by construction: there is no block variant that carries markup.
+
+| Field    | Type                                                    | Required | Nullable | Description |
+| -------- | ------------------------------------------------------- | -------- | -------- | ----------- |
+| `blocks` | array of [`BlogContentBlock`](#schema-blogcontentblock) | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "blocks": [
+    {
+      "type": "paragraph",
+      "text": "string"
+    }
+  ]
+}
+```
+
+### Schema: BlogPageWriteInput
+
+Shared shape for POST /api/v1/blog/pages and PATCH /api/v1/blog/pages/{id} (all fields optional on update).
+
+| Field             | Type                                           | Required | Nullable | Description |
+| ----------------- | ---------------------------------------------- | -------- | -------- | ----------- |
+| `title`           | string                                         | no       | no       |             |
+| `slug`            | string                                         | no       | no       |             |
+| `excerpt`         | string                                         | no       | yes      |             |
+| `contentJson`     | [`BlogContentJson`](#schema-blogcontentjson)   | no       | no       |             |
+| `contentText`     | string                                         | no       | no       |             |
+| `locale`          | string                                         | no       | no       |             |
+| `visibility`      | enum(`public`, `private`, `unlisted`)          | no       | no       |             |
+| `featuredMediaId` | string (uuid)                                  | no       | yes      |             |
+| `seoTitle`        | string                                         | no       | yes      |             |
+| `metaDescription` | string                                         | no       | yes      |             |
+| `canonicalUrl`    | string                                         | no       | yes      |             |
+| `pageType`        | enum(`standard`, `landing`, `legal`, `system`) | no       | no       |             |
+| `parentPageId`    | string (uuid)                                  | no       | yes      |             |
+| `menuOrder`       | integer                                        | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "title": "string",
+  "slug": "example-slug",
+  "excerpt": "string",
+  "contentJson": {
+    "blocks": [
+      {
+        "type": null,
+        "text": null
+      }
+    ]
+  },
+  "contentText": "string",
+  "locale": "string",
+  "visibility": "public",
+  "featuredMediaId": "00000000-0000-0000-0000-000000000000",
+  "seoTitle": "string",
+  "metaDescription": "string",
+  "canonicalUrl": "https://example.com/resource",
+  "pageType": "standard",
+  "parentPageId": "00000000-0000-0000-0000-000000000000",
+  "menuOrder": 0
+}
+```
+
+### Schema: BlogPostWriteInput
+
+Shared shape for POST /api/v1/blog/posts (all fields required) and PATCH /api/v1/blog/posts/{id} (all fields optional, only present fields change).
+
+| Field                          | Type                                         | Required | Nullable | Description                                                                                      |
+| ------------------------------ | -------------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `title`                        | string                                       | no       | no       |                                                                                                  |
+| `slug`                         | string                                       | no       | no       |                                                                                                  |
+| `excerpt`                      | string                                       | no       | yes      |                                                                                                  |
+| `contentJson`                  | [`BlogContentJson`](#schema-blogcontentjson) | no       | no       |                                                                                                  |
+| `contentText`                  | string                                       | no       | no       |                                                                                                  |
+| `locale`                       | string                                       | no       | no       |                                                                                                  |
+| `visibility`                   | enum(`public`, `private`, `unlisted`)        | no       | no       |                                                                                                  |
+| `featuredMediaId`              | string (uuid)                                | no       | yes      |                                                                                                  |
+| `seoImageMediaId`              | string (uuid)                                | no       | yes      | Explicit "use this image for social/SEO preview" override — takes priority over featuredMediaId. |
+| `seoTitle`                     | string                                       | no       | yes      |                                                                                                  |
+| `metaDescription`              | string                                       | no       | yes      |                                                                                                  |
+| `canonicalUrl`                 | string                                       | no       | yes      |                                                                                                  |
+| `termIds`                      | array of string (uuid)                       | no       | no       |                                                                                                  |
+| `translationGroupId`           | string (uuid)                                | no       | yes      |                                                                                                  |
+| `autoInternalTagLinksDisabled` | boolean                                      | no       | no       | Per-post opt-out of automatic internal tag linking.                                              |
+
+**Example**
+
+```json
+{
+  "title": "string",
+  "slug": "example-slug",
+  "excerpt": "string",
+  "contentJson": {
+    "blocks": [
+      {
+        "type": null,
+        "text": null
+      }
+    ]
+  },
+  "contentText": "string",
+  "locale": "string",
+  "visibility": "public",
+  "featuredMediaId": "00000000-0000-0000-0000-000000000000",
+  "seoImageMediaId": "00000000-0000-0000-0000-000000000000",
+  "seoTitle": "string",
+  "metaDescription": "string",
+  "canonicalUrl": "https://example.com/resource",
+  "termIds": ["00000000-0000-0000-0000-000000000000"],
+  "translationGroupId": "00000000-0000-0000-0000-000000000000",
+  "autoInternalTagLinksDisabled": false
+}
+```
+
+### Schema: BlogTermWriteInput
+
+| Field          | Type                    | Required | Nullable | Description |
+| -------------- | ----------------------- | -------- | -------- | ----------- |
+| `taxonomyType` | enum(`category`, `tag`) | no       | no       |             |
+| `parentId`     | string (uuid)           | no       | yes      |             |
+| `name`         | string                  | no       | no       |             |
+| `slug`         | string                  | no       | no       |             |
+| `description`  | string                  | no       | yes      |             |
+
+**Example**
+
+```json
+{
+  "taxonomyType": "category",
+  "parentId": "00000000-0000-0000-0000-000000000000",
+  "name": "string",
+  "slug": "example-slug",
+  "description": "string"
+}
+```
+
+### Schema: CollectVisitBeaconRequest
+
+| Field        | Type   | Required | Nullable | Description                                                                                                     |
+| ------------ | ------ | -------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `tenantCode` | string | yes      | no       | Public tenant code the beacon is reporting for.                                                                 |
+| `path`       | string | yes      | no       | The page path being reported (must start with '/'). Sanitized server-side; sensitive query params are stripped. |
+| `referrer`   | string | no       | yes      | Optional referrer URL; only its bare hostname is ever stored.                                                   |
+
+**Example**
+
+```json
+{
+  "tenantCode": "string",
+  "path": "string",
+  "referrer": "string"
+}
+```
+
 ### Schema: CommentSettings
 
 Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint in sql/066.
@@ -5516,6 +7514,98 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
   "originalFilename": "string",
   "altText": "string",
   "caption": "string"
+}
+```
+
+### Schema: CreateTenantDomainRequest
+
+| Field                     | Type                                                   | Required | Nullable | Description                                                            |
+| ------------------------- | ------------------------------------------------------ | -------- | -------- | ---------------------------------------------------------------------- |
+| `hostname`                | string                                                 | yes      | no       | DNS hostname (no port). Normalized to lowercase for uniqueness/lookup. |
+| `domainType`              | enum(`subdomain`, `custom_domain`)                     | no       | no       |                                                                        |
+| `routeMode`               | enum(`canonical`, `legacy_blog`)                       | no       | no       |                                                                        |
+| `verificationMethod`      | enum(`dns_txt`, `dns_cname`, `file`, `manual`, `null`) | no       | yes      |                                                                        |
+| `verificationRecordName`  | string                                                 | no       | yes      |                                                                        |
+| `verificationRecordValue` | string                                                 | no       | yes      |                                                                        |
+| `redirectToPrimary`       | boolean                                                | no       | no       |                                                                        |
+
+**Example**
+
+```json
+{
+  "hostname": "tenant.example.com",
+  "domainType": "subdomain",
+  "routeMode": "canonical",
+  "verificationMethod": "dns_txt",
+  "verificationRecordName": "string",
+  "verificationRecordValue": "string",
+  "redirectToPrimary": false
+}
+```
+
+### Schema: DataLifecycleCreateLegalHoldRequest
+
+| Field                | Type               | Required | Nullable | Description                                                                                                                                                      |
+| -------------------- | ------------------ | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `descriptorKey`      | string             | no       | yes      | Omit or null for a tenant-wide hold applying to every registered descriptor.                                                                                     |
+| `scopeDescription`   | string             | yes      | no       |                                                                                                                                                                  |
+| `reason`             | string             | yes      | no       |                                                                                                                                                                  |
+| `authorityReference` | string             | yes      | no       | e.g. a court order or regulator reference number.                                                                                                                |
+| `endsAt`             | string (date-time) | no       | yes      | Reporting metadata only (an operator's expected review date) — NEVER an automatic-expiry mechanism. A hold stops applying only via an explicit, audited release. |
+
+**Example**
+
+```json
+{
+  "descriptorKey": "string",
+  "scopeDescription": "string",
+  "reason": "string",
+  "authorityReference": "string",
+  "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: DataLifecycleDryRunRequest
+
+| Field                   | Type    | Required | Nullable | Description                                                                                                                                                                    |
+| ----------------------- | ------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `descriptorKey`         | string  | yes      | no       | A key from GET /api/v1/data-lifecycle/registry.                                                                                                                                |
+| `retentionDaysOverride` | integer | no       | no       | Optional — clamped to the descriptor's [retentionMinDays, retentionMaxDays] bounds. Cannot widen eligibility around a legal hold (the hold check runs first, unconditionally). |
+
+**Example**
+
+```json
+{
+  "descriptorKey": "string",
+  "retentionDaysOverride": 0
+}
+```
+
+### Schema: DataLifecycleReleaseLegalHoldRequest
+
+| Field           | Type   | Required | Nullable | Description |
+| --------------- | ------ | -------- | -------- | ----------- |
+| `releaseReason` | string | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "releaseReason": "string"
+}
+```
+
+### Schema: DeleteTenantDomainRequest
+
+| Field    | Type   | Required | Nullable | Description                             |
+| -------- | ------ | -------- | -------- | --------------------------------------- |
+| `reason` | string | yes      | no       | Non-empty soft-delete reason (audited). |
+
+**Example**
+
+```json
+{
+  "reason": "string"
 }
 ```
 
@@ -5864,6 +7954,34 @@ A tenant's DATA-only theme configuration. Every key/value is validated against t
   "assetRefs": "(operation-specific payload)",
   "sectionOrder": ["string"],
   "navPlacement": "string"
+}
+```
+
+### Schema: UpdateTenantDomainRequest
+
+At least one field required. `status` may not be `active` (use verify); `hostname`/`is_primary` are immutable.
+
+| Field                     | Type                                                   | Required | Nullable | Description |
+| ------------------------- | ------------------------------------------------------ | -------- | -------- | ----------- |
+| `domainType`              | enum(`subdomain`, `custom_domain`)                     | no       | no       |             |
+| `routeMode`               | enum(`canonical`, `legacy_blog`)                       | no       | no       |             |
+| `status`                  | enum(`pending_verification`, `suspended`, `failed`)    | no       | no       |             |
+| `verificationMethod`      | enum(`dns_txt`, `dns_cname`, `file`, `manual`, `null`) | no       | yes      |             |
+| `verificationRecordName`  | string                                                 | no       | yes      |             |
+| `verificationRecordValue` | string                                                 | no       | yes      |             |
+| `redirectToPrimary`       | boolean                                                | no       | no       |             |
+
+**Example**
+
+```json
+{
+  "domainType": "subdomain",
+  "routeMode": "canonical",
+  "status": "pending_verification",
+  "verificationMethod": "dns_txt",
+  "verificationRecordName": "string",
+  "verificationRecordValue": "string",
+  "redirectToPrimary": false
 }
 ```
 

@@ -23,9 +23,11 @@ import {
   listModuleFragmentFiles
 } from "../scripts/openapi-bundle";
 import {
+  collectFragmentOwnershipProblems,
   collectOperationIdProblems,
   collectPathParameterProblems,
-  collectStandardErrorSchemaProblems
+  collectStandardErrorSchemaProblems,
+  collectTagCatalogProblems
 } from "../scripts/api-spec-check";
 
 const ROOT = process.cwd();
@@ -289,9 +291,20 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
     // submit/list/reply/report surface plus the admin moderation queue; the six
     // unauthenticated operations are in the contract and individually justified
     // in ALLOWED_PUBLIC_OPERATIONS).
+    //
+    // The last four were not "added" surfaces at all — their operations had
+    // been in the bundle for releases, carrying tags the root catalog never
+    // declared, so `scripts/api-docs-generate.ts` (which groups by DECLARED
+    // tag) dropped all 55 of them from the reference document without a single
+    // gate going red: "Blog Content" (blog_content, 30 paths), "Visitor
+    // Analytics" (visitor_analytics, 12), "Tenant Domains" (tenant_domain, 7),
+    // "Data Lifecycle" (data_lifecycle, 6). `collectTagCatalogProblems` in
+    // scripts/api-spec-check.ts now fails on both halves of that defect.
     const added = [...afterTags].filter((n) => !beforeTags.has(n)).sort();
     expect(added).toEqual([
+      "Blog Content",
       "Comments",
+      "Data Lifecycle",
       "Domain Event Runtime",
       "Form Drafts",
       "News Media",
@@ -299,7 +312,9 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "News Portal Homepage Sections",
       "SEO & Distribution",
       "Site Search",
-      "Theming"
+      "Tenant Domains",
+      "Theming",
+      "Visitor Analytics"
     ]);
   });
 });
@@ -388,6 +403,164 @@ describe("api-spec-check gate functions (unit)", () => {
       }
     };
     expect(collectStandardErrorSchemaProblems(doc)).toEqual([]);
+  });
+
+  // The three tag-catalog rules are tested one at a time, each with a document
+  // that would have passed every OTHER gate — because that is precisely the
+  // shape the real defect had: a fully valid, fully bundled contract whose
+  // operations were invisible to the generated reference document.
+  test("collectTagCatalogProblems flags an operation tag missing from the root catalog", () => {
+    const doc = {
+      tags: [{ name: "Declared" }],
+      paths: {
+        "/api/v1/blog/posts": {
+          get: { operationId: "blogListPosts", tags: ["Blog Content"] }
+        },
+        "/api/v1/declared": {
+          get: { operationId: "getDeclared", tags: ["Declared"] }
+        }
+      }
+    };
+    const problems = collectTagCatalogProblems(doc);
+    expect(
+      problems.some(
+        (p) =>
+          p.includes('tag "Blog Content" is not declared') &&
+          p.includes("GET /api/v1/blog/posts")
+      )
+    ).toBe(true);
+  });
+
+  test("collectTagCatalogProblems flags a declared tag no operation carries (a retired module's tag)", () => {
+    const doc = {
+      tags: [{ name: "Declared" }, { name: "News Portal Ad Placements" }],
+      paths: {
+        "/api/v1/declared": {
+          get: { operationId: "getDeclared", tags: ["Declared"] }
+        }
+      }
+    };
+    const problems = collectTagCatalogProblems(doc);
+    expect(
+      problems.some((p) =>
+        p.includes(
+          'Root tag catalog declares "News Portal Ad Placements" but no operation carries it'
+        )
+      )
+    ).toBe(true);
+  });
+
+  test("collectTagCatalogProblems flags an untagged operation and accepts a fully consistent catalog", () => {
+    expect(
+      collectTagCatalogProblems({
+        tags: [{ name: "Declared" }],
+        paths: {
+          "/api/v1/declared": {
+            get: { operationId: "getDeclared", tags: ["Declared"] }
+          },
+          "/api/v1/orphan": { get: { operationId: "getOrphan" } }
+        }
+      }).some((p) => p.includes("declares no tag"))
+    ).toBe(true);
+
+    expect(
+      collectTagCatalogProblems({
+        tags: [{ name: "Declared" }],
+        paths: {
+          "/api/v1/declared": {
+            get: { operationId: "getDeclared", tags: ["Declared"] }
+          }
+        }
+      })
+    ).toEqual([]);
+  });
+
+  test("collectFragmentOwnershipProblems flags a module pointing at the generated bundle", () => {
+    const problems = collectFragmentOwnershipProblems(
+      [
+        {
+          key: "blog_content",
+          api: { openApiPath: "openapi/awcms-public-api.openapi.yaml" }
+        }
+      ],
+      ["blog-content.openapi.yaml", "foundation.openapi.yaml"]
+    );
+    expect(
+      problems.some(
+        (p) =>
+          p.includes('Module "blog_content"') &&
+          p.includes("generated bundle") &&
+          p.includes("instead of its own fragment")
+      )
+    ).toBe(true);
+  });
+
+  test("collectFragmentOwnershipProblems flags a fragment left behind by a retired module", () => {
+    const problems = collectFragmentOwnershipProblems(
+      [
+        {
+          key: "blog_content",
+          api: { openApiPath: "openapi/modules/blog-content.openapi.yaml" }
+        }
+      ],
+      [
+        "blog-content.openapi.yaml",
+        "foundation.openapi.yaml",
+        "news-portal.openapi.yaml"
+      ]
+    );
+    expect(
+      problems.some(
+        (p) =>
+          p.includes('"openapi/modules/news-portal.openapi.yaml"') &&
+          p.includes("claimed by no registered module")
+      )
+    ).toBe(true);
+    // The module-less platform fragment is the reviewed exception, not a leak
+    // in the rule.
+    expect(problems.some((p) => p.includes("foundation.openapi.yaml"))).toBe(
+      false
+    );
+  });
+
+  test("collectFragmentOwnershipProblems flags a missing fragment file and a doubly-claimed one", () => {
+    expect(
+      collectFragmentOwnershipProblems(
+        [
+          {
+            key: "ghost",
+            api: { openApiPath: "openapi/modules/ghost.openapi.yaml" }
+          }
+        ],
+        ["foundation.openapi.yaml"]
+      ).some((p) => p.includes("does not exist"))
+    ).toBe(true);
+
+    expect(
+      collectFragmentOwnershipProblems(
+        [
+          {
+            key: "a",
+            api: { openApiPath: "openapi/modules/shared.openapi.yaml" }
+          },
+          {
+            key: "b",
+            api: { openApiPath: "openapi/modules/shared.openapi.yaml" }
+          }
+        ],
+        ["foundation.openapi.yaml", "shared.openapi.yaml"]
+      ).some((p) => p.includes("claimed by more than one module (a, b)"))
+    ).toBe(true);
+  });
+
+  test("collectFragmentOwnershipProblems accepts the real registry against the real fragment directory", async () => {
+    const { listModules } = await import("../src/modules");
+    expect(
+      collectFragmentOwnershipProblems(
+        listModules(),
+        await listModuleFragmentFiles()
+      )
+    ).toEqual([]);
   });
 
   test("collectPathParameterProblems flags a template param with no matching declaration", () => {
