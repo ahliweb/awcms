@@ -1,5 +1,15 @@
 # Alur pengembangan: awcms-mini dulu, lalu port ke awcms
 
+> **DITANGGUHKAN sejak 31 Juli 2026.** `awcms-mini` dibekukan sebagai referensi
+> dan tidak menerima perubahan, sehingga alur di dokumen ini tidak bisa ditempuh:
+> langkah pertamanya tidak punya tujuan. Selama pembekuan berlaku, fitur fondasi
+> dirintis **langsung di `awcms`**, dengan seluruh penjagaan penggantinya
+> dinyatakan eksplisit di [ADR-0047](../adr/0047-mini-micro-frozen-foundation-built-here.md).
+>
+> Dokumen ini **tidak** dihapus dan tidak diubah isinya: ia kembali berlaku utuh
+> begitu pembekuan dicabut, dan langkah rename prefix di dalamnya justru yang
+> akan dipakai untuk memulangkan pekerjaan ke hulu — dengan arah terbalik.
+
 > **Status:** kontrak kerja operasional. Wajib dipatuhi setiap agent/kontributor
 > yang menambah atau mengubah fitur di repo ini. Melengkapi
 > [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md) (rebuild di
