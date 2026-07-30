@@ -8,6 +8,25 @@ Baca dokumen ini sebelum mengerjakan task apa pun di repo ini. Ini adalah kontra
 
 ## Relasi dengan awcms-mini (wajib dibaca)
 
+> **DITANGGUHKAN sejak 31 Juli 2026 — baca ini lebih dulu.**
+> `ahliweb/awcms-mini` dan `ahliweb/awcms-micro` **dibekukan sebagai referensi**:
+> boleh dibaca, polanya boleh disalin, kode boleh di-port KELUAR — tetapi
+> keduanya **tidak menerima perubahan**. Akibatnya aturan mini-first di paragraf
+> berikut **tidak bisa ditempuh**: tidak ada hulu yang menerima pekerjaan.
+> Selama pembekuan berlaku, **fitur fondasi dirintis langsung di repo ini**.
+>
+> Ini bukan pelonggaran. Seluruh penjagaan yang dulu dibawa jalur mini-first
+> tetap wajib dan kini dinyatakan eksplisit: ADR untuk perubahan standar, review
+> keamanan tambahan untuk modul `auth`/`access`/`sync`, `bun run check` penuh
+> termasuk `family:conformance:check`, dan pencatatan setiap fitur fondasi baru
+> sebagai **divergence sengaja** di `awcms-family-compatibility.yaml` saat ia
+> mendarat — bukan belakangan.
+>
+> Alasan, bukti, dan syarat pencabutannya:
+> [ADR-0047](docs/adr/0047-mini-micro-frozen-foundation-built-here.md).
+> Paragraf di bawah tetap berlaku penuh begitu pembekuan dicabut, jadi ia tidak
+> dihapus.
+
 AWCMS adalah rebuild fondasi (bukan ERP jadi) di atas basis teknis **awcms-mini** (repo standar), yang **dikembangkan** ke skop ERP/SaaS online-first dan **menyerap** kapabilitas website/e-commerce `awcms-micro`. **Fitur fondasi diuji lebih dulu di awcms-mini, baru di-port ke repo ini**; kapabilitas website/e-commerce yang sudah matang di **awcms-micro** juga di-port ke sini (pola adaptasi yang sama, rename prefix `awcms_micro_…` → `awcms_…`). Repo ini bukan tempat merintis fitur fondasi dari nol. Alur port, langkah rename prefix `awcms_mini_…` → `awcms_…`, dan implikasinya untuk agent ada di [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md); peta penyerapan awcms-micro di [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
 
 Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari mini — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
