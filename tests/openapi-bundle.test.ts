@@ -307,6 +307,7 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "Data Lifecycle",
       "Domain Event Runtime",
       "Form Drafts",
+      "Indonesia Regions",
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",

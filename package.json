@@ -49,6 +49,7 @@
     "data-lifecycle:archive-purge": "bun scripts/data-lifecycle-archive-purge.ts",
     "form-drafts:purge": "bun scripts/form-draft-purge.ts",
     "site-search:reconcile": "bun scripts/site-search-reconcile.ts",
+    "idn-regions:import": "bun scripts/idn-regions-import.ts",
     "site-search:sources:check": "bun scripts/site-search-sources-check.ts",
     "comments:resources:check": "bun scripts/comments-resources-check.ts",
     "comments:retention": "bun scripts/comments-retention.ts",

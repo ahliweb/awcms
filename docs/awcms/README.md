@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:724bfe74a3890d0843c9e2b00c3430b6c24f23cff1fc22512e61f18a85a1e53d -->
+<!-- i18n-source-hash: sha256:fea4bae68988f477293693bbb75522fa91189356878b5324dce3d592dec7357d -->
 
 # AWCMS Technical Document Package
 
@@ -10,7 +10,7 @@ This folder holds AWCMS's standard technical document package — the **AWCMS-fa
 
 ## Status
 
-This repo is past the rebuild-foundation stage (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **20** foundation + website/content modules are already live (including `theming` and `blog-content`, which since [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) also owns everything the retired `news-portal` used to; advanced auth MFA/OIDC/SSO/business-scope/SoD; see [`../ARCHITECTURE.md`](../ARCHITECTURE.md) as the source of truth for code state). Some documents in this folder are still **plan/target** for capabilities being absorbed from awcms-micro (see [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)), not all the current state of the code. Claims of "already live/available/verified" from the awcms-mini/awcms-micro source documents should be read as binding targets for future implementation here when the relevant module has not yet been ported.
+This repo is past the rebuild-foundation stage (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **21** foundation + website/content modules are already live (including `theming` and `blog-content`, which since [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) also owns everything the retired `news-portal` used to; advanced auth MFA/OIDC/SSO/business-scope/SoD; see [`../ARCHITECTURE.md`](../ARCHITECTURE.md) as the source of truth for code state). Some documents in this folder are still **plan/target** for capabilities being absorbed from awcms-micro (see [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)), not all the current state of the code. Claims of "already live/available/verified" from the awcms-mini/awcms-micro source documents should be read as binding targets for future implementation here when the relevant module has not yet been ported.
 
 This package now adapts **the entire** technical document set from the awcms-mini reference repo so AWCMS is ready to be developed with the same agent tooling (see also [`.claude/skills/`](../../.claude/skills/README.md)). Documents from the website/e-commerce cluster (news portal, social publishing, visitor analytics, comments, newsletter, SEO, etc.) are now **target specifications for the awcms-micro absorption** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), map in [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)) — those modules are **absorbed directly into this template's `src/modules/`**, not merely patterns to map.
 

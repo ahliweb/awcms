@@ -542,6 +542,31 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/idn-regions/datasets/[id]/activate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/idn-regions/datasets/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/idn-regions/datasets/rollback.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/idn-regions/regions/[code].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/idn-regions/regions/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/logs/audit.ts",
       "workClass": "interactive",
       "source": "default"
@@ -1148,6 +1173,12 @@
       "workClass": "maintenance",
       "source": "registry",
       "rationale": "Scheduled expiry sweep for business-scope assignments/SoD conflict exceptions (identity-access:business-scope:expiry, Issue #746) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenantOrThrow call inside business-scope-expiry-job.ts already passes workClass: \"maintenance\" explicitly."
+    },
+    {
+      "path": "scripts/idn-regions-import.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "One-shot reference-data import (idn-regions:import, ADR-0046) — 91,599 rows written in a single transaction on deploy, not on a timer. Tolerant of delay and never latency-sensitive, but deliberately NOT background_sync: it is a long single write, so it belongs in the class sized for sweeps rather than the one sized for recurring dispatchers competing with request traffic."
     },
     {
       "path": "scripts/news-media-r2-reconcile.ts",

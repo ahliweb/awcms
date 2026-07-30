@@ -1,23 +1,41 @@
 ---
 name: awcms-idn-admin-regions
-description: BACAAN SAJA — modul idn_admin_regions BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `idn-admin-regions`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #655-#664, epic #654 — master data wilayah administratif Indonesia dari cahyadsn/wilayah). Gunakan saat menambah/mengubah vendoring source metadata, schema dataset region, parser/normalizer SQL upstream, validation gate, import pipeline, activation/rollback/diff, lookup API, atau admin UI untuk modul `idn_admin_regions`. Merangkum keputusan yang sudah dibuat supaya issue lanjutan tidak mengulang investigasi/kontradiksi.
+description: Modul idn_admin_regions SUDAH ADA di repo ini (ADR-0046, migrasi `sql/080` schema + `sql/081` permission) — master data wilayah administratif Indonesia (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) ber-VERSI, disumber dari dataset komunitas `cahyadsn/wilayah` (MIT) yang DI-VENDOR di `data/idn-admin-regions/`. Cakupan di sini LEBIH LUAS dari awcms-mini (yang berhenti di scaffold+schema): parser dump upstream, pipeline import `bun run idn-regions:import` (dry-run default, `--commit` menulis), aktivasi/rollback dataset ter-audit, dan lookup API `/api/v1/idn-regions/*`. Dua tabelnya GLOBAL (tanpa `tenant_id`, tanpa RLS — terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`), otorisasi tetap per-tenant default-deny. Gunakan saat mengubah parser/normalizer, schema dataset, jalur import/aktivasi, lookup API, atau saat mem-vendor pemutakhiran Kepmendagri berikutnya. BADAN skill di bawah adalah spesifikasi awcms-mini (penomoran `sql/NNN` mini, issue #655-#664) — perlakukan sebagai sejarah, bukan peta kode repo ini.
 ---
 
 # AWCMS — Indonesia Administrative Regions (`idn_admin_regions`)
 
-<!-- sql-refs: awcms-mini — modul belum di-port; setiap `sql/NNN` di file ini penomoran awcms-mini, bukan repo ini -->
+<!-- sql-refs: awcms-mini — badan skill memakai penomoran awcms-mini; migrasi NYATA repo ini adalah sql/080 + sql/081 -->
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `idn_admin_regions` ada di **awcms-mini**, bukan di sini: `ls src/modules`
-> TIDAK memuat `idn-admin-regions`, dan `sql/` tidak memuat migration-nya.
-> Semua rujukan `src/modules/idn-admin-regions/...`, tabel
-> `awcms_idn_admin_regions_*`, dan `sql/NNN` di bawah adalah artefak
-> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini.
-> Nomor `sql/NNN` memakai penomoran awcms-mini dan akan berubah saat
-> di-port (melanjutkan dari migration terakhir repo ini). Pakai skill ini
-> sebagai spesifikasi target port (via `awcms-port-from-mini`), bukan peta
-> kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum mengklaim
-> apa pun ada.
+> **STATUS — MODUL INI SUDAH ADA DI REPO INI, dan lebih lengkap dari yang
+> dijelaskan di bawah** ([ADR-0046](../../../docs/adr/0046-idn-admin-regions-module-admission.md)).
+>
+> - Kode nyata: `src/modules/idn-admin-regions/` — descriptor, `domain/`
+>   (provenance, parser dump, normalizer hierarki), `application/`
+>   (import, lifecycle dataset, lookup), plus rute
+>   `src/pages/api/v1/idn-regions/**` dan job `scripts/idn-regions-import.ts`.
+> - Migrasi NYATA: **`sql/080`** (dua tabel) + **`sql/081`** (4 permission).
+>   Setiap `sql/NNN` di badan skill ini adalah penomoran **awcms-mini**.
+> - Dataset ter-vendor: `data/idn-admin-regions/` (4 berkas upstream + LICENSE +
+>   `manifest.json` + `checksums.sha256`), digerbangi
+>   `tests/idn-admin-regions-vendor-manifest.test.ts`.
+>
+> **Yang BERBEDA dari awcms-mini** (jangan bawa asumsi mini ke sini):
+>
+> | Hal            | awcms-mini                                                        | repo ini                                                                                                            |
+> | -------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+> | Cakupan        | scaffold + vendor + schema (#658–#664 di-hold)                    | modul fungsional penuh: import, aktivasi/rollback, lookup API                                                       |
+> | `type`         | `base`                                                            | `system` (`isCore: false`) — repo ini tak punya modul ber-type `base`                                               |
+> | Permission     | 5 (termasuk `dataset.import`)                                     | **4** — tidak ada permission import: import adalah JOB, bukan aksi HTTP                                             |
+> | Aksi lifecycle | direncanakan `activate`/`rollback`                                | dipetakan ke literal `AccessAction` yang SUDAH ADA: `configure` (activate) dan `restore` (rollback)                 |
+> | Provenance     | satu kalimat menyebut Kepmendagri 300.2.2-2430 untuk semua berkas | **per berkas**, dibaca dari header masing-masing — berkas yang diimpor (`db/wilayah.sql`) menyebut **300.2.2-2138** |
+> | Grant          | nol grant (schema-only)                                           | `awcms_app` SELECT (+UPDATE dataset), `awcms_worker` SELECT/INSERT/UPDATE, **nol DELETE untuk keduanya**            |
+>
+> Untuk MENGUBAH kode nyata: baca
+> [`src/modules/idn-admin-regions/README.md`](../../../src/modules/idn-admin-regions/README.md)
+> dan ADR-0046 lebih dulu. Badan di bawah dipertahankan sebagai catatan
+> keputusan asal (sumber/lisensi/caveat dan derivasi permission), bukan peta
+> kode hari ini.
 
 Epic #654 (Issue #655-#664): master data wilayah administratif Indonesia
 (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) sebagai modul

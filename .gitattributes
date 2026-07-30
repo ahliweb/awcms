@@ -1,0 +1,14 @@
+# Vendored third-party dataset (ADR-0046) — byte-exact or worthless.
+#
+# `data/idn-admin-regions/upstream/**` holds files copied verbatim from
+# `cahyadsn/wilayah` together with the sha256 of every byte
+# (`checksums.sha256`, `manifest.json`, and the test that recomputes both).
+# `db/wilayah.sql` upstream uses CRLF line endings while its siblings use LF;
+# any EOL normalisation on checkout/commit would silently change those bytes and
+# make every recorded checksum wrong — turning a provenance record into a lie
+# that reads like a passing gate. Marking the subtree `binary` disables EOL
+# normalisation (and diffing) for it entirely.
+#
+# A future vendored file under this path inherits the rule automatically; it
+# never needs its own line here.
+data/idn-admin-regions/upstream/** binary

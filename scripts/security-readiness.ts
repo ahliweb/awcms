@@ -467,7 +467,19 @@ const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   awcms_schema_migrations: ["INSERT", "UPDATE", "DELETE"],
   // Write-limited — only DELETE forbidden.
   awcms_tenants: ["DELETE"],
-  awcms_setup_state: ["DELETE"]
+  awcms_setup_state: ["DELETE"],
+  // Global reference data (ADR-0046, sql/080) — Indonesia administrative
+  // regions. Global because the rows are identical for every tenant (province
+  // "Aceh" is not tenant-owned data), NOT because access is unguarded: every
+  // endpoint over them still runs session + tenant context + default-deny ABAC.
+  //
+  // The dataset table keeps UPDATE: activate/rollback is a request-path action
+  // that flips `status`/`activated_at`/`activated_by` (ADR-0046 §5). The region
+  // table is read-only at request time — rows are written exclusively by the
+  // import job as `awcms_worker`. Neither may DELETE: a dataset is superseded,
+  // never deleted, so 91k rows are never one wrong query away.
+  awcms_idn_region_datasets: ["INSERT", "DELETE"],
+  awcms_idn_admin_regions: ["INSERT", "UPDATE", "DELETE"]
 };
 
 /**
@@ -1048,6 +1060,15 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // soft-deleting stale `orphaned` rows, DELETE hard-deleting expired `failed`
   // rows. The job's own audit INSERT reuses awcms_audit_events above.
   awcms_news_media_objects: ["SELECT", "UPDATE", "DELETE"],
+  // idn_admin_regions — idn-regions:import (sql/080, ADR-0046). The import job
+  // INSERTs one dataset row plus its regions and UPDATEs the dataset row's
+  // counters; it never DELETEs, because a dataset is superseded rather than
+  // removed, and 91,599 rows must not be one wrong query away. No UPDATE on the
+  // region rows either: a new version is imported beside the old one, never
+  // edited in place — that is what makes rollback a status flip. Activation
+  // itself is a request-path action on awcms_app, not this job's business.
+  awcms_idn_region_datasets: ["SELECT", "INSERT", "UPDATE"],
+  awcms_idn_admin_regions: ["SELECT", "INSERT"],
   // visitor_analytics — analytics:rollup + analytics:purge (sql/050). Rollup
   // SELECTs raw events and SELECT/INSERT/UPDATEs the daily rollups; purge
   // DELETEs aged events, SELECT/UPDATE/DELETEs sessions (raw-detail clear +

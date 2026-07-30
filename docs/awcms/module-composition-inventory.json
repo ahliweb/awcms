@@ -1,5 +1,5 @@
 {
-  "moduleCount": 20,
+  "moduleCount": 21,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -143,6 +143,22 @@
       ],
       "permissionCount": 23,
       "navigationCount": 5,
+      "jobCount": 1,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "idn_admin_regions",
+      "name": "Indonesia Administrative Regions",
+      "version": "0.1.0",
+      "status": "active",
+      "type": "system",
+      "dependencies": ["tenant_admin", "identity_access"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 4,
+      "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
