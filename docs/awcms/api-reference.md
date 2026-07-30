@@ -5878,6 +5878,135 @@ Gated by visitor_analytics.dashboard.read. Human unique visitors, pageviews, bot
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
+## Indonesia Regions
+
+Versioned master data for Indonesia's administrative hierarchy — province / regency-city / district / village (idn_admin_regions module, ADR-0046) — for address forms, coverage mapping, and regional reporting. Read-only lookup with tier/parent/name filters and keyset pagination, plus the imported dataset versions and their upstream provenance. The rows are GLOBAL reference data (identical for every tenant, no tenant_id, no RLS), but every endpoint still requires a session, a tenant context, and a permission grant: what is global is the row, not the authorization. Importing is deliberately NOT in this contract — it is a worker job reading a repo-vendored dump; what IS here are the two audited, idempotency-keyed lifecycle actions (activate, rollback) that decide which imported version the platform serves. The data is a third-party community packaging of the Kepmendagri decree, NOT an official Kementerian Dalam Negeri API or export, and that caveat is returned in the dataset response body rather than left to documentation.
+
+### `GET /api/v1/idn-regions/datasets` — List imported region dataset versions with their provenance
+
+- **operationId**: `idnRegionsDatasetList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by idn_admin_regions.dataset.read. Newest import first, with upstream repository, commit SHA, file checksum, decree reference, row count, and lifecycle status. The official-reference caveat travels in the same response body: anyone reading this is deciding whether to trust these rows for something official, and the answer — a community packaging of the decree, not a Kemendagri feed — has to arrive with the data.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                              | Schema                                 |
+| ------ | -------------------------------------------------------- | -------------------------------------- |
+| 200    | Imported dataset versions plus static source provenance. | object                                 |
+| 400    | Validation error.                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/idn-regions/datasets/{id}/activate` — Activate one imported dataset version
+
+- **operationId**: `idnRegionsDatasetActivate`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by idn_admin_regions.dataset.configure. High-risk, `Idempotency-Key` required, audited with the dataset codes on both sides of the switch: this changes what every address form and regional report in the product returns, for every tenant at once. Activating the already-active dataset is a no-op success (`changed: false`), because a retried request that lands on the state it asked for succeeded. Only one dataset can be active — enforced by a partial unique index, so two concurrent activations end with one committed and one rejected.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description   |
+| ------------------ | ------ | -------- | ------------- | ------------- |
+| `id`               | path   | yes      | string (uuid) | Dataset UUID. |
+| `Idempotency-Key`  | header | yes      | string        |               |
+| `X-Correlation-ID` | header | no       | string        |               |
+
+**Responses**
+
+| Status | Description                                                                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The activated dataset.                                                                                                          | object                                 |
+| 400    | Validation error.                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/idn-regions/datasets/rollback` — Roll back to the previously active dataset version
+
+- **operationId**: `idnRegionsDatasetRollback`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The dataset that is now active.                                                                                                 | object                                 |
+| 400    | Validation error.                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/idn-regions/regions` — Look up Indonesia administrative regions
+
+- **operationId**: `idnRegionsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by idn_admin_regions.region.read. Filter by tier (`level` 1-4), by `parentCode`, and/or by `search` (case-folded substring over the normalized name); keyset-paginated on `code`. Reads the ACTIVE dataset unless `dataset` names another version. When no dataset has been activated the response is an empty page with `reason: no_active_dataset` — a fresh install is a real state, not an error. The rows are global reference data, but the endpoint still requires a session, a tenant context, and the permission grant.
+
+**Parameters**
+
+| Name               | In     | Required | Type    | Description                                                                                               |
+| ------------------ | ------ | -------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `dataset`          | query  | no       | string  | Dataset code to query. Defaults to the active dataset.                                                    |
+| `level`            | query  | no       | integer | 1 province, 2 regency/city, 3 district, 4 village. An out-of-range value is rejected rather than ignored. |
+| `parentCode`       | query  | no       | string  | Dotted code of the parent region, e.g. `11.01` to list its districts.                                     |
+| `search`           | query  | no       | string  | Case-folded substring of the region name. LIKE wildcards in the input are matched literally.              |
+| `limit`            | query  | no       | integer | Page size, clamped to 200.                                                                                |
+| `after`            | query  | no       | string  | Keyset cursor — the `code` of the last item on the previous page.                                         |
+| `X-Correlation-ID` | header | no       | string  |                                                                                                           |
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | One page of regions from the resolved dataset. | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/idn-regions/regions/{code}` — Read one region by its Kemendagri code
+
+- **operationId**: `idnRegionsGet`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by idn_admin_regions.region.read. Returns the region plus its resolved ancestor path, so a caller rendering a full address label needs one request instead of four.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                                              |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------------------------------ |
+| `code`             | path   | yes      | string | Dotted Kemendagri code, e.g. `11`, `11.01`, `11.01.01`, `11.01.01.2001`. |
+| `dataset`          | query  | no       | string | Dataset code to query. Defaults to the active dataset.                   |
+| `X-Correlation-ID` | header | no       | string |                                                                          |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The region.                 | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
 ## Data Lifecycle
 
 Module-contributed high-volume table registry and safe lifecycle engine (data_lifecycle module, ADR-0037, ported from awcms-micro) — read the code-declared retention/partition/archive/purge descriptors and past run history, plan a dry run, and manage legal holds. Real archive/purge execution is deliberately NOT exposed over HTTP; it runs only as a bounded worker job. A legal hold overrides ordinary retention and is non-bypassable: it is enforced through a port that logging and visitor_analytics consume at their own purge composition roots, and placing/releasing one is a maker-checker SoD-guarded, audited action. The registry endpoint returns code-declared metadata only, never row contents.

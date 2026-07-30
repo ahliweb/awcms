@@ -147,6 +147,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Scheduled retention sweep (comments:retention, ADR-0041) — tolerant of delay, never latency-sensitive; same profile as audit-log-purge/form-draft-purge."
   },
+  "scripts/idn-regions-import.ts": {
+    workClass: "maintenance",
+    rationale:
+      "One-shot reference-data import (idn-regions:import, ADR-0046) — 91,599 rows written in a single transaction on deploy, not on a timer. Tolerant of delay and never latency-sensitive, but deliberately NOT background_sync: it is a long single write, so it belongs in the class sized for sweeps rather than the one sized for recurring dispatchers competing with request traffic."
+  },
   "scripts/edge-cache-purge.ts": {
     workClass: "background_sync",
     rationale:

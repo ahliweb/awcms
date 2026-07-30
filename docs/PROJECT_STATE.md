@@ -42,7 +42,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **20** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
-| Migrasi    | **79** (`sql/001`–`079`)                                                  | `ls sql/`                                             |
+| Migrasi    | **81** (`sql/001`–`081`)                                                  | `ls sql/`                                             |
 | ADR        | **0000**–**0045** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
@@ -73,7 +73,7 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
-- **20 modul** aktif dengan RLS `FORCE`, pemisahan role DB
+- **21 modul** aktif dengan RLS `FORCE`, pemisahan role DB
   (`awcms_app`/`awcms_worker`/`awcms_setup`), admin SSR read+write (Issue #166/#171).
 - **Auth lanjutan**: MFA TOTP + session-assurance/step-up (`sql/024`), OIDC/SSO
   tenant-aware + SSRF guard + break-glass (`sql/025`/`026`), Turnstile bot protection

@@ -57,6 +57,8 @@ tags:
     description: R2-only advertisement placement presets for the news portal (blog_content module — absorbed from the retired news_portal module by ADR-0044, which moved ownership without renaming the paths or this tag) — tenant-scoped, RLS-protected CRUD for ads assigned to a fixed set of placement keys. mediaObjectId must reference a verified R2 media object belonging to the same tenant — never a local path or arbitrary external image URL. linkUrl is optional and may be external, but is validated server-side as an absolute http(s) URL only.
   - name: Visitor Analytics
     description: "Privacy-first human visitor statistics for admin and public routes (visitor_analytics module, ported from awcms-micro) — the anonymous public visit-ingest beacon plus the authenticated, ABAC-guarded read API (summary/realtime/sessions/events/pages/devices/locations/security), tenant analytics settings, and the high-risk retention purge. Collection is OFF until an operator opts in, and raw IP/user-agent/geolocation are each independently disabled unless explicitly enabled: visitor identifiers are stored as salted HMAC-SHA256 hashes, never raw. The retention purge is idempotency-keyed, critically audited, and refused while a data_lifecycle legal hold is active."
+  - name: Indonesia Regions
+    description: "Versioned master data for Indonesia's administrative hierarchy — province / regency-city / district / village (idn_admin_regions module, ADR-0046) — for address forms, coverage mapping, and regional reporting. Read-only lookup with tier/parent/name filters and keyset pagination, plus the imported dataset versions and their upstream provenance. The rows are GLOBAL reference data (identical for every tenant, no tenant_id, no RLS), but every endpoint still requires a session, a tenant context, and a permission grant: what is global is the row, not the authorization. Importing is deliberately NOT in this contract — it is a worker job reading a repo-vendored dump; what IS here are the two audited, idempotency-keyed lifecycle actions (activate, rollback) that decide which imported version the platform serves. The data is a third-party community packaging of the Kepmendagri decree, NOT an official Kementerian Dalam Negeri API or export, and that caveat is returned in the dataset response body rather than left to documentation."
   - name: Data Lifecycle
     description: "Module-contributed high-volume table registry and safe lifecycle engine (data_lifecycle module, ADR-0037, ported from awcms-micro) — read the code-declared retention/partition/archive/purge descriptors and past run history, plan a dry run, and manage legal holds. Real archive/purge execution is deliberately NOT exposed over HTTP; it runs only as a bounded worker job. A legal hold overrides ordinary retention and is non-bypassable: it is enforced through a port that logging and visitor_analytics consume at their own purge composition roots, and placing/releasing one is a maker-checker SoD-guarded, audited action. The registry endpoint returns code-declared metadata only, never row contents."
   - name: SEO & Distribution
@@ -7323,6 +7325,280 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/idn-regions/datasets:
+    get:
+      tags:
+        - Indonesia Regions
+      summary: List imported region dataset versions with their provenance
+      description: "Gated by idn_admin_regions.dataset.read. Newest import first, with upstream repository, commit SHA, file checksum, decree reference, row count, and lifecycle status. The official-reference caveat travels in the same response body: anyone reading this is deciding whether to trust these rows for something official, and the answer — a community packaging of the decree, not a Kemendagri feed — has to arrive with the data."
+      operationId: idnRegionsDatasetList
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Imported dataset versions plus static source provenance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IdnRegionDataset"
+                      activeDatasetCode:
+                        type: string
+                        nullable: true
+                      provenance:
+                        $ref: "#/components/schemas/IdnRegionSourceProvenance"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/idn-regions/datasets/{id}/activate:
+    post:
+      tags:
+        - Indonesia Regions
+      summary: Activate one imported dataset version
+      description: "Gated by idn_admin_regions.dataset.configure. High-risk, `Idempotency-Key` required, audited with the dataset codes on both sides of the switch: this changes what every address form and regional report in the product returns, for every tenant at once. Activating the already-active dataset is a no-op success (`changed: false`), because a retried request that lands on the state it asked for succeeded. Only one dataset can be active — enforced by a partial unique index, so two concurrent activations end with one committed and one rejected."
+      operationId: idnRegionsDatasetActivate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Dataset UUID.
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The activated dataset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      dataset:
+                        $ref: "#/components/schemas/IdnRegionDataset"
+                      changed:
+                        type: boolean
+                        description: false when the dataset was already active.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/idn-regions/datasets/rollback:
+    post:
+      tags:
+        - Indonesia Regions
+      summary: Roll back to the previously active dataset version
+      description: Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version.
+      operationId: idnRegionsDatasetRollback
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The dataset that is now active.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      dataset:
+                        $ref: "#/components/schemas/IdnRegionDataset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/idn-regions/regions:
+    get:
+      tags:
+        - Indonesia Regions
+      summary: Look up Indonesia administrative regions
+      description: "Gated by idn_admin_regions.region.read. Filter by tier (`level` 1-4), by `parentCode`, and/or by `search` (case-folded substring over the normalized name); keyset-paginated on `code`. Reads the ACTIVE dataset unless `dataset` names another version. When no dataset has been activated the response is an empty page with `reason: no_active_dataset` — a fresh install is a real state, not an error. The rows are global reference data, but the endpoint still requires a session, a tenant context, and the permission grant."
+      operationId: idnRegionsList
+      parameters:
+        - name: dataset
+          in: query
+          required: false
+          description: Dataset code to query. Defaults to the active dataset.
+          schema:
+            type: string
+        - name: level
+          in: query
+          required: false
+          description: 1 province, 2 regency/city, 3 district, 4 village. An out-of-range value is rejected rather than ignored.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4
+        - name: parentCode
+          in: query
+          required: false
+          description: Dotted code of the parent region, e.g. `11.01` to list its districts.
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          description: Case-folded substring of the region name. LIKE wildcards in the input are matched literally.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Page size, clamped to 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: after
+          in: query
+          required: false
+          description: Keyset cursor — the `code` of the last item on the previous page.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: One page of regions from the resolved dataset.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      datasetCode:
+                        type: string
+                        nullable: true
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/IdnRegionItem"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                      reason:
+                        type: string
+                        nullable: true
+                        enum:
+                          - no_active_dataset
+                          - dataset_not_found
+                          - null
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/idn-regions/regions/{code}:
+    get:
+      tags:
+        - Indonesia Regions
+      summary: Read one region by its Kemendagri code
+      description: Gated by idn_admin_regions.region.read. Returns the region plus its resolved ancestor path, so a caller rendering a full address label needs one request instead of four.
+      operationId: idnRegionsGet
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Dotted Kemendagri code, e.g. `11`, `11.01`, `11.01.01`, `11.01.01.2001`.
+          schema:
+            type: string
+        - name: dataset
+          in: query
+          required: false
+          description: Dataset code to query. Defaults to the active dataset.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The region.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      datasetCode:
+                        type: string
+                        nullable: true
+                      region:
+                        $ref: "#/components/schemas/IdnRegionItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/logs/audit:
     get:
       operationId: listAuditEvents
@@ -16097,6 +16373,113 @@ components:
           type: string
           format: date-time
           nullable: true
+    IdnRegionDataset:
+      type: object
+      required:
+        - id
+        - datasetCode
+        - status
+        - rowCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        datasetCode:
+          type: string
+          description: Deterministic code derived from the upstream commit and file checksum, so re-importing identical bytes collides instead of creating a duplicate version.
+        status:
+          type: string
+          enum:
+            - validated
+            - active
+            - superseded
+            - rejected
+        rowCount:
+          type: integer
+        sourceRepository:
+          type: string
+        sourceCommitSha:
+          type: string
+        sourceLicense:
+          type: string
+        sourceReference:
+          type: string
+          nullable: true
+          description: The Kepmendagri decree the imported file's own header cites.
+        sourceFileSha256:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    IdnRegionItem:
+      type: object
+      required:
+        - code
+        - codeCompact
+        - level
+        - regionType
+        - name
+      properties:
+        code:
+          type: string
+          description: Dotted Kemendagri code, e.g. `11.01.01.2001`.
+        codeCompact:
+          type: string
+          description: The same code without separators.
+        parentCode:
+          type: string
+          nullable: true
+        level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        regionType:
+          type: string
+          enum:
+            - province
+            - regency
+            - district
+            - village
+        localTerm:
+          type: string
+          nullable: true
+          description: Indonesian term this row carries (Provinsi/Kabupaten/Kota/Desa/Kelurahan/Desa Adat). Null where upstream states none — districts ship bare names, and filling in "Kecamatan" would be wrong for the provinces that call the tier "Distrik".
+        name:
+          type: string
+          description: Official name exactly as upstream spells it, prefix included.
+        shortName:
+          type: string
+          nullable: true
+          description: Name with the tier term stripped ("Aceh Selatan" for "Kabupaten Aceh Selatan").
+        fullPathName:
+          type: string
+          nullable: true
+          description: Ancestor path in breadcrumb order, e.g. "Aceh, Kabupaten Aceh Selatan, Bakongan, Keude Bakongan".
+    IdnRegionSourceProvenance:
+      type: object
+      description: Static, code-level facts about WHICH upstream project this data is vendored from — true of every import, unlike the per-import fields on IdnRegionDataset.
+      properties:
+        repository:
+          type: string
+        sourcePath:
+          type: string
+        license:
+          type: string
+        dumpPath:
+          type: string
+        manifestPath:
+          type: string
+        upstreamStatement:
+          type: string
+        decreeReference:
+          type: string
+        officialReferenceCaveat:
+          type: string
+          description: Must be surfaced wherever this dataset is shown to an operator — this is a community packaging of the decree, not an official Kemendagri API or export.
     MediaEnforcementEnabled:
       type: object
       required:

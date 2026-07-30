@@ -115,6 +115,12 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   sync_storage: "operations",
   data_lifecycle: "operations",
   domain_event_runtime: "operations",
+  // Master reference data. Placed even though this module declares no
+  // navigation in THIS repo (its operator screen lives in awcms-astro,
+  // ADR-0047): the placement map must cover every registered module, and the
+  // day a tenant-facing region screen does land here, it lands in the right
+  // section rather than silently in "general".
+  idn_admin_regions: "operations",
   // Identity.
   identity_access: "identity",
   profile_identity: "identity"

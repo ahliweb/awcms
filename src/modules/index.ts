@@ -19,6 +19,7 @@ import { seoDistributionModule } from "./seo-distribution/module";
 import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
 import { commentsModule } from "./comments/module";
+import { idnAdminRegionsModule } from "./idn-admin-regions/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -126,7 +127,19 @@ const baseModules: ModuleDescriptor[] = [
   // capability `provides`, precisely because many providers are expected. The
   // same shape site_search uses one entry up. See
   // src/modules/comments/module.ts's `description`.
-  commentsModule
+  commentsModule,
+  // Admitted by ADR-0046 (adapted from awcms-mini's epic #654 scaffold, whose
+  // import/lookup half was never built there): versioned master data for
+  // Indonesia's administrative hierarchy, imported from a vendored third-party
+  // dump under `data/idn-admin-regions/`. Depends only on
+  // tenant_admin/identity_access (both above), so the DAG stays acyclic, and
+  // nothing depends on it — consumers read its lookup API rather than importing
+  // it. Its two tables are the first GLOBAL, non-tenant-scoped domain tables in
+  // this base: the rows are identical for every tenant, which is why they carry
+  // no `tenant_id`/RLS and are instead registered in
+  // `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` with per-role privileges spelled out.
+  // See src/modules/idn-admin-regions/module.ts's `description`.
+  idnAdminRegionsModule
 ];
 
 /**
