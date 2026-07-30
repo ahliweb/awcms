@@ -298,7 +298,16 @@ operasi menyatakan security requirement (atau `security: []` plus entri
 allow-list publik yang benar-benar dipakai), **standard error schema** (semua
 response 4xx/5xx resolve ke `ApiError`), parameter path cocok dengan template,
 dan setiap route file di `src/pages/api/v1/**` punya pasangan path OpenAPI (dan
-sebaliknya). `bun run api:docs:check` menggagalkan build bila referensi Markdown
+sebaliknya). Ditambah dua gate yang lahir dari cacat nyata (PR #308): **katalog
+tag** — tiap operasi ber-tag, tiap tag operasi terdeklarasi di katalog root, dan
+tiap tag terdeklarasi benar-benar dipakai; serta **kepemilikan fragment** — tiap
+`api.openApiPath` menunjuk fragment yang ada di `openapi/modules/` (bukan
+bundel) dan tiap fragment diklaim tepat satu modul terdaftar
+(`foundation.openapi.yaml` pengecualian ter-review). Keduanya dua arah karena
+cacatnya dua arah: 55 operasi dari empat modul hilang dari referensi API karena
+tag-nya tak terdeklarasi, sementara katalog yang sama masih mengumumkan tag
+modul `news_portal` yang sudah dipensiunkan dan fragmennya masih ada tanpa
+pemilik. `bun run api:docs:check` menggagalkan build bila referensi Markdown
 basi. Bundler menyediakan seam `buildBundledDocument({ extraFragmentFiles })`
 untuk menggabungkan fragment tambahan tanpa mengedit fragment base; fragment yang
 menimpa path/schema base ditolak (`BundleConflictError`). Detail:

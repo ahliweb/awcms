@@ -53,7 +53,25 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
    Field ini juga yang dibaca readiness-check `module_management`
    (`openapi_documented`) untuk memastikan modul mendokumentasikan API-nya.
 
-3. **Gabungkan lewat composition seam.** Build mem-feed setiap
+   Menunjuknya ke BUNDEL (`openapi/awcms-public-api.openapi.yaml`) kini
+   memerahkan gate: selain mengklaim seluruh permukaan modul lain, ia
+   meninggalkan fragment asli modul itu tanpa pemilik — persis bagaimana
+   fragment `news_portal` bertahan setelah modulnya dipensiunkan ADR-0044.
+   Gate menuntut relasi satu-ke-satu dua arah: tiap modul menunjuk satu
+   fragment yang ADA di `openapi/modules/`, dan tiap fragment diklaim tepat
+   satu modul terdaftar (`foundation.openapi.yaml` satu-satunya pengecualian
+   ter-review — ia memang milik platform, bukan modul).
+
+3. **Deklarasikan tag modul Anda di katalog root.** Tag operasi yang tidak ada
+   di `tags:` pada `openapi/awcms-public-api.src.yaml` membuat operasi itu
+   HILANG dari `docs/awcms/api-reference.md` — generator mengelompokkan menurut
+   tag yang DIDEKLARASIKAN. Ini bukan hipotesis: 55 operasi milik empat modul
+   (`blog_content`, `visitor_analytics`, `tenant_domain`, `data_lifecycle`)
+   pernah tak terdokumentasi karena ini, dengan seluruh gate hijau. Gate tag
+   kini menolaknya dari dua arah sekaligus — tag operasi tak-terdeklarasi DAN
+   tag terdeklarasi yang tak dipakai siapa pun (bekas modul pensiunan).
+
+4. **Gabungkan lewat composition seam.** Build mem-feed setiap
    `openApiPath` modul teregistrasi ke seam `extraFragmentFiles`:
 
    ```ts
@@ -69,7 +87,7 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
    `openapi/modules/` sehingga ikut ter-glob oleh bundler default. Yang
    penting: **fragment root/base yang sudah ada tidak diedit langsung.**
 
-4. **Regenerate + validasi:**
+5. **Regenerate + validasi:**
 
    ```bash
    bun run openapi:bundle
@@ -92,6 +110,13 @@ bundler) dan [ADR-0026](../adr/0026-modular-openapi-ownership-and-composition.md
   (mis. `listSalesInvoices`, bukan `list`).
 - **Mengedit `openapi/awcms-public-api.openapi.yaml` langsung** → gate bundle
   freshness merah (bundle di-generate, bukan sumber).
+- **Tag operasi tak dideklarasikan di katalog root** → gate tag merah. Gejalanya
+  kalau gate ini tak ada: operasi Anda hilang dari referensi API tanpa satu pun
+  pesan error.
+- **Fragment tanpa modul pemilik** (mis. modul dihapus/dilebur tapi fragmentnya
+  ditinggal, atau `openApiPath` menunjuk bundel) → gate kepemilikan fragment
+  merah. Saat sebuah modul dilebur, PINDAHKAN path+schema-nya ke fragment modul
+  penerusnya lalu hapus fragment lamanya.
 
 ## Versioning
 

@@ -20,6 +20,15 @@ description: "BACAAN SAJA / HISTORIS — modul `news_portal` SUDAH TIDAK ADA di 
 > - **Nama tabel `awcms_news_portal_*` DIPERTAHANKAN** (preseden ADR-0036: FK
 >   komposit keras dari ad placements). Nama tabel karena itu BUKAN petunjuk
 >   kepemilikan modul di sini.
+> - **Kontrak OpenAPI-nya ikut pindah (PR #308).**
+>   `openapi/modules/news-portal.openapi.yaml` **dihapus**; empat path
+>   `/api/v1/news-portal/*` beserta schema-nya kini ada di
+>   `openapi/modules/blog-content.openapi.yaml`. **Nama path dan nama tag
+>   (`News Portal Homepage Sections`/`News Portal Ad Placements`) sengaja TIDAK
+>   diubah** — ADR-0044 §3/§6 memindahkan kepemilikan, bukan permukaan publik;
+>   yang diperbaiki hanya atribusi modul di deskripsi tag. Gate kepemilikan
+>   fragment kini menolak fragment tanpa modul pemilik, jadi kelalaian ini tak
+>   bisa terulang diam-diam.
 > - Untuk mengubah fitur itu: skill **`awcms-blog-content`**. Untuk media:
 >   **`awcms-media-library`**. Skill ini tidak lagi punya kode untuk diubah.
 > - Badan di bawah **dipertahankan sebagai spesifikasi pra-merge** karena §640

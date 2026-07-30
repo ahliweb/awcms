@@ -71,4 +71,24 @@ Kedua JSON di atas **di-generate dari kode repo ini sendiri** dan digerbangi kes
 
 Snapshot GitHub (`docs/awcms/github/`) belum diadaptasi — dihasilkan oleh skill `awcms-github-snapshot` saat dijalankan terhadap tracker repo ini.
 
+## Konvensi diagram Mermaid
+
+Di blok `flowchart`/`graph`, **kurung di dalam teks label wajib dikutip** —
+`-->|"online (primary)"|`, `Q2{"... (bukan fitur)?"}`. Grammar mermaid membaca
+`(` sebagai token pembuka bentuk node, jadi kurung tak-terkutip membuat parse
+gagal, dan saat parse gagal GitHub tidak merender sebagian: ia mengganti
+**seluruh** diagram dengan kotak "Unable to render rich display". Dua diagram di
+repo ini pernah rusak begitu — satu di README halaman depan, satu lagi
+([`21_module_admission_governance.md`](21_module_admission_governance.md))
+rusak diam-diam tanpa ada yang melaporkan.
+
+Kurung yang merupakan **bentuk** node (`[( )]` silinder, `([ ])` stadium,
+`(( ))` lingkaran, `[[ ]]` subrutin, `{{ }}` heksagon) tidak perlu dan tidak
+boleh diubah — di sana kurung adalah sintaks. Aturan ini tidak berlaku untuk
+`sequenceDiagram` dkk., tempat kurung dalam teks memang sah.
+
+`bun run check:docs` menegakkannya. Sebelum gate itu ada, ia hanya memvalidasi
+pagar blok dan tipe diagram — tak pernah isinya — sehingga diagram rusak dan
+`bun run check` hijau bisa hidup berdampingan.
+
 Lihat juga [`AGENTS.md`](../../AGENTS.md) untuk alur kerja wajib setiap task, dan [`docs/adr/`](../adr/README.md) untuk keputusan arsitektural.

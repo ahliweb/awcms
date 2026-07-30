@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:0041fca70111cf478a46eec8ee76fb2be5de4b59c358eb17a99d8fca8cc3cef4 -->
+<!-- i18n-source-hash: sha256:724bfe74a3890d0843c9e2b00c3430b6c24f23cff1fc22512e61f18a85a1e53d -->
 
 # AWCMS Technical Document Package
 
@@ -74,5 +74,25 @@ Both JSON files above are **generated from this repo's own code** and gated for 
 > Until Issue #263, `work-class-registry.generated.json` had neither a generator nor a check and still held ~284 awcms-mini routes — with a `_disclaimer` that had itself gone stale (it said "96 real routes" for a repo with 221). `tests/generated-artifacts-have-tooling.test.ts` now fails any `.generated` file that has no generate/check pair, because the suffix is a claim readers trust.
 
 The GitHub snapshot (`docs/awcms/github/`) has not been adapted yet — it's produced by the `awcms-github-snapshot` skill when run against this repo's tracker.
+
+## Mermaid diagram convention
+
+Inside `flowchart`/`graph` blocks, **parentheses in label TEXT must be quoted** —
+`-->|"online (primary)"|`, `Q2{"... (not a feature)?"}`. Mermaid's grammar reads
+`(` as the token that opens a node shape, so an unquoted parenthesis fails the
+parse — and on a failed parse GitHub does not render partially: it replaces the
+**entire** diagram with an "Unable to render rich display" box. Two diagrams in
+this repo broke exactly that way — one on the front-page README, and one in
+[`21_module_admission_governance.md`](21_module_admission_governance.md) that
+broke silently with nobody reporting it.
+
+Parentheses that ARE the node shape (`[( )]` cylinder, `([ ])` stadium,
+`(( ))` circle, `[[ ]]` subroutine, `{{ }}` hexagon) need no quoting and must
+not be changed — there the parentheses are syntax. The rule does not apply to
+`sequenceDiagram` and friends, where parentheses in text are perfectly legal.
+
+`bun run check:docs` enforces it. Before that gate existed it validated only the
+block fence and the diagram type — never the contents — so a broken diagram and
+a green `bun run check` could coexist.
 
 See also [`AGENTS.md`](../../AGENTS.md) for the mandatory workflow for every task, and [`docs/adr/`](../adr/README.md) for architectural decisions.
