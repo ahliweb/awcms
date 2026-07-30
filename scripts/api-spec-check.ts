@@ -2,7 +2,14 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
-import { bundleOpenApi, BUNDLED_PATH } from "./openapi-bundle";
+import { listModules } from "../src/modules";
+import {
+  bundleOpenApi,
+  BUNDLED_PATH,
+  listModuleFragmentFiles,
+  MODULES_DIR,
+  ROOT_SRC_PATH
+} from "./openapi-bundle";
 
 const OPENAPI_PATH = path.resolve(process.cwd(), BUNDLED_PATH);
 export const ASYNCAPI_PATH = "asyncapi/awcms-domain-events.asyncapi.yaml";
@@ -102,6 +109,7 @@ const ROUTE_PARITY_EXEMPTIONS = new Set<string>([]);
 
 type OpenApiDocument = {
   security?: unknown[];
+  tags?: unknown[];
   paths?: Record<string, Record<string, OpenApiOperation>>;
   components?: {
     responses?: Record<string, unknown>;
@@ -111,6 +119,7 @@ type OpenApiDocument = {
 
 type OpenApiOperation = {
   operationId?: string;
+  tags?: unknown[];
   security?: unknown[];
   parameters?: Array<{ name: string; in: string; required?: boolean }>;
   responses?: Record<string, unknown>;
@@ -352,6 +361,156 @@ export function collectStandardErrorSchemaProblems(
   return problems;
 }
 
+/**
+ * Tag catalog integrity, both directions.
+ *
+ * The generated reference document (`scripts/api-docs-generate.ts`) groups
+ * operations by the tags DECLARED in the root catalog: an operation carrying a
+ * tag nobody declared is silently absent from every section, and a declared tag
+ * nobody carries silently documents a surface that no longer exists. Both
+ * failure modes shipped at once — `blog_content`'s 30 REST paths were tagged
+ * `Blog Content`, a tag the root catalog never declared, so the reference
+ * document had no Blog Content section at all while still advertising two
+ * `News Portal` tags for a module ADR-0044 retired. Nothing was red.
+ *
+ * Hence three rules, not one: every operation is tagged, every operation tag is
+ * declared, and every declared tag is carried. Dropping the third would let the
+ * catalog keep naming retired surfaces, which is exactly half of what happened.
+ */
+export function collectTagCatalogProblems(doc: OpenApiDocument): string[] {
+  const problems: string[] = [];
+  const declared = new Map<string, number>();
+
+  for (const tag of doc.tags ?? []) {
+    const name = asRecord(tag).name;
+    if (typeof name !== "string" || name.length === 0) {
+      problems.push("Root tag catalog contains an entry without a name.");
+      continue;
+    }
+    if (declared.has(name)) {
+      problems.push(`Root tag catalog declares "${name}" more than once.`);
+      continue;
+    }
+    declared.set(name, 0);
+  }
+
+  for (const [routePath, operations] of Object.entries(doc.paths ?? {})) {
+    for (const [method, operation] of Object.entries(operations)) {
+      if (
+        !HTTP_METHODS.includes(
+          method.toUpperCase() as (typeof HTTP_METHODS)[number]
+        )
+      )
+        continue;
+
+      const label = `${method.toUpperCase()} ${routePath}`;
+      const tags = Array.isArray(operation.tags) ? operation.tags : [];
+
+      if (tags.length === 0) {
+        problems.push(
+          `${label}: declares no tag, so it is absent from every section of the generated API reference.`
+        );
+        continue;
+      }
+
+      for (const rawTag of tags) {
+        const tag = String(rawTag);
+        const uses = declared.get(tag);
+        if (uses === undefined) {
+          problems.push(
+            `${label}: tag "${tag}" is not declared in the root tag catalog (${ROOT_SRC_PATH}) — the generated API reference drops this operation entirely.`
+          );
+          continue;
+        }
+        declared.set(tag, uses + 1);
+      }
+    }
+  }
+
+  for (const [tag, uses] of declared) {
+    if (uses === 0) {
+      problems.push(
+        `Root tag catalog declares "${tag}" but no operation carries it — remove it, or the contract keeps advertising a surface that no longer exists.`
+      );
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * One fragment file per REGISTERED module (ADR-0026), enforced both ways.
+ *
+ * `ModuleDescriptor.api.openApiPath` was never checked against the filesystem,
+ * so two modules could (and did) point at the generated BUNDLE instead of their
+ * own fragment — which both overstates what they declare and leaves their real
+ * fragment claimed by nobody. That is how `openapi/modules/news-portal.openapi.yaml`
+ * outlived the module ADR-0044 retired: no rule connected fragments to the
+ * registry in either direction.
+ *
+ * `MODULE_LESS_FRAGMENTS` is the reviewed exception list — platform surfaces
+ * that genuinely belong to no module.
+ */
+const MODULE_LESS_FRAGMENTS = new Set(["foundation.openapi.yaml"]);
+
+export function collectFragmentOwnershipProblems(
+  modules: readonly { key: string; api?: { openApiPath?: string } }[],
+  fragmentFiles: readonly string[]
+): string[] {
+  const problems: string[] = [];
+  const available = new Set(fragmentFiles);
+  const claimedBy = new Map<string, string[]>();
+
+  for (const module of modules) {
+    const declaredPath = module.api?.openApiPath;
+    if (declaredPath === undefined) continue;
+
+    if (declaredPath === BUNDLED_PATH) {
+      problems.push(
+        `Module "${module.key}" points api.openApiPath at the generated bundle (${BUNDLED_PATH}) instead of its own fragment under ${MODULES_DIR}/.`
+      );
+      continue;
+    }
+
+    const prefix = `${MODULES_DIR}/`;
+    if (!declaredPath.startsWith(prefix)) {
+      problems.push(
+        `Module "${module.key}" declares api.openApiPath "${declaredPath}", which is not under ${MODULES_DIR}/.`
+      );
+      continue;
+    }
+
+    const fileName = declaredPath.slice(prefix.length);
+    if (!available.has(fileName)) {
+      problems.push(
+        `Module "${module.key}" declares api.openApiPath "${declaredPath}" but that fragment file does not exist.`
+      );
+      continue;
+    }
+
+    claimedBy.set(fileName, [...(claimedBy.get(fileName) ?? []), module.key]);
+  }
+
+  for (const [fileName, owners] of claimedBy) {
+    if (owners.length > 1) {
+      problems.push(
+        `Fragment "${MODULES_DIR}/${fileName}" is claimed by more than one module (${owners.sort().join(", ")}).`
+      );
+    }
+  }
+
+  for (const fileName of fragmentFiles) {
+    if (MODULE_LESS_FRAGMENTS.has(fileName)) continue;
+    if (!claimedBy.has(fileName)) {
+      problems.push(
+        `Fragment "${MODULES_DIR}/${fileName}" is claimed by no registered module — either a module must declare it via api.openApiPath, or the fragment belongs to a module that no longer exists and must be merged into its successor's fragment.`
+      );
+    }
+  }
+
+  return problems;
+}
+
 async function discoverRouteFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -476,6 +635,13 @@ async function main() {
   parseYaml(asyncApiRaw);
 
   for (const problem of collectOperationIdProblems(openApiDoc)) fail(problem);
+  for (const problem of collectTagCatalogProblems(openApiDoc)) fail(problem);
+  for (const problem of collectFragmentOwnershipProblems(
+    listModules(),
+    await listModuleFragmentFiles()
+  )) {
+    fail(problem);
+  }
   checkPublicAllowListUsed(openApiDoc);
   for (const problem of collectPathParameterProblems(openApiDoc)) fail(problem);
   for (const problem of collectStandardErrorSchemaProblems(openApiDoc)) {

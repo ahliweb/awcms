@@ -53,14 +53,12 @@ const baseModules: ModuleDescriptor[] = [
   // src/modules/blog-content/module.ts and module.ts's own `description`
   // field for what was ported vs. dropped.
   blogContentModule,
-  // Ported from awcms-mini (editorial homepage sections, R2-only ad placements).
-  // ADR-0036 moved the media registry + presigned upload flow + reconciliation
-  // job OUT of this module into media_library. Depends on
-  // tenant_admin/identity_access/module_management/logging (all above); no longer
-  // PROVIDES `news_media` (retired) and now CONSUMES `media_library` (required —
-  // ad placements FK a media object) + blog_content's `public_content`, but
-  // capability edges are not DAG edges, so the graph stays acyclic. See
-  // src/modules/news-portal/module.ts's `description` for what was ported/moved.
+  // ADR-0044 retired `news_portal`; the comment block that stood here described
+  // that entry and outlived it. What it recorded is not lost: the editorial
+  // homepage sections and R2-only ad placements it named now belong to
+  // `blogContentModule` above (and say so in its own `description`), and the
+  // media registry ADR-0036 moved out of it belongs to `mediaLibraryModule`.
+  //
   // Ported from awcms-micro (epic #555): tenant hostname/subdomain -> tenant
   // mapping for host-based public routing, plus a SECURITY DEFINER host-lookup
   // bootstrap function and the additive public host resolver. Depends only on

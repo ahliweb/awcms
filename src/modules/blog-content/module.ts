@@ -308,7 +308,12 @@ export const blogContentModule = defineModule({
     }
   ],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    // ADR-0026: a module points at its OWN fragment, never at the generated
+    // bundle. Pointing at the bundle made this module look like it declared
+    // every other module's surface too, and left
+    // `openapi/modules/blog-content.openapi.yaml` claimed by nobody — which is
+    // how a fragment for the retired `news_portal` module survived ADR-0044.
+    openApiPath: "openapi/modules/blog-content.openapi.yaml",
     basePath: "/api/v1/blog",
     // The public path-based tenant routes (ADR-0009) are this module's surface
     // too; before Issue #256 no descriptor claimed them at all.

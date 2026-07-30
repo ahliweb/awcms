@@ -48,7 +48,7 @@ describe("media_library module descriptor (ADR-0036)", () => {
 
   test("owns the media upload basePath that moved off news_portal", () => {
     expect(mediaLibraryModule.api?.openApiPath).toBe(
-      "openapi/awcms-public-api.openapi.yaml"
+      "openapi/modules/media-library.openapi.yaml"
     );
     expect(mediaLibraryModule.api?.basePath).toBe("/api/v1/media/news-images");
   });
