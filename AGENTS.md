@@ -31,6 +31,28 @@ AWCMS adalah rebuild fondasi (bukan ERP jadi) di atas basis teknis **awcms-mini*
 
 Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari mini — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
 
+## Di repo mana sebuah LAYAR dibangun (ADR-0048)
+
+Dua repo yang dikembangkan punya peran frontend yang berbeda:
+
+| Repo          | Peran                                       | Contoh                                                       |
+| ------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `awcms-astro` | **admin OWNER / INTERNAL**                  | master data global, aktivasi/rollback dataset, alat operator |
+| `awcms` (ini) | **frontend PUBLIK + admin PUBLIK (tenant)** | situs publik, dan admin tenant atas datanya sendiri          |
+
+Tiga hal yang mudah keliru:
+
+- **Izin tidak ikut pindah.** Layar di `awcms-astro` tetap memanggil `/api/v1/*`
+  milik repo ini, lewat BFF-nya (ADR-0045), dan tetap melewati sesi + konteks
+  tenant + ABAC default-deny. Frontend baru bukan jalur kedua yang lebih longgar.
+- **Jangan deklarasikan `navigation` untuk layar yang tinggal di repo lain.**
+  Sidebar repo ini dibangun dari `listModules()`; entri yang menunjuk halaman
+  tak-ada langsung memerahkan `tests/admin-navigation-registry.test.ts` — dan
+  kalau lolos, ia menjadi 404 permanen di menu.
+- **Aturan ini mengikat layar BARU.** `/admin/*` yang sudah ada masih bercampur
+  tenant dan platform; pemilahannya pekerjaan tersendiri (ADR-0048 §Yang tidak
+  diputuskan).
+
 ## Alur kerja wajib setiap task
 
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).
