@@ -640,7 +640,7 @@ Tidak ada pemanggilan provider eksternal sama sekali di job ini (ADR-0006 tidak 
 
 ## Domain events (AsyncAPI, Issue #541, diperluas Issue #542)
 
-`asyncapi/awcms-domain-events.asyncapi.yaml` — 26 channel untuk `blog_content` (13 dari Issue #541 + 13 dari Issue #542), terdaftar juga di `module.ts`'s `events.publishes` (divalidasi `scripts/api-spec-check.ts`'s `checkModuleEventChannels`: tiap entry `publishes` module manapun wajib punya channel AsyncAPI yang cocok). Sama seperti setiap event lain di kontrak ini sejak Issue 0.3: **dokumentasi kontrak saja** — tidak ada dispatcher pub/sub nyata di repo ini; produser sebenarnya adalah structured JSON logger (`src/lib/logging/logger.ts`'s `log()`), bukan event bus. Konvensi penamaan log line: buang prefix `awcms.` dari event type (`awcms.blog-content.post.published` -> log message `blog-content.post.published`) — pola sama persis `email.message.queued` dkk.
+`asyncapi/awcms-domain-events.asyncapi.yaml` — 26 channel untuk `blog_content` (13 dari Issue #541 + 13 dari Issue #542), terdaftar juga di `module.ts`'s `events.publishes` (digerbangi `tests/domain-event-registry-parity.test.ts` — BUKAN `scripts/api-spec-check.ts`, yang hanya membaca berkas AsyncAPI untuk memastikan ia terparse; nama fungsi `checkModuleEventChannels` yang dulu dirujuk di sini tidak pernah ada di repo ini). Sama seperti setiap event lain di kontrak ini sejak Issue 0.3: **dokumentasi kontrak saja** — tidak ada dispatcher pub/sub nyata di repo ini; produser sebenarnya adalah structured JSON logger (`src/lib/logging/logger.ts`'s `log()`), bukan event bus. Konvensi penamaan log line: buang prefix `awcms.` dari event type (`awcms.blog-content.post.published` -> log message `blog-content.post.published`) — pola sama persis `email.message.queued` dkk.
 
 Ke-26 event punya produser nyata di kode saat ini (Issue #543 menutup satu-satunya celah yang tersisa, `settings.updated`):
 
@@ -665,7 +665,7 @@ Ke-26 event punya produser nyata di kode saat ini (Issue #543 menutup satu-satun
 | `blog-content.theme.updated`                          | `pages/api/v1/blog/theme/index.ts` (`PATCH`) — **beda** dari `settings.updated` di bawah, ini tegas tentang `awcms_blog_theme_settings`, bukan `awcms_blog_settings`                                             |
 | `blog-content.settings.updated`                       | `pages/api/v1/blog/settings/index.ts` (`PATCH`, Issue #543) — tentang `awcms_blog_settings`                                                                                                                      |
 
-`checkModuleEventChannels` hanya memvalidasi arah module.ts→AsyncAPI (setiap `publishes` wajib ada channel), bukan sebaliknya — jadi sebelum Issue #543, channel `settings.updated` tanpa produser tidak sempat membuat `api:spec:check` gagal.
+Tidak ada gate yang menuntut sebuah channel AsyncAPI punya PRODUSER nyata di kode — `tests/domain-event-registry-parity.test.ts` menegakkan paritas `DOMAIN_EVENT_TYPE_REGISTRY` ↔ channel ↔ `events.publishes`, semuanya deklaratif. Itu sebabnya sebelum Issue #543 channel `settings.updated` bisa hidup tanpa satu pun call-site yang menerbitkannya, dengan seluruh gate hijau.
 
 ## Presentation extensions (Issue #542)
 

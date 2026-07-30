@@ -8,7 +8,11 @@ GENERATED artifact, bundled from source fragments:
 - [`awcms-public-api.src.yaml`](awcms-public-api.src.yaml) — the root fragment:
   `openapi`/`info`/`servers`/`tags`/`security`, and
   `components.securitySchemes`/`parameters`/`responses`, plus any schema shared
-  by 2+ modules (e.g. `ApiError`, `ApiMeta`).
+  by 2+ modules (e.g. `ApiError`, `ApiMeta`). **The `tags` catalog here is not
+  decoration**: `scripts/api-docs-generate.ts` groups the reference document by
+  DECLARED tag, so an operation carrying a tag this catalog omits is dropped
+  from the generated docs entirely. Four modules' surfaces (55 operations) were
+  invisible that way until the tag gate below was added.
 - [`modules/*.openapi.yaml`](modules/) — **one file per base module** (Issue
   #182 convention: one file = one module, not one file = one tag). Each file
   owns every `paths` entry whose operations carry that module's OpenAPI tag(s),
@@ -26,7 +30,10 @@ that only resolve once every fragment is merged into one document.
 Each base module points at its own fragment via
 `ModuleDescriptor.api.openApiPath` in its `src/modules/<module>/module.ts` —
 that is also what `module-management`'s readiness check reads to confirm the
-module documents its API.
+module documents its API. Pointing it at the generated bundle instead is now a
+gate failure: it both overstates what the module declares and leaves the real
+fragment claimed by nobody, which is how a fragment for the `news_portal`
+module outlived that module's retirement (ADR-0044).
 
 ## Changing the contract
 
@@ -34,7 +41,9 @@ module documents its API.
    `openapi/modules/<module>.openapi.yaml` for anything
    path/operation/module-schema-shaped. Edit `openapi/awcms-public-api.src.yaml`
    instead for anything genuinely shared (a new security scheme, a new shared
-   header parameter, a schema two-or-more modules need).
+   header parameter, a schema two-or-more modules need) — **and for every new
+   tag**: an operation whose tag is not declared there never reaches the
+   reference document.
 2. Regenerate the bundle and the readable reference:
    ```bash
    bun run openapi:bundle
@@ -78,6 +87,18 @@ against files already in the repo — no network access, no external CLI.
 - **Standard error schema** — every non-2xx/3xx response resolves (directly, via
   `components.responses`, or through `allOf`/`oneOf`/`anyOf`) to the shared
   `ApiError` schema — never an ad-hoc inline error shape.
+- **Tag catalog integrity, both directions** — every operation carries at least
+  one tag, every operation tag is declared in the root catalog, and every
+  declared tag is carried by at least one operation. The third rule is not
+  symmetry for its own sake: it is what catches a catalog that keeps announcing
+  a retired module's surface, which is exactly half of the defect this gate was
+  written for.
+- **Fragment ownership, both directions** — every registered module's
+  `api.openApiPath` names an existing file under `openapi/modules/` (never the
+  generated bundle), no two modules claim the same fragment, and every fragment
+  is claimed by exactly one registered module. `foundation.openapi.yaml` is the
+  single reviewed exception (`MODULE_LESS_FRAGMENTS`), since it belongs to no
+  module by design.
 
 ## Derived-application fragments
 

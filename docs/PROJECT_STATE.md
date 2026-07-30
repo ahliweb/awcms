@@ -304,6 +304,19 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
   sebagai teks presisi penuh, jangan re-parse ke `Date`.
 - **Snapshot OpenAPI beku**: test subset add-only — jangan edit snapshot; evolusi via
   `INTENTIONALLY_EVOLVED_PATHS` allow-list.
+- **Tag OpenAPI = syarat visibilitas dokumen**: `api-docs-generate` mengelompokkan
+  menurut tag yang **dideklarasikan** di `openapi/awcms-public-api.src.yaml`, jadi tag
+  operasi yang lupa didaftarkan membuat seluruh permukaan modul hilang dari
+  `api-reference.md` tanpa satu pun gate merah (pernah menimpa 55 operasi/4 modul).
+  Digerbangi dua arah sejak PR #308, berbarengan dengan gate kepemilikan fragment
+  (`api.openApiPath` wajib menunjuk fragment sendiri, bukan bundel).
+- **Kurung tak-terkutip mematikan SELURUH diagram mermaid** di GitHub (bukan sebagian):
+  di `flowchart`/`graph`, `(` adalah token pembuka bentuk node, jadi
+  `-->|online (primary)|` atau `{... (x)?}` gagal parse dan diganti kotak "Unable to
+  render rich display". Kutip labelnya; kurung yang memang BENTUK (`[( )]`, `([ ])`,
+  `(( ))`, `[[ ]]`, `{{ }}`) jangan disentuh. Digerbangi `check:docs` sejak PR #309 —
+  sebelum itu gate hanya memeriksa pagar blok dan tipe diagram, sehingga dua diagram
+  rusak hidup berdampingan dengan `bun run check` hijau.
 - **Postgres lokal**: host bisa rusak, dan koneksi host→container kini bisa timeout di
   sandbox → jalankan `db:migrate` + test DB-gated **di dalam** container bun yang berbagi
   network namespace dengan container Postgres (`docker run --network container:<pg> oven/bun …`).

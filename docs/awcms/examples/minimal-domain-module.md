@@ -67,7 +67,10 @@ export const expenseCategoryModule = defineModule({
     "Kategori beban/expense tenant-scoped untuk modul finance — contoh modul domain ERP minimal.",
   dependencies: ["identity_access"],
   api: {
-    openApiPath: "openapi/awcms-public-api.openapi.yaml",
+    // Fragment MILIK modul ini, bukan bundel hasil generate — gate
+    // kepemilikan fragment di `api:spec:check` menolak yang kedua, dan
+    // menuntut berkas ini benar-benar ada.
+    openApiPath: "openapi/modules/expense-category.openapi.yaml",
     basePath: "/api/v1/finance/expense-categories"
   },
   events: {
