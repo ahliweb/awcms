@@ -60,13 +60,13 @@ flowchart TD
   Q5 -- Ya --> Reject[DITOLAK secara eksplisit.\nLihat §7 — tidak ada pengecualian\ntanpa ADR baru yang mensupersede\nADR-0001/ADR terkait Bun-only runtime]
   Q5 -- Tidak --> Q1{Apakah platform base\ntidak bisa boot/berfungsi\nuntuk deployment mana pun\ntanpanya?}
   Q1 -- Ya --> Core[Kategori: Core\nButuh ADR + 2 maintainer approval]
-  Q1 -- Tidak --> Q2{Apakah ini kapabilitas\ninfrastruktur/reusable lintas-modul\n(bukan fitur produk berdiri sendiri)?}
+  Q1 -- Tidak --> Q2{"Apakah ini kapabilitas\ninfrastruktur/reusable lintas-modul\n(bukan fitur produk berdiri sendiri)?"}
   Q2 -- Ya --> Sys[Kategori: System\nOff-by-default via *_ENABLED bila\nmelibatkan provider eksternal]
-  Q2 -- Tidak --> Q3{Apakah ini modul domain bisnis ERP\ngenerik lintas tenant ERP\n(finance/inventory/procurement/\nmanufacturing/hr-payroll/tax)?}
+  Q2 -- Tidak --> Q3{"Apakah ini modul domain bisnis ERP\ngenerik lintas tenant ERP\n(finance/inventory/procurement/\nmanufacturing/hr-payroll/tax)?"}
   Q3 -- Tidak --> Derived[BUKAN untuk repo base ini.\nSpesifik satu vertikal non-generik —\nbuat di repo aplikasi turunan]
-  Q3 -- Ya --> Q4{Apakah ini adapter untuk\nsatu provider eksternal spesifik\n(bukan modul mandiri)?}
+  Q3 -- Ya --> Q4{"Apakah ini adapter untuk\nsatu provider eksternal spesifik\n(bukan modul mandiri)?"}
   Q4 -- Ya --> Ext[Kategori: External Integration\nHidup DI DALAM modul pemilik\nkapabilitas — lihat §6]
-  Q4 -- Tidak --> Q6{Sudah lolos proposal template\n+ ADR checklist (§9),\ndisetujui maintainer?}
+  Q4 -- Tidak --> Q6{"Sudah lolos proposal template\n+ ADR checklist (§9),\ndisetujui maintainer?"}
   Q6 -- Belum --> Propose[Isi docs/awcms/templates/\nmodule-proposal-template.md,\nbuka issue, tunggu keputusan]
   Q6 -- Ya --> Opt[Kategori: ERP Domain Module\nScaffold via skill awcms-new-module]
 ```

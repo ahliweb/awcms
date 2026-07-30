@@ -60,6 +60,79 @@ describe("checkMermaid", () => {
     );
   });
 
+  // Kedua kasus di bawah adalah cacat NYATA yang lolos gerbang ini selama
+  // berbulan-bulan: GitHub mengganti SELURUH diagram dengan "Unable to render
+  // rich display" sementara `bun run check` hijau, karena pemeriksa ini hanya
+  // melihat pagar blok dan tipe diagram. Semua ekspektasi di sini dicocokkan
+  // dengan perilaku parser mermaid 11 NYATA (engine yang sama dengan GitHub),
+  // bukan dengan dugaan: bentuk tanpa kutip GAGAL, bentuk berkutip LOLOS.
+  test("label SISI ber-kurung tanpa kutip dilaporkan (cacat README)", () => {
+    const md = [
+      "```mermaid",
+      "flowchart LR",
+      "  Tx[Operational action] -->|online (primary)| Server[(Central server)]",
+      "```"
+    ].join("\n");
+    const problems = checkMermaid("README.md", lines(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.line).toBe(3);
+    expect(problems[0]?.message).toContain("online (primary)");
+  });
+
+  test("label NODE rhombus ber-kurung tanpa kutip dilaporkan (cacat doc 21)", () => {
+    const md = [
+      "```mermaid",
+      "flowchart TD",
+      "  Q1 -- Tidak --> Q2{Apakah ini kapabilitas reusable (bukan fitur)?}",
+      "```"
+    ].join("\n");
+    const problems = checkMermaid("f.md", lines(md));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.line).toBe(3);
+  });
+
+  test("versi berkutip dari kedua cacat itu diterima", () => {
+    const md = [
+      "```mermaid",
+      "flowchart LR",
+      '  Tx[Operational action] -->|"online (primary)"| Server[(Central server / SaaS)]',
+      '  Q1 -- Tidak --> Q2{"Apakah ini kapabilitas reusable (bukan fitur)?"}',
+      "```"
+    ].join("\n");
+    expect(checkMermaid("README.md", lines(md))).toEqual([]);
+  });
+
+  // Pembatas BENTUK yang mengandung kurung (silinder `[( )]`, stadium `([ ])`,
+  // lingkaran `(( ))`, subrutin, heksagon) adalah SINTAKS, bukan teks — mermaid
+  // mem-parsenya dengan baik, jadi aturan ini tidak boleh menandainya. Tanpa
+  // pengecualian ini, `Server[(Central server / SaaS)]` di README sendiri jadi
+  // temuan palsu dan gerbangnya tak bisa dipakai.
+  test("bentuk node yang memang memakai kurung sebagai sintaks tidak ditandai", () => {
+    const md = [
+      "```mermaid",
+      "flowchart LR",
+      "  Local[(Local / LAN DB)] --> Round((Titik))",
+      "  Stadium([Mulai]) --> Sub[[Subrutin]]",
+      "  Hex{{Keputusan}} --> Plain[Teks biasa]",
+      "```"
+    ].join("\n");
+    expect(checkMermaid("f.md", lines(md))).toEqual([]);
+  });
+
+  // Aturannya khusus grammar flowchart. Di sequenceDiagram kurung dalam teks
+  // pesan SAH (diverifikasi dengan parser nyata), jadi menerapkannya di sana
+  // akan menghasilkan temuan palsu yang memaksa orang mengedit diagram sehat.
+  test("kurung dalam teks sequenceDiagram tidak ditandai", () => {
+    const md = [
+      "```mermaid",
+      "sequenceDiagram",
+      "  participant A as Klien (browser)",
+      "  A->>B: minta token (sekali pakai)",
+      "```"
+    ].join("\n");
+    expect(checkMermaid("f.md", lines(md))).toEqual([]);
+  });
+
   test("dua blok, satu rusak satu valid", () => {
     const md = [
       "```mermaid",

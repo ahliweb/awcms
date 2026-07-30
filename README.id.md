@@ -103,7 +103,7 @@ Mode operasi `awcms` adalah **hybrid online + offline dengan prioritas online-fi
 
 ```mermaid
 flowchart LR
-  Tx[Aksi operasional] -->|online (utama)| Server[(Server pusat / SaaS)]
+  Tx[Aksi operasional] -->|"online (utama)"| Server[(Server pusat / SaaS)]
   Tx -.->|saat offline/LAN| Local[(DB lokal / LAN)]
   Local --> Outbox[Outbox event + object queue]
   Outbox -->|saat online kembali| Sync[Sync push/pull<br/>HMAC signed]

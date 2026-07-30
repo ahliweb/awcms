@@ -33,8 +33,65 @@ export const MERMAID_TYPES = [
  * @typedef {{ file: string, line: number, message: string }} Problem
  */
 
+/** Tipe diagram yang memakai grammar flowchart (satu-satunya yang aturan kurung di bawah berlaku untuknya). */
+const MERMAID_FLOWCHART_TYPES = new Set(["flowchart", "graph"]);
+
 /**
- * Validasi blok kode berpagar mermaid: setiap blok tertutup dan diawali tipe diagram dikenal.
+ * Pasangan pembatas BENTUK node yang memang mengandung kurung — di sini kurung
+ * adalah sintaks, bukan teks: silinder `[( )]`, stadium `([ ])`, lingkaran
+ * `(( ))`, lingkaran-ganda `((( )))`, subrutin `[[ ]]`, heksagon `{{ }}`.
+ * Dihapus lebih dulu supaya `Server[(Central server / SaaS)]` — yang di-parse
+ * mermaid dengan baik — tidak ikut ditandai.
+ */
+const MERMAID_SHAPE_DELIMITERS =
+  /\(\(\(|\)\)\)|\[\(|\)\]|\(\[|\]\)|\(\(|\)\)|\[\[|\]\]|\{\{|\}\}/g;
+
+/** Teks yang sudah dikutip aman apa pun isinya — mermaid tak mem-parse isinya. */
+const MERMAID_QUOTED_TEXT = /"[^"]*"/g;
+
+/**
+ * Sisa `(` atau `)` pada sebuah baris flowchart setelah teks ber-kutip dan
+ * pembatas bentuk dibuang — yaitu kurung yang berdiri di posisi TEKS.
+ *
+ * Ini bukan aturan gaya. Grammar flowchart mermaid memperlakukan `(` sebagai
+ * token pembuka bentuk node, jadi kurung di dalam teks label GAGAL di-parse dan
+ * GitHub mengganti SELURUH diagram dengan kotak "Unable to render rich
+ * display". Dua diagram di repo ini rusak persis begitu sementara
+ * `bun run check` tetap hijau — pemeriksa ini dulu hanya memvalidasi pagar blok
+ * dan tipe diagram, tak pernah isinya:
+ *
+ * - `README.md`/`README.id.md` — label SISI `-->|online (primary)|`;
+ * - `docs/awcms/21_module_admission_governance.md` — label NODE rhombus
+ *   `Q2{... (bukan fitur produk berdiri sendiri)?}`.
+ *
+ * Perbaikannya sama untuk keduanya: kutip labelnya (`|"online (primary)"|`,
+ * `{"... (bukan ...)?"}`). Semua klaim di atas diverifikasi terhadap parser
+ * mermaid 11 — engine yang sama dengan yang dipakai GitHub — bukan disimpulkan
+ * dari membaca dokumentasi: tanpa kutip GAGAL, dengan kutip LOLOS, dan bentuk
+ * silinder `[( )]` LOLOS apa adanya.
+ *
+ * CAKUPAN — sempit dan dinyatakan terbuka: ini pemeriksa SINTAKSIS satu kelas
+ * cacat, bukan parser mermaid, dan hanya berlaku untuk `flowchart`/`graph`
+ * (di `sequenceDiagram` dkk. kurung dalam teks sah). Cacat mermaid kelas lain
+ * tetap lolos. Menutupnya sepenuhnya berarti menarik `mermaid` + DOM ke dalam
+ * pemeriksa dokumentasi yang justru bernilai karena nol-dependensi — pilihan
+ * yang berdiri sendiri, bukan efek samping perbaikan ini.
+ *
+ * @param {string} line
+ * @returns {boolean}
+ */
+export function hasUnquotedMermaidParenthesis(line) {
+  const stripped = line
+    .replace(MERMAID_QUOTED_TEXT, "")
+    .replace(MERMAID_SHAPE_DELIMITERS, " ");
+
+  return /[()]/.test(stripped);
+}
+
+/**
+ * Validasi blok kode berpagar mermaid: setiap blok tertutup, diawali tipe
+ * diagram dikenal, dan — untuk `flowchart`/`graph` — tak ada kurung
+ * tak-terkutip di posisi teks (lihat `hasUnquotedMermaidParenthesis`).
  * @param {string} file
  * @param {string[]} lines
  * @returns {Problem[]}
@@ -45,12 +102,14 @@ export function checkMermaid(file, lines) {
   let inBlock = false;
   let blockStart = 0;
   let sawType = false;
+  let isFlowchart = false;
   for (let i = 0; i < lines.length; i++) {
     const trimmed = (lines[i] ?? "").trim();
     if (!inBlock && trimmed === "```mermaid") {
       inBlock = true;
       blockStart = i + 1;
       sawType = false;
+      isFlowchart = false;
       continue;
     }
     if (inBlock) {
@@ -74,7 +133,21 @@ export function checkMermaid(file, lines) {
             message: `tipe diagram mermaid tak dikenal: "${first}"`
           });
         }
+        isFlowchart = MERMAID_FLOWCHART_TYPES.has(first);
         sawType = true; // hanya periksa baris konten pertama
+        continue; // baris tipe diagram sendiri tak punya label
+      }
+
+      if (
+        isFlowchart &&
+        !trimmed.startsWith("%%") &&
+        hasUnquotedMermaidParenthesis(trimmed)
+      ) {
+        problems.push({
+          file,
+          line: i + 1,
+          message: `label mermaid memuat kurung tanpa tanda kutip — GitHub gagal me-render SELURUH diagram; kutip labelnya (mis. |"a (b)"| atau {"a (b)"}): ${trimmed}`
+        });
       }
     }
   }
