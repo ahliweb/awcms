@@ -82,6 +82,12 @@ export type TenantRouteRequestContext = {
   locals: APIContext["locals"];
   /** Already validated non-null (a missing one produced `400 TENANT_REQUIRED`). */
   tenantId: string;
+  /**
+   * The adapter's view of the peer address, forwarded verbatim. Pass it to
+   * `resolveClientIp` — which decides whether `x-forwarded-for` may override it
+   * — rather than trusting either source directly.
+   */
+  clientAddress: string | undefined;
   /** One clock for the whole request — the same instant the guard chain sees. */
   now: Date;
 };
@@ -154,10 +160,109 @@ export type TenantRouteConfig<TPrepared> = {
   ) => Response | Promise<Response>;
 };
 
+/**
+ * SELF-SERVICE variant: an authenticated route whose subject is the CALLER
+ * itself, so there is no permission to check (ADR-0049 §7 —
+ * `GET /api/v1/auth/session` is the first user).
+ *
+ * ## Why this is a seam and not an exception
+ *
+ * `defineTenantRoute` demands an `AccessRequest`. A self-service endpoint has
+ * none: "may I read my own session?" is answered by holding the session, not by
+ * a permission. Naming an invented permission there would be the latent-authz
+ * trap this repo has already hit more than once — an action nothing seeds
+ * denies even the tenant owner while the calling code looks correct.
+ *
+ * What it does NOT drop is the rest: `workClass` stays required, the tenant
+ * transaction is still opened in one place, and the route file still contains
+ * no `withTenant` call of its own — so `api:tenant-route:check` stays
+ * one-directional instead of growing a second allowlist.
+ *
+ * Response shaping stays with the route via `onUnauthenticated`, because the
+ * endpoints in this class are exactly the ones with deliberate anti-oracle
+ * requirements (one response shape for several different failures) that a
+ * shared default would quietly flatten.
+ */
+export type SelfServiceTenantRouteConfig = {
+  /** REQUIRED, same reasoning as `defineTenantRoute`. */
+  workClass: WorkClass;
+  queueTimeoutMs?: number;
+  /**
+   * Called when no tenant could be resolved (`"tenant"`) or no bearer was
+   * presented (`"token"`). The route decides the status/body/headers.
+   */
+  onUnauthenticated: (reason: "tenant" | "token") => Response;
+  /**
+   * Runs BEFORE any database work — rate limiting, header checks. Returning a
+   * `Response` short-circuits with it, so a refused request costs no connection.
+   */
+  beforeTransaction?: (
+    context: TenantRouteRequestContext & { token: string }
+  ) => Response | undefined | Promise<Response | undefined>;
+  handler: (
+    context: TenantRouteRequestContext & {
+      tx: Bun.TransactionSQL;
+      token: string;
+      /** Kind-tagged hash (`session-token.ts`) — machine vs session already distinguished. */
+      tokenHash: string;
+    }
+  ) => Response | Promise<Response>;
+};
+
+export function defineSelfServiceTenantRoute(
+  config: SelfServiceTenantRouteConfig
+): APIRoute {
+  return async ({ request, cookies, url, params, locals, clientAddress }) => {
+    const { tenantId, token } = resolveAuthInputs(request, cookies);
+
+    if (!token) return config.onUnauthenticated("token");
+    if (!tenantId) return config.onUnauthenticated("tenant");
+
+    const requestContext: TenantRouteRequestContext = {
+      request,
+      cookies,
+      url,
+      params,
+      locals,
+      tenantId,
+      clientAddress,
+      now: new Date()
+    };
+
+    const short = await config.beforeTransaction?.({
+      ...requestContext,
+      token
+    });
+
+    if (short) return short;
+
+    return withTenant<Response>(
+      sqlClientForRoute(),
+      tenantId,
+      async (tx) =>
+        config.handler({
+          ...requestContext,
+          tx,
+          token,
+          tokenHash: hashSessionToken(token)
+        }),
+      {
+        workClass: config.workClass,
+        queueTimeoutMs: config.queueTimeoutMs
+      }
+    );
+  };
+}
+
+/** One place both factories reach the pool, so neither can drift onto its own client. */
+function sqlClientForRoute(): Bun.SQL {
+  return getDatabaseClient();
+}
+
 export function defineTenantRoute<TPrepared = undefined>(
   config: TenantRouteConfig<TPrepared>
 ): APIRoute {
-  return async ({ request, cookies, url, params, locals }) => {
+  return async ({ request, cookies, url, params, locals, clientAddress }) => {
     const { tenantId, token } = resolveAuthInputs(request, cookies);
 
     if (!tenantId) {
@@ -175,6 +280,7 @@ export function defineTenantRoute<TPrepared = undefined>(
       params,
       locals,
       tenantId,
+      clientAddress,
       now: new Date()
     };
 

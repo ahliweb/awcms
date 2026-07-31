@@ -286,6 +286,69 @@ sampai sekarang satu-satunya cara mengubah policy tenant adalah `curl` tangan.
 - CRUD provider OIDC tetap API-only (daftar read-only di layar). Form yang
   mem-POST client secret layak jadi perubahan tersendiri.
 
+## Kredensial mesin + introspeksi sesi (ADR-0049)
+
+Fitur fondasi PERTAMA yang dirintis langsung di repo ini di bawah pembekuan
+[ADR-0047](../../../docs/adr/0047-mini-micro-frozen-foundation-built-here.md) —
+dan karenanya tercatat sebagai divergence di `awcms-family-compatibility.yaml`.
+Skema: `sql/082` (tabel + kolom `machine_credential_id` pada decision log),
+`sql/083` (permission).
+
+**Masalah yang ditutupnya.** Satu-satunya bearer yang diterima repo ini adalah
+token **sesi** ber-hash. Sebuah build tidak bisa memegangnya: sesi kedaluwarsa,
+dicabut seluruhnya saat password reset (`sql/073`), dan dirotasi step-up MFA
+(`sql/024`). Akibatnya `awcms-astro` tidak bisa menarik kontennya sendiri.
+
+**Bentuknya.**
+
+- `awcms_machine_credentials` — tenant-scoped, `FORCE` RLS, terikat komposit
+  `(tenant_id, tenant_user_id)` ke satu **service account** yang sudah ada.
+- Token: `awcmsm_<tenantIdHex32>_<rahasia>`; **membawa tenant-nya sendiri**,
+  jadi klien build cukup satu env var dan header tenant tidak relevan untuknya
+  (header yang berbeda diabaikan — token yang menang).
+- Hash disimpan di ruang nama `mc-sha256:`. `hashSessionToken()`
+  **men-dispatch** berdasarkan prefix token, sehingga 183 rute yang sudah
+  memanggilnya di antara `resolveAuthInputs` dan `authorizeInTransaction`
+  mendapat perilaku ini tanpa perubahan tanda tangan.
+- **MENGAUTENTIKASI, tidak pernah MENGOTORISASI**: setelah prinsipal resolve,
+  rantai module-enabled → RBAC → ABAC → decision log → SoD berjalan apa adanya.
+- **Baca-saja**, ditegakkan SEBELUM izin dilihat: hanya action `read`. Token
+  yang bocor tak bisa mengubah apa pun walau service account-nya `owner`.
+- **Menyempitkan, tak pernah melebarkan**: izin efektif = irisan
+  `allowed_permission_keys` dengan izin service account.
+- `expires_at` wajib (maks 365 hari), pencabutan berlaku di permintaan
+  berikutnya, `last_used_at` disegarkan paling sering sekali per jam.
+- **Deaktivasi service account langsung mematikan kredensialnya** — jalur mesin
+  mensyaratkan `awcms_tenant_users.status` DAN `awcms_identities.status` aktif,
+  sengaja lebih ketat dari jalur sesi (yang tidak memeriksa keduanya, tetapi
+  dibatasi masa berlaku sesi). Tanpa itu, "nonaktifkan akun ini" akan diam-diam
+  meninggalkan kunci yang masih bekerja selama berbulan-bulan, karena tidak ada
+  apa pun yang mencabut kredensial saat akun dinonaktifkan.
+- Decision log mencatat **kredensial mana** yang bertindak, bukan hanya akunnya.
+
+**Endpoint.** `GET`/`POST /api/v1/access/machine-credentials`,
+`POST /api/v1/access/machine-credentials/{id}/revoke` (permission
+`identity_access.machine_credentials.read`/`create`/`revoke`). Plaintext token
+hanya muncul **sekali** saat penerbitan (respons 201-nya `private, no-store` —
+satu-satunya respons di sistem ini yang badannya membawa kredensial hidup);
+tidak ada endpoint yang bisa mengembalikannya lagi — dan penerbitan sengaja **tidak** ber-`Idempotency-Key`,
+karena me-replay-nya berarti menyimpan token plaintext di
+`awcms_idempotency_keys`.
+
+**`GET /api/v1/auth/session`** — introspeksi sesi untuk BFF lintas-origin
+(ADR-0045). Klaim aman saja (`identityId`, `tenantId`, `displayName`, `roles`,
+`assuranceLevel`, `expiresAt`, `scopes`), **tanpa** identifier mentah yang
+`GET /auth/me` kembalikan. Satu bentuk 401 untuk semua kegagalan — termasuk
+saat kredensial mesin yang disodorkan, supaya endpoint ini tak bisa dipakai
+mengklasifikasi bearer. `private, no-store` di setiap jalur, dibatasi laju
+per sumber.
+
+**Jebakan yang ditemukan saat membangunnya.** `Bun.SQL` **tidak** mem-bind array
+JS sebagai array Postgres: `${["a","b"]}` sampai ke server sebagai teks `a,b`
+(22P02 "malformed array literal"), dan bentuk satu elemen paling berbahaya
+karena tiba sebagai `a` yang terlihat seperti string biasa. Pakai
+`toPostgresTextArray(...)::text[]`.
+
 ## Belum tersedia (Sprint 3+)
 
 Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:

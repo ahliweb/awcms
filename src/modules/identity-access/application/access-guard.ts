@@ -18,29 +18,61 @@ import { checkHighRiskSoDConflicts } from "./high-risk-sod-guard";
 import {
   fetchGrantedPermissionKeys,
   resolveModuleEnabled,
-  resolveTenantContext
+  resolveTenantContext,
+  resolveTenantContextForTenantUser
 } from "./auth-context";
 import { recordDecisionLog } from "./decision-log";
 import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
+import { resolveActiveMachineCredential } from "./machine-credential-lookup";
+import {
+  isMachineCredentialAllowedAction,
+  narrowPermissionKeys
+} from "../domain/machine-credential";
+import {
+  isMachineCredentialHash,
+  isMachineCredentialToken,
+  parseMachineCredentialToken
+} from "../../../lib/auth/machine-credential-token";
 
 /**
- * Resolves the tenant id + session token an endpoint should authenticate
- * with, accepting EITHER the bearer/tenant headers (API clients) OR the
- * httpOnly SSR cookies (the admin UI). Headers take priority; cookies are
- * the fallback.
+ * Resolves the tenant id + bearer token an endpoint should authenticate with,
+ * accepting EITHER the bearer/tenant headers (API clients) OR the httpOnly SSR
+ * cookies (the admin UI). Headers take priority; cookies are the fallback.
+ *
+ * ## Machine credentials carry their own tenant (ADR-0049 §4)
+ *
+ * A machine credential token embeds the tenant it belongs to, so a caller that
+ * presents one needs no tenant header at all — the single-env-var build client
+ * ADR-0047 found impossible. When such a token is present, the TOKEN wins and
+ * any tenant header is ignored: the header is unauthenticated input, and the
+ * credential is only ever valid for its own tenant, so ignoring it cannot raise
+ * any privilege. A malformed machine token resolves to a null tenant and is
+ * refused — never silently retried as a session token.
+ *
+ * The canonical header for human sessions stays `x-awcms-tenant-id`. No alias
+ * is accepted: every future route would have to honour every spelling, and an
+ * alias missed in one route is a confusing 400 rather than an obvious failure.
  */
 export function resolveAuthInputs(
   request: Request,
   cookies: AstroCookies
 ): { tenantId: string | null; token: string | null } {
-  const tenantId =
-    request.headers.get("x-awcms-tenant-id") ??
-    cookies.get(TENANT_COOKIE_NAME)?.value ??
-    null;
   const token =
     extractBearerToken(request.headers.get("authorization")) ??
     cookies.get(SESSION_COOKIE_NAME)?.value ??
+    null;
+
+  if (token !== null && isMachineCredentialToken(token)) {
+    return {
+      tenantId: parseMachineCredentialToken(token)?.tenantId ?? null,
+      token
+    };
+  }
+
+  const tenantId =
+    request.headers.get("x-awcms-tenant-id") ??
+    cookies.get(TENANT_COOKIE_NAME)?.value ??
     null;
 
   return { tenantId, token };
@@ -91,12 +123,53 @@ export async function authorizeInTransaction(
     sodRules?: readonly SoDRuleDescriptor[];
   }
 ): Promise<AuthorizeResult> {
-  const context = await resolveTenantContext(tx, tenantId, tokenHash, now);
+  // ADR-0049 — the bearer's KIND is carried by the hash namespace, so exactly
+  // one table is consulted and neither kind is ever searched in the other's.
+  // Everything after this block is identical for both: a machine credential
+  // AUTHENTICATES, it never AUTHORIZES.
+  const machine = isMachineCredentialHash(tokenHash)
+    ? await resolveActiveMachineCredential(tx, tenantId, tokenHash, now)
+    : null;
+
+  const context = machine
+    ? await resolveTenantContextForTenantUser(
+        tx,
+        tenantId,
+        machine.tenantUserId
+      )
+    : await resolveTenantContext(tx, tenantId, tokenHash, now);
 
   if (!context) {
+    // One shape for every failure — unknown, expired, revoked, and "machine
+    // credential whose service account no longer exists" are indistinguishable.
     return {
       allowed: false,
       denied: fail(401, "AUTH_REQUIRED", "Session is invalid or expired.")
+    };
+  }
+
+  // READ-ONLY, decided before any permission is looked up and independent of
+  // what the service account holds (ADR-0049 §3). A leaked build token cannot
+  // mutate anything even if it was pointed at an `owner`.
+  if (machine && !isMachineCredentialAllowedAction(guard.action)) {
+    const decision = {
+      allowed: false,
+      reason: "Machine credentials may only perform read-only actions.",
+      matchedPolicy: "machine_credential_readonly"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine.id
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "ACCESS_DENIED", decision.reason)
     };
   }
 
@@ -123,7 +196,8 @@ export async function authorizeInTransaction(
       tenantId,
       context.tenantUserId,
       guard,
-      decision
+      decision,
+      machine?.id
     );
 
     return {
@@ -132,11 +206,19 @@ export async function authorizeInTransaction(
     };
   }
 
-  const grantedPermissionKeys = await fetchGrantedPermissionKeys(
+  const accountPermissionKeys = await fetchGrantedPermissionKeys(
     tx,
     tenantId,
     context.tenantUserId
   );
+
+  // ADR-0049 §2 — a credential NARROWS, it can never widen. The effective set
+  // is the intersection with the credential's allow-list, so adding a role to
+  // the service account leaves already-issued credentials exactly where they
+  // were, and an allow-list naming a permission nobody holds grants nothing.
+  const grantedPermissionKeys = machine
+    ? narrowPermissionKeys(accountPermissionKeys, machine.allowedPermissionKeys)
+    : accountPermissionKeys;
 
   // Issue #180 — resolve the subject's business-scope facts only when the
   // guard opts into a required-scope check AND a hierarchy port is available.
@@ -174,7 +256,14 @@ export async function authorizeInTransaction(
     { policies, env: { now, ipTrusted: false } }
   );
 
-  await recordDecisionLog(tx, tenantId, context.tenantUserId, guard, decision);
+  await recordDecisionLog(
+    tx,
+    tenantId,
+    context.tenantUserId,
+    guard,
+    decision,
+    machine?.id
+  );
 
   if (!decision.allowed) {
     return {

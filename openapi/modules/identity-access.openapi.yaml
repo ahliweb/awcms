@@ -557,6 +557,134 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/access/machine-credentials:
+    get:
+      operationId: accessListMachineCredentials
+      tags:
+        - Identity & Access
+      summary: List this tenant's machine credentials (never their secrets).
+      description: Gated on `identity_access.machine_credentials.read`. Returns derived `active`/`expired`/`revoked` status plus `lastUsedAt`, so a leak can be traced without any secret material leaving the server.
+      responses:
+        "200":
+          description: The tenant's machine credentials, newest first (limit 200).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MachineCredential"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: accessIssueMachineCredential
+      tags:
+        - Identity & Access
+      summary: Issue a read-only machine credential (high-risk; audit-logged).
+      description: |
+        Mints a bearer for a non-human caller, bound to an existing tenant user (a service account), and returns the plaintext token EXACTLY ONCE — no endpoint can return it again. Gated on `identity_access.machine_credentials.create`.
+
+        The credential AUTHENTICATES only: every request it makes still passes module-enabled, RBAC, ABAC (default-deny) and SoD. `allowedPermissionKeys` NARROWS — effective permissions are the intersection with what the service account holds, so granting that account another role never widens an already-issued credential. Requests authenticated this way are refused unless the action is read-only (ADR-0049 §3).
+
+        Not idempotency-keyed, deliberately: replaying the response would mean persisting the plaintext token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueMachineCredentialRequest"
+      responses:
+        "201":
+          description: The credential, plus its plaintext token (shown once).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      credential:
+                        $ref: "#/components/schemas/MachineCredential"
+                      token:
+                        type: string
+                        description: The plaintext bearer. Shown once; only its hash is stored.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          description: Request body exceeded the endpoint's size ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: The issuance request failed validation (VALIDATION_FAILED); `error.details` lists every offending field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/access/machine-credentials/{id}/revoke:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: accessRevokeMachineCredential
+      tags:
+        - Identity & Access
+      summary: Revoke a machine credential (high-risk; audit-logged).
+      description: Effective on the credential's very next request, because authentication reads the same row. Gated on `identity_access.machine_credentials.revoke` — separate from `create` so a leak can be stopped by someone who cannot mint one. Re-revoking returns 409 rather than a silent success.
+      responses:
+        "200":
+          description: The revoked credential.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      credential:
+                        $ref: "#/components/schemas/MachineCredential"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The credential is already revoked (ALREADY_REVOKED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/login:
     post:
       operationId: postAuthLogin
@@ -2529,6 +2657,42 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/auth/session:
+    get:
+      operationId: introspectAuthSession
+      tags:
+        - Identity & Access
+      summary: Introspect the calling session — safe claims only (for a cross-origin BFF).
+      description: |
+        Cross-origin session introspection (ADR-0045 §3, ADR-0049 §7). Intended for `awcms-astro`'s BFF, which holds the session token server-side; a browser never calls it directly.
+
+        Self-service: authorized by holding the session, not by a permission. Returns ONLY claims a portal header needs — never a token, token hash, password state, MFA secret/recovery code, or a raw email/phone identifier.
+
+        Anti-oracle: a missing bearer, an unknown/expired/revoked session, a deactivated identity, and a machine credential presented here all produce the SAME 401. Rate-limited per source; `Cache-Control: private, no-store` on every path.
+      responses:
+        "200":
+          description: Safe claims for the live session.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SessionIntrospection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many introspection requests from this source (RATE_LIMITED); `Retry-After` carries the window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/sso/{providerKey}/start:
     get:
       operationId: getAuthSsoStart
@@ -3055,6 +3219,111 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    MachineCredential:
+      type: object
+      description: A read-only machine credential (ADR-0049). Never carries the token or its hash — an operator tracing a leak needs to know which credential is alive and whether anything still uses it, and none of that requires secret material.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tenantUserId:
+          type: string
+          format: uuid
+          description: The service account this credential authenticates AS. Its roles, narrowed by allowedPermissionKeys, are the whole of what the credential may do.
+        allowedPermissionKeys:
+          type: array
+          description: NARROWING filter — effective permissions are the intersection with what the service account holds. It can never widen them.
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Refreshed at most hourly, so an idle or leaked credential is visible without a write on every request.
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdByTenantUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          description: Derived from the clock and revokedAt, not stored.
+          enum:
+            - active
+            - expired
+            - revoked
+    IssueMachineCredentialRequest:
+      type: object
+      required:
+        - name
+        - tenantUserId
+        - allowedPermissionKeys
+        - expiresAt
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          description: Operator-facing label, e.g. "awcms-astro build feed".
+        tenantUserId:
+          type: string
+          format: uuid
+          description: An existing tenant user in THIS tenant (the service account).
+        allowedPermissionKeys:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: Permission keys (`module.activity.action`) this credential may use. Required and non-empty — an empty list means "can do nothing", never "unrestricted".
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+          description: Required, in the future, at most 365 days away. There is no perpetual credential.
+    SessionIntrospection:
+      type: object
+      description: Safe claims for a live session (ADR-0049 §7). Deliberately excludes the raw login identifier that GET /api/v1/auth/me returns.
+      properties:
+        identityId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        assuranceLevel:
+          type: string
+          enum:
+            - aal1
+            - aal2
+        expiresAt:
+          type: string
+          format: date-time
+        scopes:
+          type: array
+          description: Active, effective-dated business-scope references — the same evaluation the authorization layer uses.
+          items:
+            type: object
+            properties:
+              scopeType:
+                type: string
+              scopeId:
+                type: string
+                format: uuid
     RegistrationRequest:
       type: object
       description: A pending self-registration request. The login identifier is masked — the raw address is never returned in a list.

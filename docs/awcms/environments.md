@@ -385,19 +385,19 @@ Cron produksi:
 
 ## Status nyata (2026-07-26)
 
-| Hal                                | Status                                                              |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| Development lokal                  | ✅ migrasi 70, tenant `development`, owner 197/197, RLS `0/1/0`     |
-| DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
-| DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25  |
-| App Coolify produksi               | ✅ `got4etcblum9kowdv4mrixqo` + DB `eel59mczdlkidkm5a6fhbdeh`       |
-| App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`       |
-| TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS |
-| Health staging                     | ✅ `GET /api/v1/health` → 200, 20 modul                             |
-| Migrasi DB staging                 | ✅ `sql/001`–`sql/081`, 79 applied — sama dengan produksi & dev     |
-| Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`        |
-| Seed tenant pertama staging        | ✅ tenant `staging` + owner; `setup/status` → `locked:true`         |
-| Isolasi RLS staging                | ✅ dibuktikan di bawah `awcms_app` (lihat di bawah)                 |
+| Hal                                | Status                                                                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Development lokal                  | ✅ migrasi 70, tenant `development`, owner 197/197, RLS `0/1/0`                                                                             |
+| DNS `awcms.ahlikoding.com`         | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25                                                                          |
+| DNS `awcms-staging.ahlikoding.com` | ✅ A → `192.42.84.46`, **proxied (orange cloud)** sejak 2026-07-25                                                                          |
+| App Coolify produksi               | ✅ `got4etcblum9kowdv4mrixqo` + DB `eel59mczdlkidkm5a6fhbdeh`                                                                               |
+| App Coolify staging                | ✅ `n3gg3qudm91kqdy62znmyxuq` + DB `my85c1xd4txesedhic72maeu`                                                                               |
+| TLS staging                        | ✅ terbit otomatis (Traefik/letsencrypt) beberapa menit setelah DNS                                                                         |
+| Health staging                     | ✅ `GET /api/v1/health` → 200, 20 modul                                                                                                     |
+| Migrasi DB staging                 | ✅ 81 applied s/d `sql/081` (verifikasi 2026-07-26) — sama dengan produksi & dev; `sql/082`–`sql/083` (ADR-0049) menunggu deploy berikutnya |
+| Role least-privilege staging       | ✅ app/worker/setup terpisah, `rolsuper=f`, `rolbypassrls=f`                                                                                |
+| Seed tenant pertama staging        | ✅ tenant `staging` + owner; `setup/status` → `locked:true`                                                                                 |
+| Isolasi RLS staging                | ✅ dibuktikan di bawah `awcms_app` (lihat di bawah)                                                                                         |
 
 Staging memakai `--ip 10.0.1.61` (produksi `10.0.1.51`); Coolify tidak bisa
 mem-publish port, jadi alamat container ditetapkan lewat
