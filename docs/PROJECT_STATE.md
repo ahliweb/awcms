@@ -61,8 +61,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
-| Migrasi    | **81** (`sql/001`–`081`)                                                  | `ls sql/`                                             |
-| ADR        | **0000**–**0048** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Migrasi    | **83** (`sql/001`–`083`)                                                  | `ls sql/`                                             |
+| ADR        | **0000**–**0049** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
@@ -200,6 +200,9 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   `awcms_worker`); aktivasi/rollback = aksi admin ter-audit ber-idempotency-key. Modul
   pertama yang **dirintis langsung di sini** (bukan port) di bawah ADR-0047, dan sengaja
   **tanpa `navigation`** — layar operatornya milik `awcms-astro` (ADR-0048).
+- **Kredensial mesin baca-saja + introspeksi sesi** ([ADR-0049](adr/0049-machine-credentials-and-session-introspection.md),
+  `sql/082` skema + `sql/083` permission) — bearer KEDUA yang bukan sesi manusia, terikat
+  ke satu service account. Rinci di §4 dan di `src/modules/identity-access/README.md`.
 - **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
   `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
   ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
@@ -208,9 +211,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
-- **Kontrak yang menahan `awcms-astro` — LANGKAH BERIKUTNYA yang dinamai ADR-0047.**
-  Dua cacat kontrak, keduanya diverifikasi terhadap staging (bukan disimpulkan dari
-  dokumen): (1) `resolveAuthInputs` membaca `x-awcms-tenant-id` sementara `awcms-astro`
+- **Kontrak yang menahan `awcms-astro` — SELESAI (2026-08-01, ADR-0049, `sql/082`/`083`).**
+  Kredensial mesin baca-saja + `GET /api/v1/auth/session`. Kredensial
+  MENGAUTENTIKASI, tidak pernah MENGOTORISASI (terikat ke satu service account;
+  rantai module-enabled → RBAC → ABAC → decision log → SoD tak berubah); izin
+  efektifnya IRISAN dengan izin akun itu (menyempitkan, tak pernah melebarkan);
+  setiap permintaannya ditolak kecuali action `read`, diputus **sebelum** izin
+  dilihat. Token **membawa tenant-nya sendiri** sehingga klien build cukup satu
+  env var — itu menutup cacat header ADR-0047 untuk build tanpa menambah alias
+  header (`x-awcms-tenant-id` tetap satu-satunya ejaan untuk sesi manusia).
+  Diverifikasi terhadap Postgres nyata: 83 migrasi bersih + 18 test integrasi
+  (irisan izin, baca-saja walau akunnya `owner`, pencabutan/kedaluwarsa,
+  lintas-tenant, decision log ber-`machine_credential_id`, klaim aman
+  introspeksi). Dicatat sebagai divergence di `awcms-family-compatibility.yaml`
+  saat mendarat (ADR-0047 §4). **Sisa di `awcms-astro`:** memakai token itu di
+  BFF + build feed.
+- **Konteks cacat yang ditutupnya (ADR-0047, diverifikasi ke staging).**
+  (1) `resolveAuthInputs` membaca `x-awcms-tenant-id` sementara `awcms-astro`
   mengirim `X-Tenant-Code`/`X-Tenant-Id` — setiap nilai `X-Tenant-Code` balas
   `400 TENANT_REQUIRED`; (2) **tidak ada kredensial yang bisa dipegang sebuah build** —
   bearer yang diterima `/api/v1/blog/posts` adalah token **sesi** ber-hash, dan skema di
@@ -220,7 +237,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   sudah putuskan (desain di [`awcms/jualanku/05-kontrak-sesi-dan-bff.md`](awcms/jualanku/05-kontrak-sesi-dan-bff.md) §3)
   juga membutuhkannya, sehingga keduanya **satu percakapan desain**, bukan dua.
   ADR-0048 menegaskan keduanya harus selesai sebelum layar internal pertama di
-  `awcms-astro` bisa memanggil repo ini.
+  `awcms-astro` bisa memanggil repo ini. Keduanya kini ada di kode (entri di atas).
 - **Katalog tag OpenAPI & kepemilikan fragment — SELESAI (2026-07-30).** Temuan graphify
   2026-07-29 ternyata **lebih luas dari yang dilaporkan**: bukan hanya `blog_content` yang
   hilang dari `docs/awcms/api-reference.md`, melainkan **55 operasi dari empat modul** —

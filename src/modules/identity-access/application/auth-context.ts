@@ -1,6 +1,41 @@
 import type { TenantContext } from "../domain/access-control";
 import { resolveActiveSession } from "./session-lookup";
 
+/**
+ * Builds the `TenantContext` for a tenant user that has ALREADY been
+ * authenticated by something other than a session — today, a machine credential
+ * (ADR-0049). Roles come from the same `awcms_access_assignments` join the
+ * session path uses, so a machine principal is subject to exactly the same RBAC
+ * membership, never a parallel one.
+ */
+export async function resolveTenantContextForTenantUser(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string
+): Promise<TenantContext | null> {
+  const rows = (await tx`
+    SELECT id, identity_id FROM awcms_tenant_users
+    WHERE tenant_id = ${tenantId} AND id = ${tenantUserId}
+  `) as { id: string; identity_id: string }[];
+
+  const tenantUser = rows[0];
+  if (!tenantUser) return null;
+
+  const roleRows = (await tx`
+    SELECT r.role_code
+    FROM awcms_access_assignments aa
+    JOIN awcms_roles r ON r.id = aa.role_id
+    WHERE aa.tenant_id = ${tenantId} AND aa.tenant_user_id = ${tenantUser.id} AND r.deleted_at IS NULL
+  `) as { role_code: string }[];
+
+  return {
+    tenantId,
+    tenantUserId: tenantUser.id,
+    identityId: tenantUser.identity_id,
+    roles: roleRows.map((row) => row.role_code)
+  };
+}
+
 export async function resolveTenantContext(
   tx: Bun.SQL,
   tenantId: string,

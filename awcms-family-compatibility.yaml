@@ -193,3 +193,24 @@ intentionalDivergences:
     reviewDate: "2027-07-19"
     adr: 0024-semver-numbering-continues-legacy-major-line.md
     since: "#177"
+  # ADR-0047 §4 — the FIRST foundation feature prototyped directly here during
+  # the awcms-mini/awcms-micro freeze, recorded as it lands rather than
+  # discovered when the freeze lifts.
+  - id: machine-credentials-read-only-bearer
+    summary: >-
+      awcms accepts a SECOND kind of bearer — a read-only, scope-narrowed
+      machine credential bound to a service account — which no other family
+      template has; and it exposes GET /api/v1/auth/session for cross-origin
+      session introspection.
+    reason: >-
+      awcms-astro could not fetch its own content: the only bearer this family
+      accepts is a hashed SESSION token, which no build can hold (sessions
+      expire, are revoked by password reset, and are rotated by MFA step-up).
+      Built here because the freeze leaves foundation work nowhere else to land.
+      The divergence is contained: a credential AUTHENTICATES only, its
+      permissions are the intersection with its service account's, and every
+      request it makes is refused unless the action is read-only.
+    owner: "@ahliweb"
+    reviewDate: "2027-08-01"
+    adr: 0049-machine-credentials-and-session-introspection.md
+    since: "ADR-0049"

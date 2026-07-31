@@ -254,6 +254,32 @@ export const identityAccessModule = defineModule({
       action: "reject",
       description:
         "Reject a self-registration request (no account is created) — audited"
+    },
+    // Machine credentials (ADR-0049, sql/082/083). A separate activity from
+    // `access_control` for the same reason `registration_requests` is:
+    // minting a bearer that reads tenant data with no human behind it is its
+    // own authority, and folding it into `access_control.configure` would make
+    // every role editor a credential issuer by side effect. `create` and
+    // `revoke` are split because only one of them creates a capability — during
+    // an incident you want people who can kill a leaked credential without
+    // being able to mint one.
+    {
+      activityCode: "machine_credentials",
+      action: "read",
+      description:
+        "List machine credentials for this tenant (never their secrets)"
+    },
+    {
+      activityCode: "machine_credentials",
+      action: "create",
+      description:
+        "Issue a read-only machine credential bound to a service account — audited"
+    },
+    {
+      activityCode: "machine_credentials",
+      action: "revoke",
+      description:
+        "Revoke a machine credential, effective on its next request — audited"
     }
   ],
   /**

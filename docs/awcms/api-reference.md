@@ -659,6 +659,62 @@ Returns what `evaluateAccess` would decide for the CALLER'S OWN access against t
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/access/machine-credentials` — List this tenant's machine credentials (never their secrets).
+
+- **operationId**: `accessListMachineCredentials`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `identity_access.machine_credentials.read`. Returns derived `active`/`expired`/`revoked` status plus `lastUsedAt`, so a leak can be traced without any secret material leaving the server.
+
+**Responses**
+
+| Status | Description                                                 | Schema                                 |
+| ------ | ----------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's machine credentials, newest first (limit 200). | object                                 |
+| 401    | Missing or invalid session.                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                 | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/machine-credentials` — Issue a read-only machine credential (high-risk; audit-logged).
+
+- **operationId**: `accessIssueMachineCredential`
+- **Security**: bearerAuth + tenantHeader
+
+Mints a bearer for a non-human caller, bound to an existing tenant user (a service account), and returns the plaintext token EXACTLY ONCE — no endpoint can return it again. Gated on `identity_access.machine_credentials.create`.
+
+The credential AUTHENTICATES only: every request it makes still passes module-enabled, RBAC, ABAC (default-deny) and SoD. `allowedPermissionKeys` NARROWS — effective permissions are the intersection with what the service account holds, so granting that account another role never widens an already-issued credential. Requests authenticated this way are refused unless the action is read-only (ADR-0049 §3).
+
+Not idempotency-keyed, deliberately: replaying the response would mean persisting the plaintext token.
+
+**Request body** (required): [`IssueMachineCredentialRequest`](#schema-issuemachinecredentialrequest)
+
+**Responses**
+
+| Status | Description                                                                                              | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The credential, plus its plaintext token (shown once).                                                   | object                                 |
+| 401    | Missing or invalid session.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 413    | Request body exceeded the endpoint's size ceiling.                                                       | [`ApiError`](#standard-error-envelope) |
+| 422    | The issuance request failed validation (VALIDATION_FAILED); `error.details` lists every offending field. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/machine-credentials/{id}/revoke` — Revoke a machine credential (high-risk; audit-logged).
+
+- **operationId**: `accessRevokeMachineCredential`
+- **Security**: bearerAuth + tenantHeader
+
+Effective on the credential's very next request, because authentication reads the same row. Gated on `identity_access.machine_credentials.revoke` — separate from `create` so a leak can be stopped by someone who cannot mint one. Re-revoking returns 409 rather than a silent success.
+
+**Responses**
+
+| Status | Description                                          | Schema                                 |
+| ------ | ---------------------------------------------------- | -------------------------------------- |
+| 200    | The revoked credential.                              | object                                 |
+| 401    | Missing or invalid session.                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | The credential is already revoked (ALREADY_REVOKED). | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue
 
 - **operationId**: `accessListAbacPolicies`
@@ -1073,6 +1129,26 @@ Records a request; it NEVER creates an account. Accepts no password and no privi
 | 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
 | 404    | Self-registration is not enabled for this deployment.                                              | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many registration attempts from this source.                                                   | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/session` — Introspect the calling session — safe claims only (for a cross-origin BFF).
+
+- **operationId**: `introspectAuthSession`
+- **Security**: bearerAuth + tenantHeader
+
+Cross-origin session introspection (ADR-0045 §3, ADR-0049 §7). Intended for `awcms-astro`'s BFF, which holds the session token server-side; a browser never calls it directly.
+
+Self-service: authorized by holding the session, not by a permission. Returns ONLY claims a portal header needs — never a token, token hash, password state, MFA secret/recovery code, or a raw email/phone identifier.
+
+Anti-oracle: a missing bearer, an unknown/expired/revoked session, a deactivated identity, and a machine credential presented here all produce the SAME 401. Rate-limited per source; `Cache-Control: private, no-store` on every path.
+
+**Responses**
+
+| Status | Description                                                                                        | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Safe claims for the live session.                                                                  | object                                 |
+| 400    | Validation error.                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                        | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many introspection requests from this source (RATE_LIMITED); `Retry-After` carries the window. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
@@ -7871,6 +7947,26 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "isEnabled": false,
   "startsAt": "2026-01-01T00:00:00.000Z",
   "endsAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: IssueMachineCredentialRequest
+
+| Field                   | Type               | Required | Nullable | Description                                                                                                                                              |
+| ----------------------- | ------------------ | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | string             | yes      | no       | Operator-facing label, e.g. "awcms-astro build feed".                                                                                                    |
+| `tenantUserId`          | string (uuid)      | yes      | no       | An existing tenant user in THIS tenant (the service account).                                                                                            |
+| `allowedPermissionKeys` | array of string    | yes      | no       | Permission keys (`module.activity.action`) this credential may use. Required and non-empty — an empty list means "can do nothing", never "unrestricted". |
+| `expiresAt`             | string (date-time) | yes      | no       | Required, in the future, at most 365 days away. There is no perpetual credential.                                                                        |
+
+**Example**
+
+```json
+{
+  "name": "string",
+  "tenantUserId": "00000000-0000-0000-0000-000000000000",
+  "allowedPermissionKeys": ["string"],
+  "expiresAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 

@@ -22,6 +22,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/access/machine-credentials/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/access/machine-credentials/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/access/modules.ts",
       "workClass": "interactive",
       "source": "default"
