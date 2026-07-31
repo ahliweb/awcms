@@ -827,7 +827,11 @@ bun test                               # unit + integration; DATABASE_URL wajib 
 bun test tests/integration/blog-content-admin-ui.integration.test.ts  # test baru khusus Issue #543
 bun run build                          # Astro build, termasuk seluruh layar admin/blog/*
 bun run check                          # lint + check:docs + api:spec:check + typecheck + test + build
-bun run production:preflight           # gate go-live penuh (lihat §Known limitations soal env sandbox)
+bun run config:validate                # kontrak env (satu dari tiga tahap go-live yang sudah nyata)
+bun run security:readiness             # postur keamanan (RLS FORCE, default-deny, audit trail)
+bun run db:pool:health                 # kesehatan pool/backpressure
+# Orkestrator `production:preflight` yang menjalankan ketiganya sebagai satu
+# gated go/no-go BELUM ada di repo ini — lihat docs/awcms/production-preflight-runbook.md §Status dokumen.
 ```
 
 ### Operational checklist (Issue #543)

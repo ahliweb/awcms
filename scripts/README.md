@@ -128,6 +128,17 @@ dibangun. `scripts:inventory:check` **menolak** kalau salah satu dari nama di
 bawah ternyata sudah terdaftar di `package.json` — itu tepat cara tabel
 sebelumnya membusuk.
 
+Nama-nama ini boleh disebut sebagai **target** di `docs/awcms/` dan
+`.claude/skills/` (dokumen yang diadaptasi dari repo acuan), tetapi tidak boleh
+muncul sebagai `bun run <target>` di berkas **current-state**: `README*.md`,
+`AGENTS.md`, `CONTRIBUTING.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_STATE.md`,
+berkas ini, README modul `src/**`, dan **komentar kode** di `src/`/`scripts/`.
+`check:docs` menggerbanginya. Cakupan sumber itu ditambahkan setelah ditemukan
+enam komentar di `src/modules/module-management/` yang menyuruh pembacanya
+menjalankan target `modules:sync` — perintah yang tak pernah ada di repo ini
+(mekanisme sesungguhnya `POST /api/v1/modules/sync`) — sementara `bun run check`
+tetap hijau karena gate lamanya hanya membaca lima berkas markdown akar.
+
 | Target acuan                                    | Prasyarat yang belum ada                                                    |
 | ----------------------------------------------- | --------------------------------------------------------------------------- |
 | `repo:inventory:generate` / `:check`            | Generator inventaris repo lintas-artefak (OpenAPI + komposisi modul + docs) |

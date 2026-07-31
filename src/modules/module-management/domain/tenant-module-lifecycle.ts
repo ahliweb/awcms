@@ -8,7 +8,7 @@
  * The dependency graph itself always comes from the live code registry
  * (`listModules()`'s own `dependencies` arrays), never the DB's
  * `awcms_module_dependencies` table — that table only reflects whatever
- * `bun run modules:sync` last wrote, and enable/disable must never depend on
+ * the last `POST /api/v1/modules/sync` wrote, and enable/disable must never depend on
  * someone having remembered to run a sync first.
  */
 import type { ModuleDescriptor } from "../../_shared/module-contract";

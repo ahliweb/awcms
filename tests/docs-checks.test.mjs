@@ -14,6 +14,7 @@ import {
   checkSqlMigrationReferences,
   SQL_REF_UNCHECKED_FILES,
   AUTHORITATIVE_SCRIPT_DOC_FILES,
+  isAuthoritativeScriptFile,
   extractLinks,
   classifyLink,
   splitTarget,
@@ -266,6 +267,51 @@ describe("checkKnownScripts", () => {
     expect(AUTHORITATIVE_SCRIPT_DOC_FILES.has("docs/awcms/README.md")).toBe(
       false
     );
+  });
+});
+
+describe("isAuthoritativeScriptFile", () => {
+  test("dokumen state & inventaris scripts ikut dijaga", () => {
+    expect(isAuthoritativeScriptFile("docs/PROJECT_STATE.md")).toBe(true);
+    expect(isAuthoritativeScriptFile("scripts/README.md")).toBe(true);
+  });
+
+  test("README modul di src/ ikut dijaga", () => {
+    expect(
+      isAuthoritativeScriptFile("src/modules/blog-content/README.md")
+    ).toBe(true);
+  });
+
+  test("komentar kode src/ dan scripts/ ikut dijaga", () => {
+    expect(
+      isAuthoritativeScriptFile(
+        "src/modules/module-management/application/job-registry.ts"
+      )
+    ).toBe(true);
+    expect(isAuthoritativeScriptFile("scripts/db-migrate.ts")).toBe(true);
+    expect(isAuthoritativeScriptFile("src/pages/admin/index.astro")).toBe(true);
+  });
+
+  // Kelas berkas yang justru HARUS bebas menyebut target yang belum ada:
+  // docs/skills diadaptasi dari awcms-mini sebagai target, dan fixture test
+  // memang memakai nama fiktif untuk menguji gate ini.
+  test("docs target, skill, dan test TIDAK dijaga", () => {
+    expect(isAuthoritativeScriptFile("docs/awcms/performance-suite.md")).toBe(
+      false
+    );
+    expect(
+      isAuthoritativeScriptFile(".claude/skills/awcms-i18n/SKILL.md")
+    ).toBe(false);
+    expect(isAuthoritativeScriptFile("tests/docs-checks.test.mjs")).toBe(false);
+    expect(
+      isAuthoritativeScriptFile(
+        "tests/fixtures/example-domain-modules/modules/example-crm/module.ts"
+      )
+    ).toBe(false);
+  });
+
+  test("berkas non-sumber di src/ (mis. .css) tidak ikut dipindai", () => {
+    expect(isAuthoritativeScriptFile("src/styles/tokens.css")).toBe(false);
   });
 });
 

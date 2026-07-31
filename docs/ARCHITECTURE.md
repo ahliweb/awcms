@@ -30,7 +30,7 @@ src/modules/<module>/
   api/                  # (opsional) skema/handler bersama; route file tetap di src/pages
 ```
 
-20 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
+21 modul terdaftar di `src/modules/index.ts` (urutan = urutan registrasi):
 
 - **`logging`** — audit trail lintas modul (`awcms_audit_events`) + purge terjadwal.
 - **`tenant_admin`** — tenant root, hierarki office, tenant settings, setup wizard sekali jalan.
@@ -57,9 +57,11 @@ src/modules/<module>/
 
 - **`comments`** (`type: "domain"`) — di-port dari micro ([ADR-0041](adr/0041-comments-module-admission.md), `sql/066`-`sql/067`): komentar **moderation-first** di atas resource yang **sudah terbit & publik**. Memiliki thread, komentar ber-kedalaman-terbatas (hard cap 4), riwayat moderasi append-only, laporan penyalahgunaan, setting per-tenant, telemetri anti-abuse terminimalisasi, dan langganan notifikasi-balasan terenkripsi. **Konsumen/agregator** descriptor `commentableResources` (`MODULE_CONTRACT_VERSION` 2.3.0) — modul konten MENDEKLARASIKAN resource mana yang boleh dikomentari; `comments` menemukannya lewat `listModules()`. Tulang punggung keamanannya: batas publikasi ditegakkan di perbatasan resource→thread (draft/privat/terhapus tak pernah menerima maupun mengekspos komentar); body disimpan **teks polos** dan di-escape saat render (tak ada HTML tersimpan → tak ada XSS tersimpan), hanya autolink http(s) `rel="nofollow ugc noopener noreferrer"`; respons submit publik **seragam** sehingga endpoint tak bisa dipakai sebagai oracle blocked-term atau konten belum-terbit; PII penulis diminimalkan (sha256 + mask, tak pernah mentah). Notifikasi balasan lewat outbox event (payload tanpa alamat), retensi meng-**anonimkan** di tempat (bukan menghapus) dan menghormati legal hold. Admin `/admin/comments` + API `/api/v1/comments/*`.
 
+- **`idn-admin-regions`** (`type: "system"`) — dirintis langsung di sini ([ADR-0046](adr/0046-idn-admin-regions-module-admission.md), #312, `sql/080` skema + `sql/081` permission): master data wilayah administratif Indonesia (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) **ber-versi & ter-provenance**, disumber dari dataset komunitas `cahyadsn/wilayah` (MIT) yang di-**vendor** di `data/idn-admin-regions/`. Dua tabelnya (`awcms_idn_region_datasets`, `awcms_idn_admin_regions`) **GLOBAL** — tanpa `tenant_id`, tanpa RLS, seperti `awcms_permissions`/`awcms_modules` — karena provinsi "Aceh" adalah baris yang sama untuk setiap tenant; keduanya terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` (`scripts/security-readiness.ts`) sehingga privilese per-role wajib dideklarasikan eksplisit, bukan diwarisi DML massal. Yang global adalah **barisnya**, bukan izinnya: setiap endpoint tetap melewati sesi + konteks tenant + ABAC default-deny. Impor 91.599 baris adalah **job deployment** (`bun run idn-regions:import`, dry-run secara default, berjalan sebagai `awcms_worker`) — bukan panggilan HTTP; sedangkan **aktivasi/rollback** versi dataset adalah keputusan jalur-request sehingga ABAC-gated, ber-idempotency-key, dan ter-audit. Lookup baca-saja di `/api/v1/idn-regions/*`. Belum punya `navigation`: layar operator platformnya milik `awcms-astro` ([ADR-0048](adr/0048-frontend-role-split-awcms-astro-internal-admin.md)).
+
 Modul lain di ekosistem keluarga (mis. `newsletter`,
-`social-publishing`, `document-infrastructure`, `integration-hub`,
-`idn-admin-regions`) **belum di-port** ke repo ini — lihat
+`social-publishing`, `document-infrastructure`, `integration-hub`)
+**belum di-port** ke repo ini — lihat
 skill masing-masing (ditandai "BACAAN SAJA") + [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
 untuk spesifikasi target & urutan porting.
 
@@ -376,7 +378,7 @@ Sudah live dan diverifikasi terhadap kode (bukan rencana):
 Gap yang genuinely masih ada (jangan diklaim selesai):
 
 - Modul keluarga yang belum di-port (`newsletter`, `social-publishing`,
-  `document-infrastructure`, `integration-hub`, `idn-admin-regions`) — lihat skill masing-masing
+  `document-infrastructure`, `integration-hub`) — lihat skill masing-masing
   (BACAAN SAJA) untuk spesifikasi target, dan
   [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
   untuk urutannya. Pasca-[ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)

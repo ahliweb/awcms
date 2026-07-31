@@ -2,7 +2,7 @@
  * Shared worker runner (Issue #697, epic #679, platform-hardening).
  *
  * Every `scripts/*.ts` cron/systemd worker (`bun run logs:audit:purge`,
- * `bun run modules:sync`, ...) re-implements the same handful of concerns
+ * `bun run domain-events:dispatch`, ...) re-implements the same handful of concerns
  * slightly differently: iterate tenants, generate a correlation/run id,
  * decide the process exit code, print a completion summary, and log
  * failures safely. `runJob` is the single place that logic now lives —
