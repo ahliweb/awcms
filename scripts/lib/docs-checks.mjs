@@ -260,6 +260,11 @@ export function checkNaming(file, lines) {
  * `.claude/skills/` sengaja TIDAK termasuk — isinya diadaptasi dari awcms-mini
  * sebagai target (lihat `docs/awcms/README.md` §Status) dan boleh menyebut
  * script yang belum diimplementasikan.
+ *
+ * `docs/PROJECT_STATE.md` dan `scripts/README.md` ada di sini karena keduanya
+ * mendeklarasikan dirinya sebagai cermin keadaan repo (titik-lanjut ter-versioning
+ * dan inventaris scripts) — persis kelas berkas yang pembacanya perlakukan
+ * sebagai fakta.
  * @type {Set<string>}
  */
 export const AUTHORITATIVE_SCRIPT_DOC_FILES = new Set([
@@ -267,13 +272,52 @@ export const AUTHORITATIVE_SCRIPT_DOC_FILES = new Set([
   "README.id.md",
   "AGENTS.md",
   "CONTRIBUTING.md",
-  "docs/ARCHITECTURE.md"
+  "docs/ARCHITECTURE.md",
+  "docs/PROJECT_STATE.md",
+  "scripts/README.md"
 ]);
+
+/**
+ * Ekstensi berkas SUMBER yang ikut dijaga. Komentar kode adalah dokumentasi
+ * current-state yang paling dipercaya — dan yang paling tidak pernah diaudit:
+ * enam komentar di `src/modules/module-management/` sempat menyuruh pembacanya
+ * menjalankan target `modules:sync` yang tak pernah ada di repo ini (mekanisme
+ * sesungguhnya `POST /api/v1/modules/sync`), sementara `bun run check` hijau
+ * karena gate hanya membaca lima berkas markdown. Komentar ini pun sengaja
+ * TIDAK menulis nama target itu dalam bentuk `bun run …`: gate ini membaca
+ * dirinya sendiri.
+ *
+ * `tests/` sengaja DI LUAR: fixture-nya memang menyebut target fiktif
+ * (`ghost:one`, `example-crm:reconcile`) untuk menguji gate ini sendiri.
+ * @type {string[]}
+ */
+export const AUTHORITATIVE_SCRIPT_SOURCE_EXTENSIONS = [".ts", ".mjs", ".astro"];
+
+/** @type {string[]} */
+export const AUTHORITATIVE_SCRIPT_SOURCE_DIRS = ["src/", "scripts/"];
+
+/**
+ * Apakah `file` wajib menunjuk script `package.json` yang nyata?
+ *
+ * Tiga kelas: berkas current-state bernama eksplisit di atas, README modul di
+ * `src/**` (deskripsi modul sebagaimana ADANYA — bukan target port), dan
+ * berkas sumber di `src/`/`scripts/`.
+ * @param {string} file path relatif terhadap root repo
+ * @returns {boolean}
+ */
+export function isAuthoritativeScriptFile(file) {
+  if (AUTHORITATIVE_SCRIPT_DOC_FILES.has(file)) return true;
+  if (file.startsWith("src/") && file.endsWith("README.md")) return true;
+  return (
+    AUTHORITATIVE_SCRIPT_SOURCE_DIRS.some((dir) => file.startsWith(dir)) &&
+    AUTHORITATIVE_SCRIPT_SOURCE_EXTENSIONS.some((ext) => file.endsWith(ext))
+  );
+}
 
 /**
  * Deteksi rujukan `bun run <script>` yang tidak terdaftar di `package.json`.
  * Hanya dipanggil untuk berkas current-state (lihat
- * `AUTHORITATIVE_SCRIPT_DOC_FILES`) agar tidak salah menandai command "target"
+ * `isAuthoritativeScriptFile`) agar tidak salah menandai command "target"
  * di docs/skills yang memang belum diimplementasikan.
  * @param {string} file
  * @param {string[]} lines
@@ -291,7 +335,7 @@ export function checkKnownScripts(file, lines, knownScripts) {
       problems.push({
         file,
         line: i + 1,
-        message: `rujukan \`bun run ${script}\` tidak ada di package.json (dokumen current-state wajib menunjuk script nyata)`
+        message: `rujukan \`bun run ${script}\` tidak ada di package.json (berkas current-state wajib menunjuk script nyata)`
       });
     }
   });

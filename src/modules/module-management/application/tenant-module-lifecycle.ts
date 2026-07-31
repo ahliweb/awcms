@@ -141,8 +141,8 @@ export async function enableTenantModule(
 ): Promise<TenantModuleMutationResult> {
   // `awcms_tenant_modules.module_key` has an FK to `awcms_modules` — ensure
   // the registry is current before writing tenant state that references it,
-  // rather than requiring an operator to have already run
-  // `bun run modules:sync`/`POST /api/v1/modules/sync` at least once.
+  // rather than requiring an operator to have already called
+  // `POST /api/v1/modules/sync` at least once.
   // Idempotent and cheap (a handful of upserts, no network calls).
   await syncModuleDescriptors(tx);
 

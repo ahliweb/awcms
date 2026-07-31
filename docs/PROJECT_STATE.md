@@ -36,14 +36,33 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 - Dokumen/skill yang masih menyebut "repo turunan / derived" sebagai jalur aktif adalah
   **usang** — perlakukan sebagai catatan historis (banyak sudah bertanda DEPRECATED).
 
+**Perubahan 31 Juli 2026 — dua ADR yang mengubah cara kerja, bukan cuma isi kode:**
+
+- [ADR-0047](adr/0047-mini-micro-frozen-foundation-built-here.md): `awcms-mini` dan
+  `awcms-micro` **dibekukan sebagai referensi** (boleh dibaca & di-port _keluar_, tidak
+  menerima perubahan). Konsekuensinya aturan **mini-first ditangguhkan** — selama
+  pembekuan, fitur fondasi **dirintis langsung di repo ini**. Ini **bukan** pelonggaran:
+  ADR §3 mendaftarkan ulang setiap penjagaan yang dulu dibawa jalur mini-first secara
+  eksplisit (ADR wajib untuk perubahan standar, security review tambahan untuk
+  `auth`/`access`/`sync`, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS `FORCE`,
+  ABAC default-deny). ADR §4: **setiap fitur fondasi yang mendarat selama pembekuan
+  WAJIB dicatat sebagai divergence** di `awcms-family-compatibility.yaml` **saat ia
+  mendarat**, bukan belakangan.
+- [ADR-0048](adr/0048-frontend-role-split-awcms-astro-internal-admin.md): pembagian peran
+  frontend. Layar **platform/operator internal** (master data global, rilis/rollback data,
+  kesehatan lintas tenant) dibangun di **`awcms-astro`**; layar **tenant atas datanya
+  sendiri** + seluruh permukaan publik tetap di **`awcms`**. Permukaan otorisasi tetap
+  SATU — memindahkan layar tidak memindahkan izinnya. Aturan ini mengikat layar **baru**;
+  pemilahan `/admin/*` yang sudah ada adalah pekerjaan tersendiri dengan ADR sendiri.
+
 ## 2. Inventori ringkas
 
 | Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
 | ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base | **20** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
+| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
 | Migrasi    | **81** (`sql/001`–`081`)                                                  | `ls sql/`                                             |
-| ADR        | **0000**–**0045** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
+| ADR        | **0000**–**0048** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
@@ -57,15 +76,17 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > job pause di "Waiting for review" sebelum sign/attest/publish (lihat
 > [`release-process.md`](awcms/release-process.md) §Environment approval).
 
-Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
+Modul (21, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 `profile-identity`, `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 **`media-library`**, `blog-content`, **`tenant-domain`**, **`visitor-analytics`**,
 **`data-lifecycle`**, **`seo-distribution`**, **`form-drafts`**, **`site-search`**,
-**`comments`**.
+**`comments`**, `idn-admin-regions`.
 (Delapan yang di-bold = gelombang penyerapan awcms-micro, 2026-07-24/25 — lihat §3/§4.
 `news-portal` **tidak lagi ada**: dilebur ke `blog-content` oleh
-[ADR-0044](adr/0044-merge-news-portal-into-blog-content.md), #300.)
+[ADR-0044](adr/0044-merge-news-portal-into-blog-content.md), #300.
+`idn-admin-regions` (#312, ADR-0046) **bukan** hasil port — ia modul pertama yang
+dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 > Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
 > [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
@@ -170,6 +191,15 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
   `bun run tenant-domain:dns:sync` sebagai `awcms_worker` SELECT-only. Tanpa
   `TENANT_DOMAIN_SERVING_TARGET` job no-op — tidak ada default, karena menebak berarti
   outage seluruh platform.
+- **`idn-admin-regions`** ([ADR-0046](adr/0046-idn-admin-regions-module-admission.md), #312,
+  `sql/080` skema + `sql/081` permission) — master data wilayah administratif Indonesia
+  ber-versi, ter-provenance, bisa di-rollback; dataset `cahyadsn/wilayah` (MIT) di-vendor
+  di `data/idn-admin-regions/`. **Dua tabelnya GLOBAL** (tanpa `tenant_id`, tanpa RLS —
+  terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`), otorisasi tetap per-tenant
+  default-deny. Impor = job deployment dry-run-by-default (`bun run idn-regions:import`,
+  `awcms_worker`); aktivasi/rollback = aksi admin ter-audit ber-idempotency-key. Modul
+  pertama yang **dirintis langsung di sini** (bukan port) di bawah ADR-0047, dan sengaja
+  **tanpa `navigation`** — layar operatornya milik `awcms-astro` (ADR-0048).
 - **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
   `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
   ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
@@ -178,6 +208,19 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 
 ## 4. Backlog / langkah berikutnya
 
+- **Kontrak yang menahan `awcms-astro` — LANGKAH BERIKUTNYA yang dinamai ADR-0047.**
+  Dua cacat kontrak, keduanya diverifikasi terhadap staging (bukan disimpulkan dari
+  dokumen): (1) `resolveAuthInputs` membaca `x-awcms-tenant-id` sementara `awcms-astro`
+  mengirim `X-Tenant-Code`/`X-Tenant-Id` — setiap nilai `X-Tenant-Code` balas
+  `400 TENANT_REQUIRED`; (2) **tidak ada kredensial yang bisa dipegang sebuah build** —
+  bearer yang diterima `/api/v1/blog/posts` adalah token **sesi** ber-hash, dan skema di
+  sini tak punya tabel token mesin sama sekali. Menutup (2) berarti konsep
+  **machine credential** di `identity_access` — dan endpoint introspeksi sesi
+  `GET /api/v1/auth/session` yang [ADR-0045](adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md)
+  sudah putuskan (desain di [`awcms/jualanku/05-kontrak-sesi-dan-bff.md`](awcms/jualanku/05-kontrak-sesi-dan-bff.md) §3)
+  juga membutuhkannya, sehingga keduanya **satu percakapan desain**, bukan dua.
+  ADR-0048 menegaskan keduanya harus selesai sebelum layar internal pertama di
+  `awcms-astro` bisa memanggil repo ini.
 - **Katalog tag OpenAPI & kepemilikan fragment — SELESAI (2026-07-30).** Temuan graphify
   2026-07-29 ternyata **lebih luas dari yang dilaporkan**: bukan hanya `blog_content` yang
   hilang dari `docs/awcms/api-reference.md`, melainkan **55 operasi dari empat modul** —
@@ -285,9 +328,16 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 
 ## 5. Kontrak alur kerja (ringkas)
 
-1. **Mini-first**: fitur fondasi diuji di `awcms-mini` dulu, lalu **diport** ke sini
-   (rename prefix `awcms_mini_` → `awcms_`, penomoran migrasi lanjut). Lihat
-   [`awcms/alur-pengembangan-mini-first.md`](awcms/alur-pengembangan-mini-first.md).
+1. **Mini-first DITANGGUHKAN** ([ADR-0047](adr/0047-mini-micro-frozen-foundation-built-here.md),
+   31 Juli 2026): `awcms-mini`/`awcms-micro` beku, jadi fitur fondasi **dirintis langsung
+   di sini**. Port _keluar_ dari kedua repo itu tetap boleh dan tetap memakai langkah
+   rename `awcms_mini_`/`awcms_micro_` → `awcms_` di
+   [`awcms/alur-pengembangan-mini-first.md`](awcms/alur-pengembangan-mini-first.md)
+   (dokumen itu kembali berlaku utuh begitu pembekuan dicabut). Fitur fondasi yang
+   mendarat selama pembekuan: **ADR wajib**, security review tambahan untuk
+   `auth`/`access`/`sync`, dan **entri divergence di
+   [`awcms-family-compatibility.yaml`](../awcms-family-compatibility.yaml) saat ia
+   mendarat** — bukan retroaktif.
 2. **Branch dulu** (jangan commit ke `main`); satu PR = satu perubahan atomic.
 3. **`bun run check` PENUH** sebelum PR (lint + docs + kontrak + typecheck + test + build;
    `bun run format` dulu bila perlu). Changeset wajib untuk perubahan perilaku.
@@ -310,6 +360,16 @@ Modul (20, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
   `api-reference.md` tanpa satu pun gate merah (pernah menimpa 55 operasi/4 modul).
   Digerbangi dua arah sejak PR #308, berbarengan dengan gate kepemilikan fragment
   (`api.openApiPath` wajib menunjuk fragment sendiri, bukan bundel).
+- **Rujukan `bun run <target>` di KOMENTAR KODE ikut digerbangi** sejak sinkronisasi
+  scripts↔docs: `check:docs` memeriksa berkas current-state — lima berkas markdown akar,
+  dokumen ini, `scripts/README.md`, README modul `src/**`, **dan seluruh sumber
+  `src/`/`scripts/`**. Sebelumnya hanya lima markdown akar, sehingga enam komentar di
+  `src/modules/module-management/` bisa menyuruh pembacanya menjalankan target
+  `modules:sync` yang tak pernah ada (mekanisme sesungguhnya `POST /api/v1/modules/sync`)
+  dengan `bun run check` tetap hijau. `docs/awcms/` + `.claude/skills/` tetap DI LUAR
+  gerbang: isinya target adaptasi awcms-mini yang memang boleh menyebut tooling belum-ada
+  (`production:preflight`, `repo:inventory:*`, `performance:*`, dst. — daftar lengkapnya
+  di [`../scripts/README.md`](../scripts/README.md) §Ditunda).
 - **Kurung tak-terkutip mematikan SELURUH diagram mermaid** di GitHub (bukan sebagian):
   di `flowchart`/`graph`, `(` adalah token pembuka bentuk node, jadi
   `-->|online (primary)|` atau `{... (x)?}` gagal parse dan diganti kotak "Unable to

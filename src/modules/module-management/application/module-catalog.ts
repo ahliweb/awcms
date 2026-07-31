@@ -3,7 +3,7 @@
  * is the source of truth for a module's static metadata
  * (name/version/description/dependencies/api/events/type) — it is always
  * current, never stale, unlike the DB registry which only reflects whatever
- * `bun run modules:sync` last wrote. This merges the two: static fields come
+ * the last `POST /api/v1/modules/sync` wrote. This merges the two: static fields come
  * from the descriptor, `lifecycleStatus`/`isCore`/`lastSyncedAt` come from
  * `awcms_modules` when a row exists (falling back to the descriptor's own
  * `status`/`isCore` if sync hasn't run yet).

@@ -1,8 +1,8 @@
 /**
  * Module job/command registry service. Reads directly from `listModules()` —
  * never `awcms_module_jobs` — same reasoning as the navigation registry and
- * tenant module lifecycle: that table only reflects whatever
- * `bun run modules:sync` last wrote, and this is documentation the operator
+ * tenant module lifecycle: that table only reflects whatever the last
+ * `POST /api/v1/modules/sync` wrote, and this is documentation the operator
  * reads, not something that should silently go stale until someone remembers
  * to sync. No I/O at all: every job descriptor is trusted,
  * statically-imported code metadata already in this process.

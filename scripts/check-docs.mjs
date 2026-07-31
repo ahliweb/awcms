@@ -8,6 +8,10 @@
  *  2. Tautan relatif Markdown menunjuk ke berkas/anchor yang ada.
  *  3. Regresi penamaan: sisa identifier repo acuan (`awcms_mini_`/`AWCMS_MINI_`)
  *     yang belum diadaptasi ke prefix repo ini (`awcms_`/`AWCMS_`).
+ *  3b. Rujukan `bun run <target>` di berkas current-state (lihat
+ *     `isAuthoritativeScriptFile`) menunjuk script yang benar-benar ada di
+ *     `package.json` — termasuk README modul `src/**` dan komentar kode
+ *     `src/`/`scripts/`, bukan hanya lima berkas markdown akar.
  *  4. Rujukan migration hantu: setiap `sql/NNN` yang disebut dokumentasi
  *     (termasuk `.claude/skills/`, yang DIIKUTI agen) benar-benar ada di
  *     `sql/` — penomoran awcms-mini yang terbawa saat adaptasi dokumen
@@ -30,7 +34,9 @@ import {
   checkNaming,
   checkKnownScripts,
   checkSqlMigrationReferences,
-  AUTHORITATIVE_SCRIPT_DOC_FILES,
+  isAuthoritativeScriptFile,
+  AUTHORITATIVE_SCRIPT_SOURCE_DIRS,
+  AUTHORITATIVE_SCRIPT_SOURCE_EXTENSIONS,
   extractLinks,
   classifyLink,
   splitTarget,
@@ -86,6 +92,27 @@ function anyComposeFileExists() {
  * @type {Set<string>}
  */
 const GENERATED_EXEMPT = new Set(["docs/awcms/agent-memory.md"]);
+
+/**
+ * Berkas SUMBER yang ikut diperiksa rujukan `bun run`-nya (lihat
+ * `AUTHORITATIVE_SCRIPT_SOURCE_DIRS`). Hanya pemeriksaan script yang berlaku di
+ * sini — mermaid/tautan/naming adalah pemeriksaan markdown.
+ * @returns {string[]}
+ */
+function listAuthoritativeSources() {
+  const out = execFileSync(
+    "git",
+    ["ls-files", ...AUTHORITATIVE_SCRIPT_SOURCE_DIRS],
+    { cwd: ROOT, encoding: "utf8" }
+  );
+  return out
+    .split("\n")
+    .filter(Boolean)
+    .filter((file) =>
+      AUTHORITATIVE_SCRIPT_SOURCE_EXTENSIONS.some((ext) => file.endsWith(ext))
+    )
+    .filter((file) => existsSync(join(ROOT, file)));
+}
 
 /** @returns {string[]} */
 function listMarkdown() {
@@ -204,7 +231,7 @@ export function runChecks() {
     problems.push(...checkLinks(file, content));
     problems.push(...checkNaming(file, lines));
     problems.push(...checkSqlMigrationReferences(file, lines, sqlFileNames));
-    if (AUTHORITATIVE_SCRIPT_DOC_FILES.has(file)) {
+    if (isAuthoritativeScriptFile(file)) {
       problems.push(...checkKnownScripts(file, lines, knownScripts));
     }
     if (composeServiceNames) {
@@ -212,6 +239,11 @@ export function runChecks() {
         ...checkComposeServiceNames(file, content, composeServiceNames)
       );
     }
+  }
+
+  for (const file of listAuthoritativeSources()) {
+    const lines = readFileSync(join(ROOT, file), "utf8").split("\n");
+    problems.push(...checkKnownScripts(file, lines, knownScripts));
   }
   return problems;
 }
@@ -225,6 +257,6 @@ if (import.meta.main) {
     process.exit(1);
   }
   console.log(
-    "check:docs OK — mermaid, tautan internal, penamaan, rujukan migration `sql/NNN`, dan rujukan `bun run` di dokumen current-state valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
+    "check:docs OK — mermaid, tautan internal, penamaan, rujukan migration `sql/NNN`, dan rujukan `bun run` di berkas current-state (dokumen + README modul + sumber `src/`/`scripts/`) valid (cek nama service docker compose menyusul begitu docker-compose*.yml ada)."
   );
 }

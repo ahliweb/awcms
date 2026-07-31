@@ -3,7 +3,7 @@
  * directly from the live code registry (`listModules()`) — never
  * `awcms_module_navigation` — same reasoning as
  * `tenant-module-lifecycle.ts`'s dependency graph: that table only reflects
- * whatever `bun run modules:sync` last wrote, and a sidebar rendered on every
+ * whatever the last `POST /api/v1/modules/sync` wrote, and a sidebar rendered on every
  * admin request must never depend on someone having remembered to run a sync
  * first. This also keeps the per-request cost to exactly one lightweight
  * query (the tenant's disabled-module keys).
