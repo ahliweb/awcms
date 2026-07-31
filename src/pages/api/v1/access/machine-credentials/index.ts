@@ -1,4 +1,8 @@
-import { created, fail, ok } from "../../../../../modules/_shared/api-response";
+import {
+  fail,
+  jsonResponse,
+  ok
+} from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import {
   bodyTooLargeResponse,
@@ -110,10 +114,21 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
       }
     });
 
-    return created({
-      credential: result.credential,
-      // Shown once. There is no endpoint that can return it again, by design.
-      token: result.token
-    });
+    // `jsonResponse` rather than `created()`: this is the ONE response in the
+    // system whose body carries a live credential, and it must never be stored
+    // by anything between here and the operator. POST is not normally cached,
+    // but "not normally" is not a control.
+    return jsonResponse(
+      {
+        success: true,
+        data: {
+          credential: result.credential,
+          // Shown once. No endpoint can return it again, by design.
+          token: result.token
+        },
+        meta: {}
+      },
+      { status: 201, headers: { "cache-control": "private, no-store" } }
+    );
   }
 });

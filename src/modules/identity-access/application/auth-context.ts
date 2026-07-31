@@ -7,6 +7,18 @@ import { resolveActiveSession } from "./session-lookup";
  * (ADR-0049). Roles come from the same `awcms_access_assignments` join the
  * session path uses, so a machine principal is subject to exactly the same RBAC
  * membership, never a parallel one.
+ *
+ * ## Deliberately STRICTER than the session path
+ *
+ * `resolveTenantContext` above does not check `awcms_tenant_users.status` or
+ * `awcms_identities.status`; deactivating a user therefore only takes effect
+ * when their sessions expire or are revoked. That window is hours.
+ *
+ * A machine credential lives up to a YEAR, and nothing revokes credentials when
+ * a service account is deactivated. Inheriting the same laxity would mean
+ * "deactivate this service account" silently leaves a working key behind for
+ * months — so both statuses are required here. Being stricter can only deny;
+ * it can never grant something the session path would refuse.
  */
 export async function resolveTenantContextForTenantUser(
   tx: Bun.SQL,
@@ -14,8 +26,12 @@ export async function resolveTenantContextForTenantUser(
   tenantUserId: string
 ): Promise<TenantContext | null> {
   const rows = (await tx`
-    SELECT id, identity_id FROM awcms_tenant_users
-    WHERE tenant_id = ${tenantId} AND id = ${tenantUserId}
+    SELECT tu.id, tu.identity_id
+    FROM awcms_tenant_users tu
+    JOIN awcms_identities i
+      ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
+    WHERE tu.tenant_id = ${tenantId} AND tu.id = ${tenantUserId}
+      AND tu.status = 'active' AND i.status = 'active'
   `) as { id: string; identity_id: string }[];
 
   const tenantUser = rows[0];

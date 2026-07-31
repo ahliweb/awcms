@@ -64,3 +64,12 @@ sebagai `a` yang terlihat seperti string biasa.
 Dicatat sebagai divergence keluarga di `awcms-family-compatibility.yaml` **saat
 mendarat**, sesuai ADR-0047 §4 — fitur fondasi pertama yang dirintis langsung di
 sini selama pembekuan `awcms-mini`/`awcms-micro`.
+
+Security review pra-merge menemukan dua hal dan menutup keduanya: deaktivasi
+service account kini **langsung** mematikan kredensialnya (jalur mesin
+mensyaratkan status tenant-user **dan** identitas aktif — sengaja lebih ketat
+dari jalur sesi, karena tak ada apa pun yang mencabut kredensial saat akun
+dinonaktifkan dan umurnya bisa setahun), dan respons penerbitan kini
+`private, no-store` karena badannya membawa kredensial hidup. Yang pertama
+dibuktikan dengan mengembalikan cacatnya: dua test integrasi merah, lalu hijau
+lagi setelah dipulihkan.

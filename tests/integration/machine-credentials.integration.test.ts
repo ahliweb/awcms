@@ -500,6 +500,57 @@ suite("machine credentials + session introspection (ADR-0049)", () => {
     expect(new Date(again[0]!.last_used_at!).getTime()).toBe(firstStamp);
   });
 
+  // Nothing revokes credentials when a service account is deactivated, and a
+  // credential lives up to a YEAR — so "deactivate this account" MUST stop its
+  // keys immediately, or it silently leaves a working one behind for months.
+  // This is why the machine path checks both statuses while the session path
+  // (bounded by session expiry) does not.
+  test.each([
+    ["tenant user deactivated", "awcms_tenant_users"],
+    ["identity deactivated", "awcms_identities"]
+  ])("%s kills its credentials on the next request", async (_label, table) => {
+    const { token } = await issue(["blog_content.posts.read"]);
+    const runtime = getRuntimeSql();
+
+    const before = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        READ_GUARD
+      )
+    );
+    expect(before.allowed).toBe(true);
+
+    const admin = getAdminSql();
+    if (table === "awcms_tenant_users") {
+      await admin`
+        UPDATE awcms_tenant_users SET status = 'inactive'
+        WHERE tenant_id = ${TENANT_A} AND id = ${SERVICE_USER_A}
+      `;
+    } else {
+      await admin`
+        UPDATE awcms_identities SET status = 'inactive'
+        WHERE tenant_id = ${TENANT_A}
+          AND id = (SELECT identity_id FROM awcms_tenant_users WHERE id = ${SERVICE_USER_A})
+      `;
+    }
+
+    const after = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        READ_GUARD
+      )
+    );
+
+    expect(after.allowed).toBe(false);
+    if (!after.allowed) expect(after.denied.status).toBe(401);
+  });
+
   test("the listing never carries secret material", async () => {
     await issue(["blog_content.posts.read"]);
 

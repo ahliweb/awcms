@@ -318,13 +318,20 @@ dicabut seluruhnya saat password reset (`sql/073`), dan dirotasi step-up MFA
   `allowed_permission_keys` dengan izin service account.
 - `expires_at` wajib (maks 365 hari), pencabutan berlaku di permintaan
   berikutnya, `last_used_at` disegarkan paling sering sekali per jam.
+- **Deaktivasi service account langsung mematikan kredensialnya** — jalur mesin
+  mensyaratkan `awcms_tenant_users.status` DAN `awcms_identities.status` aktif,
+  sengaja lebih ketat dari jalur sesi (yang tidak memeriksa keduanya, tetapi
+  dibatasi masa berlaku sesi). Tanpa itu, "nonaktifkan akun ini" akan diam-diam
+  meninggalkan kunci yang masih bekerja selama berbulan-bulan, karena tidak ada
+  apa pun yang mencabut kredensial saat akun dinonaktifkan.
 - Decision log mencatat **kredensial mana** yang bertindak, bukan hanya akunnya.
 
 **Endpoint.** `GET`/`POST /api/v1/access/machine-credentials`,
 `POST /api/v1/access/machine-credentials/{id}/revoke` (permission
 `identity_access.machine_credentials.read`/`create`/`revoke`). Plaintext token
-hanya muncul **sekali** saat penerbitan; tidak ada endpoint yang bisa
-mengembalikannya lagi — dan penerbitan sengaja **tidak** ber-`Idempotency-Key`,
+hanya muncul **sekali** saat penerbitan (respons 201-nya `private, no-store` —
+satu-satunya respons di sistem ini yang badannya membawa kredensial hidup);
+tidak ada endpoint yang bisa mengembalikannya lagi — dan penerbitan sengaja **tidak** ber-`Idempotency-Key`,
 karena me-replay-nya berarti menyimpan token plaintext di
 `awcms_idempotency_keys`.
 

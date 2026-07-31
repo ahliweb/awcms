@@ -107,6 +107,14 @@ pencarian membaca baris yang sama — inilah alasan token buram ber-hash dipilih
 alih-alih JWT bertanda tangan, yang tidak punya jawaban untuk "cabut sekarang"
 tanpa daftar yang harus dibaca juga.
 
+Deaktivasi service account berlaku **seketika**: jalur mesin mensyaratkan
+`awcms_tenant_users.status` dan `awcms_identities.status` aktif — sengaja lebih
+ketat dari jalur sesi, yang tidak memeriksa keduanya tetapi dibatasi masa
+berlaku sesi. Tidak ada apa pun yang mencabut kredensial saat sebuah akun
+dinonaktifkan, jadi mewarisi kelonggaran itu berarti meninggalkan kunci yang
+masih bekerja selama berbulan-bulan. Lebih ketat hanya bisa menolak; ia tak
+pernah bisa memberi apa yang jalur sesi tolak.
+
 `last_used_at` diperbarui **paling sering sekali per jam** (satu `UPDATE`
 bersyarat), supaya kredensial yang menganggur atau bocor bisa terlihat tanpa
 menambahkan satu tulisan ke setiap permintaan baca.
