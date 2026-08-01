@@ -167,6 +167,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/media/objects:
+    get:
+      operationId: mediaResolveObjects
+      tags:
+        - News Media
+      summary: Batch-resolve media object ids to their public reference.
+      description: |
+        Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+
+        An object resolves ONLY when it is `verified` or `attached`, belongs to the calling tenant, and is not soft-deleted. Everything else — unknown, cross-tenant, unverified, deleted — is returned in `unresolved` rather than dropped, so a caller can tell "this resource has no image" from "this resource's image reference is broken". A malformed (non-uuid) id is a 400 instead: "you sent junk" and "that object is not referenceable" are different facts.
+
+        Batch rather than one-per-id because a build feed resolves every image on a page at once, and the underlying query is already a single `id = ANY(...)`.
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Comma-separated media object uuids, at most 100.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: Resolved references, plus the ids that did not resolve.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ResolvedMediaReference"
+                      unresolved:
+                        type: array
+                        description: Ids that are unknown, cross-tenant, unverified, or soft-deleted — one bucket on purpose, so the response is not an oracle over which.
+                        items:
+                          type: string
+                          format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/media/enforcement:
     get:
       tags:
@@ -235,6 +285,29 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    ResolvedMediaReference:
+      type: object
+      description: A media object safe to reference publicly (verified/attached, same tenant, not deleted).
+      properties:
+        id:
+          type: string
+          format: uuid
+        publicUrl:
+          type: string
+        altText:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        sizeBytes:
+          type: integer
+          nullable: true
     CreateNewsMediaUploadSessionRequest:
       type: object
       required:
