@@ -1,0 +1,348 @@
+---
+/**
+ * Audit trail viewer — the admin screen for `logging`.
+ *
+ * `logging` has exactly ONE HTTP surface (`GET /api/v1/logs/audit`) and no
+ * screen, so the tenant's audit history — the record of every high-risk action
+ * this system takes — was readable only by `curl`. That is the module whose
+ * whole purpose is accountability, so it is a poor one to leave unreadable.
+ *
+ * ## Read-only, therefore NO client script
+ *
+ * Every other admin screen here ships a `<script>` importing
+ * `admin-form-client` because it mutates. This one never writes: the audit
+ * trail is append-only by design (`recordAuditEvent` is the only writer, and it
+ * is called by other modules inside their own transactions). So the filter is a
+ * plain `method="get"` form that navigates with query params and works with
+ * JavaScript disabled — no bundle, nothing for CSP to admit, and no
+ * double-submit to guard.
+ *
+ * ## The 100-row bound is real, and said out loud
+ *
+ * `listAuditEvents` clamps `limit` to a hard maximum of 100 and has NO cursor
+ * (unlike `_shared/keyset-pagination.ts`, which the newer list endpoints use).
+ * A viewer therefore sees the newest N up to 100 for the chosen filter, and
+ * NOTHING tells them older rows exist unless the page says so — a silently
+ * truncated audit log is worse than an obviously truncated one, because it
+ * reads as "this is everything that happened". The footer states the bound
+ * whenever the page is full. Adding keyset pagination to this endpoint is a
+ * follow-up with its own OpenAPI change; it is deliberately not smuggled in
+ * here.
+ *
+ * `attributes` is already redacted at WRITE time by `redactSensitiveAttributes`
+ * (password/token/NPWP/NIK/phone/email never reach the row), so rendering it is
+ * safe — and it is rendered as escaped TEXT inside `<details>`, never as HTML.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listAuditEvents,
+  type AuditEventRecord
+} from "../../modules/logging/application/audit-log";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "audit-trail.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const canRead = ssr.permissions.has(
+  permissionKey("logging", "audit_trail", "read")
+);
+
+/** Mirrors `MAX_LIST_LIMIT` in `logging/application/audit-log.ts`. */
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
+
+/**
+ * Filters ride the query string so the view is linkable and needs no script.
+ * Both are re-validated here rather than trusted: `resourceType` is passed as a
+ * bound parameter by `listAuditEvents` (never interpolated), and `limit` is
+ * clamped by the same function, but a NaN from `?limit=abc` would otherwise
+ * render as a blank input.
+ */
+const resourceTypeFilter =
+  Astro.url.searchParams.get("resourceType")?.trim() || "";
+
+const requestedLimit = Number(Astro.url.searchParams.get("limit"));
+const limit =
+  Number.isFinite(requestedLimit) && requestedLimit >= 1
+    ? Math.min(Math.trunc(requestedLimit), MAX_LIMIT)
+    : DEFAULT_LIMIT;
+
+let events: AuditEventRecord[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    events = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
+      listAuditEvents(tx, ssr.tenantId, {
+        resourceType: resourceTypeFilter || undefined,
+        limit
+      })
+    );
+  } catch (error) {
+    logAdminPageError(
+      "admin/audit-trail.astro: failed to load audit events",
+      error,
+      {
+        correlationId: Astro.locals.correlationId
+      }
+    );
+    loadError = true;
+  }
+}
+
+/**
+ * Resource types present in THIS result set, offered as a `<datalist>`.
+ *
+ * Deliberately not a `<select>`: there is no endpoint that enumerates every
+ * resource type a tenant has ever audited, so a dropdown built from one page
+ * would silently present itself as the complete set and make the other values
+ * unreachable. A text input with suggestions stays honest — anything can be
+ * typed, these are just the ones on screen.
+ */
+const suggestedResourceTypes = [
+  ...new Set(events.map((event) => event.resourceType))
+].sort();
+
+/** The page is full, so older rows almost certainly exist beyond this bound. */
+const possiblyTruncated = events.length >= limit;
+
+/** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18:38` (UTC, locale-independent). */
+function formatTimestamp(value: Date): string {
+  return value.toISOString().replace("T", " ").slice(0, 19);
+}
+
+/** Audit severity -> the shared `.status-badge` variant vocabulary. */
+function severityVariant(severity: string): string {
+  if (severity === "critical") return "danger";
+  if (severity === "warning") return "warning";
+  return "neutral";
+}
+---
+
+<AdminLayout title="Audit trail">
+  <header class="page-header fade-in-up">
+    <h1 id="audit-trail-heading">Audit trail</h1>
+    <p class="page-description">
+      Append-only record of high-risk actions taken in this tenant — who did
+      what, to which resource, and when. Sensitive values are redacted before an
+      event is ever stored, so nothing here can be un-redacted.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="audit-trail-denied">
+        You do not have permission to view the audit trail.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="audit-trail-error">
+        The audit trail could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        {/* A GET form: it navigates with query params, so the filter works
+            with JavaScript disabled and ships no bundle. */}
+        <form class="admin-create-form fade-in-up" method="get" role="search">
+          <p class="form-legend">Filter</p>
+
+          <label for="filter-resource-type">
+            Resource type
+            <input
+              type="text"
+              id="filter-resource-type"
+              name="resourceType"
+              value={resourceTypeFilter}
+              list="audit-resource-types"
+              placeholder="Any resource type"
+            />
+          </label>
+          <datalist id="audit-resource-types">
+            {suggestedResourceTypes.map((resourceType) => (
+              <option value={resourceType} />
+            ))}
+          </datalist>
+
+          <label for="filter-limit">
+            Rows (max {MAX_LIMIT})
+            <input
+              type="number"
+              id="filter-limit"
+              name="limit"
+              value={limit}
+              min="1"
+              max={MAX_LIMIT}
+            />
+          </label>
+
+          <button type="submit" class="module-toggle">
+            Apply filter
+          </button>
+          {(resourceTypeFilter !== "" || limit !== DEFAULT_LIMIT) && (
+            <a class="btn-inline" href="/admin/audit-trail">
+              Clear filter
+            </a>
+          )}
+        </form>
+
+        <section class="admin-section fade-in-up" id="audit-trail-events">
+          <h2 class="admin-section-title">
+            Events
+            <span class="count-pill">{events.length}</span>
+          </h2>
+
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <caption class="sr-only">
+                Audit events, newest first
+                {resourceTypeFilter !== "" &&
+                  `, filtered to resource type ${resourceTypeFilter}`}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">When (UTC)</th>
+                  <th scope="col">Severity</th>
+                  <th scope="col">Module</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Message</th>
+                  <th scope="col">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.length === 0 && (
+                  <tr>
+                    <td class="data-table-empty" colspan={7}>
+                      <div class="empty-state">
+                        <span class="empty-state-icon" aria-hidden="true">
+                          🗒
+                        </span>
+                        <span class="empty-state-title">
+                          {resourceTypeFilter === ""
+                            ? "No audit events yet"
+                            : "No audit events match this filter"}
+                        </span>
+                        <span class="empty-state-text">
+                          {resourceTypeFilter === ""
+                            ? "High-risk actions are recorded here as they happen."
+                            : "Try a different resource type, or clear the filter."}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {events.map((event) => (
+                  <tr>
+                    <td data-label="When (UTC)">
+                      <span class="cell-code">
+                        {formatTimestamp(event.createdAt)}
+                      </span>
+                    </td>
+                    <td data-label="Severity">
+                      <span
+                        class="status-badge"
+                        data-variant={severityVariant(event.severity)}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {event.severity}
+                      </span>
+                    </td>
+                    <td data-label="Module">
+                      <span class="cell-code">{event.moduleKey}</span>
+                    </td>
+                    <td data-label="Action">
+                      <span class="cell-code">{event.action}</span>
+                    </td>
+                    <td data-label="Resource">
+                      <span class="cell-code">{event.resourceType}</span>
+                      {event.resourceId !== null && (
+                        <>
+                          {" "}
+                          <span class="cell-muted">{event.resourceId}</span>
+                        </>
+                      )}
+                    </td>
+                    <td data-label="Message">{event.message}</td>
+                    <td data-label="Detail" class="stacked-block">
+                      {event.attributes === null &&
+                      event.correlationId === null ? (
+                        <span class="cell-muted">—</span>
+                      ) : (
+                        <details>
+                          <summary>View</summary>
+                          {event.correlationId !== null && (
+                            <p class="cell-muted">
+                              Correlation:{" "}
+                              <span class="cell-code">
+                                {event.correlationId}
+                              </span>
+                            </p>
+                          )}
+                          {event.attributes !== null && (
+                            /* Escaped text, never `set:html` — the value is
+                               redacted but still caller-supplied JSON. */
+                            <pre class="audit-attributes">
+                              {JSON.stringify(event.attributes, null, 2)}
+                            </pre>
+                          )}
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {possiblyTruncated && (
+            <p class="page-description" id="audit-trail-truncated">
+              Showing the {events.length} most recent matching events. This view
+              is capped at {MAX_LIMIT} rows and cannot page further back — older
+              events exist and are retained according to the audit retention
+              policy.
+            </p>
+          )}
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<style>
+  /* Long redacted JSON must not force the whole table to scroll sideways. */
+  .audit-attributes {
+    margin: var(--sp-2) 0 0;
+    padding: var(--sp-2);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    max-height: 18rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  details > summary {
+    cursor: pointer;
+  }
+</style>
