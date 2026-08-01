@@ -1,6 +1,6 @@
 # ADR-0048 — Pembagian peran frontend: `awcms-astro` = admin OWNER/INTERNAL, `awcms` = frontend PUBLIK + admin PUBLIK
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0051](0051-admin-screens-consolidated-in-awcms.md)
 - **Tanggal:** 2026-07-31
 - **Pengambil keputusan:** @ahliweb
 - **Melengkapi:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) (pembekuan `awcms-mini`/`awcms-micro`; dua repo yang dikembangkan adalah repo ini dan `awcms-astro`)

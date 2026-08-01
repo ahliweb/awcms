@@ -31,27 +31,34 @@ AWCMS adalah rebuild fondasi (bukan ERP jadi) di atas basis teknis **awcms-mini*
 
 Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari mini — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
 
-## Di repo mana sebuah LAYAR dibangun (ADR-0048)
+## Di repo mana sebuah LAYAR dibangun (ADR-0051)
 
-Dua repo yang dikembangkan punya peran frontend yang berbeda:
+**Semua layar admin dibangun di repo ini**, di bawah satu shell `/admin/*` —
+tenant maupun owner/internal/platform. [ADR-0051](docs/adr/0051-admin-screens-consolidated-in-awcms.md)
+men-supersede ADR-0048 (yang dulu menaruh layar owner/internal di `awcms-astro`).
 
-| Repo          | Peran                                       | Contoh                                                       |
-| ------------- | ------------------------------------------- | ------------------------------------------------------------ |
-| `awcms-astro` | **admin OWNER / INTERNAL**                  | master data global, aktivasi/rollback dataset, alat operator |
-| `awcms` (ini) | **frontend PUBLIK + admin PUBLIK (tenant)** | situs publik, dan admin tenant atas datanya sendiri          |
+| Repo          | Peran                                              | Contoh                                             |
+| ------------- | -------------------------------------------------- | -------------------------------------------------- |
+| `awcms` (ini) | **frontend PUBLIK + SELURUH admin**                | situs publik, admin tenant, admin platform         |
+| `awcms-astro` | **experience layer + BFF** (ADR-0045, tak berubah) | permukaan publik/Jualanku; bukan rumah layar admin |
 
 Tiga hal yang mudah keliru:
 
-- **Izin tidak ikut pindah.** Layar di `awcms-astro` tetap memanggil `/api/v1/*`
-  milik repo ini, lewat BFF-nya (ADR-0045), dan tetap melewati sesi + konteks
-  tenant + ABAC default-deny. Frontend baru bukan jalur kedua yang lebih longgar.
-- **Jangan deklarasikan `navigation` untuk layar yang tinggal di repo lain.**
-  Sidebar repo ini dibangun dari `listModules()`; entri yang menunjuk halaman
-  tak-ada langsung memerahkan `tests/admin-navigation-registry.test.ts` — dan
-  kalau lolos, ia menjadi 404 permanen di menu.
-- **Aturan ini mengikat layar BARU.** `/admin/*` yang sudah ada masih bercampur
-  tenant dan platform; pemilahannya pekerjaan tersendiri (ADR-0048 §Yang tidak
-  diputuskan).
+- **Repo bukan gerbang keamanan.** ADR-0048 memindahkan _layar_ aktivasi dataset
+  ke repo lain, tetapi _permission_-nya tetap di-seed ke role `owner` setiap
+  tenant — jadi pemisahan itu tidak pernah menahan apa pun. Aksi yang efeknya
+  **melintasi batas tenant** wajib punya **gerbang platform-scoped** di repo ini,
+  dan **tidak boleh** masuk katalog yang di-seed ke role tenant (ADR-0051
+  §Keputusan). Berlaku sekarang untuk `idn_admin_regions.dataset.configure`/`.restore`.
+- **Setiap entri `navigation` wajib punya halaman nyata.** Sidebar dibangun dari
+  `listModules()`; entri yang menunjuk halaman tak-ada langsung memerahkan
+  `tests/admin-navigation-registry.test.ts` — dan kalau lolos, ia menjadi 404
+  permanen di menu. Tambahkan entri `navigation` **dalam perubahan yang sama**
+  dengan layarnya, tidak sebelumnya.
+- **Setiap entri non-core wajib punya `requiredPermission`** yang benar-benar
+  ditegakkan endpoint-nya **dan** di-seed migrasi. Permission yang tak pernah
+  di-seed men-deny bahkan owner sementara kodenya terlihat benar — repo ini sudah
+  pernah kena dua kali (lihat `tests/admin-security-page-contract.test.ts`).
 
 ## Alur kerja wajib setiap task
 
