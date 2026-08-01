@@ -93,6 +93,16 @@ export type BlogPostView = {
   version: number;
   /** Issue #641 — manual per-post opt-out of automatic internal tag linking. */
   autoInternalTagLinksDisabled: boolean;
+  /**
+   * Groups the locale variants of one logical post.
+   *
+   * Writable since the column existed and returned by nothing until now, even
+   * though the OpenAPI `BlogPost` schema declared it the whole time. A client
+   * pairing locales (an `awcms-astro` build is the one that hit this) could set
+   * the field and never read it back, so every translation looked like an
+   * unrelated post.
+   */
+  translationGroupId: string | null;
 };
 
 type BlogPostRow = {
@@ -123,6 +133,7 @@ type BlogPostRow = {
   restored_by: string | null;
   version: number;
   auto_internal_tag_links_disabled: boolean;
+  translation_group_id: string | null;
 };
 
 function toView(row: BlogPostRow): BlogPostView {
@@ -153,7 +164,8 @@ function toView(row: BlogPostRow): BlogPostView {
     restoredAt: row.restored_at,
     restoredBy: row.restored_by,
     version: row.version,
-    autoInternalTagLinksDisabled: row.auto_internal_tag_links_disabled
+    autoInternalTagLinksDisabled: row.auto_internal_tag_links_disabled,
+    translationGroupId: row.translation_group_id
   };
 }
 
@@ -180,7 +192,8 @@ export async function createBlogPost(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
   `) as BlogPostRow[];
 
   return toView(rows[0]!);
@@ -204,7 +217,8 @@ export async function fetchBlogPostById(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND id = ${postId}
       `
@@ -213,7 +227,8 @@ export async function fetchBlogPostById(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND id = ${postId} AND deleted_at IS NULL
       `
@@ -230,6 +245,15 @@ export type ListBlogPostsFilter = {
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+
+/**
+ * Full rows carry `content_json` — a page of 100 of them is a different order
+ * of magnitude from a page of summaries. The caller that wants them (a static
+ * build) walks the whole set anyway, so a smaller page costs it nothing while
+ * bounding any single response.
+ */
+const DEFAULT_FULL_LIST_LIMIT = 20;
+const MAX_FULL_LIST_LIMIT = 50;
 
 /**
  * STABLE, cursor-paginated traversal — ordered `(created_at DESC, id DESC)`.
@@ -298,6 +322,78 @@ export async function listBlogPostsPage(
 }
 
 /** `LIMIT` bounded (default 20, max 100), newest-updated first — same bounded-list convention as `email/templates` and `workflows/tasks`. For a STABLE traversal past page one, use {@link listBlogPostsPage}. */
+/**
+ * The same stable traversal as {@link listBlogPostsPage}, but returning FULL
+ * posts instead of summaries — the shape the OpenAPI contract calls `BlogPost`.
+ *
+ * ## Why this exists
+ *
+ * A static-site build needs every published post WITH its body: `contentJson`,
+ * `excerpt`, `metaDescription`, `canonicalUrl`, and `translationGroupId`. The
+ * summary traversal carries none of those, so the only way to build a site was
+ * to walk the list and then fetch every post again by id — N+1 requests per
+ * build, against an admin endpoint, on every publish.
+ *
+ * Worse, nothing said so. The contract documented this endpoint as returning
+ * `BlogPost`, the implementation returned a summary, and a client that trusted
+ * the contract read `contentJson` as `undefined` — producing a site that built
+ * green with every article body empty, and (because the section an article
+ * belongs to also lives inside `contentJson`) every section empty too. That is
+ * the defect this closes, and the reason the summary shape is now spelled out
+ * in the contract as its own schema instead of being left to be inferred.
+ *
+ * The projection is deliberately identical to `fetchBlogPostById`'s, minus the
+ * per-post `termIds` — those are a second query each, which would put the N+1
+ * straight back.
+ */
+export async function listBlogPostsFullPage(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: {
+    status?: BlogContentStatus;
+    limit?: number;
+    cursor?: KeysetCursor | null;
+  } = {}
+): Promise<{ items: BlogPostView[]; nextCursor: string | null }> {
+  const limit = boundedPageSize(
+    options.limit,
+    DEFAULT_FULL_LIST_LIMIT,
+    MAX_FULL_LIST_LIMIT
+  );
+
+  const cursorCreatedAt = options.cursor?.createdAt ?? null;
+  const cursorId = options.cursor?.id ?? null;
+  const status = options.status ?? null;
+
+  const rows = (await tx`
+    SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
+      content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
+      meta_description, canonical_url, locale, published_at, scheduled_at,
+      created_at, updated_at, deleted_at, deleted_by, delete_reason,
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id,
+      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+    FROM awcms_blog_posts
+    WHERE tenant_id = ${tenantId}
+      AND deleted_at IS NULL
+      AND (${status}::text IS NULL OR status = ${status})
+      AND (
+        ${cursorCreatedAt}::timestamptz IS NULL
+        OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}
+  `) as (BlogPostRow & { created_at_cursor: string })[];
+
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    rows.length === limit && last
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
+      : null;
+
+  return { items: rows.map(toView), nextCursor };
+}
+
 export async function listBlogPosts(
   tx: Bun.SQL,
   tenantId: string,
@@ -384,7 +480,8 @@ export async function updateBlogPost(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
   `) as BlogPostRow[];
 
   return rows[0] ? toView(rows[0]) : null;
@@ -441,7 +538,8 @@ export async function transitionBlogPostStatus(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
   `) as BlogPostRow[];
 
   return rows[0] ? toView(rows[0]) : null;
@@ -462,7 +560,8 @@ export async function restoreBlogPost(
       content_text, status, visibility, featured_media_id, seo_image_media_id, seo_title,
       meta_description, canonical_url, locale, published_at, scheduled_at,
       created_at, updated_at, deleted_at, deleted_by, delete_reason,
-      restored_at, restored_by, version, auto_internal_tag_links_disabled
+      restored_at, restored_by, version, auto_internal_tag_links_disabled,
+      translation_group_id
   `) as BlogPostRow[];
 
   return rows[0] ? toView(rows[0]) : null;

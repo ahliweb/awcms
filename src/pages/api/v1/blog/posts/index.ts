@@ -18,9 +18,10 @@ import { recordAuditEvent } from "../../../../../modules/logging/application/aud
 import {
   createBlogPost,
   listBlogPosts,
+  listBlogPostsFullPage,
   listBlogPostsPage
 } from "../../../../../modules/blog-content/application/blog-post-directory";
-import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
+import { parseBlogPostListQuery } from "../../../../../modules/blog-content/domain/blog-post-list-query";
 import {
   countExistingTerms,
   syncPostTermAssignments
@@ -31,10 +32,6 @@ import { validateVideoNewsThumbnailReferencesForFullOnlineR2Mode } from "../../.
 import { mediaLibraryPortAdapter } from "../../../../../modules/media-library/application/media-library-port-adapter";
 import { validateCreateBlogPostInput } from "../../../../../modules/blog-content/domain/blog-post-validation";
 import { validateAndNormalizeContentJsonVideoBlocks } from "../../../../../modules/blog-content/domain/video-news-block-validation";
-import {
-  isBlogContentStatus,
-  type BlogContentStatus
-} from "../../../../../modules/blog-content/domain/post-status";
 
 const READ_GUARD = {
   moduleKey: "blog_content",
@@ -77,61 +74,13 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return fail(401, "AUTH_REQUIRED", "Authentication required.");
   }
 
-  const statusParam = url.searchParams.get("status");
-  let status: BlogContentStatus | undefined;
+  const query = parseBlogPostListQuery(url.searchParams);
 
-  if (statusParam !== null) {
-    if (!isBlogContentStatus(statusParam)) {
-      return fail(
-        400,
-        "VALIDATION_ERROR",
-        "status must be one of draft, review, scheduled, published, archived."
-      );
-    }
-
-    status = statusParam;
+  if (!query.valid) {
+    return fail(400, "VALIDATION_ERROR", query.message);
   }
 
-  const limitParam = url.searchParams.get("limit");
-  const limit = limitParam ? Number(limitParam) : undefined;
-
-  if (
-    limitParam !== null &&
-    (!Number.isFinite(limit) || (limit as number) < 1)
-  ) {
-    return fail(400, "VALIDATION_ERROR", "limit must be a positive number.");
-  }
-
-  const orderParam = url.searchParams.get("order");
-
-  if (
-    orderParam !== null &&
-    orderParam !== "created_at" &&
-    orderParam !== "updated_at"
-  ) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "order must be one of created_at, updated_at."
-    );
-  }
-
-  const stableOrder = orderParam === "created_at";
-  const cursorParam = url.searchParams.get("cursor");
-
-  if (cursorParam !== null && !stableOrder) {
-    return fail(
-      400,
-      "VALIDATION_ERROR",
-      "cursor requires order=created_at — updated_at changes on every edit, so a cursor over it can skip or repeat posts."
-    );
-  }
-
-  const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
-
-  if (cursorParam !== null && cursor === null) {
-    return fail(400, "VALIDATION_ERROR", "cursor is malformed.");
-  }
+  const { status, limit, stableOrder, cursor, view } = query.value;
 
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -148,6 +97,16 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (view === "full") {
+      const page = await listBlogPostsFullPage(tx, tenantId, {
+        status,
+        limit,
+        cursor
+      });
+
+      return ok({ posts: page.items, nextCursor: page.nextCursor });
     }
 
     if (stableOrder) {
