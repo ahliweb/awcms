@@ -65,8 +65,15 @@ export function evaluateLegalHoldForDescriptor(
   };
 }
 
-const MIN_REASON_LENGTH = 10;
-const MAX_TEXT_FIELD_LENGTH = 2000;
+/**
+ * Exported so the admin screen's `minlength`/`maxlength` attributes come from
+ * the SAME constants this validator enforces. A hand-typed `minlength="10"`
+ * would silently stop matching the day the rule moves, and the browser would
+ * then accept input the server rejects — the failure landing as a generic
+ * "could not save" on a form that looked valid.
+ */
+export const MIN_REASON_LENGTH = 10;
+export const MAX_TEXT_FIELD_LENGTH = 2000;
 
 export type CreateLegalHoldInput = {
   descriptorKey: string | null;

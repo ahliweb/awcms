@@ -272,8 +272,15 @@ var (e.g. `AUDIT_LOG_RETENTION_DAYS`) — never re-declared here.
   write pattern.
 - **External object-storage archive adapter**: not implemented — `local_offline`
   only.
-- **No dedicated admin UI screen**: the API exists; a `/admin/data-lifecycle`
-  screen is a reasonable follow-up, not required by this port.
+- ~~**No dedicated admin UI screen**~~ — landed: `/admin/data-lifecycle` renders
+  the registry, the legal-hold ledger (place and release), the on-demand dry-run
+  planner, and run history, and the module now declares its `navigation` entry.
+  The screen never writes: reads reuse this module's own application functions
+  inside one `withTenantOrThrow` transaction, and every mutation goes to the
+  guarded `/api/v1/data-lifecycle/*` endpoints. `legal_hold.create` and
+  `.release` are gated SEPARATELY there, because the SoD rule below makes
+  holding both a `critical` conflict. Real archive/purge remains job-only — the
+  screen has no control for it because there is no HTTP surface to call.
 - **Partitioning is guidance only**: no automation.
 - **Deferred consumers**: `form_drafts`/`newsletter`/`comments` (unported in this
   base) are not registered as adopters here; re-add their descriptors + guard
