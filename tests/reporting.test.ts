@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { permissionKey } from "../src/modules/identity-access/domain/access-control";
-import { shapeSyncHealth } from "../src/modules/reporting/domain/sync-health";
+import {
+  classifySyncHealthDisplay,
+  shapeSyncHealth
+} from "../src/modules/reporting/domain/sync-health";
 import { shapeEmailHealth } from "../src/modules/reporting/domain/email-health";
 
 describe("permissionKey — reporting dashboard guard", () => {
@@ -85,6 +88,84 @@ describe("shapeSyncHealth", () => {
     expect(view.openConflictCount).toBe(2);
     expect(view.pendingObjectCount).toBe(7);
     expect(view.failedObjectCount).toBe(4);
+  });
+});
+
+describe("classifySyncHealthDisplay — the dashboard's three states", () => {
+  test("a tenant with NO nodes is 'not_configured', not an alarm", () => {
+    // The bug this pins: the dashboard rendered `!isHealthy` as an amber
+    // "Needs attention" badge, so an online-first deployment that never enrols
+    // an offline node showed a permanent warning with no action behind it.
+    // `isHealthy` stays false here — the REPORT contract is unchanged — but the
+    // display state must not be the alarm.
+    const view = shapeSyncHealth({
+      totalNodeCount: 0,
+      activeNodeCount: 0,
+      openConflictCount: 0,
+      pendingObjectCount: 0,
+      failedObjectCount: 0
+    });
+
+    expect(view.isHealthy).toBe(false);
+    expect(classifySyncHealthDisplay(view)).toBe("not_configured");
+  });
+
+  test("nodes enrolled but none active IS 'needs_attention'", () => {
+    // The case that must NOT be swallowed by the fix above: sync was set up and
+    // has since stopped, which is a real regression a tenant should act on.
+    const view = shapeSyncHealth({
+      totalNodeCount: 3,
+      activeNodeCount: 0,
+      openConflictCount: 0,
+      pendingObjectCount: 0,
+      failedObjectCount: 0
+    });
+
+    expect(classifySyncHealthDisplay(view)).toBe("needs_attention");
+  });
+
+  test("open conflicts are 'needs_attention' even with every node active", () => {
+    const view = shapeSyncHealth({
+      totalNodeCount: 2,
+      activeNodeCount: 2,
+      openConflictCount: 1,
+      pendingObjectCount: 0,
+      failedObjectCount: 0
+    });
+
+    expect(classifySyncHealthDisplay(view)).toBe("needs_attention");
+  });
+
+  test("failed objects are 'needs_attention' even with every node active", () => {
+    const view = shapeSyncHealth({
+      totalNodeCount: 2,
+      activeNodeCount: 2,
+      openConflictCount: 0,
+      pendingObjectCount: 0,
+      failedObjectCount: 1
+    });
+
+    expect(classifySyncHealthDisplay(view)).toBe("needs_attention");
+  });
+
+  test("a working sync setup is 'healthy'", () => {
+    const view = shapeSyncHealth({
+      totalNodeCount: 2,
+      activeNodeCount: 2,
+      openConflictCount: 0,
+      pendingObjectCount: 5,
+      failedObjectCount: 0
+    });
+
+    expect(classifySyncHealthDisplay(view)).toBe("healthy");
+  });
+
+  test("'healthy' wins over a zero-node contradiction", () => {
+    // Defensive ordering, not a reachable state: if the two inputs ever
+    // disagree, never label a healthy tenant unconfigured.
+    expect(
+      classifySyncHealthDisplay({ totalNodeCount: 0, isHealthy: true })
+    ).toBe("healthy");
   });
 });
 
