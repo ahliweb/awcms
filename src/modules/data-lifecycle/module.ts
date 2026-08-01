@@ -31,6 +31,24 @@ export const dataLifecycleModule = defineModule({
     openApiPath: "openapi/modules/data-lifecycle.openapi.yaml",
     basePath: "/api/v1/data-lifecycle"
   },
+  // `/admin/data-lifecycle` — the registry, the legal-hold ledger (place and
+  // release), the on-demand dry-run planner, and run history. Gated on
+  // `registry.read`, the permission the page's primary panel needs; a viewer
+  // holding only `legal_hold.read` or `runs.read` reaches the page directly and
+  // gets the panels they are entitled to. Hiding a link is not a security
+  // control — the page and every endpoint it calls guard themselves.
+  //
+  // Note that the page deliberately gates `legal_hold.create` and
+  // `.release` SEPARATELY: `sodRules` below makes holding both a `critical`
+  // maker/checker conflict, so no ordinary operator has the pair.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_data_lifecycle",
+      path: "/admin/data-lifecycle",
+      order: 72,
+      requiredPermission: "data_lifecycle.registry.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "registry",
