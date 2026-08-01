@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-62 target menjalankan berkas di `scripts/`; 23 di antaranya
+64 target menjalankan berkas di `scripts/`; 23 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -63,7 +63,9 @@ terjadwal, atau oleh workflow CI tertentu.
 | `identity-access:business-scope:expiry`  | `identity-access-business-scope-expiry.ts`     | —    |
 | `identity-access:permissions:backfill`   | `identity-access-owner-permission-backfill.ts` | —    |
 | `identity-access:sod-registry:check`     | `identity-access-sod-registry-check.ts`        | ✅   |
+| `idn-regions:activate`                   | `idn-regions-activate.ts`                      | —    |
 | `idn-regions:import`                     | `idn-regions-import.ts`                        | —    |
+| `idn-regions:rollback`                   | `idn-regions-rollback.ts`                      | —    |
 | `logging:lint:check`                     | `logging-lint-check.ts`                        | ✅   |
 | `logs:audit:purge`                       | `audit-log-purge.ts`                           | —    |
 | `memory:docs:check`                      | `sync-agent-memory.ts`                         | —    |

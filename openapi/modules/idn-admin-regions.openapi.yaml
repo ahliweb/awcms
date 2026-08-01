@@ -6,7 +6,10 @@
 # (`bun run idn-regions:import`) reading a repo-vendored dump, not an HTTP
 # operation — same administrative-operation posture as data_lifecycle's real
 # archive/purge. What IS here: the read-only lookup, the dataset/provenance
-# listing, and the two audited lifecycle actions (activate, rollback).
+# listing. The lifecycle actions (activate, rollback) are NOT here: ADR-0052
+# made them operator jobs (`bun run idn-regions:activate` / `:rollback`) because
+# they change the dataset served to every tenant, which no tenant-scoped
+# permission can honestly authorize.
 #
 # NOT independently valid OpenAPI — $ref targets pointing at shared components
 # only resolve after `bun run openapi:bundle` merges this file with the root and
@@ -183,102 +186,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-  /api/v1/idn-regions/datasets/rollback:
-    post:
-      tags:
-        - Indonesia Regions
-      summary: Roll back to the previously active dataset version
-      description: "Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version."
-      operationId: idnRegionsDatasetRollback
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-        - $ref: "#/components/parameters/CorrelationId"
-      responses:
-        "200":
-          description: The dataset that is now active.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum: [true]
-                  data:
-                    type: object
-                    properties:
-                      dataset:
-                        $ref: "#/components/schemas/IdnRegionDataset"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "409":
-          description: Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-  /api/v1/idn-regions/datasets/{id}/activate:
-    post:
-      tags:
-        - Indonesia Regions
-      summary: Activate one imported dataset version
-      description: "Gated by idn_admin_regions.dataset.configure. High-risk, `Idempotency-Key` required, audited with the dataset codes on both sides of the switch: this changes what every address form and regional report in the product returns, for every tenant at once. Activating the already-active dataset is a no-op success (`changed: false`), because a retried request that lands on the state it asked for succeeded. Only one dataset can be active — enforced by a partial unique index, so two concurrent activations end with one committed and one rejected."
-      operationId: idnRegionsDatasetActivate
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: Dataset UUID.
-          schema:
-            type: string
-            format: uuid
-        - name: Idempotency-Key
-          in: header
-          required: true
-          schema:
-            type: string
-        - $ref: "#/components/parameters/CorrelationId"
-      responses:
-        "200":
-          description: The activated dataset.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum: [true]
-                  data:
-                    type: object
-                    properties:
-                      dataset:
-                        $ref: "#/components/schemas/IdnRegionDataset"
-                      changed:
-                        type: boolean
-                        description: false when the dataset was already active.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          description: Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     IdnRegionItem:
