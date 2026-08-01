@@ -68,15 +68,19 @@ gejalanya 403 `ACCESS_DENIED` pada modul yang "sudah terpasang". Terjadi nyata d
 produksi 2026-07-26: owner kehilangan 18 permission (`comments`, `site_search`,
 `form_drafts`) setelah migrasi 062–070. Backfill adalah langkah deployment:
 
-```sql
-INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
-SELECT r.tenant_id, r.id, p.id
-FROM awcms_roles r CROSS JOIN awcms_permissions p
-LEFT JOIN awcms_role_permissions rp
-  ON rp.role_id = r.id AND rp.permission_id = p.id
-WHERE r.role_code = 'owner' AND r.deleted_at IS NULL
-  AND rp.permission_id IS NULL;
+```bash
+bun run identity-access:permissions:backfill              # DRY-RUN, aman di produksi
+bun run identity-access:permissions:backfill --commit     # menulis
+bun run identity-access:permissions:backfill --tenant <kode> --commit   # bertahap
 ```
+
+**Jangan pakai SQL "grant semua yang hilang".** Versi sebelumnya dari dokumen ini
+menganjurkan `LEFT JOIN … WHERE rp.permission_id IS NULL`, dan bentuk itu tidak
+bisa membedakan "belum pernah ada saat tenant dibuat" dari "dicabut admin dengan
+sengaja" — ia menghidupkan kembali persis grant yang seseorang putuskan untuk
+dihapus, tanpa jejak. Perintah di atas hanya memberikan permission yang baris
+katalognya **lebih baru** dari role owner-nya, melaporkan sisanya sebagai
+"presumed removed on purpose", dan menulis satu entri audit per tenant.
 
 Verifikasi bahwa "akses penuh" memang penuh — RBAC 197/197 belum cukup bila ada
 ABAC deny, aturan SoD, atau batasan business-scope:

@@ -377,6 +377,15 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   `api-reference.md` tanpa satu pun gate merah (pernah menimpa 55 operasi/4 modul).
   Digerbangi dua arah sejak PR #308, berbarengan dengan gate kepemilikan fragment
   (`api.openApiPath` wajib menunjuk fragment sendiri, bukan bundel).
+- **Seed permission tidak menjangkau tenant lama, dan "grant semua yang hilang" itu
+  SALAH.** Migrasi seed hanya memperluas katalog global; role `owner` sebuah tenant
+  dapat izinnya sekali saat tenant dibuat. Backfill-nya kini punya tooling:
+  `bun run identity-access:permissions:backfill` (dry-run default, `--commit` menulis,
+  `--tenant` untuk bertahap). Ia sengaja **tidak** memberikan setiap permission yang
+  hilang — hanya yang baris katalognya lebih baru dari role-nya. Yang lebih tua dan
+  hilang dianggap dicabut admin dengan sengaja dan dilaporkan, tidak dikembalikan;
+  menghidupkannya kembali adalah perubahan otorisasi yang tak seorang pun minta dan
+  tak seorang pun lihat.
 - **Rujukan `bun run <target>` di KOMENTAR KODE ikut digerbangi** sejak sinkronisasi
   scripts↔docs: `check:docs` memeriksa berkas current-state — lima berkas markdown akar,
   dokumen ini, `scripts/README.md`, README modul `src/**`, **dan seluruh sumber
