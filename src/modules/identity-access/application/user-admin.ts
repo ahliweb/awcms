@@ -19,6 +19,7 @@
  * row references the stable `tenant_user_id`, not the identifier.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import { revokeAllSessionsForIdentity } from "./session-revocation";
 
 const AUDIT_MODULE_KEY = "identity_access";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -135,6 +136,7 @@ export type TenantUserStatusRecord = {
 
 type TenantUserStatusRow = {
   id: string;
+  identity_id: string;
   status: string;
   updated_at: Date;
 };
@@ -152,8 +154,18 @@ export type SetStatusResult =
 /**
  * Sets a tenant user's status.
  *
- * Deactivation (`status = 'inactive'`) revokes all of a user's access (login
- * reads this status), so two lockout foot-guns are blocked BEFORE the write —
+ * Deactivation (`status = 'inactive'`) blocks LOGIN, and — since this change —
+ * also revokes every session the user already holds. Those are two different
+ * things, and the gap between them was real: `resolveTenantContext` never reads
+ * `status`, so before this a deactivated user kept working normally until their
+ * session happened to expire. "Revoke this person's access" has to mean now,
+ * not "in up to a session lifetime".
+ *
+ * Machine credentials bound to the user need no separate sweep: the machine
+ * principal path (`resolveTenantContextForTenantUser`, ADR-0049) requires an
+ * ACTIVE tenant user, so they stop resolving at the same instant.
+ *
+ * Two lockout foot-guns are blocked BEFORE the write —
  * mirroring `softDeleteRole`'s `is_system` guard:
  *  - `self_blocked` — an actor cannot deactivate themselves.
  *  - `last_admin_blocked` — the last active member of an `is_system` (owner)
@@ -214,10 +226,22 @@ export async function setTenantUserStatus(
     UPDATE awcms_tenant_users
     SET status = ${status}, updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${tenantUserId}
-    RETURNING id, status, updated_at
+    RETURNING id, identity_id, status, updated_at
   `) as TenantUserStatusRow[];
 
   if (rows.length === 0) return { outcome: "not_found" };
+
+  if (status === "inactive") {
+    // Inside the same transaction as the status write: a deactivation that
+    // committed while the revocation failed would leave a live session behind
+    // for exactly the account someone just decided to shut out.
+    await revokeAllSessionsForIdentity(
+      tx,
+      tenantId,
+      rows[0]!.identity_id,
+      new Date()
+    );
+  }
 
   const record: TenantUserStatusRecord = {
     id: rows[0]!.id,
