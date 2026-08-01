@@ -1,0 +1,1753 @@
+---
+/**
+ * `/admin/seo` — the operator screen for `seo_distribution` (ADR-0038 discovery
+ * config + ADR-0039 redirect governance). Until now the module shipped a
+ * complete admin API and NO screen, and declared no `navigation`, so it was
+ * invisible in the sidebar; this page and the descriptor's `navigation` entry
+ * land together.
+ *
+ * ## Scope decision: ONE page with sections, not `/admin/seo` + `/admin/seo/redirects`
+ *
+ * The module's admin surface is four small panels over three tables
+ * (`awcms_seo_tenant_settings`, `awcms_seo_redirects`,
+ * `awcms_seo_redirect_settings`) plus the 404 telemetry aggregate. Splitting
+ * would double the nav entries and the labelKeys for what is one operator task
+ * ("make this tenant's public URLs and metadata behave"), and every split page
+ * must be claimed by its own descriptor entry
+ * (`tests/admin-navigation-registry.test.ts`). The panels are also coupled in
+ * practice: a 404 observation is resolved BY creating a redirect rule, and the
+ * redirect policy governs how rules get created. One page keeps that loop on
+ * one screen.
+ *
+ * ## Deliberately NOT surfaced (both endpoints stay reachable via the API)
+ *
+ * - `POST /api/v1/seo/redirects/import` — bulk import. Integration-shaped: it
+ *   takes an array of rule bodies and returns a per-row outcome report. A
+ *   usable UI for it is a file-upload + preview + partial-failure report flow,
+ *   which is its own screen, not a control on this one.
+ * - `POST /api/v1/seo/redirects/capture-url-change` — the URL-change hook. It
+ *   is called BY a content module when a resource's URL changes (governed by
+ *   `urlChangeAutoPolicy`, editable in the Redirect policy panel below), not
+ *   by an operator pressing a button. Rendering it as a button would invite
+ *   hand-typing an old/new path pair that the content module already knows.
+ * - `GET /api/v1/seo/redirects/{id}` — the list already returns every field
+ *   this screen renders, so a per-row re-read buys nothing.
+ *
+ * ## How this page reads
+ *
+ * SSR-read-then-render (the pattern `admin/offices.astro` established): call
+ * the SAME application-layer functions the JSON routes call, inside ONE
+ * `withTenantOrThrow` transaction, awaiting SEQUENTIALLY (concurrent queries on
+ * a single transaction connection leak it). It never fetches this app's own API
+ * over HTTP from frontmatter, and it never writes: every mutation goes out over
+ * `fetch` to the guarded endpoints.
+ *
+ * ## Permission gates are UX-only
+ *
+ * The endpoints' `authorizeInTransaction` guards are the authority. The gates
+ * here exist so a viewer without a permission gets an explicit notice instead
+ * of an empty panel, and so a control that would always 403 is never rendered.
+ * Every triple below is one the seo routes actually enforce AND the descriptor
+ * declares — pinned by `tests/admin-seo-page-contract.test.ts`.
+ *
+ * The subtle one is the lifecycle endpoint: `POST /redirects/{id}/lifecycle`
+ * derives its guard from the BODY — `action=purge` needs `redirect.delete`,
+ * while `activate|deactivate|archive|restore` need `redirect.update`. So Purge
+ * is gated on `canDeleteRedirect` and the other four on `canUpdateRedirect`.
+ * Showing Purge to an update-only holder would render a control that 403s every
+ * time.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import { fetchSeoTenantSettings } from "../../modules/seo-distribution/application/seo-config-directory";
+import {
+  listRedirects,
+  type RedirectListFilters,
+  type RedirectRecord
+} from "../../modules/seo-distribution/application/redirect-directory";
+import { fetchRedirectSettings } from "../../modules/seo-distribution/application/redirect-settings-directory";
+import {
+  listNotFoundObservations,
+  type NotFoundObservation
+} from "../../modules/seo-distribution/application/not-found-directory";
+import {
+  EMPTY_SEO_TENANT_SETTINGS,
+  type SeoTenantSettings
+} from "../../modules/seo-distribution/domain/seo-config";
+import {
+  EMPTY_REDIRECT_SETTINGS,
+  URL_CHANGE_AUTO_POLICIES,
+  type RedirectSettings
+} from "../../modules/seo-distribution/domain/redirect-settings";
+import {
+  ALLOWED_REDIRECT_STATES,
+  ALLOWED_REDIRECT_STATUS_CODES
+} from "../../modules/seo-distribution/domain/redirect-rule";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canReadConfig = ssr.permissions.has(
+  permissionKey("seo_distribution", "config", "read")
+);
+const canUpdateConfig = ssr.permissions.has(
+  permissionKey("seo_distribution", "config", "update")
+);
+const canReadRedirect = ssr.permissions.has(
+  permissionKey("seo_distribution", "redirect", "read")
+);
+const canCreateRedirect = ssr.permissions.has(
+  permissionKey("seo_distribution", "redirect", "create")
+);
+const canUpdateRedirect = ssr.permissions.has(
+  permissionKey("seo_distribution", "redirect", "update")
+);
+const canDeleteRedirect = ssr.permissions.has(
+  permissionKey("seo_distribution", "redirect", "delete")
+);
+const canReadNotFound = ssr.permissions.has(
+  permissionKey("seo_distribution", "not_found", "read")
+);
+const canUpdateNotFound = ssr.permissions.has(
+  permissionKey("seo_distribution", "not_found", "update")
+);
+
+const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
+const showNotFoundActions = canUpdateNotFound;
+
+// --- query string (all list state travels in the URL, never in JS state) ---
+const params = Astro.url.searchParams;
+
+const stateParam = params.get("state");
+const REDIRECT_STATE_FILTERS = ["active", "inactive", "archived"] as const;
+const stateFilter =
+  stateParam === "active" ||
+  stateParam === "inactive" ||
+  stateParam === "archived"
+    ? stateParam
+    : "";
+
+const targetTypeParam = params.get("targetType");
+const REDIRECT_TARGET_TYPES = [
+  "relative_same_tenant",
+  "verified_external"
+] as const;
+const targetTypeFilter =
+  targetTypeParam === "relative_same_tenant" ||
+  targetTypeParam === "verified_external"
+    ? targetTypeParam
+    : "";
+
+const qFilter = params.get("q") ?? "";
+const unresolvedOnly = params.get("unresolvedOnly") === "true";
+
+// `cursor` drives the keyset "next page" link. A malformed cursor is treated as
+// "no cursor" (first page) rather than an error state — the same forgiving
+// reading the list endpoint applies to its own decode, minus the 400 (there is
+// no caller to return a status to here).
+const cursorParam = params.get("cursor");
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+// `?recover=<uuid>` pre-fills the recovery panel. `DELETE /redirects/{id}`
+// soft-deletes, and `listRedirects` excludes soft-deleted rows (ADR-0039), so a
+// deleted rule cannot be listed — the delete handler below navigates here with
+// the id so restore/purge stay reachable instead of needing an id from the
+// audit trail.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const recoverParam = params.get("recover") ?? "";
+const recoverId = UUID_PATTERN.test(recoverParam) ? recoverParam : "";
+
+let seoConfig: SeoTenantSettings = EMPTY_SEO_TENANT_SETTINGS;
+let redirectSettings: RedirectSettings = EMPTY_REDIRECT_SETTINGS;
+let redirects: RedirectRecord[] = [];
+let nextCursor: string | null = null;
+let observations: NotFoundObservation[] = [];
+let loadError = false;
+
+if (canReadConfig || canReadRedirect || canReadNotFound) {
+  try {
+    const sql = getDatabaseClient();
+    const filters: RedirectListFilters = {};
+    if (stateFilter) filters.state = stateFilter;
+    if (targetTypeFilter) filters.targetType = targetTypeFilter;
+    if (qFilter.trim()) filters.q = qFilter.trim();
+
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      // Sequential on purpose: one transaction owns one pooled connection, and
+      // firing these concurrently leaks it (idle in transaction). Each read is
+      // skipped entirely when the viewer cannot see that panel.
+      const config = canReadConfig
+        ? await fetchSeoTenantSettings(tx, ssr.tenantId)
+        : EMPTY_SEO_TENANT_SETTINGS;
+      const settings = canReadRedirect
+        ? await fetchRedirectSettings(tx, ssr.tenantId)
+        : EMPTY_REDIRECT_SETTINGS;
+      const rules = canReadRedirect
+        ? await listRedirects(tx, ssr.tenantId, filters, cursor ?? undefined)
+        : { redirects: [], nextCursor: null };
+      const notFound = canReadNotFound
+        ? await listNotFoundObservations(tx, ssr.tenantId, { unresolvedOnly })
+        : [];
+
+      return { config, settings, rules, notFound };
+    });
+
+    seoConfig = result.config;
+    redirectSettings = result.settings;
+    redirects = result.rules.redirects;
+    nextCursor = result.rules.nextCursor;
+    observations = result.notFound;
+  } catch (error) {
+    loadError = true;
+    logAdminPageError("admin/seo.astro: failed to load the SEO screen", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+}
+
+/** Next-page href: current filters preserved, cursor advanced. */
+function nextPageHref(token: string): string {
+  const next = new URLSearchParams();
+  if (stateFilter) next.set("state", stateFilter);
+  if (targetTypeFilter) next.set("targetType", targetTypeFilter);
+  if (qFilter.trim()) next.set("q", qFilter.trim());
+  if (unresolvedOnly) next.set("unresolvedOnly", "true");
+  next.set("cursor", token);
+  return `${Astro.url.pathname}?${next.toString()}`;
+}
+
+function redirectStateVariant(state: string): string {
+  if (state === "active") return "success";
+  if (state === "archived") return "warning";
+  return "neutral";
+}
+
+const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
+---
+
+<AdminLayout title="SEO & Distribution">
+  <header class="page-header fade-in-up">
+    <h1 id="seo-heading">SEO &amp; distribution</h1>
+    <p class="page-description">
+      This tenant's public metadata defaults, discovery surfaces (robots.txt,
+      sitemap, feeds), redirect rules, and the privacy-minimized 404 log. Bulk
+      import and automatic URL-change capture are API-only; the redirect policy
+      below governs the latter.
+    </p>
+  </header>
+
+  <!-- ================= Tenant SEO defaults ================= -->
+  <section class="admin-section fade-in-up" aria-labelledby="seo-config-title">
+    <h2 class="admin-section-title" id="seo-config-title">SEO defaults</h2>
+
+    {
+      !canReadConfig && (
+        <p class="state-notice" id="seo-config-denied">
+          You do not have permission to view this tenant's SEO defaults.
+        </p>
+      )
+    }
+
+    {
+      canReadConfig && loadError && (
+        <p class="state-notice" id="seo-config-error">
+          SEO defaults could not be loaded right now. Please try again later.
+        </p>
+      )
+    }
+
+    {
+      canReadConfig && !loadError && !canUpdateConfig && (
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="seo-config-table">
+            <caption class="sr-only">
+              Current SEO defaults for this tenant (read-only)
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Setting</th>
+                <th scope="col">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Setting">Site name</td>
+                <td data-label="Value">
+                  {seoConfig.siteName ?? <span class="cell-muted">—</span>}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Default meta description</td>
+                <td data-label="Value">
+                  {seoConfig.defaultMetaDescription ?? (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Twitter site handle</td>
+                <td data-label="Value">
+                  {seoConfig.twitterSiteHandle ?? (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Organization name</td>
+                <td data-label="Value">
+                  {seoConfig.organizationName ?? (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Site-wide noindex</td>
+                <td data-label="Value">
+                  <span
+                    class="status-badge"
+                    data-variant={
+                      seoConfig.defaultRobotsNoindex ? "danger" : "success"
+                    }
+                  >
+                    <span class="status-dot" aria-hidden="true" />
+                    {seoConfig.defaultRobotsNoindex ? "noindex" : "indexable"}
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Sitemap served</td>
+                <td data-label="Value">
+                  {seoConfig.sitemapEnabled ? "Yes" : "No"}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Feeds served</td>
+                <td data-label="Value">
+                  {seoConfig.feedsEnabled ? "Yes" : "No"}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Feed item limit</td>
+                <td data-label="Value">{seoConfig.feedItemLimit}</td>
+              </tr>
+              <tr>
+                <td data-label="Setting">Included resource types</td>
+                <td data-label="Value">
+                  {includedTypesValue === "" ? (
+                    <span class="cell-muted">all eligible types</span>
+                  ) : (
+                    <span class="cell-code">{includedTypesValue}</span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    {
+      canReadConfig && !loadError && canUpdateConfig && (
+        <form id="seo-config-form" class="admin-create-form">
+          <p class="form-legend">
+            Edit SEO defaults (a full replace — every field below is sent)
+          </p>
+          <p
+            id="seo-config-form-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="seo-site-name">Site name</label>
+          <input
+            id="seo-site-name"
+            name="siteName"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.siteName ?? ""}
+          />
+
+          <label for="seo-meta-description">Default meta description</label>
+          <input
+            id="seo-meta-description"
+            name="defaultMetaDescription"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.defaultMetaDescription ?? ""}
+          />
+
+          <label for="seo-twitter-handle">Twitter site handle</label>
+          <input
+            id="seo-twitter-handle"
+            name="twitterSiteHandle"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.twitterSiteHandle ?? ""}
+          />
+
+          <label for="seo-organization-name">Organization name</label>
+          <input
+            id="seo-organization-name"
+            name="organizationName"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.organizationName ?? ""}
+          />
+
+          <label for="seo-social-media-id">
+            Default social image (media object UUID)
+          </label>
+          <input
+            id="seo-social-media-id"
+            name="defaultSocialMediaId"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.defaultSocialMediaId ?? ""}
+          />
+
+          <label for="seo-org-logo-media-id">
+            Organization logo (media object UUID)
+          </label>
+          <input
+            id="seo-org-logo-media-id"
+            name="organizationLogoMediaId"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.organizationLogoMediaId ?? ""}
+          />
+
+          <label for="seo-feed-title">Feed title</label>
+          <input
+            id="seo-feed-title"
+            name="feedTitle"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.feedTitle ?? ""}
+          />
+
+          <label for="seo-feed-description">Feed description</label>
+          <input
+            id="seo-feed-description"
+            name="feedDescription"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.feedDescription ?? ""}
+          />
+
+          <label for="seo-feed-logo-media-id">
+            Feed logo (media object UUID)
+          </label>
+          <input
+            id="seo-feed-logo-media-id"
+            name="feedLogoMediaId"
+            type="text"
+            autocomplete="off"
+            value={seoConfig.feedLogoMediaId ?? ""}
+          />
+
+          <label for="seo-feed-item-limit">Feed item limit (1–200)</label>
+          <input
+            id="seo-feed-item-limit"
+            name="feedItemLimit"
+            type="number"
+            min="1"
+            max="200"
+            value={String(seoConfig.feedItemLimit)}
+          />
+
+          <label for="seo-included-types">
+            Included resource types (comma separated; blank = all)
+          </label>
+          <input
+            id="seo-included-types"
+            name="includedResourceTypes"
+            type="text"
+            autocomplete="off"
+            value={includedTypesValue}
+          />
+
+          <label for="seo-noindex">Site-wide noindex</label>
+          <select id="seo-noindex" name="defaultRobotsNoindex">
+            <option value="false" selected={!seoConfig.defaultRobotsNoindex}>
+              indexable
+            </option>
+            <option value="true" selected={seoConfig.defaultRobotsNoindex}>
+              noindex (hide the whole site from crawlers)
+            </option>
+          </select>
+
+          <label for="seo-sitemap-enabled">Serve sitemap</label>
+          <select id="seo-sitemap-enabled" name="sitemapEnabled">
+            <option value="true" selected={seoConfig.sitemapEnabled}>
+              yes
+            </option>
+            <option value="false" selected={!seoConfig.sitemapEnabled}>
+              no
+            </option>
+          </select>
+
+          <label for="seo-feeds-enabled">Serve feeds</label>
+          <select id="seo-feeds-enabled" name="feedsEnabled">
+            <option value="true" selected={seoConfig.feedsEnabled}>
+              yes
+            </option>
+            <option value="false" selected={!seoConfig.feedsEnabled}>
+              no
+            </option>
+          </select>
+
+          <button type="submit" id="seo-config-submit">
+            Save SEO defaults
+          </button>
+        </form>
+      )
+    }
+  </section>
+
+  <!-- ================= Redirect policy ================= -->
+  <section
+    class="admin-section fade-in-up"
+    aria-labelledby="redirect-policy-title"
+  >
+    <h2 class="admin-section-title" id="redirect-policy-title">
+      Redirect policy
+    </h2>
+
+    {
+      !canReadRedirect && (
+        <p class="state-notice" id="redirect-policy-denied">
+          You do not have permission to view this tenant's redirect policy.
+        </p>
+      )
+    }
+
+    {
+      canReadRedirect && loadError && (
+        <p class="state-notice" id="redirect-policy-error">
+          The redirect policy could not be loaded right now. Please try again
+          later.
+        </p>
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && !canUpdateRedirect && (
+        <div class="data-table-scroll">
+          <table
+            class="data-table data-table--stack"
+            id="redirect-policy-table"
+          >
+            <caption class="sr-only">
+              Current redirect policy for this tenant (read-only)
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Policy</th>
+                <th scope="col">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Policy">URL-change capture</td>
+                <td data-label="Value">
+                  <span class="cell-code">
+                    {redirectSettings.urlChangeAutoPolicy}
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Policy">Legacy /blog redirect</td>
+                <td data-label="Value">
+                  {redirectSettings.legacyBlogRedirectEnabled
+                    ? "enabled"
+                    : "disabled"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && canUpdateRedirect && (
+        <form id="redirect-settings-form" class="admin-create-form">
+          <p class="form-legend">Edit redirect policy</p>
+          <p
+            id="redirect-settings-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="redirect-url-change-policy">
+            When a resource's URL changes
+          </label>
+          <select id="redirect-url-change-policy" name="urlChangeAutoPolicy">
+            {URL_CHANGE_AUTO_POLICIES.map((value) => (
+              <option
+                value={value}
+                selected={value === redirectSettings.urlChangeAutoPolicy}
+              >
+                {value}
+              </option>
+            ))}
+          </select>
+
+          <label for="redirect-legacy-blog">
+            Legacy /blog redirect (inert in this base — no /news routes)
+          </label>
+          <select id="redirect-legacy-blog" name="legacyBlogRedirectEnabled">
+            <option
+              value="false"
+              selected={!redirectSettings.legacyBlogRedirectEnabled}
+            >
+              disabled
+            </option>
+            <option
+              value="true"
+              selected={redirectSettings.legacyBlogRedirectEnabled}
+            >
+              enabled
+            </option>
+          </select>
+
+          <button type="submit" id="redirect-settings-submit">
+            Save redirect policy
+          </button>
+        </form>
+      )
+    }
+  </section>
+
+  <!-- ================= Redirect rules ================= -->
+  <section
+    class="admin-section fade-in-up"
+    aria-labelledby="redirect-rules-title"
+  >
+    <h2 class="admin-section-title">
+      <span id="redirect-rules-title">Redirect rules</span>
+      <span class="count-pill">{redirects.length}</span>
+    </h2>
+
+    {
+      !canReadRedirect && (
+        <p class="state-notice" id="redirect-rules-denied">
+          You do not have permission to view redirect rules.
+        </p>
+      )
+    }
+
+    {
+      canReadRedirect && loadError && (
+        <p class="state-notice" id="redirect-rules-error">
+          Redirect rules could not be loaded right now. Please try again later.
+        </p>
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && (
+        <form method="get" class="admin-toolbar" id="redirect-filter-form">
+          <label for="redirect-filter-q">Source contains</label>
+          <input
+            id="redirect-filter-q"
+            name="q"
+            type="search"
+            autocomplete="off"
+            value={qFilter}
+          />
+
+          <label for="redirect-filter-state">State</label>
+          <select id="redirect-filter-state" name="state">
+            <option value="">any</option>
+            {REDIRECT_STATE_FILTERS.map((value) => (
+              <option value={value} selected={value === stateFilter}>
+                {value}
+              </option>
+            ))}
+          </select>
+
+          <label for="redirect-filter-target-type">Target type</label>
+          <select id="redirect-filter-target-type" name="targetType">
+            <option value="">any</option>
+            {REDIRECT_TARGET_TYPES.map((value) => (
+              <option value={value} selected={value === targetTypeFilter}>
+                {value}
+              </option>
+            ))}
+          </select>
+
+          {/* Keeps the 404 panel's own filter across a redirect-filter submit;
+              `cursor` is deliberately NOT carried — changing a filter restarts
+              pagination at the first page. */}
+          {unresolvedOnly && (
+            <input type="hidden" name="unresolvedOnly" value="true" />
+          )}
+
+          <button type="submit">Apply filters</button>
+        </form>
+      )
+    }
+
+    {
+      canCreateRedirect && (
+        <form id="redirect-create-form" class="admin-create-form">
+          <p class="form-legend">Create a redirect rule</p>
+          <p
+            id="redirect-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+          <p
+            id="redirect-validate-result"
+            class="state-notice"
+            role="status"
+            hidden
+          />
+
+          <label for="redirect-source-path">Source path</label>
+          <input
+            id="redirect-source-path"
+            name="sourcePath"
+            type="text"
+            required
+            autocomplete="off"
+            placeholder="/old-page"
+          />
+
+          <label for="redirect-target">Target</label>
+          <input
+            id="redirect-target"
+            name="target"
+            type="text"
+            required
+            autocomplete="off"
+            placeholder="/new-page or https://verified-host/new-page"
+          />
+
+          <label for="redirect-status-code">Status code</label>
+          <select id="redirect-status-code" name="statusCode">
+            {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
+              <option value={String(value)} selected={value === 301}>
+                {value}
+              </option>
+            ))}
+          </select>
+
+          <label for="redirect-state">Initial state</label>
+          <select id="redirect-state" name="state">
+            {ALLOWED_REDIRECT_STATES.map((value) => (
+              <option value={value} selected={value === "active"}>
+                {value}
+              </option>
+            ))}
+          </select>
+
+          <label for="redirect-domain-scope">
+            Host scope (one of this tenant's verified domains; blank = all)
+          </label>
+          <input
+            id="redirect-domain-scope"
+            name="domainScopeHost"
+            type="text"
+            autocomplete="off"
+          />
+
+          <label for="redirect-preserve-query">Preserve query string</label>
+          <select id="redirect-preserve-query" name="preserveQuery">
+            <option value="false" selected>
+              no
+            </option>
+            <option value="true">yes</option>
+          </select>
+
+          <label for="redirect-reason">Reason (optional)</label>
+          <input
+            id="redirect-reason"
+            name="reason"
+            type="text"
+            autocomplete="off"
+          />
+
+          <div class="row-actions">
+            {/* Read-only dry run: normalize, preview the chain, explain a
+                conflict — WITHOUT writing. Gated by `redirect.read`, which a
+                holder of `redirect.create` necessarily needs to reach this
+                panel, and it sends NO Idempotency-Key (nothing is stored). */}
+            <button type="button" class="btn-inline" id="redirect-validate-btn">
+              Dry run
+            </button>
+            <button type="submit" id="redirect-create-submit">
+              Create rule
+            </button>
+          </div>
+        </form>
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && (
+        <p
+          id="redirect-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && (
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="redirect-rules-table">
+            <caption class="sr-only">
+              Redirect rules for this tenant, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Source</th>
+                <th scope="col">Target</th>
+                <th scope="col">Code</th>
+                <th scope="col">State</th>
+                <th scope="col">Query</th>
+                <th scope="col">Hits</th>
+                {showRedirectActions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {redirects.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={showRedirectActions ? 7 : 6}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ↪
+                      </span>
+                      <span class="empty-state-title">
+                        No redirect rules match
+                      </span>
+                      <span class="empty-state-text">
+                        {canCreateRedirect
+                          ? "Create one above, or widen the filters."
+                          : "Rules created for this tenant will appear here."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                redirects.map((rule) => (
+                  <tr
+                    data-redirect-row={rule.id}
+                    data-redirect-locale={rule.localeScope ?? ""}
+                    data-redirect-host={rule.domainScopeHost ?? ""}
+                    data-redirect-from={rule.effectiveFrom ?? ""}
+                    data-redirect-until={rule.effectiveUntil ?? ""}
+                    data-redirect-reason={rule.reason ?? ""}
+                    data-redirect-state={rule.state}
+                  >
+                    <td data-label="Source">
+                      <span class="cell-code">{rule.normalizedSourcePath}</span>
+                      {rule.domainScopeHost && (
+                        <span class="cell-muted"> @{rule.domainScopeHost}</span>
+                      )}
+                    </td>
+                    <td
+                      data-label="Target"
+                      class={canUpdateRedirect ? "stacked-block" : ""}
+                    >
+                      {canUpdateRedirect ? (
+                        <input
+                          type="text"
+                          value={rule.target}
+                          aria-label={`Target for ${rule.normalizedSourcePath}`}
+                          data-redirect-target={rule.id}
+                        />
+                      ) : (
+                        <span class="cell-code">{rule.target}</span>
+                      )}
+                    </td>
+                    <td
+                      data-label="Code"
+                      class={canUpdateRedirect ? "stacked-block" : ""}
+                    >
+                      {canUpdateRedirect ? (
+                        <select
+                          aria-label={`Status code for ${rule.normalizedSourcePath}`}
+                          data-redirect-code={rule.id}
+                        >
+                          {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
+                            <option
+                              value={String(value)}
+                              selected={value === rule.statusCode}
+                            >
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        rule.statusCode
+                      )}
+                    </td>
+                    <td data-label="State">
+                      <span
+                        class="status-badge"
+                        data-variant={redirectStateVariant(rule.state)}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {rule.state}
+                      </span>
+                    </td>
+                    <td
+                      data-label="Query"
+                      class={canUpdateRedirect ? "stacked-block" : ""}
+                    >
+                      {canUpdateRedirect ? (
+                        <select
+                          aria-label={`Preserve query for ${rule.normalizedSourcePath}`}
+                          data-redirect-query={rule.id}
+                        >
+                          <option value="false" selected={!rule.preserveQuery}>
+                            no
+                          </option>
+                          <option value="true" selected={rule.preserveQuery}>
+                            yes
+                          </option>
+                        </select>
+                      ) : rule.preserveQuery ? (
+                        "yes"
+                      ) : (
+                        "no"
+                      )}
+                    </td>
+                    <td data-label="Hits">
+                      <span class="cell-muted">{rule.hitCount}</span>
+                    </td>
+                    {showRedirectActions && (
+                      <td data-label="Actions" class="stacked-block">
+                        <div class="row-actions">
+                          {canUpdateRedirect && (
+                            <button
+                              type="button"
+                              class="module-toggle redirect-save-btn"
+                              data-redirect-id={rule.id}
+                            >
+                              Save
+                            </button>
+                          )}
+                          {/* activate/deactivate/archive/restore all resolve to
+                              `redirect.update` at the lifecycle endpoint. */}
+                          {canUpdateRedirect && rule.state !== "active" && (
+                            <button
+                              type="button"
+                              class="module-toggle redirect-lifecycle-btn"
+                              data-redirect-id={rule.id}
+                              data-lifecycle-action="activate"
+                            >
+                              Activate
+                            </button>
+                          )}
+                          {canUpdateRedirect && rule.state === "active" && (
+                            <button
+                              type="button"
+                              class="module-toggle redirect-lifecycle-btn"
+                              data-redirect-id={rule.id}
+                              data-lifecycle-action="deactivate"
+                            >
+                              Deactivate
+                            </button>
+                          )}
+                          {canUpdateRedirect && rule.state !== "archived" && (
+                            <button
+                              type="button"
+                              class="module-toggle redirect-lifecycle-btn"
+                              data-redirect-id={rule.id}
+                              data-lifecycle-action="archive"
+                              data-lifecycle-confirm={`Archive ${rule.normalizedSourcePath}? It stops redirecting immediately.`}
+                            >
+                              Archive
+                            </button>
+                          )}
+                          {canDeleteRedirect && (
+                            <button
+                              type="button"
+                              class="module-toggle redirect-delete-btn"
+                              data-redirect-id={rule.id}
+                              data-redirect-source={rule.normalizedSourcePath}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    {
+      canReadRedirect && !loadError && nextCursor && (
+        <p class="row-actions">
+          {/* Keyset pagination, driven entirely by the query string so the next
+              page is a plain GET (bookmarkable, back-button safe) rather than
+              client state. */}
+          <a class="btn-inline" href={nextPageHref(nextCursor)} rel="next">
+            Next page
+          </a>
+        </p>
+      )
+    }
+  </section>
+
+  <!-- ================= Recover a deleted rule ================= -->
+  {
+    canReadRedirect && !loadError && showRedirectActions && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="redirect-recover-title"
+      >
+        <h2 class="admin-section-title" id="redirect-recover-title">
+          Recover a deleted rule
+        </h2>
+        <p class="page-description">
+          Soft-deleted rules are excluded from the list above, so restore and
+          purge are addressed by rule id. Deleting a rule on this page sends you
+          back here with its id filled in.
+        </p>
+        <form id="redirect-recover-form" class="admin-create-form">
+          <p class="form-legend">Rule id</p>
+          <p
+            id="redirect-recover-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="redirect-recover-id">Deleted rule id (UUID)</label>
+          <input
+            id="redirect-recover-id"
+            name="recoverId"
+            type="text"
+            autocomplete="off"
+            value={recoverId}
+          />
+
+          <div class="row-actions">
+            {canUpdateRedirect && (
+              <button
+                type="button"
+                class="module-toggle"
+                id="redirect-restore-btn"
+                data-lifecycle-action="restore"
+              >
+                Restore
+              </button>
+            )}
+            {/* Purge is the ONE lifecycle action the endpoint gates on
+                `redirect.delete` (every other action needs `redirect.update`),
+                so it is gated here on delete and nothing else. */}
+            {canDeleteRedirect && (
+              <button
+                type="button"
+                class="btn-inline btn-inline--danger"
+                id="redirect-purge-btn"
+                data-lifecycle-action="purge"
+              >
+                Purge permanently
+              </button>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  <!-- ================= 404 governance ================= -->
+  <section class="admin-section fade-in-up" aria-labelledby="not-found-title">
+    <h2 class="admin-section-title">
+      <span id="not-found-title">Broken links (404)</span>
+      <span class="count-pill">{observations.length}</span>
+    </h2>
+
+    {
+      !canReadNotFound && (
+        <p class="state-notice" id="not-found-denied">
+          You do not have permission to view the 404 log.
+        </p>
+      )
+    }
+
+    {
+      canReadNotFound && loadError && (
+        <p class="state-notice" id="not-found-error">
+          The 404 log could not be loaded right now. Please try again later.
+        </p>
+      )
+    }
+
+    {
+      canReadNotFound && !loadError && (
+        <form method="get" class="admin-toolbar" id="not-found-filter-form">
+          <label for="not-found-unresolved">Show</label>
+          <select id="not-found-unresolved" name="unresolvedOnly">
+            <option value="" selected={!unresolvedOnly}>
+              all observations
+            </option>
+            <option value="true" selected={unresolvedOnly}>
+              unresolved only
+            </option>
+          </select>
+
+          {/* Carries the redirect panel's filters so switching this one does
+              not silently reset them. */}
+          {qFilter.trim() && (
+            <input type="hidden" name="q" value={qFilter.trim()} />
+          )}
+          {stateFilter && (
+            <input type="hidden" name="state" value={stateFilter} />
+          )}
+          {targetTypeFilter && (
+            <input type="hidden" name="targetType" value={targetTypeFilter} />
+          )}
+
+          <button type="submit">Apply</button>
+        </form>
+      )
+    }
+
+    {
+      canReadNotFound && !loadError && (
+        <p
+          id="not-found-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+      )
+    }
+
+    {
+      canReadNotFound && !loadError && (
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="not-found-table">
+            <caption class="sr-only">
+              Privacy-minimized 404 observations, most-hit first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Path</th>
+                <th scope="col">Referrer</th>
+                <th scope="col">Hits</th>
+                <th scope="col">Last seen</th>
+                <th scope="col">Status</th>
+                {showNotFoundActions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {observations.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={showNotFoundActions ? 6 : 5}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span class="empty-state-title">No 404s recorded</span>
+                      <span class="empty-state-text">
+                        Broken links visitors hit on this tenant's public site
+                        will be aggregated here.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                observations.map((row) => (
+                  <tr data-observation-row={row.id}>
+                    <td data-label="Path">
+                      <span class="cell-code">{row.normalizedPath}</span>
+                    </td>
+                    <td data-label="Referrer">
+                      {row.referrerDomain ? (
+                        <span class="cell-muted">{row.referrerDomain}</span>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Hits">{row.hitCount}</td>
+                    <td data-label="Last seen">
+                      <span class="cell-muted">{row.lastSeenAt}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={row.resolvedAt ? "success" : "warning"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {row.resolvedAt ? "resolved" : "open"}
+                      </span>
+                    </td>
+                    {showNotFoundActions && (
+                      <td data-label="Actions" class="stacked-block">
+                        <div class="row-actions">
+                          <input
+                            type="text"
+                            placeholder="redirect rule id (optional)"
+                            aria-label={`Suggested redirect rule id for ${row.normalizedPath}`}
+                            data-observation-suggested={row.id}
+                            value={row.suggestedRedirectId ?? ""}
+                          />
+                          <button
+                            type="button"
+                            class="module-toggle observation-resolve-btn"
+                            data-observation-id={row.id}
+                          >
+                            Resolve
+                          </button>
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger observation-dismiss-btn"
+                            data-observation-id={row.id}
+                            data-observation-path={row.normalizedPath}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </section>
+</AdminLayout>
+
+<style>
+  /* The dry-run panel reuses `.state-notice` (the page's only neutral inline
+     message element) but sits inside a form, where the default block margins
+     read as a gap. No transition is introduced, so no reduced-motion override
+     is needed. */
+  #redirect-validate-result {
+    margin: var(--space-2, 0.5rem) 0;
+  }
+</style>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro INLINES a hoisted
+  // `<script>` with no imports, and this app's middleware CSP is
+  // `default-src 'self'` with no `'unsafe-inline'`, so an inlined script is
+  // blocked and the page silently loses every control. Importing forces an
+  // external `/_astro/*.js` bundle. See admin-form-client.ts.
+  //
+  // Every listener below binds unconditionally: the control it targets only
+  // renders when the matching server-side permission gate passed, so a viewer
+  // without it simply has no matching element. The endpoint guards are the
+  // authority regardless.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  function show(id: string, message: string): void {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = message;
+    box.hidden = false;
+  }
+
+  function clear(id: string): void {
+    const box = document.getElementById(id);
+    if (box) box.hidden = true;
+  }
+
+  function fieldValue(id: string): string {
+    const el = document.getElementById(id) as
+      HTMLInputElement | HTMLSelectElement | null;
+    return el ? el.value.trim() : "";
+  }
+
+  /** Blank text input → `null`, which the API reads as "unset this field". */
+  function orNull(value: string): string | null {
+    return value === "" ? null : value;
+  }
+
+  // ---------------- SEO defaults (PUT /api/v1/seo/config) ----------------
+  const configForm = document.getElementById(
+    "seo-config-form"
+  ) as HTMLFormElement | null;
+  const configSubmit = document.getElementById(
+    "seo-config-submit"
+  ) as HTMLButtonElement | null;
+
+  configForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!configSubmit || configSubmit.disabled) return;
+    clear("seo-config-form-error");
+    const unlock = lockElement(configSubmit, "Saving…");
+
+    const includedRaw = fieldValue("seo-included-types");
+    const included = includedRaw
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    const limitRaw = fieldValue("seo-feed-item-limit");
+    const limit = Number.parseInt(limitRaw, 10);
+
+    // PUT is a FULL replace, so every field is sent — omitting one would
+    // silently clear it.
+    const result = await sendJson(
+      "PUT",
+      "/api/v1/seo/config",
+      {
+        siteName: orNull(fieldValue("seo-site-name")),
+        defaultMetaDescription: orNull(fieldValue("seo-meta-description")),
+        defaultSocialMediaId: orNull(fieldValue("seo-social-media-id")),
+        twitterSiteHandle: orNull(fieldValue("seo-twitter-handle")),
+        organizationName: orNull(fieldValue("seo-organization-name")),
+        organizationLogoMediaId: orNull(fieldValue("seo-org-logo-media-id")),
+        defaultRobotsNoindex: fieldValue("seo-noindex") === "true",
+        feedTitle: orNull(fieldValue("seo-feed-title")),
+        feedDescription: orNull(fieldValue("seo-feed-description")),
+        feedLogoMediaId: orNull(fieldValue("seo-feed-logo-media-id")),
+        feedItemLimit: Number.isNaN(limit) ? null : limit,
+        includedResourceTypes: included.length === 0 ? null : included,
+        sitemapEnabled: fieldValue("seo-sitemap-enabled") === "true",
+        feedsEnabled: fieldValue("seo-feeds-enabled") === "true"
+      },
+      // High-risk write: a fresh key per submit makes a retry safe without
+      // colliding with a genuinely different later save.
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+    show(
+      "seo-config-form-error",
+      "Could not save the SEO defaults. Check the values and try again."
+    );
+    unlock();
+  });
+
+  // -------------- Redirect policy (PUT /redirects/settings) --------------
+  const settingsForm = document.getElementById(
+    "redirect-settings-form"
+  ) as HTMLFormElement | null;
+  const settingsSubmit = document.getElementById(
+    "redirect-settings-submit"
+  ) as HTMLButtonElement | null;
+
+  settingsForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!settingsSubmit || settingsSubmit.disabled) return;
+    clear("redirect-settings-error");
+    const unlock = lockElement(settingsSubmit, "Saving…");
+
+    const result = await sendJson(
+      "PUT",
+      "/api/v1/seo/redirects/settings",
+      {
+        urlChangeAutoPolicy: fieldValue("redirect-url-change-policy"),
+        legacyBlogRedirectEnabled: fieldValue("redirect-legacy-blog") === "true"
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+    show(
+      "redirect-settings-error",
+      "Could not save the redirect policy. Please try again."
+    );
+    unlock();
+  });
+
+  // ---------------- Redirect create + dry run ----------------
+  /** The rule body both `POST /redirects` and `POST /redirects/validate` take. */
+  function readRedirectDraft(): Record<string, unknown> {
+    return {
+      sourcePath: fieldValue("redirect-source-path"),
+      target: fieldValue("redirect-target"),
+      statusCode: Number.parseInt(fieldValue("redirect-status-code"), 10),
+      state: fieldValue("redirect-state"),
+      domainScopeHost: orNull(fieldValue("redirect-domain-scope")),
+      preserveQuery: fieldValue("redirect-preserve-query") === "true",
+      reason: orNull(fieldValue("redirect-reason"))
+    };
+  }
+
+  const validateButton = document.getElementById(
+    "redirect-validate-btn"
+  ) as HTMLButtonElement | null;
+
+  validateButton?.addEventListener("click", async () => {
+    if (validateButton.disabled) return;
+    clear("redirect-create-error");
+    clear("redirect-validate-result");
+    const unlock = lockElement(validateButton, "Checking…");
+
+    // Read-only dry run — deliberately NO Idempotency-Key: nothing is stored,
+    // so there is no replay to collapse, and the endpoint does not ask for one.
+    // `sendJson` only reports ok/errorCode, and this response's BODY is the
+    // point, so it is fetched directly.
+    try {
+      const response = await fetch("/api/v1/seo/redirects/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(readRedirectDraft())
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        data?: {
+          valid?: boolean;
+          normalizedSourcePath?: string;
+          errors?: { field?: string; message?: string }[];
+          issue?: { message?: string } | null;
+        };
+      } | null;
+
+      if (!response.ok || payload?.success !== true || !payload.data) {
+        show(
+          "redirect-validate-result",
+          "Could not check the rule right now. Please try again."
+        );
+        unlock();
+        return;
+      }
+
+      const data = payload.data;
+      if (data.valid === true) {
+        show(
+          "redirect-validate-result",
+          `Looks good. Normalized source: ${data.normalizedSourcePath ?? "—"}.`
+        );
+      } else {
+        // These messages describe the operator's OWN submitted values (the same
+        // text the API returns to the same actor), not internal detail.
+        const detail =
+          data.errors && data.errors.length > 0
+            ? data.errors
+                .map((e) => `${e.field ?? "field"}: ${e.message ?? ""}`)
+                .join(" · ")
+            : (data.issue?.message ??
+              "This rule conflicts with an existing one.");
+        show("redirect-validate-result", `Not valid — ${detail}`);
+      }
+    } catch {
+      show(
+        "redirect-validate-result",
+        "Could not check the rule right now. Please try again."
+      );
+    }
+    unlock();
+  });
+
+  const createForm = document.getElementById(
+    "redirect-create-form"
+  ) as HTMLFormElement | null;
+  const createSubmit = document.getElementById(
+    "redirect-create-submit"
+  ) as HTMLButtonElement | null;
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!createSubmit || createSubmit.disabled) return;
+    clear("redirect-create-error");
+    clear("redirect-validate-result");
+    const unlock = lockElement(createSubmit, "Creating…");
+
+    const result = await sendJson(
+      "POST",
+      "/api/v1/seo/redirects",
+      readRedirectDraft(),
+      // Fresh key per click: a double-click or a retry after a dropped response
+      // collapses onto one rule instead of creating two.
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+    show(
+      "redirect-create-error",
+      result.errorCode === "SOURCE_CONFLICT"
+        ? "Another live rule already governs this source path and scope."
+        : "Could not create the rule. Use Dry run to see what is wrong."
+    );
+    unlock();
+  });
+
+  // ---------------- Per-row save / lifecycle / delete ----------------
+  document
+    .querySelectorAll<HTMLButtonElement>(".redirect-save-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.redirectId;
+        if (!id) return;
+        const row = document.querySelector<HTMLTableRowElement>(
+          `[data-redirect-row="${id}"]`
+        );
+        if (!row) return;
+        clear("redirect-action-error");
+        const unlock = lockElement(button, "Saving…");
+
+        const target = document.querySelector<HTMLInputElement>(
+          `[data-redirect-target="${id}"]`
+        );
+        const code = document.querySelector<HTMLSelectElement>(
+          `[data-redirect-code="${id}"]`
+        );
+        const query = document.querySelector<HTMLSelectElement>(
+          `[data-redirect-query="${id}"]`
+        );
+
+        // `PUT /redirects/{id}` is a FULL replace of the mutable fields: the
+        // fields this row does not expose (scope, effective window, reason,
+        // state) are echoed back from the rendered row, so saving a target
+        // never silently clears an effective window or reactivates an
+        // archived rule.
+        const result = await sendJson("PUT", `/api/v1/seo/redirects/${id}`, {
+          target: target?.value.trim() ?? "",
+          statusCode: Number.parseInt(code?.value ?? "301", 10),
+          state: row.dataset.redirectState ?? "active",
+          localeScope: orNull(row.dataset.redirectLocale ?? ""),
+          domainScopeHost: orNull(row.dataset.redirectHost ?? ""),
+          effectiveFrom: orNull(row.dataset.redirectFrom ?? ""),
+          effectiveUntil: orNull(row.dataset.redirectUntil ?? ""),
+          preserveQuery: query?.value === "true",
+          reason: orNull(row.dataset.redirectReason ?? "")
+        });
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        show(
+          "redirect-action-error",
+          "Could not save the rule. Check the target and try again."
+        );
+        unlock();
+      });
+    });
+
+  // activate / deactivate / archive — all `redirect.update` at the endpoint.
+  document
+    .querySelectorAll<HTMLButtonElement>(".redirect-lifecycle-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.redirectId;
+        const action = button.dataset.lifecycleAction;
+        if (!id || !action) return;
+        const confirmText = button.dataset.lifecycleConfirm;
+        if (confirmText && !window.confirm(confirmText)) return;
+        clear("redirect-action-error");
+        const unlock = lockElement(button, "Working…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/seo/redirects/${id}/lifecycle`,
+          { action },
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        show(
+          "redirect-action-error",
+          "Could not change the rule's state. Please try again."
+        );
+        unlock();
+      });
+    });
+
+  // Soft delete: reason required by the endpoint, so it is prompted for.
+  document
+    .querySelectorAll<HTMLButtonElement>(".redirect-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.redirectId;
+        if (!id) return;
+        const source = button.dataset.redirectSource ?? "this rule";
+        const reason = window.prompt(
+          `Delete the rule for ${source}? Enter a reason (it can be restored):`
+        );
+        if (reason === null || reason.trim().length === 0) return;
+        clear("redirect-action-error");
+        const unlock = lockElement(button, "Deleting…");
+
+        const result = await sendJson("DELETE", `/api/v1/seo/redirects/${id}`, {
+          reason: reason.trim()
+        });
+
+        if (result.ok) {
+          // Carry the id into the recovery panel: the list excludes
+          // soft-deleted rules, so this is the only place the id stays
+          // reachable without digging through the audit trail.
+          const url = new URL(window.location.href);
+          url.searchParams.set("recover", id);
+          window.location.assign(url.toString());
+          return;
+        }
+        show(
+          "redirect-action-error",
+          "Could not delete the rule. Please try again."
+        );
+        unlock();
+      });
+    });
+
+  // ---------------- Recovery panel: restore / purge ----------------
+  const restoreButton = document.getElementById(
+    "redirect-restore-btn"
+  ) as HTMLButtonElement | null;
+  const purgeButton = document.getElementById(
+    "redirect-purge-btn"
+  ) as HTMLButtonElement | null;
+
+  async function runRecovery(
+    button: HTMLButtonElement,
+    action: "restore" | "purge",
+    busyLabel: string,
+    failureMessage: string
+  ): Promise<void> {
+    if (button.disabled) return;
+    const id = fieldValue("redirect-recover-id");
+    if (!id) {
+      show("redirect-recover-error", "Enter the deleted rule's id first.");
+      return;
+    }
+    clear("redirect-recover-error");
+    const unlock = lockElement(button, busyLabel);
+
+    const result = await sendJson(
+      "POST",
+      `/api/v1/seo/redirects/${id}/lifecycle`,
+      { action },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.assign(window.location.pathname);
+      return;
+    }
+    show("redirect-recover-error", failureMessage);
+    unlock();
+  }
+
+  restoreButton?.addEventListener("click", () => {
+    void runRecovery(
+      restoreButton,
+      "restore",
+      "Restoring…",
+      "Could not restore that rule. Check the id and try again."
+    );
+  });
+
+  purgeButton?.addEventListener("click", () => {
+    if (
+      !window.confirm(
+        "Purge this rule permanently? A purged rule cannot be restored."
+      )
+    ) {
+      return;
+    }
+    void runRecovery(
+      purgeButton,
+      "purge",
+      "Purging…",
+      "Could not purge that rule. Only an already-deleted rule can be purged."
+    );
+  });
+
+  // ---------------- 404 governance: resolve / dismiss ----------------
+  document
+    .querySelectorAll<HTMLButtonElement>(".observation-resolve-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.observationId;
+        if (!id) return;
+        clear("not-found-action-error");
+        const unlock = lockElement(button, "Resolving…");
+
+        const suggested = document.querySelector<HTMLInputElement>(
+          `[data-observation-suggested="${id}"]`
+        );
+        const suggestedId = suggested?.value.trim() ?? "";
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/seo/not-found/${id}`,
+          suggestedId ? { suggestedRedirectId: suggestedId } : {}
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        show(
+          "not-found-action-error",
+          "Could not resolve the observation. Check the rule id and try again."
+        );
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".observation-dismiss-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.observationId;
+        if (!id) return;
+        const path = button.dataset.observationPath ?? "this observation";
+        if (
+          !window.confirm(
+            `Dismiss ${path}? The record is deleted and will only return if the 404 recurs.`
+          )
+        ) {
+          return;
+        }
+        clear("not-found-action-error");
+        const unlock = lockElement(button, "Dismissing…");
+
+        const result = await sendJson("DELETE", `/api/v1/seo/not-found/${id}`);
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        show(
+          "not-found-action-error",
+          "Could not dismiss the observation. Please try again."
+        );
+        unlock();
+      });
+    });
+</script>
