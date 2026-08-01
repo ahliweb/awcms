@@ -3204,7 +3204,10 @@ paths:
         - Blog Content
       operationId: blogListPosts
       summary: List this tenant's non-deleted blog posts
-      description: Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
+      description: |
+        Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
+
+        Ordering defaults to `updated_at DESC` — right for an admin table, and unsound as a keyset key because editing a post moves it, so a row can cross a page boundary between requests and be skipped or repeated. A caller that needs EVERY post (a build feed) passes `?order=created_at`, which is immutable, and follows `nextCursor` until it is null. `?cursor=` without `?order=created_at` is refused with 400 rather than quietly honoured.
       parameters:
         - name: status
           in: query
@@ -3222,6 +3225,19 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: order
+          in: query
+          description: Sort key. `created_at` selects the STABLE, cursor-capable traversal; `updated_at` (default) is the admin ordering and rejects `cursor`.
+          schema:
+            type: string
+            enum:
+              - created_at
+              - updated_at
+        - name: cursor
+          in: query
+          description: Opaque keyset cursor from a previous response's `nextCursor`. Requires `order=created_at`. A malformed value is a 400, never treated as "no cursor".
+          schema:
+            type: string
         - $ref: "#/components/parameters/CorrelationId"
       responses:
         "200":
@@ -3242,6 +3258,10 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/BlogPost"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                        description: Present only with `order=created_at`. Null means the traversal is complete.
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

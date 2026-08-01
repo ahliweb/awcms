@@ -10,6 +10,10 @@ import {
   boundedPageNumber,
   boundedPageSize
 } from "../../_shared/offset-pagination";
+import {
+  encodeKeysetCursor,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 
 /**
  * Read/write query module for `awcms_blog_posts` (Issue #537 scaffolded
@@ -27,6 +31,8 @@ export type BlogPostSummary = {
   locale: string;
   publishedAt: Date | null;
   updatedAt: Date;
+  /** Immutable — the only sort key a keyset cursor over this table can be sound on. */
+  createdAt: Date;
 };
 
 type BlogPostSummaryRow = {
@@ -39,6 +45,7 @@ type BlogPostSummaryRow = {
   locale: string;
   published_at: Date | null;
   updated_at: Date;
+  created_at: Date;
 };
 
 function toBlogPostSummary(row: BlogPostSummaryRow): BlogPostSummary {
@@ -51,7 +58,8 @@ function toBlogPostSummary(row: BlogPostSummaryRow): BlogPostSummary {
     visibility: row.visibility,
     locale: row.locale,
     publishedAt: row.published_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    createdAt: row.created_at
   };
 }
 
@@ -223,7 +231,73 @@ export type ListBlogPostsFilter = {
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
 
-/** `LIMIT` bounded (default 20, max 100), newest-updated first — same bounded-list convention as `email/templates` and `workflows/tasks` (no cursor pagination yet). */
+/**
+ * STABLE, cursor-paginated traversal — ordered `(created_at DESC, id DESC)`.
+ *
+ * ## Why this is a second function and not a `cursor` option on the one above
+ *
+ * `listBlogPosts` orders by `updated_at`, which is the right answer for a human
+ * looking at an admin table and the WRONG key for a keyset cursor: editing any
+ * post moves it in the ordering, so a row can cross the page boundary between
+ * two requests and be skipped — or returned twice — with nothing to detect it.
+ * A cursor is only sound over an ordering that does not change under the writes
+ * the traversal races with, so this one uses `created_at`, which is immutable.
+ *
+ * The caller therefore CHOOSES a traversal rather than accidentally mixing
+ * them; the route refuses a cursor against the mutable ordering outright.
+ *
+ * `nextCursor` is minted here, where the full-microsecond text is still in
+ * hand — never re-derived from a JS `Date` in a route, which would floor the
+ * microseconds and resurrect the row-skipping bug of Issue #158.
+ */
+export async function listBlogPostsPage(
+  tx: Bun.SQL,
+  tenantId: string,
+  options: {
+    status?: BlogContentStatus;
+    limit?: number;
+    cursor?: KeysetCursor | null;
+  } = {}
+): Promise<{ items: BlogPostSummary[]; nextCursor: string | null }> {
+  const limit = boundedPageSize(
+    options.limit,
+    DEFAULT_LIST_LIMIT,
+    MAX_LIST_LIMIT
+  );
+
+  const cursorCreatedAt = options.cursor?.createdAt ?? null;
+  const cursorId = options.cursor?.id ?? null;
+  const status = options.status ?? null;
+
+  // One statement for both filtered and unfiltered: `${status}::text IS NULL`
+  // keeps the plan shape identical and stops this from growing a fourth
+  // near-identical copy of the same SELECT as filters accumulate.
+  const rows = (await tx`
+    SELECT id, tenant_id, title, slug, status, visibility, locale, published_at,
+           updated_at, created_at,
+           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') AS created_at_cursor
+    FROM awcms_blog_posts
+    WHERE tenant_id = ${tenantId}
+      AND deleted_at IS NULL
+      AND (${status}::text IS NULL OR status = ${status})
+      AND (
+        ${cursorCreatedAt}::timestamptz IS NULL
+        OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}
+  `) as (BlogPostSummaryRow & { created_at_cursor: string })[];
+
+  const last = rows[rows.length - 1];
+  const nextCursor =
+    rows.length === limit && last
+      ? encodeKeysetCursor(last.created_at_cursor, last.id)
+      : null;
+
+  return { items: rows.map(toBlogPostSummary), nextCursor };
+}
+
+/** `LIMIT` bounded (default 20, max 100), newest-updated first — same bounded-list convention as `email/templates` and `workflows/tasks`. For a STABLE traversal past page one, use {@link listBlogPostsPage}. */
 export async function listBlogPosts(
   tx: Bun.SQL,
   tenantId: string,
@@ -238,14 +312,14 @@ export async function listBlogPosts(
   const rows = (
     filter.status
       ? await tx`
-        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at
+        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at, created_at
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND status = ${filter.status} AND deleted_at IS NULL
         ORDER BY updated_at DESC
         LIMIT ${limit}
       `
       : await tx`
-        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at
+        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at, created_at
         FROM awcms_blog_posts
         WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
         ORDER BY updated_at DESC
