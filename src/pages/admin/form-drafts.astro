@@ -1,0 +1,382 @@
+---
+/**
+ * Form drafts screen — an OPS/JANITOR view over `awcms_form_drafts`.
+ *
+ * `form_drafts` is a generic, domain-agnostic scratch store: a draft is created
+ * by some OTHER module's multi-step wizard, and that module owns what the
+ * payload MEANS. So this screen deliberately builds only what a platform
+ * administrator can act on without domain knowledge:
+ *
+ * - a filter bar (module key / wizard key / status) that drives the same
+ *   `moduleKey`/`wizardKey`/`status` filters `GET /api/v1/form-drafts` accepts,
+ * - the bounded newest-first list (the application function caps at 100 rows and
+ *   has no cursor — the same bound the JSON route serves),
+ * - a collapsed, read-only payload inspector, and
+ * - a per-row delete (soft-delete/abandon).
+ *
+ * Deliberately ABSENT — a create form and a step editor. Drafts are produced by
+ * wizards, not typed in by hand here; a hand-built draft would carry a payload
+ * shape no owning module recognises.
+ *
+ * Deliberately ABSENT — the submit button, even though `POST
+ * /api/v1/form-drafts/{id}/submit` exists and is reachable with the `update`
+ * permission this screen could have gated on. Submitting is a DOMAIN
+ * transition: the endpoint only flips `status` to `submitted`, and whatever the
+ * owning wizard does on submission (validate the finished payload, create the
+ * real record, notify) lives in that wizard, not here. A janitor pressing
+ * "Submit" on someone else's half-finished draft would mark it finished while
+ * nothing downstream ever happens — an irreversible, silent lie about state.
+ * Abandoning a draft is the janitorial act; finishing one is not.
+ *
+ * Reads call the SAME application function the JSON route uses (`listFormDrafts`,
+ * see `src/pages/api/v1/form-drafts/index.ts`) inside one
+ * `withTenantOrThrow` — never this app's own HTTP API from frontmatter.
+ *
+ * Every permission gate here is UX-only; `authorizeInTransaction` in the routes
+ * is the authority. The gates use exactly the triples those routes enforce
+ * (`form_drafts.draft.read`, `form_drafts.draft.delete`), pinned by
+ * `tests/admin-form-drafts-page-contract.test.ts`.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listFormDrafts,
+  type FormDraftView
+} from "../../modules/form-drafts/application/form-draft-directory";
+
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(
+  permissionKey("form_drafts", "draft", "read")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("form_drafts", "draft", "delete")
+);
+
+/** Mirrors `VALID_STATUSES` in `src/pages/api/v1/form-drafts/index.ts`. */
+const STATUS_OPTIONS = ["draft", "submitted", "abandoned", "expired"] as const;
+type DraftStatus = (typeof STATUS_OPTIONS)[number];
+
+function readFilter(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const moduleKeyFilter = readFilter("moduleKey");
+const wizardKeyFilter = readFilter("wizardKey");
+const statusRaw = readFilter("status");
+// An unknown `status` is dropped rather than sent on: the endpoint answers a
+// bad value with a 400, and a hand-edited query string must not turn this
+// screen into an error page.
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as DraftStatus)
+  : "";
+const hasFilters =
+  moduleKeyFilter !== "" || wizardKeyFilter !== "" || statusFilter !== "";
+
+const STATUS_VARIANT: Record<DraftStatus, string> = {
+  draft: "info",
+  submitted: "success",
+  abandoned: "neutral",
+  expired: "warning"
+};
+
+let drafts: FormDraftView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    // One transaction, one awaited query. Concurrent queries on a single
+    // transaction connection leak it, so nothing here runs in parallel.
+    drafts = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
+      listFormDrafts(tx, ssr.tenantId, {
+        moduleKey: moduleKeyFilter || undefined,
+        wizardKey: wizardKeyFilter || undefined,
+        status: statusFilter || undefined
+      })
+    );
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal) — a refusal
+    // must never be rendered as "there are no drafts".
+    loadError = true;
+    logAdminPageError("admin/form-drafts.astro: failed to list drafts", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+}
+
+/** Rendered as a short, single-line preview beside the collapsed payload. */
+function payloadSummary(payload: Record<string, unknown>): string {
+  const keys = Object.keys(payload ?? {});
+  if (keys.length === 0) return "empty payload";
+  return `${keys.length} field(s)`;
+}
+
+const columnCount = canDelete ? 7 : 6;
+---
+
+<AdminLayout title="Form drafts">
+  <header class="page-header fade-in-up">
+    <h1 id="form-drafts-heading">Form drafts</h1>
+    <p class="page-description">
+      Server-side scratch state for multi-step forms. Drafts are created by the
+      wizards of other modules — this screen is for inspecting and clearing
+      them, not for authoring. The newest 100 matching drafts are shown; narrow
+      the list with the filters below. Purged automatically by
+      <code>form-drafts:purge</code>.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="form-drafts-denied">
+        You do not have permission to view form drafts.
+      </p>
+    )
+  }
+
+  {
+    canRead && (
+      <form
+        method="get"
+        class="admin-toolbar fade-in-up"
+        id="draft-filter-form"
+      >
+        <label for="filter-module-key">Module key</label>
+        <input
+          id="filter-module-key"
+          name="moduleKey"
+          type="text"
+          value={moduleKeyFilter}
+          autocomplete="off"
+          placeholder="e.g. blog_content"
+        />
+
+        <label for="filter-wizard-key">Wizard key</label>
+        <input
+          id="filter-wizard-key"
+          name="wizardKey"
+          type="text"
+          value={wizardKeyFilter}
+          autocomplete="off"
+          placeholder="e.g. post_composer"
+        />
+
+        <label for="filter-status">Status</label>
+        <select id="filter-status" name="status">
+          <option value="" selected={statusFilter === ""}>
+            Any status
+          </option>
+          {STATUS_OPTIONS.map((value) => (
+            <option value={value} selected={statusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <button type="submit">Apply filters</button>
+      </form>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="form-drafts-error">
+        Form drafts could not be loaded right now. This is a problem reading the
+        list, not an empty list — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="draft-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="draft-list-title"
+      >
+        <h2 class="admin-section-title" id="draft-list-title">
+          Drafts
+          <span class="count-pill">{drafts.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="form-drafts-table">
+            <caption class="sr-only">
+              Form drafts, newest first, capped at 100 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Module</th>
+                <th scope="col">Wizard</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Step</th>
+                <th scope="col">Status</th>
+                <th scope="col">Updated</th>
+                {canDelete && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {drafts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={columnCount}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">
+                        {hasFilters
+                          ? "No drafts match these filters"
+                          : "No form drafts"}
+                      </span>
+                      <span class="empty-state-text">
+                        {hasFilters
+                          ? "Clear or widen the filters above to see more drafts."
+                          : "Drafts appear here as soon as a module's wizard saves one."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                drafts.map((draft) => (
+                  <tr data-draft-row={draft.id}>
+                    <td data-label="Module">
+                      <span class="cell-code">{draft.moduleKey}</span>
+                    </td>
+                    <td data-label="Wizard">
+                      <span class="cell-code">{draft.wizardKey}</span>
+                    </td>
+                    <td data-label="Resource">
+                      <span class="cell-code">{draft.resourceType}</span>
+                      {draft.resourceId && (
+                        <span class="cell-muted"> · {draft.resourceId}</span>
+                      )}
+                    </td>
+                    <td data-label="Step">
+                      <span class="cell-code">{draft.currentStep}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={STATUS_VARIANT[draft.status]}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {draft.status}
+                      </span>
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">{draft.updatedAt}</span>
+                      {/* Read-only payload inspection. Collapsed by default so
+                          a wide list stays scannable, and never editable —
+                          editing a payload is the owning wizard's job. */}
+                      <details>
+                        <summary>
+                          Payload ({payloadSummary(draft.payload)})
+                        </summary>
+                        {/* `set:text` rather than a child expression: <pre>
+                            preserves whitespace, and prettier reindents .astro
+                            children — an expression written between the tags
+                            comes back wrapped in the template's own
+                            indentation, which <pre> then renders. `set:text`
+                            escapes and sets the content directly, so the JSON
+                            is the element's only text. */}
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(draft.payload, null, 2)}
+                        />
+                      </details>
+                    </td>
+                    {canDelete && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <button
+                            type="button"
+                            class="btn-inline btn-inline--danger draft-delete-btn"
+                            data-draft-id={draft.id}
+                            data-draft-label={`${draft.moduleKey}/${draft.wizardKey}`}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'` with
+  // no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  // Bundled unconditionally (Astro hoists at build time): for a viewer without
+  // `draft.delete` no button renders, so the listener never binds.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("draft-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".draft-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.draftId;
+        if (!id) return;
+        const label = button.dataset.draftLabel ?? "this draft";
+
+        // Destructive and not undoable from this screen — confirm first.
+        if (
+          !window.confirm(
+            `Delete the ${label} draft? Any progress it holds is discarded.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        // `DELETE /api/v1/form-drafts/{id}` takes an optional `reason` and is
+        // idempotent by construction (`deleted_at IS NULL` guard), so it needs
+        // no `Idempotency-Key`.
+        const result = await sendJson("DELETE", `/api/v1/form-drafts/${id}`, {
+          reason: "Deleted from the admin form drafts screen."
+        });
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail (Issue #540).
+        showActionError("Could not delete the draft. Please try again.");
+        unlock();
+      });
+    });
+</script>

@@ -15,9 +15,20 @@ export const FORM_DRAFTS_LIFECYCLE_KEY = "form_drafts.form_drafts";
  * row of `docs/awcms/absorb-awcms-micro-roadmap.md`.
  *
  * Net-new and additive: no existing module changes behaviour, the module DAG
- * stays acyclic (this depends only on `identity_access`), and nothing consumes
- * it yet. It is infrastructure a later multi-step form reaches for, not a
- * tenant-facing feature on its own.
+ * stays acyclic (this depends only on `identity_access`), and no other module's
+ * wizard writes to it yet. It is infrastructure a later multi-step form reaches
+ * for, not a tenant-facing feature on its own.
+ *
+ * It nonetheless declares `navigation` now. The screen it points at,
+ * `/admin/form-drafts`, is an OPS/JANITOR view — filter, inspect the payload
+ * read-only, delete — NOT an authoring UI, so it is useful before any wizard
+ * exists: without it the drafts a tenant accumulates are invisible outside the
+ * JSON API, and the only way to clear a stuck one is the daily purge job. The
+ * entry is gated on `form_drafts.draft.read`, the same triple the routes
+ * enforce and `sql/063` seeds; a non-core entry without a
+ * `requiredPermission` would be visible to everyone (and fails
+ * `tests/admin-navigation-registry.test.ts`). No `group` is set — `form_drafts`
+ * already has a `DEFAULT_MODULE_TYPE` placement (`system`), which wins.
  *
  * `type: "system"` — like `logging`/`data_lifecycle`, this is shared platform
  * mechanism rather than a business capability. A derived or website module owns
@@ -43,6 +54,15 @@ export const formDraftsModule = defineModule({
     openApiPath: "openapi/modules/form-drafts.openapi.yaml",
     basePath: "/api/v1/form-drafts"
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_form_drafts",
+      path: "/admin/form-drafts",
+      // Sits with the other `system` screens, after `/admin/sidebar-menu` (33).
+      order: 34,
+      requiredPermission: "form_drafts.draft.read"
+    }
+  ],
   permissions: FORM_DRAFT_PERMISSIONS.map((permission) => ({
     activityCode: permission.activityCode,
     action: permission.action,
