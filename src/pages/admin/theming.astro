@@ -1,0 +1,1051 @@
+---
+/**
+ * Theming console — the admin screen for `theming` (ADR-0034 Fase 3). The module
+ * shipped its whole draft/validate/preview/publish/rollback/retire API without a
+ * screen, so the surface was reachable only by `curl`, and it declared no
+ * `navigation`, so the module was invisible in the sidebar. Its `module.ts`
+ * recorded the token editor as a deferred, API-first follow-up; this is that
+ * follow-up, and it adds the `navigation` entry in the SAME change — an entry
+ * without a page is a permanent 404 in the menu, which
+ * `tests/admin-navigation-registry.test.ts` enforces in both directions.
+ *
+ * Reads call the SAME application functions `GET /api/v1/theming` uses
+ * (`fetchThemeTenantState` / `fetchDraftVersion` / `listPublishedVersions`)
+ * inside ONE `withTenantOrThrow` transaction, awaited SEQUENTIALLY — concurrent
+ * queries on a single transaction connection leak it. The theme descriptors come
+ * from `listThemeDescriptors()`, which is build-time source with no I/O, so it is
+ * resolved outside the transaction.
+ *
+ * ## Why the draft editor is a typed form and not a JSON textarea
+ *
+ * A JSON textarea would have been the honest fallback for an open-ended config,
+ * and it is NOT needed here: `ThemeDescriptor` bounds the configurable surface
+ * completely (`domain/theme-descriptor.ts`). Every field below is generated from
+ * the SELECTED descriptor — one control per declared token (typed by
+ * `token.kind`), one `<select>` per slot restricted to that slot's declared
+ * variants, one field per declared asset slot, the declared content sections, and
+ * the declared nav placements. Nothing is invented: a field exists here only
+ * because the descriptor declares it, and `validateThemeConfig` rejects anything
+ * the descriptor does not declare regardless.
+ *
+ * Colour tokens use a text input rather than `<input type="color">` on purpose:
+ * the colour picker normalises every value to 7-character hex and cannot
+ * represent the `rgb()`/`hsl()` forms `validateColorValue` accepts, so it would
+ * silently rewrite a valid stored value on save.
+ *
+ * Because each theme declares its OWN tokens/slots/sections, the theme picker
+ * navigates to `?theme=<key>` and the server re-renders the form for that
+ * descriptor — the field set is descriptor-driven, never a merged superset.
+ *
+ * Writes go the other way: every mutation POSTs/PUTs to the guarded
+ * `/api/v1/theming/*` endpoints. Draft-save, publish, rollback and retire each
+ * mint a FRESH `Idempotency-Key`; validate deliberately sends none (it is a
+ * read-only dry run and the endpoint requires no key).
+ *
+ * Every permission gate below is UX-only — the endpoint's ABAC guard is the
+ * authority. The gates exist so a viewer without a permission gets a clean notice
+ * or a hidden control instead of a form that 403s on use.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  fetchDraftVersion,
+  fetchThemeTenantState,
+  listPublishedVersions,
+  type ThemeConfigVersion,
+  type ThemeTenantState
+} from "../../modules/theming/application/theme-config-directory";
+import {
+  defaultThemeConfig,
+  type ThemeConfig
+} from "../../modules/theming/domain/theme-config";
+import { listThemeDescriptors } from "../../modules/theming/theme-registry";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "theming.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const canRead = ssr.permissions.has(permissionKey("theming", "config", "read"));
+const canUpdate = ssr.permissions.has(
+  permissionKey("theming", "config", "update")
+);
+const canPublish = ssr.permissions.has(
+  permissionKey("theming", "version", "publish")
+);
+const canRollback = ssr.permissions.has(
+  permissionKey("theming", "version", "restore")
+);
+const canRetire = ssr.permissions.has(
+  permissionKey("theming", "version", "archive")
+);
+const canPreview = ssr.permissions.has(
+  permissionKey("theming", "preview", "create")
+);
+
+// Build-time, reviewed source — no I/O, so it is resolved before (and outside)
+// the tenant transaction.
+const themes = listThemeDescriptors();
+
+let state: ThemeTenantState | null = null;
+let draft: ThemeConfigVersion | null = null;
+let versions: ThemeConfigVersion[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      // Sequential on purpose: one transaction connection, one query at a time.
+      const tenantState = await fetchThemeTenantState(tx, ssr.tenantId);
+      const draftVersion = await fetchDraftVersion(tx, ssr.tenantId);
+      const published = await listPublishedVersions(tx, ssr.tenantId, 50);
+      return { tenantState, draftVersion, published };
+    });
+    state = result.tenantState;
+    draft = result.draftVersion;
+    versions = result.published;
+  } catch (error) {
+    logAdminPageError("admin/theming.astro: failed to load console", error, {
+      correlationId: Astro.locals.correlationId
+    });
+    loadError = true;
+  }
+}
+
+/**
+ * Which descriptor the editor renders. An explicit `?theme=` wins (that is how
+ * the picker switches themes); otherwise the draft's theme, then the active
+ * theme, then the first registered theme.
+ */
+const requestedThemeKey = Astro.url.searchParams.get("theme");
+const selectedTheme =
+  themes.find((theme) => theme.themeKey === requestedThemeKey) ??
+  themes.find((theme) => theme.themeKey === draft?.themeKey) ??
+  themes.find((theme) => theme.themeKey === state?.activeThemeKey) ??
+  themes[0] ??
+  null;
+
+/**
+ * Values the form starts from: the saved draft when it belongs to the selected
+ * theme, otherwise the theme's neutral defaults. A draft for a DIFFERENT theme
+ * is never mixed in — its token/slot keys belong to another descriptor.
+ */
+const editing: ThemeConfig | null = selectedTheme
+  ? draft && draft.themeKey === selectedTheme.themeKey
+    ? draft.config
+    : defaultThemeConfig(selectedTheme)
+  : null;
+
+const tokenOverrides: Record<string, string> = editing?.tokenOverrides ?? {};
+const slotSelections: Record<string, string> = editing?.slotSelections ?? {};
+const assetRefs: Record<string, string> = editing?.assetRefs ?? {};
+const sectionOrderValue = (editing?.sectionOrder ?? []).join(", ");
+const navPlacementValue = editing?.navPlacement ?? "";
+const isEditingSavedDraft = Boolean(
+  draft && selectedTheme && draft.themeKey === selectedTheme.themeKey
+);
+
+/** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18` (UTC, no locale dependency). */
+function formatTimestamp(value: Date | string | null): string {
+  if (!value) return "—";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().replace("T", " ").slice(0, 16);
+}
+
+const activeThemeName =
+  themes.find((theme) => theme.themeKey === state?.activeThemeKey)?.name ??
+  null;
+
+const showLifecycleActions = canPublish || canRetire || canPreview;
+---
+
+<AdminLayout title="Theming">
+  <header class="page-header fade-in-up">
+    <h1 id="theming-heading">Theming</h1>
+    <p class="page-description">
+      Choose one of the reviewed, built-in themes and configure it by data —
+      design tokens, layout slots, media asset ids, section order and nav
+      placement. There is no uploaded code and no raw CSS: every value is
+      validated against the theme's own declared grammar before it can reach the
+      published stylesheet. The lifecycle is draft → validate → preview →
+      publish, with rollback and retire moving the live pointer only; published
+      versions are immutable.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="theming-denied">
+        You do not have permission to view the theming console.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="theming-error">
+        The theming console could not be loaded right now. Please try again
+        later.
+      </p>
+    )
+  }
+
+  <p id="theming-action-error" class="admin-create-error" role="alert" hidden>
+  </p>
+
+  {
+    canRead && !loadError && (
+      <section class="admin-section fade-in-up" id="theming-state">
+        <h2 class="admin-section-title">Current state</h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              The tenant's active theme pointer and saved draft
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">What</th>
+                <th scope="col">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="What">Live theme</td>
+                <td data-label="Value">
+                  {state?.activeThemeKey ? (
+                    <span class="status-badge" data-variant="success">
+                      <span class="status-dot" aria-hidden="true" />
+                      {activeThemeName ?? state.activeThemeKey}
+                    </span>
+                  ) : (
+                    <span class="status-badge" data-variant="neutral">
+                      <span class="status-dot" aria-hidden="true" />
+                      none — falling back to the default theme
+                    </span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What">Live version</td>
+                <td data-label="Value">
+                  {state?.activeVersionId ? (
+                    <span class="cell-code">{state.activeVersionId}</span>
+                  ) : (
+                    <span class="cell-muted">—</span>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td data-label="What">Saved draft</td>
+                <td data-label="Value">
+                  {draft ? (
+                    <span class="status-badge" data-variant="info">
+                      <span class="status-dot" aria-hidden="true" />
+                      {draft.themeKey}
+                    </span>
+                  ) : (
+                    <span class="cell-muted">no draft saved yet</span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && selectedTheme && (
+      <section class="admin-section fade-in-up" id="theming-picker-section">
+        <h2 class="admin-section-title">Theme</h2>
+        <p class="page-description">
+          Each theme declares its own tokens, slots and sections, so switching
+          reloads the editor for that theme and discards any unsaved edits on
+          this page.
+        </p>
+        <div class="admin-toolbar">
+          <label for="theming-theme-picker">
+            <span class="sr-only">Theme</span>
+            <select id="theming-theme-picker">
+              {themes.map((theme) => (
+                <option
+                  value={theme.themeKey}
+                  selected={theme.themeKey === selectedTheme.themeKey}
+                >
+                  {theme.name} ({theme.themeKey} v{theme.version})
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p class="page-description">{selectedTheme.description}</p>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && !selectedTheme && (
+      <section class="admin-section fade-in-up" id="theming-no-themes">
+        <div class="empty-state">
+          <span class="empty-state-icon" aria-hidden="true">
+            ◻
+          </span>
+          <span class="empty-state-title">No themes are registered</span>
+          <span class="empty-state-text">
+            This build ships no theme descriptors, so there is nothing to
+            configure.
+          </span>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && selectedTheme && (
+      <section class="admin-section fade-in-up" id="theming-draft-section">
+        <h2 class="admin-section-title">Draft configuration</h2>
+        <form
+          id="theming-draft-form"
+          class="admin-create-form"
+          data-theme-key={selectedTheme.themeKey}
+        >
+          <p class="form-legend">
+            {!canUpdate
+              ? "Read-only — you do not have permission to change the draft."
+              : isEditingSavedDraft
+                ? "Editing this tenant's saved draft. Saving replaces it; publishing promotes it to an immutable version."
+                : "No saved draft for this theme yet — these are the theme's defaults. Saving creates the draft."}
+          </p>
+          <p
+            id="theming-draft-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          {selectedTheme.tokens.map((token) => (
+            <label for={`theming-token-${token.key}`}>
+              {token.label}
+              {token.kind === "font_family" ? (
+                <select
+                  id={`theming-token-${token.key}`}
+                  data-token-key={token.key}
+                  disabled={!canUpdate}
+                >
+                  <option value="">
+                    Theme default (
+                    {selectedTheme.fontFamilies.find(
+                      (family) => family.key === token.default
+                    )?.label ?? token.default}
+                    )
+                  </option>
+                  {selectedTheme.fontFamilies.map((family) => (
+                    <option
+                      value={family.key}
+                      selected={tokenOverrides[token.key] === family.key}
+                    >
+                      {family.label}
+                    </option>
+                  ))}
+                </select>
+              ) : token.kind === "number" ? (
+                <input
+                  type="number"
+                  id={`theming-token-${token.key}`}
+                  data-token-key={token.key}
+                  value={tokenOverrides[token.key] ?? ""}
+                  placeholder={token.default}
+                  min={token.constraint.min}
+                  max={token.constraint.max}
+                  step="any"
+                  disabled={!canUpdate}
+                />
+              ) : (
+                /*
+                 * Colour and dimension both carry a UNIT or a functional form
+                 * (`rgb(...)`, `1.5rem`), so they stay text inputs — a
+                 * `type="color"` control would normalise every value to hex and
+                 * silently rewrite a valid stored `rgb()`/`hsl()` value.
+                 */
+                <input
+                  type="text"
+                  id={`theming-token-${token.key}`}
+                  data-token-key={token.key}
+                  value={tokenOverrides[token.key] ?? ""}
+                  placeholder={token.default}
+                  autocomplete="off"
+                  spellcheck={false}
+                  disabled={!canUpdate}
+                />
+              )}
+            </label>
+          ))}
+
+          {selectedTheme.slots.map((slot) => (
+            <label for={`theming-slot-${slot.key}`}>
+              {slot.label}
+              <select
+                id={`theming-slot-${slot.key}`}
+                data-slot-key={slot.key}
+                disabled={!canUpdate}
+              >
+                {slot.variants.map((variant) => (
+                  <option
+                    value={variant.key}
+                    selected={
+                      (slotSelections[slot.key] ?? slot.default) === variant.key
+                    }
+                  >
+                    {variant.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+
+          {selectedTheme.assetSlots.map((assetSlot) => (
+            <label for={`theming-asset-${assetSlot.key}`}>
+              {assetSlot.label} media id
+              <input
+                type="text"
+                id={`theming-asset-${assetSlot.key}`}
+                data-asset-key={assetSlot.key}
+                value={assetRefs[assetSlot.key] ?? ""}
+                placeholder="Media object UUID — leave empty for none"
+                autocomplete="off"
+                spellcheck={false}
+                disabled={!canUpdate}
+              />
+            </label>
+          ))}
+
+          <label for="theming-section-order">
+            Section order
+            <input
+              type="text"
+              id="theming-section-order"
+              value={sectionOrderValue}
+              placeholder={selectedTheme.contentSections
+                .map((section) => section.key)
+                .join(", ")}
+              autocomplete="off"
+              spellcheck={false}
+              disabled={!canUpdate}
+            />
+          </label>
+
+          <label for="theming-nav-placement">
+            Navigation placement
+            <select id="theming-nav-placement" disabled={!canUpdate}>
+              {selectedTheme.navPlacements.map((placement) => (
+                <option
+                  value={placement}
+                  selected={placement === navPlacementValue}
+                >
+                  {placement}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <p class="form-legend">
+            Sections, comma-separated, in the order they should render:{" "}
+            {selectedTheme.contentSections
+              .map((section) => `${section.label} (${section.key})`)
+              .join(", ")}
+            . Leave a token empty to inherit the theme default shown as its
+            placeholder.
+          </p>
+
+          <div class="admin-toolbar">
+            {canUpdate && (
+              <button
+                type="submit"
+                id="theming-draft-submit"
+                class="module-toggle"
+              >
+                Save draft
+              </button>
+            )}
+            <button type="button" id="theming-validate" class="btn-inline">
+              Validate
+            </button>
+          </div>
+        </form>
+
+        <div
+          id="theming-validate-result"
+          class="state-notice"
+          role="status"
+          hidden
+        >
+          <span id="theming-validate-summary" />
+          <ul id="theming-validate-errors" />
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && selectedTheme && showLifecycleActions && (
+      <section class="admin-section fade-in-up" id="theming-lifecycle">
+        <h2 class="admin-section-title">Lifecycle</h2>
+        <p class="page-description">
+          Preview mints a short-lived, non-indexable link to the saved draft.
+          Publish promotes the saved draft to a new immutable version and makes
+          it the live look. Retire clears the live pointer so the site falls
+          back to the default theme; published versions stay intact and can be
+          rolled back to.
+        </p>
+        <div class="admin-toolbar">
+          {canPreview && (
+            <button type="button" id="theming-preview" class="module-toggle">
+              Create preview link
+            </button>
+          )}
+          {canPublish && (
+            <button type="button" id="theming-publish" class="module-toggle">
+              Publish draft
+            </button>
+          )}
+          {canRetire && (
+            <button
+              type="button"
+              id="theming-retire"
+              class="btn-inline btn-inline--danger"
+            >
+              Retire live theme
+            </button>
+          )}
+        </div>
+
+        <p
+          id="theming-preview-result"
+          class="state-notice"
+          role="status"
+          hidden
+        >
+          <a
+            id="theming-preview-link"
+            href="/theming"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open the preview
+          </a>
+          <span id="theming-preview-expiry" class="cell-muted" />
+        </p>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section class="admin-section fade-in-up" id="theming-versions">
+        <h2 class="admin-section-title">
+          Published versions
+          <span class="count-pill">{versions.length}</span>
+        </h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              The 50 most recent published theme versions, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Theme</th>
+                <th scope="col">Config hash</th>
+                <th scope="col">Published</th>
+                <th scope="col">Status</th>
+                {canRollback && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {versions.length === 0 && (
+                <tr>
+                  <td class="data-table-empty" colspan={canRollback ? 6 : 5}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌛
+                      </span>
+                      <span class="empty-state-title">
+                        Nothing published yet
+                      </span>
+                      <span class="empty-state-text">
+                        Save a draft and publish it to create the first
+                        immutable version.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {versions.map((version) => (
+                <tr>
+                  <td data-label="Version">{version.versionNumber ?? "—"}</td>
+                  <td data-label="Theme">
+                    <span class="cell-code">{version.themeKey}</span>
+                  </td>
+                  <td data-label="Config hash">
+                    <span class="cell-code">
+                      {version.configHash.slice(0, 12)}
+                    </span>
+                  </td>
+                  <td data-label="Published">
+                    <span class="cell-code">
+                      {formatTimestamp(version.publishedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Status">
+                    {state?.activeVersionId === version.id ? (
+                      <span class="status-badge" data-variant="success">
+                        <span class="status-dot" aria-hidden="true" />
+                        live
+                      </span>
+                    ) : (
+                      <span class="status-badge" data-variant="neutral">
+                        <span class="status-dot" aria-hidden="true" />
+                        published
+                      </span>
+                    )}
+                  </td>
+                  {canRollback && (
+                    <td data-label="Actions">
+                      <div class="row-actions">
+                        {state?.activeVersionId === version.id ? (
+                          <span class="cell-muted">already live</span>
+                        ) : (
+                          <button
+                            type="button"
+                            class="module-toggle theming-rollback-btn"
+                            data-version-id={version.id}
+                            data-version-number={String(
+                              version.versionNumber ?? ""
+                            )}
+                          >
+                            Roll back
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bound unconditionally: every control only renders when the matching
+  // permission gate passed server-side, so `getElementById` returns null for a
+  // viewer who lacks it and the listener never binds. Astro hoists this script at
+  // build time, so a conditional wrapper would be meaningless.
+  //
+  // The import is deliberate and load-bearing for CSP: an import-free script is
+  // INLINED by Astro, and inline scripts are blocked by this app's
+  // `default-src 'self'` policy. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("theming-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function clearActionError(): void {
+    if (actionError) actionError.hidden = true;
+  }
+
+  /**
+   * Same cookie-auth conventions as `sendJson` (`credentials: "same-origin"`,
+   * JSON body, envelope check, never throws) but it also hands back the response
+   * DATA. Deliberately local rather than a widening of the shared helper:
+   * `sendJson`'s narrow `{ ok, errorCode }` return is the Issue #540 guard that
+   * stops a dozen other call sites from accidentally rendering internal detail,
+   * and only THIS screen has two calls whose whole point is the server-computed
+   * body — `validate`'s field-level `errors[]` and `preview`'s one-time
+   * `previewUrl`.
+   *
+   * `validate` is genuinely read-only. `preview` is NOT — it mints a
+   * short-lived session token and is audited under `preview.create`; it is
+   * routed here only because that token is returned exactly ONCE and would be
+   * lost if the page reloaded. It is not idempotency-keyed, which matches the
+   * endpoint's own contract. Neither call mutates theme state, which is the
+   * property that matters: the four lifecycle mutations (draft, publish,
+   * rollback, retire) all still go through the shared `sendJson`.
+   *
+   * Both responses are rendered via `textContent` or, for the preview link, a
+   * path validated against the expected `/theming/preview/` prefix before it is
+   * ever assigned to `href` — never `innerHTML`.
+   */
+  async function requestJson(
+    url: string,
+    body: unknown
+  ): Promise<{
+    ok: boolean;
+    errorCode: string | null;
+    data: Record<string, unknown> | null;
+  }> {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body)
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        data?: Record<string, unknown>;
+        error?: { code?: string };
+      } | null;
+
+      if (response.ok && payload?.success === true) {
+        return { ok: true, errorCode: null, data: payload.data ?? null };
+      }
+      return {
+        ok: false,
+        errorCode: payload?.error?.code ?? null,
+        data: null
+      };
+    } catch {
+      return { ok: false, errorCode: "NETWORK_ERROR", data: null };
+    }
+  }
+
+  /**
+   * Read the descriptor-driven form back into the `{ themeKey, ...config }` body
+   * both `validate` and the draft PUT take. Empty token/asset fields are OMITTED
+   * rather than sent as `""`: an absent token inherits the theme default, while
+   * `""` would fail the token grammar, and an absent asset slot means "none"
+   * while `""` is not a UUID.
+   */
+  function collectConfig(): Record<string, unknown> | null {
+    const form = document.getElementById(
+      "theming-draft-form"
+    ) as HTMLFormElement | null;
+    if (!form) return null;
+
+    const tokenOverrides: Record<string, string> = {};
+    form
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        "[data-token-key]"
+      )
+      .forEach((field) => {
+        const key = field.dataset.tokenKey;
+        const value = field.value.trim();
+        if (key && value !== "") tokenOverrides[key] = value;
+      });
+
+    const slotSelections: Record<string, string> = {};
+    form
+      .querySelectorAll<HTMLSelectElement>("[data-slot-key]")
+      .forEach((field) => {
+        const key = field.dataset.slotKey;
+        if (key) slotSelections[key] = field.value;
+      });
+
+    const assetRefs: Record<string, string> = {};
+    form
+      .querySelectorAll<HTMLInputElement>("[data-asset-key]")
+      .forEach((field) => {
+        const key = field.dataset.assetKey;
+        const value = field.value.trim();
+        if (key && value !== "") assetRefs[key] = value;
+      });
+
+    const sectionOrderInput = document.getElementById(
+      "theming-section-order"
+    ) as HTMLInputElement | null;
+    const sectionOrder = String(sectionOrderInput?.value ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== "");
+
+    const navPlacement =
+      (
+        document.getElementById(
+          "theming-nav-placement"
+        ) as HTMLSelectElement | null
+      )?.value ?? "";
+
+    return {
+      themeKey: form.dataset.themeKey ?? "",
+      tokenOverrides,
+      slotSelections,
+      assetRefs,
+      sectionOrder,
+      navPlacement
+    };
+  }
+
+  // --- theme picker: server re-renders the field set for the chosen theme ---
+  const themePicker = document.getElementById(
+    "theming-theme-picker"
+  ) as HTMLSelectElement | null;
+
+  themePicker?.addEventListener("change", () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("theme", themePicker.value);
+    window.location.assign(url.toString());
+  });
+
+  // --- validate: read-only dry run, NO Idempotency-Key ---
+  const validateButton = document.getElementById(
+    "theming-validate"
+  ) as HTMLButtonElement | null;
+  const validateResult = document.getElementById("theming-validate-result");
+  const validateSummary = document.getElementById("theming-validate-summary");
+  const validateErrors = document.getElementById("theming-validate-errors");
+
+  validateButton?.addEventListener("click", async () => {
+    if (validateButton.disabled) return;
+    const config = collectConfig();
+    if (!config) return;
+    clearActionError();
+    const unlock = lockElement(validateButton, "Validating…");
+
+    // No `Idempotency-Key` here on purpose: `POST /api/v1/theming/validate`
+    // writes nothing and requires no key, and sending one would imply a stored
+    // response for an action that has none.
+    const result = await requestJson("/api/v1/theming/validate", config);
+
+    if (validateErrors) validateErrors.textContent = "";
+
+    if (!result.ok) {
+      if (validateSummary) {
+        validateSummary.textContent =
+          "The configuration could not be checked. Please try again.";
+      }
+      if (validateResult) validateResult.hidden = false;
+      unlock();
+      return;
+    }
+
+    const valid = result.data?.valid === true;
+    const errors = Array.isArray(result.data?.errors)
+      ? (result.data.errors as { field?: unknown; message?: unknown }[])
+      : [];
+
+    if (validateSummary) {
+      validateSummary.textContent = valid
+        ? "Valid — this configuration would produce a clean stylesheet."
+        : `Not valid — ${errors.length} problem(s) to fix:`;
+    }
+    // `textContent` only: these are field-level messages about the caller's own
+    // input, never markup.
+    for (const error of errors) {
+      const item = document.createElement("li");
+      item.textContent = `${String(error.field ?? "")}: ${String(error.message ?? "")}`;
+      validateErrors?.appendChild(item);
+    }
+    if (validateResult) validateResult.hidden = false;
+    unlock();
+  });
+
+  // --- save draft: high-risk write, FRESH Idempotency-Key per click ---
+  const draftForm = document.getElementById(
+    "theming-draft-form"
+  ) as HTMLFormElement | null;
+  const draftSubmit = document.getElementById(
+    "theming-draft-submit"
+  ) as HTMLButtonElement | null;
+  const draftError = document.getElementById("theming-draft-error");
+
+  draftForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!draftSubmit || draftSubmit.disabled) return;
+    const config = collectConfig();
+    if (!config) return;
+    if (draftError) draftError.hidden = true;
+    const unlock = lockElement(draftSubmit, "Saving…");
+
+    const result = await sendJson("PUT", "/api/v1/theming/draft", config, {
+      "Idempotency-Key": crypto.randomUUID()
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (draftError) {
+      // Generic copy only — never surface internal detail. VALIDATION_ERROR is
+      // worth distinguishing because it is the caller's own input, and the
+      // Validate button explains exactly which field.
+      draftError.textContent =
+        result.errorCode === "VALIDATION_ERROR"
+          ? "Some values are not accepted by this theme. Use Validate to see which."
+          : "Could not save the draft. Please try again.";
+      draftError.hidden = false;
+    }
+    unlock();
+  });
+
+  // --- preview: needs the response body, so it must NOT reload the page ---
+  const previewButton = document.getElementById(
+    "theming-preview"
+  ) as HTMLButtonElement | null;
+  const previewResult = document.getElementById("theming-preview-result");
+  const previewLink = document.getElementById(
+    "theming-preview-link"
+  ) as HTMLAnchorElement | null;
+  const previewExpiry = document.getElementById("theming-preview-expiry");
+
+  previewButton?.addEventListener("click", async () => {
+    if (previewButton.disabled) return;
+    clearActionError();
+    const unlock = lockElement(previewButton, "Creating…");
+
+    // Preview is not idempotency-keyed server-side: each session is a distinct,
+    // disposable token, and the raw token comes back exactly ONCE — so this is
+    // the one action that shows its result instead of reloading it away.
+    const result = await requestJson("/api/v1/theming/preview", {});
+
+    const previewUrl =
+      typeof result.data?.previewUrl === "string" ? result.data.previewUrl : "";
+
+    // Only ever navigate to the same-origin preview namespace this endpoint
+    // documents — an unexpected body can never become an arbitrary href.
+    if (
+      result.ok &&
+      previewUrl.startsWith("/theming/preview/") &&
+      previewLink
+    ) {
+      previewLink.href = previewUrl;
+      if (previewExpiry) {
+        const expiresAt =
+          typeof result.data?.expiresAt === "string"
+            ? result.data.expiresAt
+            : "";
+        previewExpiry.textContent = expiresAt
+          ? ` (expires ${expiresAt.replace("T", " ").slice(0, 16)} UTC)`
+          : "";
+      }
+      if (previewResult) previewResult.hidden = false;
+      unlock();
+      return;
+    }
+
+    showActionError(
+      result.errorCode === "NO_DRAFT"
+        ? "There is no saved draft to preview. Save the draft first."
+        : "Could not create a preview link. Please try again."
+    );
+    unlock();
+  });
+
+  /**
+   * Publish / rollback / retire all change the LIVE look and are all
+   * idempotency-keyed server-side, so each click mints a FRESH key — reusing one
+   * would replay the stored response instead of acting.
+   */
+  async function runLifecycleAction(
+    button: HTMLButtonElement,
+    url: string,
+    body: unknown,
+    busyLabel: string,
+    failureMessage: string
+  ): Promise<void> {
+    if (button.disabled) return;
+    clearActionError();
+    const unlock = lockElement(button, busyLabel);
+
+    const result = await sendJson("POST", url, body, {
+      "Idempotency-Key": crypto.randomUUID()
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showActionError(failureMessage);
+    unlock();
+  }
+
+  const publishButton = document.getElementById(
+    "theming-publish"
+  ) as HTMLButtonElement | null;
+
+  publishButton?.addEventListener("click", () => {
+    // Destructive in the sense that matters: it changes what every visitor sees,
+    // and the version it creates can never be edited afterwards.
+    if (
+      !window.confirm(
+        "Publish the saved draft? It becomes the live look immediately, and the published version is immutable."
+      )
+    ) {
+      return;
+    }
+    void runLifecycleAction(
+      publishButton,
+      "/api/v1/theming/publish",
+      undefined,
+      "Publishing…",
+      "Could not publish the draft. Please try again."
+    );
+  });
+
+  const retireButton = document.getElementById(
+    "theming-retire"
+  ) as HTMLButtonElement | null;
+
+  retireButton?.addEventListener("click", () => {
+    if (
+      !window.confirm(
+        "Retire the live theme? The site falls back to the default theme until you publish or roll back."
+      )
+    ) {
+      return;
+    }
+    void runLifecycleAction(
+      retireButton,
+      "/api/v1/theming/retire",
+      undefined,
+      "Retiring…",
+      "Could not retire the live theme. Please try again."
+    );
+  });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".theming-rollback-btn")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const versionId = button.dataset.versionId;
+        if (!versionId) return;
+        const label = button.dataset.versionNumber
+          ? `version ${button.dataset.versionNumber}`
+          : "this version";
+        if (
+          !window.confirm(
+            `Roll the live theme back to ${label}? It becomes the live look immediately.`
+          )
+        ) {
+          return;
+        }
+        void runLifecycleAction(
+          button,
+          "/api/v1/theming/rollback",
+          { versionId },
+          "Rolling back…",
+          "Could not roll back to that version. Please try again."
+        );
+      });
+    });
+</script>
