@@ -91,3 +91,30 @@ Media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media` —
 micro step 5d), responsive `srcset` render (step 5b), and the PDF media type
 (step 5c). The allowed MIME set stays the four raster types and the module
 declares no `navigation` yet.
+
+## Resolusi referensi media (`GET /api/v1/media/objects`)
+
+Registry ini sebelumnya **tidak punya permukaan baca sama sekali** — hanya
+upload session dan flag enforcement. Akibatnya konsumen di luar proses bisa
+melihat bahwa sebuah post PUNYA gambar (`featured_media_id`,
+`seo_image_media_id`) tanpa cara apa pun mengetahui URL-nya; `article-images.ts`
+di `awcms-astro` mengembalikan `src: undefined` justru karena itu, dan setiap
+artikel terbit tanpa gambarnya sementara tak ada yang gagal.
+
+`GET /api/v1/media/objects?ids=<uuid>,<uuid>` me-resolve maksimal 100 id sekali
+jalan (gerbang `media_library.media.read` — permission yang sudah diseed sejak
+`sql/052` sambil menunggu permukaannya, ADR-0026 langkah 5d). Logikanya BUKAN
+baru: `MediaLibraryPort.resolveMediaReferences` sudah melakukan hal yang sama
+untuk konsumen in-process. Ini panggilan yang sama, lewat HTTP, dengan aturan
+keamanan yang sama — hanya objek `verified`/`attached`, satu tenant, tidak
+soft-deleted, yang resolve.
+
+Id yang tidak resolve **dilaporkan** di `unresolved`, tidak dibuang: mengembalikan
+hanya yang berhasil membuat "resource ini tidak punya gambar" dan "referensi
+gambarnya rusak" jadi respons yang sama — ambiguitas yang membuat celah gambar
+hilang ini bertahan tanpa disadari. Id yang bukan uuid ditolak 400, karena
+"Anda mengirim sampah" dan "objek itu tak boleh dirujuk" adalah dua fakta
+berbeda.
+
+Read-only, jadi kredensial mesin ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
+boleh memegangnya.

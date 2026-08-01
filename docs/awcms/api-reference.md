@@ -4292,6 +4292,33 @@ Gated by media_library.media.verify. High-risk, requires Idempotency-Key. Verifi
 | 422    | Uploaded object failed content verification (`UPLOAD_VERIFICATION_FAILED`). `error.details.reason` is one of `object_not_found`, `size_exceeded`, `mime_not_recognized`, `mime_not_allowed`, `mime_mismatch`, `checksum_mismatch`. | [`ApiError`](#standard-error-envelope) |
 | 502    | Unable to verify the uploaded object right now (R2 provider error/circuit breaker open) — retry shortly.                                                                                                                           | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/media/objects` — Batch-resolve media object ids to their public reference.
+
+- **operationId**: `mediaResolveObjects`
+- **Security**: bearerAuth + tenantHeader
+
+Resolves up to 100 media object ids at once to `{publicUrl, altText, mimeType, width, height, sizeBytes}`. Gated on `media_library.media.read`; read-only, so a machine credential (ADR-0049) may hold it.
+
+An object resolves ONLY when it is `verified` or `attached`, belongs to the calling tenant, and is not soft-deleted. Everything else — unknown, cross-tenant, unverified, deleted — is returned in `unresolved` rather than dropped, so a caller can tell "this resource has no image" from "this resource's image reference is broken". A malformed (non-uuid) id is a 400 instead: "you sent junk" and "that object is not referenceable" are different facts.
+
+Batch rather than one-per-id because a build feed resolves every image on a page at once, and the underlying query is already a single `id = ANY(...)`.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description                                      |
+| ------------------ | ------ | -------- | ------ | ------------------------------------------------ |
+| `ids`              | query  | yes      | string | Comma-separated media object uuids, at most 100. |
+| `X-Correlation-ID` | header | no       | string |                                                  |
+
+**Responses**
+
+| Status | Description                                             | Schema                                 |
+| ------ | ------------------------------------------------------- | -------------------------------------- |
+| 200    | Resolved references, plus the ids that did not resolve. | object                                 |
+| 400    | Validation error.                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                             | [`ApiError`](#standard-error-envelope) |
+
 ## Blog Content
 
 Tenant-scoped blog/content administration (blog_content module, ported from awcms-mini) — posts and pages with their full lifecycle (draft → review → scheduled/published → archived, soft delete/restore/purge), hierarchical categories/tags, append-only revision history (restore APPENDS a revision, never overwrites), PostgreSQL full-text search, presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements), per-tenant blog settings, internal tag-link policy, and the editorial content-quality checklist. The public, anonymous reader surface (`/blog/{tenantCode}/...` index/detail/archive/search/feed/sitemap, ADR-0009) is served by Astro text/html/xml routes and is deliberately NOT part of this REST contract. Publish/unpublish/purge and settings writes are ABAC-gated, idempotency-keyed, and audited.
