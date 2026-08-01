@@ -21,6 +21,17 @@ export const loggingModule = defineModule({
     openApiPath: "openapi/modules/logging.openapi.yaml",
     basePath: "/api/v1/logs"
   },
+  // `/admin/audit-trail` — the read-only viewer over `GET /api/v1/logs/audit`.
+  // Gated on the module's single permission, which is also the one that
+  // endpoint enforces, so a viewer who can see the link can use the page.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_audit_trail",
+      path: "/admin/audit-trail",
+      order: 60,
+      requiredPermission: "logging.audit_trail.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "audit_trail",
