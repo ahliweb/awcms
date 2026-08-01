@@ -42,6 +42,7 @@ import { permissionKey } from "../../modules/identity-access/domain/access-contr
 import { fetchTenantActivityReport } from "../../modules/reporting/application/tenant-activity-report";
 import { fetchAccessAuditReport } from "../../modules/reporting/application/access-audit-report";
 import { fetchSyncHealthReport } from "../../modules/reporting/application/sync-health-report";
+import { classifySyncHealthDisplay } from "../../modules/reporting/domain/sync-health";
 import { fetchModuleUsageReport } from "../../modules/reporting/application/module-usage-report";
 import { logAdminPageError } from "../../lib/logging/error-log";
 
@@ -91,8 +92,16 @@ if (hasDashboardAccess) {
   }
 }
 
-const syncNeedsAttention =
-  dashboard !== null && !dashboard.syncHealth.isHealthy;
+/**
+ * Three states, not two — see `classifySyncHealthDisplay` for why `0/0` must
+ * not render as an alarm. The classifier is pure and lives in the domain so it
+ * is unit-testable; this file only maps its result onto badges.
+ */
+const syncDisplayState =
+  dashboard === null ? null : classifySyncHealthDisplay(dashboard.syncHealth);
+
+const syncNotConfigured = syncDisplayState === "not_configured";
+const syncNeedsAttention = syncDisplayState === "needs_attention";
 
 /* Decorative line icons (aria-hidden), injected with `set:html`. Static SVG
    only — no inline style or script — so they carry no CSP cost, and
@@ -159,7 +168,13 @@ const ICON_MODULES =
             </span>
           </article>
 
-          <article class="kpi kpi--warning fade-in-up">
+          <article
+            class:list={[
+              "kpi",
+              "fade-in-up",
+              syncNeedsAttention ? "kpi--warning" : "kpi--muted"
+            ]}
+          >
             <span class="kpi-icon" set:html={ICON_SYNC} />
             <span class="kpi-value">
               {dashboard.syncHealth.activeNodeCount}/
@@ -169,6 +184,11 @@ const ICON_MODULES =
             {syncNeedsAttention && (
               <span class="kpi-status">
                 <span class="badge badge--warning">Needs attention</span>
+              </span>
+            )}
+            {syncNotConfigured && (
+              <span class="kpi-status">
+                <span class="badge badge--muted">Not configured</span>
               </span>
             )}
           </article>
@@ -243,6 +263,11 @@ const ICON_MODULES =
               {syncNeedsAttention && (
                 <span class="card-header-badge">
                   <span class="badge badge--warning">Needs attention</span>
+                </span>
+              )}
+              {syncNotConfigured && (
+                <span class="card-header-badge">
+                  <span class="badge badge--muted">Not configured</span>
                 </span>
               )}
             </header>
@@ -392,6 +417,12 @@ const ICON_MODULES =
   }
   .kpi--warning {
     --kpi-accent: var(--color-warning);
+  }
+  /* Sync with no nodes enrolled: a category marker, not a state. The tile used
+     to be hard-coded `kpi--warning`, which painted an amber bar on a tenant
+     that simply does not use offline sync. */
+  .kpi--muted {
+    --kpi-accent: var(--color-border);
   }
 
   .kpi-icon {
