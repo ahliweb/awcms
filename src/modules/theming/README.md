@@ -89,10 +89,24 @@ audited.
 - **Public tenant resolution is `tenantCode`-based** (ADR-0009), not Host-based —
   the public stylesheet lives at `/theming/{tenantCode}/tokens.css`.
 
+## Admin screen
+
+`/admin/theming` (`src/pages/admin/theming.astro`) drives the whole lifecycle:
+theme picker, a draft editor generated from the SELECTED descriptor (one control
+per declared token, slot, and asset slot — plus section order and nav placement),
+a Validate button that lists the endpoint's field-level `errors[]`, a Preview
+button that surfaces the one-time preview link, and the published-version history
+with publish / rollback / retire. Reads call the same application functions
+`GET /api/v1/theming` uses inside one `withTenantOrThrow` transaction; every write
+goes to the guarded `/api/v1/theming/*` endpoints, with a fresh `Idempotency-Key`
+per draft-save/publish/rollback/retire click and none on the read-only validate.
+The module's `navigation` entry (order 34, gated on `theming.config.read`) landed
+with it. Pinned by `tests/admin-theming-page-contract.test.ts`.
+
 ## Documented follow-ups (deferred, API-first)
 
-- **Full admin UI screens** (rich token editor + responsive preview dashboard) —
-  the API + a minimal preview surface ship here; `navigation` is undeclared.
+- **Responsive preview dashboard** (side-by-side breakpoint rendering) — the
+  console links out to the preview session instead.
 - **Domain events** (`awcms.theming.version.published` / `.rolled-back` /
   `.retired`) — publish/rollback/retire are audited synchronous hooks today.
 - **Media asset rendering** — lands when a media module is ported into this base.

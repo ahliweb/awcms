@@ -66,12 +66,24 @@ import {
  *
  * `theming` `provides` no capability and nothing depends on it.
  *
+ * ## Admin UI
+ *
+ * `/admin/theming` (`src/pages/admin/theming.astro`) is the console for this
+ * whole surface: theme picker, a descriptor-driven draft editor (one control per
+ * declared token/slot/asset slot — nothing invented), Validate, Preview, and the
+ * published-version history with publish/rollback/retire. The `navigation` entry
+ * below and that page landed together — a declared entry without a page is a
+ * permanent 404 in the sidebar (`tests/admin-navigation-registry.test.ts`), and a
+ * page no descriptor claims can never appear in it. This supersedes the earlier
+ * note here that the token editor was deferred API-first.
+ *
  * ## Deliberately NOT here yet (documented follow-ups)
  *
- * `navigation` is undeclared (no admin UI in awcms yet — the token editor /
- * responsive-preview dashboard is deferred API-first). `events` stays undeclared:
- * publish/rollback/retire are audited synchronous hooks, not yet domain events.
- * `jobs` stays undeclared: no background purge (see the retention note above).
+ * The responsive-preview DASHBOARD (side-by-side breakpoint rendering) is still
+ * deferred; the console links out to the preview session instead. `events` stays
+ * undeclared: publish/rollback/retire are audited synchronous hooks, not yet
+ * domain events. `jobs` stays undeclared: no background purge (see the retention
+ * note above).
  */
 export const themingModule = defineModule({
   key: THEMING_MODULE_KEY,
@@ -97,6 +109,14 @@ export const themingModule = defineModule({
     // Public token CSS + preview surfaces.
     routes: ["/api/v1/theming", "/theming"]
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_theming",
+      path: "/admin/theming",
+      order: 34,
+      requiredPermission: "theming.config.read"
+    }
+  ],
   permissions: [
     {
       activityCode: THEMING_CONFIG_ACTIVITY_CODE,
