@@ -817,6 +817,32 @@ Seluruh string UI (~300 key baru, namespace `admin.blog.*`) ditambahkan ke `i18n
 - Rendering publik tetap aman dari XSS — tidak diubah oleh issue ini; `content_json`/`content_text`/widget `bodyText`/ad `imageUrl`/`linkUrl` tetap lewat whitelist renderer yang sama (`content-block-rendering.ts`, `ads-directory.ts`'s `renderAdHtml`). Editor admin (`contentJson` textarea) mengizinkan penulis mengetik apa pun, tapi validasi server (`validateContentJsonField`'s `containsUnsafeHtml`) tetap menolak `<script>`/`<iframe>`/`<embed>`/`<object>`/inline handler/`javascript:` sebelum tersimpan — editor tidak melonggarkan aturan itu.
 - Pesan error tidak membocorkan stack trace — action banner admin selalu menampilkan `error.message` dari respons API (yang sendiri sudah aman, doc 10) atau string generik `common.network_error`, tidak pernah `error.stack`/exception mentah dari `console.error` (yang hanya dicatat server-side).
 
+### Build feed: traversal stabil ber-cursor
+
+`GET /api/v1/blog/posts` default-nya urut `updated_at DESC` — benar untuk tabel
+admin, dan **tidak sah** sebagai kunci keyset: menyunting sebuah post
+memindahkannya, sehingga satu baris bisa melintasi batas halaman di antara dua
+permintaan lalu terlewat atau muncul dua kali, tanpa apa pun yang bisa
+mendeteksinya.
+
+Pemanggil yang butuh SELURUH post (build feed `awcms-astro`) memakai:
+
+```
+GET /api/v1/blog/posts?order=created_at&limit=100
+GET /api/v1/blog/posts?order=created_at&limit=100&cursor=<nextCursor>
+```
+
+`created_at` immutable, jadi traversal-nya stabil. `?cursor=` tanpa
+`?order=created_at` **ditolak 400**, bukan diam-diam dilayani — paginasi senyap
+di atas urutan yang bisa berubah persis muncul sebagai "beberapa artikel hilang
+dari situs" berbulan-bulan kemudian.
+
+`nextCursor` dicetak di lapisan yang masih memegang teks presisi mikrodetik
+(`to_char(... 'US')`), tidak pernah diturunkan ulang dari `Date` JS di rute —
+`Date` sudah membulatkan ke bawah mikrodetiknya dan menghidupkan kembali bug
+row-skipping Issue #158. Dibuktikan di `tests/integration/blog-post-cursor.integration.test.ts`
+dengan batch-insert yang seluruh barisnya berbagi satu instant.
+
 ### Testing commands
 
 ```bash

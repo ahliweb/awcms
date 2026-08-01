@@ -17,8 +17,10 @@ import { log } from "../../../../../lib/logging/logger";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import {
   createBlogPost,
-  listBlogPosts
+  listBlogPosts,
+  listBlogPostsPage
 } from "../../../../../modules/blog-content/application/blog-post-directory";
+import { decodeKeysetCursor } from "../../../../../modules/_shared/keyset-pagination";
 import {
   countExistingTerms,
   syncPostTermAssignments
@@ -46,7 +48,24 @@ const CREATE_GUARD = {
   action: "create" as const
 };
 
-/** `GET /api/v1/blog/posts` (Issue #538) — list this tenant's non-deleted posts, `?status=` optional filter, `?limit=` bounded (default 20, max 100). */
+/**
+ * `GET /api/v1/blog/posts` (Issue #538) — list this tenant's non-deleted posts.
+ * `?status=` optional filter, `?limit=` bounded (default 20, max 100).
+ *
+ * ## `?order=` and `?cursor=` — a stable traversal for builds and exports
+ *
+ * The default ordering is `updated_at DESC`: right for a human scanning an
+ * admin table, and unsound as a keyset key, because editing any post moves it
+ * and a row can cross the page boundary between two requests — skipped, or
+ * returned twice, with nothing able to detect it.
+ *
+ * So a caller that needs EVERY post (an `awcms-astro` build feed is the reason
+ * this exists) asks for `?order=created_at`, which is immutable, and follows
+ * `nextCursor`. Passing `?cursor=` without it is refused outright rather than
+ * quietly honoured: silently paginating over a mutable ordering is exactly the
+ * bug that would surface as "a few articles are missing from the site" months
+ * later.
+ */
 export const GET: APIRoute = async ({ request, cookies, url }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
 
@@ -83,6 +102,37 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return fail(400, "VALIDATION_ERROR", "limit must be a positive number.");
   }
 
+  const orderParam = url.searchParams.get("order");
+
+  if (
+    orderParam !== null &&
+    orderParam !== "created_at" &&
+    orderParam !== "updated_at"
+  ) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "order must be one of created_at, updated_at."
+    );
+  }
+
+  const stableOrder = orderParam === "created_at";
+  const cursorParam = url.searchParams.get("cursor");
+
+  if (cursorParam !== null && !stableOrder) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "cursor requires order=created_at — updated_at changes on every edit, so a cursor over it can skip or repeat posts."
+    );
+  }
+
+  const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+  if (cursorParam !== null && cursor === null) {
+    return fail(400, "VALIDATION_ERROR", "cursor is malformed.");
+  }
+
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
   const now = new Date();
@@ -98,6 +148,16 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    if (stableOrder) {
+      const page = await listBlogPostsPage(tx, tenantId, {
+        status,
+        limit,
+        cursor
+      });
+
+      return ok({ posts: page.items, nextCursor: page.nextCursor });
     }
 
     const posts = await listBlogPosts(tx, tenantId, {

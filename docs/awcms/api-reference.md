@@ -4672,13 +4672,17 @@ Read-only preview for the admin editor. Gated by blog_content.pages.read.
 
 Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
 
+Ordering defaults to `updated_at DESC` — right for an admin table, and unsound as a keyset key because editing a post moves it, so a row can cross a page boundary between requests and be skipped or repeated. A caller that needs EVERY post (a build feed) passes `?order=created_at`, which is immutable, and follows `nextCursor` until it is null. `?cursor=` without `?order=created_at` is refused with 400 rather than quietly honoured.
+
 **Parameters**
 
-| Name               | In     | Required | Type                                                          | Description |
-| ------------------ | ------ | -------- | ------------------------------------------------------------- | ----------- |
-| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |             |
-| `limit`            | query  | no       | integer                                                       |             |
-| `X-Correlation-ID` | header | no       | string                                                        |             |
+| Name               | In     | Required | Type                                                          | Description                                                                                                                                          |
+| ------------------ | ------ | -------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |                                                                                                                                                      |
+| `limit`            | query  | no       | integer                                                       |                                                                                                                                                      |
+| `order`            | query  | no       | enum(`created_at`, `updated_at`)                              | Sort key. `created_at` selects the STABLE, cursor-capable traversal; `updated_at` (default) is the admin ordering and rejects `cursor`.              |
+| `cursor`           | query  | no       | string                                                        | Opaque keyset cursor from a previous response's `nextCursor`. Requires `order=created_at`. A malformed value is a 400, never treated as "no cursor". |
+| `X-Correlation-ID` | header | no       | string                                                        |                                                                                                                                                      |
 
 **Responses**
 
