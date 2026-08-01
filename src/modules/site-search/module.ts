@@ -51,11 +51,19 @@ export const SITE_SEARCH_INDEX_FAILURES_LIFECYCLE_KEY =
  * `renderSafeSnippet` (XSS impossible); anonymous search has per-IP rate limits,
  * query-length bounds, and result caps.
  *
+ * ## Admin surface
+ *
+ * `navigation` points at `/admin/site-search` — the operations console: index
+ * status/freshness, documents by resource type, recent runs, reconcile/rebuild,
+ * the settings form, and failed-item diagnostics. The entry and the page landed
+ * in the SAME change, which is the invariant
+ * `tests/admin-navigation-registry.test.ts` enforces in both directions (a nav
+ * entry with no page is a permanent 404 in the menu; a page no descriptor claims
+ * is unreachable).
+ *
  * ## Deliberately NOT here yet
  *
- * `navigation` is undeclared: the index/settings/diagnostics ADMIN API exists,
- * not an admin screen — the dashboard UI is a documented follow-up (same posture
- * as `seo_distribution`). `capabilities` is undeclared (the search-source seam is
+ * `capabilities` is undeclared (the search-source seam is
  * the descriptor list, not a capability). `events` stays undeclared: index
  * lifecycle events (`awcms.site-search.*`) are documented log lines, not yet
  * published through `domain_event_runtime`. Indexing blog PAGES (no public route
@@ -79,6 +87,19 @@ export const siteSearchModule = defineModule({
     basePath: "/api/v1/site-search",
     routes: ["/api/v1/site-search", "/search"]
   },
+  // Gated on `index.read` — the permission the console's primary panel (status
+  // + recent runs) actually needs. A viewer holding only `settings.read` or
+  // `diagnostics.read` reaches the page directly; the page renders the panels
+  // they are entitled to. Hiding the link is not a security control (the page
+  // and every endpoint it calls guard themselves).
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_site_search",
+      path: "/admin/site-search",
+      order: 40,
+      requiredPermission: "site_search.index.read"
+    }
+  ],
   permissions: [
     {
       activityCode: SITE_SEARCH_INDEX_ACTIVITY_CODE,

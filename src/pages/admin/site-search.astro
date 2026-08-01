@@ -1,0 +1,674 @@
+---
+/**
+ * Site search operations console — the admin screen for `site_search`
+ * (ADR-0040). The module shipped its index/settings/diagnostics API without a
+ * screen, so the whole surface was reachable only by `curl`; its `module.ts`
+ * recorded that as a documented follow-up. This is that follow-up, and it adds
+ * the module's `navigation` entry in the SAME change — an entry without a page
+ * is a permanent 404 in the menu, which `tests/admin-navigation-registry.test.ts`
+ * enforces in both directions.
+ *
+ * Reads call the SAME application functions the JSON endpoints use
+ * (`fetchIndexStatus`/`fetchRecentRuns`/`fetchIndexFailures`/
+ * `fetchSiteSearchSettings`) inside ONE `withTenantOrThrow` transaction, rather
+ * than fetching this app's own API over HTTP — the established pattern for
+ * every other admin page here.
+ *
+ * Writes go the other way: reconcile / rebuild / settings all POST/PUT to the
+ * guarded `/api/v1/site-search/*` endpoints with a fresh `Idempotency-Key` per
+ * click, because all three are idempotency-keyed and audited server-side.
+ *
+ * Every permission gate below is UX-only — the endpoint's ABAC guard is the
+ * authority. The gates exist so a viewer without a permission gets a clean
+ * notice or a hidden control instead of a table that 403s on use.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  fetchIndexFailures,
+  fetchIndexStatus,
+  fetchRecentRuns,
+  type IndexFailureItem,
+  type IndexRunSummary,
+  type IndexStatus
+} from "../../modules/site-search/application/search-diagnostics";
+import { fetchSiteSearchSettings } from "../../modules/site-search/application/search-settings-directory";
+import {
+  MIN_QUERY_LENGTH_MAX,
+  MIN_QUERY_LENGTH_MIN,
+  RESULT_LIMIT_MAX,
+  RESULT_LIMIT_MIN,
+  SUGGESTION_LIMIT_MAX,
+  SUGGESTION_LIMIT_MIN,
+  type SiteSearchSettings
+} from "../../modules/site-search/domain/search-settings";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "site-search.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const canReadIndex = ssr.permissions.has(
+  permissionKey("site_search", "index", "read")
+);
+const canReconcile = ssr.permissions.has(
+  permissionKey("site_search", "index", "reconcile")
+);
+const canRebuild = ssr.permissions.has(
+  permissionKey("site_search", "index", "rebuild")
+);
+const canReadSettings = ssr.permissions.has(
+  permissionKey("site_search", "settings", "read")
+);
+const canUpdateSettings = ssr.permissions.has(
+  permissionKey("site_search", "settings", "update")
+);
+const canReadDiagnostics = ssr.permissions.has(
+  permissionKey("site_search", "diagnostics", "read")
+);
+
+let status: IndexStatus | null = null;
+let recentRuns: IndexRunSummary[] = [];
+let failures: IndexFailureItem[] = [];
+let settings: SiteSearchSettings | null = null;
+let loadError = false;
+
+// One transaction for every panel this viewer is allowed to see. Each fetch is
+// awaited SEQUENTIALLY: concurrent queries on a single transaction connection
+// leak it (idle in transaction) — the same note the API routes carry.
+if (canReadIndex || canReadSettings || canReadDiagnostics) {
+  try {
+    const sql = getDatabaseClient();
+    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      const indexStatus = canReadIndex
+        ? await fetchIndexStatus(tx, ssr.tenantId)
+        : null;
+      const runs = canReadIndex
+        ? await fetchRecentRuns(tx, ssr.tenantId, 10)
+        : [];
+      const failed = canReadDiagnostics
+        ? await fetchIndexFailures(tx, ssr.tenantId, 100)
+        : [];
+      const config = canReadSettings
+        ? await fetchSiteSearchSettings(tx, ssr.tenantId)
+        : null;
+      return { indexStatus, runs, failed, config };
+    });
+    status = result.indexStatus;
+    recentRuns = result.runs;
+    failures = result.failed;
+    settings = result.config;
+  } catch (error) {
+    logAdminPageError(
+      "admin/site-search.astro: failed to load console",
+      error,
+      {
+        correlationId: Astro.locals.correlationId
+      }
+    );
+    loadError = true;
+  }
+}
+
+/** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18` (UTC, no locale dependency). */
+function formatTimestamp(value: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().replace("T", " ").slice(0, 16);
+}
+
+/** Run status -> the shared `.status-badge` variant vocabulary. */
+function runStatusVariant(runStatus: string): string {
+  if (runStatus === "succeeded" || runStatus === "completed") return "success";
+  if (runStatus === "failed") return "danger";
+  if (runStatus === "running") return "info";
+  return "neutral";
+}
+
+const resourceTypesValue =
+  settings?.enabledResourceTypes === null ||
+  settings?.enabledResourceTypes === undefined
+    ? ""
+    : settings.enabledResourceTypes.join(", ");
+
+const showIndexActions = canReconcile || canRebuild;
+---
+
+<AdminLayout title="Site search">
+  <header class="page-header fade-in-up">
+    <h1 id="site-search-heading">Site search</h1>
+    <p class="page-description">
+      The tenant's full-text search index over published content: how fresh it
+      is, what it contains, the last runs, and the items that failed to index.
+      The index is a projection of public content only — it is never an
+      authorization source.
+    </p>
+  </header>
+
+  {
+    !canReadIndex && !canReadSettings && !canReadDiagnostics && (
+      <p class="state-notice fade-in-up" id="site-search-denied">
+        You do not have permission to view the search console.
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="site-search-error">
+        The search console could not be loaded right now. Please try again
+        later.
+      </p>
+    )
+  }
+
+  <p
+    id="site-search-action-error"
+    class="admin-create-error"
+    role="alert"
+    hidden
+  >
+  </p>
+
+  {
+    canReadIndex && status && (
+      <section class="admin-section fade-in-up" id="site-search-status">
+        <h2 class="admin-section-title">Index status</h2>
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">Documents indexed</span>
+            <span class="stat-value">{status.documentCount}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Last indexed</span>
+            <span class="stat-value stat-value--mono">
+              {formatTimestamp(status.latestIndexedAt)}
+            </span>
+            <span class="stat-hint">UTC</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Open failures</span>
+            <span class="stat-value">{status.openFailureCount}</span>
+            {status.openFailureCount > 0 && (
+              <span class="stat-hint">See diagnostics below</span>
+            )}
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Last run</span>
+            <span class="stat-value stat-value--mono">
+              {status.lastRun ? status.lastRun.runType : "—"}
+            </span>
+            {status.lastRun && (
+              <span class="stat-hint">
+                {formatTimestamp(status.lastRun.startedAt)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {status.byResourceType.length > 0 && (
+          <div class="data-table-scroll">
+            <table class="data-table data-table--stack">
+              <caption>Documents by resource type</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Resource type</th>
+                  <th scope="col">Documents</th>
+                </tr>
+              </thead>
+              <tbody>
+                {status.byResourceType.map((row) => (
+                  <tr>
+                    <td data-label="Resource type">
+                      <span class="cell-code">{row.resourceType}</span>
+                    </td>
+                    <td data-label="Documents">{row.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    showIndexActions && (
+      <section class="admin-section fade-in-up" id="site-search-actions">
+        <h2 class="admin-section-title">Index operations</h2>
+        <p class="page-description">
+          Reconcile upserts current public documents and removes stale ones.
+          Rebuild deletes every document and re-extracts from scratch — slower,
+          and the public search surface is degraded while it runs.
+        </p>
+        <div class="admin-toolbar">
+          {canReconcile && (
+            <button
+              type="button"
+              id="site-search-reconcile"
+              class="module-toggle"
+            >
+              Reconcile index
+            </button>
+          )}
+          {canRebuild && (
+            <button
+              type="button"
+              id="site-search-rebuild"
+              class="btn-inline btn-inline--danger"
+            >
+              Rebuild index
+            </button>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadSettings && settings && (
+      <section class="admin-section fade-in-up" id="site-search-settings">
+        <h2 class="admin-section-title">Search configuration</h2>
+        <form id="site-search-settings-form" class="admin-create-form">
+          <p class="form-legend">
+            {canUpdateSettings
+              ? "These values shape the public search surface."
+              : "Read-only — you do not have permission to change these."}
+          </p>
+          <p
+            id="site-search-settings-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="setting-enabled">
+            <input
+              type="checkbox"
+              id="setting-enabled"
+              name="enabled"
+              checked={settings.enabled}
+              disabled={!canUpdateSettings}
+            />
+            Search enabled
+          </label>
+
+          <label for="setting-suggestions-enabled">
+            <input
+              type="checkbox"
+              id="setting-suggestions-enabled"
+              name="suggestionsEnabled"
+              checked={settings.suggestionsEnabled}
+              disabled={!canUpdateSettings}
+            />
+            Suggestions enabled
+          </label>
+
+          <label for="setting-analytics-enabled">
+            <input
+              type="checkbox"
+              id="setting-analytics-enabled"
+              name="analyticsEnabled"
+              checked={settings.analyticsEnabled}
+              disabled={!canUpdateSettings}
+            />
+            Query analytics (opt-in, stores query hashes and counts only)
+          </label>
+
+          <label for="setting-result-limit">
+            Result limit
+            <input
+              type="number"
+              id="setting-result-limit"
+              name="resultLimit"
+              value={settings.resultLimit}
+              min={RESULT_LIMIT_MIN}
+              max={RESULT_LIMIT_MAX}
+              disabled={!canUpdateSettings}
+            />
+          </label>
+
+          <label for="setting-min-query-length">
+            Minimum query length
+            <input
+              type="number"
+              id="setting-min-query-length"
+              name="minQueryLength"
+              value={settings.minQueryLength}
+              min={MIN_QUERY_LENGTH_MIN}
+              max={MIN_QUERY_LENGTH_MAX}
+              disabled={!canUpdateSettings}
+            />
+          </label>
+
+          <label for="setting-suggestion-limit">
+            Suggestion limit
+            <input
+              type="number"
+              id="setting-suggestion-limit"
+              name="suggestionLimit"
+              value={settings.suggestionLimit}
+              min={SUGGESTION_LIMIT_MIN}
+              max={SUGGESTION_LIMIT_MAX}
+              disabled={!canUpdateSettings}
+            />
+          </label>
+
+          <label for="setting-resource-types">
+            Indexed resource types
+            <input
+              type="text"
+              id="setting-resource-types"
+              name="enabledResourceTypes"
+              value={resourceTypesValue}
+              placeholder="Leave empty for every admitted type"
+              disabled={!canUpdateSettings}
+            />
+          </label>
+
+          {canUpdateSettings && (
+            <button
+              type="submit"
+              id="site-search-settings-submit"
+              class="module-toggle"
+            >
+              Save configuration
+            </button>
+          )}
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canReadIndex && (
+      <section class="admin-section fade-in-up" id="site-search-runs">
+        <h2 class="admin-section-title">
+          Recent index runs
+          <span class="count-pill">{recentRuns.length}</span>
+        </h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">The ten most recent index runs</caption>
+            <thead>
+              <tr>
+                <th scope="col">Started</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Indexed</th>
+                <th scope="col">Updated</th>
+                <th scope="col">Removed</th>
+                <th scope="col">Failures</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentRuns.length === 0 && (
+                <tr>
+                  <td class="data-table-empty" colspan={7}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌛
+                      </span>
+                      <span class="empty-state-title">No index runs yet</span>
+                      <span class="empty-state-text">
+                        Run a reconcile to build the index for the first time.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {recentRuns.map((run) => (
+                <tr>
+                  <td data-label="Started">
+                    <span class="cell-code">
+                      {formatTimestamp(run.startedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Type">{run.runType}</td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={runStatusVariant(run.status)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {run.status}
+                    </span>
+                  </td>
+                  <td data-label="Indexed">{run.documentsIndexed}</td>
+                  <td data-label="Updated">{run.documentsUpdated}</td>
+                  <td data-label="Removed">{run.documentsRemoved}</td>
+                  <td data-label="Failures">
+                    {run.failureCount > 0 ? (
+                      run.failureCount
+                    ) : (
+                      <span class="cell-muted">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadDiagnostics && (
+      <section class="admin-section fade-in-up" id="site-search-failures">
+        <h2 class="admin-section-title">
+          Failed items
+          <span class="count-pill">{failures.length}</span>
+        </h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Items that could not be indexed, most recent first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Source</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Locale</th>
+                <th scope="col">Error</th>
+                <th scope="col">Seen</th>
+                <th scope="col">Last seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {failures.length === 0 && (
+                <tr>
+                  <td class="data-table-empty" colspan={6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span class="empty-state-title">No failed items</span>
+                      <span class="empty-state-text">
+                        Every source item indexed cleanly.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {failures.map((item) => (
+                <tr>
+                  <td data-label="Source">
+                    <span class="cell-code">{item.sourceKey}</span>
+                  </td>
+                  <td data-label="Resource">
+                    <span class="cell-code">{item.resourceId}</span>
+                  </td>
+                  <td data-label="Locale">{item.locale}</td>
+                  <td data-label="Error">
+                    <span class="status-badge" data-variant="danger">
+                      <span class="status-dot" aria-hidden="true" />
+                      {item.errorClass}
+                    </span>
+                  </td>
+                  <td data-label="Seen">{item.occurrenceCount}</td>
+                  <td data-label="Last seen">
+                    <span class="cell-code">
+                      {formatTimestamp(item.lastSeenAt)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bound unconditionally: the controls only render when the matching
+  // permission gate passed server-side, so `getElementById` returns null for a
+  // viewer who lacks them and the listeners never bind. Astro hoists this
+  // script at build time, so a conditional wrapper would be meaningless.
+  //
+  // The import is deliberate and load-bearing for CSP: an import-free script is
+  // INLINED by Astro, and inline scripts are blocked by this app's
+  // `default-src 'self'` policy. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("site-search-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  /**
+   * Reconcile and rebuild are both idempotency-keyed server-side, so each click
+   * mints a FRESH key — reusing one would make a deliberate second run replay
+   * the first run's stored response instead of running again.
+   */
+  async function runIndexOperation(
+    button: HTMLButtonElement,
+    url: string,
+    busyLabel: string,
+    failureMessage: string
+  ): Promise<void> {
+    if (button.disabled) return;
+    const unlock = lockElement(button, busyLabel);
+    if (actionError) actionError.hidden = true;
+
+    const result = await sendJson("POST", url, undefined, {
+      "Idempotency-Key": crypto.randomUUID()
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showActionError(failureMessage);
+    unlock();
+  }
+
+  const reconcileButton = document.getElementById(
+    "site-search-reconcile"
+  ) as HTMLButtonElement | null;
+
+  reconcileButton?.addEventListener("click", () => {
+    void runIndexOperation(
+      reconcileButton,
+      "/api/v1/site-search/index/reconcile",
+      "Reconciling…",
+      "Could not reconcile the index. Please try again."
+    );
+  });
+
+  const rebuildButton = document.getElementById(
+    "site-search-rebuild"
+  ) as HTMLButtonElement | null;
+
+  rebuildButton?.addEventListener("click", () => {
+    // Destructive: a rebuild empties the index before refilling it, so the
+    // public search surface is degraded until it finishes.
+    if (
+      !window.confirm(
+        "Rebuild the whole search index? Public search results will be incomplete until it finishes."
+      )
+    ) {
+      return;
+    }
+    void runIndexOperation(
+      rebuildButton,
+      "/api/v1/site-search/index/rebuild",
+      "Rebuilding…",
+      "Could not rebuild the index. Please try again."
+    );
+  });
+
+  const settingsForm = document.getElementById(
+    "site-search-settings-form"
+  ) as HTMLFormElement | null;
+  const settingsError = document.getElementById("site-search-settings-error");
+  const settingsSubmit = document.getElementById(
+    "site-search-settings-submit"
+  ) as HTMLButtonElement | null;
+
+  settingsForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!settingsSubmit || settingsSubmit.disabled) return;
+    const unlock = lockElement(settingsSubmit, "Saving…");
+    if (settingsError) settingsError.hidden = true;
+
+    const formData = new FormData(settingsForm);
+
+    // An empty resource-type list means "every admitted type", which the API
+    // models as null — NOT as an empty array (that would index nothing).
+    const rawTypes = String(formData.get("enabledResourceTypes") ?? "").trim();
+    const enabledResourceTypes =
+      rawTypes === ""
+        ? null
+        : rawTypes
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry !== "");
+
+    const result = await sendJson(
+      "PUT",
+      "/api/v1/site-search/settings",
+      {
+        enabled: formData.get("enabled") === "on",
+        suggestionsEnabled: formData.get("suggestionsEnabled") === "on",
+        analyticsEnabled: formData.get("analyticsEnabled") === "on",
+        resultLimit: Number(formData.get("resultLimit")),
+        minQueryLength: Number(formData.get("minQueryLength")),
+        suggestionLimit: Number(formData.get("suggestionLimit")),
+        enabledResourceTypes
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    // Generic copy only — never surface internal detail. VALIDATION_ERROR is
+    // the one code worth distinguishing, because it is the user's own input.
+    if (settingsError) {
+      settingsError.textContent =
+        result.errorCode === "VALIDATION_ERROR"
+          ? "Some values are out of range. Check the limits and try again."
+          : "Could not save the configuration. Please try again.";
+      settingsError.hidden = false;
+    }
+    unlock();
+  });
+</script>
