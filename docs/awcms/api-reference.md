@@ -4697,19 +4697,25 @@ Read-only preview for the admin editor. Gated by blog_content.pages.read.
 - **operationId**: `blogListPosts`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100).
+Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100 — max 50 with `view=full`, whose rows carry `contentJson`).
 
 Ordering defaults to `updated_at DESC` — right for an admin table, and unsound as a keyset key because editing a post moves it, so a row can cross a page boundary between requests and be skipped or repeated. A caller that needs EVERY post (a build feed) passes `?order=created_at`, which is immutable, and follows `nextCursor` until it is null. `?cursor=` without `?order=created_at` is refused with 400 rather than quietly honoured.
 
+**The default response is `BlogPostSummary`, not `BlogPost`.** It carries no `contentJson`, `excerpt`, `metaDescription`, `canonicalUrl`, or `translationGroupId`. This document used to say otherwise, and a client that believed it built an entire static site with every article body empty — nothing failed, because a missing field reads as `undefined`. A caller that needs the body asks for `?view=full` (which requires `order=created_at`) and receives `BlogPost`.
+
 **Parameters**
 
-| Name               | In     | Required | Type                                                          | Description                                                                                                                                          |
-| ------------------ | ------ | -------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`           | query  | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |                                                                                                                                                      |
-| `limit`            | query  | no       | integer                                                       |                                                                                                                                                      |
-| `order`            | query  | no       | enum(`created_at`, `updated_at`)                              | Sort key. `created_at` selects the STABLE, cursor-capable traversal; `updated_at` (default) is the admin ordering and rejects `cursor`.              |
-| `cursor`           | query  | no       | string                                                        | Opaque keyset cursor from a previous response's `nextCursor`. Requires `order=created_at`. A malformed value is a 400, never treated as "no cursor". |
-| `X-Correlation-ID` | header | no       | string                                                        |                                                                                                                                                      |
+| Name     | In    | Required | Type                                                          | Description                                                                                                                                                                                           |
+| -------- | ----- | -------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status` | query | no       | enum(`draft`, `review`, `scheduled`, `published`, `archived`) |                                                                                                                                                                                                       |
+| `limit`  | query | no       | integer                                                       |                                                                                                                                                                                                       |
+| `order`  | query | no       | enum(`created_at`, `updated_at`)                              | Sort key. `created_at` selects the STABLE, cursor-capable traversal; `updated_at` (default) is the admin ordering and rejects `cursor`.                                                               |
+| `cursor` | query | no       | string                                                        | Opaque keyset cursor from a previous response's `nextCursor`. Requires `order=created_at`. A malformed value is a 400, never treated as "no cursor".                                                  |
+| `view`   | query | no       | enum(`summary`, `full`)                                       | Response projection. `summary` (default) returns `BlogPostSummary`; `full` returns `BlogPost` — every column the detail endpoint returns except `termIds`, which would cost one extra query per post. |
+
+`full` requires `order=created_at`: a full traversal is only sound over the immutable ordering, and the ordering is demanded rather than silently substituted. An unrecognised value is a 400, never a silent fallback to `summary`.
+|
+| `X-Correlation-ID` | header | no | string | |
 
 **Responses**
 
