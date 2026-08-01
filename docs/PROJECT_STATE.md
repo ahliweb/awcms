@@ -62,7 +62,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
 | Migrasi    | **83** (`sql/001`–`083`)                                                  | `ls sql/`                                             |
-| ADR        | **0000**–**0049** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
+| ADR        | **0000**–**0050** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
@@ -238,6 +238,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   juga membutuhkannya, sehingga keduanya **satu percakapan desain**, bukan dua.
   ADR-0048 menegaskan keduanya harus selesai sebelum layar internal pertama di
   `awcms-astro` bisa memanggil repo ini. Keduanya kini ada di kode (entri di atas).
+- **Gelombang penutup kontrak `awcms-astro` — SELESAI (2026-08-01).** Lima perubahan
+  berurutan, masing-masing satu PR atomic ber-CI penuh:
+  - **#316** `bun run identity-access:permissions:backfill` — role `owner` menerima izinnya
+    SEKALI saat tenant dibuat, jadi tiap tenant yang lebih tua dari sebuah modul kena 403.
+    Hanya permission yang baris katalognya **lebih baru** dari role yang di-grant; yang
+    lebih tua dianggap dicabut sengaja dan dilaporkan, bukan dikembalikan. Dry-run default.
+  - **#317** cursor stabil `GET /api/v1/blog/posts?order=created_at` — build feed tidak lagi
+    berhenti di 100 post. `?cursor=` di atas urutan `updated_at` ditolak 400: kunci keyset
+    yang bisa berubah melewatkan/mengulang baris tanpa gejala.
+  - **#318** `GET /api/v1/media/objects` — registry media tidak punya endpoint baca sama
+    sekali, sehingga konsumen luar tahu sebuah post punya gambar tanpa bisa tahu URL-nya.
+  - **#319** deaktivasi tenant user **mencabut sesinya seketika** — `resolveTenantContext`
+    tak pernah membaca `status`, jadi pengguna yang dinonaktifkan tetap bekerja sampai
+    sesinya kedaluwarsa.
+  - **[ADR-0050](adr/0050-bff-session-handoff-code.md)** — BFF memperoleh sesi manusia lewat
+    kode handoff sekali-pakai; proksi password ditolak karena login di sini bukan satu
+    langkah (MFA/OIDC/Turnstile harus disalin ke repo kedua). **Dokumen, belum kode.**
 - **Katalog tag OpenAPI & kepemilikan fragment — SELESAI (2026-07-30).** Temuan graphify
   2026-07-29 ternyata **lebih luas dari yang dilaporkan**: bukan hanya `blog_content` yang
   hilang dari `docs/awcms/api-reference.md`, melainkan **55 operasi dari empat modul** —
