@@ -77,7 +77,7 @@ describe("seo_distribution module descriptor (ADR-0038 discovery + ADR-0039 redi
     ]);
   });
 
-  test("dataLifecycle: governs the 404-telemetry table (ADR-0039); no jobs/events/navigation", () => {
+  test("dataLifecycle: governs the 404-telemetry table (ADR-0039); no jobs/events", () => {
     // ADR-0038 shipped no dataLifecycle; ADR-0039's redirect scope adds the
     // privacy-minimized 404-observations table, which MUST be governed.
     const lifecycle = seoDistributionModule.dataLifecycle ?? [];
@@ -89,7 +89,34 @@ describe("seo_distribution module descriptor (ADR-0038 discovery + ADR-0039 redi
     expect(lifecycle[0]?.deletion.mode).toBe("hard_delete");
     expect(seoDistributionModule.jobs).toBeUndefined();
     expect(seoDistributionModule.events).toBeUndefined();
-    expect(seoDistributionModule.navigation).toBeUndefined();
+  });
+
+  test("navigation: one entry for /admin/seo, permission-gated, ungrouped", () => {
+    // This assertion used to be `navigation` is undefined, on the grounds that
+    // the redirect/404 surface was "an API, not an admin screen". That is what
+    // kept the module invisible in the sidebar while all eight of its
+    // permissions were routed — `/admin/seo` is that screen, so the pin is
+    // inverted rather than deleted.
+    expect(seoDistributionModule.navigation).toEqual([
+      {
+        labelKey: "admin.layout.nav_seo",
+        path: "/admin/seo",
+        order: 40,
+        requiredPermission: "seo_distribution.config.read"
+      }
+    ]);
+    // `group` must stay unset: `DEFAULT_MODULE_TYPE` places this module under
+    // `system` and wins over a descriptor-level group, so setting one would
+    // read as an effective choice while changing nothing.
+    expect(seoDistributionModule.navigation?.[0]?.group).toBeUndefined();
+    // A non-core entry without `requiredPermission` is visible to everyone and
+    // breaks `admin-navigation-registry.test.ts`'s no-permissions expectation.
+    const declared = new Set(
+      (seoDistributionModule.permissions ?? []).map(
+        (p) => `seo_distribution.${p.activityCode}.${p.action}`
+      )
+    );
+    expect(declared.has("seo_distribution.config.read")).toBe(true);
   });
 
   test("api basePath is /api/v1/seo with its own fragment", () => {

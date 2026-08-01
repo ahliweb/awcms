@@ -72,11 +72,26 @@ export const SEO_NOT_FOUND_LIFECYCLE_KEY =
  * host-based-only first cut (ADR-0039); a path-tenant strategy is a documented
  * deferred follow-up. awcms has NO i18n/locale seam, so `locale` is always `null`.
  *
- * `navigation`, `events`, and `jobs` stay undeclared: the redirect/404 surface is an
- * API, not an admin screen (a documented follow-up); resolution is live per request
- * (bounded); URL-change capture is an audited synchronous hook, not yet a published
- * domain event; and 404 retention rides the generic data_lifecycle purge engine
- * (declared below), not a module-owned job.
+ * ## Admin screen (`navigation`)
+ *
+ * `navigation` used to be undeclared here, on the grounds that the redirect/404
+ * surface was "an API, not an admin screen". That left the module INVISIBLE in the
+ * sidebar even though every one of its eight permissions was routed — an operator
+ * holding them had no way to reach any of it. `/admin/seo`
+ * (`src/pages/admin/seo.astro`) closes that: ONE screen with four panels (SEO
+ * defaults, redirect policy, redirect rules + recovery, 404 governance), so the loop
+ * an operator actually runs — see a 404, create the rule that fixes it, resolve the
+ * observation — stays on one page. The entry's `requiredPermission` is
+ * `config.read`, the gate on the screen's leading panel; a viewer holding only
+ * `redirect.read`/`not_found.read` therefore does not see the link, which is the
+ * accepted cost of a single entry (the alternative, splitting the screen, doubles
+ * the nav entries and the labelKeys for one operator task). `group` is deliberately
+ * NOT set — `DEFAULT_MODULE_TYPE` places this module under `system` and wins over it.
+ *
+ * `events` and `jobs` stay undeclared: resolution is live per request (bounded);
+ * URL-change capture is an audited synchronous hook, not yet a published domain
+ * event; and 404 retention rides the generic data_lifecycle purge engine (declared
+ * below), not a module-owned job.
  */
 export const seoDistributionModule = defineModule({
   key: SEO_MODULE_KEY,
@@ -125,6 +140,14 @@ export const seoDistributionModule = defineModule({
       "/atom.xml"
     ]
   },
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_seo",
+      path: "/admin/seo",
+      order: 40,
+      requiredPermission: "seo_distribution.config.read"
+    }
+  ],
   permissions: [
     {
       activityCode: SEO_CONFIG_ACTIVITY_CODE,
