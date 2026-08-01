@@ -51,6 +51,8 @@
     "form-drafts:purge": "bun scripts/form-draft-purge.ts",
     "site-search:reconcile": "bun scripts/site-search-reconcile.ts",
     "idn-regions:import": "bun scripts/idn-regions-import.ts",
+    "idn-regions:activate": "bun scripts/idn-regions-activate.ts",
+    "idn-regions:rollback": "bun scripts/idn-regions-rollback.ts",
     "site-search:sources:check": "bun scripts/site-search-sources-check.ts",
     "comments:resources:check": "bun scripts/comments-resources-check.ts",
     "comments:retention": "bun scripts/comments-retention.ts",

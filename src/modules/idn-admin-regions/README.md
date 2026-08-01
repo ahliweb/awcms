@@ -4,15 +4,15 @@ Versioned master data for Indonesia's administrative hierarchy — **province /
 regency-city / district / village** — admitted by
 [ADR-0046](../../../docs/adr/0046-idn-admin-regions-module-admission.md).
 
-| Aspect      | Value                                                                             |
-| ----------- | --------------------------------------------------------------------------------- |
-| Key / type  | `idn_admin_regions` · `system`, `isCore: false`                                   |
-| Tables      | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                |
-| Permissions | `region.read`, `dataset.read`, `dataset.configure`, `dataset.restore` (`sql/081`) |
-| API         | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)        |
-| Job         | `bun run idn-regions:import`                                                      |
-| Dataset     | `data/idn-admin-regions/` — vendored `cahyadsn/wilayah` (MIT)                     |
-| Depends on  | `tenant_admin`, `identity_access` — nothing depends on this module                |
+| Aspect      | Value                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| Key / type  | `idn_admin_regions` · `system`, `isCore: false`                                                          |
+| Tables      | `awcms_idn_region_datasets`, `awcms_idn_admin_regions` (`sql/080`)                                       |
+| Permissions | `region.read`, `dataset.read` (`sql/081`; `dataset.configure`/`.restore` revoked by `sql/084`, ADR-0052) |
+| API         | `/api/v1/idn-regions/*` (`openapi/modules/idn-admin-regions.openapi.yaml`)                               |
+| Job         | `bun run idn-regions:import`                                                                             |
+| Dataset     | `data/idn-admin-regions/` — vendored `cahyadsn/wilayah` (MIT)                                            |
+| Depends on  | `tenant_admin`, `identity_access` — nothing depends on this module                                       |
 
 ## Source, licence, and the claim this module does NOT make
 
@@ -92,13 +92,27 @@ An import fails — rather than importing what it could — when any of these ho
 
 ## Lookup API
 
-| Method + path                                     | Permission          | Notes                                           |
-| ------------------------------------------------- | ------------------- | ----------------------------------------------- |
-| `GET /api/v1/idn-regions/regions`                 | `region.read`       | `level`, `parentCode`, `search`, keyset `after` |
-| `GET /api/v1/idn-regions/regions/{code}`          | `region.read`       | One region + resolved ancestor path             |
-| `GET /api/v1/idn-regions/datasets`                | `dataset.read`      | Versions + provenance + caveat                  |
-| `POST /api/v1/idn-regions/datasets/{id}/activate` | `dataset.configure` | High-risk, `Idempotency-Key`, audited           |
-| `POST /api/v1/idn-regions/datasets/rollback`      | `dataset.restore`   | High-risk, `Idempotency-Key`, audited           |
+| Method + path                            | Permission     | Notes                                           |
+| ---------------------------------------- | -------------- | ----------------------------------------------- |
+| `GET /api/v1/idn-regions/regions`        | `region.read`  | `level`, `parentCode`, `search`, keyset `after` |
+| `GET /api/v1/idn-regions/regions/{code}` | `region.read`  | One region + resolved ancestor path             |
+| `GET /api/v1/idn-regions/datasets`       | `dataset.read` | Versions + provenance + caveat                  |
+
+Every endpoint here is **read-only**. Activation and rollback used to sit in this
+table and are gone — [ADR-0052](../../../docs/adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
+made them operator jobs:
+
+```bash
+bun run idn-regions:activate -- --dataset <code|uuid>            # dry run
+bun run idn-regions:activate -- --dataset <code|uuid> --commit   # serves it
+bun run idn-regions:rollback --commit                            # undo
+```
+
+They changed the dataset served to **every** tenant, but their permissions were
+seeded into the global catalog that `setup/initialize` grants wholesale to each
+tenant's `owner` — so an ordinary tenant owner held authority over data served to
+other tenants. These tables have no `tenant_id` and no RLS: there is no tenant the
+action belongs to, so no tenant permission can honestly express it.
 
 Queries default to the **active** dataset; `?dataset=<code>` reads a specific
 version, which is what makes keeping superseded versions worth the rows. With

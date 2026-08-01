@@ -152,6 +152,16 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "One-shot reference-data import (idn-regions:import, ADR-0046) — 91,599 rows written in a single transaction on deploy, not on a timer. Tolerant of delay and never latency-sensitive, but deliberately NOT background_sync: it is a long single write, so it belongs in the class sized for sweeps rather than the one sized for recurring dispatchers competing with request traffic."
   },
+  "scripts/idn-regions-activate.ts": {
+    workClass: "maintenance",
+    rationale:
+      "Operator-run dataset activation (idn-regions:activate, ADR-0052) — a short status flip plus a superseding update, run by hand and never on a timer. `maintenance` for the same reason as idn-regions-import: tolerant of delay, never latency-sensitive, and not a recurring dispatcher competing with request traffic."
+  },
+  "scripts/idn-regions-rollback.ts": {
+    workClass: "maintenance",
+    rationale:
+      "Operator-run rollback to the previously active dataset (idn-regions:rollback, ADR-0052) — same shape and same class as idn-regions:activate; run by hand to recover from a bad activation, never scheduled."
+  },
   "scripts/edge-cache-purge.ts": {
     workClass: "background_sync",
     rationale:

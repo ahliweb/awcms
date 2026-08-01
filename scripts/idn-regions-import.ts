@@ -20,9 +20,11 @@
  * ## The import never activates what it imports
  *
  * A new dataset lands `validated`. Deciding which version the platform SERVES is
- * an audited admin action (`POST /api/v1/idn-regions/datasets/{id}/activate`),
- * because it changes what every address form in the product returns and someone
- * has to own that.
+ * a separate operator job (`bun run idn-regions:activate`), because it changes
+ * what every address form in the product returns — for EVERY tenant at once —
+ * and someone has to own that. ADR-0052 moved it off HTTP: a global action has
+ * no tenant subject for an ABAC guard to evaluate, which is the same reason this
+ * import is a job (ADR-0046 §5).
  *
  * NOT tenant-scoped: this is global reference data, so the write runs on a plain
  * transaction rather than `withTenant` — there is no tenant to scope it to (and
@@ -83,7 +85,7 @@ async function main(): Promise<void> {
       `imported dataset ${result.datasetCode} (${result.datasetId}) with ${result.rowCount} regions — status ${result.status}.`
     );
     console.log(
-      "Activate it explicitly (admin screen or POST /api/v1/idn-regions/datasets/{id}/activate) — importing never changes which dataset is served."
+      "Activate it explicitly (`bun run idn-regions:activate -- --dataset <code> --commit`) — importing never changes which dataset is served."
     );
   } catch (error) {
     // A second import of identical bytes collides on the deterministic dataset

@@ -6017,56 +6017,6 @@ Gated by idn_admin_regions.dataset.read. Newest import first, with upstream repo
 | 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/idn-regions/datasets/{id}/activate` — Activate one imported dataset version
-
-- **operationId**: `idnRegionsDatasetActivate`
-- **Security**: bearerAuth + tenantHeader
-
-Gated by idn_admin_regions.dataset.configure. High-risk, `Idempotency-Key` required, audited with the dataset codes on both sides of the switch: this changes what every address form and regional report in the product returns, for every tenant at once. Activating the already-active dataset is a no-op success (`changed: false`), because a retried request that lands on the state it asked for succeeded. Only one dataset can be active — enforced by a partial unique index, so two concurrent activations end with one committed and one rejected.
-
-**Parameters**
-
-| Name               | In     | Required | Type          | Description   |
-| ------------------ | ------ | -------- | ------------- | ------------- |
-| `id`               | path   | yes      | string (uuid) | Dataset UUID. |
-| `Idempotency-Key`  | header | yes      | string        |               |
-| `X-Correlation-ID` | header | no       | string        |               |
-
-**Responses**
-
-| Status | Description                                                                                                                     | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The activated dataset.                                                                                                          | object                                 |
-| 400    | Validation error.                                                                                                               | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                                                                                             | [`ApiError`](#standard-error-envelope) |
-| 409    | Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state. | [`ApiError`](#standard-error-envelope) |
-
-### `POST /api/v1/idn-regions/datasets/rollback` — Roll back to the previously active dataset version
-
-- **operationId**: `idnRegionsDatasetRollback`
-- **Security**: bearerAuth + tenantHeader
-
-Gated by idn_admin_regions.dataset.restore. High-risk, `Idempotency-Key` required, audited. The target is resolved from `activated_at` history, never supplied by the caller — letting the client name the destination would make this an activation wearing a safer-sounding name. Returns 409 when there is no previously activated version.
-
-**Parameters**
-
-| Name               | In     | Required | Type   | Description |
-| ------------------ | ------ | -------- | ------ | ----------- |
-| `Idempotency-Key`  | header | yes      | string |             |
-| `X-Correlation-ID` | header | no       | string |             |
-
-**Responses**
-
-| Status | Description                                                                                                                     | Schema                                 |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| 200    | The dataset that is now active.                                                                                                 | object                                 |
-| 400    | Validation error.                                                                                                               | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                                                                                                     | [`ApiError`](#standard-error-envelope) |
-| 409    | Idempotency-Key was already used with a different request, or the dataset cannot be activated/rolled back in its current state. | [`ApiError`](#standard-error-envelope) |
-
 ### `GET /api/v1/idn-regions/regions` — Look up Indonesia administrative regions
 
 - **operationId**: `idnRegionsList`
