@@ -76,14 +76,14 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek       | Nilai (per commit ini)                                                      | Sumber kebenaran                                      |
-| ----------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya          | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                    | `src/modules/index.ts`                                |
-| Migrasi     | **84** (`sql/001`–`084`)                                                    | `ls sql/`                                             |
-| ADR         | **0000**–**0052** (`0000` = template)                                       | `docs/adr/README.id.md` (indeks ter-gate)             |
-| Layar admin | **20** berkas `.astro` di `src/pages/admin/`; **7 modul** masih tanpa layar | `ls src/pages/admin/`, `navigation` di `module.ts`    |
-| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**   | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
+| Aspek       | Nilai (per commit ini)                                                              | Sumber kebenaran                                      |
+| ----------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                |
+| Migrasi     | **84** (`sql/001`–`084`)                                                            | `ls sql/`                                             |
+| ADR         | **0000**–**0052** (`0000` = template)                                               | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Layar admin | **20** berkas `.astro` di `src/pages/admin/`; **7 dari 21 modul** masih tanpa layar | `ls src/pages/admin/`, `navigation` di `module.ts`    |
+| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
