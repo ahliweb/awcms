@@ -48,22 +48,42 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
   ABAC default-deny). ADR §4: **setiap fitur fondasi yang mendarat selama pembekuan
   WAJIB dicatat sebagai divergence** di `awcms-family-compatibility.yaml` **saat ia
   mendarat**, bukan belakangan.
-- [ADR-0048](adr/0048-frontend-role-split-awcms-astro-internal-admin.md): pembagian peran
-  frontend. Layar **platform/operator internal** (master data global, rilis/rollback data,
-  kesehatan lintas tenant) dibangun di **`awcms-astro`**; layar **tenant atas datanya
-  sendiri** + seluruh permukaan publik tetap di **`awcms`**. Permukaan otorisasi tetap
-  SATU — memindahkan layar tidak memindahkan izinnya. Aturan ini mengikat layar **baru**;
-  pemilahan `/admin/*` yang sudah ada adalah pekerjaan tersendiri dengan ADR sendiri.
+- ~~ADR-0048~~ (pembagian peran frontend: layar platform/operator internal dibangun di
+  `awcms-astro`) — **di-supersede [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md)
+  pada 1 Agustus 2026**, lihat butir berikutnya. Peran `awcms-astro` sebagai experience
+  layer + BFF (ADR-0045) tidak ikut berubah.
+
+**Perubahan 1 Agustus 2026 — seluruh layar admin dibangun di sini:**
+
+- [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md): **setiap layar admin —
+  tenant maupun owner/internal/platform — dibangun di repo ini**, di bawah satu shell
+  `/admin/*`. Alasan yang mengubah substansinya: **memindahkan layar tidak pernah menjadi
+  kontrol keamanan.** `sql/081` men-seed `idn_admin_regions.dataset.configure`/`.restore`
+  ke katalog ABAC global dan `POST /api/v1/setup/initialize` memberikan seluruh katalog ke
+  role `owner` tiap tenant baru — jadi owner tenant biasa SUDAH memegang wewenang mengganti
+  dataset yang dilayani ke seluruh tenant, persis risiko yang ADR-0048 ingin cegah, karena
+  ABAC mengevaluasi permission bukan asal-usul frontend. Gerbang penggantinya normatif:
+  aksi lintas-tenant **wajib** punya gerbang platform-scoped dan **tidak boleh** masuk
+  katalog yang di-seed ke role tenant.
+- [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) menutup temuan
+  terbuka itu di kode: aktivasi/rollback dataset wilayah jadi **job operator**
+  (`bun run idn-regions:activate` / `:rollback`, dry-run default), endpoint HTTP-nya
+  dihapus, dan kedua permission dicabut dari katalog (`sql/084`). Menggerbanginya dengan
+  kredensial mesin DITOLAK: kredensial mesin baca-saja (ADR-0049), jadi melebarkannya
+  justru membuat token build yang bocor bisa mengganti dataset global. Biaya yang
+  diterima & dinyatakan: baris audit hilang, karena `awcms_audit_events` tenant-scoped
+  sedangkan aksinya global.
 
 ## 2. Inventori ringkas
 
-| Aspek      | Nilai (per commit ini)                                                    | Sumber kebenaran                                      |
-| ---------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi      | **6.4.0** (2026-07-26); 0 changeset menunggu                              | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base | **21** (lihat daftar di ARCHITECTURE.md)                                  | `src/modules/index.ts`                                |
-| Migrasi    | **84** (`sql/001`–`084`)                                                  | `ls sql/`                                             |
-| ADR        | **0000**–**0050** (`0000` = template)                                     | `docs/adr/README.id.md` (indeks ter-gate)             |
-| Kontrak    | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
+| Aspek       | Nilai (per commit ini)                                                      | Sumber kebenaran                                      |
+| ----------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya          | `package.json`, `CHANGELOG.md`, tag `v*`              |
+| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                    | `src/modules/index.ts`                                |
+| Migrasi     | **84** (`sql/001`–`084`)                                                    | `ls sql/`                                             |
+| ADR         | **0000**–**0052** (`0000` = template)                                       | `docs/adr/README.id.md` (indeks ter-gate)             |
+| Layar admin | **20** berkas `.astro` di `src/pages/admin/`; **7 modul** masih tanpa layar | `ls src/pages/admin/`, `navigation` di `module.ts`    |
+| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**   | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -198,11 +218,35 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`), otorisasi tetap per-tenant
   default-deny. Impor = job deployment dry-run-by-default (`bun run idn-regions:import`,
   `awcms_worker`); aktivasi/rollback = aksi admin ter-audit ber-idempotency-key. Modul
-  pertama yang **dirintis langsung di sini** (bukan port) di bawah ADR-0047, dan sengaja
-  **tanpa `navigation`** — layar operatornya milik `awcms-astro` (ADR-0048).
+  pertama yang **dirintis langsung di sini** (bukan port) di bawah ADR-0047. Sengaja
+  **tanpa `navigation`**, dan alasannya kini berubah: bukan lagi "layarnya milik
+  `awcms-astro`" (ADR-0048, sudah di-supersede) melainkan karena ADR-0052 memindahkan
+  aktivasi/rollback ke job operator — yang tersisa untuk tenant hanyalah dua permission
+  baca.
 - **Kredensial mesin baca-saja + introspeksi sesi** ([ADR-0049](adr/0049-machine-credentials-and-session-introspection.md),
   `sql/082` skema + `sql/083` permission) — bearer KEDUA yang bukan sesi manusia, terikat
   ke satu service account. Rinci di §4 dan di `src/modules/identity-access/README.md`.
+- **Gelombang layar admin (1–2 Agustus 2026, PR #321–#330).** Audit permukaan admin
+  menemukan **13 dari 21 modul tanpa satu pun layar** — 125 berkas route yang hanya bisa
+  dipakai lewat `curl`. [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md)
+  memutuskan seluruhnya dibangun di sini; sembilan PR atomic mendarat berurutan:
+  `/admin/audit-trail` (#324, `logging`), `/admin/form-drafts` (#325),
+  `/admin/site-search` (#322), `/admin/theming` (#327), `/admin/seo` (#329),
+  `/admin/data-lifecycle` (#330), plus perbaikan dashboard sync zero-node (#323) dan
+  ADR-0052/`sql/084` (#328). **Nol migrasi** untuk layarnya sendiri — permukaan
+  otorisasinya sudah ada, yang hilang hanya layarnya.
+  Pola yang dipakai seragam dan patut diikuti layar berikutnya: baca lewat fungsi
+  aplikasi modul sendiri di **satu** `withTenantOrThrow` (await berurutan — query paralel
+  di satu koneksi transaksi membocorkannya), tulis lewat endpoint ter-guard dengan
+  `Idempotency-Key` segar per klik, gerbang permission di halaman **UX-only** (endpoint
+  tetap otoritasnya), entri `navigation` mendarat di PR yang SAMA (entri tanpa halaman =
+  404 permanen di menu, digerbangi `tests/admin-navigation-registry.test.ts` dua arah),
+  dan satu `tests/admin-<modul>-page-contract.test.ts` yang mengikat tiap key halaman ke
+  yang route tegakkan DAN descriptor deklarasikan — penangkal bug latent-authz yang repo
+  ini sudah dua kali kirim. `/admin/data-lifecycle` menambah satu pelajaran khusus:
+  `legal_hold.create` dan `.release` digerbangi **terpisah**, karena SoD menjadikan
+  memegang keduanya konflik `critical` — satu gerbang gabungan yang terlihat lebih rapi
+  justru salah untuk setiap operator nyata.
 - **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
   `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
   ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
@@ -210,6 +254,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Tujuh modul belum
+  mendeklarasikan `navigation` — verifikasi ulang dengan
+  `grep -L 'navigation:' src/modules/*/module.ts`, bukan dari daftar ini:
+  - `blog-content` — paling besar (19 tabel: post, kategori, homepage section, ad
+    placement) dan bernilai-pakai paling tinggi.
+  - `media-library` — browse/upload/verifikasi objek + lifecycle orphan; setara step 5b
+    awcms-micro (`/admin/media`) yang belum di-port.
+  - `workflow-approval` — inbox persetujuan; tanpa layar, approval hanya bisa diputus
+    lewat API.
+  - `reporting` — lima view management reporting; `/admin/index.astro` hanya dashboard.
+  - `sync-storage`, `domain-event-runtime` — permukaan operator.
+  - `idn-admin-regions` — sengaja tanpa layar, lihat §3 (ADR-0052 memindahkan
+    lifecycle-nya ke job operator; sisanya dua permission baca).
+
+  Ikuti pola gelombang #321–#330 di §3 — termasuk contract test per layar, yang
+  **mutation-proven** (kembalikan cacat aslinya dan pastikan MERAH) sebelum di-commit.
 
 - **Kontrak yang menahan `awcms-astro` — SELESAI (2026-08-01, ADR-0049, `sql/082`/`083`).**
   Kredensial mesin baca-saja + `GET /api/v1/auth/session`. Kredensial
