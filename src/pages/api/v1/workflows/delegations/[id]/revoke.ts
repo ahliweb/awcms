@@ -26,6 +26,7 @@ import {
   WorkflowDelegationForbiddenError,
   WorkflowDelegationNotFoundError
 } from "../../../../../../modules/workflow-approval/application/workflow-delegation-directory";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/workflow-approval/domain/reason-bounds";
 
 /**
  * Security-auditor finding (PR #778): this route previously gated on
@@ -47,7 +48,6 @@ const REVOKE_GUARD = {
   action: "revoke" as const
 };
 const REVOKE_IDEMPOTENCY_SCOPE = "workflow_delegation_revoke";
-const MAX_REASON_LENGTH = 500;
 
 type RevokeRequestBody = { reason?: unknown };
 

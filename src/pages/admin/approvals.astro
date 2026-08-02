@@ -1,0 +1,1091 @@
+---
+/**
+ * Approval inbox — the decision surface of `workflow_approval`.
+ *
+ * The module shipped a complete engine (graph definitions, quorum, delegation,
+ * escalation, administrative recovery) and no screen, so every approval in this
+ * base could only be decided with `curl`. Under ADR-0051 the screen belongs
+ * here; this is the inbox half of it.
+ *
+ * ## Scope, and what is deliberately absent
+ *
+ * This page covers the eight permissions an approver or an operator recovering
+ * a stuck instance needs: `approval.read`, `approval.approve`, the three
+ * `recovery.*`, and the three `delegation.*`.
+ *
+ * The six `definition.*` permissions are NOT gated here. Authoring a workflow
+ * definition means editing a validated node graph, and the honest options are a
+ * real graph editor or a raw-JSON textarea. A textarea that silently accepts a
+ * malformed graph until the publish call rejects it is a worse affordance than
+ * no affordance, so definitions get their own screen rather than a corner of
+ * this one. `tests/admin-approvals-page-contract.test.ts` asserts that this
+ * page claims none of them, so the split stays deliberate rather than becoming
+ * a gap nobody notices.
+ *
+ * There is also no user PICKER for reassignment or delegation, only a tenant
+ * user id field. Rendering a directory of tenant users here would hand the
+ * whole list to anyone holding `recovery.reassign` — a disclosure
+ * `identity_access` gates separately on its own permissions. The field links to
+ * `/admin/users`, where that data is already properly gated.
+ *
+ * ## Reads
+ *
+ * Through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited sequentially — concurrent queries on a single
+ * transaction connection leak it.
+ *
+ * The instance history is fetched only when `?instance=<id>` names one. Doing
+ * it per row would be up to 100 extra queries for a list nobody has expanded.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. All six mutations post to the guarded endpoints with
+ * a fresh per-click `Idempotency-Key`; every one of them requires the header
+ * and every one is audited.
+ *
+ * ## Gates
+ *
+ * UX-only; `authorizeInTransaction` in the routes is the authority. Two are
+ * easy to get wrong in a way that denies everyone while reading perfectly:
+ *
+ * - approve and reject share ONE permission, `approval.approve` — the
+ *   permission is the ability to decide, and a separate `approval.reject` is
+ *   seeded nowhere;
+ * - the module key is `workflow`, not `workflow_approval` (the directory name).
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import {
+  listWorkflowInboxTasks,
+  listWorkflowInstanceHistory,
+  type WorkflowInstanceHistoryEntry,
+  type WorkflowTaskListItem
+} from "../../modules/workflow-approval/application/workflow-inbox-directory";
+import {
+  listWorkflowDelegations,
+  type WorkflowDelegationRow
+} from "../../modules/workflow-approval/application/workflow-delegation-directory";
+import {
+  MAX_REASON_LENGTH,
+  MIN_REASON_LENGTH
+} from "../../modules/workflow-approval/domain/reason-bounds";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("workflow", "approval", "read")
+);
+const canDecide = ssr.permissions.has(
+  permissionKey("workflow", "approval", "approve")
+);
+const canReassign = ssr.permissions.has(
+  permissionKey("workflow", "recovery", "reassign")
+);
+const canCancel = ssr.permissions.has(
+  permissionKey("workflow", "recovery", "cancel")
+);
+const canForceDecide = ssr.permissions.has(
+  permissionKey("workflow", "recovery", "force_decide")
+);
+const canReadDelegations = ssr.permissions.has(
+  permissionKey("workflow", "delegation", "read")
+);
+const canCreateDelegation = ssr.permissions.has(
+  permissionKey("workflow", "delegation", "create")
+);
+const canRevokeDelegation = ssr.permissions.has(
+  permissionKey("workflow", "delegation", "revoke")
+);
+
+/** Mirrors `VALID_STATUSES` in `src/pages/api/v1/workflows/tasks/index.ts`. */
+const STATUS_OPTIONS = [
+  "pending",
+  "completed",
+  "skipped",
+  "cancelled"
+] as const;
+type TaskStatus = (typeof STATUS_OPTIONS)[number];
+
+const STATUS_VARIANT: Record<TaskStatus, string> = {
+  pending: "info",
+  completed: "success",
+  skipped: "neutral",
+  cancelled: "neutral"
+};
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const statusRaw = readParam("status");
+// An unknown `status` falls back to the endpoint's own default rather than
+// being forwarded: the route answers a bad value with a 400, and a hand-edited
+// query string must not turn this screen into an error page.
+const statusFilter: TaskStatus = (STATUS_OPTIONS as readonly string[]).includes(
+  statusRaw
+)
+  ? (statusRaw as TaskStatus)
+  : "pending";
+const workflowKeyFilter = readParam("workflowKey");
+const resourceTypeFilter = readParam("resourceType");
+const searchFilter = readParam("search");
+const overdueOnly = readParam("overdue") === "true";
+const selectedInstanceId = readParam("instance");
+
+const cursorParam = readParam("cursor");
+// A malformed cursor is dropped rather than forwarded, for the same reason.
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+let tasks: WorkflowTaskListItem[] = [];
+let nextCursor: string | null = null;
+let history: WorkflowInstanceHistoryEntry[] = [];
+let delegations: WorkflowDelegationRow[] = [];
+let loadError = false;
+
+const canSeeAnything = canRead || canReadDelegations;
+
+if (canSeeAnything) {
+  try {
+    const sql = getDatabaseClient();
+    const now = new Date();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      if (canRead) {
+        const result = await listWorkflowInboxTasks(
+          tx,
+          ssr.tenantId,
+          {
+            status: statusFilter,
+            workflowKey: workflowKeyFilter || undefined,
+            resourceType: resourceTypeFilter || undefined,
+            search: searchFilter || undefined,
+            overdueOnly
+          },
+          now,
+          cursor
+        );
+        tasks = result.tasks;
+        nextCursor = result.nextCursor;
+
+        if (selectedInstanceId) {
+          // `listWorkflowInstanceHistory` asserts the id is a UUID and throws
+          // otherwise, which the surrounding catch turns into the load-error
+          // notice — a hand-edited `?instance=` must not 500 the page.
+          history = await listWorkflowInstanceHistory(
+            tx,
+            ssr.tenantId,
+            selectedInstanceId
+          );
+        }
+      }
+
+      if (canReadDelegations) {
+        delegations = await listWorkflowDelegations(tx, ssr.tenantId);
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "there is nothing to approve".
+    loadError = true;
+    logAdminPageError(
+      "admin/approvals.astro: failed to load the approval inbox",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+function formatTimestamp(value: Date | string | null): string {
+  if (value === null) return "—";
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+/** Rebuilds the current query string with one key replaced — keeps filters across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/approvals?${query}` : "/admin/approvals";
+}
+
+const hasFilters =
+  workflowKeyFilter !== "" ||
+  resourceTypeFilter !== "" ||
+  searchFilter !== "" ||
+  overdueOnly ||
+  statusFilter !== "pending";
+
+const showRecovery = canReassign || canForceDecide;
+const taskColumns = 6 + (canDecide || showRecovery ? 1 : 0);
+const delegationColumns = canRevokeDelegation ? 7 : 6;
+const selectedTask = selectedInstanceId
+  ? (tasks.find((task) => task.instanceId === selectedInstanceId) ?? null)
+  : null;
+---
+
+<AdminLayout title="Approvals">
+  <header class="page-header fade-in-up">
+    <h1 id="approvals-heading">Approvals</h1>
+    <p class="page-description">
+      Tasks awaiting a decision, the history behind them, and the delegations
+      that let someone else decide on your behalf. Overdue tasks are escalated
+      by <code>workflow:escalations:dispatch</code>; escalation notifies, it
+      never decides.
+    </p>
+  </header>
+
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="approvals-denied">
+        You do not have permission to view approvals.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="approvals-error">
+        The approval inbox could not be loaded right now. This is a problem
+        reading it, not an empty inbox — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="approvals-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <form method="get" class="admin-toolbar fade-in-up" id="task-filter-form">
+        <label for="filter-status">Status</label>
+        <select id="filter-status" name="status">
+          {STATUS_OPTIONS.map((value) => (
+            <option value={value} selected={statusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="filter-workflow-key">Workflow key</label>
+        <input
+          id="filter-workflow-key"
+          name="workflowKey"
+          type="text"
+          value={workflowKeyFilter}
+          autocomplete="off"
+          placeholder="e.g. purchase_requisition"
+        />
+
+        <label for="filter-resource-type">Resource type</label>
+        <input
+          id="filter-resource-type"
+          name="resourceType"
+          type="text"
+          value={resourceTypeFilter}
+          autocomplete="off"
+        />
+
+        <label for="filter-search">Search</label>
+        <input
+          id="filter-search"
+          name="search"
+          type="search"
+          value={searchFilter}
+          autocomplete="off"
+          placeholder="resource id, key or name"
+        />
+
+        <label for="filter-overdue">
+          <input
+            id="filter-overdue"
+            name="overdue"
+            type="checkbox"
+            value="true"
+            checked={overdueOnly}
+          />
+          Overdue only
+        </label>
+
+        <button type="submit">Apply filters</button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="task-list-title"
+      >
+        <h2 class="admin-section-title" id="task-list-title">
+          Tasks
+          <span class="count-pill">{tasks.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="approval-tasks-table">
+            <caption class="sr-only">
+              Workflow tasks, newest first, 100 per page.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Workflow</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Node</th>
+                <th scope="col">Quorum</th>
+                <th scope="col">Due</th>
+                <th scope="col">Status</th>
+                {(canDecide || showRecovery) && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={taskColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span class="empty-state-title">
+                        {hasFilters
+                          ? "No tasks match these filters"
+                          : "Nothing awaiting a decision"}
+                      </span>
+                      <span class="empty-state-text">
+                        {hasFilters
+                          ? "Clear or widen the filters above to see more tasks."
+                          : "Tasks appear here when a module starts a workflow instance."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                tasks.map((task) => (
+                  <tr data-task-row={task.id}>
+                    <td data-label="Workflow">
+                      <span class="cell-code">{task.workflowKey}</span>
+                      <span class="cell-muted"> · {task.workflowName}</span>
+                    </td>
+                    <td data-label="Resource">
+                      <span class="cell-code">{task.resourceType}</span>
+                      <span class="cell-muted"> · {task.resourceId}</span>
+                      <a
+                        class="quick-link"
+                        href={linkWith({
+                          instance: task.instanceId,
+                          cursor: null
+                        })}
+                      >
+                        History
+                        <span class="quick-link-arrow" aria-hidden="true">
+                          →
+                        </span>
+                      </a>
+                    </td>
+                    <td data-label="Node">
+                      <span class="cell-code">{task.nodeId}</span>
+                    </td>
+                    <td data-label="Quorum">
+                      <span class="cell-code">{task.quorumRule}</span>
+                    </td>
+                    <td data-label="Due">
+                      <span class="cell-muted">
+                        {formatTimestamp(task.dueAt)}
+                      </span>
+                      {task.overdue && (
+                        <span class="status-badge" data-variant="warning">
+                          <span class="status-dot" aria-hidden="true" />
+                          overdue
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          STATUS_VARIANT[task.status as TaskStatus] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {task.status}
+                      </span>
+                    </td>
+                    {(canDecide || showRecovery) && (
+                      <td data-label="Actions">
+                        {task.status === "pending" ? (
+                          <div class="row-actions">
+                            {canDecide && (
+                              <>
+                                {/* One permission covers both: the ability to
+                                    decide, not the direction of the decision.
+                                    A separate `approval.reject` is seeded
+                                    nowhere. */}
+                                <button
+                                  type="button"
+                                  class="btn-inline task-decide-btn"
+                                  data-task-id={task.id}
+                                  data-decision="approve"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  class="btn-inline btn-inline--danger task-decide-btn"
+                                  data-task-id={task.id}
+                                  data-decision="reject"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                            {canReassign && (
+                              <button
+                                type="button"
+                                class="btn-inline task-reassign-btn"
+                                data-task-id={task.id}
+                              >
+                                Reassign
+                              </button>
+                            )}
+                            {canForceDecide && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger task-force-btn"
+                                data-task-id={task.id}
+                              >
+                                Force decision
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span class="cell-muted">decided</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            {/* Keyset, not offset: the cursor carries full-precision
+                `created_at` text, so a page boundary cannot skip or repeat a
+                row the way a millisecond-truncated timestamp would. */}
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              Next 100
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && selectedInstanceId && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="instance-history-title"
+        id="instance-history"
+      >
+        <h2 class="admin-section-title" id="instance-history-title">
+          Instance history
+          <span class="count-pill">{history.length}</span>
+        </h2>
+        <p class="page-description">
+          <span class="cell-code">{selectedInstanceId}</span>
+          {selectedTask && (
+            <span class="cell-muted">
+              {" "}
+              · {selectedTask.workflowKey} · {selectedTask.resourceType}/
+              {selectedTask.resourceId}
+            </span>
+          )}
+        </p>
+
+        <div class="row-actions">
+          <a class="quick-link" href={linkWith({ instance: null })}>
+            Close history
+          </a>
+          {canCancel && (
+            <button
+              type="button"
+              class="btn-inline btn-inline--danger instance-cancel-btn"
+              data-instance-id={selectedInstanceId}
+            >
+              Cancel instance
+            </button>
+          )}
+        </div>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Decisions and audit events for this workflow instance.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">When</th>
+                <th scope="col">Kind</th>
+                <th scope="col">Action</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={5}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">No history</span>
+                      <span class="empty-state-text">
+                        Nothing has been decided or recorded against this
+                        instance yet — or the id does not name one.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                history.map((entry) => (
+                  <tr>
+                    <td data-label="When">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.createdAt)}
+                      </span>
+                    </td>
+                    <td data-label="Kind">
+                      <span class="cell-code">{entry.kind}</span>
+                    </td>
+                    <td data-label="Action">
+                      <span class="cell-code">{entry.action}</span>
+                    </td>
+                    <td data-label="Actor">
+                      <span class="cell-muted">
+                        {entry.actorTenantUserId ?? "—"}
+                      </span>
+                    </td>
+                    <td data-label="Detail">
+                      {/* `set:text` rather than a child expression: <pre>
+                          preserves whitespace and prettier reindents .astro
+                          children, so an expression written between the tags
+                          comes back wrapped in template indentation that <pre>
+                          then renders. `set:text` escapes and sets the content
+                          directly. */}
+                      <details>
+                        <summary>Detail</summary>
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(entry.detail, null, 2)}
+                        />
+                      </details>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadDelegations && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="delegations-title"
+        id="delegations"
+      >
+        <h2 class="admin-section-title" id="delegations-title">
+          Delegations
+          <span class="count-pill">{delegations.length}</span>
+        </h2>
+        <p class="page-description">
+          A delegation lets the delegate decide on the delegator's behalf while
+          it is in effect. It never widens what the delegate may decide beyond
+          the delegator's own eligibility.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Workflow delegations for this tenant.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Delegator</th>
+                <th scope="col">Delegate</th>
+                <th scope="col">Scope</th>
+                <th scope="col">From</th>
+                <th scope="col">To</th>
+                <th scope="col">Status</th>
+                {canRevokeDelegation && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {delegations.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={delegationColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⇄
+                      </span>
+                      <span class="empty-state-title">No delegations</span>
+                      <span class="empty-state-text">
+                        Nobody is currently deciding on anyone else's behalf.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                delegations.map((row) => (
+                  <tr>
+                    <td data-label="Delegator">
+                      <span class="cell-code">
+                        {row.delegator_tenant_user_id}
+                      </span>
+                    </td>
+                    <td data-label="Delegate">
+                      <span class="cell-code">
+                        {row.delegate_tenant_user_id}
+                      </span>
+                    </td>
+                    <td data-label="Scope">
+                      <span class="cell-muted">
+                        {row.workflow_key ?? "any workflow"} ·{" "}
+                        {row.resource_type ?? "any resource"}
+                      </span>
+                    </td>
+                    <td data-label="From">
+                      <span class="cell-muted">
+                        {formatTimestamp(row.effective_from)}
+                      </span>
+                    </td>
+                    <td data-label="To">
+                      <span class="cell-muted">
+                        {formatTimestamp(row.effective_to)}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          row.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {row.status}
+                      </span>
+                    </td>
+                    {canRevokeDelegation && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {row.status === "active" && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger delegation-revoke-btn"
+                              data-delegation-id={row.id}
+                            >
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {canCreateDelegation && (
+          <form id="delegation-create-form" class="admin-create-form">
+            <p class="form-legend">Delegate your decisions</p>
+            <p
+              id="delegation-create-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+
+            <label for="delegate-user-id">
+              Delegate tenant user id
+              {/* A free-text id, not a picker: a directory of tenant users is
+                  `identity_access` data, gated on its own permissions. Find
+                  the id on <a href="/admin/users">Users</a>. */}
+              <input
+                type="text"
+                id="delegate-user-id"
+                name="delegateTenantUserId"
+                required
+                autocomplete="off"
+                placeholder="UUID from /admin/users"
+              />
+            </label>
+
+            <label for="delegation-workflow-key">
+              Workflow key (optional — blank means every workflow)
+              <input
+                type="text"
+                id="delegation-workflow-key"
+                name="workflowKey"
+                autocomplete="off"
+              />
+            </label>
+
+            <label for="delegation-resource-type">
+              Resource type (optional — blank means every resource)
+              <input
+                type="text"
+                id="delegation-resource-type"
+                name="resourceType"
+                autocomplete="off"
+              />
+            </label>
+
+            <label for="delegation-effective-to">
+              Effective until (optional)
+              <input
+                type="datetime-local"
+                id="delegation-effective-to"
+                name="effectiveTo"
+              />
+            </label>
+
+            <label for="delegation-reason">
+              Reason
+              {/* Bounds come from the same constant the validator enforces. */}
+              <input
+                type="text"
+                id="delegation-reason"
+                name="reason"
+                required
+                minlength={MIN_REASON_LENGTH}
+                maxlength={MAX_REASON_LENGTH}
+                autocomplete="off"
+              />
+            </label>
+
+            <button type="submit" id="delegation-create-submit">
+              Create delegation
+            </button>
+          </form>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("approvals-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  /** Every mutation below requires the header; a fresh value per click is also what makes a deliberate second action run instead of replaying the first. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
+  }
+
+  function askReason(prompt: string): string | null {
+    const reason = window.prompt(prompt);
+    if (reason === null) return null;
+    const trimmed = reason.trim();
+    if (trimmed === "") {
+      showActionError(
+        "A reason is required — it is recorded in the audit trail."
+      );
+      return null;
+    }
+    return trimmed;
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".task-decide-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const taskId = button.dataset.taskId;
+        const decision = button.dataset.decision;
+        if (!taskId || !decision) return;
+
+        const reason = askReason(
+          `Reason for this ${decision} (recorded against the task):`
+        );
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Submitting…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/workflows/tasks/${taskId}/decisions`,
+          { decision, reason },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail. `ACCESS_DENIED`
+        // here most often means the caller is not an eligible decider for THIS
+        // task (assignment/delegation), which is a narrower rule than the
+        // permission, so it is worth distinguishing.
+        showActionError(
+          result.errorCode === "ACCESS_DENIED"
+            ? "You are not an eligible decider for this task."
+            : "Could not record the decision. Please try again."
+        );
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".task-reassign-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const taskId = button.dataset.taskId;
+        if (!taskId) return;
+
+        const toTenantUserId = window.prompt(
+          "Reassign to which tenant user id? (find it on /admin/users)"
+        );
+        if (toTenantUserId === null || toTenantUserId.trim() === "") return;
+
+        const reason = askReason("Reason for the reassignment:");
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Reassigning…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/workflows/tasks/${taskId}/reassign`,
+          { toTenantUserId: toTenantUserId.trim(), reason },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not reassign the task. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".task-force-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const taskId = button.dataset.taskId;
+        if (!taskId) return;
+
+        const decision = window.prompt(
+          'Force which decision — type "approve" or "reject"?'
+        );
+        if (decision !== "approve" && decision !== "reject") return;
+
+        // An administrative override decides on someone else's behalf and is
+        // recorded as such. Confirm before asking for the reason.
+        if (
+          !window.confirm(
+            `Force-${decision} this task? This overrides the assigned deciders and is recorded as an administrative override.`
+          )
+        ) {
+          return;
+        }
+
+        const reason = askReason("Reason for the override:");
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Overriding…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/workflows/tasks/${taskId}/force-decision`,
+          { decision, reason },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not force the decision. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".instance-cancel-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const instanceId = button.dataset.instanceId;
+        if (!instanceId) return;
+
+        if (
+          !window.confirm(
+            "Cancel this workflow instance? Its pending tasks are cancelled with it and it cannot be resumed."
+          )
+        ) {
+          return;
+        }
+
+        const reason = askReason("Reason for cancelling the instance:");
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Cancelling…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/workflows/instances/${instanceId}/cancel`,
+          { reason },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not cancel the instance. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".delegation-revoke-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.delegationId;
+        if (!id) return;
+
+        if (
+          !window.confirm(
+            "Revoke this delegation? The delegate stops being eligible immediately."
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Revoking…");
+
+        // `reason` is optional on this endpoint, unlike the others.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/workflows/delegations/${id}/revoke`,
+          { reason: "Revoked from the admin approvals screen." },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not revoke the delegation. Please try again.");
+        unlock();
+      });
+    });
+
+  const delegationForm = document.getElementById(
+    "delegation-create-form"
+  ) as HTMLFormElement | null;
+
+  delegationForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "delegation-create-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(delegationForm);
+    const errorElement = document.getElementById("delegation-create-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Creating…");
+
+    const workflowKey = String(data.get("workflowKey") ?? "").trim();
+    const resourceType = String(data.get("resourceType") ?? "").trim();
+    const effectiveTo = String(data.get("effectiveTo") ?? "").trim();
+
+    // Blank optional fields are OMITTED rather than sent as "": the validator
+    // rejects a non-string/non-ISO value, and an empty string is not "no
+    // scope", it is an invalid scope.
+    const body: Record<string, unknown> = {
+      delegateTenantUserId: String(
+        data.get("delegateTenantUserId") ?? ""
+      ).trim(),
+      reason: String(data.get("reason") ?? "").trim()
+    };
+    if (workflowKey !== "") body.workflowKey = workflowKey;
+    if (resourceType !== "") body.resourceType = resourceType;
+    // `datetime-local` yields local wall-clock with no zone; converting through
+    // `Date` gives the validator the ISO 8601 string it requires.
+    if (effectiveTo !== "")
+      body.effectiveTo = new Date(effectiveTo).toISOString();
+
+    const result = await sendJson(
+      "POST",
+      "/api/v1/workflows/delegations",
+      body,
+      idempotency()
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        "Could not create the delegation. Please check the tenant user id and try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+</script>

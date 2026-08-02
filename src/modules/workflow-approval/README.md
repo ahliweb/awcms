@@ -82,9 +82,15 @@ Reassign (`POST /workflows/tasks/{id}/reassign`), cancel (`POST /workflows/insta
 
 `workflow_instances_active_total`/`workflow_tasks_overdue_total` (gauges, sampled per escalation-job pass), `workflow_task_decision_duration_ms` (histogram), `workflow_escalation_total`/`workflow_recovery_action_total` (counters) — all unlabeled or labeled with a fixed, code-defined enum only (never a tenant/resource id).
 
-## Admin UI (`/admin/workflows`)
+## Admin UI (`/admin/approvals`)
 
-`src/pages/admin/workflows/index.astro` — the consolidated approval inbox screen: filters (status/workflow key/resource type/overdue), safe search, keyset "load more" pagination, per-row approve/reject/reassign/force-decide/cancel actions (each gated by its own permission, each a real client-side `fetch` against the existing endpoints above, same convention `admin/analytics.astro` established — the UI is never the enforcement point, only a second, strictly-more-restrictive convenience layer over already-guarded server-side ABAC), and an expandable immutable action-history panel per row. Deliberately NOT built in this issue: a visual definition/graph editor — `POST/PUT /workflows/definitions/**` are exercised by tests and usable directly, but authoring a node/transition graph today is done via the API, same precedent Issue 11.1 set for the original linear engine (backlog for a follow-up issue, not silently dropped).
+`src/pages/admin/approvals.astro` (ADR-0051) — the consolidated approval inbox: filters (status/workflow key/resource type/overdue), safe search, keyset pagination, per-row approve/reject/reassign/force-decide, a per-instance history panel (`?instance=<id>`) carrying the cancel action, and the delegation ledger with create/revoke. Each control is gated by its own permission and is a real client-side `fetch` against the endpoints above — the UI is never the enforcement point, only a second, strictly-more-restrictive convenience layer over already-guarded server-side ABAC. Pinned by `tests/admin-approvals-page-contract.test.ts`.
+
+Cancel lives on the instance panel rather than the task row on purpose: cancelling ends the whole instance and every pending task under it, so offering it beside a single task would misrepresent its blast radius.
+
+Deliberately NOT built here: a definition/graph editor. `POST/PUT /workflows/definitions/**` are exercised by tests and usable directly, but authoring a node/transition graph needs a real editor — a raw-JSON textarea that accepts a malformed graph until the publish call rejects it is a worse affordance than none. The six `definition.*` permissions are therefore claimed by no screen yet, and the contract test asserts they stay off this one so the split remains a decision rather than a gap.
+
+> This section previously described `/admin/workflows` and `src/pages/admin/workflows/index.astro`. Neither existed in this repo — the text came over with the port. Because the module declared no `navigation`, the registry gate that catches a dangling path had nothing to check; docs are not gated the way descriptors are.
 
 ## Deferred (explicitly out of scope for Issue #747, not silently dropped)
 

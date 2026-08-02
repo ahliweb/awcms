@@ -81,6 +81,23 @@ All endpoints are tenant-scoped, guarded by default-deny ABAC
 (`authorizeInTransaction`), and run inside `withTenant` so RLS enforces
 tenant isolation at the database layer.
 
+## Admin UI (`/admin/domain-events`)
+
+`src/pages/admin/domain-events.astro` (ADR-0051) — the operator console for
+the table above: the consumer registry with pause state and backlog counts
+(pause/resume), the delivery list filtered by status/consumer/event type with
+replay on dead-lettered rows, and the outbox itself with a payload inspector.
+All five permissions are driven from this one page. Reads go through this
+module's own application functions inside one `withTenantOrThrow`; every
+mutation posts to the endpoint above.
+
+The idempotency split in the table is reproduced exactly by the screen, and
+`tests/admin-domain-events-page-contract.test.ts` pins it: `replay` sends an
+`Idempotency-Key` because each call does new work, while `pause` and `resume`
+send none because they are naturally idempotent. Sending a key to `pause`
+would imply a replay contract that endpoint does not have; omitting it on
+`replay` would render a button that always fails.
+
 ## Data model (migration `009`)
 
 Tenant-scoped, RLS tenant-isolated tables:

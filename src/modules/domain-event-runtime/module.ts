@@ -14,12 +14,6 @@ export const domainEventRuntimeModule = defineModule({
     publishes: ["awcms.domain-event-runtime.sample.recorded"],
     subscribes: ["awcms.domain-event-runtime.sample.recorded"]
   },
-  // No `navigation` entries yet — an admin UI for deliveries/consumers
-  // (src/pages/admin/domain-events/*.astro) does not exist in this
-  // foundation module; declaring a nav entry with no matching page would be
-  // a real 404. Add navigation once that UI ships (follow-up), matching the
-  // convention every other module's nav entry already follows (a real page
-  // always exists first).
   permissions: [
     {
       activityCode: "events",
@@ -54,6 +48,17 @@ export const domainEventRuntimeModule = defineModule({
     openApiPath: "openapi/modules/domain-event-runtime.openapi.yaml",
     basePath: "/api/v1/domain-events"
   },
+  // Gated on `consumers.read` rather than `events.read`: the consumer table is
+  // the part an operator opens this page FOR — a stuck or paused consumer is
+  // what makes an event never arrive — and it is the first panel rendered.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_domain_events",
+      path: "/admin/domain-events",
+      order: 78,
+      requiredPermission: "domain_event_runtime.consumers.read"
+    }
+  ],
   jobs: [
     {
       command: "bun run domain-events:dispatch",

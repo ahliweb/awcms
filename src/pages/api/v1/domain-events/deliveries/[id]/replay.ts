@@ -24,6 +24,7 @@ import {
   UnknownReplayConsumerError,
   replayDomainEventDelivery
 } from "../../../../../../modules/domain-event-runtime/application/delivery-replay";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/domain-event-runtime/domain/reason-bounds";
 
 const REPLAY_GUARD = {
   moduleKey: "domain_event_runtime",
@@ -32,7 +33,6 @@ const REPLAY_GUARD = {
 };
 
 const IDEMPOTENCY_SCOPE = "domain_event_runtime_delivery_replay";
-const MAX_REASON_LENGTH = 500;
 
 type ReplayRequestBody = { reason?: unknown };
 
