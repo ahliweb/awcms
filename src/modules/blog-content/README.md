@@ -748,9 +748,42 @@ Field: `defaultLocale`/`defaultVisibility`/`postsPerPage`/`seoDefaultTitle`/`seo
 
 `GET /blog/{tenantCode}/feed.xml` dan `.../sitemap-blog.xml` (Issue #540) memanggil `fetchBlogSettings` di awal handler dan mengembalikan `404` yang identik dengan tenant-tidak-ditemukan kalau flag terkait `false` — tenant yang mematikan RSS/sitemap tidak membocorkan sinyal "fitur ini ada tapi dimatikan" vs "tenant ini tidak ada", konsisten dengan ADR-0009's "jangan bocorkan keberadaan tenant" yang sudah diterapkan §Public routes.
 
-## Admin UI (Issue #543)
+## Admin UI
 
-Seluruh layar di bawah `/admin/blog` (`src/pages/admin/blog/`), memakai `AdminLayout`/design token yang sudah ada (`docs/awcms/14_ui_ux_design_system.md`), Astro + vanilla JS saja — tidak ada framework UI baru. Pola tiap layar identik `admin/modules/[moduleKey].astro`/`admin/access-users.astro` (referensi yang sudah ada sebelum issue ini): SSR read lewat fungsi application-layer yang sama yang dipakai (atau bisa dipakai) endpoint JSON, seluruh mutasi lewat `fetch()` client-side ke endpoint `/api/v1/blog/...` yang sudah ter-guard/audit/idempotency sejak Issue #538-#542 — halaman admin **tidak pernah** menulis ke database langsung atau melewati guard ABAC endpoint. Permission-gated per-section, mengikuti persis guard endpoint yang mendasarinya (defense-in-depth; enforcement sebenarnya tetap di server).
+**Yang ADA di repo ini: satu layar, `/admin/blog`** (`src/pages/admin/blog.astro`,
+ADR-0051) — konsol siklus hidup post: daftar ber-filter (search judul, status)
+dengan pagination bernomor halaman, aksi baris publish/schedule/archive/soft-delete/
+restore/purge/submit-review, panel revisi (`?post=<id>`) dengan restore, dan form
+draft baru. Sebelas permission digerakkan dari sana; digerbangi
+`tests/admin-blog-page-contract.test.ts`.
+
+Tiga hal yang SENGAJA tidak ada di layar itu, dan bedanya penting:
+
+- **Editor body/konten.** Menulis body post berarti permukaan rich-text/Markdown
+  plus field SEO, term, dan featured media — itu editor, bukan sudut sebuah
+  daftar. `posts.update` tetap digerakkan lewat "submit for review".
+- **`posts.export`.** Dideklarasikan descriptor dan di-seed `sql/036`, dan **tidak
+  ada satu pun endpoint yang menegakkannya**. Layar tidak bisa menggerakkan
+  permission tanpa permukaan; tombolnya akan mengirim request yang 404.
+- **`search.read`.** Endpoint-nya ada, tapi daftar admin sudah punya pencarian
+  sendiri (`ILIKE` judul, yang mentoleransi query kosong — hal yang justru
+  ditolak `websearch_to_tsquery` di balik `search.read`). Dua kotak pencari
+  dengan semantik berbeda di satu layar lebih buruk daripada satu.
+
+**Sisa 32 permission** (pages, taxonomy, templates/menus/widgets, settings/seo/theme,
+internal links, homepage sections, ad placements) menunggu layar saudaranya —
+masing-masing membawa entri `navigation`-nya sendiri saat halamannya mendarat.
+
+> **Segala sesuatu di bawah baris ini adalah SPESIFIKASI awcms-mini (Issue #543),
+> bukan deskripsi kode repo ini.** Pohon layar `/admin/blog/*` di bawah — posts/new,
+> pages, categories, tags, settings, templates, widgets, menus, ads — **tidak ada di
+> sini**; teksnya ikut terbawa saat modul ini di-port, dan karena modul ini dulu
+> tidak mendeklarasikan `navigation`, gerbang `admin-navigation-registry.test.ts`
+> yang menangkap path menggantung tak punya apa pun untuk diperiksa. Dipertahankan
+> karena ia rancangan target yang berguna untuk layar-layar saudara di atas — baca
+> sebagai rencana, bukan sebagai peta kode.
+
+### (spesifikasi mini) Seluruh layar di bawah `/admin/blog` (`src/pages/admin/blog/`), memakai `AdminLayout`/design token yang sudah ada (`docs/awcms/14_ui_ux_design_system.md`), Astro + vanilla JS saja — tidak ada framework UI baru. Pola tiap layar identik `admin/modules/[moduleKey].astro`/`admin/access-users.astro` (referensi yang sudah ada sebelum issue ini): SSR read lewat fungsi application-layer yang sama yang dipakai (atau bisa dipakai) endpoint JSON, seluruh mutasi lewat `fetch()` client-side ke endpoint `/api/v1/blog/...` yang sudah ter-guard/audit/idempotency sejak Issue #538-#542 — halaman admin **tidak pernah** menulis ke database langsung atau melewati guard ABAC endpoint. Permission-gated per-section, mengikuti persis guard endpoint yang mendasarinya (defense-in-depth; enforcement sebenarnya tetap di server).
 
 ```txt
 /admin/blog                    -> dashboard (ringkasan post/draft/scheduled/pages, quick link)

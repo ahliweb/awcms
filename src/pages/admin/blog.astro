@@ -1,0 +1,946 @@
+---
+/**
+ * Blog posts console — the editorial surface of `blog_content`.
+ *
+ * `blog_content` is the largest module in this repo: 43 permissions across 15
+ * activity codes and ~30 route files, and until now not one screen. Under
+ * ADR-0051 the screens belong here, and this is the FIRST of them — the post
+ * lifecycle, which is the surface an editor uses every day.
+ *
+ * ## Scope, and what is deliberately elsewhere
+ *
+ * This page drives eleven permissions: `posts.read`/`create`/`update`/
+ * `publish`/`schedule`/`archive`/`delete`/`restore`/`purge` and
+ * `revisions.read`/`restore`.
+ *
+ * The other thirty-two belong to sibling screens that are NOT in this change —
+ * pages, taxonomy, templates/menus/widgets, settings/seo/theme, internal
+ * links, homepage sections and ad placements. Cramming fifteen activity codes
+ * into one page would produce something nobody can use and nobody can review.
+ *
+ * Two are absent for reasons worth stating, because "not yet" and "never here"
+ * are different claims and `tests/admin-blog-page-contract.test.ts` asserts
+ * both:
+ *
+ * - **`posts.export` has NO route at all.** It is declared by the descriptor
+ *   and seeded by `sql/036`, and no endpoint anywhere enforces it. A screen
+ *   cannot drive a permission that has no surface, and gating a control on it
+ *   would render a button whose request 404s.
+ * - **`search.read` has a route, and this page still does not use it.** The
+ *   admin list already searches, through `listBlogPostsForAdmin`'s own
+ *   `ILIKE` on title — which tolerates an empty query, the thing the
+ *   `websearch_to_tsquery` surface behind `search.read` rejects. Two search
+ *   boxes with different semantics on one screen is a worse answer than one.
+ *
+ * There is also **no body/content editor** here. Authoring a post body means a
+ * rich-text or Markdown surface plus SEO fields, terms and featured media —
+ * that is an editor, not a corner of a list. `posts.update` is still driven,
+ * through "submit for review", which is the lifecycle half of that permission.
+ *
+ * ## Reads
+ *
+ * Through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited sequentially — concurrent queries on a single
+ * transaction connection leak it.
+ *
+ * `listBlogPostsForAdmin` was written for exactly this screen and paginates by
+ * page NUMBER rather than keyset, deliberately: this is a human-browsed table
+ * with "page 2, 3" controls, and its own header comment records that choice.
+ * That is the opposite of `/admin/approvals`, which is keyset — the difference
+ * is the UX, not an inconsistency.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. The mutations split on idempotency, and the split
+ * is per-endpoint rather than per-repo:
+ *
+ * - **six require an `Idempotency-Key`** — publish, schedule, archive,
+ *   restore, purge and revision restore;
+ * - **create requires none, by documented design.** `POST /api/v1/blog/posts`
+ *   records that a retry duplicating a create is caught by the
+ *   `(tenant_id, locale, slug)` partial unique index instead;
+ * - **soft delete and submit-for-review require none** either.
+ *
+ * ## Gates
+ *
+ * UX-only; `authorizeInTransaction` in the routes is the authority. The trap
+ * specific to this module: `submit-review` is gated on `posts.update`, not on
+ * a `posts.submit` or `posts.review` — neither of those is seeded anywhere.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listBlogPostsForAdmin,
+  type ListBlogPostsForAdminResult
+} from "../../modules/blog-content/application/blog-post-directory";
+import {
+  listBlogRevisions,
+  type BlogRevisionSummary
+} from "../../modules/blog-content/application/blog-revision-directory";
+import {
+  BLOG_CONTENT_STATUSES,
+  BLOG_CONTENT_VISIBILITIES,
+  isBlogContentStatus,
+  type BlogContentStatus
+} from "../../modules/blog-content/domain/post-status";
+import {
+  MAX_EXCERPT_LENGTH,
+  MAX_TITLE_LENGTH
+} from "../../modules/blog-content/domain/content-validation";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "read")
+);
+const canCreate = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "create")
+);
+// Also the gate on "submit for review" — there is no `posts.submit`.
+const canUpdate = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "update")
+);
+const canPublish = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "publish")
+);
+const canSchedule = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "schedule")
+);
+const canArchive = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "archive")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "delete")
+);
+const canRestore = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "restore")
+);
+const canPurge = ssr.permissions.has(
+  permissionKey("blog_content", "posts", "purge")
+);
+const canReadRevisions = ssr.permissions.has(
+  permissionKey("blog_content", "revisions", "read")
+);
+const canRestoreRevisions = ssr.permissions.has(
+  permissionKey("blog_content", "revisions", "restore")
+);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const searchFilter = readParam("search");
+const statusRaw = readParam("status");
+// An unknown status is dropped rather than forwarded: the list endpoint answers
+// a bad value with a 400, and a hand-edited query string must not turn this
+// screen into an error page.
+const statusFilter: BlogContentStatus | undefined = isBlogContentStatus(
+  statusRaw
+)
+  ? statusRaw
+  : undefined;
+
+const pageRaw = Number(readParam("page"));
+const pageNumber = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+
+/** `?post=<id>` opens the revision panel for one post, rather than N queries for a list nobody expanded. */
+const selectedPostId = readParam("post");
+
+let listing: ListBlogPostsForAdminResult | null = null;
+let revisions: BlogRevisionSummary[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      listing = await listBlogPostsForAdmin(tx, ssr.tenantId, {
+        search: searchFilter || undefined,
+        status: statusFilter,
+        page: pageNumber
+      });
+
+      if (selectedPostId && canReadRevisions) {
+        // `listBlogRevisions` asserts the id is a UUID and throws otherwise,
+        // which the surrounding catch turns into the load-error notice — a
+        // hand-edited `?post=` must not 500 the page.
+        revisions = await listBlogRevisions(
+          tx,
+          ssr.tenantId,
+          "post",
+          selectedPostId
+        );
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has no posts".
+    loadError = true;
+    logAdminPageError("admin/blog.astro: failed to load posts", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+}
+
+const STATUS_VARIANT: Record<string, string> = {
+  draft: "neutral",
+  review: "info",
+  scheduled: "info",
+  published: "success",
+  archived: "warning"
+};
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString() : "—";
+}
+
+/** Rebuilds the current query string with one key replaced — keeps filters across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/blog?${query}` : "/admin/blog";
+}
+
+const posts = listing?.items ?? [];
+const total = listing?.total ?? 0;
+const pageSize = listing?.pageSize ?? 20;
+const lastPage = Math.max(1, Math.ceil(total / pageSize));
+const hasFilters = searchFilter !== "" || statusFilter !== undefined;
+
+const showsRowActions =
+  canPublish ||
+  canSchedule ||
+  canArchive ||
+  canDelete ||
+  canRestore ||
+  canPurge ||
+  canUpdate ||
+  canReadRevisions;
+const postColumns = 5 + (showsRowActions ? 1 : 0);
+const selectedPost = selectedPostId
+  ? (posts.find((post) => post.id === selectedPostId) ?? null)
+  : null;
+---
+
+<AdminLayout title="Blog posts">
+  <header class="page-header fade-in-up">
+    <h1 id="blog-heading">Blog posts</h1>
+    <p class="page-description">
+      The post lifecycle: draft, review, scheduled, published, archived. Pages,
+      taxonomy, presentation and homepage composition are separate screens.
+      Scheduled posts are published by <code>blog:publish:scheduled</code> — scheduling
+      sets the time, it does not publish.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="blog-denied">
+        You do not have permission to view blog posts.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="blog-error">
+        Posts could not be loaded right now. This is a problem reading the list,
+        not an empty list — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="blog-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <form method="get" class="admin-toolbar fade-in-up" id="post-filter-form">
+        <label for="filter-search">Search titles</label>
+        <input
+          id="filter-search"
+          name="search"
+          type="search"
+          value={searchFilter}
+          autocomplete="off"
+        />
+
+        <label for="filter-status">Status</label>
+        <select id="filter-status" name="status">
+          <option value="" selected={statusFilter === undefined}>
+            Any status
+          </option>
+          {BLOG_CONTENT_STATUSES.map((value) => (
+            <option value={value} selected={statusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <button type="submit">Apply filters</button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="post-list-title"
+      >
+        <h2 class="admin-section-title" id="post-list-title">
+          Posts
+          <span class="count-pill">{total}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-posts-table">
+            <caption class="sr-only">
+              Blog posts, most recently updated first.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Status</th>
+                <th scope="col">Visibility</th>
+                <th scope="col">Published</th>
+                <th scope="col">Updated</th>
+                {showsRowActions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {posts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={postColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✎
+                      </span>
+                      <span class="empty-state-title">
+                        {hasFilters
+                          ? "No posts match these filters"
+                          : "No posts yet"}
+                      </span>
+                      <span class="empty-state-text">
+                        {hasFilters
+                          ? "Clear or widen the filters above to see more posts."
+                          : "Create a draft below to get started."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                posts.map((post) => (
+                  <tr data-post-row={post.id}>
+                    <td data-label="Title">
+                      <span set:text={post.title} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{post.slug}</span> ·{" "}
+                        {post.locale}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={STATUS_VARIANT[post.status] ?? "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {post.status}
+                      </span>
+                    </td>
+                    <td data-label="Visibility">
+                      <span class="cell-code">{post.visibility}</span>
+                    </td>
+                    <td data-label="Published">
+                      <span class="cell-muted">
+                        {formatTimestamp(post.publishedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(post.updatedAt)}
+                      </span>
+                    </td>
+                    {showsRowActions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {canReadRevisions && (
+                            <a
+                              class="quick-link"
+                              href={linkWith({ post: post.id })}
+                            >
+                              Revisions
+                              <span class="quick-link-arrow" aria-hidden="true">
+                                →
+                              </span>
+                            </a>
+                          )}
+                          {canUpdate && post.status === "draft" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-submit-btn"
+                              data-post-id={post.id}
+                            >
+                              Submit for review
+                            </button>
+                          )}
+                          {canPublish && post.status !== "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-publish-btn"
+                              data-post-id={post.id}
+                            >
+                              Publish
+                            </button>
+                          )}
+                          {canSchedule && post.status !== "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-schedule-btn"
+                              data-post-id={post.id}
+                            >
+                              Schedule
+                            </button>
+                          )}
+                          {canArchive && post.status === "published" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-archive-btn"
+                              data-post-id={post.id}
+                            >
+                              Archive
+                            </button>
+                          )}
+                          {canRestore && post.status === "archived" && (
+                            <button
+                              type="button"
+                              class="btn-inline post-restore-btn"
+                              data-post-id={post.id}
+                            >
+                              Restore
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger post-delete-btn"
+                              data-post-id={post.id}
+                              data-post-title={post.title}
+                            >
+                              Delete
+                            </button>
+                          )}
+                          {canPurge && post.status === "archived" && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger post-purge-btn"
+                              data-post-id={post.id}
+                              data-post-title={post.title}
+                            >
+                              Purge
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {total > pageSize && (
+          <div class="admin-toolbar">
+            {/* Page numbers, not a cursor: `listBlogPostsForAdmin` is
+                LIMIT/OFFSET by design for a human-browsed table, and its own
+                header comment records that choice. */}
+            {pageNumber > 1 && (
+              <a
+                class="quick-link"
+                href={linkWith({ page: String(pageNumber - 1) })}
+              >
+                ← Previous
+              </a>
+            )}
+            <span class="cell-muted">
+              Page {pageNumber} of {lastPage}
+            </span>
+            {pageNumber < lastPage && (
+              <a
+                class="quick-link"
+                href={linkWith({ page: String(pageNumber + 1) })}
+              >
+                Next →
+              </a>
+            )}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && canReadRevisions && selectedPostId && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="revisions-title"
+        id="blog-revisions"
+      >
+        <h2 class="admin-section-title" id="revisions-title">
+          Revisions
+          <span class="count-pill">{revisions.length}</span>
+        </h2>
+        <p class="page-description">
+          <span class="cell-code">{selectedPostId}</span>
+          {selectedPost && (
+            <span class="cell-muted"> · {selectedPost.title}</span>
+          )}
+          {" · "}
+          <a href={linkWith({ post: null })}>Close</a>
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">Revisions for the selected post.</caption>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Title at revision</th>
+                <th scope="col">Status</th>
+                <th scope="col">Note</th>
+                <th scope="col">Created</th>
+                {canRestoreRevisions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {revisions.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={canRestoreRevisions ? 6 : 5}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">No revisions</span>
+                      <span class="empty-state-text">
+                        A revision is recorded when a post is edited — or the id
+                        does not name a post in this tenant.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                revisions.map((revision) => (
+                  <tr>
+                    <td data-label="#">{revision.revisionNumber}</td>
+                    <td data-label="Title at revision">
+                      <span set:text={revision.title} />
+                    </td>
+                    <td data-label="Status">
+                      <span class="cell-code">{revision.status}</span>
+                    </td>
+                    <td data-label="Note">
+                      <span
+                        class="cell-muted"
+                        set:text={revision.changeNote ?? "—"}
+                      />
+                    </td>
+                    <td data-label="Created">
+                      <span class="cell-muted">
+                        {formatTimestamp(revision.createdAt)}
+                      </span>
+                    </td>
+                    {canRestoreRevisions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <button
+                            type="button"
+                            class="btn-inline revision-restore-btn"
+                            data-post-id={selectedPostId}
+                            data-revision-id={revision.id}
+                            data-revision-number={String(
+                              revision.revisionNumber
+                            )}
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canCreate && !loadError && (
+      <section class="admin-section fade-in-up" aria-labelledby="create-title">
+        <h2 class="admin-section-title" id="create-title">
+          New draft
+        </h2>
+        <form id="post-create-form" class="admin-create-form">
+          <p class="form-legend">
+            Creates a draft. The body is written in the post editor, which is
+            not part of this screen yet.
+          </p>
+          <p
+            id="post-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="create-title-field">
+            Title
+            {/* `maxlength` comes from the SAME constant the validator
+                enforces, so the browser cannot accept what the server
+                rejects. */}
+            <input
+              type="text"
+              id="create-title-field"
+              name="title"
+              required
+              maxlength={MAX_TITLE_LENGTH}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="create-slug">
+            Slug
+            <input
+              type="text"
+              id="create-slug"
+              name="slug"
+              required
+              autocomplete="off"
+              placeholder="url-safe-identifier"
+            />
+          </label>
+
+          <label for="create-locale">
+            Locale
+            <input
+              type="text"
+              id="create-locale"
+              name="locale"
+              value="id"
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="create-visibility">
+            Visibility
+            <select id="create-visibility" name="visibility">
+              {BLOG_CONTENT_VISIBILITIES.map((value) => (
+                <option value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+
+          <label for="create-excerpt">
+            Excerpt (optional)
+            <textarea
+              id="create-excerpt"
+              name="excerpt"
+              rows="2"
+              maxlength={MAX_EXCERPT_LENGTH}
+            />
+          </label>
+
+          <button type="submit" id="post-create-submit">
+            Create draft
+          </button>
+        </form>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("blog-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  /** Publish/schedule/archive/restore/purge/revision-restore all require the header. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
+  }
+
+  /** Wires a row button to one endpoint, with an optional confirm and body. */
+  function wireLifecycle(
+    selector: string,
+    busyLabel: string,
+    url: (postId: string) => string,
+    options: {
+      confirm?: (button: HTMLButtonElement) => string | null;
+      body?: (button: HTMLButtonElement) => unknown | null;
+      idempotent?: boolean;
+      failure: string;
+    }
+  ): void {
+    document.querySelectorAll<HTMLButtonElement>(selector).forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const postId = button.dataset.postId;
+        if (!postId) return;
+
+        const confirmText = options.confirm?.(button) ?? null;
+        if (confirmText !== null && !window.confirm(confirmText)) return;
+
+        let body: unknown;
+        if (options.body) {
+          const value = options.body(button);
+          // `null` means the operator cancelled a prompt — not an empty body.
+          if (value === null) return;
+          body = value;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, busyLabel);
+
+        const result = await sendJson(
+          "POST",
+          url(postId),
+          body,
+          options.idempotent === false ? undefined : idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError(options.failure);
+        unlock();
+      });
+    });
+  }
+
+  wireLifecycle(
+    ".post-publish-btn",
+    "Publishing…",
+    (id) => `/api/v1/blog/posts/${id}/publish`,
+    {
+      confirm: () =>
+        "Publish this post? It becomes visible on the public site immediately.",
+      failure: "Could not publish the post. Please try again."
+    }
+  );
+
+  wireLifecycle(
+    ".post-schedule-btn",
+    "Scheduling…",
+    (id) => `/api/v1/blog/posts/${id}/schedule`,
+    {
+      body: () => {
+        const at = window.prompt(
+          "Publish at (ISO 8601, e.g. 2026-08-05T09:00:00Z):"
+        );
+        if (at === null || at.trim() === "") return null;
+        return { scheduledAt: at.trim() };
+      },
+      failure:
+        "Could not schedule the post. Check the date is in the future and try again."
+    }
+  );
+
+  wireLifecycle(
+    ".post-archive-btn",
+    "Archiving…",
+    (id) => `/api/v1/blog/posts/${id}/archive`,
+    {
+      confirm: () =>
+        "Archive this post? It is removed from the public site but kept.",
+      failure: "Could not archive the post. Please try again."
+    }
+  );
+
+  wireLifecycle(
+    ".post-restore-btn",
+    "Restoring…",
+    (id) => `/api/v1/blog/posts/${id}/restore`,
+    { failure: "Could not restore the post. Please try again." }
+  );
+
+  wireLifecycle(
+    ".post-purge-btn",
+    "Purging…",
+    (id) => `/api/v1/blog/posts/${id}/purge`,
+    {
+      confirm: (button) =>
+        `Permanently delete "${button.dataset.postTitle ?? "this post"}"? This cannot be undone — the post row is removed, not soft-deleted.`,
+      failure: "Could not purge the post. Please try again."
+    }
+  );
+
+  // Submit-for-review is gated on `posts.update` and needs NO key: it is a
+  // status transition to `review`, not work that repeats per call.
+  wireLifecycle(
+    ".post-submit-btn",
+    "Submitting…",
+    (id) => `/api/v1/blog/posts/${id}/submit-review`,
+    {
+      idempotent: false,
+      failure: "Could not submit the post for review. Please try again."
+    }
+  );
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".post-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const postId = button.dataset.postId;
+        if (!postId) return;
+        const title = button.dataset.postTitle ?? "this post";
+
+        if (
+          !window.confirm(
+            `Delete "${title}"? It is soft-deleted — recoverable until it is purged.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        // Soft delete needs no key: the endpoint's `deleted_at IS NULL` guard
+        // makes a repeat a no-op rather than a second deletion.
+        const result = await sendJson("DELETE", `/api/v1/blog/posts/${postId}`);
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not delete the post. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".revision-restore-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const postId = button.dataset.postId;
+        const revisionId = button.dataset.revisionId;
+        if (!postId || !revisionId) return;
+        const number = button.dataset.revisionNumber ?? "?";
+
+        if (
+          !window.confirm(
+            `Restore revision ${number}? The post's current content is replaced by this revision's, and the replacement is itself recorded as a new revision.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Restoring…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/blog/posts/${postId}/revisions/${revisionId}/restore`,
+          undefined,
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not restore the revision. Please try again.");
+        unlock();
+      });
+    });
+
+  const createForm = document.getElementById(
+    "post-create-form"
+  ) as HTMLFormElement | null;
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "post-create-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(createForm);
+    const errorElement = document.getElementById("post-create-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Creating…");
+
+    const excerpt = String(data.get("excerpt") ?? "").trim();
+    const body: Record<string, unknown> = {
+      title: String(data.get("title") ?? "").trim(),
+      slug: String(data.get("slug") ?? "").trim(),
+      locale: String(data.get("locale") ?? "").trim() || "id",
+      visibility: String(data.get("visibility") ?? "public"),
+      // The validator requires both content fields; a new draft starts empty
+      // and the body is written in the editor, which is not this screen.
+      contentJson: {},
+      contentText: ""
+    };
+    // Omitted rather than sent as "": an empty string is a value, and the
+    // validator treats absent as "no excerpt".
+    if (excerpt !== "") body.excerpt = excerpt;
+
+    // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
+    // documented design — a retry that duplicates a create is caught by the
+    // `(tenant_id, locale, slug)` partial unique index instead.
+    const result = await sendJson("POST", "/api/v1/blog/posts", body);
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        result.errorCode === "CONFLICT"
+          ? "A post with that slug and locale already exists."
+          : "Could not create the draft. Check the title and slug, then try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+</script>

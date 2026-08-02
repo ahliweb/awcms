@@ -72,20 +72,31 @@ export const blogContentModule = defineModule({
     ]
   },
   /**
-   * No `navigation` yet — deliberately.
+   * `/admin/blog` is back, in the change that adds the page — which is what
+   * the note that stood here promised.
    *
-   * This module declared `/admin/blog` when it was ported from awcms-mini,
-   * where that page exists. It does not exist here: the port brought the API
-   * and the public routes, not the authoring screens. Nothing rendered
-   * descriptor navigation at the time, so the entry was invisible; once
-   * `AdminLayout.astro` started rendering from the registry it would have been
-   * a 404 in the sidebar, and `descriptor-sync` had already been publishing it
-   * to `awcms_module_navigation` and `GET /api/v1/modules` as a valid item.
+   * The history is worth keeping: this module declared this exact path when it
+   * was ported from awcms-mini, where the page exists. It did not exist here —
+   * the port brought the API and the public routes, not the authoring screens
+   * — and nothing rendered descriptor navigation at the time, so the entry was
+   * invisible while `descriptor-sync` published it to
+   * `awcms_module_navigation` and `GET /api/v1/modules` as a valid item.
+   * `tests/admin-navigation-registry.test.ts` now fails on any entry whose
+   * path has no page, in both directions.
    *
-   * `tests/admin-navigation-registry.test.ts` now fails on any entry whose path
-   * has no page, so this comes back in the same change that adds the screen —
-   * not before.
+   * ONE entry for fifteen activity codes, on purpose: this is the post
+   * lifecycle screen. Pages, taxonomy, presentation, settings and homepage
+   * composition are sibling screens, and each brings its own entry when its
+   * page lands — not before.
    */
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_blog",
+      path: "/admin/blog",
+      order: 36,
+      requiredPermission: "blog_content.posts.read"
+    }
+  ],
   permissions: [
     { activityCode: "posts", action: "read", description: "Read blog posts" },
     {

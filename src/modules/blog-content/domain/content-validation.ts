@@ -25,8 +25,16 @@ export type BlogContentCoreValidationResult =
   | { valid: true; value: BlogContentCoreInput }
   | { valid: false; errors: ValidationError[] };
 
-const MAX_TITLE_LENGTH = 200;
-const MAX_EXCERPT_LENGTH = 500;
+/**
+ * Exported so a form can render `maxlength` from the SAME constant this
+ * validator enforces. A hand-typed bound in markup drifts into a browser that
+ * accepts what the server rejects with a 400 the author cannot act on — the
+ * reason `/admin/data-lifecycle` exported its own bounds, and the reason
+ * `reporting`, `workflow-approval` and `domain-event-runtime` each grew a
+ * bounds module rather than a second copy of a number.
+ */
+export const MAX_TITLE_LENGTH = 200;
+export const MAX_EXCERPT_LENGTH = 500;
 
 /** Same list `email-template-validation.ts` uses for admin-authored HTML template shells (doc 20 §XSS) — applied here to `contentJson`/`contentText` (Issue #538 acceptance criterion: "Unsafe HTML/script/embed content is rejected or sanitized"). Rejects rather than sanitizes, same choice email templates made. */
 const UNSAFE_HTML_PATTERNS: readonly RegExp[] = [
