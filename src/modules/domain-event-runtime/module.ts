@@ -54,6 +54,17 @@ export const domainEventRuntimeModule = defineModule({
     openApiPath: "openapi/modules/domain-event-runtime.openapi.yaml",
     basePath: "/api/v1/domain-events"
   },
+  // Gated on `consumers.read` rather than `events.read`: the consumer table is
+  // the part an operator opens this page FOR — a stuck or paused consumer is
+  // what makes an event never arrive — and it is the first panel rendered.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_domain_events",
+      path: "/admin/domain-events",
+      order: 78,
+      requiredPermission: "domain_event_runtime.consumers.read"
+    }
+  ],
   jobs: [
     {
       command: "bun run domain-events:dispatch",
