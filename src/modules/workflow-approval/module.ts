@@ -9,11 +9,6 @@ export const workflowApprovalModule = defineModule({
     "Managed, versioned workflow-definition engine ported from awcms-mini's proven workflow-approval module: draft/publish/retire lifecycle with immutable published/retired versions and version pinning per instance, generic nodes/transitions (sequential approval, bounded conditional routing, parallel/join fan-out/fan-in, notify), quorum/any/all approval rules, effective-dated delegation/substitution, escalation/timeout policies processed by a scheduled worker job, and administrative recovery (reassign/cancel/force-decision) with explicit permissions, reason, Idempotency-Key, and full audit. Self-approval guard reused unchanged from identity_access's ABAC evaluator. Module-contributed condition resolvers/actions are a static, reviewed-source-code registry (`infrastructure/condition-action-registry.ts`) — never runtime-registered or arbitrary tenant-supplied code (doc 21 §3 decision tree, node Q5). See README.",
   dependencies: ["tenant_admin", "identity_access", "domain_event_runtime"],
   type: "system",
-  // No `navigation` entries yet — an admin UI for the approval inbox
-  // (src/pages/admin/workflows/*.astro) does not exist in this base;
-  // declaring a nav entry with no matching page would be a real 404. Add
-  // navigation once that UI ships, matching every other ported module's
-  // convention (a real page always exists first).
   permissions: [
     {
       activityCode: "approval",
