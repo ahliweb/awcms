@@ -586,6 +586,22 @@ export type ListBlogPostsForAdminFilter = {
   status?: BlogContentStatus;
   /** Matches posts assigned this category/tag term id (via `awcms_blog_post_terms`). */
   termId?: string;
+  /**
+   * `true` lists ONLY soft-deleted posts — the bin — instead of only live ones.
+   *
+   * Without it `posts.restore` is a permission `/admin/blog` could appear to
+   * drive and never could: this list hard-filtered `deleted_at IS NULL`, so a
+   * soft-deleted post was never on screen to restore, and the Restore control
+   * was therefore rendered against `status = 'archived'` — which is a different
+   * axis, is not soft-deleted, and makes `POST .../restore` answer 404 every
+   * time (it requires `canRestorePost`, i.e. `deleted_at IS NOT NULL`).
+   *
+   * Deliberately a separate VIEW rather than an `includeDeleted` union: mixing
+   * binned rows into the working list gives every row's status badge two
+   * possible meanings, and the operator question is "what is in the bin", not
+   * "show me everything at once".
+   */
+  deletedOnly?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -632,12 +648,14 @@ export async function listBlogPostsForAdmin(
   const search = filter.search?.trim() || null;
   const status = filter.status ?? null;
   const termId = filter.termId ?? null;
+  const deletedOnly = filter.deletedOnly === true;
 
   const rows = (await tx`
     SELECT p.id, p.tenant_id, p.title, p.slug, p.status, p.visibility, p.locale,
            p.author_tenant_user_id, p.published_at, p.updated_at
     FROM awcms_blog_posts p
-    WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL
+    WHERE p.tenant_id = ${tenantId}
+      AND (CASE WHEN ${deletedOnly} THEN p.deleted_at IS NOT NULL ELSE p.deleted_at IS NULL END)
       AND (${status}::text IS NULL OR p.status = ${status})
       AND (${search}::text IS NULL OR p.title ILIKE '%' || ${search} || '%')
       AND (
@@ -654,7 +672,8 @@ export async function listBlogPostsForAdmin(
   const countRows = (await tx`
     SELECT count(*)::int AS count
     FROM awcms_blog_posts p
-    WHERE p.tenant_id = ${tenantId} AND p.deleted_at IS NULL
+    WHERE p.tenant_id = ${tenantId}
+      AND (CASE WHEN ${deletedOnly} THEN p.deleted_at IS NOT NULL ELSE p.deleted_at IS NULL END)
       AND (${status}::text IS NULL OR p.status = ${status})
       AND (${search}::text IS NULL OR p.title ILIKE '%' || ${search} || '%')
       AND (

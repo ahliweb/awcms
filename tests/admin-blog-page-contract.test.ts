@@ -276,6 +276,70 @@ describe("/admin/blog permission gates", () => {
     expect(validation).toContain("export const MAX_EXCERPT_LENGTH");
   });
 
+  test("Restore is gated on the bin view, not on archived status", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // The original defect: `{canRestore && post.status === "archived" && (`.
+    // Archived is not soft-deleted, and `POST .../restore` requires
+    // `canRestorePost` (`deleted_at IS NOT NULL`), so the control was rendered
+    // exactly where it must 404.
+    expect(page).not.toMatch(
+      /canRestore\s*&&\s*post\.status\s*===\s*"archived"/
+    );
+    expect(page).toMatch(/canRestore\s*&&\s*showsBin/);
+
+    // And the endpoint really does demand a soft-deleted row, which is the
+    // only reason the line above is the correct one.
+    const restore = await readFile(
+      "src/pages/api/v1/blog/posts/[id]/restore.ts",
+      "utf8"
+    );
+    expect(restore).toContain("canRestorePost");
+    expect(restore).toContain("includeDeleted: true");
+  });
+
+  test("the bin is reachable, so a restorable post can actually be on screen", async () => {
+    const page = await readFile(PAGE, "utf8");
+    const directory = await readFile(
+      "src/modules/blog-content/application/blog-post-directory.ts",
+      "utf8"
+    );
+
+    // A `deletedOnly` filter nothing passes would leave the bin unreachable
+    // and Restore undrivable for a second time, one layer down.
+    expect(directory).toContain("deletedOnly?: boolean");
+    expect(directory).toMatch(/CASE WHEN \$\{deletedOnly\}/);
+    expect(page).toContain("deletedOnly: showsBin || undefined");
+    expect(page).toContain('readParam("view") === "deleted"');
+  });
+
+  test("a soft-deleted post is offered no lifecycle transition", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // `transitionBlogPostStatus` matches `deleted_at IS NULL`, so publish,
+    // schedule, archive and submit-for-review all 404 on a binned post.
+    // Matched with `\s*` because prettier wraps these JSX conditions across
+    // lines — an exact-string assertion here reads as a behaviour change the
+    // next time a condition grows a clause.
+    for (const control of [
+      "canUpdate",
+      "canPublish",
+      "canSchedule",
+      "canArchive",
+      // Delete too — it is already deleted.
+      "canDelete"
+    ]) {
+      expect(page).toMatch(
+        new RegExp(String.raw`\{${control}\s*&&\s*!showsBin\s*&&`)
+      );
+    }
+
+    // Purge is the deliberate exception: `canPurgePost` accepts either state.
+    expect(page).toMatch(
+      /canPurge\s*&&\s*\(showsBin\s*\|\|\s*post\.status\s*===\s*"archived"\)/
+    );
+  });
+
   test("the sidebar entry points at this page and is gated on a real permission", () => {
     const nav = listModules()
       .find((module) => module.key === "blog_content")
