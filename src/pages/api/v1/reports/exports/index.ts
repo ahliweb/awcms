@@ -19,13 +19,15 @@ import {
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import { findProjectionDescriptor } from "../../../../../modules/reporting/application/projection-directory";
 import {
+  MAX_EXPORT_INTERVAL_MINUTES,
+  MIN_EXPORT_INTERVAL_MINUTES
+} from "../../../../../modules/reporting/domain/operator-input-bounds";
+import {
   createScheduledExport,
   listScheduledExports
 } from "../../../../../modules/reporting/application/scheduled-export-store";
 
 const IDEMPOTENCY_SCOPE = "reporting_scheduled_export_create";
-const MIN_INTERVAL_MINUTES = 15;
-const MAX_INTERVAL_MINUTES = 60 * 24 * 30; // 30 days
 
 /** `GET /api/v1/reports/exports` (Issue #753) — list scheduled export configs for the caller's tenant. */
 export const GET: APIRoute = async ({ request, cookies, url }) => {
@@ -135,13 +137,13 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
   }
   if (
     !Number.isInteger(scheduleIntervalMinutes) ||
-    scheduleIntervalMinutes < MIN_INTERVAL_MINUTES ||
-    scheduleIntervalMinutes > MAX_INTERVAL_MINUTES
+    scheduleIntervalMinutes < MIN_EXPORT_INTERVAL_MINUTES ||
+    scheduleIntervalMinutes > MAX_EXPORT_INTERVAL_MINUTES
   ) {
     return fail(
       400,
       "VALIDATION_ERROR",
-      `scheduleIntervalMinutes must be an integer between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}.`
+      `scheduleIntervalMinutes must be an integer between ${MIN_EXPORT_INTERVAL_MINUTES} and ${MAX_EXPORT_INTERVAL_MINUTES}.`
     );
   }
 
