@@ -128,19 +128,39 @@ kerja yang belum ada yang minta.
 dahulu". Aturan itu berlaku untuk page tanpa perubahan, dan dipakai ulang alih-alih
 ditulis kembali.
 
-**`purge` page menghapus baris, dan satu rujukan lunak bisa menggantung.**
+**Rujukan ad placement yang menggantung TIDAK memblokir purge**, dan itu bukan
+kelonggaran melainkan kontrak yang modul ini sudah tetapkan.
 `awcms_news_portal_ad_placements` menargetkan page lewat pasangan
 `target_type = 'page'` dan `target_id` polimorfik yang, karena tak ada FK yang
 bisa menjangkau tiga tabel, hanya diperiksa **saat tulis** oleh
-`application/ad-placement-reference-validation.ts`. Purge karena itu bisa
-meninggalkan ad placement yang menunjuk page yang sudah tiada.
+`application/ad-placement-reference-validation.ts`. Header berkas itu sudah
+memutuskan apa artinya bila target hilang belakangan:
 
-Penanganannya: purge **menolak** dengan 409 bila masih ada ad placement yang
-menargetkan page itu, alih-alih menghapus diam-diam atau ikut menghapus
-placement-nya. Menghapus placement milik modul lain sebagai efek samping adalah
-persis kepemilikan yang ADR-0044 rapikan; membiarkannya menggantung berarti
-render iklan yang gagal tanpa jejak. Menolak membuat operator melihat sebabnya
-dan memilih.
+> A target deleted LATER is not an error and never becomes one. The render
+> query joins nothing on `target_id`, so the ad simply stops matching —
+> degrade, don't error.
+
+Dan itu benar sampai ke query-nya: `listActiveAdPlacementsForRendering`
+mencocokkan `p.target_id = ${targetId}` dengan id **page yang sedang dirender**.
+Page yang sudah di-purge tidak pernah dirender, jadi placement-nya tidak pernah
+dicocokkan — ia menjadi inert, bukan rusak. Soft delete, yang sudah ada hari ini
+dan tak digerbangi apa pun soal ini, punya efek render yang **persis sama**.
+Purge karena itu tidak memperkenalkan mode kegagalan baru.
+
+> **Koreksi terhadap draf pertama ADR ini.** Draf itu memutuskan purge
+> **menolak dengan 409** selama ada ad placement menargetkan page tersebut.
+> Itu salah, dan salahnya bukan soal selera: ia menolak sebuah operasi demi
+> mencegah kondisi yang modul ini sudah nyatakan tak berbahaya, dan akan
+> membuat operator terhalang menghapus page oleh iklan yang toh sudah berhenti
+> tampil. Ditemukan dengan membaca `ad-placement-reference-validation.ts` dan
+> query render-nya, bukan dengan menalar dari bentuk skema — pelajaran yang
+> sama yang §4 catat tentang memindai route saja.
+
+Yang purge **wajib** lakukan adalah membuat perubahan itu terlihat: responsnya
+membawa jumlah ad placement yang kini menargetkan page yang tiada. Sebuah baris
+yang diam-diam menjadi inert adalah persis "menghilang tanpa catatan" yang
+ADR-0044 §4 tolak untuk iklan yang tak bisa dimigrasikan. Melaporkan bukan
+menolak — operator melihat akibatnya tanpa dihalangi olehnya.
 
 ### D. Nol migrasi
 
@@ -204,8 +224,9 @@ sudah tercatat di `/admin/blog`:
   pencarian publik untuk page berhenti selalu-kosong, dan `seo_facts`/sitemap
   konsumen akan mulai melihat page terbit — yang benar, dan yang harus
   disebut di changeset sebagai `minor`, bukan `patch`.
-- **`purge` bisa menolak.** 409 saat ada ad placement menargetkan page tersebut
-  adalah permukaan baru yang harus didokumentasikan di OpenAPI, bukan kegagalan.
+- **`purge` melaporkan, tidak menolak.** Responsnya membawa jumlah ad placement
+  yang kini menargetkan page yang tiada — field baru yang harus ada di OpenAPI.
+  Tidak ada kode error baru untuk kasus itu, dan itu memang keputusannya.
 - **Empat layar saudara masih tersisa** setelah ini (taxonomy, presentation,
   settings, homepage composition). Sejauh audit ini, permukaan keempatnya
   lengkap — seluruhnya pasangan `read`/`configure` yang punya route. Gate §F
@@ -230,6 +251,14 @@ sudah tercatat di `/admin/blog`:
   milik permukaan lain sebagai efek samping — kepemilikan yang ADR-0044 baru
   saja rapikan, dan penghapusan senyap yang persis dilarang ADR-0044 §4 untuk
   ad yang tak bisa dimigrasikan.
-- **Purge membiarkan rujukan menggantung.** Menukar kegagalan yang bisa
-  ditindaklanjuti dengan iklan yang berhenti dirender tanpa ada yang tahu
-  kenapa.
+- **Purge menolak (409) selama ada ad placement menargetkan page itu.** Ini
+  putusan draf pertama ADR ini, dan ia ditolak setelah membaca kode alih-alih
+  menalar dari skema: `ad-placement-reference-validation.ts` sudah menyatakan
+  target yang hilang belakangan "is not an error and never becomes one", query
+  render tak pernah mencocokkan placement milik page yang tak dirender, dan
+  soft delete — yang sudah ada dan tak digerbangi — punya efek yang sama
+  persis. Menolak berarti menghalangi operator demi mencegah kondisi yang tidak
+  merusak apa pun.
+- **Purge diam saja soal placement yang jadi inert.** Aman secara teknis dan
+  buruk secara operasional: sebuah slot iklan berhenti terisi tanpa satu pun
+  jejak yang menghubungkannya ke page yang dihapus tiga minggu lalu.

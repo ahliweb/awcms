@@ -421,8 +421,12 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
     ADR-0057 memberi keempatnya permukaan (bukan mencabutnya — mencabut
     `pages.publish` memberkati cacat itu sebagai desain), dengan siklus hidup
     yang sengaja **lebih sempit** dari post: tanpa `review`, tanpa `scheduled`,
-    karena `sql/036` tak pernah men-seed `pages.schedule`. `purge` menolak 409
-    selama ada ad placement menargetkan page itu. **Nol migrasi** — kolom, CHECK,
+    karena `sql/036` tak pernah men-seed `pages.schedule`. `purge` **melaporkan,
+    tidak menolak**, jumlah ad placement yang jadi inert — draf pertama ADR itu
+    memilih 409, dan `ad-placement-reference-validation.ts` membantahnya: modul
+    itu sudah memutuskan target yang hilang belakangan "is not an error and never
+    becomes one", dan soft delete hari ini punya efek render yang sama persis.
+    **Nol migrasi** — kolom, CHECK,
     index dan baris katalog sudah ada; yang hilang murni lapisan aplikasi + route.
     Urutan mengikat: permukaan dulu, `/admin/blog/pages` menyusul.
 
