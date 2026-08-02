@@ -81,14 +81,14 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek       | Nilai (per commit ini)                                                              | Sumber kebenaran                                                                        |
-| ----------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
-| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                                                  |
-| Migrasi     | **87** (`sql/001`–`087`)                                                            | `ls sql/`                                                                               |
-| ADR         | **0000**–**0056** (`0000` = template)                                               | `ls docs/adr/`                                                                          |
-| Layar admin | **27** berkas `.astro` di `src/pages/admin/`; **1 dari 21 modul** masih tanpa layar | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek       | Nilai (per commit ini)                                                                                                              | Sumber kebenaran                                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                                                                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
+| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
+| Migrasi     | **87** (`sql/001`–`087`)                                                                                                            | `ls sql/`                                                                               |
+| ADR         | **0000**–**0056** (`0000` = template)                                                                                               | `ls docs/adr/`                                                                          |
+| Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar tak-disengaja (`idn-admin-regions` sengaja, ADR-0052) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
 > berbunyi "20 berkas / 7 dari 21 modul" sementara `main` sudah memuat 22 berkas dan
@@ -313,8 +313,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     test karena BEDA KELAS: `posts.export` dideklarasikan + di-seed `sql/036` dan
     **tak ada endpoint mana pun yang menegakkannya**; `search.read` punya rute tapi
     daftar admin sudah punya pencarian sendiri yang mentoleransi query kosong.
-  - `media-library` — **BELUM, dan bukan sekadar layar
-    ([ADR-0056](adr/0056-media-library-admin-surface.md)).** Lima dari sebelas
+  - ~~`media-library`~~ **SELESAI (#345)** — `/admin/media`. Dan ini bukan sekadar
+    layar ([ADR-0056](adr/0056-media-library-admin-surface.md)): lima dari sebelas
     permission-nya tidak digerbangi apa pun (`attach`/`detach`/`delete`/`restore`/
     `purge`), lima fungsi aplikasi yang memanggilnya nol, dan tidak ada fungsi
     `list*` sama sekali — `GET /api/v1/media/objects` menuntut `?ids=`, ia resolver
@@ -345,8 +345,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     tiap halaman; mengembalikan kursor ke `Date` kehilangan 57 baris (jebakan
     #158, dan registry media adalah tempat paling mungkin ia kambuh).
 
-    **ADR-0056 selesai seluruhnya. Yang tersisa hanyalah layar `/admin/media`
-    itu sendiri** — dan sesudahnya kriteria 1 ADR-0021 tinggal nol pengecualian.
+    **Layar (#345).** Konsol siklus hidup objek: browse ber-filter, lalu
+    delete/restore/purge — empat permission, tiap mutasi ber-`Idempotency-Key`
+    baru (tak ada opt-out seperti `/admin/blog`, dan tak ada endpoint yang
+    menolak header seperti `/admin/sync`). TIGA absen sengaja, digerbangi
+    contract test agar tetap keputusan: **unggah** (`create`/`verify`/`cancel`)
+    — alur tiga langkah di browser, tombol yang memulai sesi tapi tak bisa
+    menuntaskannya meninggalkan baris `pending_upload` tiap salah klik;
+    **`enforcement.*`** — saklar kebijakan tenant SATU ARAH, bukan aksi objek,
+    tempatnya di `/admin/security`; dan **tanpa pratinjau `<img>`** — baris bisa
+    `pending_upload`/`failed`, bytes-nya mungkin tak ada, belum terverifikasi,
+    atau justru hal yang sedang dihapus operator.
+
+    **ADR-0056 SELESAI SELURUHNYA, dan dengan itu kriteria 1 ADR-0021 nol
+    pengecualian tak-disengaja** — `idn-admin-regions` satu-satunya modul tanpa
+    layar, dan itu memang keputusan (ADR-0052). Contract test layar ini ikut
+    menegakkannya lintas-modul, jadi modul berikutnya yang mendarat tanpa
+    `navigation` memerahkan CI alih-alih diam-diam menambah pengecualian.
 
     > **Temuan sampingan, sudah diperbaiki di PR yang sama.** SQLSTATE Postgres
     > ada di `error.errno`, BUKAN `error.code` — Bun mengisi `code` dengan

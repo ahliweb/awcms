@@ -157,12 +157,34 @@ Issue #158; `tests/integration/media-object-list.integration.test.ts` inserts
 107 rows in ONE statement and walks every page, and reverting the cursor to a
 `Date` loses 57 of them.
 
+## `/admin/media` ([ADR-0056](../../../docs/adr/0056-media-library-admin-surface.md), ADR-0051)
+
+The object lifecycle console: browse with the §C filters, then delete, restore,
+or purge. Four permissions — `media.read`, `.delete`, `.restore`, `.purge`.
+Every mutation posts to the guarded endpoint with a fresh `Idempotency-Key`
+(unlike `/admin/sync`, where no endpoint wants one, all three here require it).
+
+Three deliberate absences, each pinned by
+`tests/admin-media-page-contract.test.ts` so they stay decisions rather than
+becoming gaps:
+
+- **Upload** (`media.create`/`.verify`/`.cancel`) — a three-step browser flow
+  (create session → PUT to R2 → finalize) with file input, progress, and
+  client-side failure modes. A button that starts a session this page cannot
+  finish leaves a `pending_upload` row on every misclick, which is exactly the
+  litter the reconciliation job cleans up.
+- **`enforcement.*`** — a tenant-wide ONE-WAY policy switch, not an object
+  action. It lives on `/admin/security` with the other policy controls.
+- **No `<img>` preview.** A row can be `pending_upload` or `failed`: the bytes
+  may be absent, unverified, or the very thing the operator came to remove.
+  Rendering them shows a policy-violating image one more time, to the person
+  removing it.
+
 ## Not ported to this base (deferred, additive)
 
-The `/admin/media` screen (micro step 5d — the whole API half is now ported, so
-this is all that remains of it; the module still declares no `navigation`),
-responsive `srcset` render (step 5b), and the PDF media type (step 5c). The
-allowed MIME set stays the four raster types.
+Responsive `srcset` render (micro step 5b) and the PDF media type (step 5c).
+The allowed MIME set stays the four raster types. Step 5d — the lifecycle API
+and `/admin/media` — is now ported in full.
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 
