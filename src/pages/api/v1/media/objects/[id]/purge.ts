@@ -11,6 +11,7 @@ import {
 } from "../../../../../../modules/_shared/idempotency";
 import { MEDIA_PERMISSION_ACTIVITY_CODE } from "../../../../../../modules/media-library/domain/media-permissions";
 import { purgeNewsMediaObject } from "../../../../../../modules/media-library/application/media-object-directory";
+import { isMediaObjectId } from "../../../../../../modules/media-library/domain/media-object-id";
 import { log } from "../../../../../../lib/logging/logger";
 
 /**
@@ -71,8 +72,8 @@ export const POST = defineTenantRoute<Prepared>({
   handler: async ({ tx, auth, prepared, params, tenantId, locals }) => {
     const objectId = params.id;
 
-    if (!objectId) {
-      return fail(400, "VALIDATION_ERROR", "Media object id is required.");
+    if (!isMediaObjectId(objectId)) {
+      return fail(400, "VALIDATION_ERROR", "Media object id must be a uuid.");
     }
 
     const requestHash = computeRequestHash({ objectId, action: "purge" });

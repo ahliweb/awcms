@@ -4460,6 +4460,42 @@ Restoring an object that is NOT soft-deleted answers 404 rather than succeeding 
 | 404    | Resource not found.                                                               | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/media/objects/list` — Browse this tenant's media registry.
+
+- **operationId**: `mediaObjectList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `media_library.media.read`. Keyset-paginated, newest first, 50 per page. Read-only, so a machine credential (ADR-0049) may hold it.
+
+**A separate path from `GET /api/v1/media/objects`, deliberately.** That endpoint demands `?ids=` — it is a batch RESOLVER built for the `awcms-astro` build to swap ids for public URLs. Teaching it a "no `ids` means list everything" branch would turn a request that is a 400 today into a dump of the whole registry: a contract change wearing the clothes of an addition, and one no existing caller could opt out of.
+
+`list` can never be mistaken for an object id — the object routes require a uuid and answer 400 otherwise — so this static path and `/{id}` do not contend.
+
+**Unlike the resolver, this returns rows in ANY status** (`pending_upload`, `failed`, `orphaned`) and, with `deletion`, soft-deleted ones. That inverts the resolver's public-safety rule on purpose: an administrator opens this list precisely because of the objects that are not healthy, and the lifecycle endpoints need a way to find their targets. Nothing returned here may be used as a public reference — that is what the resolver is for.
+
+The projection omits `bucket_name`/`storage_driver` (deployment facts) and `owner_resource_type`/`owner_resource_id` (vestigial since ADR-0036 moved attachment to the consumer's FK).
+
+`cursor` is opaque: pass back `nextCursor` verbatim. A malformed one is a 400, never silently treated as "no cursor" — that would serve page 1 to a caller who asked for page 4.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                                                        | Description                                                                                                                                |
+| ------------------ | ------ | -------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`           | query  | no       | enum(`pending_upload`, `uploaded`, `verified`, `attached`, `orphaned`, `deleted`, `failed`) | Exact media object status. An unrecognised value is a 400, never ignored.                                                                  |
+| `mimeType`         | query  | no       | string                                                                                      | Exact mime type. Lowercased before matching, since that is how the registry stores it.                                                     |
+| `deletion`         | query  | no       | enum(`live`, `deleted`, `all`)                                                              | Which soft-delete state to list. Defaults to `live`; `deleted` is what a restore/purge workflow needs, and a boolean could not ask for it. |
+| `cursor`           | query  | no       | string                                                                                      | Opaque keyset cursor from a previous response's `nextCursor`.                                                                              |
+| `X-Correlation-ID` | header | no       | string                                                                                      |                                                                                                                                            |
+
+**Responses**
+
+| Status | Description                              | Schema                                 |
+| ------ | ---------------------------------------- | -------------------------------------- |
+| 200    | One page of media objects, newest first. | object                                 |
+| 400    | Validation error.                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
+
 ## Blog Content
 
 Tenant-scoped blog/content administration (blog_content module, ported from awcms-mini) — posts and pages with their full lifecycle (draft → review → scheduled/published → archived, soft delete/restore/purge), hierarchical categories/tags, append-only revision history (restore APPENDS a revision, never overwrites), PostgreSQL full-text search, presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements), per-tenant blog settings, internal tag-link policy, and the editorial content-quality checklist. The public, anonymous reader surface (`/blog/{tenantCode}/...` index/detail/archive/search/feed/sitemap, ADR-0009) is served by Astro text/html/xml routes and is deliberately NOT part of this REST contract. Publish/unpublish/purge and settings writes are ABAC-gated, idempotency-keyed, and audited.

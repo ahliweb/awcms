@@ -217,6 +217,90 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/media/objects/list:
+    get:
+      operationId: mediaObjectList
+      tags:
+        - News Media
+      summary: Browse this tenant's media registry.
+      description: |
+        Gated on `media_library.media.read`. Keyset-paginated, newest first, 50 per page. Read-only, so a machine credential (ADR-0049) may hold it.
+
+        **A separate path from `GET /api/v1/media/objects`, deliberately.** That endpoint demands `?ids=` — it is a batch RESOLVER built for the `awcms-astro` build to swap ids for public URLs. Teaching it a "no `ids` means list everything" branch would turn a request that is a 400 today into a dump of the whole registry: a contract change wearing the clothes of an addition, and one no existing caller could opt out of.
+
+        `list` can never be mistaken for an object id — the object routes require a uuid and answer 400 otherwise — so this static path and `/{id}` do not contend.
+
+        **Unlike the resolver, this returns rows in ANY status** (`pending_upload`, `failed`, `orphaned`) and, with `deletion`, soft-deleted ones. That inverts the resolver's public-safety rule on purpose: an administrator opens this list precisely because of the objects that are not healthy, and the lifecycle endpoints need a way to find their targets. Nothing returned here may be used as a public reference — that is what the resolver is for.
+
+        The projection omits `bucket_name`/`storage_driver` (deployment facts) and `owner_resource_type`/`owner_resource_id` (vestigial since ADR-0036 moved attachment to the consumer's FK).
+
+        `cursor` is opaque: pass back `nextCursor` verbatim. A malformed one is a 400, never silently treated as "no cursor" — that would serve page 1 to a caller who asked for page 4.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Exact media object status. An unrecognised value is a 400, never ignored.
+          schema:
+            type: string
+            enum:
+              - pending_upload
+              - uploaded
+              - verified
+              - attached
+              - orphaned
+              - deleted
+              - failed
+        - name: mimeType
+          in: query
+          required: false
+          description: Exact mime type. Lowercased before matching, since that is how the registry stores it.
+          schema:
+            type: string
+        - name: deletion
+          in: query
+          required: false
+          description: "Which soft-delete state to list. Defaults to `live`; `deleted` is what a restore/purge workflow needs, and a boolean could not ask for it."
+          schema:
+            type: string
+            enum: [live, deleted, all]
+            default: live
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset cursor from a previous response's `nextCursor`.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: One page of media objects, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/MediaObjectListItem"
+                      nextCursor:
+                        type: string
+                        nullable: true
+                        description: Null on the last page.
+                      pageSize:
+                        type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/media/objects/{id}:
     delete:
       operationId: mediaObjectSoftDelete
@@ -449,6 +533,67 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    MediaObjectListItem:
+      type: object
+      description: One registry row as the browse listing presents it. NOT a public reference — unlike `ResolvedMediaReference`, an item here may be in any status, including one that is unsafe to publish.
+      properties:
+        id:
+          type: string
+          format: uuid
+        objectKey:
+          type: string
+        publicUrl:
+          type: string
+        originalFilename:
+          type: string
+          nullable: true
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          nullable: true
+        checksumSha256:
+          type: string
+          nullable: true
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        altText:
+          type: string
+          nullable: true
+        caption:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - pending_upload
+            - uploaded
+            - verified
+            - attached
+            - orphaned
+            - deleted
+            - failed
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deleteReason:
+          type: string
+          nullable: true
+        restoredAt:
+          type: string
+          format: date-time
+          nullable: true
     SoftDeleteMediaObjectRequest:
       type: object
       required:

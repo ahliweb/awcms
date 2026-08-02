@@ -125,12 +125,44 @@ at COMMIT. The SQLSTATE is read from `error.errno` — Bun puts its own constant
 on `error.code`, so comparing `code` to `"23503"` can never be true
 (`tests/postgres-sqlstate-detection.test.ts` now gates this repo-wide).
 
+## Browse listing ([ADR-0056](../../../docs/adr/0056-media-library-admin-surface.md) §C)
+
+`GET /api/v1/media/objects/list` — gated on `media_library.media.read`, keyset
+paginated (50/page), newest first. Filters: `status`, `mimeType`, `deletion`
+(`live` | `deleted` | `all`, default `live`), `cursor`.
+
+Before this, the application layer had only point lookups
+(`fetchNewsMediaObjectById`, `...ByIds`, `...ByObjectKey`). There was no way to
+ask "what media does this tenant have", so a browse screen could not be built on
+the existing surface at all, whatever the permissions said.
+
+**A separate path from `GET /api/v1/media/objects`, deliberately.** That
+endpoint demands `?ids=` — it is a batch RESOLVER for the `awcms-astro` build.
+Teaching it a no-`ids` mode would turn a request that is a **400 today** into a
+dump of the whole registry: a contract change wearing the clothes of an
+addition. `list` can never be read as an object id, because the `/{id}` routes
+require a uuid and answer 400 otherwise — so the static/dynamic precedence rule
+is not the only thing keeping the two paths apart.
+
+**It deliberately outgrows the resolver's safety rule**, returning rows in ANY
+status and, on request, soft-deleted ones. `isNewsMediaObjectSafeForPublicReference`
+admits only `verified`/`attached`; an administrator opens this list precisely
+because of the objects that are NOT healthy, and §B's lifecycle endpoints would
+otherwise have no way to find their targets. Nothing returned here may be used
+as a public reference — that is what the resolver is for.
+
+The cursor carries full-precision `created_at` text, never a JS `Date`. A batch
+upload writes many rows inside one millisecond, which is the exact shape of
+Issue #158; `tests/integration/media-object-list.integration.test.ts` inserts
+107 rows in ONE statement and walks every page, and reverting the cursor to a
+`Date` loses 57 of them.
+
 ## Not ported to this base (deferred, additive)
 
-The `/admin/media` screen (micro step 5d — the lifecycle API half above is now
-ported, so this module still declares no `navigation`), responsive `srcset`
-render (step 5b), and the PDF media type (step 5c). The allowed MIME set stays
-the four raster types.
+The `/admin/media` screen (micro step 5d — the whole API half is now ported, so
+this is all that remains of it; the module still declares no `navigation`),
+responsive `srcset` render (step 5b), and the PDF media type (step 5c). The
+allowed MIME set stays the four raster types.
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 

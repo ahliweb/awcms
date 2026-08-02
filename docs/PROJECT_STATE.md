@@ -331,7 +331,22 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     berjalan dalam SAVEPOINT karena FK keras dari
     `awcms_news_portal_ad_placements` membuat `23503` MEMBATALKAN transaksi
     (tanpa savepoint, 409 yang bisa ditindaklanjuti berubah jadi 500 saat
-    COMMIT). Tersisa §C: `listMediaObjects` + rute daftar sendiri, lalu layar.
+    COMMIT).
+
+    **§C SELESAI juga.** `listMediaObjects` (keyset, 50/halaman) +
+    `GET /api/v1/media/objects/list` — rute SENDIRI, bukan mode-ganda pada
+    `?ids=`. Sebelumnya lapisan aplikasi hanya punya point lookup, jadi layar
+    browse memang TIDAK BISA dibangun di atas permukaan lama, apa pun kata
+    permission-nya. Daftar ini sengaja MELAMPAUI aturan aman resolver (status
+    apa pun, plus soft-deleted bila diminta): justru objek tak-sehat itulah
+    alasan administrator membukanya. `/list` tak bisa bentrok dengan id karena
+    rute `/{id}` kini menuntut uuid. Kursor membawa teks presisi mikrodetik —
+    integration test menyisipkan 107 baris dalam SATU statement lalu menyusuri
+    tiap halaman; mengembalikan kursor ke `Date` kehilangan 57 baris (jebakan
+    #158, dan registry media adalah tempat paling mungkin ia kambuh).
+
+    **ADR-0056 selesai seluruhnya. Yang tersisa hanyalah layar `/admin/media`
+    itu sendiri** — dan sesudahnya kriteria 1 ADR-0021 tinggal nol pengecualian.
 
     > **Temuan sampingan, sudah diperbaiki di PR yang sama.** SQLSTATE Postgres
     > ada di `error.errno`, BUKAN `error.code` — Bun mengisi `code` dengan
