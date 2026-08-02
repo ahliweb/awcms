@@ -25,14 +25,18 @@ const READ_GUARD = {
  * checklist.ts` exactly — see that file's header for the full rationale.
  * `taxonomy_exists` is always reported non-applicable for pages
  * (`awcms_blog_pages` has no category/tag assignment table, unlike
- * posts' `awcms_blog_post_terms`). There is currently no
- * `POST /api/v1/blog/pages/{id}/publish` or `.../schedule` endpoint in this
- * codebase at all — pages are created directly in `status = 'draft'` with
- * no lifecycle-transition route (a pre-existing gap, out of this issue's
- * atomic scope to add). This endpoint is therefore preview-only for pages:
- * it reports the same checklist a page WOULD need to pass, but nothing
- * currently blocks a page transition server-side because no such
- * transition exists to gate.
+ * posts' `awcms_blog_post_terms`).
+ *
+ * This header used to end by noting that no `POST .../publish` endpoint
+ * existed, so nothing blocked a page transition server-side "because no such
+ * transition exists to gate". [ADR-0057](../../../../../../../docs/adr/0057-blog-page-lifecycle.md)
+ * added the transition, and `pages/{id}/publish.ts` now runs this same
+ * checklist as a real gate before it. This route stays what it always was —
+ * a read-only preview of the result the editor can see before trying — but it
+ * is now a preview OF something rather than a preview of nothing.
+ *
+ * There is still no `.../schedule`, and there will not be: pages have no
+ * `scheduled` state (ADR-0057 §B).
  */
 export const GET: APIRoute = async ({ request, params, cookies }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);

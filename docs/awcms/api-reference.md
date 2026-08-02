@@ -4909,6 +4909,82 @@ Gated by blog_content.pages.delete.
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/blog/pages/{id}/archive` — Archive a blog page
+
+- **operationId**: `blogArchivePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.archive (ADR-0057). High-risk, requires Idempotency-Key. Removes the page from the public site without destroying it; published_at is retained so a later re-publish keeps the original go-live date.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page archived (or an idempotent replay).                                                     | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Invalid status transition, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/pages/{id}/publish` — Publish a blog page
+
+- **operationId**: `blogPublishPage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.publish (ADR-0057). High-risk, requires Idempotency-Key. Blocked (422) if the content quality checklist fails when full-online R2-only mode is active for the tenant. Pages have a narrower lifecycle than posts - no review, no scheduled - so the only sources for this transition are draft and archived. No social-publishing hook is invoked - that port's trigger is post_published and a page is not an article.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                  | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page published (or an idempotent replay).                                                    | object                                 |
+| 400    | Validation error.                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Invalid status transition, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+| 422    | Publish is blocked by the content quality checklist.                                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/pages/{id}/purge` — Permanently purge an archived or soft-deleted blog page
+
+- **operationId**: `blogPurgePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.purge (ADR-0057). High-risk, irreversible, requires Idempotency-Key. Only an archived or previously soft-deleted page may be purged. Advertisement placements targeting this page neither block the purge nor are deleted with it - they simply go inert, exactly as they already do for a soft-deleted page, because the render query matches target_id against the page being rendered. Their count is returned as adPlacementsNowInert so the change is visible rather than silent.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                                                                      | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page purged (or an idempotent replay).                                                                           | object                                 |
+| 400    | Validation error.                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 409    | The page is neither archived nor soft-deleted, or the Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/blog/pages/{id}/quality-checklist` — Preview the content quality checklist for a page
 
 - **operationId**: `blogGetPageQualityChecklist`
@@ -4931,6 +5007,31 @@ Read-only preview for the admin editor. Gated by blog_content.pages.read.
 | 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/blog/pages/{id}/restore` — Restore a soft-deleted blog page
+
+- **operationId**: `blogRestorePage`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by blog_content.pages.restore (ADR-0057). High-risk, requires Idempotency-Key. Undoes a soft delete, not an archive - lifecycle status is left untouched, so a page soft-deleted while published comes back published. A page that is not soft-deleted answers 404, the same shape as an unknown id, so restore cannot be used to probe which ids exist.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | Page restored (or an idempotent replay).                       | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/blog/posts` — List this tenant's non-deleted blog posts
 

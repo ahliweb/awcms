@@ -237,9 +237,29 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/blog/pages/[id]/archive.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/pages/[id]/publish.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/blog/pages/[id]/purge.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/blog/pages/[id]/quality-checklist.ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/blog/pages/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/blog/pages/index.ts",

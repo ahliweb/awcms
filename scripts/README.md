@@ -23,12 +23,13 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-64 target menjalankan berkas di `scripts/`; 23 di antaranya
+65 target menjalankan berkas di `scripts/`; 24 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
 | Target                                   | Skrip                                          | Gate |
 | ---------------------------------------- | ---------------------------------------------- | ---- |
+| `access:permissions:enforcement:check`   | `permission-enforcement-check.ts`              | ✅   |
 | `analytics:purge`                        | `visitor-analytics-purge.ts`                   | —    |
 | `analytics:rollup`                       | `visitor-analytics-rollup.ts`                  | —    |
 | `api:docs:check`                         | `api-docs-check.ts`                            | ✅   |

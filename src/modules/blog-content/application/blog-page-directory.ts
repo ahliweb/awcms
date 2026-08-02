@@ -7,6 +7,7 @@ import type {
   UpdateBlogPageInput
 } from "../domain/blog-page-validation";
 import type { PageType } from "../domain/page-type";
+import type { BlogPageStatus } from "../domain/page-status";
 import {
   boundedPageNumber,
   boundedPageSize
@@ -15,11 +16,23 @@ import {
 /**
  * Read/write query module for `awcms_blog_pages` (Issue #539) — same
  * "directory holds both reads and writes for one resource" convention
- * `blog-post-directory.ts` (Issue #538) established. Pages get plain CRUD
- * only (no publish/schedule/archive/restore/purge lifecycle actions —
- * doc issue #539's Routes section lists only GET/POST/GET/PATCH/DELETE for
- * pages, unlike posts; those permissions are already seeded (#537) for a
- * future issue to wire up, not this one).
+ * `blog-post-directory.ts` (Issue #538) established.
+ *
+ * This file used to say pages get plain CRUD only, and that the seeded
+ * lifecycle permissions were left "for a future issue to wire up, not this
+ * one". That future issue never arrived, and the cost was not a spare
+ * catalogue row: `createBlogPage` writes a literal `'draft'`, `updateBlogPage`
+ * never touches `status`, and `blog-scheduled-publish.ts` reads only
+ * `awcms_blog_posts` — so no code path in the repo could publish a page, while
+ * `blog-search.ts` filtered public pages on `status = 'published'` and
+ * therefore always returned nothing.
+ *
+ * [ADR-0057](../../../../docs/adr/0057-blog-page-lifecycle.md) closes that.
+ * Pages now have publish/archive/restore/purge, deliberately WITHOUT the
+ * `review` and `scheduled` states posts have — `sql/036` seeded no
+ * `pages.schedule`, which is a decision the catalogue already made. The
+ * transition rules live in `domain/page-status.ts`, separate from the post
+ * table for the same reason.
  */
 export type BlogPageSummary = {
   id: string;
@@ -390,4 +403,125 @@ export async function softDeleteBlogPage(
   `;
 
   return rows.length > 0;
+}
+
+/**
+ * Shared mutation for publish/archive/restore-to-draft (ADR-0057 §A) — the
+ * page counterpart of `transitionBlogPostStatus`. Transition VALIDITY is
+ * checked by the caller through `isValidPageStatusTransition` before this
+ * runs, so this stays a plain conditional write rather than a second source of
+ * truth about which transitions are legal.
+ *
+ * `scheduled_at` is cleared unconditionally rather than branched on, unlike
+ * the post version: no page transition can target `scheduled`, so the only
+ * reachable branch there would be the clearing one. It is written rather than
+ * ignored because a row that reached `scheduled` outside this repo's code
+ * paths must not keep a stale timestamp after moving on.
+ *
+ * `published_at` is set on the way IN to `published` and never cleared. That
+ * is deliberate and matches posts: it records when the page first went live,
+ * which is what `blog-search.ts`'s public filter and the SEO facts adapter
+ * read. Clearing it on archive would make an un-archived page look like it had
+ * never been published.
+ */
+export async function transitionBlogPageStatus(
+  tx: Bun.SQL,
+  tenantId: string,
+  id: string,
+  toStatus: BlogPageStatus
+): Promise<BlogPageView | null> {
+  const rows = (await tx`
+    UPDATE awcms_blog_pages
+    SET status = ${toStatus},
+        published_at = CASE WHEN ${toStatus === "published"} THEN now() ELSE published_at END,
+        scheduled_at = NULL,
+        version = version + 1,
+        updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NULL
+    RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
+      content_text, status, visibility, featured_media_id, seo_title,
+      meta_description, canonical_url, locale, page_type, parent_page_id,
+      menu_order, published_at, scheduled_at, created_at, updated_at,
+      deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
+  `) as BlogPageRow[];
+
+  return rows[0] ? toView(rows[0]) : null;
+}
+
+/** Undoes `softDeleteBlogPage`; the `deleted_at IS NOT NULL` predicate makes a repeat a no-op rather than a second restore. */
+export async function restoreBlogPage(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  id: string
+): Promise<BlogPageView | null> {
+  const rows = (await tx`
+    UPDATE awcms_blog_pages
+    SET deleted_at = NULL, deleted_by = NULL, delete_reason = NULL,
+        restored_at = now(), restored_by = ${actorTenantUserId}, updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NOT NULL
+    RETURNING id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
+      content_text, status, visibility, featured_media_id, seo_title,
+      meta_description, canonical_url, locale, page_type, parent_page_id,
+      menu_order, published_at, scheduled_at, created_at, updated_at,
+      deleted_at, deleted_by, delete_reason, restored_at, restored_by, version
+  `) as BlogPageRow[];
+
+  return rows[0] ? toView(rows[0]) : null;
+}
+
+export type PurgeBlogPageResult = {
+  purged: boolean;
+  /**
+   * Ad placements that targeted this page and are now inert (ADR-0057 §C).
+   * Counted BEFORE the delete, because afterwards nothing distinguishes them
+   * from placements that were already pointing at nothing.
+   */
+  adPlacementsNowInert: number;
+};
+
+/**
+ * Hard delete (ADR-0057 §C). The caller checks `canPurgePage` first.
+ *
+ * Nothing is cascaded, and there is no page equivalent of the
+ * `awcms_blog_post_terms` cleanup `purgeBlogPost` does: pages have no taxonomy
+ * assignment table. `awcms_blog_revisions` rows under
+ * `resource_type = 'page'` are deliberately LEFT, which is the same call
+ * `purgeBlogPost` makes for its own revisions — no FK points at the content
+ * row, and the history stays a record for the same reason audit events keep
+ * referencing purged resources by id.
+ *
+ * Ad placements targeting this page are deliberately NOT touched. ADR-0057 §C:
+ * `ad-placement-reference-validation.ts` already decided a target deleted
+ * later "is not an error and never becomes one", and
+ * `listActiveAdPlacementsForRendering` matches `target_id` against the page
+ * BEING RENDERED — a purged page is never rendered, so its placements are
+ * never matched. They go inert, exactly as they already do for a soft-deleted
+ * page. Deleting rows owned by another surface as a side effect is the
+ * ownership ADR-0044 tidied; the count is returned instead so the change is
+ * visible rather than silent.
+ */
+export async function purgeBlogPage(
+  tx: Bun.SQL,
+  tenantId: string,
+  id: string
+): Promise<PurgeBlogPageResult> {
+  const inertRows = (await tx`
+    SELECT count(*)::int AS count
+    FROM awcms_news_portal_ad_placements
+    WHERE tenant_id = ${tenantId}
+      AND target_type = 'page' AND target_id = ${id}
+      AND deleted_at IS NULL
+  `) as { count: number }[];
+
+  const rows = await tx`
+    DELETE FROM awcms_blog_pages
+    WHERE tenant_id = ${tenantId} AND id = ${id}
+    RETURNING id
+  `;
+
+  return {
+    purged: rows.length > 0,
+    adPlacementsNowInert: inertRows[0]?.count ?? 0
+  };
 }
