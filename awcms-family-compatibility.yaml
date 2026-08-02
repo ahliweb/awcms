@@ -29,7 +29,7 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
-  moduleDescriptorContractVersion: "2.4.0"
+  moduleDescriptorContractVersion: "2.5.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base
@@ -109,6 +109,22 @@ intentionalDivergences:
   # dipakai-langsung"), and the first one — `theming` — is implemented in the
   # base (ADR-0034 Fase 3). Website/content modules that are not yet ported are
   # simply not-yet-ported (drift is tracked per-module), not a standing divergence.
+  - id: platform-scoped-permissions
+    summary: >-
+      awcms_permissions carries a `scope` column (`tenant`/`platform`), and the
+      authorization chokepoint refuses a platform-scoped permission unless the
+      acting tenant is the platform tenant. awcms-mini has no such split — every
+      permission there is tenant-scoped.
+    reason: >-
+      This base owns GLOBAL reference data (the Indonesia region dataset:
+      no tenant_id, no RLS, served identically to every tenant), so it has
+      actions with no honest per-tenant subject. Recorded as it lands, per
+      ADR-0047 §4, because it is a foundation authorization primitive prototyped
+      here while awcms-mini is frozen.
+    owner: "@ahliweb"
+    reviewDate: "2027-08-02"
+    adr: 0053-platform-scoped-permissions.md
+    since: "ADR-0053"
   - id: openapi-one-file-per-module
     summary: >-
       OpenAPI fragments are one-file-per-MODULE, not one-file-per-tag as in

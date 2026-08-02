@@ -1,0 +1,515 @@
+---
+/**
+ * Indonesia administrative-region dataset console — the admin screen for
+ * `idn_admin_regions` (ADR-0046), and the first screen in this base whose write
+ * controls are PLATFORM-scoped (ADR-0053).
+ *
+ * ## What makes this screen different from every other one here
+ *
+ * Every other `/admin/*` screen acts on the viewer's OWN tenant data. This one
+ * acts on `awcms_idn_region_datasets` — global reference data with no
+ * `tenant_id` and no RLS, served identically to every tenant. Activating a
+ * version changes what every address form in the product returns, everywhere,
+ * at once.
+ *
+ * So the read panels are ordinary tenant reads (`dataset.read`), while the two
+ * write controls are gated on platform-scoped permissions that only the
+ * platform tenant can exercise — enforced at the chokepoint, not here. A viewer
+ * in an ordinary tenant sees the versions being served and the provenance
+ * behind them, and no buttons.
+ *
+ * ## Reads vs writes
+ *
+ * Reads call the module's own `listDatasets` inside one `withTenantOrThrow`
+ * transaction (sequential awaits — concurrent queries on one transaction
+ * connection leak it). Writes POST to the guarded
+ * `/api/v1/idn-regions/datasets/*` endpoints with a fresh `Idempotency-Key`
+ * per click, so the audit row and idempotency record cannot be bypassed.
+ *
+ * Import is deliberately absent: it parses a dump vendored in the repository
+ * (`data/idn-admin-regions/`) and belongs to a deploy, not to a browser
+ * (ADR-0046 §5). The screen says so rather than leaving a reader to wonder
+ * where the button is.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  resolvePlatformTenant,
+  resolveTenancyMode,
+  type TenancyMode
+} from "../../lib/tenant/platform-tenant";
+import {
+  listDatasets,
+  type DatasetSummary
+} from "../../modules/idn-admin-regions/application/dataset-lifecycle";
+import { IDN_ADMIN_REGIONS_PROVENANCE } from "../../modules/idn-admin-regions/domain/source-provenance";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "idn-regions.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const canReadDatasets = ssr.permissions.has(
+  permissionKey("idn_admin_regions", "dataset", "read")
+);
+const holdsActivate = ssr.permissions.has(
+  permissionKey("idn_admin_regions", "dataset", "configure")
+);
+const holdsRollback = ssr.permissions.has(
+  permissionKey("idn_admin_regions", "dataset", "restore")
+);
+
+let datasets: DatasetSummary[] = [];
+let tenancyMode: TenancyMode = "single";
+let isPlatformTenant = false;
+let platformTenantCode: string | null = null;
+let loadError = false;
+
+if (canReadDatasets || holdsActivate || holdsRollback) {
+  try {
+    const sql = getDatabaseClient();
+    const rows = canReadDatasets
+      ? await withTenantOrThrow(sql, ssr.tenantId, (tx) => listDatasets(tx))
+      : [];
+
+    // Resolved OUTSIDE the tenant transaction on purpose: both read RLS-free
+    // root tables (`awcms_tenants`, `awcms_setup_state`) and neither needs — or
+    // should imply — a tenant context.
+    const platformTenant = await resolvePlatformTenant(sql);
+    tenancyMode = await resolveTenancyMode(sql);
+
+    datasets = rows;
+    isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
+    platformTenantCode = platformTenant?.tenantCode ?? null;
+  } catch (error) {
+    logAdminPageError(
+      "admin/idn-regions.astro: failed to load dataset console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+    loadError = true;
+  }
+}
+
+/**
+ * Holding the permission is not enough — the chokepoint also requires the
+ * acting tenant to BE the platform tenant. Mirroring both halves here means the
+ * screen never renders a button whose request is already destined for a 403.
+ */
+const canActivate = holdsActivate && isPlatformTenant;
+const canRollback = holdsRollback && isPlatformTenant;
+
+/** Held the permission but is not the platform tenant — worth explaining, not hiding. */
+const withheldByPlatformScope =
+  (holdsActivate || holdsRollback) && !isPlatformTenant;
+
+const activeDataset = datasets.find((dataset) => dataset.status === "active");
+const hasPreviousDataset = datasets.some(
+  (dataset) => dataset.status === "superseded"
+);
+
+/** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18` (UTC, no locale dependency). */
+function formatTimestamp(value: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().replace("T", " ").slice(0, 16);
+}
+
+function statusVariant(status: string): string {
+  if (status === "active") return "success";
+  if (status === "rejected") return "danger";
+  if (status === "validated") return "info";
+  return "neutral";
+}
+
+const numberFormatter = new Intl.NumberFormat("en-US");
+---
+
+<AdminLayout title="Region datasets">
+  <header class="page-header fade-in-up">
+    <h1 id="idn-regions-heading">Region datasets</h1>
+    <p class="page-description">
+      The Indonesia administrative-region hierarchy (province, regency/city,
+      district, village) that address forms and regional reports read from.
+      Versions are imported on deploy; exactly one is served at a time, to every
+      tenant.
+    </p>
+  </header>
+
+  {
+    !canReadDatasets && !holdsActivate && !holdsRollback && (
+      <p class="state-notice fade-in-up" id="idn-regions-denied">
+        You do not have permission to view region datasets.
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="idn-regions-error">
+        The dataset console could not be loaded right now. Please try again
+        later.
+      </p>
+    )
+  }
+
+  <p
+    id="idn-regions-action-error"
+    class="admin-create-error"
+    role="alert"
+    hidden
+  >
+  </p>
+
+  {
+    canReadDatasets && (
+      <section class="admin-section fade-in-up" id="idn-regions-summary">
+        <h2 class="admin-section-title">Currently served</h2>
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">Active version</span>
+            <span class="stat-value stat-value--mono">
+              {activeDataset ? activeDataset.datasetCode : "none"}
+            </span>
+            {activeDataset && (
+              <span class="stat-hint">
+                since {formatTimestamp(activeDataset.activatedAt)} UTC
+              </span>
+            )}
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Regions in this version</span>
+            <span class="stat-value">
+              {activeDataset
+                ? numberFormatter.format(activeDataset.rowCount)
+                : "—"}
+            </span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Imported versions</span>
+            <span class="stat-value">{datasets.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Deployment</span>
+            <span class="stat-value stat-value--mono">{tenancyMode}</span>
+            <span class="stat-hint">
+              {tenancyMode === "single"
+                ? "one active tenant"
+                : "serving more than one tenant"}
+            </span>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    withheldByPlatformScope && (
+      <section class="admin-section fade-in-up" id="idn-regions-scope-notice">
+        <h2 class="admin-section-title">Read-only here</h2>
+        <p class="page-description">
+          Changing the served version affects every tenant, so it can only be
+          done from the platform tenant
+          {platformTenantCode && (
+            <>
+              {" "}
+              (<span class="cell-code">{platformTenantCode}</span>)
+            </>
+          )}
+          — not from this one. Your role carries the permission; the action is
+          refused because of where it is being made, not who is making it.
+        </p>
+      </section>
+    )
+  }
+
+  {
+    (canActivate || canRollback) && (
+      <section class="admin-section fade-in-up" id="idn-regions-actions">
+        <h2 class="admin-section-title">Serve a different version</h2>
+        <p class="page-description">
+          {tenancyMode === "multi"
+            ? "This deployment serves more than one tenant. A change here reaches all of them at once."
+            : "This deployment currently has one tenant, but the data is platform-wide: the same change would reach every tenant added later."}
+        </p>
+        {canRollback && (
+          <div class="admin-toolbar">
+            <button
+              type="button"
+              id="idn-regions-rollback"
+              class="btn-inline btn-inline--danger"
+              disabled={!hasPreviousDataset}
+            >
+              Roll back to previous version
+            </button>
+            {!hasPreviousDataset && (
+              <span class="cell-muted">
+                No superseded version to return to.
+              </span>
+            )}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canReadDatasets && (
+      <section class="admin-section fade-in-up" id="idn-regions-datasets">
+        <h2 class="admin-section-title">
+          Imported versions
+          <span class="count-pill">{datasets.length}</span>
+        </h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Every imported dataset version, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col">Regions</th>
+                <th scope="col">Imported</th>
+                <th scope="col">Activated</th>
+                <th scope="col">Provenance</th>
+                {canActivate && <th scope="col">Action</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {datasets.length === 0 && (
+                <tr>
+                  <td class="data-table-empty" colspan={canActivate ? 7 : 6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        📦
+                      </span>
+                      <span class="empty-state-title">
+                        No versions imported
+                      </span>
+                      <span class="empty-state-text">
+                        Run <code>bun run idn-regions:import -- --commit</code>{" "}
+                        on the deployment to import the vendored dataset.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {datasets.map((dataset) => (
+                <tr>
+                  <td data-label="Version">
+                    <span class="cell-code">{dataset.datasetCode}</span>
+                  </td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={statusVariant(dataset.status)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {dataset.status}
+                    </span>
+                  </td>
+                  <td data-label="Regions">
+                    {numberFormatter.format(dataset.rowCount)}
+                  </td>
+                  <td data-label="Imported">
+                    <span class="cell-code">
+                      {formatTimestamp(dataset.createdAt)}
+                    </span>
+                  </td>
+                  <td data-label="Activated">
+                    <span class="cell-code">
+                      {formatTimestamp(dataset.activatedAt)}
+                    </span>
+                  </td>
+                  <td data-label="Provenance">
+                    {/* Operator-facing evidence, rendered as escaped TEXT
+                        inside `<details>` — never as HTML. */}
+                    <details>
+                      <summary>Source</summary>
+                      <p>
+                        <strong>Repository:</strong> {dataset.sourceRepository}
+                      </p>
+                      <p>
+                        <strong>Commit:</strong>{" "}
+                        <span class="cell-code">{dataset.sourceCommitSha}</span>
+                      </p>
+                      <p>
+                        <strong>File SHA-256:</strong>{" "}
+                        <span class="cell-code">
+                          {dataset.sourceFileSha256}
+                        </span>
+                      </p>
+                      <p>
+                        <strong>License:</strong> {dataset.sourceLicense}
+                      </p>
+                      {dataset.sourceReference && (
+                        <p>
+                          <strong>Decree:</strong> {dataset.sourceReference}
+                        </p>
+                      )}
+                    </details>
+                  </td>
+                  {canActivate && (
+                    <td data-label="Action">
+                      {dataset.status === "validated" ? (
+                        <button
+                          type="button"
+                          class="module-toggle"
+                          data-activate-dataset={dataset.id}
+                          data-dataset-code={dataset.datasetCode}
+                        >
+                          Serve this version
+                        </button>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadDatasets && (
+      <section class="admin-section fade-in-up" id="idn-regions-caveat">
+        <h2 class="admin-section-title">What this data is, and is not</h2>
+        <p class="page-description">
+          {IDN_ADMIN_REGIONS_PROVENANCE.officialReferenceCaveat}
+        </p>
+        <p class="page-description">
+          New versions arrive by deploy, not from this screen:
+          <code>bun run idn-regions:import -- --commit</code> parses the dump
+          vendored in the repository. Importing never activates — a new version
+          lands as <span class="cell-code">validated</span> and is served only
+          when someone chooses it here.
+        </p>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bound unconditionally: the controls only render when BOTH the permission
+  // gate and the platform-tenant check passed server-side, so `querySelectorAll`
+  // finds nothing for anyone else and no listener binds. Astro hoists this
+  // script at build time, so a conditional wrapper would be meaningless.
+  //
+  // The import is deliberate and load-bearing for CSP: an import-free script is
+  // INLINED by Astro, and inline scripts are blocked by this app's
+  // `default-src 'self'` policy. See admin-form-client.ts.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("idn-regions-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function describeFailure(errorCode: string | null): string {
+    if (errorCode === "ACCESS_DENIED") {
+      // The most likely 403 here is not a missing permission but the platform
+      // gate — the screen already hides the buttons for that case, so reaching
+      // this branch usually means the platform tenant moved under the session.
+      return "This action is only permitted from the platform tenant. Reload the page — the platform tenant may have changed.";
+    }
+    if (errorCode === "NO_PREVIOUS_DATASET") {
+      return "There is no superseded version to roll back to.";
+    }
+    if (errorCode === "DATASET_NOT_ACTIVATABLE") {
+      return "That version cannot be served — only a validated version can be activated.";
+    }
+    if (errorCode === "DATASET_NOT_FOUND") {
+      return "That version no longer exists. Reload the page.";
+    }
+    return "The change could not be applied. Please try again.";
+  }
+
+  /**
+   * Activation and rollback are both idempotency-keyed server-side, so each
+   * click mints a FRESH key — reusing one would make a deliberate second action
+   * replay the first one's stored response instead of running again.
+   */
+  async function runLifecycleAction(
+    button: HTMLButtonElement,
+    url: string,
+    busyLabel: string
+  ): Promise<void> {
+    if (button.disabled) return;
+    const unlock = lockElement(button, busyLabel);
+    if (actionError) actionError.hidden = true;
+
+    const result = await sendJson("POST", url, undefined, {
+      "Idempotency-Key": crypto.randomUUID()
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showActionError(describeFailure(result.errorCode));
+    unlock();
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-activate-dataset]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const datasetId = button.dataset.activateDataset;
+        const datasetCode = button.dataset.datasetCode ?? "this version";
+        if (!datasetId) return;
+
+        // Platform-wide and immediate: every tenant's address forms change the
+        // moment this commits.
+        if (
+          !window.confirm(
+            `Serve ${datasetCode} to every tenant? The current version is superseded immediately.`
+          )
+        ) {
+          return;
+        }
+
+        void runLifecycleAction(
+          button,
+          `/api/v1/idn-regions/datasets/${encodeURIComponent(datasetId)}/activate`,
+          "Activating…"
+        );
+      });
+    });
+
+  const rollbackButton = document.getElementById(
+    "idn-regions-rollback"
+  ) as HTMLButtonElement | null;
+
+  rollbackButton?.addEventListener("click", () => {
+    if (
+      !window.confirm(
+        "Roll back to the previously served version? This affects every tenant."
+      )
+    ) {
+      return;
+    }
+
+    void runLifecycleAction(
+      rollbackButton,
+      "/api/v1/idn-regions/datasets/rollback",
+      "Rolling back…"
+    );
+  });
+</script>

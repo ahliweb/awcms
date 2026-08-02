@@ -77,9 +77,19 @@ export async function runOwnerPermissionBackfill(
 
       // The catalog is GLOBAL (no tenant_id, no RLS) — the same table every
       // tenant's roles point at.
+      //
+      // PLATFORM-scoped permissions are excluded outright (ADR-0053). This job
+      // walks EVERY tenant, and its whole premise — "a catalog row newer than
+      // the role could not have been a deliberate removal" — is a statement
+      // about permissions a tenant is supposed to hold. A platform permission
+      // is never one of those, so backfilling it would not be repairing a gap;
+      // it would be re-creating the cross-tenant defect ADR-0052 removed, on
+      // every tenant at once, with the operator reading "restored missing
+      // permissions" in the output.
       const catalogRows = (await tx`
         SELECT id, module_key, activity_code, action, created_at
         FROM awcms_permissions
+        WHERE scope = 'tenant'
         ORDER BY created_at, module_key, activity_code, action
       `) as {
         id: string;

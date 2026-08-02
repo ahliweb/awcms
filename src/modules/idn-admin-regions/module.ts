@@ -125,6 +125,27 @@ export const idnAdminRegionsModule = defineModule({
       safeInOfflineLan: true
     }
   ],
+  // `/admin/idn-regions` — the dataset console (ADR-0053). Gated on
+  // `dataset.read`, the permission its READ panels need, so an ordinary tenant
+  // can see which version it is being served and where that data came from.
+  // The two write controls need platform-scoped permissions AND the platform
+  // tenant; the page renders them only when both hold, and the chokepoint —
+  // never the page — is what enforces it.
+  //
+  // ADR-0051 §Keputusan butir 3 asks that a navigation entry for a
+  // cross-tenant action be gated on the platform permission. This entry is
+  // gated on `dataset.read` instead, deliberately: the SCREEN is not
+  // cross-tenant, only two of its buttons are, and gating the link on
+  // `dataset.configure` would hide the provenance every tenant is entitled to
+  // read about data it is being served.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_idn_regions",
+      path: "/admin/idn-regions",
+      order: 74,
+      requiredPermission: "idn_admin_regions.dataset.read"
+    }
+  ],
   permissions: [
     {
       activityCode: IDN_REGION_ACTIVITY_CODE,
@@ -137,25 +158,38 @@ export const idnAdminRegionsModule = defineModule({
       action: "read",
       description:
         "Read imported dataset versions and their upstream provenance (repository, commit, checksum, decree reference)"
-    }
-    // `dataset.configure` (activate) and `dataset.restore` (rollback) were here
-    // and are GONE — ADR-0052, revoked by `sql/084`.
+    },
+    // `dataset.configure` (activate) and `dataset.restore` (rollback) are back
+    // — but as PLATFORM-scoped permissions (ADR-0053, seeded by `sql/085`),
+    // which is the precondition ADR-0052 set for their return.
     //
-    // Both swap the dataset served to EVERY tenant (`awcms_idn_region_datasets`
-    // is global: no `tenant_id`, no RLS), yet they sat in the global ABAC
-    // catalog, which `setup/initialize` grants wholesale to each new tenant's
+    // The history is worth keeping, because the shape of the original bug is
+    // easy to recreate: both swap the dataset served to EVERY tenant
+    // (`awcms_idn_region_datasets` is global — no `tenant_id`, no RLS), yet
+    // they first shipped as ORDINARY tenant permissions in the global ABAC
+    // catalogue, which `setup/initialize` grants wholesale to each new tenant's
     // `owner`. An ordinary tenant owner therefore held authority over data
     // served to other tenants, and ABAC saw nothing wrong: it evaluates the
-    // permission, not who the action ultimately affects.
+    // permission, not who the action ultimately affects. ADR-0052 removed them
+    // rather than guard them, because the guard did not exist yet.
     //
-    // They are now operator jobs (`bun run idn-regions:activate` /
-    // `:rollback`), joining `idn-regions:import` — which ADR-0046 §5 made
-    // job-only for the identical reason: "no request-time subject for an ABAC
-    // guard to evaluate". With no endpoint left, re-seeding either permission
-    // would advertise a surface that does not exist.
-    //
-    // Do not add them back without first giving cross-tenant actions a
-    // platform-scoped gate (ADR-0051 §Keputusan). A tenant permission cannot
-    // express this authority, whatever it is named.
+    // `scope: "platform"` is what changed. It keeps them OUT of the blanket
+    // grant a new tenant's owner receives, and `access-guard.ts` refuses them
+    // unless the acting tenant is the platform tenant — so the authority cannot
+    // be exercised from a tenant even if a grant row for it appears somehow.
+    {
+      activityCode: IDN_DATASET_ACTIVITY_CODE,
+      action: "configure",
+      scope: "platform",
+      description:
+        "PLATFORM: choose which imported dataset version is served to every tenant (activate)"
+    },
+    {
+      activityCode: IDN_DATASET_ACTIVITY_CODE,
+      action: "restore",
+      scope: "platform",
+      description:
+        "PLATFORM: return every tenant to the previously active dataset version (rollback)"
+    }
   ]
 });

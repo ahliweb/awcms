@@ -85,9 +85,32 @@ export async function bootstrapPlatformTenant(
   `;
   const roleId = roleRows[0]!.id as string;
 
+  // The owner receives the whole TENANT-scoped catalogue. The `scope` filter is
+  // the point (ADR-0053): without it this statement hands every future
+  // cross-tenant permission to every tenant that is ever created, which is
+  // exactly how `idn_admin_regions.dataset.configure` came to be held by an
+  // ordinary tenant owner (ADR-0052). Filtering here means a new platform
+  // permission is safe the moment it is declared — nobody has to remember.
   await tx`
     INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
     SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
+    WHERE scope = 'tenant'
+  `;
+
+  // ...and, because THIS tenant is the one the setup wizard bootstraps, it is
+  // also the platform tenant by default (it becomes `awcms_setup_state.tenant_id`,
+  // the last link of the chain `resolvePlatformTenant` follows). So its owner —
+  // and only its owner — additionally receives the platform-scoped catalogue.
+  //
+  // A deployment that later repoints `PLATFORM_TENANT_ID` at a different tenant
+  // grants that tenant's owner explicitly; `security:readiness` reports the
+  // divergence. Nothing here can widen: the guard still requires the acting
+  // tenant to BE the resolved platform tenant, so these rows are inert anywhere
+  // the resolution does not point.
+  await tx`
+    INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+    SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
+    WHERE scope = 'platform'
   `;
 
   await tx`

@@ -10,7 +10,13 @@ import type {
   BusinessScopeFact,
   TenantContext
 } from "../domain/access-control";
-import { evaluateAccess, isHighRiskAction } from "../domain/access-control";
+import {
+  evaluateAccess,
+  isHighRiskAction,
+  permissionKey
+} from "../domain/access-control";
+import { isPlatformScopedPermissionKey } from "../domain/platform-scope";
+import { resolvePlatformTenant } from "../../../lib/tenant/platform-tenant";
 import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
 import type { SoDRuleDescriptor } from "../../_shared/module-contract";
 import { resolveBusinessScopeFacts } from "./business-scope-facts";
@@ -204,6 +210,46 @@ export async function authorizeInTransaction(
       allowed: false,
       denied: fail(403, "MODULE_DISABLED", decision.reason)
     };
+  }
+
+  // ADR-0053 — a PLATFORM-scoped permission may only be exercised by the
+  // platform tenant. Decided BEFORE permissions are looked up, like the
+  // machine-credential read-only refusal above, so the answer cannot depend on
+  // what the caller happens to hold: a grant row that reached the wrong tenant
+  // (a restored backup, a hand-written INSERT, a future provisioning path that
+  // forgets `WHERE scope = 'tenant'`) is inert rather than sufficient.
+  //
+  // Fail-closed twice over: an unresolvable platform tenant — no setup state, a
+  // `PLATFORM_TENANT_ID` naming a tenant that is absent or inactive — denies.
+  // "Nobody is the platform" must never read as "everybody is".
+  if (
+    isPlatformScopedPermissionKey(
+      permissionKey(guard.moduleKey, guard.activityCode, guard.action)
+    )
+  ) {
+    const platformTenant = await resolvePlatformTenant(tx);
+
+    if (!platformTenant || platformTenant.tenantId !== tenantId) {
+      const decision = {
+        allowed: false,
+        reason: "This action may only be performed by the platform tenant.",
+        matchedPolicy: "platform_scope_required"
+      };
+
+      await recordDecisionLog(
+        tx,
+        tenantId,
+        context.tenantUserId,
+        guard,
+        decision,
+        machine?.id
+      );
+
+      return {
+        allowed: false,
+        denied: fail(403, "ACCESS_DENIED", decision.reason)
+      };
+    }
   }
 
   const accountPermissionKeys = await fetchGrantedPermissionKeys(
