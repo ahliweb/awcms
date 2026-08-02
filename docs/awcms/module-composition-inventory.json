@@ -303,7 +303,7 @@
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
       "permissionCount": 6,
-      "navigationCount": 0,
+      "navigationCount": 1,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
