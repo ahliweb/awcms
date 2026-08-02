@@ -27,6 +27,7 @@ import {
   WorkflowRecoveryError
 } from "../../../../../../modules/workflow-approval/application/workflow-recovery";
 import { fetchTaskWithInstanceForDecision } from "../../../../../../modules/workflow-approval/application/workflow-instance-decision";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/workflow-approval/domain/reason-bounds";
 
 const FORCE_DECIDE_GUARD = {
   moduleKey: "workflow",
@@ -34,7 +35,6 @@ const FORCE_DECIDE_GUARD = {
   action: "force_decide" as const
 };
 const IDEMPOTENCY_SCOPE = "workflow_task_force_decision";
-const MAX_REASON_LENGTH = 500;
 // No notification port is wired in this base — see decisions.ts for why the
 // `email`-owned WorkflowNotificationPort adapter is not injected yet.
 

@@ -19,6 +19,10 @@ import {
 import { recordAuditEvent } from "../../../../../../../modules/logging/application/audit-log";
 import { findProjectionDescriptor } from "../../../../../../../modules/reporting/application/projection-directory";
 import { triggerOrResumeRebuild } from "../../../../../../../modules/reporting/application/projection-rebuild";
+import {
+  MAX_REASON_LENGTH,
+  MIN_REASON_LENGTH
+} from "../../../../../../../modules/reporting/domain/operator-input-bounds";
 
 const IDEMPOTENCY_SCOPE = "reporting_projection_rebuild";
 
@@ -65,8 +69,12 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
   }
 
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-  if (reason.length < 1 || reason.length > 500) {
-    return fail(400, "VALIDATION_ERROR", "reason must be 1-500 characters.");
+  if (reason.length < MIN_REASON_LENGTH || reason.length > MAX_REASON_LENGTH) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      `reason must be ${MIN_REASON_LENGTH}-${MAX_REASON_LENGTH} characters.`
+    );
   }
 
   const descriptor = findProjectionDescriptor(key);
