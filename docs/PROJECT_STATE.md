@@ -323,7 +323,28 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     `delete`/`restore`/`purge` (lubang nyata), tambah rute daftar sendiri. Layar
     menyusul SETELAH ketiganya.
 
-    **Kemajuan: §A SELESAI.** `sql/087` mencabut `attach`/`detach` dari katalog
+    **Kemajuan: §A + §B SELESAI.** §B memberi `delete`/`restore`/`purge`
+    endpoint ter-guard, ter-audit, ber-`Idempotency-Key`
+    (`DELETE /api/v1/media/objects/{id}`, `.../{id}/restore`, `.../{id}/purge`).
+    Nol permission `media_library` kini tak-tergerbangi. `purge` memurnikan
+    REGISTRY saja — job rekonsiliasi tetap satu-satunya penulis bucket — dan
+    berjalan dalam SAVEPOINT karena FK keras dari
+    `awcms_news_portal_ad_placements` membuat `23503` MEMBATALKAN transaksi
+    (tanpa savepoint, 409 yang bisa ditindaklanjuti berubah jadi 500 saat
+    COMMIT). Tersisa §C: `listMediaObjects` + rute daftar sendiri, lalu layar.
+
+    > **Temuan sampingan, sudah diperbaiki di PR yang sama.** SQLSTATE Postgres
+    > ada di `error.errno`, BUKAN `error.code` — Bun mengisi `code` dengan
+    > konstanta miliknya sendiri (`ERR_POSTGRES_SERVER_ERROR`) untuk SEMUA error
+    > server. Jadi `error.code === "23505"` bukan cek yang agak salah, melainkan
+    > cek yang TAK PERNAH bisa benar. Sepuluh situs di repo ini sudah benar
+    > (`String(error.errno)`); satu tidak: `tenant-provisioning.ts` —
+    > `POST /api/v1/tenants` menjanjikan 409 untuk `tenant_code` duplikat tapi
+    > menyajikan 500 pada kasus balapan (pre-check SELECT menutupi kasus biasa).
+    > Ditemukan dengan MEMPROBE database nyata, bukan dengan membaca; digerbangi
+    > `tests/postgres-sqlstate-detection.test.ts`.
+
+    **§A SELESAI.** `sql/087` mencabut `attach`/`detach` dari katalog
     dan dari tiap grant role; dua fungsi nol-pemanggil dihapus. Modul kini
     mendeklarasikan **9 permission (7 `media.*` + 2 `enforcement.*`)**, dan yang
     belum tergerbangi tinggal **tiga**: `delete`/`restore`/`purge` — semuanya

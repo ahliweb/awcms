@@ -873,11 +873,68 @@ export async function restoreNewsMediaObject(
   return restored;
 }
 
+export type PurgeNewsMediaObjectResult =
+  | { ok: true; objectKey: string }
+  /** No row matched `id` in this tenant with `deleted_at IS NOT NULL`. */
+  | { ok: false; reason: "not_purgeable" }
+  /** A live FK still points at the row — see the savepoint note below. */
+  | { ok: false; reason: "still_referenced" };
+
+/** Postgres foreign-key violation. */
+const FOREIGN_KEY_VIOLATION = "23503";
+
 /**
- * Hard delete. Caller must have already verified the row is soft-deleted
- * (this only guards it at the SQL level via `deleted_at IS NOT NULL` in the
- * WHERE clause) — same "caller verifies eligibility first" convention as
- * `blog-content/application/blog-post-directory.ts`'s `purgeBlogPost`.
+ * The SQLSTATE is on `errno`, NOT on `code`. Bun sets `code` to its own
+ * `"ERR_POSTGRES_SERVER_ERROR"` for every server error alike, so comparing
+ * `code` against a SQLSTATE is always false — the error would be rethrown and
+ * the caller-actionable 409 would surface as a 500. Verified against
+ * PostgreSQL 18 + Bun 1.3.14; `String()` because `errno` is typed loosely
+ * enough to be a number in other Bun error shapes. Same idiom as the ten other
+ * violation checks in this repo (`role-admin.ts`, `office-directory.ts`, ...).
+ */
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "errno" in error &&
+    String((error as { errno?: unknown }).errno) === FOREIGN_KEY_VIOLATION
+  );
+}
+
+/** Fixed identifier — never built from input. */
+const PURGE_SAVEPOINT = "awcms_purge_media_object";
+
+/**
+ * Hard delete of the REGISTRY ROW. Eligibility is enforced in the `WHERE`
+ * (`deleted_at IS NOT NULL`), so an object that was never soft-deleted comes
+ * back `not_purgeable` rather than silently vanishing.
+ *
+ * ## This does NOT delete the R2 object (ADR-0056 §B)
+ *
+ * The reconciliation job owns the bucket. Deleting bytes here would put two
+ * writers on one bucket with two different ideas of what is safe to remove, and
+ * the job already has the ordering discipline for it (see
+ * `scripts/news-media-r2-reconcile.ts`). The accepted, stated cost is a window
+ * where the R2 object outlives its registry row — closed by the next
+ * reconciliation tick, which sees a key with no row and treats it as an
+ * orphan-in-R2.
+ *
+ * ## Why a savepoint, and why no pre-check
+ *
+ * `awcms_news_portal_ad_placements.media_object_id` is a hard, NOT NULL FK to
+ * this table with no `ON DELETE` clause — so purging a still-referenced object
+ * raises `23503`. In PostgreSQL that ABORTS the transaction: every later
+ * statement fails with "current transaction is aborted", and the COMMIT
+ * `withTenant` performs on a returned 4xx fails too. Catching the error without
+ * a savepoint turns a caller-actionable 409 into a 500.
+ *
+ * There is deliberately no pre-check SELECT to go with it — unlike
+ * `provisionTenant`, which pre-checks then uses the savepoint only for the race.
+ * A pre-check here would have to name the referencing tables, i.e. this module
+ * would have to know its own CONSUMERS (`module.ts`: "media must never depend on
+ * its own consumers"). Letting the FK answer keeps that knowledge in the
+ * database, where it already lives, and stays correct the day a second module
+ * adds a reference.
  */
 export async function purgeNewsMediaObject(
   tx: Bun.SQL,
@@ -885,14 +942,31 @@ export async function purgeNewsMediaObject(
   actorTenantUserId: string,
   id: string,
   correlationId?: string
-): Promise<boolean> {
-  const rows = (await tx`
-    DELETE FROM awcms_news_media_objects
-    WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NOT NULL
-    RETURNING object_key
-  `) as { object_key: string }[];
+): Promise<PurgeNewsMediaObjectResult> {
+  await tx.unsafe(`SAVEPOINT ${PURGE_SAVEPOINT}`);
 
-  if (rows.length === 0) return false;
+  let rows: { object_key: string }[];
+
+  try {
+    rows = (await tx`
+      DELETE FROM awcms_news_media_objects
+      WHERE tenant_id = ${tenantId} AND id = ${id} AND deleted_at IS NOT NULL
+      RETURNING object_key
+    `) as { object_key: string }[];
+
+    await tx.unsafe(`RELEASE SAVEPOINT ${PURGE_SAVEPOINT}`);
+  } catch (error) {
+    await tx.unsafe(`ROLLBACK TO SAVEPOINT ${PURGE_SAVEPOINT}`);
+
+    if (isForeignKeyViolation(error)) {
+      return { ok: false, reason: "still_referenced" };
+    }
+    throw error;
+  }
+
+  if (rows.length === 0) return { ok: false, reason: "not_purgeable" };
+
+  const objectKey = rows[0]!.object_key;
 
   await recordAuditEvent(tx, {
     tenantId,
@@ -902,10 +976,10 @@ export async function purgeNewsMediaObject(
     resourceType: AUDIT_RESOURCE_TYPE,
     resourceId: id,
     severity: "warning",
-    message: `News media object purged: ${rows[0]!.object_key}.`,
-    attributes: { objectKey: rows[0]!.object_key },
+    message: `News media object purged: ${objectKey}.`,
+    attributes: { objectKey },
     correlationId
   });
 
-  return true;
+  return { ok: true, objectKey };
 }

@@ -81,16 +81,56 @@ media-library/
 | `052`     | Repoint permission ownership `news_portal.media.*` → `media_library.media.*` (INSERT → repoint role grants → DELETE; order load-bearing) |
 | `053`     | `awcms_media_library_tenant_state` (RLS ENABLE+FORCE + tenant_isolation) + backfill from `awcms_news_portal_tenant_state`                |
 | `054`     | `media_library.enforcement.{read,enable}` permission catalog rows                                                                        |
+| `087`     | REVOKE `media_library.media.{attach,detach}` — grants first, then catalog rows (ADR-0056 §A)                                             |
 
 Registry/upload/homepage/ad-placement tables (`041`–`045`) were created before
 the inversion and are unchanged.
 
+## Object lifecycle ([ADR-0056](../../../docs/adr/0056-media-library-admin-surface.md) §B)
+
+Three of this module's permissions sat in the catalog since `sql/052`, granted
+to every tenant owner, and enforced by **nothing** — no route, no function, no
+job. The functions behind them were written and had zero callers. So an object
+uploaded by mistake, orphaned, or violating policy disappeared only if the
+reconciliation job happened to categorise it that way, on the job's schedule.
+There was no way for an administrator to remove one, and no way to undo it.
+
+| Endpoint                                  | Permission                    | Notes                                                               |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------- |
+| `DELETE /api/v1/media/objects/{id}`       | `media_library.media.delete`  | Body `{ reason }`, required and bounded. Soft delete; R2 untouched. |
+| `POST /api/v1/media/objects/{id}/restore` | `media_library.media.restore` | Undo. A live object answers 404, not a silent success.              |
+| `POST /api/v1/media/objects/{id}/purge`   | `media_library.media.purge`   | Hard-deletes the REGISTRY ROW only. Cannot be undone.               |
+
+All three are high-risk actions and require `Idempotency-Key`.
+
+**Soft delete breaks live references, deliberately.** `resolveMediaReferences`
+filters `deleted_at IS NULL`, so a post whose `featured_media_id` points at a
+deleted object resolves to nothing immediately. That is the intended outcome for
+the case this exists to serve — a policy-violating image must stop being served
+— and `restore` is why it is recoverable. None of these endpoints scans for
+referencing rows first: that would make this module know its own consumers.
+
+**`purge` clears the registry, not the bucket.** The `news-media:reconcile` job
+owns R2 and has the ordering discipline for deleting from it; a second writer
+here would mean two processes with different ideas of what is safe to remove.
+Accepted, stated cost: a window where the R2 object outlives its registry row,
+closed by the next reconciliation tick, which sees a key with no row and treats
+it as an orphan-in-R2.
+
+`awcms_news_portal_ad_placements.media_object_id` is a hard NOT NULL FK here, so
+purging a still-referenced object answers `409 MEDIA_OBJECT_REFERENCED`. That
+path runs inside a **savepoint**: in PostgreSQL a `23503` aborts the whole
+transaction, so catching it without one turns a caller-actionable 409 into a 500
+at COMMIT. The SQLSTATE is read from `error.errno` — Bun puts its own constant
+on `error.code`, so comparing `code` to `"23503"` can never be true
+(`tests/postgres-sqlstate-detection.test.ts` now gates this repo-wide).
+
 ## Not ported to this base (deferred, additive)
 
-Media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media` —
-micro step 5d), responsive `srcset` render (step 5b), and the PDF media type
-(step 5c). The allowed MIME set stays the four raster types and the module
-declares no `navigation` yet.
+The `/admin/media` screen (micro step 5d — the lifecycle API half above is now
+ported, so this module still declares no `navigation`), responsive `srcset`
+render (step 5b), and the PDF media type (step 5c). The allowed MIME set stays
+the four raster types.
 
 ## Resolusi referensi media (`GET /api/v1/media/objects`)
 
