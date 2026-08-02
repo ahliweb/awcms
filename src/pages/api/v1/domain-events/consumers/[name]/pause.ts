@@ -14,14 +14,13 @@ import {
   listConsumerStates,
   pauseConsumer
 } from "../../../../../../modules/domain-event-runtime/application/consumer-state-directory";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/domain-event-runtime/domain/reason-bounds";
 
 const MANAGE_GUARD = {
   moduleKey: "domain_event_runtime",
   activityCode: "consumers",
   action: "manage" as const
 };
-
-const MAX_REASON_LENGTH = 500;
 
 type PauseRequestBody = { reason?: unknown };
 
