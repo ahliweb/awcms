@@ -14,12 +14,6 @@ export const domainEventRuntimeModule = defineModule({
     publishes: ["awcms.domain-event-runtime.sample.recorded"],
     subscribes: ["awcms.domain-event-runtime.sample.recorded"]
   },
-  // No `navigation` entries yet — an admin UI for deliveries/consumers
-  // (src/pages/admin/domain-events/*.astro) does not exist in this
-  // foundation module; declaring a nav entry with no matching page would be
-  // a real 404. Add navigation once that UI ships (follow-up), matching the
-  // convention every other module's nav entry already follows (a real page
-  // always exists first).
   permissions: [
     {
       activityCode: "events",
