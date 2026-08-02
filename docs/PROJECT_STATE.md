@@ -81,14 +81,21 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek       | Nilai (per commit ini)                                                              | Sumber kebenaran                                      |
-| ----------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`              |
-| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                |
-| Migrasi     | **86** (`sql/001`–`086`)                                                            | `ls sql/`                                             |
-| ADR         | **0000**–**0052** (`0000` = template)                                               | `docs/adr/README.id.md` (indeks ter-gate)             |
-| Layar admin | **20** berkas `.astro` di `src/pages/admin/`; **7 dari 21 modul** masih tanpa layar | `ls src/pages/admin/`, `navigation` di `module.ts`    |
-| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
+| Aspek       | Nilai (per commit ini)                                                              | Sumber kebenaran                                                                        |
+| ----------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
+| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                                                  |
+| Migrasi     | **86** (`sql/001`–`086`)                                                            | `ls sql/`                                                                               |
+| ADR         | **0000**–**0055** (`0000` = template)                                               | `ls docs/adr/`                                                                          |
+| Layar admin | **26** berkas `.astro` di `src/pages/admin/`; **2 dari 21 modul** masih tanpa layar | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+
+> **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
+> berbunyi "20 berkas / 7 dari 21 modul" sementara `main` sudah memuat 22 berkas dan
+> hanya 6 modul tanpa `navigation`, dan baris ADR berhenti di `0052` padahal `0055`
+> sudah mendarat. Tak ada gerbang yang memeriksa tabel ini — kolom "Sumber kebenaran"
+> kini memuat perintah yang **menghasilkan** angkanya, jadi memverifikasinya butuh satu
+> tempel, bukan satu penghitungan manual.
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -252,6 +259,31 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   `legal_hold.create` dan `.release` digerbangi **terpisah**, karena SoD menjadikan
   memegang keduanya konflik `critical` — satu gerbang gabungan yang terlihat lebih rapi
   justru salah untuk setiap operator nyata.
+- **Gelombang layar admin kedua (2 Agustus 2026, PR #335–#338).** Empat modul yang
+  gelombang pertama tinggalkan mendapat layarnya: `/admin/reporting` (#335, seluruh
+  mesin proyeksi/ekspor Issue #753 + view `email-health` yang tak pernah dirender),
+  `/admin/approvals` (#336, inbox + recovery + delegasi), `/admin/domain-events`
+  (#337, consumer/delivery/outbox) dan `/admin/sync` (#338, node/conflict/object
+  queue). **Nol migrasi** lagi — permukaan otorisasinya sudah ada.
+  Tiga hal yang layar berikutnya harus tiru:
+  - **Konstanta bound di-hoist ke `domain/`, lalu diimpor DUA arah** (route yang
+    memvalidasinya dan form yang merendernya sebagai `min`/`max`/`maxlength`).
+    `MAX_REASON_LENGTH` ditulis ulang sebagai `500` telanjang di **lima** berkas
+    `workflow-approval` dan dua di `domain-event-runtime`; lima salinan sebuah angka
+    sepakat sampai salah satunya diedit, dan salinan keenam di markup berarti browser
+    menerima apa yang server tolak dengan 400 yang tak bisa ditindak operator.
+  - **Satu fungsi baca dipakai bersama halaman DAN endpoint.** `/admin/sync` menambah
+    `fetchSyncConflicts` ke `sync-directory.ts` dan me-repoint
+    `GET /api/v1/sync/conflicts` ke sana. Jebakannya: fungsi itu mengembalikan `null`
+    untuk kolom resolusi yang kosong (bentuk yang diinginkan halaman) sedangkan
+    endpoint selama ini MENGHILANGKAN key-nya (`?? undefined`), jadi route memetakan
+    balik — `null` di tempat klien menunggu key absen itu perubahan kontrak, bukan
+    refactor.
+  - **Permukaan yang bukan untuk browser tidak diberi kontrol.** `/admin/sync` sengaja
+    tak menyentuh `push`/`pull`/`objects`/`status`: itu protokol NODE ber-HMAC, bukan
+    sesi administrator, dan tombolnya akan jadi kontrol yang tak bisa dipakai browser
+    mana pun — kegagalannya terbaca sebagai bug, bukan salah kategori.
+
 - **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
   `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
   ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
@@ -260,22 +292,55 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
-- **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Tujuh modul belum
-  mendeklarasikan `navigation` — verifikasi ulang dengan
+- **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Gelombang kedua
+  (PR #335–#338, 2 Agustus 2026) menutup EMPAT dari tujuh — verifikasi ulang dengan
   `grep -L 'navigation:' src/modules/*/module.ts`, bukan dari daftar ini:
-  - `blog-content` — paling besar (19 tabel: post, kategori, homepage section, ad
-    placement) dan bernilai-pakai paling tinggi.
-  - `media-library` — browse/upload/verifikasi objek + lifecycle orphan; setara step 5b
-    awcms-micro (`/admin/media`) yang belum di-port.
-  - `workflow-approval` — inbox persetujuan; tanpa layar, approval hanya bisa diputus
-    lewat API.
-  - `reporting` — lima view management reporting; `/admin/index.astro` hanya dashboard.
-  - `sync-storage`, `domain-event-runtime` — permukaan operator.
+  - ~~`reporting`~~ **SELESAI (#335)** — `/admin/reporting`. Bukan dashboard kedua:
+    `/admin` sudah merender empat dari lima view, jadi layar ini mengambil seluruh
+    mesin proyeksi/ekspor Issue #753 **plus** `email-health`, satu-satunya view yang
+    tak pernah dirender di mana pun.
+  - ~~`workflow-approval`~~ **SELESAI (#336)** — `/admin/approvals` (inbox + recovery
+    - delegasi). Enam permission `definition.*` **sengaja ditinggalkan**: menyusun
+      node graph butuh editor sungguhan, dan textarea JSON yang menerima graph rusak
+      sampai `publish` menolaknya lebih buruk daripada tak ada sama sekali. Contract
+      test menegakkan bahwa keenamnya TIDAK bocor ke layar ini, sehingga pemisahan itu
+      tetap keputusan, bukan celah.
+  - ~~`domain-event-runtime`~~ **SELESAI (#337)** — `/admin/domain-events`.
+  - ~~`sync-storage`~~ **SELESAI (#338)** — `/admin/sync`.
+  - `blog-content` — **BELUM**, dan paling besar (19 tabel, ~30 path API: post,
+    kategori, homepage section, ad placement). Bernilai-pakai paling tinggi.
+  - `media-library` — **BELUM, dan bukan sekadar layar.** Audit #335–#338 menemukan
+    **enam dari sebelas permission-nya tak punya permukaan HTTP sama sekali**
+    (`verify`/`attach`/`detach`/`delete`/`restore`/`purge`), dan
+    `GET /api/v1/media/objects` menuntut `?ids=` — ia resolver batch, bukan daftar.
+    Tidak ada fungsi aplikasi `list*`; yang ada hanya fetch-by-id. Jadi layar
+    browse menuntut fungsi baca BARU plus keputusan tentang alur unggah presigned
+    (setara step 5b awcms-micro). Perlakukan sebagai perubahan desain ber-ADR, bukan
+    "layarnya hilang".
   - `idn-admin-regions` — sengaja tanpa layar, lihat §3 (ADR-0052 memindahkan
     lifecycle-nya ke job operator; sisanya dua permission baca).
 
   Ikuti pola gelombang #321–#330 di §3 — termasuk contract test per layar, yang
   **mutation-proven** (kembalikan cacat aslinya dan pastikan MERAH) sebelum di-commit.
+
+  **Dua pelajaran baru dari gelombang kedua, keduanya berlaku untuk layar berikutnya:**
+  - **README modul bisa mengklaim layar yang tak pernah ada.** `reporting/README.md`
+    memerikan `/admin/reporting/projections` + helper `submitJson`, dan
+    `workflow-approval/README.md` memerikan `/admin/workflows` —
+    tak satu pun pernah ada di repo ini; teksnya ikut terbawa saat port. Karena kedua
+    modul tak mendeklarasikan `navigation`, gerbang `admin-navigation-registry.test.ts`
+    yang menangkap path menggantung **tak punya apa pun untuk diperiksa**. Docs tidak
+    digerbangi sebagaimana descriptor digerbangi — jadi baca README modul sebagai
+    klaim yang harus diverifikasi ke `ls src/pages/admin/`, persis seperti
+    [[awcms-stale-skill-flips-direction]] untuk skill.
+  - **Nilai `Idempotency-Key` bukan seragam per repo, melainkan per endpoint, dan
+    layar harus meniru pembagiannya persis.** Tiga bentuk sudah muncul:
+    `/admin/reporting` (lima wajib, `reconcile` tanpa — ia hanya meng-append snapshot),
+    `/admin/domain-events` (tiga arah: `replay` wajib karena tiap panggilan kerja BARU,
+    `pause`/`resume` tidak karena transisi status), dan `/admin/sync` (NOL — ketiga
+    mutasinya transisi status yang idempoten alami). Contract test harus mengikat
+    pembagian itu **per-request** (potong string dari URL-nya), bukan sebagai hitungan
+    header global, dan sekalian menegaskan endpoint-nya masih setuju.
 
 - **Kontrak yang menahan `awcms-astro` — SELESAI (2026-08-01, ADR-0049, `sql/082`/`083`).**
   Kredensial mesin baca-saja + `GET /api/v1/auth/session`. Kredensial
