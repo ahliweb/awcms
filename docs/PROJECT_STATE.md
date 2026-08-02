@@ -85,7 +85,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ----------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                                                  |
-| Migrasi     | **86** (`sql/001`–`086`)                                                            | `ls sql/`                                                                               |
+| Migrasi     | **87** (`sql/001`–`087`)                                                            | `ls sql/`                                                                               |
 | ADR         | **0000**–**0056** (`0000` = template)                                               | `ls docs/adr/`                                                                          |
 | Layar admin | **27** berkas `.astro` di `src/pages/admin/`; **1 dari 21 modul** masih tanpa layar | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
@@ -322,6 +322,16 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     `attach`/`detach` (usang sejak inversi ADR-0036), beri permukaan
     `delete`/`restore`/`purge` (lubang nyata), tambah rute daftar sendiri. Layar
     menyusul SETELAH ketiganya.
+
+    **Kemajuan: §A SELESAI.** `sql/087` mencabut `attach`/`detach` dari katalog
+    dan dari tiap grant role; dua fungsi nol-pemanggil dihapus. Modul kini
+    mendeklarasikan **9 permission (7 `media.*` + 2 `enforcement.*`)**, dan yang
+    belum tergerbangi tinggal **tiga**: `delete`/`restore`/`purge` — semuanya
+    tercakup §B. Status `attached` sengaja TIDAK ikut dicabut (CHECK `sql/041`
+    masih menerimanya, baris lama tetap resolve); yang hilang cuma kemampuan
+    menulisnya. ADR §A edisi pertama menulis "kelima fungsi mati dihapus" —
+    keliru, itu bertabrakan dengan §B yang justru memakai tiga di antaranya;
+    ADR sudah dikoreksi.
 
     > **Koreksi angka di atas.** Entri sebelumnya (#339) menulis "**enam**...
     > termasuk `verify`". Itu salah: `media.verify` DIGERBANGI — di dalam fungsi

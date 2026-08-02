@@ -2,25 +2,32 @@
  * Permission KEY CONSTANTS for the tenant media registry (ADR-0036 media-library
  * ownership inversion; originally Issue #633 under `news_portal`).
  *
- * All 9 `media.*` keys are declared in `media-library/module.ts`'s `permissions`
- * array and seeded into `awcms_permissions`. The rows were first seeded under
- * `('news_portal','media',*)` (migration `042`); migration `052`
+ * Every `media.*` key below is declared in `media-library/module.ts`'s
+ * `permissions` array and seeded into `awcms_permissions`. The rows were first
+ * seeded under `('news_portal','media',*)` (migration `042`); migration `052`
  * (`awcms_media_library_permission_ownership.sql`) repoints ownership to
  * `('media_library','media',*)` when this module was extracted out of
  * `news_portal` — INSERT the new rows, repoint any role grants, then DELETE the
- * old rows (order is load-bearing).
+ * old rows (order is load-bearing). `sql/087` then REVOKES two of the nine it
+ * seeded; see below.
  *
  * ## Reachability in THIS base
  *
- * `create`/`verify`/`cancel` are enforced today by the presigned-upload flow
+ * Seven keys, and ADR-0056 §A is why it is not the nine `awcms-mini`/`awcms-micro`
+ * carry: `attach`/`detach` were REVOKED (`sql/087`). They described writes on a
+ * relation this module stopped owning at ADR-0036 — a post's image is
+ * `awcms_blog_posts.featured_media_id`, changed through `blog_content`'s
+ * permission, not this module's. Both were seeded into a catalog every tenant
+ * owner receives whole, while no route, function, or job ever checked them.
+ *
+ * Of the seven that remain, every one is enforced by real code:
+ * `create`/`verify`/`cancel` by the presigned-upload flow
  * (`POST /api/v1/media/news-images/upload-sessions`, `.../{id}/finalize`,
- * `.../{id}/cancel`). `read`/`attach`/`detach`/`delete`/`restore`/`purge` are
- * declared ahead of the media lifecycle/browser surface (ADR-0026 step 5d —
- * `/api/v1/media/objects/*` + `/admin/media`) that is NOT yet ported to this
- * base, following the same "declare a permission where the code that will check
- * it lives, not scatter the string" convention `blog_content`'s
- * `posts.*`/`pages.*` set already uses. `awcms-mini`/`awcms-micro` carry the same
- * 9-key set, so this shape is inherited, not invented here.
+ * `.../{id}/cancel`), `read` by `GET /api/v1/media/objects`, and
+ * `delete`/`restore`/`purge` by the object lifecycle endpoints (ADR-0056 §B).
+ * Adding an eighth means writing the guard that checks it in the same change —
+ * a key declared "ahead of its surface" is how the two revoked ones survived
+ * three waves of review looking correct.
  *
  * This file remains the single source for the key strings: `module.ts`, the
  * guards, and `tests/media-library-module.test.ts`'s parity assertion all derive
@@ -31,8 +38,8 @@
  * `activityCode` follows this module's own resource shape (`media`, plural
  * dropped to match e.g. `blog_content`'s `posts`/`pages` activity codes),
  * `action` follows the same verb set already used elsewhere in this repo for
- * a soft-deletable resource with an attach/detach lifecycle
- * (`blog_content`'s `posts.create`/`.update`/`.delete`/`.restore`/`.purge`).
+ * a soft-deletable resource (`blog_content`'s
+ * `posts.create`/`.update`/`.delete`/`.restore`/`.purge`).
  */
 export const MEDIA_PERMISSION_ACTIVITY_CODE = "media";
 
@@ -43,10 +50,6 @@ export const MEDIA_PERMISSIONS = {
   read: "media_library.media.read",
   /** Mark an uploaded object verified (MIME/checksum/dimension check passed) — also gates the finalize endpoint, Issue #634. */
   verify: "media_library.media.verify",
-  /** Attach a verified media object to an owning blog/news resource. */
-  attach: "media_library.media.attach",
-  /** Detach a media object from its current owning resource. */
-  detach: "media_library.media.detach",
   /** Soft delete media object metadata. */
   delete: "media_library.media.delete",
   /** Restore a soft-deleted media object. */
@@ -55,9 +58,9 @@ export const MEDIA_PERMISSIONS = {
   purge: "media_library.media.purge",
   /**
    * Abort one's own not-yet-uploaded upload session (Issue #634). New in
-   * this issue — #633's original set (create/read/verify/attach/detach/
-   * delete/restore/purge) had no "cancel" concept yet because no upload
-   * session existed. Reuses the existing `AccessAction` union member
+   * this issue — #633's original set (create/read/verify/delete/restore/purge,
+   * plus the since-revoked attach/detach) had no "cancel" concept yet because
+   * no upload session existed. Reuses the existing `AccessAction` union member
    * `"cancel"` (`identity-access/domain/access-control.ts`, already used by
    * sync/POS cancel flows) — a distinct permission from `delete` because
    * cancelling a `pending_upload` session (nothing was ever verified/

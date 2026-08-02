@@ -57,9 +57,9 @@ change (fail-closed via readiness). Guarded by
 
 ```
 media-library/
-  module.ts                                  # descriptor: system, provides media_library, 11 permissions, reconcile job
+  module.ts                                  # descriptor: system, provides media_library, 9 permissions, reconcile job
   domain/
-    media-permissions.ts                     # MEDIA_PERMISSIONS (9) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
+    media-permissions.ts                     # MEDIA_PERMISSIONS (7) + MEDIA_ENFORCEMENT_PERMISSIONS (2)
     media-r2-config.ts                        # NEWS_MEDIA_R2_* config (names kept), separation-from-sync-storage checks
     managed-media-readiness.ts               # evaluateManagedMediaReadiness (media half of preset readiness)
     media-mime-sniffer.ts | media-object-key.ts | media-finalize-decision.ts

@@ -34,7 +34,7 @@ yang memeriksanya.
 > aplikasi `media-finalize-upload-session.ts`. Memindai route saja memberi
 > jawaban yang salah di kedua arah.
 
-### 2. Lima fungsi aplikasi yang memanggilnya nol
+### 2. Lima fungsi aplikasi yang pemanggilnya nol
 
 `attachNewsMediaObject`, `detachNewsMediaObject`, `softDeleteNewsMediaObject`,
 `restoreNewsMediaObject`, dan `purgeNewsMediaObject` diekspor dari
@@ -78,7 +78,19 @@ Membiarkan keduanya di katalog berarti setiap owner tenant memegang wewenang
 atas aksi yang tak bisa dilakukan siapa pun, dan review permission berikutnya
 harus menebak lagi apakah itu celah atau peninggalan. Dicabut lewat migrasi
 baru, mengikuti preseden [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
-(`sql/084`). Kelima fungsi mati dihapus bersamanya.
+(`sql/084`).
+
+**Koreksi terhadap edisi pertama ADR ini.** Kalimat aslinya berbunyi "kelima
+fungsi mati dihapus bersamanya" — itu bertentangan dengan §B, yang justru
+MEMAKAI tiga dari lima fungsi tersebut. Yang dihapus adalah **dua**:
+`attachNewsMediaObject` dan `detachNewsMediaObject`. `softDeleteNewsMediaObject`,
+`restoreNewsMediaObject`, dan `purgeNewsMediaObject` tetap — §B memberi mereka
+endpoint.
+
+Status `attached` sendiri **tidak** ikut dicabut: CHECK di `sql/041` masih
+menerimanya dan `isNewsMediaObjectSafeForPublicReference` masih menganggapnya
+aman, jadi baris yang sudah berada di status itu tetap resolve. Yang hilang
+adalah kemampuan menulisnya dari modul ini — yang memang tak dipakai siapa pun.
 
 ### B. `media.delete` / `media.restore` / `media.purge` — DIBERI PERMUKAAN
 

@@ -93,16 +93,11 @@ export const mediaLibraryModule = defineModule({
       action: "verify",
       description: "Finalize/verify an uploaded media object"
     },
-    {
-      activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
-      action: "attach",
-      description: "Attach a verified media object to an owning resource"
-    },
-    {
-      activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
-      action: "detach",
-      description: "Detach a media object from its owning resource"
-    },
+    // No `attach`/`detach` — REVOKED by ADR-0056 §A (`sql/087`). They wrote a
+    // relation this module stopped owning at ADR-0036: media attachment is the
+    // consumer's FK (`awcms_blog_posts.featured_media_id`), changed under the
+    // consumer's permission. Both sat in the catalog, granted to every tenant
+    // owner, checked by nothing.
     {
       activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,
       action: "delete",

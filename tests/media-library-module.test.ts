@@ -69,7 +69,7 @@ describe("media_library module descriptor (ADR-0036)", () => {
     expect(mediaLibraryModule.jobs?.[0]?.safeInOfflineLan).toBe(false);
   });
 
-  test("declares exactly the 9 media + 2 enforcement permissions, each reproducing a constant", () => {
+  test("declares exactly the 7 media + 2 enforcement permissions, each reproducing a constant", () => {
     const mediaPermissions = (mediaLibraryModule.permissions ?? []).filter(
       (p) => p.activityCode === MEDIA_PERMISSION_ACTIVITY_CODE
     );
