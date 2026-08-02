@@ -240,6 +240,13 @@ export async function fetchBlogPostById(
 
 export type ListBlogPostsFilter = {
   status?: BlogContentStatus;
+  /**
+   * Exact match on `awcms_blog_posts.locale`. Absent means every locale — the
+   * pre-existing behaviour, and still the right default for the admin table,
+   * where hiding a translation because the operator did not name its language
+   * would be the surprising answer.
+   */
+  locale?: string;
   limit?: number;
 };
 
@@ -279,6 +286,7 @@ export async function listBlogPostsPage(
   tenantId: string,
   options: {
     status?: BlogContentStatus;
+    locale?: string;
     limit?: number;
     cursor?: KeysetCursor | null;
   } = {}
@@ -292,10 +300,12 @@ export async function listBlogPostsPage(
   const cursorCreatedAt = options.cursor?.createdAt ?? null;
   const cursorId = options.cursor?.id ?? null;
   const status = options.status ?? null;
+  const locale = options.locale ?? null;
 
   // One statement for both filtered and unfiltered: `${status}::text IS NULL`
   // keeps the plan shape identical and stops this from growing a fourth
-  // near-identical copy of the same SELECT as filters accumulate.
+  // near-identical copy of the same SELECT as filters accumulate. `locale`
+  // joined the same way for the same reason.
   const rows = (await tx`
     SELECT id, tenant_id, title, slug, status, visibility, locale, published_at,
            updated_at, created_at,
@@ -304,6 +314,7 @@ export async function listBlogPostsPage(
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL
       AND (${status}::text IS NULL OR status = ${status})
+      AND (${locale}::text IS NULL OR locale = ${locale})
       AND (
         ${cursorCreatedAt}::timestamptz IS NULL
         OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
@@ -351,6 +362,7 @@ export async function listBlogPostsFullPage(
   tenantId: string,
   options: {
     status?: BlogContentStatus;
+    locale?: string;
     limit?: number;
     cursor?: KeysetCursor | null;
   } = {}
@@ -364,6 +376,7 @@ export async function listBlogPostsFullPage(
   const cursorCreatedAt = options.cursor?.createdAt ?? null;
   const cursorId = options.cursor?.id ?? null;
   const status = options.status ?? null;
+  const locale = options.locale ?? null;
 
   const rows = (await tx`
     SELECT id, tenant_id, author_tenant_user_id, title, slug, excerpt, content_json,
@@ -377,6 +390,7 @@ export async function listBlogPostsFullPage(
     WHERE tenant_id = ${tenantId}
       AND deleted_at IS NULL
       AND (${status}::text IS NULL OR status = ${status})
+      AND (${locale}::text IS NULL OR locale = ${locale})
       AND (
         ${cursorCreatedAt}::timestamptz IS NULL
         OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
@@ -405,23 +419,23 @@ export async function listBlogPosts(
     MAX_LIST_LIMIT
   );
 
-  const rows = (
-    filter.status
-      ? await tx`
-        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at, created_at
-        FROM awcms_blog_posts
-        WHERE tenant_id = ${tenantId} AND status = ${filter.status} AND deleted_at IS NULL
-        ORDER BY updated_at DESC
-        LIMIT ${limit}
-      `
-      : await tx`
-        SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at, created_at
-        FROM awcms_blog_posts
-        WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
-        ORDER BY updated_at DESC
-        LIMIT ${limit}
-      `
-  ) as BlogPostSummaryRow[];
+  const status = filter.status ?? null;
+  const locale = filter.locale ?? null;
+
+  // Collapsed from a two-branch `filter.status ? … : …` into one statement when
+  // `locale` was added: two optional filters written that way is four copies of
+  // the same SELECT, and the third filter would make it eight. Same
+  // `${param}::text IS NULL` idiom the paged siblings above already use.
+  const rows = (await tx`
+    SELECT id, tenant_id, title, slug, status, visibility, locale, published_at, updated_at, created_at
+    FROM awcms_blog_posts
+    WHERE tenant_id = ${tenantId}
+      AND deleted_at IS NULL
+      AND (${status}::text IS NULL OR status = ${status})
+      AND (${locale}::text IS NULL OR locale = ${locale})
+    ORDER BY updated_at DESC
+    LIMIT ${limit}
+  `) as BlogPostSummaryRow[];
 
   return rows.map(toBlogPostSummary);
 }

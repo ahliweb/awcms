@@ -80,7 +80,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     return fail(400, "VALIDATION_ERROR", query.message);
   }
 
-  const { status, limit, stableOrder, cursor, view } = query.value;
+  const { status, locale, limit, stableOrder, cursor, view } = query.value;
 
   const sql = getDatabaseClient();
   const tokenHash = hashSessionToken(token);
@@ -102,6 +102,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     if (view === "full") {
       const page = await listBlogPostsFullPage(tx, tenantId, {
         status,
+        locale,
         limit,
         cursor
       });
@@ -112,6 +113,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
     if (stableOrder) {
       const page = await listBlogPostsPage(tx, tenantId, {
         status,
+        locale,
         limit,
         cursor
       });
@@ -121,6 +123,7 @@ export const GET: APIRoute = async ({ request, cookies, url }) => {
 
     const posts = await listBlogPosts(tx, tenantId, {
       status,
+      locale,
       limit
     });
 

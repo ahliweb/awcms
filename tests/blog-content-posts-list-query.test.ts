@@ -18,10 +18,15 @@
  * These are pure over `URLSearchParams`: no database, no session, so they run
  * in the `quality` job rather than only where a Postgres is available.
  */
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, test } from "bun:test";
 
 import { encodeKeysetCursor } from "../src/modules/_shared/keyset-pagination";
-import { parseBlogPostListQuery } from "../src/modules/blog-content/domain/blog-post-list-query";
+import {
+  MAX_LOCALE_FILTER_LENGTH,
+  parseBlogPostListQuery
+} from "../src/modules/blog-content/domain/blog-post-list-query";
 
 function parse(qs: string) {
   return parseBlogPostListQuery(new URLSearchParams(qs));
@@ -112,5 +117,105 @@ describe("the build feed's own request", () => {
       createdAt: "2026-07-17T10:00:00.029058+00:00",
       id: "11111111-2222-4333-8444-555555555555"
     });
+  });
+});
+
+/**
+ * `?locale=` closes awcms-astro ADR-0021 §2. Before it, a build for a
+ * single-language site had to pull EVERY locale and discard most of it,
+ * because there was no way to ask for one.
+ *
+ * The refusals here are the same class as the rest of this file: a caller that
+ * meant to filter and silently got the unfiltered feed builds a site with every
+ * translation of every article in it, and nothing anywhere fails.
+ */
+describe("locale", () => {
+  test("is absent by default — every locale, which is right for the admin table", () => {
+    const result = parse("");
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+
+    expect(result.value.locale).toBeUndefined();
+  });
+
+  test("is carried through, trimmed", () => {
+    const result = parse("locale=%20en%20");
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+
+    expect(result.value.locale).toBe("en");
+  });
+
+  test("an empty value is REFUSED, not read as absent", () => {
+    // `?locale=` reads as "I asked for a locale". Serving the unfiltered feed
+    // for it is the silent-wrong-data shape this whole parser exists to avoid.
+    expect(parse("locale=").valid).toBe(false);
+    expect(parse("locale=%20%20").valid).toBe(false);
+  });
+
+  test("an absurdly long value is refused before it reaches the database", () => {
+    expect(parse(`locale=${"x".repeat(MAX_LOCALE_FILTER_LENGTH)}`).valid).toBe(
+      true
+    );
+    expect(
+      parse(`locale=${"x".repeat(MAX_LOCALE_FILTER_LENGTH + 1)}`).valid
+    ).toBe(false);
+  });
+
+  test("shape is NOT validated, deliberately", () => {
+    // `awcms_blog_posts.locale` is plain `text` and the write path accepts any
+    // non-empty string. A read filter stricter than the write path would make a
+    // stored locale unreachable — a row that exists, that the admin table
+    // shows, and that no query can select.
+    for (const value of ["id", "en-GB", "zh-Hans-CN", "klingon", "xx_YY"]) {
+      const result = parse(`locale=${encodeURIComponent(value)}`);
+      expect(result.valid).toBe(true);
+      if (!result.valid) return;
+      expect(result.value.locale).toBe(value);
+    }
+  });
+
+  test("combines with the build feed's own requirements", () => {
+    const result = parse("locale=en&view=full&order=created_at");
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+
+    expect(result.value.locale).toBe("en");
+    expect(result.value.view).toBe("full");
+    expect(result.value.stableOrder).toBe(true);
+  });
+});
+
+/**
+ * Parsing a parameter and USING it are different things, and the gap between
+ * them is silent: the parser accepts `?locale=en`, the route ignores it, the
+ * response is 200, and the caller gets every locale it meant to exclude.
+ *
+ * The route branches three ways on `view`/`order`, so a filter wired into two
+ * of the three would stay invisible until someone changed a query string. This
+ * asserts all three call sites forward it. That the filter then really filters
+ * is proven against a real database in
+ * `tests/integration/blog-post-locale-filter.integration.test.ts`.
+ */
+describe("the route forwards locale to every list function", () => {
+  test("all three call sites pass it", async () => {
+    const route = await readFile(
+      "src/pages/api/v1/blog/posts/index.ts",
+      "utf8"
+    );
+
+    expect(route).toContain("const { status, locale, limit");
+
+    for (const fn of [
+      "listBlogPostsFullPage",
+      "listBlogPostsPage",
+      "listBlogPosts"
+    ]) {
+      const call = route.slice(route.indexOf(`await ${fn}(tx, tenantId, {`));
+      const args = call.slice(0, call.indexOf("});"));
+
+      expect(args).toContain("status");
+      expect(args).toContain("locale");
+    }
   });
 });

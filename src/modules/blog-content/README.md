@@ -876,6 +876,32 @@ dari situs" berbulan-bulan kemudian.
 row-skipping Issue #158. Dibuktikan di `tests/integration/blog-post-cursor.integration.test.ts`
 dengan batch-insert yang seluruh barisnya berbagi satu instant.
 
+#### Filter `?locale=`
+
+```
+GET /api/v1/blog/posts?order=created_at&view=full&locale=id&limit=50
+```
+
+Ditambahkan untuk menutup awcms-astro ADR-0021 §2: tanpa ini, build situs
+satu-bahasa harus menarik SELURUH locale lalu membuang sebagian besarnya.
+Cocok **persis** (`locale = $1`), bukan awalan — `en` tidak menjaring `en-GB`.
+Absen berarti semua locale, yang tetap default benar untuk tabel admin:
+menyembunyikan terjemahan karena operator tak menyebut bahasanya adalah jawaban
+yang mengejutkan.
+
+Bentuknya **tidak** divalidasi di luar non-kosong dan batas 35 karakter, dan itu
+disengaja: kolomnya `text NOT NULL DEFAULT 'id'` dan jalur TULIS menerima string
+non-kosong apa pun, jadi filter baca yang lebih ketat daripada jalur tulis akan
+membuat sebuah locale tersimpan menjadi TAK TERJANGKAU — baris yang ada, yang
+tampil di tabel admin, dan yang tak satu query pun bisa memilihnya. `?locale=`
+kosong ditolak 400, bukan dianggap absen.
+
+Ketiga fungsi daftar menerimanya (`listBlogPosts`, `listBlogPostsPage`,
+`listBlogPostsFullPage`), karena rute memilih di antara ketiganya lewat
+`view`/`order` — filter yang terpasang di dua dari tiga tidak akan terlihat
+sampai seseorang mengubah query string. Dibuktikan di
+`tests/integration/blog-post-locale-filter.integration.test.ts`.
+
 ### Testing commands
 
 ```bash
