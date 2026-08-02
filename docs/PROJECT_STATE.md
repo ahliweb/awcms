@@ -86,8 +86,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                                                  |
 | Migrasi     | **86** (`sql/001`–`086`)                                                            | `ls sql/`                                                                               |
-| ADR         | **0000**–**0055** (`0000` = template)                                               | `ls docs/adr/`                                                                          |
-| Layar admin | **26** berkas `.astro` di `src/pages/admin/`; **2 dari 21 modul** masih tanpa layar | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| ADR         | **0000**–**0056** (`0000` = template)                                               | `ls docs/adr/`                                                                          |
+| Layar admin | **27** berkas `.astro` di `src/pages/admin/`; **1 dari 21 modul** masih tanpa layar | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
@@ -307,16 +307,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
       tetap keputusan, bukan celah.
   - ~~`domain-event-runtime`~~ **SELESAI (#337)** — `/admin/domain-events`.
   - ~~`sync-storage`~~ **SELESAI (#338)** — `/admin/sync`.
-  - `blog-content` — **BELUM**, dan paling besar (19 tabel, ~30 path API: post,
-    kategori, homepage section, ad placement). Bernilai-pakai paling tinggi.
-  - `media-library` — **BELUM, dan bukan sekadar layar.** Audit #335–#338 menemukan
-    **enam dari sebelas permission-nya tak punya permukaan HTTP sama sekali**
-    (`verify`/`attach`/`detach`/`delete`/`restore`/`purge`), dan
-    `GET /api/v1/media/objects` menuntut `?ids=` — ia resolver batch, bukan daftar.
-    Tidak ada fungsi aplikasi `list*`; yang ada hanya fetch-by-id. Jadi layar
-    browse menuntut fungsi baca BARU plus keputusan tentang alur unggah presigned
-    (setara step 5b awcms-micro). Perlakukan sebagai perubahan desain ber-ADR, bukan
-    "layarnya hilang".
+  - ~~`blog-content`~~ **SELESAI (#340)** — `/admin/blog`, konsol siklus hidup post
+    (sebelas permission dari 43). Sisanya menunggu layar saudaranya (pages,
+    taxonomy, presentation, settings, homepage). Dua absen yang digerbangi contract
+    test karena BEDA KELAS: `posts.export` dideklarasikan + di-seed `sql/036` dan
+    **tak ada endpoint mana pun yang menegakkannya**; `search.read` punya rute tapi
+    daftar admin sudah punya pencarian sendiri yang mentoleransi query kosong.
+  - `media-library` — **BELUM, dan bukan sekadar layar
+    ([ADR-0056](adr/0056-media-library-admin-surface.md)).** Lima dari sebelas
+    permission-nya tidak digerbangi apa pun (`attach`/`detach`/`delete`/`restore`/
+    `purge`), lima fungsi aplikasi yang memanggilnya nol, dan tidak ada fungsi
+    `list*` sama sekali — `GET /api/v1/media/objects` menuntut `?ids=`, ia resolver
+    batch untuk build `awcms-astro`. ADR-0056 memecahnya tiga: cabut
+    `attach`/`detach` (usang sejak inversi ADR-0036), beri permukaan
+    `delete`/`restore`/`purge` (lubang nyata), tambah rute daftar sendiri. Layar
+    menyusul SETELAH ketiganya.
+
+    > **Koreksi angka di atas.** Entri sebelumnya (#339) menulis "**enam**...
+    > termasuk `verify`". Itu salah: `media.verify` DIGERBANGI — di dalam fungsi
+    > aplikasi `media-finalize-upload-session.ts`, bukan di berkas route. Memindai
+    > berkas route saja memberi jawaban salah di dua arah sekaligus, karena
+    > `media-object-directory.ts` juga penuh string `action: "..."` yang merupakan
+    > nama aksi AUDIT, bukan gerbang permission.
+
   - `idn-admin-regions` — sengaja tanpa layar, lihat §3 (ADR-0052 memindahkan
     lifecycle-nya ke job operator; sisanya dua permission baca).
 
