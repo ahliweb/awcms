@@ -190,7 +190,7 @@
       "capabilitiesProvided": ["media_library"],
       "capabilitiesConsumed": [],
       "permissionCount": 9,
-      "navigationCount": 0,
+      "navigationCount": 1,
       "jobCount": 1,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

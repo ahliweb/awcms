@@ -76,6 +76,20 @@ export const mediaLibraryModule = defineModule({
     // `/api/v1/media/enforcement` was falling to `tenant_admin`'s catch-all.
     routes: ["/api/v1/media"]
   },
+  // ADR-0056 — ONE entry for eleven activity codes' worth of surface, because
+  // this module's screen is the object lifecycle and nothing else. Upload lives
+  // wherever a composer needs it (a three-step browser flow, not a button), and
+  // the enforcement switch is a tenant-wide one-way policy that belongs on
+  // `/admin/security`. A second entry appearing here without a page is what
+  // `admin-navigation-registry.test.ts` catches.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_media",
+      path: "/admin/media",
+      order: 34,
+      requiredPermission: "media_library.media.read"
+    }
+  ],
   permissions: [
     {
       activityCode: MEDIA_PERMISSION_ACTIVITY_CODE,

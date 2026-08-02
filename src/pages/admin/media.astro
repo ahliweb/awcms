@@ -1,0 +1,638 @@
+---
+/**
+ * Media library console — the last module in this base without a screen.
+ *
+ * ## Why this took an ADR and four PRs
+ *
+ * It was listed for two waves beside modules that were genuinely only missing a
+ * page. That was wrong for this one ([ADR-0056](../../../docs/adr/0056-media-library-admin-surface.md)):
+ * five of eleven permissions were enforced by nothing, five application
+ * functions had zero callers, and there was **no list function at all** — so
+ * this screen could not have been built on the surface that existed, whatever
+ * the catalog said. `attach`/`detach` were revoked (§A, `sql/087`),
+ * `delete`/`restore`/`purge` got endpoints (§B), and the browse listing got its
+ * own function and route (§C). This page is what those three were for.
+ *
+ * All four remaining reachable permissions are driven here:
+ * `media.read`, `media.delete`, `media.restore`, `media.purge`.
+ *
+ * ## Three deliberate absences
+ *
+ * - **`media.create`/`media.verify`/`media.cancel`** — the presigned upload
+ *   flow. Uploading is a three-step browser dance (create session → PUT the
+ *   bytes straight to R2 → finalize) with real file input, progress, and
+ *   client-side failure modes. A button that starts a session this page cannot
+ *   finish would leave `pending_upload` rows behind on every misclick, which is
+ *   precisely the litter the reconciliation job exists to clean up. Upload
+ *   belongs to whatever composer surface needs it.
+ * - **`enforcement.read`/`enforcement.enable`** — a tenant-wide, ONE-WAY
+ *   content policy switch, not an object action. It is on `/admin/security`
+ *   with the other policy controls; offering it beside a row of thumbnails
+ *   would misrepresent its blast radius.
+ * - **No preview `<img>`.** A registry row can be in `pending_upload` or
+ *   `failed` — the bytes may be absent, unverified, or the very thing an
+ *   operator is here to delete. Rendering them is how a policy-violating image
+ *   gets shown one more time, to the person removing it.
+ *
+ * ## Reads
+ *
+ * `listMediaObjects` inside ONE `withTenantOrThrow`, awaited sequentially —
+ * concurrent queries on a single transaction connection leak it. Keyset
+ * paginated: the cursor carries full-precision `created_at` text, so a page
+ * boundary cannot skip rows sharing a millisecond, which a batch upload
+ * produces by the dozen.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. All three mutations post to the guarded endpoints,
+ * each with a fresh `Idempotency-Key` — unlike `/admin/sync`, where none of the
+ * endpoints wants one, every endpoint here requires it.
+ *
+ * ## Gates
+ *
+ * UX-only; `authorizeInTransaction` in the routes is the authority. Pinned by
+ * `tests/admin-media-page-contract.test.ts`, which also asserts that the three
+ * absences above stay absences rather than quietly becoming gaps.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+import {
+  listMediaObjects,
+  MEDIA_OBJECT_LIST_LIMIT,
+  type MediaObjectDeletionFilter,
+  type NewsMediaObjectStatus,
+  type NewsMediaObjectView
+} from "../../modules/media-library/application/media-object-directory";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("media_library", "media", "read")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("media_library", "media", "delete")
+);
+const canRestore = ssr.permissions.has(
+  permissionKey("media_library", "media", "restore")
+);
+const canPurge = ssr.permissions.has(
+  permissionKey("media_library", "media", "purge")
+);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const STATUS_OPTIONS: readonly NewsMediaObjectStatus[] = [
+  "pending_upload",
+  "uploaded",
+  "verified",
+  "attached",
+  "orphaned",
+  "deleted",
+  "failed"
+];
+
+const DELETION_OPTIONS: readonly MediaObjectDeletionFilter[] = [
+  "live",
+  "deleted",
+  "all"
+];
+
+const statusRaw = readParam("status");
+const statusFilter = (STATUS_OPTIONS as readonly string[]).includes(statusRaw)
+  ? (statusRaw as NewsMediaObjectStatus)
+  : undefined;
+
+const deletionRaw = readParam("deletion");
+const deletionFilter = (DELETION_OPTIONS as readonly string[]).includes(
+  deletionRaw
+)
+  ? (deletionRaw as MediaObjectDeletionFilter)
+  : "live";
+
+const mimeTypeFilter = readParam("mimeType").toLowerCase() || undefined;
+
+const cursorParam = readParam("cursor");
+// A malformed cursor is dropped rather than forwarded — a hand-edited query
+// string must not turn this screen into an error page. The API answers 400 for
+// the same input, which is correct there: a machine caller should be told.
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+let objects: NewsMediaObjectView[] = [];
+let nextCursor: string | null = null;
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      const page = await listMediaObjects(
+        tx,
+        ssr.tenantId,
+        {
+          status: statusFilter,
+          mimeType: mimeTypeFilter,
+          deletion: deletionFilter
+        },
+        cursor ?? undefined
+      );
+      objects = page.items;
+      nextCursor = page.nextCursor;
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has no media".
+    loadError = true;
+    logAdminPageError(
+      "admin/media.astro: failed to load the media library",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+/**
+ * `verified`/`attached` are the two statuses safe to reference publicly
+ * (`isNewsMediaObjectSafeForPublicReference`). The rest are shown, and shown as
+ * what they are — this list exists for the unhealthy ones.
+ */
+const STATUS_VARIANT: Record<string, string> = {
+  pending_upload: "info",
+  uploaded: "info",
+  verified: "success",
+  attached: "success",
+  orphaned: "warning",
+  deleted: "warning",
+  failed: "danger"
+};
+
+function formatBytes(bytes: number | null): string {
+  if (bytes === null) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDimensions(view: NewsMediaObjectView): string {
+  if (view.width === null || view.height === null) return "—";
+  return `${view.width}×${view.height}`;
+}
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString().replace("T", " ").slice(0, 19) : "—";
+}
+
+/** Rebuilds the current query string with one key replaced — keeps filters across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null || value === "") params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/media?${query}` : "/admin/media";
+}
+
+const unsafeCount = objects.filter(
+  (item) => item.status !== "verified" && item.status !== "attached"
+).length;
+const deletedCount = objects.filter((item) => item.deletedAt !== null).length;
+const canActOnAny = canDelete || canRestore || canPurge;
+const columnCount = canActOnAny ? 8 : 7;
+---
+
+<AdminLayout title="Media library">
+  <header class="page-header fade-in-up">
+    <h1 id="media-heading">Media library</h1>
+    <p class="page-description">
+      Every media object this tenant has registered, in any state — including
+      the ones that never finished uploading or failed verification. Deleting is
+      reversible; purging is not, and clears the registry row rather than the
+      stored file.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="media-denied">
+        You do not have permission to view the media library.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="media-error">
+        The media library could not be loaded right now. This is a problem
+        reading it, not an empty library — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="media-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="Media summary">
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">On this page</span>
+            <span class="stat-value">{objects.length}</span>
+            <span class="stat-hint">{MEDIA_OBJECT_LIST_LIMIT} per page</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Not publicly referenceable</span>
+            <span class="stat-value">{unsafeCount}</span>
+            {unsafeCount > 0 && (
+              <span class="stat-hint">
+                Only verified and attached objects resolve
+              </span>
+            )}
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Soft-deleted (this page)</span>
+            <span class="stat-value">{deletedCount}</span>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="media-filter-title"
+      >
+        <h2 class="admin-section-title" id="media-filter-title">
+          Filters
+        </h2>
+        {/* A GET form, so every filtered view is a shareable URL and the back
+            button works. Paging drops `cursor` by omitting it. */}
+        <form method="get" action="/admin/media" class="admin-filter-form">
+          <label class="field">
+            <span class="field-label">Status</span>
+            <select name="status" class="field-input">
+              <option value="">Any</option>
+              {STATUS_OPTIONS.map((option) => (
+                <option value={option} selected={statusRaw === option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Deletion</span>
+            <select name="deletion" class="field-input">
+              {DELETION_OPTIONS.map((option) => (
+                <option value={option} selected={deletionFilter === option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Mime type</span>
+            <input
+              type="text"
+              name="mimeType"
+              class="field-input"
+              value={readParam("mimeType")}
+              placeholder="image/png"
+            />
+          </label>
+
+          <div class="admin-toolbar">
+            <button type="submit" class="btn-primary">
+              Apply
+            </button>
+            <a class="quick-link" href="/admin/media">
+              Reset
+            </a>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="media-objects-title"
+        id="media-objects"
+      >
+        <h2 class="admin-section-title" id="media-objects-title">
+          Objects
+          <span class="count-pill">{objects.length}</span>
+        </h2>
+        <p class="page-description">
+          Deleting an object stops every reference to it resolving immediately —
+          a published page pointing at it loses its image. That is the point
+          when the object should not be served, and restore is how it comes
+          back. Purging removes the registry row only; the stored file is
+          removed later by the reconciliation job, which owns the bucket.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="media-objects-table">
+            <caption class="sr-only">Registered media objects.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Object</th>
+                <th scope="col">Type</th>
+                <th scope="col">Size</th>
+                <th scope="col">Dimensions</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Deleted</th>
+                {canActOnAny && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {objects.length === 0 ? (
+                <tr>
+                  <td colspan={columnCount} class="cell-muted">
+                    No media objects match these filters.
+                  </td>
+                </tr>
+              ) : (
+                objects.map((item) => (
+                  <tr>
+                    <td data-label="Object">
+                      {/* `set:text`, never parsed: a filename is caller-supplied
+                          and reaches this table verbatim. No image tag either — see
+                          this file's header. */}
+                      <span
+                        class="cell-strong"
+                        set:text={item.originalFilename ?? item.objectKey}
+                      />
+                      <span class="cell-muted" set:text={item.objectKey} />
+                    </td>
+                    <td data-label="Type" set:text={item.mimeType} />
+                    <td data-label="Size">{formatBytes(item.sizeBytes)}</td>
+                    <td data-label="Dimensions">{formatDimensions(item)}</td>
+                    <td data-label="Status">
+                      <span
+                        class={`status-badge status-badge--${STATUS_VARIANT[item.status] ?? "info"}`}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {item.status}
+                      </span>
+                    </td>
+                    <td data-label="Created">
+                      <span class="cell-muted">
+                        {formatTimestamp(item.createdAt)}
+                      </span>
+                    </td>
+                    <td data-label="Deleted">
+                      {item.deletedAt === null ? (
+                        <span class="cell-muted">—</span>
+                      ) : (
+                        <>
+                          <span class="cell-muted">
+                            {formatTimestamp(item.deletedAt)}
+                          </span>
+                          <span
+                            class="cell-muted"
+                            set:text={item.deleteReason ?? ""}
+                          />
+                        </>
+                      )}
+                    </td>
+                    {canActOnAny && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {item.deletedAt === null
+                            ? canDelete && (
+                                <button
+                                  type="button"
+                                  class="btn-inline media-delete-btn"
+                                  data-media-id={item.id}
+                                  data-media-label={
+                                    item.originalFilename ?? item.objectKey
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              )
+                            : [
+                                canRestore && (
+                                  <button
+                                    type="button"
+                                    class="btn-inline media-restore-btn"
+                                    data-media-id={item.id}
+                                  >
+                                    Restore
+                                  </button>
+                                ),
+                                canPurge && (
+                                  <button
+                                    type="button"
+                                    class="btn-inline btn-inline--danger media-purge-btn"
+                                    data-media-id={item.id}
+                                    data-media-label={
+                                      item.originalFilename ?? item.objectKey
+                                    }
+                                  >
+                                    Purge
+                                  </button>
+                                )
+                              ]}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {nextCursor && (
+          <div class="admin-toolbar">
+            {/* Keyset, not offset: the cursor carries full-precision
+                `created_at` TEXT, so a page boundary cannot skip rows sharing a
+                millisecond — which a batch upload produces by the dozen. */}
+            <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
+              Next page
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+
+  const actionError = document.getElementById("media-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  /**
+   * Every endpoint on this screen requires `Idempotency-Key` — unlike
+   * `/admin/sync`, where none does. A fresh uuid per click, so a double-click
+   * replays the first result instead of doing the work twice.
+   */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".media-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.mediaId;
+        if (!id) return;
+        const label = button.dataset.mediaLabel ?? "this object";
+
+        // A reason is required by the endpoint and recorded on the audit row,
+        // which outlives the object. Prompt rather than send a placeholder:
+        // "deleted via admin" tells the next reader nothing.
+        const reason = window.prompt(
+          `Why are you deleting ${label}? Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this.`
+        );
+        if (reason === null) return;
+
+        if (reason.trim() === "") {
+          showActionError("A reason is required to delete a media object.");
+          return;
+        }
+
+        if (reason.trim().length > MAX_DELETE_REASON_LENGTH) {
+          showActionError(
+            `The reason must be at most ${MAX_DELETE_REASON_LENGTH} characters.`
+          );
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/media/objects/${id}`,
+          { reason: reason.trim() },
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError("Could not delete the media object. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".media-restore-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.mediaId;
+        if (!id) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Restoring…");
+
+        // No body: this endpoint takes none, and its request hash covers the id
+        // alone.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/media/objects/${id}/restore`,
+          undefined,
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError(
+          "Could not restore the media object. Please try again."
+        );
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".media-purge-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.mediaId;
+        if (!id) return;
+        const label = button.dataset.mediaLabel ?? "this object";
+
+        // The one action on this screen that cannot be undone.
+        if (
+          !window.confirm(
+            `Purge ${label}? This removes its registry row permanently and cannot be undone. The stored file is removed later by the reconciliation job.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Purging…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/media/objects/${id}/purge`,
+          undefined,
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // The one failure worth naming: a live foreign key is caller-actionable
+        // in a way "try again" is not — retrying will never succeed.
+        showActionError(
+          result.errorCode === "MEDIA_OBJECT_REFERENCED"
+            ? "This object is still referenced by another resource. Remove that reference first."
+            : "Could not purge the media object. Please try again."
+        );
+        unlock();
+      });
+    });
+</script>
