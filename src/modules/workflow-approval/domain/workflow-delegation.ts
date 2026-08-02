@@ -1,3 +1,4 @@
+import { MAX_REASON_LENGTH } from "./reason-bounds";
 /**
  * Delegation/substitute-assignment domain logic (Issue #747). Pure
  * functions — `application/workflow-delegation-directory.ts` owns all
@@ -119,7 +120,6 @@ export type CreateDelegationValidationResult =
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_REASON_LENGTH = 500;
 
 export function validateCreateDelegationRequestBody(
   body: unknown,

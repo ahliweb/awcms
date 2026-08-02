@@ -114,5 +114,18 @@ export const workflowApprovalModule = defineModule({
   api: {
     openApiPath: "openapi/modules/workflow-approval.openapi.yaml",
     basePath: "/api/v1/workflows"
-  }
+  },
+  // The inbox half of this module's admin surface (ADR-0051). Definition
+  // authoring is deliberately NOT here — it needs a graph editor, not a corner
+  // of the inbox — so it will arrive as its own entry alongside this one.
+  // Gated on `approval.read`: an approver who can see nothing else on the page
+  // should still reach it.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_approvals",
+      path: "/admin/approvals",
+      order: 62,
+      requiredPermission: "workflow.approval.read"
+    }
+  ]
 });
