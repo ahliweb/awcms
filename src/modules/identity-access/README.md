@@ -349,6 +349,73 @@ JS sebagai array Postgres: `${["a","b"]}` sampai ke server sebagai teks `a,b`
 karena tiba sebagai `a` yang terlihat seperti string biasa. Pakai
 `toPostgresTextArray(...)::text[]`.
 
+## Handoff sesi untuk BFF (ADR-0050)
+
+Skema: `sql/088` (`awcms_bff_clients` + `awcms_session_handoff_codes`).
+
+**Masalah yang ditutupnya.** ADR-0049 menyelesaikan setengah pertanyaan: BFF
+yang SUDAH memegang token sesi bisa menanyakan "sesi ini milik siapa". Yang
+belum terjawab adalah dari mana token itu datang. Cookie `awcms_session` milik
+origin `awcms`; browser di origin `awcms-astro` tidak akan pernah mengirimnya,
+dan tidak boleh — itu batas origin yang bekerja, bukan celah yang perlu
+ditambal.
+
+Jalan pintas yang jelas (form login di `awcms-astro` yang mem-proksi
+`POST /api/v1/auth/login`) ditolak dua kali: password melintasi repo yang bukan
+identity store, dan **login di sini bukan satu langkah** — ia bisa membalas
+`401 MFA_REQUIRED`, mengalihkan ke provider OIDC tenant, atau menuntut token
+Turnstile. Mem-proksinya berarti salinan kedua dari alur MFA, callback OIDC, dan
+widget Turnstile di repo kedua.
+
+**Bentuknya.** Dua endpoint, dua prinsipal berbeda:
+
+- `POST /api/v1/auth/session-handoff/issue` — **manusia yang sudah login**
+  meminta kode sekali-pakai (≤60 detik). Self-service, bukan ber-permission:
+  identitas dan assurance diambil dari SESI, tak pernah dari body, jadi pemanggil
+  hanya bisa mencetak kode untuk dirinya sendiri. Mengarang permission di sini
+  adalah jebakan latent-authz yang repo ini sudah kirim dua kali.
+- `POST /api/v1/auth/session-handoff/redeem` — **klien terdaftar**, server-ke-server,
+  dengan client secret. Satu-satunya endpoint di repo ini yang diautentikasi
+  begitu (`defineClientCredentialTenantRoute`): ia adalah permintaan yang
+  MEMPEROLEH sesi, jadi belum ada sesi untuk disodorkan. Bukan kredensial mesin
+  juga — itu baca-saja secara konstruksi, dan prinsipal baca-saja yang bisa
+  mencetak sesi manusia adalah jalur eskalasi.
+
+**Yang mengikat keamanannya.**
+
+- **Allow-list `redirect_uri` cocok-persis.** ADR-0050 menamai open-redirect di
+  sini sebagai cara desain ini gagal. Bukan prefix (`https://app.example.com`
+  ber-prefix-sama dengan `https://app.example.com.evil.test`), bukan pula
+  origin (penyerang yang bisa memilih path di origin yang diizinkan sudah
+  cukup). Query dan fragment DITOLAK, bukan dibuang.
+- **Kode tidak membawa token.** Barisnya menyimpan `identity_id` + assurance
+  yang login benar-benar CAPAI; redeem mencetak sesi baru lewat
+  `createSessionWithAssurance`. Tidak ada kredensial hidup tersimpan selain
+  hash satu-arah kodenya sendiri — dan assurance tak pernah naik, jadi login
+  `aal1` tak bisa dicuci jadi sesi `aal2`.
+- **Sekali pakai di bawah konkurensi.** Klaimnya `UPDATE … WHERE redeemed_at IS
+NULL RETURNING …`, primitif mutual-exclusion tabel ini. Versi
+  baca-lalu-tulis membiarkan dua redemption serentak dua-duanya berhasil —
+  dibuktikan MERAH di `tests/integration/session-handoff.integration.test.ts`.
+- **Baris terpakai DISIMPAN, tidak dihapus.** Replay dijawab dari bukti, bukan
+  dari ketiadaan bukti: baris yang dihapus dan kode yang tak pernah ada tak
+  bisa dibedakan.
+- **Satu jawaban untuk semua kegagalan** (`401 HANDOFF_REJECTED`), termasuk body
+  cacat. Bedanya dicatat di audit trail; memberikannya ke pemanggil memberi tahu
+  pemegang kode curian apakah kode itu pernah sah.
+- TTL ≤60 detik ditegakkan **CHECK database**, bukan hanya konstanta TypeScript.
+
+**Jebakan yang ditemukan saat membangunnya.** `created_at` DEFAULT `now()`
+adalah instant MULAI TRANSAKSI, sedangkan `expires_at` diturunkan dari jam
+aplikasi — dua jam berbeda, sehingga CHECK `expires_at <= created_at + 60 detik`
+menolak kode yang sepenuhnya normal begitu transaksi sudah terbuka sesaat.
+Aplikasi menulis KEDUANYA dari satu jam. Ditemukan oleh integration test, bukan
+oleh pembacaan.
+
+**Yang masih milik `awcms-astro`:** rute `/internal/login`, penyimpanan sesi BFF
+server-side, cookie portal, CSRF, dan pemanggilan introspeksi per permintaan.
+Sisi `awcms` sudah lengkap.
+
 ## Belum tersedia (Sprint 3+)
 
 Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:

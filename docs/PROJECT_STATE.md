@@ -85,7 +85,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                                                                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrasi     | **87** (`sql/001`–`087`)                                                                                                            | `ls sql/`                                                                               |
+| Migrasi     | **88** (`sql/001`–`088`)                                                                                                            | `ls sql/`                                                                               |
 | ADR         | **0000**–**0056** (`0000` = template)                                                                                               | `ls docs/adr/`                                                                          |
 | Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar tak-disengaja (`idn-admin-regions` sengaja, ADR-0052) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
@@ -459,7 +459,22 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     sesinya kedaluwarsa.
   - **[ADR-0050](adr/0050-bff-session-handoff-code.md)** — BFF memperoleh sesi manusia lewat
     kode handoff sekali-pakai; proksi password ditolak karena login di sini bukan satu
-    langkah (MFA/OIDC/Turnstile harus disalin ke repo kedua). **Dokumen, belum kode.**
+    langkah (MFA/OIDC/Turnstile harus disalin ke repo kedua). **SISI `awcms` SELESAI
+    (#347)** — `sql/088` (`awcms_bff_clients` + `awcms_session_handoff_codes`),
+    `POST /api/v1/auth/session-handoff/issue` (self-service: identitas dari SESI, tak
+    pernah dari body) dan `.../redeem` (klien terdaftar, server-ke-server, satu-satunya
+    endpoint di repo ini yang diautentikasi client secret). Kode ≤60 detik, sekali pakai
+    lewat `UPDATE … WHERE redeemed_at IS NULL`, allow-list `redirect_uri` cocok-persis,
+    dan barisnya menyimpan `identity_id` + assurance — bukan token — sehingga tak ada
+    kredensial hidup tersimpan dan login `aal1` tak bisa dicuci jadi sesi `aal2`.
+    Yang tersisa milik `awcms-astro`: `/internal/login`, sesi BFF server-side, cookie
+    portal, CSRF.
+
+    > **Jebakan yang ditemukan integration test, bukan pembacaan.** `created_at` DEFAULT
+    > `now()` adalah instant MULAI TRANSAKSI, sementara `expires_at` diturunkan dari jam
+    > aplikasi — dua jam berbeda, jadi CHECK `expires_at <= created_at + 60 detik`
+    > menolak kode normal begitu transaksi terbuka sesaat. Aplikasi kini menulis
+    > keduanya dari satu jam.
 - **Katalog tag OpenAPI & kepemilikan fragment — SELESAI (2026-07-30).** Temuan graphify
   2026-07-29 ternyata **lebih luas dari yang dilaporkan**: bukan hanya `blog_content` yang
   hilang dari `docs/awcms/api-reference.md`, melainkan **55 operasi dari empat modul** —
