@@ -16,6 +16,7 @@ import {
 import { MEDIA_PERMISSION_ACTIVITY_CODE } from "../../../../../modules/media-library/domain/media-permissions";
 import { validateSoftDeleteMediaObjectInput } from "../../../../../modules/media-library/domain/media-lifecycle-validation";
 import { softDeleteNewsMediaObject } from "../../../../../modules/media-library/application/media-object-directory";
+import { isMediaObjectId } from "../../../../../modules/media-library/domain/media-object-id";
 import { log } from "../../../../../lib/logging/logger";
 
 /**
@@ -91,8 +92,8 @@ export const DELETE = defineTenantRoute<Prepared>({
   handler: async ({ tx, auth, prepared, params, tenantId, locals }) => {
     const objectId = params.id;
 
-    if (!objectId) {
-      return fail(400, "VALIDATION_ERROR", "Media object id is required.");
+    if (!isMediaObjectId(objectId)) {
+      return fail(400, "VALIDATION_ERROR", "Media object id must be a uuid.");
     }
 
     // The reason is part of the request hash: replaying the same key with a

@@ -1,4 +1,9 @@
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import {
+  encodeKeysetCursor,
+  KEYSET_CURSOR_CREATED_AT_SQL,
+  type KeysetCursor
+} from "../../_shared/keyset-pagination";
 import type { NewsMediaR2Config } from "../domain/media-r2-config";
 import {
   buildNewsMediaObjectKey,
@@ -243,6 +248,119 @@ export async function createPendingNewsMediaObject(
 export type FetchNewsMediaObjectOptions = {
   includeDeleted?: boolean;
 };
+
+/**
+ * Column list shared by the keyset list query below. The point lookups keep
+ * their inline lists — rewriting six working queries to share a constant would
+ * be churn dressed as tidiness — but a list query must select these columns
+ * PLUS the cursor expression, and repeating them a seventh time beside an
+ * `AS created_at_cursor` alias is exactly where a column silently goes missing.
+ */
+const SELECT_COLUMNS =
+  "id, tenant_id, module_key, owner_resource_type, owner_resource_id, " +
+  "storage_driver, bucket_name, object_key, original_filename, public_url, " +
+  "mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption, " +
+  "status, created_by_tenant_user_id, created_at, updated_at, " +
+  "deleted_at, deleted_by, delete_reason, restored_at, restored_by";
+
+/** Page size for {@link listMediaObjects} — bounded, keyset-paginated. */
+export const MEDIA_OBJECT_LIST_LIMIT = 50;
+
+/**
+ * Which soft-delete state a listing wants.
+ *
+ * A boolean `includeDeleted` (the point lookups' convention) is wrong for a
+ * BROWSE surface: the admin screen's whole reason to look at deleted objects is
+ * to restore or purge them, and folding them in with live ones makes "show me
+ * what I deleted" impossible to ask. Three explicit states, `"live"` by default
+ * — a listing that silently included soft-deleted objects would put rows in
+ * front of an operator that no consumer can resolve.
+ */
+export type MediaObjectDeletionFilter = "live" | "deleted" | "all";
+
+export type ListMediaObjectsFilter = {
+  status?: NewsMediaObjectStatus;
+  /** Exact match on the stored (already lowercased) mime type. */
+  mimeType?: string;
+  deletion?: MediaObjectDeletionFilter;
+};
+
+/**
+ * Browse the tenant's media registry — keyset paginated, newest first
+ * (ADR-0056 §C).
+ *
+ * ## Why this is a new function and not a widened `?ids=`
+ *
+ * `GET /api/v1/media/objects` demands `?ids=`: it is a batch RESOLVER, built
+ * for `awcms-astro` to swap ids for URLs at build time, and it answers only for
+ * objects safe to reference publicly. Before this function the application
+ * layer had `fetchNewsMediaObjectById`, `fetchNewsMediaObjectsByIds`, and
+ * `fetchNewsMediaObjectByObjectKey` — every one a point lookup. There was no
+ * way to ask "what media does this tenant have", so a browse screen could not
+ * be built on the existing surface at all, whatever the permissions said.
+ *
+ * Teaching the resolver a no-`ids` mode would turn a request that is a 400
+ * today into a dump of the whole registry — a contract change wearing the
+ * clothes of an addition. Hence a separate function and a separate route.
+ *
+ * ## Deliberately unlike the resolver
+ *
+ * This returns rows in ANY status, including `pending_upload` and `failed`,
+ * and (when asked) soft-deleted ones. That is the opposite of
+ * `isNewsMediaObjectSafeForPublicReference`, and it is correct here: an
+ * administrator's reason to open this list is usually the objects that are NOT
+ * healthy. The `media.read` guard is what keeps that inside the tenant, and no
+ * caller of this function may use its rows as a public reference — use the port
+ * for that.
+ *
+ * The cursor carries FULL-PRECISION `created_at` text
+ * (`KEYSET_CURSOR_CREATED_AT_SQL`), never a JS `Date`, so a page boundary
+ * cannot skip rows sharing a millisecond — the trap this repo already paid for
+ * (Issue #158), and one a media registry walks straight into, since a batch
+ * upload writes many rows inside the same millisecond.
+ */
+export async function listMediaObjects(
+  tx: Bun.SQL,
+  tenantId: string,
+  filter: ListMediaObjectsFilter = {},
+  cursor?: KeysetCursor
+): Promise<{ items: NewsMediaObjectView[]; nextCursor: string | null }> {
+  const statusParam = filter.status ?? null;
+  const mimeTypeParam = filter.mimeType ?? null;
+  const deletion: MediaObjectDeletionFilter = filter.deletion ?? "live";
+  const cursorCreatedAt = cursor ? cursor.createdAt : null;
+  const cursorId = cursor ? cursor.id : null;
+
+  const rows = (await tx`
+    SELECT ${tx.unsafe(SELECT_COLUMNS)},
+           ${tx.unsafe(KEYSET_CURSOR_CREATED_AT_SQL)} AS created_at_cursor
+    FROM awcms_news_media_objects
+    WHERE tenant_id = ${tenantId}
+      AND (${statusParam}::text IS NULL OR status = ${statusParam})
+      AND (${mimeTypeParam}::text IS NULL OR mime_type = ${mimeTypeParam})
+      AND (
+        ${deletion} = 'all'
+        OR (${deletion} = 'live' AND deleted_at IS NULL)
+        OR (${deletion} = 'deleted' AND deleted_at IS NOT NULL)
+      )
+      AND (
+        ${cursorCreatedAt}::timestamptz IS NULL
+        OR (created_at, id) < (${cursorCreatedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${MEDIA_OBJECT_LIST_LIMIT}
+  `) as (NewsMediaObjectRow & { created_at_cursor: string })[];
+
+  const last = rows[rows.length - 1];
+
+  return {
+    items: rows.map(toView),
+    nextCursor:
+      rows.length === MEDIA_OBJECT_LIST_LIMIT && last
+        ? encodeKeysetCursor(last.created_at_cursor, last.id)
+        : null
+  };
+}
 
 export async function fetchNewsMediaObjectById(
   tx: Bun.SQL,
