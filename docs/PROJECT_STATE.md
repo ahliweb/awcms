@@ -81,14 +81,14 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek       | Nilai (per commit ini)                                                                                                              | Sumber kebenaran                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                                                                  | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
-| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                            | `src/modules/index.ts`                                                                  |
-| Migrasi     | **88** (`sql/001`–`088`)                                                                                                            | `ls sql/`                                                                               |
-| ADR         | **0000**–**0056** (`0000` = template)                                                                                               | `ls docs/adr/`                                                                          |
-| Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar tak-disengaja (`idn-admin-regions` sengaja, ADR-0052) | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek       | Nilai (per commit ini)                                                                                                   | Sumber kebenaran                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                                                       | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
+| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
+| Migrasi     | **88** (`sql/001`–`088`)                                                                                                 | `ls sql/`                                                                               |
+| ADR         | **0000**–**0056** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
+| Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
 > berbunyi "20 berkas / 7 dari 21 modul" sementara `main` sudah memuat 22 berkas dan
@@ -391,8 +391,13 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     > `media-object-directory.ts` juga penuh string `action: "..."` yang merupakan
     > nama aksi AUDIT, bukan gerbang permission.
 
-  - `idn-admin-regions` — sengaja tanpa layar, lihat §3 (ADR-0052 memindahkan
-    lifecycle-nya ke job operator; sisanya dua permission baca).
+  - ~~`idn-admin-regions`~~ **SUDAH PUNYA LAYAR** — `/admin/idn-regions`, mendarat
+    di #332. Entri ini sebelumnya berbunyi "sengaja tanpa layar"; itu **usang**,
+    dan sempat diulang dalam badan PR #345 ("satu-satunya modul tanpa layar").
+    Diverifikasi ke kode: `grep -L 'navigation:' src/modules/*/module.ts` kini
+    mengembalikan **nol** baris. ADR-0052 memindahkan LIFECYCLE dataset-nya ke
+    job operator — bukan seluruh modulnya — dan dua permission baca yang tersisa
+    justru digerakkan layar itu.
 
   Ikuti pola gelombang #321–#330 di §3 — termasuk contract test per layar, yang
   **mutation-proven** (kembalikan cacat aslinya dan pastikan MERAH) sebelum di-commit.
