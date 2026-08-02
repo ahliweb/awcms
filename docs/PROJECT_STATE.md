@@ -87,7 +87,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
 | Migrasi     | **88** (`sql/001`–`088`)                                                                                                 | `ls sql/`                                                                               |
 | ADR         | **0000**–**0057** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
-| Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Layar admin | **29** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
@@ -428,12 +428,37 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
     becomes one", dan soft delete hari ini punya efek render yang sama persis.
     **Nol migrasi** — kolom, CHECK,
     index dan baris katalog sudah ada; yang hilang murni lapisan aplikasi + route.
-    Urutan mengikat: permukaan dulu, `/admin/blog/pages` menyusul.
+    Urutan mengikat: permukaan dulu, `/admin/blog-pages` menyusul.
 
-    **Permukaan SELESAI** — `sql/`-nol, empat rute ter-guard/ter-audit/
-    ber-`Idempotency-Key` (`publish`/`archive`/`restore`/`purge`) lewat
+    **ADR-0057 SELESAI SELURUHNYA — tiga PR, nol migrasi.** Permukaan (#350):
+    empat rute ter-guard/ter-audit/ber-`Idempotency-Key` lewat
     `defineTenantRoute`, plus `domain/page-status.ts` dan tiga fungsi directory.
-    Layar `/admin/blog/pages` menyusul.
+    Layar (#352): **`/admin/blog-pages`** menggerakkan **kedelapan** permission,
+    dua tampilan (hidup + bin), edit STRUKTUR (judul/slug/tipe/urutan menu)
+    bukan editor badan, tanpa re-parenting (API tak punya deteksi siklus).
+    Contract test-nya memuat satu asersi maju: permission `pages.*` KESEMBILAN
+    yang di-seed akan memerahkan CI, karena begitulah empat yang ini lolos
+    berbulan-bulan.
+
+- **Bug yang ditemukan dalam perjalanan, sudah diperbaiki (#351).** Tombol
+  **Restore** di `/admin/blog` (#340, enam hari sebelumnya) **tidak pernah bisa
+  bekerja**. `listBlogPostsForAdmin` menyaring keras `deleted_at IS NULL` dan
+  layar itu tak punya filter "deleted", jadi Restore digantungkan pada
+  `status === "archived"` — sumbu yang BERBEDA. Endpoint-nya menuntut
+  `canRestorePost` (`deleted_at IS NOT NULL`), sehingga tombolnya dirender
+  persis pada baris yang pasti 404 dan tak pernah pada baris yang akan
+  berhasil. Teks konfirmasi hapusnya bahkan menjanjikan sebaliknya
+  ("recoverable until it is purged"). Diperbaiki dengan filter `deletedOnly`
+  di kedua fungsi daftar admin + tampilan `?view=deleted` di kedua layar.
+
+  > **Gate §F TIDAK menangkap ini, dan itu batas yang perlu diketahui.** Ia
+  > bertanya "apakah permission ini punya penegak" — dan `posts.restore` punya;
+  > endpoint-nya ada dan benar. Yang salah adalah LAYAR memanggilnya pada baris
+  > yang salah. Itu lapisan contract-test per-layar, dan contract test yang ada
+  > tidak menanyakannya. Sekarang menanyakan, di kedua layar, mutation-proven.
+  > Pelajaran umumnya: gate cakupan permission dan contract test layar menjawab
+  > **dua pertanyaan berbeda**, dan sebuah kontrol bisa lulus yang pertama
+  > sambil mustahil dipakai.
 
 - **Gate cakupan permission — BARU, dan ia menemukan lima gap lagi.**
   `bun run access:permissions:enforcement:check` (ADR-0057 §F) menuntut tiap
