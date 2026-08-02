@@ -552,7 +552,17 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/idn-regions/datasets/[id]/activate.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/idn-regions/datasets/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/idn-regions/datasets/rollback.ts",
       "workClass": "interactive",
       "source": "factory"
     },

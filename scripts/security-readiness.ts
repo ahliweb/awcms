@@ -74,6 +74,10 @@ import {
   isOnlineSecurityEnabled,
   resolveOnlineSecurityProfile
 } from "../src/lib/auth/online-security-config";
+import {
+  resolvePlatformTenant,
+  resolveTenancyMode
+} from "../src/lib/tenant/platform-tenant";
 import { validateEnv } from "./validate-env";
 
 export type CheckSeverity = "critical" | "warning" | "info";
@@ -2302,6 +2306,87 @@ export const OUT_OF_SCOPE_ITEMS: OutOfScopeItem[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// 9b. Platform authority is held by an identifiable tenant (warning)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reports WHICH tenant currently holds platform authority (ADR-0053), and warns
+ * when that is not the tenant the setup wizard bootstrapped.
+ *
+ * This check exists because of a trade-off ADR-0053 §Konsekuensi accepts
+ * deliberately: while `PLATFORM_TENANT_ID` is unset, the answer is inherited
+ * from `PUBLIC_DEFAULT_TENANT_ID`/`_CODE` — variables whose ordinary purpose is
+ * deciding which site renders on an unmatched host. Someone repointing them for
+ * a rendering reason ALSO repoints who may swap the region dataset served to
+ * every tenant.
+ *
+ * That is a documented decision, not a bug, so this is a `warning` rather than
+ * `critical`: a deployment may legitimately want platform authority somewhere
+ * other than the bootstrap tenant. What must never happen is it moving without
+ * anyone noticing — so the condition is reported with the source that produced
+ * it, and the fix (pin `PLATFORM_TENANT_ID`) is named in the evidence.
+ *
+ * Resolving to NOTHING is also reported: platform actions all deny in that
+ * state, which is safe but is usually a misconfiguration rather than an intent.
+ */
+export async function checkPlatformTenantIdentifiable(): Promise<SecurityCheckResult> {
+  const name = "Platform authority resolves to an identifiable tenant";
+  const severity: CheckSeverity = "warning";
+
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not set.");
+    }
+
+    const sql = getDatabaseClient();
+    const resolved = await resolvePlatformTenant(sql);
+
+    if (!resolved) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence:
+          "No platform tenant resolves — every platform-scoped action is denied. Either the setup wizard has not run, or PLATFORM_TENANT_ID names a tenant that is absent or inactive (an explicit pin never falls back)."
+      };
+    }
+
+    const setupRows = (await sql`
+      SELECT tenant_id FROM awcms_setup_state WHERE id = true
+    `) as { tenant_id: string | null }[];
+    const bootstrapTenantId = setupRows[0]?.tenant_id ?? null;
+    const mode = await resolveTenancyMode(sql);
+
+    if (
+      resolved.source !== "platform_tenant_id" &&
+      bootstrapTenantId &&
+      resolved.tenantId !== bootstrapTenantId
+    ) {
+      return {
+        name,
+        severity,
+        status: "fail",
+        evidence: `Platform authority is held by tenant "${resolved.tenantCode}" (${resolved.tenantId}), which is NOT the bootstrap tenant (${bootstrapTenantId}) — and it was inherited from ${resolved.source}, not pinned. Editing PUBLIC_DEFAULT_TENANT_ID would move it again. Pin PLATFORM_TENANT_ID to make it deliberate. Tenancy mode: ${mode}.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Platform authority: tenant "${resolved.tenantCode}" (${resolved.tenantId}), resolved from ${resolved.source}. Tenancy mode: ${mode}.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not resolve the platform tenant: ${errorMessage(error)}`
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
 
@@ -2322,6 +2407,7 @@ export async function runSecurityReadinessChecks(): Promise<
     checkDataLifecycleRegistryValid(),
     checkDataLifecycleLegalHoldReleaseSeparate(),
     await checkAuditLogTableReachable(),
+    await checkPlatformTenantIdentifiable(),
     checkEnvConfigValid(),
     checkSyncHmacSecretNotDefault(),
     checkMfaEncryptionKeyConfigured(),

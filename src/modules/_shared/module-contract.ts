@@ -59,10 +59,36 @@ export type ModuleEventContract = {
   subscribes?: string[];
 };
 
+/**
+ * Who a permission can ever be held BY (ADR-0053) — not what it lets you do.
+ *
+ * `tenant` (the default, and what every permission in this base was before the
+ * field existed): an ordinary per-tenant permission. It is seeded into the
+ * global catalogue and granted to a tenant's `owner` role when that tenant is
+ * created.
+ *
+ * `platform`: the action's effect crosses tenant boundaries, so it is NEVER
+ * included in the blanket grant a new tenant's owner receives, and the
+ * authorization chokepoint additionally refuses it unless the acting tenant IS
+ * the platform tenant (`lib/tenant/platform-tenant.ts`). Two independent
+ * mechanisms on purpose: a grant that leaks — by a hand-written INSERT, a
+ * restored backup, a future provisioning path that forgets the filter — still
+ * cannot be exercised from another tenant.
+ */
+export type ModulePermissionScope = "tenant" | "platform";
+
 export type ModulePermissionDescriptor = {
   activityCode: string;
   action: string;
   description: string;
+  /**
+   * Defaults to `"tenant"` when omitted, which is what every existing
+   * descriptor means. Declared HERE (in code) rather than read from the
+   * database at request time so the chokepoint needs no extra query per call;
+   * `tests/platform-scoped-permissions.test.ts` pins this declaration against
+   * the migration that seeds it, so the two cannot drift apart silently.
+   */
+  scope?: ModulePermissionScope;
 };
 
 export type ModuleNavigationEntry = {
@@ -733,8 +759,13 @@ export type HighVolumeTableDescriptor = {
  * `CommentableResourceDefaultPolicy` exported types — MINOR: purely additive,
  * every base `module.ts` that omits `commentableResources` stays valid
  * unchanged.
+ *
+ * `2.5.0` (ADR-0053) — added the optional `ModulePermissionDescriptor.scope`
+ * field plus the `ModulePermissionScope` exported type — MINOR: purely
+ * additive, and omitting it means `"tenant"`, which is exactly what every
+ * existing descriptor already meant.
  */
-export const MODULE_CONTRACT_VERSION = "2.4.0";
+export const MODULE_CONTRACT_VERSION = "2.5.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;
