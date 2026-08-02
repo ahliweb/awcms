@@ -430,13 +430,49 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
     index dan baris katalog sudah ada; yang hilang murni lapisan aplikasi + route.
     Urutan mengikat: permukaan dulu, `/admin/blog/pages` menyusul.
 
-    Tiga saudara sisanya (taxonomy, presentation, settings/homepage) sejauh
-    audit ini permukaannya lengkap — seluruhnya pasangan `read`/`configure`
-    ber-route. ADR-0057 §F menjadikan "sejauh audit ini" klaim yang dijaga:
-    gate baru menuntut tiap permission terdeklarasi punya call site
-    `authorizeInTransaction` atau terdaftar sebagai pengecualian ber-alasan.
-    Tanpa itu, kelas cacat yang sama sudah lolos DUA kali dan keduanya hanya
-    ketahuan karena seseorang hendak membangun layarnya.
+    **Permukaan SELESAI** — `sql/`-nol, empat rute ter-guard/ter-audit/
+    ber-`Idempotency-Key` (`publish`/`archive`/`restore`/`purge`) lewat
+    `defineTenantRoute`, plus `domain/page-status.ts` dan tiga fungsi directory.
+    Layar `/admin/blog/pages` menyusul.
+
+- **Gate cakupan permission — BARU, dan ia menemukan lima gap lagi.**
+  `bun run access:permissions:enforcement:check` (ADR-0057 §F) menuntut tiap
+  permission terdeklarasi punya call site `authorizeInTransaction` atau
+  terdaftar sebagai pengecualian ber-alasan. Murni (registry + teks sumber),
+  masuk rantai `check`. Skor pertama: **199/205 tergerbangi, 6 pengecualian**.
+
+  Lima di antaranya **temuan baru**, semuanya diverifikasi ke kode, dan
+  masing-masing butuh keputusan yang sama dengan ADR-0057 §A — beri permukaan,
+  atau cabut:
+  - `profile_identity.profile_management.restore` — **lubang nyata**: tak ada
+    rute restore sama sekali, jadi profil yang di-soft-delete tidak bisa
+    dipulihkan lewat API. Bentuk yang sama dengan yang ADR-0056 §B tutup untuk
+    objek media.
+  - `visitor_analytics.settings.read` + `.update` — setting analitik per-tenant
+    tak punya permukaan apa pun.
+  - `blog_content.seo.configure` — satu-satunya kemunculan `"seo"` di repo
+    adalah deklarasi descriptor itu sendiri; kemungkinan besar **pencabutan**,
+    karena default SEO blog nyatanya dikonfigurasi lewat blog settings.
+  - `comments.moderation.delete` — model moderasi ADR-0041 adalah
+    arsip-bukan-hapus, jadi ini pun kandidat pencabutan.
+
+  Yang keenam sudah diketahui: `blog_content.posts.export` (ADR-0057 §F).
+
+  > **Gate-nya sendiri butuh tiga kali tulis ulang, dan itu pelajarannya.**
+  > Draf 1 hanya membaca literal string → **39 false positive**, termasuk tiga
+  > permission yang endpoint-nya mendarat minggu itu juga (banyak modul menulis
+  > `moduleKey: THEMING_MODULE_KEY`). Draf 2 mencocokkan kurung terdalam →
+  > setiap guard ber-field bersarang tak terlihat (`workflow.approval.approve`).
+  > Draf 3 menuntut action literal → dua guard kondisional
+  > (`comments.moderation.approve`/`.reject`) terlewat. Scanner yang menjawab
+  > "tak tergerbangi" untuk yang tergerbangi LEBIH buruk daripada tak ada
+  > scanner: ia melatih pembacanya menambah pengecualian sampai gate-nya tak
+  > menanyakan apa pun. Ketiga draf itu dibekukan sebagai test di
+  > `tests/permission-enforcement-coverage.test.ts`.
+
+  Tiga saudara `blog_content` sisanya (taxonomy, presentation, settings/homepage)
+  permukaannya lengkap — dan itu kini klaim yang **dijaga**, bukan hasil audit
+  manual sekali jalan.
 
   - ~~`idn-admin-regions`~~ **SUDAH PUNYA LAYAR** — `/admin/idn-regions`, mendarat
     di #332. Entri ini sebelumnya berbunyi "sengaja tanpa layar"; itu **usang**,
