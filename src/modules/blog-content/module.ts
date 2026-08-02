@@ -84,10 +84,14 @@ export const blogContentModule = defineModule({
    * `tests/admin-navigation-registry.test.ts` now fails on any entry whose
    * path has no page, in both directions.
    *
-   * ONE entry for fifteen activity codes, on purpose: this is the post
-   * lifecycle screen. Pages, taxonomy, presentation, settings and homepage
-   * composition are sibling screens, and each brings its own entry when its
-   * page lands — not before.
+   * Two entries for fifteen activity codes: the post lifecycle and the page
+   * lifecycle. Taxonomy, presentation, settings and homepage composition are
+   * still sibling screens, and each brings its own entry when its page lands —
+   * not before.
+   *
+   * The pages entry is gated on `pages.read` rather than `posts.read`: they
+   * are separate permissions, and an operator granted one and not the other
+   * must see exactly the screen they can use.
    */
   navigation: [
     {
@@ -95,6 +99,12 @@ export const blogContentModule = defineModule({
       path: "/admin/blog",
       order: 36,
       requiredPermission: "blog_content.posts.read"
+    },
+    {
+      labelKey: "admin.layout.nav_blog_pages",
+      path: "/admin/blog-pages",
+      order: 37,
+      requiredPermission: "blog_content.pages.read"
     }
   ],
   permissions: [

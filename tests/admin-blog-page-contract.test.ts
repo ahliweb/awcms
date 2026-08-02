@@ -349,12 +349,26 @@ describe("/admin/blog permission gates", () => {
     expect(nav!.requiredPermission).toBe("blog_content.posts.read");
     expect(declaredTriples().has(nav!.requiredPermission as Triple)).toBe(true);
 
-    // ONE entry for fifteen activity codes: this is the lifecycle screen, and
-    // its siblings bring their own entries when their pages land. A second
+    // TWO entries for fifteen activity codes: the post lifecycle and the page
+    // lifecycle (ADR-0057). Taxonomy, presentation, settings and homepage
+    // composition still bring their own entries when their pages land. An
     // entry appearing here without a page is what
     // `admin-navigation-registry.test.ts` catches.
-    expect(
-      listModules().find((module) => module.key === "blog_content")?.navigation
-    ).toHaveLength(1);
+    const navigation = listModules().find(
+      (module) => module.key === "blog_content"
+    )?.navigation;
+
+    expect(navigation).toHaveLength(2);
+    expect(navigation?.map((entry) => entry.path).sort()).toEqual([
+      "/admin/blog",
+      "/admin/blog-pages"
+    ]);
+
+    // Gated on their OWN permissions: an operator granted one and not the
+    // other must see exactly the screen they can use.
+    const pagesEntry = navigation?.find(
+      (entry) => entry.path === "/admin/blog-pages"
+    );
+    expect(pagesEntry?.requiredPermission).toBe("blog_content.pages.read");
   });
 });

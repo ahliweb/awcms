@@ -1,0 +1,930 @@
+---
+/**
+ * Blog pages console — the structural half of `blog_content`.
+ *
+ * Sibling of `/admin/blog` (posts). Pages are the site's standing content —
+ * about, contact, privacy policy — so this screen is a hierarchy and a
+ * lifecycle, not an editorial queue.
+ *
+ * ## Scope
+ *
+ * Drives all EIGHT `pages.*` permissions: `read`/`create`/`update`/`publish`/
+ * `archive`/`delete`/`restore`/`purge`. Four of them had no surface at all
+ * until [ADR-0057](../../../docs/adr/0057-blog-page-lifecycle.md) — until then
+ * `createBlogPage` wrote a literal `'draft'` and nothing could ever move it, so
+ * every page in every tenant was permanently unpublished and the public page
+ * search returned nothing by construction.
+ *
+ * The lifecycle here is NARROWER than posts': no "submit for review", no
+ * "schedule". `sql/036` seeded no `pages.schedule`, and ADR-0057 §B records
+ * that as a decision rather than a gap — `domain/page-status.ts` holds the
+ * three-state table this screen renders against.
+ *
+ * ## Two views, because delete and archive are different axes
+ *
+ * `?view=deleted` lists the bin. This is not a nicety: the post console
+ * shipped without it and `posts.restore` became a permission the screen
+ * appeared to drive and could not, because a soft-deleted row was never on
+ * screen and Restore was therefore hung off `status === "archived"` — a
+ * guaranteed 404 (#351). Control placement here follows what each endpoint
+ * accepts, not what looks tidy:
+ *
+ * - **Restore** — bin rows only (`canRestorePage`: `deleted_at IS NOT NULL`);
+ * - **Delete** — live rows only; it is already deleted in the bin;
+ * - **Publish / Archive** — live rows only. `transitionBlogPageStatus` matches
+ *   `deleted_at IS NULL`, so both 404 on a binned page;
+ * - **Purge** — BOTH, because `canPurgePage` accepts archived OR soft-deleted.
+ *
+ * ## No body editor, and one absence worth naming
+ *
+ * Same boundary `/admin/blog` drew: authoring a page body is a rich-text
+ * surface plus SEO fields and media, not a corner of a list. `pages.update` is
+ * driven through the STRUCTURE fields this screen genuinely owns — title,
+ * slug, page type, menu order — which is what an operator reorganising a site
+ * menu actually needs, and what no other screen offers.
+ *
+ * `parent_page_id` is displayed but not editable here. Re-parenting is a tree
+ * operation: it needs cycle detection the API does not currently perform, and
+ * a `<select>` of every page in the tenant is not a tree editor. Showing a
+ * control that can produce a cycle would be worse than showing none.
+ *
+ * ## Reads / writes / gates
+ *
+ * Reads go through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited sequentially — concurrent queries on a single
+ * transaction connection leak it. Nothing here writes SQL; every mutation is a
+ * request to a guarded endpoint, so audit rows and idempotency records cannot
+ * be bypassed.
+ *
+ * Idempotency splits per-endpoint, and this screen mirrors that split exactly:
+ * the four lifecycle mutations require an `Idempotency-Key`; create, update and
+ * soft delete require none, and sending one would imply a replay contract those
+ * endpoints declined.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes
+ * is the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listBlogPagesForAdmin,
+  type ListBlogPagesForAdminResult
+} from "../../modules/blog-content/application/blog-page-directory";
+import {
+  BLOG_CONTENT_VISIBILITIES,
+  isBlogContentStatus,
+  type BlogContentStatus
+} from "../../modules/blog-content/domain/post-status";
+import { BLOG_PAGE_STATUSES } from "../../modules/blog-content/domain/page-status";
+import {
+  PAGE_TYPES,
+  isPageType
+} from "../../modules/blog-content/domain/page-type";
+import {
+  MAX_EXCERPT_LENGTH,
+  MAX_TITLE_LENGTH
+} from "../../modules/blog-content/domain/content-validation";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "read")
+);
+const canCreate = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "create")
+);
+const canUpdate = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "update")
+);
+const canPublish = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "publish")
+);
+const canArchive = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "archive")
+);
+const canDelete = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "delete")
+);
+const canRestore = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "restore")
+);
+const canPurge = ssr.permissions.has(
+  permissionKey("blog_content", "pages", "purge")
+);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const searchFilter = readParam("search");
+
+const statusRaw = readParam("status");
+// An unknown value is dropped rather than forwarded: a hand-edited query
+// string must not turn this screen into an error page.
+const statusFilter: BlogContentStatus | undefined = isBlogContentStatus(
+  statusRaw
+)
+  ? statusRaw
+  : undefined;
+
+const pageTypeRaw = readParam("pageType");
+const pageTypeFilter = isPageType(pageTypeRaw) ? pageTypeRaw : undefined;
+
+const pageRaw = Number(readParam("page"));
+const pageNumber = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+
+const showsBin = readParam("view") === "deleted";
+
+/** `?edit=<id>` opens the structure form for one page, below the table. */
+const editingPageId = readParam("edit");
+
+let listing: ListBlogPagesForAdminResult | null = null;
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      listing = await listBlogPagesForAdmin(tx, ssr.tenantId, {
+        search: searchFilter || undefined,
+        status: statusFilter,
+        pageType: pageTypeFilter,
+        deletedOnly: showsBin || undefined,
+        page: pageNumber
+      });
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has no pages".
+    loadError = true;
+    logAdminPageError("admin/blog-pages.astro: failed to load pages", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+}
+
+const STATUS_VARIANT: Record<string, string> = {
+  draft: "neutral",
+  review: "info",
+  scheduled: "info",
+  published: "success",
+  archived: "warning"
+};
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString() : "—";
+}
+
+/** Rebuilds the current query string with keys replaced — keeps filters across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  // Paging is per-view: carrying `page=3` from a long list into a two-row bin
+  // lands the operator on an empty page that looks like an empty bin.
+  if ("view" in overrides) params.delete("page");
+  const query = params.toString();
+  return query ? `/admin/blog-pages?${query}` : "/admin/blog-pages";
+}
+
+const pages = listing?.items ?? [];
+const total = listing?.total ?? 0;
+const pageSize = listing?.pageSize ?? 20;
+const lastPage = Math.max(1, Math.ceil(total / pageSize));
+const hasFilters =
+  searchFilter !== "" ||
+  statusFilter !== undefined ||
+  pageTypeFilter !== undefined;
+
+const showsRowActions =
+  canUpdate || canPublish || canArchive || canDelete || canRestore || canPurge;
+const pageColumns = 5 + (showsRowActions ? 1 : 0);
+
+const editingPage = editingPageId
+  ? (pages.find((entry) => entry.id === editingPageId) ?? null)
+  : null;
+---
+
+<AdminLayout title="Blog pages">
+  <header class="page-header fade-in-up">
+    <h1 id="pages-heading">Blog pages</h1>
+    <p class="page-description">
+      Standing site content — about, contact, policies. Pages have a narrower
+      lifecycle than posts: <strong>draft, published, archived</strong>, with no
+      review queue and no scheduling. Posts live on <a href="/admin/blog"
+        >the blog console</a
+      >.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="pages-denied">
+        You do not have permission to view blog pages.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="pages-error">
+        Pages could not be loaded right now. This is a problem reading the list,
+        not an empty list — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="pages-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <form method="get" class="admin-toolbar fade-in-up" id="page-filter-form">
+        <label for="filter-search">Search titles</label>
+        <input
+          id="filter-search"
+          name="search"
+          type="search"
+          value={searchFilter}
+          autocomplete="off"
+        />
+
+        <label for="filter-status">Status</label>
+        <select id="filter-status" name="status">
+          <option value="" selected={statusFilter === undefined}>
+            Any status
+          </option>
+          {/* The page lifecycle's three, not all five: offering `review` or
+              `scheduled` would filter for states no page can reach. */}
+          {BLOG_PAGE_STATUSES.map((value) => (
+            <option value={value} selected={statusFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <label for="filter-page-type">Type</label>
+        <select id="filter-page-type" name="pageType">
+          <option value="" selected={pageTypeFilter === undefined}>
+            Any type
+          </option>
+          {PAGE_TYPES.map((value) => (
+            <option value={value} selected={pageTypeFilter === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+
+        <button type="submit">Apply filters</button>
+
+        {/* Carried across submit, so applying a filter does not silently
+            bounce the operator out of the bin. */}
+        {showsBin && <input type="hidden" name="view" value="deleted" />}
+
+        <a
+          class="quick-link"
+          href={linkWith({ view: showsBin ? null : "deleted", edit: null })}
+        >
+          {showsBin ? "← Back to live pages" : "View deleted pages"}
+        </a>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="page-list-title"
+      >
+        <h2 class="admin-section-title" id="page-list-title">
+          {showsBin ? "Deleted pages" : "Pages"}
+          <span class="count-pill">{total}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-pages-table">
+            <caption class="sr-only">
+              Blog pages, most recently updated first.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Status</th>
+                <th scope="col">Type</th>
+                <th scope="col">Menu order</th>
+                <th scope="col">Updated</th>
+                {showsRowActions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {pages.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={pageColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▤
+                      </span>
+                      <span class="empty-state-title">
+                        {showsBin
+                          ? "Nothing in the bin"
+                          : hasFilters
+                            ? "No pages match these filters"
+                            : "No pages yet"}
+                      </span>
+                      <span class="empty-state-text">
+                        {showsBin
+                          ? "Deleted pages appear here until they are purged."
+                          : hasFilters
+                            ? "Clear or widen the filters above to see more pages."
+                            : "Create a draft below to get started."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pages.map((entry) => (
+                  <tr data-page-row={entry.id}>
+                    <td data-label="Title">
+                      <span set:text={entry.title} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{entry.slug}</span> ·{" "}
+                        {entry.locale}
+                      </span>
+                      {entry.parentPageId && (
+                        <span class="cell-muted">
+                          {" "}
+                          · child of{" "}
+                          <span class="cell-code">{entry.parentPageId}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={STATUS_VARIANT[entry.status] ?? "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td data-label="Type">
+                      <span class="cell-code">{entry.pageType}</span>
+                    </td>
+                    <td data-label="Menu order">
+                      <span class="cell-muted">{entry.menuOrder}</span>
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.updatedAt)}
+                      </span>
+                    </td>
+                    {showsRowActions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {canUpdate && !showsBin && (
+                            <a
+                              class="quick-link"
+                              href={linkWith({ edit: entry.id })}
+                            >
+                              Edit structure
+                              <span class="quick-link-arrow" aria-hidden="true">
+                                →
+                              </span>
+                            </a>
+                          )}
+                          {/* `transitionBlogPageStatus` matches
+                              `deleted_at IS NULL`, so a binned page has no
+                              transition to offer. */}
+                          {canPublish &&
+                            !showsBin &&
+                            entry.status !== "published" && (
+                              <button
+                                type="button"
+                                class="btn-inline page-publish-btn"
+                                data-page-id={entry.id}
+                              >
+                                Publish
+                              </button>
+                            )}
+                          {canArchive &&
+                            !showsBin &&
+                            entry.status === "published" && (
+                              <button
+                                type="button"
+                                class="btn-inline page-archive-btn"
+                                data-page-id={entry.id}
+                              >
+                                Archive
+                              </button>
+                            )}
+                          {/* Restore undoes the BIN. Hanging it off
+                              `status === "archived"` is the defect #351 fixed
+                              on the post console: archived is a different axis
+                              and the endpoint answers 404. */}
+                          {canRestore && showsBin && (
+                            <button
+                              type="button"
+                              class="btn-inline page-restore-btn"
+                              data-page-id={entry.id}
+                            >
+                              Restore
+                            </button>
+                          )}
+                          {canDelete && !showsBin && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger page-delete-btn"
+                              data-page-id={entry.id}
+                              data-page-title={entry.title}
+                            >
+                              Delete
+                            </button>
+                          )}
+                          {/* `canPurgePage` accepts archived OR soft-deleted,
+                              so both views can offer it. */}
+                          {canPurge &&
+                            (showsBin || entry.status === "archived") && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger page-purge-btn"
+                                data-page-id={entry.id}
+                                data-page-title={entry.title}
+                              >
+                                Purge
+                              </button>
+                            )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {total > pageSize && (
+          <div class="admin-toolbar">
+            {pageNumber > 1 && (
+              <a
+                class="quick-link"
+                href={linkWith({ page: String(pageNumber - 1) })}
+              >
+                ← Previous
+              </a>
+            )}
+            <span class="cell-muted">
+              Page {pageNumber} of {lastPage}
+            </span>
+            {pageNumber < lastPage && (
+              <a
+                class="quick-link"
+                href={linkWith({ page: String(pageNumber + 1) })}
+              >
+                Next →
+              </a>
+            )}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canUpdate && !loadError && editingPage && (
+      <section class="admin-section fade-in-up" aria-labelledby="edit-title">
+        <h2 class="admin-section-title" id="edit-title">
+          Edit structure
+        </h2>
+        <form id="page-edit-form" class="admin-create-form">
+          <p class="form-legend">
+            <span class="cell-code">{editingPage.id}</span>
+            {" · "}
+            <a href={linkWith({ edit: null })}>Close</a>
+          </p>
+          <p class="form-legend">
+            Structure only — title, address and menu placement. The page body is
+            written in the editor, which is not part of this screen.
+            Re-parenting is not offered here: it needs cycle detection the API
+            does not perform, and a control that can build a loop is worse than
+            none.
+          </p>
+          <p
+            id="page-edit-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <input type="hidden" id="edit-page-id" value={editingPage.id} />
+
+          <label for="edit-title-field">
+            Title
+            {/* `maxlength` comes from the SAME constant the validator
+                enforces, so the browser cannot accept what the server
+                rejects. */}
+            <input
+              type="text"
+              id="edit-title-field"
+              name="title"
+              required
+              maxlength={MAX_TITLE_LENGTH}
+              value={editingPage.title}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="edit-slug">
+            Slug
+            <input
+              type="text"
+              id="edit-slug"
+              name="slug"
+              required
+              value={editingPage.slug}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="edit-page-type">
+            Page type
+            <select id="edit-page-type" name="pageType">
+              {PAGE_TYPES.map((value) => (
+                <option value={value} selected={editingPage.pageType === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label for="edit-menu-order">
+            Menu order
+            <input
+              type="number"
+              id="edit-menu-order"
+              name="menuOrder"
+              step="1"
+              value={String(editingPage.menuOrder)}
+            />
+          </label>
+
+          <button type="submit" id="page-edit-submit">
+            Save structure
+          </button>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canCreate && !loadError && !showsBin && (
+      <section class="admin-section fade-in-up" aria-labelledby="create-title">
+        <h2 class="admin-section-title" id="create-title">
+          New page
+        </h2>
+        <form id="page-create-form" class="admin-create-form">
+          <p class="form-legend">
+            Creates a draft. The body is written in the page editor, which is
+            not part of this screen yet.
+          </p>
+          <p
+            id="page-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="create-title-field">
+            Title
+            <input
+              type="text"
+              id="create-title-field"
+              name="title"
+              required
+              maxlength={MAX_TITLE_LENGTH}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="create-slug">
+            Slug
+            <input
+              type="text"
+              id="create-slug"
+              name="slug"
+              required
+              autocomplete="off"
+              placeholder="url-safe-identifier"
+            />
+          </label>
+
+          <label for="create-locale">
+            Locale
+            <input
+              type="text"
+              id="create-locale"
+              name="locale"
+              value="id"
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="create-page-type">
+            Page type
+            <select id="create-page-type" name="pageType">
+              {PAGE_TYPES.map((value) => (
+                <option value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+
+          <label for="create-visibility">
+            Visibility
+            <select id="create-visibility" name="visibility">
+              {BLOG_CONTENT_VISIBILITIES.map((value) => (
+                <option value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+
+          <label for="create-menu-order">
+            Menu order
+            <input
+              type="number"
+              id="create-menu-order"
+              name="menuOrder"
+              step="1"
+              value="0"
+            />
+          </label>
+
+          <label for="create-excerpt">
+            Excerpt (optional)
+            <textarea
+              id="create-excerpt"
+              name="excerpt"
+              rows="2"
+              maxlength={MAX_EXCERPT_LENGTH}
+            />
+          </label>
+
+          <button type="submit" id="page-create-submit">
+            Create draft
+          </button>
+        </form>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("pages-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  /** All four lifecycle endpoints require the header; create/update/delete require none. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
+  }
+
+  function wireLifecycle(
+    selector: string,
+    busyLabel: string,
+    url: (pageId: string) => string,
+    options: {
+      confirm?: (button: HTMLButtonElement) => string | null;
+      failure: string;
+    }
+  ): void {
+    document.querySelectorAll<HTMLButtonElement>(selector).forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const pageId = button.dataset.pageId;
+        if (!pageId) return;
+
+        const confirmText = options.confirm?.(button) ?? null;
+        if (confirmText !== null && !window.confirm(confirmText)) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, busyLabel);
+
+        const result = await sendJson(
+          "POST",
+          url(pageId),
+          undefined,
+          idempotency()
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError(options.failure);
+        unlock();
+      });
+    });
+  }
+
+  wireLifecycle(
+    ".page-publish-btn",
+    "Publishing…",
+    (id) => `/api/v1/blog/pages/${id}/publish`,
+    {
+      confirm: () =>
+        "Publish this page? It becomes visible on the public site immediately.",
+      failure:
+        "Could not publish the page. It may be blocked by the content quality checklist."
+    }
+  );
+
+  wireLifecycle(
+    ".page-archive-btn",
+    "Archiving…",
+    (id) => `/api/v1/blog/pages/${id}/archive`,
+    {
+      confirm: () =>
+        "Archive this page? It is removed from the public site but kept.",
+      failure: "Could not archive the page. Please try again."
+    }
+  );
+
+  wireLifecycle(
+    ".page-restore-btn",
+    "Restoring…",
+    (id) => `/api/v1/blog/pages/${id}/restore`,
+    { failure: "Could not restore the page. Please try again." }
+  );
+
+  wireLifecycle(
+    ".page-purge-btn",
+    "Purging…",
+    (id) => `/api/v1/blog/pages/${id}/purge`,
+    {
+      confirm: (button) =>
+        `Permanently delete "${button.dataset.pageTitle ?? "this page"}"? This cannot be undone — the page row is removed, not soft-deleted. Any advertisement placement targeting it stops matching.`,
+      failure:
+        "Could not purge the page. A page must be archived or deleted first."
+    }
+  );
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".page-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const pageId = button.dataset.pageId;
+        if (!pageId) return;
+        const title = button.dataset.pageTitle ?? "this page";
+
+        if (
+          !window.confirm(
+            `Delete "${title}"? It is soft-deleted — recoverable from "View deleted pages" until it is purged.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        // Soft delete needs no key: the endpoint's `deleted_at IS NULL` guard
+        // makes a repeat a no-op rather than a second deletion.
+        const result = await sendJson("DELETE", `/api/v1/blog/pages/${pageId}`);
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not delete the page. Please try again.");
+        unlock();
+      });
+    });
+
+  const editForm = document.getElementById(
+    "page-edit-form"
+  ) as HTMLFormElement | null;
+
+  editForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "page-edit-submit"
+    ) as HTMLButtonElement | null;
+    const idField = document.getElementById(
+      "edit-page-id"
+    ) as HTMLInputElement | null;
+    if (!submit || submit.disabled || !idField) return;
+
+    const data = new FormData(editForm);
+    const errorElement = document.getElementById("page-edit-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Saving…");
+
+    // PATCH is a partial update; only the structure fields this screen owns
+    // are sent, so a concurrent body edit is not clobbered by a stale copy.
+    const result = await sendJson(
+      "PATCH",
+      `/api/v1/blog/pages/${idField.value}`,
+      {
+        title: String(data.get("title") ?? "").trim(),
+        slug: String(data.get("slug") ?? "").trim(),
+        pageType: String(data.get("pageType") ?? "standard"),
+        menuOrder: Number(data.get("menuOrder") ?? 0)
+      }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        result.errorCode === "CONFLICT"
+          ? "A page with that slug and locale already exists."
+          : "Could not save the page. Check the title and slug, then try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+
+  const createForm = document.getElementById(
+    "page-create-form"
+  ) as HTMLFormElement | null;
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "page-create-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(createForm);
+    const errorElement = document.getElementById("page-create-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Creating…");
+
+    const excerpt = String(data.get("excerpt") ?? "").trim();
+    const body: Record<string, unknown> = {
+      title: String(data.get("title") ?? "").trim(),
+      slug: String(data.get("slug") ?? "").trim(),
+      locale: String(data.get("locale") ?? "").trim() || "id",
+      visibility: String(data.get("visibility") ?? "public"),
+      pageType: String(data.get("pageType") ?? "standard"),
+      menuOrder: Number(data.get("menuOrder") ?? 0),
+      // The validator requires both content fields; a new draft starts empty
+      // and the body is written in the editor, which is not this screen.
+      contentJson: {},
+      contentText: ""
+    };
+    // Omitted rather than sent as "": an empty string is a value, and the
+    // validator treats absent as "no excerpt".
+    if (excerpt !== "") body.excerpt = excerpt;
+
+    // No `Idempotency-Key`: `POST /api/v1/blog/pages` requires none — a retry
+    // that duplicates a create is caught by the slug/locale unique index.
+    const result = await sendJson("POST", "/api/v1/blog/pages", body);
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        result.errorCode === "CONFLICT"
+          ? "A page with that slug and locale already exists."
+          : "Could not create the draft. Check the title and slug, then try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+</script>
