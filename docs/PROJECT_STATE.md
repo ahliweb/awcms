@@ -80,7 +80,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ----------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                  | `package.json`, `CHANGELOG.md`, tag `v*`              |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                            | `src/modules/index.ts`                                |
-| Migrasi     | **84** (`sql/001`–`084`)                                                            | `ls sql/`                                             |
+| Migrasi     | **85** (`sql/001`–`085`)                                                            | `ls sql/`                                             |
 | ADR         | **0000**–**0052** (`0000` = template)                                               | `docs/adr/README.id.md` (indeks ter-gate)             |
 | Layar admin | **20** berkas `.astro` di `src/pages/admin/`; **7 dari 21 modul** masih tanpa layar | `ls src/pages/admin/`, `navigation` di `module.ts`    |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**           | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
