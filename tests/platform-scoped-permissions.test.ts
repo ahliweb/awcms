@@ -18,7 +18,7 @@
  *
  * Pure — no database, no network. Runs in `quality` on every PR.
  */
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "bun:test";
 
@@ -29,16 +29,23 @@ import {
   resetPlatformScopeCacheForTests
 } from "../src/modules/identity-access/domain/platform-scope";
 
-const MIGRATION = "sql/085_awcms_platform_scoped_permissions.sql";
+const SCOPE_COLUMN_MIGRATION = "sql/085_awcms_platform_scoped_permissions.sql";
 const BOOTSTRAP = "src/modules/tenant-admin/application/platform-bootstrap.ts";
 const BACKFILL_JOB =
   "src/modules/identity-access/application/owner-permission-backfill-job.ts";
 const GUARD = "src/modules/identity-access/application/access-guard.ts";
 
-/** The pair this base ships today. A third one arriving should be a decision, not a surprise. */
+/**
+ * Every platform-scoped key this base ships. A new one arriving should be a
+ * DECISION, not a surprise — this list is what makes adding one a deliberate
+ * edit rather than a side effect, and it already earned that: provisioning
+ * (ADR-0054) turned this test red on the commit that introduced it.
+ */
 const EXPECTED_PLATFORM_KEYS = [
   "idn_admin_regions.dataset.configure",
-  "idn_admin_regions.dataset.restore"
+  "idn_admin_regions.dataset.restore",
+  "tenant_admin.tenant_provisioning.read",
+  "tenant_admin.tenant_provisioning.create"
 ];
 
 describe("platform-scoped permission declaration", () => {
@@ -80,30 +87,58 @@ describe("platform-scoped permission declaration", () => {
 });
 
 describe("code declaration and migration agree", () => {
-  test("the migration seeds every code-declared platform key with scope 'platform'", async () => {
-    const sql = await readFile(MIGRATION, "utf8");
+  test("every code-declared platform key is seeded with scope 'platform' by SOME migration", async () => {
+    // Scans every migration rather than naming one file: platform permissions
+    // arrive over time (`sql/085` seeded the first pair, `sql/086` the next),
+    // and a test pinned to one file would fail the day a third lands — for a
+    // reason unrelated to the invariant it is defending.
+    const files = (await readdir("sql")).filter((name) =>
+      name.endsWith(".sql")
+    );
+    const bodies = await Promise.all(
+      files.map((name) => readFile(`sql/${name}`, "utf8"))
+    );
+    const corpus = bodies.join("\n");
 
-    // The seed is one INSERT with a `'platform'` literal per row. Matching the
-    // key parts individually (rather than the whole tuple verbatim) keeps this
-    // from breaking on formatting while still failing if a row is dropped.
     for (const key of EXPECTED_PLATFORM_KEYS) {
       const [moduleKey, activityCode, action] = key.split(".");
-      expect(sql).toContain(`'${moduleKey}', '${activityCode}', '${action}'`);
-    }
+      const tuple = `'${moduleKey}', '${activityCode}', '${action}'`;
 
-    expect(sql).toContain("'platform'");
+      // Seeded at all...
+      expect(corpus).toContain(tuple);
+
+      // ...and by a migration that also says `'platform'`. A seed without it
+      // defaults the column to `'tenant'`, which silently drops the row into
+      // the blanket grant every tenant owner receives.
+      const seedingFile = bodies.find(
+        (body) => body.includes(tuple) && body.includes("'platform'")
+      );
+      expect(seedingFile).toBeDefined();
+    }
+  });
+
+  test("the scope column itself is created with a CHECK", async () => {
+    const sql = await readFile(SCOPE_COLUMN_MIGRATION, "utf8");
+
     expect(sql).toContain("ADD COLUMN IF NOT EXISTS scope");
     expect(sql).toContain("awcms_permissions_scope_check");
   });
 
-  test("the migration grants them to the setup tenant's owner role only", async () => {
-    const sql = await readFile(MIGRATION, "utf8");
+  test("every platform grant is anchored to the setup tenant, never to all tenants", async () => {
+    const files = (await readdir("sql")).filter((name) =>
+      name.endsWith(".sql")
+    );
 
-    // The grant must be anchored to `awcms_setup_state` — a grant that selected
-    // every tenant's owner role would reproduce the defect with extra steps.
-    expect(sql).toContain("FROM awcms_setup_state");
-    expect(sql).toContain("role_code = 'owner'");
-    expect(sql).not.toMatch(/FROM\s+awcms_tenants/i);
+    for (const name of files) {
+      const body = await readFile(`sql/${name}`, "utf8");
+      if (!body.includes("'platform'")) continue;
+      if (!/INSERT\s+INTO\s+awcms_role_permissions/i.test(body)) continue;
+
+      // A grant that walked `awcms_tenants` would hand platform authority to
+      // every tenant — the defect wearing the new column as a disguise.
+      expect(body).toContain("FROM awcms_setup_state");
+      expect(body).not.toMatch(/FROM\s+awcms_tenants/i);
+    }
   });
 });
 

@@ -165,6 +165,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.menu_type.identity": "Identity",
   "admin.menu_type.general": "General",
   "admin.layout.nav_dashboard": "Dashboard",
+  "admin.layout.nav_tenants": "Tenants",
   "admin.layout.nav_offices": "Offices",
   "admin.layout.nav_tenant_domains": "Tenant domains",
   "admin.layout.nav_modules": "Modules",

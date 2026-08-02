@@ -364,6 +364,53 @@ Clears the delete stamps and records restored_at/restored_by. 404 when the id is
 | ------ | ----------------- | ------ |
 | 200    | Setup lock state. | object |
 
+### `GET /api/v1/tenants` — List every tenant on the deployment (PLATFORM-scoped).
+
+- **operationId**: `listTenants`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_admin.tenant_provisioning.read, which is scope: platform (ADR-0053) — the chokepoint refuses it unless the acting tenant IS the platform tenant. Deliberately platform-scoped rather than tenant-scoped: this lists EVERY tenant, so a tenant-scoped read would let any customer enumerate the platform's customer list. The projection is narrow on purpose (code, name, status, created_at) — a directory answers who is on the deployment, not what is inside their tenant.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                         | Schema                                 |
+| ------ | ----------------------------------- | -------------------------------------- |
+| 200    | The tenant directory, newest first. | object                                 |
+| 401    | Missing or invalid session.         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenants` — Provision a new tenant with its owner account (PLATFORM-scoped).
+
+- **operationId**: `provisionTenant`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Creates the tenant, its head office, the owner profile/identity/tenant-user, the system `owner` role, and that role's grants — the SAME code path the setup wizard uses, so the `WHERE scope = 'tenant'` filter on those grants cannot drift between the two. A provisioned tenant NEVER receives platform-scoped permissions. `Idempotency-Key` required; audited in the platform tenant's log. Returns 409 when the tenant_code is taken.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                    | Schema                                 |
+| ------ | ------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The provisioned tenant.                                                        | object                                 |
+| 400    | Validation error.                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                    | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key reused with a different request, or tenant_code already taken. | [`ApiError`](#standard-error-envelope) |
+
 ## Tenant Domains
 
 Tenant domain/subdomain mapping for host-based public routing (tenant_domain module, ported from awcms-micro) — tenant-scoped, RLS-protected CRUD over hostname mappings plus verification (dns_txt/dns_cname/file/manual) and primary-host selection. A hostname only serves a tenant once it is verified and active; the optional DNS provider adapter is env-gated and never stores a provider credential in the database. verify and set-primary change which host answers for a tenant, so both are ABAC-gated, idempotency-keyed, and audited.

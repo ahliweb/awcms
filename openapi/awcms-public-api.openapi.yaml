@@ -13333,6 +13333,124 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/tenants:
+    get:
+      operationId: listTenants
+      tags:
+        - Tenant Admin
+      summary: List every tenant on the deployment (PLATFORM-scoped).
+      description: "Gated by tenant_admin.tenant_provisioning.read, which is scope: platform (ADR-0053) — the chokepoint refuses it unless the acting tenant IS the platform tenant. Deliberately platform-scoped rather than tenant-scoped: this lists EVERY tenant, so a tenant-scoped read would let any customer enumerate the platform's customer list. The projection is narrow on purpose (code, name, status, created_at) — a directory answers who is on the deployment, not what is inside their tenant."
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant directory, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TenantDirectoryEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: provisionTenant
+      tags:
+        - Tenant Admin
+      summary: Provision a new tenant with its owner account (PLATFORM-scoped).
+      description: "Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Creates the tenant, its head office, the owner profile/identity/tenant-user, the system `owner` role, and that role's grants — the SAME code path the setup wizard uses, so the `WHERE scope = 'tenant'` filter on those grants cannot drift between the two. A provisioned tenant NEVER receives platform-scoped permissions. `Idempotency-Key` required; audited in the platform tenant's log. Returns 409 when the tenant_code is taken."
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantCode
+                - tenantName
+                - officeCode
+                - officeName
+                - ownerLoginIdentifier
+                - ownerPassword
+                - ownerDisplayName
+              properties:
+                tenantCode:
+                  type: string
+                tenantName:
+                  type: string
+                officeCode:
+                  type: string
+                officeName:
+                  type: string
+                ownerLoginIdentifier:
+                  type: string
+                ownerPassword:
+                  type: string
+                  minLength: 8
+                ownerDisplayName:
+                  type: string
+      responses:
+        "200":
+          description: The provisioned tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      tenant:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          tenantCode:
+                            type: string
+                          tenantName:
+                            type: string
+                          officeId:
+                            type: string
+                            format: uuid
+                          ownerTenantUserId:
+                            type: string
+                            format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Idempotency-Key reused with a different request, or tenant_code already taken.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/theming:
     get:
       tags:
@@ -18459,6 +18577,21 @@ components:
           type: string
           format: date-time
           nullable: true
+    TenantDirectoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantCode:
+          type: string
+        tenantName:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     TenantDomain:
       type: object
       description: A tenant hostname/subdomain mapping. `verification_token_hash` is never exposed.
