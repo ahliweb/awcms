@@ -9,7 +9,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > kini juga dari [`awcms-micro`](https://github.com/ahliweb/awcms-micro)
 > (program penyerapan ADR-0035). **KOREKSI:** versi sebelumnya menyatakan
 > implementasi ini "baru fondasi Sprint 1–2" dengan empat modul — itu **sudah
-> lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/086`;
+> lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/087`;
 > lihat [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) untuk daftar nyata.
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.

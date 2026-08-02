@@ -189,7 +189,7 @@
       "dependencies": ["tenant_admin", "identity_access"],
       "capabilitiesProvided": ["media_library"],
       "capabilitiesConsumed": [],
-      "permissionCount": 11,
+      "permissionCount": 9,
       "navigationCount": 0,
       "jobCount": 1,
       "hasHealthCheck": false,

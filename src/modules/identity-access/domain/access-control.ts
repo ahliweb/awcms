@@ -81,10 +81,12 @@ export type AccessAction =
   // a media object's own status, does not delete or irreversibly change data;
   // the finalize endpoint still requires `Idempotency-Key` and is audited
   // regardless of this classification (`isHighRiskAction` is metadata, not a
-  // gate on idempotency/audit). (`attach`/`detach`/`delete`/`restore`/`purge`/
-  // `cancel` are also seeded in the `media_library.media` permission catalog
-  // (repointed from `news_portal.media` by ADR-0036's `sql/052`) but reuse
-  // existing union members / are not yet authorized by any ported route.)
+  // gate on idempotency/audit). (`delete`/`restore`/`purge`/`cancel` are also
+  // seeded in the `media_library.media` permission catalog (repointed from
+  // `news_portal.media` by ADR-0036's `sql/052`) and reuse existing union
+  // members. `attach`/`detach` were seeded there too and are REVOKED by
+  // ADR-0056 §A / `sql/087` — they named a relation ADR-0036 moved to the
+  // consumer's own FK, so nothing ever checked them.)
   | "verify"
   // Tenant domain (ported from awcms-micro epic #555): `set_primary` atomically
   // makes a verified tenant domain the active primary. Deliberately NOT in

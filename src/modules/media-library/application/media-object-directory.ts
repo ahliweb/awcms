@@ -18,9 +18,12 @@ import {
  * UPDATE; the caller is responsible for having done the real R2 work first
  * (ADR-0006: provider calls never happen inside a DB transaction).
  *
- * Audit events are written for exactly the actions the epic's acceptance
- * criteria require: create, verify, attach, detach, delete, restore, purge
- * (skill `awcms-audit-log`). The intermediate `pending_upload -> uploaded`
+ * Audit events are written for exactly the actions that still exist here:
+ * create, verify, delete, restore, purge (skill `awcms-audit-log`). The epic's
+ * original list also named attach/detach; ADR-0056 §A removed both, since
+ * ADR-0036 moved the relation they wrote to the consumer's own FK — see the
+ * marker where those two functions used to be. The intermediate
+ * `pending_upload -> uploaded`
  * and any `-> orphaned`/`-> failed` transition are logged via the structured
  * logger only (`src/lib/logging/logger.ts`) — see `markNewsMediaObjectUploaded`/
  * `markNewsMediaObjectOrphaned`/`markNewsMediaObjectFailed` below for why
@@ -433,108 +436,25 @@ export async function markNewsMediaObjectVerified(
   return updated;
 }
 
-export type AttachNewsMediaObjectInput = {
-  ownerResourceType: NewsMediaOwnerResourceType;
-  ownerResourceId: string;
-};
-
-/**
- * `verified -> attached` — binds the media object to an owning resource.
- * Deliberately requires `status = 'verified'` (never straight from
- * `pending_upload`/`uploaded`) — this is what enforces "Keputusan kunci #4"
- * (editorial content must only ever point at verified/confirmed media,
- * never at an unverified upload) at the write path, not just by convention.
+/*
+ * ADR-0056 §A — `attachNewsMediaObject`/`detachNewsMediaObject` USED TO LIVE
+ * HERE, and are gone along with the two permissions that named them
+ * (`sql/087`).
+ *
+ * They wrote `status = 'attached'` plus `owner_resource_type`/`owner_resource_id`
+ * — the object→content relation this module owned BEFORE ADR-0036's inversion.
+ * After it, a media object's attachment is stated by the consumer's own FK
+ * (`awcms_blog_posts.featured_media_id`, `awcms_news_portal_ad_placements.
+ * media_object_id`), so attaching means updating the consumer's row under the
+ * consumer's permission. Nothing in `src/`, `scripts/`, or `tests/` had called
+ * either function.
+ *
+ * The `attached` STATUS survives them deliberately: `sql/041`'s CHECK still
+ * admits it and `isNewsMediaObjectSafeForPublicReference` still treats it as
+ * safe, so rows already in that state keep resolving. Nothing writes it
+ * anymore, which is the honest end state — `verified` is what the finalize
+ * flow produces, and it is equally referenceable.
  */
-export async function attachNewsMediaObject(
-  tx: Bun.SQL,
-  tenantId: string,
-  actorTenantUserId: string,
-  id: string,
-  input: AttachNewsMediaObjectInput,
-  correlationId?: string
-): Promise<NewsMediaObjectView | null> {
-  const rows = (await tx`
-    UPDATE awcms_news_media_objects
-    SET status = 'attached', owner_resource_type = ${input.ownerResourceType},
-        owner_resource_id = ${input.ownerResourceId}, updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${id}
-      AND status = 'verified' AND deleted_at IS NULL
-    RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
-      storage_driver, bucket_name, object_key, original_filename, public_url,
-      mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
-      status, created_by_tenant_user_id, created_at, updated_at,
-      deleted_at, deleted_by, delete_reason, restored_at, restored_by
-  `) as NewsMediaObjectRow[];
-
-  const updated = rows[0] ? toView(rows[0]) : null;
-  if (!updated) return null;
-
-  await recordAuditEvent(tx, {
-    tenantId,
-    actorTenantUserId,
-    moduleKey: AUDIT_MODULE_KEY,
-    action: "news_media.object.attached",
-    resourceType: AUDIT_RESOURCE_TYPE,
-    resourceId: id,
-    severity: "info",
-    message: `News media object attached to ${input.ownerResourceType} ${input.ownerResourceId}.`,
-    attributes: {
-      objectKey: updated.objectKey,
-      ownerResourceType: input.ownerResourceType,
-      ownerResourceId: input.ownerResourceId
-    },
-    correlationId
-  });
-
-  return updated;
-}
-
-/**
- * `attached -> verified` — reverses `attachNewsMediaObject`. Returns to
- * `verified` (not `orphaned`): a detached-but-still-good media object
- * remains immediately reusable for another `attach` call.
- * `markNewsMediaObjectOrphaned` is the separate, deliberate "flag for
- * cleanup" transition (doc `r2-backup-lifecycle.md` §2's orphan detection),
- * not an automatic side effect of detach.
- */
-export async function detachNewsMediaObject(
-  tx: Bun.SQL,
-  tenantId: string,
-  actorTenantUserId: string,
-  id: string,
-  correlationId?: string
-): Promise<NewsMediaObjectView | null> {
-  const rows = (await tx`
-    UPDATE awcms_news_media_objects
-    SET status = 'verified', owner_resource_type = NULL, owner_resource_id = NULL,
-        updated_at = now()
-    WHERE tenant_id = ${tenantId} AND id = ${id}
-      AND status = 'attached' AND deleted_at IS NULL
-    RETURNING id, tenant_id, module_key, owner_resource_type, owner_resource_id,
-      storage_driver, bucket_name, object_key, original_filename, public_url,
-      mime_type, size_bytes, checksum_sha256, width, height, alt_text, caption,
-      status, created_by_tenant_user_id, created_at, updated_at,
-      deleted_at, deleted_by, delete_reason, restored_at, restored_by
-  `) as NewsMediaObjectRow[];
-
-  const updated = rows[0] ? toView(rows[0]) : null;
-  if (!updated) return null;
-
-  await recordAuditEvent(tx, {
-    tenantId,
-    actorTenantUserId,
-    moduleKey: AUDIT_MODULE_KEY,
-    action: "news_media.object.detached",
-    resourceType: AUDIT_RESOURCE_TYPE,
-    resourceId: id,
-    severity: "info",
-    message: `News media object detached: ${updated.objectKey}.`,
-    attributes: { objectKey: updated.objectKey },
-    correlationId
-  });
-
-  return updated;
-}
 
 /**
  * `pending_upload|uploaded|verified -> orphaned` — flags a never-attached
