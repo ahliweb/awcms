@@ -254,7 +254,84 @@ export function defineSelfServiceTenantRoute(
   };
 }
 
-/** One place both factories reach the pool, so neither can drift onto its own client. */
+/**
+ * CLIENT-CREDENTIAL variant: an endpoint whose principal is a registered
+ * server-side client, not a person and not a session (ADR-0050's
+ * `POST /api/v1/auth/session-handoff/redeem` is the first user).
+ *
+ * ## Why this is a third seam and not an exception
+ *
+ * `defineTenantRoute` requires a session token; `defineSelfServiceTenantRoute`
+ * requires one too and merely drops the permission. A redeem call has neither —
+ * it is the request that OBTAINS a session, made server-to-server with a client
+ * secret. Hand-rolling `withTenant` there would be a new entry on
+ * `api:tenant-route:check`'s allowlist, and that list is a debt ledger that may
+ * only shrink.
+ *
+ * What it does NOT drop: `workClass` stays required, the tenant transaction is
+ * still opened in one place, and the route file still contains no `withTenant`
+ * call of its own.
+ *
+ * Authentication is the ROUTE's job, inside `handler`. This factory
+ * deliberately does not parse a secret or look a client up: those are
+ * credential comparisons whose failure shape (one generic answer, never an
+ * oracle for which client keys exist) belongs with the endpoint that knows what
+ * it is authenticating, not in a shared default that would flatten it.
+ */
+export type ClientCredentialTenantRouteConfig = {
+  /** REQUIRED, same reasoning as `defineTenantRoute`. */
+  workClass: WorkClass;
+  queueTimeoutMs?: number;
+  /** Called when no tenant could be resolved. The route decides the response. */
+  onMissingTenant: () => Response;
+  /**
+   * Runs BEFORE any database work — body parsing, rate limiting. Returning a
+   * `Response` short-circuits, so a malformed request costs no connection.
+   */
+  beforeTransaction?: (
+    context: TenantRouteRequestContext
+  ) => Response | undefined | Promise<Response | undefined>;
+  handler: (
+    context: TenantRouteRequestContext & { tx: Bun.TransactionSQL }
+  ) => Response | Promise<Response>;
+};
+
+export function defineClientCredentialTenantRoute(
+  config: ClientCredentialTenantRouteConfig
+): APIRoute {
+  return async ({ request, cookies, url, params, locals, clientAddress }) => {
+    const { tenantId } = resolveAuthInputs(request, cookies);
+
+    if (!tenantId) return config.onMissingTenant();
+
+    const requestContext: TenantRouteRequestContext = {
+      request,
+      cookies,
+      url,
+      params,
+      locals,
+      tenantId,
+      clientAddress,
+      now: new Date()
+    };
+
+    const short = await config.beforeTransaction?.(requestContext);
+
+    if (short) return short;
+
+    return withTenant<Response>(
+      sqlClientForRoute(),
+      tenantId,
+      async (tx) => config.handler({ ...requestContext, tx }),
+      {
+        workClass: config.workClass,
+        queueTimeoutMs: config.queueTimeoutMs
+      }
+    );
+  };
+}
+
+/** One place every factory reaches the pool, so none can drift onto its own client. */
 function sqlClientForRoute(): Bun.SQL {
   return getDatabaseClient();
 }

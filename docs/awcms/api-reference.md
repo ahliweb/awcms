@@ -1197,6 +1197,69 @@ Anti-oracle: a missing bearer, an unknown/expired/revoked session, a deactivated
 | 401    | Missing or invalid session.                                                                        | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many introspection requests from this source (RATE_LIMITED); `Retry-After` carries the window. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/session-handoff/issue` — Mint a one-time code letting a registered BFF obtain a session as the caller.
+
+- **operationId**: `issueSessionHandoffCode`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0050. The authenticated human asks for a short-lived (≤60 second), single-use code; a registered BFF then spends it server-to-server at `/api/v1/auth/session-handoff/redeem` and receives a session token for that person.
+
+**Self-service, not permission-gated.** The identity and assurance level come from the presented session, never from the body, so the caller can only ever mint a code for themselves. There is no permission that answers "may I hand my own session to a client I am already logged into", and inventing one would deny everyone including the tenant owner. Same reasoning as `GET /api/v1/auth/session`.
+
+What constrains it is the CLIENT registry: a code is only issued for a registered, enabled client, bound to a `redirectUri` on that client's **exact-match** allow-list. Prefix and origin matches are refused — `https://app.example.com` prefix-matches `https://app.example.com.evil.test`, and an attacker who can choose the path on a permitted origin can forward the code onward.
+
+Every rejection — unknown client, non-allow-listed URI, a URI carrying a query or fragment, a non-https URI — answers the same `400 HANDOFF_NOT_ALLOWED`. Distinguishing them turns this into a probe for which clients are registered and which URIs they accept.
+
+**No `Idempotency-Key`**, deliberately: each call mints a fresh single-use credential, and replaying one would mean two live codes for one request.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`IssueSessionHandoffRequest`](#schema-issuesessionhandoffrequest)
+
+**Responses**
+
+| Status | Description                                                                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | A one-time code, and the redirect_uri it is bound to.                                                           | object                                 |
+| 400    | The client and redirect_uri combination cannot be used (`HANDOFF_NOT_ALLOWED`), or the body is missing a field. | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/session-handoff/redeem` — Spend a one-time handoff code and receive a session token (server-to-server).
+
+- **operationId**: `redeemSessionHandoffCode`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0050. The only endpoint here authenticated by a **client secret** rather than a session: this is the request that obtains a session, so there is none to present yet. Not a machine credential either — those are read-only by construction (ADR-0049), and a read-only principal minting a human session would be an escalation path.
+
+Call it from the BFF's SERVER. The token must never reach a browser: the BFF stores it server-side and gives the browser its own portal cookie.
+
+The code is spent exactly once, claimed with a guarded `UPDATE … WHERE redeemed_at IS NULL` so two concurrent redemptions cannot both succeed. The spent row is kept rather than deleted, so a replay is answered from evidence instead of from the absence of it.
+
+**Every failure is one answer.** Unknown code, expired code, already-spent code, wrong client, wrong `redirectUri`, bad secret — all `401 HANDOFF_REJECTED`, including a malformed body. The distinctions are recorded in the audit trail; handing them to the caller tells whoever holds a stolen code whether it was ever valid.
+
+The minted session inherits the assurance level the original login REACHED and never more: an `aal1` login cannot be laundered into an `aal2` session.
+
+**No `Idempotency-Key`**: the code IS the idempotency key, with the opposite contract — the second attempt must fail rather than replay the first response.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`RedeemSessionHandoffRequest`](#schema-redeemsessionhandoffrequest)
+
+**Responses**
+
+| Status | Description                                                                                         | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | A session token for the human who authenticated.                                                    | object                                 |
+| 401    | The handoff could not be completed (`HANDOFF_REJECTED`) — one answer for every cause, deliberately. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
 - **operationId**: `getSsoPolicy`
@@ -8182,6 +8245,42 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "tenantUserId": "00000000-0000-0000-0000-000000000000",
   "allowedPermissionKeys": ["string"],
   "expiresAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+### Schema: IssueSessionHandoffRequest
+
+| Field         | Type         | Required | Nullable | Description                                                                                                               |
+| ------------- | ------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `clientKey`   | string       | yes      | no       | The registered BFF client's public key. Not a secret, and never treated as one — the secret authenticates at redeem time. |
+| `redirectUri` | string (uri) | yes      | no       | Must appear EXACTLY in the client's registered allow-list. https only, no query, no fragment.                             |
+
+**Example**
+
+```json
+{
+  "clientKey": "string",
+  "redirectUri": "string"
+}
+```
+
+### Schema: RedeemSessionHandoffRequest
+
+| Field          | Type         | Required | Nullable | Description                                            |
+| -------------- | ------------ | -------- | -------- | ------------------------------------------------------ |
+| `clientKey`    | string       | yes      | no       |                                                        |
+| `clientSecret` | string       | yes      | no       | Server-to-server only. A browser must never hold this. |
+| `code`         | string       | yes      | no       |                                                        |
+| `redirectUri`  | string (uri) | yes      | no       | Must equal the URI the code was issued against.        |
+
+**Example**
+
+```json
+{
+  "clientKey": "string",
+  "clientSecret": "string",
+  "code": "string",
+  "redirectUri": "string"
 }
 ```
 

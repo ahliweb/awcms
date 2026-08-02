@@ -2080,6 +2080,98 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/session-handoff/issue:
+    post:
+      operationId: issueSessionHandoffCode
+      tags:
+        - Identity & Access
+      summary: Mint a one-time code letting a registered BFF obtain a session as the caller.
+      description: |
+        ADR-0050. The authenticated human asks for a short-lived (≤60 second), single-use code; a registered BFF then spends it server-to-server at `/api/v1/auth/session-handoff/redeem` and receives a session token for that person.
+
+        **Self-service, not permission-gated.** The identity and assurance level come from the presented session, never from the body, so the caller can only ever mint a code for themselves. There is no permission that answers "may I hand my own session to a client I am already logged into", and inventing one would deny everyone including the tenant owner. Same reasoning as `GET /api/v1/auth/session`.
+
+        What constrains it is the CLIENT registry: a code is only issued for a registered, enabled client, bound to a `redirectUri` on that client's **exact-match** allow-list. Prefix and origin matches are refused — `https://app.example.com` prefix-matches `https://app.example.com.evil.test`, and an attacker who can choose the path on a permitted origin can forward the code onward.
+
+        Every rejection — unknown client, non-allow-listed URI, a URI carrying a query or fragment, a non-https URI — answers the same `400 HANDOFF_NOT_ALLOWED`. Distinguishing them turns this into a probe for which clients are registered and which URIs they accept.
+
+        **No `Idempotency-Key`**, deliberately: each call mints a fresh single-use credential, and replaying one would mean two live codes for one request.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueSessionHandoffRequest"
+      responses:
+        "200":
+          description: A one-time code, and the redirect_uri it is bound to.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SessionHandoffCodeIssued"
+        "400":
+          description: The client and redirect_uri combination cannot be used (`HANDOFF_NOT_ALLOWED`), or the body is missing a field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/session-handoff/redeem:
+    post:
+      operationId: redeemSessionHandoffCode
+      tags:
+        - Identity & Access
+      summary: Spend a one-time handoff code and receive a session token (server-to-server).
+      description: |
+        ADR-0050. The only endpoint here authenticated by a **client secret** rather than a session: this is the request that obtains a session, so there is none to present yet. Not a machine credential either — those are read-only by construction (ADR-0049), and a read-only principal minting a human session would be an escalation path.
+
+        Call it from the BFF's SERVER. The token must never reach a browser: the BFF stores it server-side and gives the browser its own portal cookie.
+
+        The code is spent exactly once, claimed with a guarded `UPDATE … WHERE redeemed_at IS NULL` so two concurrent redemptions cannot both succeed. The spent row is kept rather than deleted, so a replay is answered from evidence instead of from the absence of it.
+
+        **Every failure is one answer.** Unknown code, expired code, already-spent code, wrong client, wrong `redirectUri`, bad secret — all `401 HANDOFF_REJECTED`, including a malformed body. The distinctions are recorded in the audit trail; handing them to the caller tells whoever holds a stolen code whether it was ever valid.
+
+        The minted session inherits the assurance level the original login REACHED and never more: an `aal1` login cannot be laundered into an `aal2` session.
+
+        **No `Idempotency-Key`**: the code IS the idempotency key, with the opposite contract — the second attempt must fail rather than replay the first response.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemSessionHandoffRequest"
+      responses:
+        "200":
+          description: A session token for the human who authenticated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/SessionHandoffRedeemed"
+        "401":
+          description: The handoff could not be completed (`HANDOFF_REJECTED`) — one answer for every cause, deliberately.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/sso-policy:
     get:
       operationId: getSsoPolicy
@@ -17192,6 +17284,19 @@ components:
           type: string
           format: date-time
           description: Required, in the future, at most 365 days away. There is no perpetual credential.
+    IssueSessionHandoffRequest:
+      type: object
+      required:
+        - clientKey
+        - redirectUri
+      properties:
+        clientKey:
+          type: string
+          description: The registered BFF client's public key. Not a secret, and never treated as one — the secret authenticates at redeem time.
+        redirectUri:
+          type: string
+          format: uri
+          description: Must appear EXACTLY in the client's registered allow-list. https only, no query, no fragment.
     MachineCredential:
       type: object
       description: A read-only machine credential (ADR-0049). Never carries the token or its hash — an operator tracing a leak needs to know which credential is alive and whether anything still uses it, and none of that requires secret material.
@@ -17869,6 +17974,25 @@ components:
         lastUpdatedAt:
           type: string
           format: date-time
+    RedeemSessionHandoffRequest:
+      type: object
+      required:
+        - clientKey
+        - clientSecret
+        - code
+        - redirectUri
+      properties:
+        clientKey:
+          type: string
+        clientSecret:
+          type: string
+          description: Server-to-server only. A browser must never hold this.
+        code:
+          type: string
+        redirectUri:
+          type: string
+          format: uri
+          description: Must equal the URI the code was issued against.
     RegistrationRequest:
       type: object
       description: A pending self-registration request. The login identifier is masked — the raw address is never returned in a list.
@@ -18352,6 +18476,34 @@ components:
           type: boolean
         feedsEnabled:
           type: boolean
+    SessionHandoffCodeIssued:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Single-use, ≤60 second lifetime. Returned once and never stored in clear text.
+        redirectUri:
+          type: string
+          format: uri
+          description: The URI the code is bound to. Redemption must present the same value.
+        expiresAt:
+          type: string
+          format: date-time
+    SessionHandoffRedeemed:
+      type: object
+      properties:
+        token:
+          type: string
+          description: A session token for the human who authenticated. Store it SERVER-SIDE; it must never reach a browser.
+        expiresAt:
+          type: string
+          format: date-time
+        assuranceLevel:
+          type: string
+          enum:
+            - aal1
+            - aal2
+          description: Inherited from the original login, never above it.
     SessionIntrospection:
       type: object
       description: Safe claims for a live session (ADR-0049 §7). Deliberately excludes the raw login identifier that GET /api/v1/auth/me returns.
