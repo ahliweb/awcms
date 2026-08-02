@@ -1007,6 +1007,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/tenants/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/theming/draft.ts",
       "workClass": "interactive",
       "source": "default"

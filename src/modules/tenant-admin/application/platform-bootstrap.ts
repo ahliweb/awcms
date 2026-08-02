@@ -14,30 +14,49 @@ export type PlatformBootstrapResult =
       ownerRoleId: string;
     };
 
+export type CreatedTenant = {
+  tenantId: string;
+  officeId: string;
+  ownerProfileId: string;
+  ownerIdentityId: string;
+  ownerTenantUserId: string;
+  ownerRoleId: string;
+};
+
 /**
- * The ONLY place that creates a tenant, office, owner profile, identity,
- * tenant-user, role, and access assignment together in one transaction —
- * spanning `tenant_admin`, `profile_identity`, and `identity_access`'s
- * tables. This is a one-time, call-time orchestration concern, kept as an
- * explicit composition-root function rather than a module `dependencies`
- * edge (a static dependency there would wrongly imply tenant_admin cannot
- * function at all without the other two modules enabled).
+ * Creates a tenant with its office, owner account, `owner` role, grants, and
+ * access assignment — the whole set, in the caller's transaction.
+ *
+ * ## Why this is extracted (ADR-0054)
+ *
+ * The setup wizard and tenant provisioning both need it, and the one thing that
+ * must never differ between them is the `scope` filter on the grant. A second
+ * copy of this INSERT is exactly how the cross-tenant defect ADR-0052 removed
+ * would come back: the copy would be written by someone reading the original,
+ * which for most of this repo's life did not have the filter.
+ *
+ * `grantPlatformScope` is the ONLY difference between the two callers, and it
+ * is a parameter rather than a branch on "is this the first tenant?" so the
+ * answer is stated at the call site instead of inferred.
+ *
+ * ## The tenant-context switch
+ *
+ * Every table written below is under FORCE RLS keyed on
+ * `app.current_tenant_id`, so this sets that GUC to the tenant being CREATED.
+ * The caller may already be inside a different tenant's context (provisioning
+ * runs as the platform tenant), so it restores the previous value before
+ * returning — otherwise the caller's own audit row, idempotency record, and
+ * anything else after this point would silently be written into the new
+ * tenant's partition.
+ *
+ * Both ids are `assertUuid`-validated before interpolation; `SET LOCAL` takes
+ * no bind parameters, which is why this is the one place `tx.unsafe` appears.
  */
-export async function bootstrapPlatformTenant(
+export async function createTenantWithOwner(
   tx: Bun.SQL,
-  input: SetupInitializeInput
-): Promise<PlatformBootstrapResult> {
-  const claimed = await tx`
-    INSERT INTO awcms_setup_state (id, locked_at)
-    VALUES (true, now())
-    ON CONFLICT (id) DO NOTHING
-    RETURNING id
-  `;
-
-  if (!claimed[0]) {
-    return { outcome: "already_initialized" };
-  }
-
+  input: SetupInitializeInput,
+  options: { grantPlatformScope: boolean; restoreTenantId?: string }
+): Promise<CreatedTenant> {
   const tenantRows = await tx`
     INSERT INTO awcms_tenants (tenant_code, tenant_name)
     VALUES (${input.tenantCode}, ${input.tenantName})
@@ -97,31 +116,35 @@ export async function bootstrapPlatformTenant(
     WHERE scope = 'tenant'
   `;
 
-  // ...and, because THIS tenant is the one the setup wizard bootstraps, it is
-  // also the platform tenant by default (it becomes `awcms_setup_state.tenant_id`,
-  // the last link of the chain `resolvePlatformTenant` follows). So its owner —
-  // and only its owner — additionally receives the platform-scoped catalogue.
-  //
-  // A deployment that later repoints `PLATFORM_TENANT_ID` at a different tenant
-  // grants that tenant's owner explicitly; `security:readiness` reports the
-  // divergence. Nothing here can widen: the guard still requires the acting
-  // tenant to BE the resolved platform tenant, so these rows are inert anywhere
-  // the resolution does not point.
-  await tx`
-    INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
-    SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
-    WHERE scope = 'platform'
-  `;
+  if (options.grantPlatformScope) {
+    // Only the setup wizard passes true: the tenant it creates BECOMES
+    // `awcms_setup_state.tenant_id`, the last link of the chain
+    // `resolvePlatformTenant` follows, so it is the platform tenant by default.
+    //
+    // Nothing here can widen. The chokepoint still requires the acting tenant
+    // to BE the resolved platform tenant, so these rows are inert anywhere the
+    // resolution does not point.
+    await tx`
+      INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+      SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
+      WHERE scope = 'platform'
+    `;
+  }
 
   await tx`
     INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
     VALUES (${tenantId}, ${tenantUserId}, ${roleId}, ${tenantUserId})
   `;
 
-  await tx`UPDATE awcms_setup_state SET tenant_id = ${tenantId} WHERE id = true`;
+  if (options.restoreTenantId) {
+    // See the header: leaving the GUC pointed at the new tenant would send the
+    // caller's remaining writes (audit, idempotency) into the wrong partition.
+    await tx.unsafe(
+      `SET LOCAL app.current_tenant_id = '${assertUuid(options.restoreTenantId)}'`
+    );
+  }
 
   return {
-    outcome: "initialized",
     tenantId,
     officeId,
     ownerProfileId: profileId,
@@ -129,4 +152,40 @@ export async function bootstrapPlatformTenant(
     ownerTenantUserId: tenantUserId,
     ownerRoleId: roleId
   };
+}
+
+/**
+ * The one-time setup wizard: creates the FIRST tenant and claims
+ * `awcms_setup_state`, so it can only ever succeed once. Spans `tenant_admin`,
+ * `profile_identity`, and `identity_access`'s tables — a call-time
+ * orchestration concern kept as an explicit composition-root function rather
+ * than a module `dependencies` edge (a static dependency there would wrongly
+ * imply tenant_admin cannot function at all without the other two enabled).
+ *
+ * The tenant it creates becomes the PLATFORM tenant, which is why it is the one
+ * caller that passes `grantPlatformScope: true`. Every subsequent tenant is
+ * created by `provisionTenant`, which does not.
+ */
+export async function bootstrapPlatformTenant(
+  tx: Bun.SQL,
+  input: SetupInitializeInput
+): Promise<PlatformBootstrapResult> {
+  const claimed = await tx`
+    INSERT INTO awcms_setup_state (id, locked_at)
+    VALUES (true, now())
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id
+  `;
+
+  if (!claimed[0]) {
+    return { outcome: "already_initialized" };
+  }
+
+  const created = await createTenantWithOwner(tx, input, {
+    grantPlatformScope: true
+  });
+
+  await tx`UPDATE awcms_setup_state SET tenant_id = ${created.tenantId} WHERE id = true`;
+
+  return { outcome: "initialized", ...created };
 }

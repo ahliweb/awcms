@@ -1,0 +1,422 @@
+---
+/**
+ * Tenant directory and provisioning — the platform operator's screen
+ * (ADR-0054), and the second one whose whole surface is PLATFORM-scoped.
+ *
+ * ## What it is for
+ *
+ * Until this landed, a second tenant could not exist: `setup/initialize` claims
+ * the `awcms_setup_state` singleton and succeeds exactly once. Every deployment
+ * was permanently single-tenant, which is also why ADR-0053's platform gate had
+ * never met a real second tenant.
+ *
+ * ## Both panels are platform-scoped, `read` included
+ *
+ * The directory lists EVERY tenant. That is a platform question, not a tenant
+ * one — a tenant-scoped read here would let any customer's owner enumerate the
+ * platform's customer list, and no RLS policy would object, because
+ * `awcms_tenants` is deliberately the RLS-free root table.
+ *
+ * So there is no partial view: a viewer who is not the platform tenant sees an
+ * explanation, not an empty table. Hiding the reason would leave "why is this
+ * blank" as the only feedback.
+ *
+ * Reads use the module's own directory query inside one `withTenantOrThrow`;
+ * the write posts to the guarded `POST /api/v1/tenants` with a fresh
+ * `Idempotency-Key`.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  resolvePlatformTenant,
+  resolveTenancyMode,
+  type TenancyMode
+} from "../../lib/tenant/platform-tenant";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "tenants.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const holdsRead = ssr.permissions.has(
+  permissionKey("tenant_admin", "tenant_provisioning", "read")
+);
+const holdsCreate = ssr.permissions.has(
+  permissionKey("tenant_admin", "tenant_provisioning", "create")
+);
+
+type DirectoryEntry = {
+  id: string;
+  tenantCode: string;
+  tenantName: string;
+  status: string;
+  createdAt: Date;
+};
+
+let tenants: DirectoryEntry[] = [];
+let tenancyMode: TenancyMode = "single";
+let isPlatformTenant = false;
+let platformTenantCode: string | null = null;
+let loadError = false;
+
+if (holdsRead || holdsCreate) {
+  try {
+    const sql = getDatabaseClient();
+
+    // Resolved OUTSIDE any tenant transaction: both read RLS-free root tables
+    // and neither needs — or should imply — a tenant context.
+    const platformTenant = await resolvePlatformTenant(sql);
+    isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
+    platformTenantCode = platformTenant?.tenantCode ?? null;
+    tenancyMode = await resolveTenancyMode(sql);
+
+    if (holdsRead && isPlatformTenant) {
+      const rows = await withTenantOrThrow(
+        sql,
+        ssr.tenantId,
+        async (tx) =>
+          (await tx`
+            SELECT id, tenant_code, tenant_name, status, created_at
+            FROM awcms_tenants
+            ORDER BY created_at DESC
+            LIMIT 500
+          `) as {
+            id: string;
+            tenant_code: string;
+            tenant_name: string;
+            status: string;
+            created_at: Date;
+          }[]
+      );
+
+      tenants = rows.map((row) => ({
+        id: row.id,
+        tenantCode: row.tenant_code,
+        tenantName: row.tenant_name,
+        status: row.status,
+        createdAt: row.created_at
+      }));
+    }
+  } catch (error) {
+    logAdminPageError("admin/tenants.astro: failed to load directory", error, {
+      correlationId: Astro.locals.correlationId
+    });
+    loadError = true;
+  }
+}
+
+const canRead = holdsRead && isPlatformTenant;
+const canCreate = holdsCreate && isPlatformTenant;
+const withheldByPlatformScope = (holdsRead || holdsCreate) && !isPlatformTenant;
+
+function formatTimestamp(value: Date | null): string {
+  if (!value) return "—";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().replace("T", " ").slice(0, 16);
+}
+
+function statusVariant(status: string): string {
+  if (status === "active") return "success";
+  if (status === "suspended") return "danger";
+  return "neutral";
+}
+---
+
+<AdminLayout title="Tenants">
+  <header class="page-header fade-in-up">
+    <h1 id="tenants-heading">Tenants</h1>
+    <p class="page-description">
+      Every party this deployment serves. Provisioning creates a tenant with its
+      head office and owner account in one transaction — the same code path the
+      setup wizard uses, so the two cannot drift.
+    </p>
+  </header>
+
+  {
+    !holdsRead && !holdsCreate && (
+      <p class="state-notice fade-in-up" id="tenants-denied">
+        You do not have permission to view the tenant directory.
+      </p>
+    )
+  }
+
+  {
+    withheldByPlatformScope && (
+      <p class="state-notice fade-in-up" id="tenants-scope-notice">
+        The tenant directory belongs to the platform tenant
+        {platformTenantCode && (
+          <>
+            {" "}
+            (<span class="cell-code">{platformTenantCode}</span>)
+          </>
+        )}
+        , not to this one. Your role carries the permission; the action is
+        refused because of where it is being made, not who is making it.
+      </p>
+    )
+  }
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="tenants-error">
+        The tenant directory could not be loaded right now. Please try again
+        later.
+      </p>
+    )
+  }
+
+  <p id="tenants-action-error" class="admin-create-error" role="alert" hidden>
+  </p>
+
+  {
+    canRead && (
+      <section class="admin-section fade-in-up" id="tenants-summary">
+        <h2 class="admin-section-title">Deployment</h2>
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">Tenancy mode</span>
+            <span class="stat-value stat-value--mono">{tenancyMode}</span>
+            <span class="stat-hint">
+              {tenancyMode === "single"
+                ? "one active tenant — provisioning a second flips this"
+                : "derived from the active-tenant count, never configured"}
+            </span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Tenants listed</span>
+            <span class="stat-value">{tenants.length}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Platform tenant</span>
+            <span class="stat-value stat-value--mono">
+              {platformTenantCode ?? "—"}
+            </span>
+            <span class="stat-hint">holds platform-scoped permissions</span>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canCreate && (
+      <section class="admin-section fade-in-up" id="tenants-create">
+        <h2 class="admin-section-title">Provision a tenant</h2>
+        <p class="page-description">
+          The owner account is created with the password you set here — it is
+          sent once and never stored by this screen. The new tenant receives the
+          tenant-scoped permission catalogue only; platform permissions are
+          never granted to a provisioned tenant.
+        </p>
+        <form id="tenants-create-form" class="admin-create-form">
+          <p
+            id="tenants-create-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <label for="tenant-code">
+            Tenant code
+            <input type="text" id="tenant-code" name="tenantCode" required />
+          </label>
+
+          <label for="tenant-name">
+            Tenant name
+            <input type="text" id="tenant-name" name="tenantName" required />
+          </label>
+
+          <label for="office-code">
+            Head office code
+            <input type="text" id="office-code" name="officeCode" required />
+          </label>
+
+          <label for="office-name">
+            Head office name
+            <input type="text" id="office-name" name="officeName" required />
+          </label>
+
+          <label for="owner-display-name">
+            Owner name
+            <input
+              type="text"
+              id="owner-display-name"
+              name="ownerDisplayName"
+              required
+            />
+          </label>
+
+          <label for="owner-login-identifier">
+            Owner login identifier
+            <input
+              type="text"
+              id="owner-login-identifier"
+              name="ownerLoginIdentifier"
+              required
+            />
+          </label>
+
+          <label for="owner-password">
+            Owner password
+            <input
+              type="password"
+              id="owner-password"
+              name="ownerPassword"
+              minlength="8"
+              autocomplete="new-password"
+              required
+            />
+          </label>
+
+          <button
+            type="submit"
+            id="tenants-create-submit"
+            class="module-toggle"
+          >
+            Provision tenant
+          </button>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && (
+      <section class="admin-section fade-in-up" id="tenants-directory">
+        <h2 class="admin-section-title">
+          Directory
+          <span class="count-pill">{tenants.length}</span>
+        </h2>
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Every tenant on this deployment, newest first
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.length === 0 && (
+                <tr>
+                  <td class="data-table-empty" colspan={4}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        🏢
+                      </span>
+                      <span class="empty-state-title">No tenants listed</span>
+                      <span class="empty-state-text">
+                        This should not happen — the platform tenant itself is a
+                        tenant. Check the server logs.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {tenants.map((tenant) => (
+                <tr>
+                  <td data-label="Code">
+                    <span class="cell-code">{tenant.tenantCode}</span>
+                    {tenant.tenantCode === platformTenantCode && (
+                      <span class="status-badge" data-variant="info">
+                        <span class="status-dot" aria-hidden="true" />
+                        platform
+                      </span>
+                    )}
+                  </td>
+                  <td data-label="Name">{tenant.tenantName}</td>
+                  <td data-label="Status">
+                    <span
+                      class="status-badge"
+                      data-variant={statusVariant(tenant.status)}
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {tenant.status}
+                    </span>
+                  </td>
+                  <td data-label="Created">
+                    <span class="cell-code">
+                      {formatTimestamp(tenant.createdAt)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bound unconditionally: the form only renders when BOTH the permission and
+  // the platform-tenant check passed server-side. Astro hoists this script at
+  // build time, so a conditional wrapper would be meaningless.
+  //
+  // The import is load-bearing for CSP: an import-free script is INLINED by
+  // Astro, and inline scripts are blocked by `default-src 'self'`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "tenants-create-form"
+  ) as HTMLFormElement | null;
+  const formError = document.getElementById("tenants-create-error");
+  const submit = document.getElementById(
+    "tenants-create-submit"
+  ) as HTMLButtonElement | null;
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!submit || submit.disabled) return;
+    const unlock = lockElement(submit, "Provisioning…");
+    if (formError) formError.hidden = true;
+
+    const formData = new FormData(form);
+
+    const result = await sendJson(
+      "POST",
+      "/api/v1/tenants",
+      {
+        tenantCode: String(formData.get("tenantCode") ?? ""),
+        tenantName: String(formData.get("tenantName") ?? ""),
+        officeCode: String(formData.get("officeCode") ?? ""),
+        officeName: String(formData.get("officeName") ?? ""),
+        ownerDisplayName: String(formData.get("ownerDisplayName") ?? ""),
+        ownerLoginIdentifier: String(
+          formData.get("ownerLoginIdentifier") ?? ""
+        ),
+        ownerPassword: String(formData.get("ownerPassword") ?? "")
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (formError) {
+      formError.textContent =
+        result.errorCode === "TENANT_CODE_TAKEN"
+          ? "That tenant code is already taken. Choose another."
+          : result.errorCode === "VALIDATION_ERROR"
+            ? "Check the fields and try again — the owner password must be at least eight characters."
+            : "Could not provision the tenant. Please try again.";
+      formError.hidden = false;
+    }
+    unlock();
+  });
+</script>

@@ -15,9 +15,24 @@ export const tenantAdminModule = defineModule({
     // which is a prefix of EVERY route in the application — see
     // `ModuleApiContract.routes` for the 36 routes that swallowed.
     basePath: "/api/v1/offices",
-    routes: ["/api/v1/offices", "/api/v1/settings", "/api/v1/setup"]
+    routes: [
+      "/api/v1/offices",
+      "/api/v1/settings",
+      "/api/v1/setup",
+      "/api/v1/tenants"
+    ]
   },
   navigation: [
+    // PLATFORM-scoped (ADR-0054). The link is gated on the platform permission
+    // itself — ADR-0051 §Keputusan butir 3 — because unlike `/admin/idn-regions`
+    // there is no tenant-readable half of this screen: the directory lists every
+    // tenant, so an ordinary tenant has nothing here to see.
+    {
+      labelKey: "admin.layout.nav_tenants",
+      path: "/admin/tenants",
+      order: 29,
+      requiredPermission: "tenant_admin.tenant_provisioning.read"
+    },
     {
       labelKey: "admin.layout.nav_offices",
       path: "/admin/offices",
@@ -45,6 +60,26 @@ export const tenantAdminModule = defineModule({
       activityCode: "office_management",
       action: "delete",
       description: "Soft-delete office records"
+    },
+    // PLATFORM-scoped (ADR-0053/ADR-0054). Creating a tenant is not an action a
+    // tenant takes on its own data — it adds a party to the deployment — so it
+    // is excluded from the catalogue every tenant owner receives, and the
+    // chokepoint refuses it unless the acting tenant is the platform tenant.
+    //
+    // `read` is here for the same reason: the tenant DIRECTORY lists every
+    // tenant on the deployment. A tenant-scoped `read` would let any owner
+    // enumerate the platform's customer list.
+    {
+      activityCode: "tenant_provisioning",
+      action: "read",
+      scope: "platform",
+      description: "PLATFORM: list every tenant on the deployment"
+    },
+    {
+      activityCode: "tenant_provisioning",
+      action: "create",
+      scope: "platform",
+      description: "PLATFORM: provision a new tenant with its owner account"
     },
     {
       activityCode: "tenant_settings",
