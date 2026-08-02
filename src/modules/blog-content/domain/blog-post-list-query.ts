@@ -30,8 +30,21 @@ import {
 /** `summary` is the admin table's shape; `full` is the build feed's. */
 export type BlogPostListView = "summary" | "full";
 
+/**
+ * Longest `locale` this filter will accept. There is no shape validation
+ * beyond non-empty and this bound, and that is deliberate: `awcms_blog_posts.locale`
+ * is plain `text NOT NULL DEFAULT 'id'`, and the WRITE path
+ * (`validateLocaleField`) accepts any non-empty string. A read filter stricter
+ * than the write path would make a stored locale unreachable — a row that
+ * exists, that the admin table shows, and that no query can select. The bound
+ * exists only so an absurd value is refused before it reaches the database.
+ */
+export const MAX_LOCALE_FILTER_LENGTH = 35;
+
 export type BlogPostListQuery = {
   status?: BlogContentStatus;
+  /** Exact match on the post's stored `locale`. */
+  locale?: string;
   limit?: number;
   /** True only for `order=created_at` — the sole ordering a cursor is sound over. */
   stableOrder: boolean;
@@ -60,6 +73,34 @@ export function parseBlogPostListQuery(
     }
 
     status = statusParam;
+  }
+
+  // `locale` closes awcms-astro ADR-0021 §2: a build for a single-language site
+  // had to pull EVERY locale and discard most of it, because there was no way
+  // to ask for one. An empty `?locale=` is refused rather than ignored — a
+  // caller that meant to filter and got the unfiltered feed builds a site with
+  // every translation of every article in it, and nothing anywhere fails.
+  const localeParam = params.get("locale");
+  let locale: string | undefined;
+
+  if (localeParam !== null) {
+    const trimmed = localeParam.trim();
+
+    if (trimmed.length === 0) {
+      return {
+        valid: false,
+        message: "locale must not be empty when provided."
+      };
+    }
+
+    if (trimmed.length > MAX_LOCALE_FILTER_LENGTH) {
+      return {
+        valid: false,
+        message: `locale must be at most ${MAX_LOCALE_FILTER_LENGTH} characters.`
+      };
+    }
+
+    locale = trimmed;
   }
 
   const limitParam = params.get("limit");
@@ -125,6 +166,7 @@ export function parseBlogPostListQuery(
     valid: true,
     value: {
       status,
+      locale,
       limit,
       stableOrder,
       cursor,

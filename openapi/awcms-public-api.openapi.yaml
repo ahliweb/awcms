@@ -3205,7 +3205,7 @@ paths:
       operationId: blogListPosts
       summary: List this tenant's non-deleted blog posts
       description: |
-        Gated by blog_content.posts.read. Optional ?status= filter, ?limit= bounded (default 20, max 100 — max 50 with `view=full`, whose rows carry `contentJson`).
+        Gated by blog_content.posts.read. Optional ?status= and ?locale= filters, ?limit= bounded (default 20, max 100 — max 50 with `view=full`, whose rows carry `contentJson`).
 
         Ordering defaults to `updated_at DESC` — right for an admin table, and unsound as a keyset key because editing a post moves it, so a row can cross a page boundary between requests and be skipped or repeated. A caller that needs EVERY post (a build feed) passes `?order=created_at`, which is immutable, and follows `nextCursor` until it is null. `?cursor=` without `?order=created_at` is refused with 400 rather than quietly honoured.
 
@@ -3221,6 +3221,13 @@ paths:
               - scheduled
               - published
               - archived
+        - name: locale
+          in: query
+          description: Exact match on the post's stored locale. Absent means every locale, which is the right default for an admin table but wasteful for a single-language build feed — that is what this parameter exists for. Not shape-validated beyond non-empty and a 35-character bound, because the write path accepts any non-empty string and a stricter read filter would make a stored locale unreachable. An empty value is a 400, never treated as absent.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 35
         - name: limit
           in: query
           schema:
