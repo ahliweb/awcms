@@ -38,9 +38,14 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 **Perubahan 31 Juli 2026 — dua ADR yang mengubah cara kerja, bukan cuma isi kode:**
 
-- [ADR-0047](adr/0047-mini-micro-frozen-foundation-built-here.md): `awcms-mini` dan
-  `awcms-micro` **dibekukan sebagai referensi** (boleh dibaca & di-port _keluar_, tidak
-  menerima perubahan). Konsekuensinya aturan **mini-first ditangguhkan** — selama
+- ~~ADR-0047~~ (`awcms-mini`/`awcms-micro` dibekukan sebagai referensi yang MASIH boleh
+  di-port keluar) — **di-supersede [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)
+  pada 2 Agustus 2026**: pengembangan kini hanya di `ahliweb/awcms` +
+  `ahliweb/awcms-astro`, dan mini/micro adalah **arsip** (bukan sumber port). Penjagaan
+  ADR-0047 §3 TETAP; hanya kewajiban §4 (catat divergence saat mendarat) yang dicabut —
+  ADR-nya sendiri kini catatan itu. Konteks aslinya dipertahankan di bawah:
+  `awcms-mini` dan `awcms-micro` dibekukan sebagai referensi (boleh dibaca & di-port
+  _keluar_, tidak menerima perubahan). Konsekuensinya aturan **mini-first ditangguhkan** — selama
   pembekuan, fitur fondasi **dirintis langsung di repo ini**. Ini **bukan** pelonggaran:
   ADR §3 mendaftarkan ulang setiap penjagaan yang dulu dibawa jalur mini-first secara
   eksplisit (ADR wajib untuk perubahan standar, security review tambahan untuk
@@ -352,7 +357,12 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   masih butuh ADR admission. Dua keputusan yang mengikat implementasi: **merchant =
   business scope** (mengisi resolver NO-OP fail-closed, bukan menambah atribut ABAC baru)
   dan **browser tidak pernah memanggil `awcms` langsung** (BFF di `awcms-astro`).
-- **Serap tulang punggung awcms-mini → awcms (fondasi bisnis + SaaS control plane).**
+- **~~Serap tulang punggung awcms-mini~~ — DICABUT sebagai jalur (ADR-0055).** Yang di
+  bawah ini kini **daftar KEBUTUHAN, bukan daftar port**: setiap kemampuan dinilai ulang
+  dan **dibangun di sini** dengan ADR admission-nya sendiri. Bahwa `awcms-mini` kebetulan
+  sudah punya implementasinya bukan lagi alasan untuk membangunnya — dan bukan pula
+  desainnya. Konteks lama dipertahankan di bawah.
+- **(historis) Serap tulang punggung awcms-mini → awcms (fondasi bisnis + SaaS control plane).**
   Peta eksekusi di
   [`awcms/absorb-awcms-mini-backbone-roadmap.md`](awcms/absorb-awcms-mini-backbone-roadmap.md).
   **Temuan audit 2026-07-25:** lima modul sudah di-`Accepted` oleh ADR di repo ini tetapi
@@ -423,16 +433,17 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 5. Kontrak alur kerja (ringkas)
 
-1. **Mini-first DITANGGUHKAN** ([ADR-0047](adr/0047-mini-micro-frozen-foundation-built-here.md),
-   31 Juli 2026): `awcms-mini`/`awcms-micro` beku, jadi fitur fondasi **dirintis langsung
-   di sini**. Port _keluar_ dari kedua repo itu tetap boleh dan tetap memakai langkah
-   rename `awcms_mini_`/`awcms_micro_` → `awcms_` di
+1. **Mini-first DICABUT** ([ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md),
+   2 Agustus 2026, men-supersede ADR-0047): pengembangan hanya di `ahliweb/awcms` +
+   `ahliweb/awcms-astro`. `awcms-mini`/`awcms-micro` adalah **arsip** — boleh dibaca
+   sebagai sejarah, tetapi **tidak ada pekerjaan yang dijadwalkan "di-port dari" sana**;
+   kemampuan yang diinginkan **dibangun di sini** dengan ADR admission sendiri.
    [`awcms/alur-pengembangan-mini-first.md`](awcms/alur-pengembangan-mini-first.md)
-   (dokumen itu kembali berlaku utuh begitu pembekuan dicabut). Fitur fondasi yang
-   mendarat selama pembekuan: **ADR wajib**, security review tambahan untuk
-   `auth`/`access`/`sync`, dan **entri divergence di
-   [`awcms-family-compatibility.yaml`](../awcms-family-compatibility.yaml) saat ia
-   mendarat** — bukan retroaktif.
+   dipertahankan sebagai catatan sejarah. Penjagaannya TETAP: **ADR wajib** untuk
+   perubahan standar, security review tambahan untuk `auth`/`access`/`sync`,
+   `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS `FORCE`, ABAC default-deny.
+   Kewajiban entri divergence di `awcms-family-compatibility.yaml` **dicabut** — ADR-nya
+   sendiri yang menjadi catatan.
 2. **Branch dulu** (jangan commit ke `main`); satu PR = satu perubahan atomic.
 3. **`bun run check` PENUH** sebelum PR (lint + docs + kontrak + typecheck + test + build;
    `bun run format` dulu bila perlu). Changeset wajib untuk perubahan perilaku.

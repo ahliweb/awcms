@@ -6,30 +6,37 @@ AWCMS adalah **template lini ERP/back-office keluarga AWCMS** milik AhliWeb — 
 
 Baca dokumen ini sebelum mengerjakan task apa pun di repo ini. Ini adalah kontrak kerja teknis — aturan wajib, guardrail keamanan, dan alur task.
 
-## Relasi dengan awcms-mini (wajib dibaca)
+## Di repo mana pekerjaan dilakukan (wajib dibaca)
 
-> **DITANGGUHKAN sejak 31 Juli 2026 — baca ini lebih dulu.**
-> `ahliweb/awcms-mini` dan `ahliweb/awcms-micro` **dibekukan sebagai referensi**:
-> boleh dibaca, polanya boleh disalin, kode boleh di-port KELUAR — tetapi
-> keduanya **tidak menerima perubahan**. Akibatnya aturan mini-first di paragraf
-> berikut **tidak bisa ditempuh**: tidak ada hulu yang menerima pekerjaan.
-> Selama pembekuan berlaku, **fitur fondasi dirintis langsung di repo ini**.
+> **Sejak 2 Agustus 2026 ([ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md), men-supersede ADR-0047):**
+> pengembangan AWCMS berlangsung di **dua repositori, dan hanya dua**:
 >
-> Ini bukan pelonggaran. Seluruh penjagaan yang dulu dibawa jalur mini-first
-> tetap wajib dan kini dinyatakan eksplisit: ADR untuk perubahan standar, review
-> keamanan tambahan untuk modul `auth`/`access`/`sync`, `bun run check` penuh
-> termasuk `family:conformance:check`, dan pencatatan setiap fitur fondasi baru
-> sebagai **divergence sengaja** di `awcms-family-compatibility.yaml` saat ia
-> mendarat — bukan belakangan.
+> | Repo                       | Peran                                                                                                                                                                 |
+> | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | `ahliweb/awcms` (repo ini) | **System of record** — modular monolith, seluruh permukaan otorisasi, API, dan seluruh layar admin ([ADR-0051](docs/adr/0051-admin-screens-consolidated-in-awcms.md)) |
+> | `ahliweb/awcms-astro`      | **Experience layer + BFF** ([ADR-0045](docs/adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md)) — situs publik & proksi sesi; tak pernah sumber kebenaran |
 >
-> Alasan, bukti, dan syarat pencabutannya:
-> [ADR-0047](docs/adr/0047-mini-micro-frozen-foundation-built-here.md).
-> Paragraf di bawah tetap berlaku penuh begitu pembekuan dicabut, jadi ia tidak
-> dihapus.
+> **`awcms-mini` dan `awcms-micro` adalah ARSIP.** Bukan standar, bukan sumber
+> port, bukan template keluarga. Boleh dibaca sebagai referensi sejarah, tetapi
+> **tidak ada pekerjaan yang dijadwalkan "di-port dari" sana**. Kemampuan yang
+> diinginkan **dibangun di sini**, dengan ADR admission-nya sendiri, dinilai
+> dari kebutuhan hari ini — bukan dari apa yang kebetulan sudah ada di repo lain.
+>
+> Aturan mini-first **dicabut**, bukan ditangguhkan. Dokumen
+> [`alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md)
+> dipertahankan sebagai catatan sejarah.
+>
+> **Ini bukan pelonggaran.** Penjagaan yang dulu dibawa jalur mini-first tetap
+> wajib: **ADR untuk perubahan standar**, review keamanan tambahan untuk modul
+> `auth`/`access`/`sync`, `bun run check` penuh termasuk
+> `family:conformance:check`, OpenAPI/AsyncAPI sinkron, RLS `FORCE`, ABAC
+> default-deny, dan migrasi terapan immutable. Satu-satunya yang dicabut adalah
+> kewajiban mencatat tiap fitur fondasi sebagai _divergence_ di
+> `awcms-family-compatibility.yaml` — **ADR-nya sendiri yang kini menjadi
+> catatan itu**, dan duplikatnya hanya menjadi hal kedua yang harus dijaga
+> sinkron.
 
-AWCMS adalah rebuild fondasi (bukan ERP jadi) di atas basis teknis **awcms-mini** (repo standar), yang **dikembangkan** ke skop ERP/SaaS online-first dan **menyerap** kapabilitas website/e-commerce `awcms-micro`. **Fitur fondasi diuji lebih dulu di awcms-mini, baru di-port ke repo ini**; kapabilitas website/e-commerce yang sudah matang di **awcms-micro** juga di-port ke sini (pola adaptasi yang sama, rename prefix `awcms_micro_…` → `awcms_…`). Repo ini bukan tempat merintis fitur fondasi dari nol. Alur port, langkah rename prefix `awcms_mini_…` → `awcms_…`, dan implikasinya untuk agent ada di [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md); peta penyerapan awcms-micro di [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
-
-Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari mini — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
+Conformance terhadap standar keluarga ini bersifat machine-readable dan ditegakkan CI: manifest [`awcms-family-compatibility.yaml`](awcms-family-compatibility.yaml) + gate `bun run family:conformance:check` (bagian dari `bun run check`). Bila perubahanmu menyentuh versi kontrak (module/capability/OpenAPI/AsyncAPI), versi stack, semantik kontrol reusable (default-deny/RLS/redaction/audit/idempotency/envelope/migration-immutability), atau menambah divergence sengaja dari kontrak yang repo ini ikuti — perbarui manifest + jalankan gate; lihat [`docs/awcms/family-compatibility.md`](docs/awcms/family-compatibility.md).
 
 ## Di repo mana sebuah LAYAR dibangun (ADR-0051)
 
@@ -137,7 +144,7 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`GOVERNANCE.md`](GOVERNANCE.md) — tata kelola & pengambilan keputusan.
 - [`docs/adr/`](docs/adr/README.md) — keputusan arsitektural (fondasi & batas ekstensi ERP).
 - [`docs/awcms/`](docs/awcms/README.md) — paket dokumen teknis detail per modul fondasi (PRD/SRS/ERD/OpenAPI/AsyncAPI) dan kontrak kesiapan ERP untuk modul domain yang ditambahkan.
-- [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — kontrak alur "uji di awcms-mini dulu, lalu port ke awcms" & langkah port.
+- [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — **catatan sejarah**: kontrak alur "uji di awcms-mini dulu, lalu port", dicabut oleh [ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — apa yang **sudah ada di kode** saat ini vs gap yang tersisa.
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) — **state proyek & titik-lanjut** (baca lebih dulu saat melanjutkan pekerjaan besar): model tata kelola, inventori ringkas, backlog, jebakan penting.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.
