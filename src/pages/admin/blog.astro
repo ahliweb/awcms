@@ -49,6 +49,19 @@
  * That is the opposite of `/admin/approvals`, which is keyset — the difference
  * is the UX, not an inconsistency.
  *
+ * ## Two views, because delete and archive are different axes
+ *
+ * `?view=deleted` lists the BIN (`deletedOnly`); the default lists live posts.
+ * The first edition of this screen had only the live list, and that made
+ * `posts.restore` a permission the page appeared to drive and could not: the
+ * list hard-filtered `deleted_at IS NULL`, so the Restore control was hung off
+ * `status === "archived"` instead — a different axis, not soft-deleted, and a
+ * guaranteed 404 from an endpoint that requires `canRestorePost`. Restore now
+ * belongs to bin rows; the lifecycle controls belong to live rows (a
+ * soft-deleted post cannot transition — `transitionBlogPostStatus` matches
+ * `deleted_at IS NULL`); and Purge appears in both, because `canPurgePost`
+ * accepts archived OR soft-deleted.
+ *
  * ## Writes
  *
  * Nothing here writes SQL. The mutations split on idempotency, and the split
@@ -147,6 +160,23 @@ const statusFilter: BlogContentStatus | undefined = isBlogContentStatus(
 const pageRaw = Number(readParam("page"));
 const pageNumber = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
 
+/**
+ * `?view=deleted` shows the BIN — soft-deleted posts — instead of live ones.
+ *
+ * This screen shipped without it, and the omission made `posts.restore`
+ * undrivable rather than merely absent. `listBlogPostsForAdmin` hard-filtered
+ * `deleted_at IS NULL`, so a soft-deleted post was never on screen; the Restore
+ * control was therefore rendered against `status === "archived"`, which is a
+ * different axis entirely. `POST .../restore` requires `canRestorePost`
+ * (`deleted_at IS NOT NULL`), so the button appeared exactly where it would
+ * 404, and never where it would work.
+ *
+ * Note the two axes stay separate here: `deleted_at` is "in the bin",
+ * `status` is where in the lifecycle a post sits. A post can be soft-deleted
+ * while published, and comes back published.
+ */
+const showsBin = readParam("view") === "deleted";
+
 /** `?post=<id>` opens the revision panel for one post, rather than N queries for a list nobody expanded. */
 const selectedPostId = readParam("post");
 
@@ -161,6 +191,7 @@ if (canRead) {
       listing = await listBlogPostsForAdmin(tx, ssr.tenantId, {
         search: searchFilter || undefined,
         status: statusFilter,
+        deletedOnly: showsBin || undefined,
         page: pageNumber
       });
 
@@ -205,6 +236,9 @@ function linkWith(overrides: Record<string, string | null>): string {
     if (value === null) params.delete(key);
     else params.set(key, value);
   }
+  // Paging is per-view: carrying `page=3` from a 60-post list into a two-row
+  // bin lands the operator on an empty page that looks like an empty bin.
+  if ("view" in overrides) params.delete("page");
   const query = params.toString();
   return query ? `/admin/blog?${query}` : "/admin/blog";
 }
@@ -294,6 +328,17 @@ const selectedPost = selectedPostId
         </select>
 
         <button type="submit">Apply filters</button>
+
+        {/* Carried across submit, so applying a filter does not silently
+            bounce the operator out of the bin. */}
+        {showsBin && <input type="hidden" name="view" value="deleted" />}
+
+        <a
+          class="quick-link"
+          href={linkWith({ view: showsBin ? null : "deleted" })}
+        >
+          {showsBin ? "← Back to live posts" : "View deleted posts"}
+        </a>
       </form>
     )
   }
@@ -305,7 +350,7 @@ const selectedPost = selectedPostId
         aria-labelledby="post-list-title"
       >
         <h2 class="admin-section-title" id="post-list-title">
-          Posts
+          {showsBin ? "Deleted posts" : "Posts"}
           <span class="count-pill">{total}</span>
         </h2>
 
@@ -333,14 +378,18 @@ const selectedPost = selectedPostId
                         ✎
                       </span>
                       <span class="empty-state-title">
-                        {hasFilters
-                          ? "No posts match these filters"
-                          : "No posts yet"}
+                        {showsBin
+                          ? "Nothing in the bin"
+                          : hasFilters
+                            ? "No posts match these filters"
+                            : "No posts yet"}
                       </span>
                       <span class="empty-state-text">
-                        {hasFilters
-                          ? "Clear or widen the filters above to see more posts."
-                          : "Create a draft below to get started."}
+                        {showsBin
+                          ? "Deleted posts appear here until they are purged."
+                          : hasFilters
+                            ? "Clear or widen the filters above to see more posts."
+                            : "Create a draft below to get started."}
                       </span>
                     </div>
                   </td>
@@ -392,43 +441,54 @@ const selectedPost = selectedPostId
                               </span>
                             </a>
                           )}
-                          {canUpdate && post.status === "draft" && (
-                            <button
-                              type="button"
-                              class="btn-inline post-submit-btn"
-                              data-post-id={post.id}
-                            >
-                              Submit for review
-                            </button>
-                          )}
-                          {canPublish && post.status !== "published" && (
-                            <button
-                              type="button"
-                              class="btn-inline post-publish-btn"
-                              data-post-id={post.id}
-                            >
-                              Publish
-                            </button>
-                          )}
-                          {canSchedule && post.status !== "published" && (
-                            <button
-                              type="button"
-                              class="btn-inline post-schedule-btn"
-                              data-post-id={post.id}
-                            >
-                              Schedule
-                            </button>
-                          )}
-                          {canArchive && post.status === "published" && (
-                            <button
-                              type="button"
-                              class="btn-inline post-archive-btn"
-                              data-post-id={post.id}
-                            >
-                              Archive
-                            </button>
-                          )}
-                          {canRestore && post.status === "archived" && (
+                          {canUpdate &&
+                            !showsBin &&
+                            post.status === "draft" && (
+                              <button
+                                type="button"
+                                class="btn-inline post-submit-btn"
+                                data-post-id={post.id}
+                              >
+                                Submit for review
+                              </button>
+                            )}
+                          {canPublish &&
+                            !showsBin &&
+                            post.status !== "published" && (
+                              <button
+                                type="button"
+                                class="btn-inline post-publish-btn"
+                                data-post-id={post.id}
+                              >
+                                Publish
+                              </button>
+                            )}
+                          {canSchedule &&
+                            !showsBin &&
+                            post.status !== "published" && (
+                              <button
+                                type="button"
+                                class="btn-inline post-schedule-btn"
+                                data-post-id={post.id}
+                              >
+                                Schedule
+                              </button>
+                            )}
+                          {canArchive &&
+                            !showsBin &&
+                            post.status === "published" && (
+                              <button
+                                type="button"
+                                class="btn-inline post-archive-btn"
+                                data-post-id={post.id}
+                              >
+                                Archive
+                              </button>
+                            )}
+                          {/* Restore undoes the BIN, so it belongs to rows in
+                              the bin — not to `status === "archived"`, which is
+                              a different axis and makes the endpoint 404. */}
+                          {canRestore && showsBin && (
                             <button
                               type="button"
                               class="btn-inline post-restore-btn"
@@ -437,7 +497,7 @@ const selectedPost = selectedPostId
                               Restore
                             </button>
                           )}
-                          {canDelete && (
+                          {canDelete && !showsBin && (
                             <button
                               type="button"
                               class="btn-inline btn-inline--danger post-delete-btn"
@@ -447,16 +507,19 @@ const selectedPost = selectedPostId
                               Delete
                             </button>
                           )}
-                          {canPurge && post.status === "archived" && (
-                            <button
-                              type="button"
-                              class="btn-inline btn-inline--danger post-purge-btn"
-                              data-post-id={post.id}
-                              data-post-title={post.title}
-                            >
-                              Purge
-                            </button>
-                          )}
+                          {/* `canPurgePost` accepts archived OR soft-deleted,
+                              so both views can offer it. */}
+                          {canPurge &&
+                            (showsBin || post.status === "archived") && (
+                              <button
+                                type="button"
+                                class="btn-inline btn-inline--danger post-purge-btn"
+                                data-post-id={post.id}
+                                data-post-title={post.title}
+                              >
+                                Purge
+                              </button>
+                            )}
                         </div>
                       </td>
                     )}
