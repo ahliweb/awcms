@@ -45,6 +45,18 @@ export const syncStorageModule = defineModule({
     openApiPath: "openapi/modules/sync-storage.openapi.yaml",
     basePath: "/api/v1/sync"
   },
+  // Gated on `node_management.read`: nodes are the first panel and the thing
+  // an operator opens this page for. The push/pull/object protocol endpoints
+  // have no entry and never will — those are called by a node with an HMAC
+  // signature, not by an administrator with a session.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_sync",
+      path: "/admin/sync",
+      order: 64,
+      requiredPermission: "sync_storage.node_management.read"
+    }
+  ],
   jobs: [
     {
       command: "bun run sync:objects:dispatch",

@@ -132,6 +132,31 @@ takes effect immediately across push/pull/status/objects.
   `sync_storage.object_queue.retry`; audited. It is a nudge to the automatic
   schedule, not a destructive action, so `isHighRiskAction("retry")` is false.
 
+### Admin UI (`/admin/sync`)
+
+`src/pages/admin/sync.astro` (ADR-0051) — the operator console for the three
+surfaces above: the node list with activate/deactivate, the conflict list with
+the three resolutions, and the object queue with retry on `failed` entries.
+All six of this module's permissions are driven from this one page. Reads go
+through `application/sync-directory.ts` inside one `withTenantOrThrow` — the
+"future `/admin/sync` SSR page" that file's own header comment has always
+named.
+
+`fetchSyncConflicts` was added there in the same change and `GET
+/api/v1/sync/conflicts` now calls it too; the query used to be inline in that
+route, which was fine while it was the only reader.
+
+**None of the three mutations sends an `Idempotency-Key`**, because none of the
+endpoints requires one: all three are naturally idempotent state transitions
+rather than requests that do fresh work per call. `tests/admin-sync-page-contract.test.ts`
+pins that in both directions, so an endpoint that later starts requiring a key
+turns the screen's contract red instead of failing silently at runtime.
+
+The HMAC node protocol (`push`/`pull`/`objects`/`status`) has **no controls on
+this page and will not get any** — those authenticate a node by signature, not
+an administrator by session, so a button for them would be a control no browser
+can legitimately use.
+
 ## Dispatcher
 
 `application/object-dispatch.ts` — `dispatchObjectSyncQueue(sql, tenantId,
