@@ -26,6 +26,7 @@ import {
   cancelWorkflowInstance,
   WorkflowRecoveryError
 } from "../../../../../../modules/workflow-approval/application/workflow-recovery";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/workflow-approval/domain/reason-bounds";
 
 const CANCEL_GUARD = {
   moduleKey: "workflow",
@@ -33,7 +34,6 @@ const CANCEL_GUARD = {
   action: "cancel" as const
 };
 const IDEMPOTENCY_SCOPE = "workflow_instance_cancel";
-const MAX_REASON_LENGTH = 500;
 
 type CancelRequestBody = { reason?: unknown };
 

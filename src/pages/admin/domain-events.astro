@@ -1,0 +1,763 @@
+---
+/**
+ * Domain event runtime console — the operator surface of the outbox.
+ *
+ * The module shipped consumers, deliveries, retry/dead-letter and replay with
+ * no screen, so the only way to see why an event never arrived — or to unstick
+ * it — was `curl`. Under ADR-0051 the screen belongs here.
+ *
+ * All five of this module's permissions are driven from this page: the three
+ * read surfaces and the two operator actions.
+ *
+ * ## Reads
+ *
+ * Through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited sequentially — concurrent queries on a single
+ * transaction connection leak it.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. The three mutations post to the guarded endpoints,
+ * and they split three ways on idempotency — which is the interesting part of
+ * this screen and the thing easiest to get wrong:
+ *
+ * - **replay** requires an `Idempotency-Key`. Each call does NEW work (it
+ *   enqueues another delivery attempt), so a replayed request must not become
+ *   a second replay.
+ * - **pause** requires none and takes a reason. Setting `is_paused = true`
+ *   twice has the same end state, so the endpoint deliberately does not demand
+ *   a key; sending one would imply a replay contract it does not have.
+ * - **resume** requires none and takes no body at all.
+ *
+ * ## Gates
+ *
+ * UX-only; `authorizeInTransaction` in the routes is the authority. The trap
+ * here is `consumers.manage`: pause and resume are opposite actions and read
+ * like they should be `consumers.pause`/`consumers.resume`, but ONE permission
+ * covers both and neither of those two is seeded anywhere. Pinned by
+ * `tests/admin-domain-events-page-contract.test.ts`.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listConsumerStates,
+  type DomainEventConsumerView
+} from "../../modules/domain-event-runtime/application/consumer-state-directory";
+import {
+  listDomainEventDeliveries,
+  listDomainEvents,
+  type DomainEventDeliveryView,
+  type DomainEventView
+} from "../../modules/domain-event-runtime/application/domain-event-directory";
+import {
+  MAX_REASON_LENGTH,
+  MIN_REASON_LENGTH
+} from "../../modules/domain-event-runtime/domain/reason-bounds";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canReadEvents = ssr.permissions.has(
+  permissionKey("domain_event_runtime", "events", "read")
+);
+const canReadDeliveries = ssr.permissions.has(
+  permissionKey("domain_event_runtime", "deliveries", "read")
+);
+const canReplay = ssr.permissions.has(
+  permissionKey("domain_event_runtime", "deliveries", "replay")
+);
+const canReadConsumers = ssr.permissions.has(
+  permissionKey("domain_event_runtime", "consumers", "read")
+);
+// One permission covers pause AND resume. `consumers.pause`/`consumers.resume`
+// read better and are seeded nowhere.
+const canManageConsumers = ssr.permissions.has(
+  permissionKey("domain_event_runtime", "consumers", "manage")
+);
+
+const canSeeAnything = canReadEvents || canReadDeliveries || canReadConsumers;
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+/** Mirrors the delivery statuses `awcms_domain_event_deliveries` can hold. */
+const DELIVERY_STATUS_OPTIONS = [
+  "pending",
+  "delivered",
+  "dead_letter"
+] as const;
+
+const deliveryStatusRaw = readParam("deliveryStatus");
+// An unknown status is dropped rather than forwarded — a hand-edited query
+// string must not turn this screen into the endpoint's 400.
+const deliveryStatusFilter = (
+  DELIVERY_STATUS_OPTIONS as readonly string[]
+).includes(deliveryStatusRaw)
+  ? deliveryStatusRaw
+  : "";
+const consumerFilter = readParam("consumer");
+const eventTypeFilter = readParam("eventType");
+const aggregateTypeFilter = readParam("aggregateType");
+
+let consumers: DomainEventConsumerView[] = [];
+let deliveries: DomainEventDeliveryView[] = [];
+let events: DomainEventView[] = [];
+let loadError = false;
+
+if (canSeeAnything) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      if (canReadConsumers) {
+        consumers = await listConsumerStates(tx, ssr.tenantId);
+      }
+
+      if (canReadDeliveries) {
+        deliveries = await listDomainEventDeliveries(tx, ssr.tenantId, {
+          status: deliveryStatusFilter || undefined,
+          consumerName: consumerFilter || undefined,
+          eventType: eventTypeFilter || undefined
+        });
+      }
+
+      if (canReadEvents) {
+        events = await listDomainEvents(tx, ssr.tenantId, {
+          eventType: eventTypeFilter || undefined,
+          aggregateType: aggregateTypeFilter || undefined
+        });
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "there are no stuck deliveries".
+    loadError = true;
+    logAdminPageError(
+      "admin/domain-events.astro: failed to load the event runtime console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+const DELIVERY_VARIANT: Record<string, string> = {
+  pending: "info",
+  delivered: "success",
+  dead_letter: "danger"
+};
+
+function formatTimestamp(value: Date | string | null): string {
+  if (value === null) return "—";
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+const deadLetterTotal = consumers.reduce(
+  (total, consumer) => total + consumer.deadLetterCount,
+  0
+);
+const pendingTotal = consumers.reduce(
+  (total, consumer) => total + consumer.pendingCount,
+  0
+);
+const pausedCount = consumers.filter((consumer) => consumer.isPaused).length;
+
+const consumerColumns = canManageConsumers ? 6 : 5;
+const deliveryColumns = canReplay ? 7 : 6;
+---
+
+<AdminLayout title="Domain events">
+  <header class="page-header fade-in-up">
+    <h1 id="domain-events-heading">Domain events</h1>
+    <p class="page-description">
+      The transactional outbox and its consumers. Events are recorded in the
+      same transaction as the change that caused them; delivery is what happens
+      afterwards, on the <code>domain-events:dispatch</code> schedule. A dead-lettered
+      delivery has exhausted its attempts and will not be retried until it is replayed.
+    </p>
+  </header>
+
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="domain-events-denied">
+        You do not have permission to view the domain event runtime.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="domain-events-error">
+        The event runtime console could not be loaded right now. This is a
+        problem reading it, not an idle runtime — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="domain-events-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canReadConsumers && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="consumers-title"
+        id="domain-events-consumers"
+      >
+        <h2 class="admin-section-title" id="consumers-title">
+          Consumers
+          <span class="count-pill">{consumers.length}</span>
+        </h2>
+
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">Pending deliveries</span>
+            <span class="stat-value">{pendingTotal}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Dead-lettered</span>
+            <span class="stat-value">{deadLetterTotal}</span>
+            {deadLetterTotal > 0 && (
+              <span class="stat-hint">
+                Replay below once the cause is fixed
+              </span>
+            )}
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Paused consumers</span>
+            <span class="stat-value">{pausedCount}</span>
+            {pausedCount > 0 && (
+              <span class="stat-hint">A paused consumer accrues backlog</span>
+            )}
+          </div>
+        </div>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="consumers-table">
+            <caption class="sr-only">
+              Registered domain event consumers and their backlog.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Consumer</th>
+                <th scope="col">Events</th>
+                <th scope="col">State</th>
+                <th scope="col">Pending</th>
+                <th scope="col">Dead-lettered</th>
+                {canManageConsumers && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {consumers.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={consumerColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⇉
+                      </span>
+                      <span class="empty-state-title">No consumers</span>
+                      <span class="empty-state-text">
+                        Consumers are a static, reviewed source-code registry —
+                        never registered at runtime.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                consumers.map((consumer) => (
+                  <tr data-consumer-row={consumer.name}>
+                    <td data-label="Consumer">
+                      <span class="cell-code">{consumer.name}</span>
+                      <span class="cell-muted"> · {consumer.description}</span>
+                    </td>
+                    <td data-label="Events">
+                      <span class="cell-code">
+                        {consumer.eventTypes.join(", ")}
+                      </span>
+                    </td>
+                    <td data-label="State">
+                      <span
+                        class="status-badge"
+                        data-variant={consumer.isPaused ? "warning" : "success"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {consumer.isPaused ? "paused" : "running"}
+                      </span>
+                      {consumer.isPaused && (
+                        <span class="cell-muted">
+                          {" "}
+                          since {formatTimestamp(consumer.pausedAt)}
+                          {consumer.pausedReason && (
+                            <span set:text={` · ${consumer.pausedReason}`} />
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Pending">{consumer.pendingCount}</td>
+                    <td data-label="Dead-lettered">
+                      {consumer.deadLetterCount}
+                    </td>
+                    {canManageConsumers && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {consumer.isPaused ? (
+                            <button
+                              type="button"
+                              class="btn-inline consumer-resume-btn"
+                              data-consumer-name={consumer.name}
+                            >
+                              Resume
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger consumer-pause-btn"
+                              data-consumer-name={consumer.name}
+                            >
+                              Pause
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    (canReadDeliveries || canReadEvents) && !loadError && (
+      <form
+        method="get"
+        class="admin-toolbar fade-in-up"
+        id="event-filter-form"
+      >
+        {canReadDeliveries && (
+          <>
+            <label for="filter-delivery-status">Delivery status</label>
+            <select id="filter-delivery-status" name="deliveryStatus">
+              <option value="" selected={deliveryStatusFilter === ""}>
+                Any status
+              </option>
+              {DELIVERY_STATUS_OPTIONS.map((value) => (
+                <option value={value} selected={deliveryStatusFilter === value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+
+            <label for="filter-consumer">Consumer</label>
+            <input
+              id="filter-consumer"
+              name="consumer"
+              type="text"
+              value={consumerFilter}
+              autocomplete="off"
+            />
+          </>
+        )}
+
+        <label for="filter-event-type">Event type</label>
+        <input
+          id="filter-event-type"
+          name="eventType"
+          type="text"
+          value={eventTypeFilter}
+          autocomplete="off"
+          placeholder="e.g. awcms.blog.post.published"
+        />
+
+        {canReadEvents && (
+          <>
+            <label for="filter-aggregate-type">Aggregate type</label>
+            <input
+              id="filter-aggregate-type"
+              name="aggregateType"
+              type="text"
+              value={aggregateTypeFilter}
+              autocomplete="off"
+            />
+          </>
+        )}
+
+        <button type="submit">Apply filters</button>
+      </form>
+    )
+  }
+
+  {
+    canReadDeliveries && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="deliveries-title"
+        id="domain-events-deliveries"
+      >
+        <h2 class="admin-section-title" id="deliveries-title">
+          Deliveries
+          <span class="count-pill">{deliveries.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="deliveries-table">
+            <caption class="sr-only">
+              Delivery attempts, newest first, capped at 100 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col">Consumer</th>
+                <th scope="col">Status</th>
+                <th scope="col">Attempts</th>
+                <th scope="col">Next attempt</th>
+                <th scope="col">Last error</th>
+                {canReplay && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {deliveries.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={deliveryColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span class="empty-state-title">No deliveries match</span>
+                      <span class="empty-state-text">
+                        Widen the filters above, or nothing has been dispatched
+                        yet.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                deliveries.map((delivery) => (
+                  <tr data-delivery-row={delivery.id}>
+                    <td data-label="Event">
+                      <span class="cell-code">{delivery.eventType}</span>
+                      <span class="cell-muted"> v{delivery.eventVersion}</span>
+                    </td>
+                    <td data-label="Consumer">
+                      <span class="cell-code">{delivery.consumerName}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          DELIVERY_VARIANT[delivery.status] ?? "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {delivery.status}
+                      </span>
+                      {delivery.replayOfDeliveryId && (
+                        <span class="cell-muted"> · replay</span>
+                      )}
+                    </td>
+                    <td data-label="Attempts">
+                      {delivery.attemptCount}/{delivery.maxAttempts}
+                    </td>
+                    <td data-label="Next attempt">
+                      <span class="cell-muted">
+                        {formatTimestamp(delivery.nextAttemptAt)}
+                      </span>
+                    </td>
+                    <td data-label="Last error">
+                      {/* Already redacted at write time by
+                          `sanitizeErrorForLog`/`redactSecretsInText`; rendered
+                          via `set:text` so it is escaped, never parsed. */}
+                      {delivery.lastErrorCode ? (
+                        <details>
+                          <summary>
+                            <span class="cell-code">
+                              {delivery.lastErrorCode}
+                            </span>
+                          </summary>
+                          <span
+                            class="cell-muted"
+                            set:text={
+                              delivery.deadLetterReason ??
+                              delivery.lastErrorMessage ??
+                              ""
+                            }
+                          />
+                        </details>
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    {canReplay && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {delivery.status === "dead_letter" ? (
+                            <button
+                              type="button"
+                              class="btn-inline delivery-replay-btn"
+                              data-delivery-id={delivery.id}
+                            >
+                              Replay
+                            </button>
+                          ) : (
+                            <span class="cell-muted">—</span>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadEvents && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="events-title"
+        id="domain-events-events"
+      >
+        <h2 class="admin-section-title" id="events-title">
+          Events
+          <span class="count-pill">{events.length}</span>
+        </h2>
+        <p class="page-description">
+          The outbox itself, newest first. These rows are append-only evidence
+          of what happened — they are never edited, and replaying a delivery
+          does not create a new one.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="events-table">
+            <caption class="sr-only">
+              Recorded domain events, newest first, capped at 100 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Seq</th>
+                <th scope="col">Type</th>
+                <th scope="col">Aggregate</th>
+                <th scope="col">Producer</th>
+                <th scope="col">Occurred</th>
+                <th scope="col">Payload</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">No events match</span>
+                      <span class="empty-state-text">
+                        Widen the filters above, or nothing has published an
+                        event yet.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                events.map((event) => (
+                  <tr>
+                    <td data-label="Seq">
+                      <span class="cell-code">{event.eventSequence}</span>
+                    </td>
+                    <td data-label="Type">
+                      <span class="cell-code">{event.eventType}</span>
+                      <span class="cell-muted"> v{event.eventVersion}</span>
+                    </td>
+                    <td data-label="Aggregate">
+                      <span class="cell-code">{event.aggregateType}</span>
+                      <span class="cell-muted"> · {event.aggregateId}</span>
+                    </td>
+                    <td data-label="Producer">
+                      <span class="cell-code">{event.producerModule}</span>
+                    </td>
+                    <td data-label="Occurred">
+                      <span class="cell-muted">
+                        {formatTimestamp(event.occurredAt)}
+                      </span>
+                    </td>
+                    <td data-label="Payload">
+                      <details>
+                        <summary>Payload</summary>
+                        {/* `set:text` rather than a child expression: <pre>
+                            preserves whitespace and prettier reindents .astro
+                            children, so an expression written between the tags
+                            comes back wrapped in template indentation that
+                            <pre> then renders. */}
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(
+                            event.payload ?? {},
+                            null,
+                            2
+                          )}
+                        />
+                      </details>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("domain-events-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function askReason(prompt: string): string | null {
+    const reason = window.prompt(prompt);
+    if (reason === null) return null;
+    const trimmed = reason.trim();
+    if (trimmed === "") {
+      showActionError(
+        "A reason is required — it is recorded in the audit trail."
+      );
+      return null;
+    }
+    return trimmed;
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".consumer-pause-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const name = button.dataset.consumerName;
+        if (!name) return;
+
+        if (
+          !window.confirm(
+            `Pause ${name}? Its events keep being recorded and keep accruing as backlog — pausing stops delivery, not production.`
+          )
+        ) {
+          return;
+        }
+
+        const reason = askReason("Reason for pausing this consumer:");
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Pausing…");
+
+        // No `Idempotency-Key`: setting `is_paused = true` twice has the same
+        // end state, so the endpoint requires none, and sending one would
+        // imply a replay contract it does not have.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/domain-events/consumers/${encodeURIComponent(name)}/pause`,
+          { reason }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError("Could not pause the consumer. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".consumer-resume-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const name = button.dataset.consumerName;
+        if (!name) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Resuming…");
+
+        // Bodyless AND keyless — the endpoint takes no request body at all,
+        // and resuming twice has the same end state.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/domain-events/consumers/${encodeURIComponent(name)}/resume`
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not resume the consumer. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".delivery-replay-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.deliveryId;
+        if (!id) return;
+
+        const reason = askReason(
+          "Reason for replaying this delivery (recorded in the audit trail):"
+        );
+        if (reason === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Replaying…");
+
+        // Replay is the one action here that requires an `Idempotency-Key`:
+        // each call does NEW work (it enqueues another attempt), so a
+        // retransmitted request must not become a second replay. A fresh value
+        // per click is what makes a deliberate second replay actually run.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/domain-events/deliveries/${id}/replay`,
+          { reason },
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not replay the delivery. Please try again.");
+        unlock();
+      });
+    });
+</script>

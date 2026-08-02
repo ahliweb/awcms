@@ -26,6 +26,7 @@ import {
   reassignWorkflowTask,
   WorkflowRecoveryError
 } from "../../../../../../modules/workflow-approval/application/workflow-recovery";
+import { MAX_REASON_LENGTH } from "../../../../../../modules/workflow-approval/domain/reason-bounds";
 
 const REASSIGN_GUARD = {
   moduleKey: "workflow",
@@ -35,7 +36,6 @@ const REASSIGN_GUARD = {
 const IDEMPOTENCY_SCOPE = "workflow_task_reassign";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_REASON_LENGTH = 500;
 
 type ReassignRequestBody = { toTenantUserId?: unknown; reason?: unknown };
 

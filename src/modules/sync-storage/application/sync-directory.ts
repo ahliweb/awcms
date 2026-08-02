@@ -205,3 +205,85 @@ export async function fetchObjectQueueEntries(
     nextCursor
   };
 }
+
+export type SyncConflictStatus = "open" | "resolved";
+
+export type SyncConflictSummary = {
+  id: string;
+  nodeId: string;
+  batchId: string;
+  aggregateType: string;
+  aggregateId: string;
+  conflictType: string;
+  payload: unknown;
+  status: string;
+  resolution: string | null;
+  resolutionNote: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+};
+
+type SyncConflictRow = {
+  id: string;
+  node_id: string;
+  batch_id: string;
+  aggregate_type: string;
+  aggregate_id: string;
+  conflict_type: string;
+  payload_json: unknown;
+  status: string;
+  resolution: string | null;
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: Date | null;
+  created_at: Date;
+};
+
+const CONFLICT_LIMIT = 50;
+
+/**
+ * Newest-first conflicts, optionally narrowed to `open`/`resolved`.
+ *
+ * This SQL used to live inline in `GET /api/v1/sync/conflicts`, which was
+ * fine while that route was the only reader. `/admin/sync` is the second one,
+ * and a screen that re-wrote the query would be free to drift from the
+ * endpoint it is supposed to mirror — the drift `sync-directory.ts`'s own
+ * header comment already anticipated for nodes and the object queue.
+ *
+ * `LIMIT 50` with no cursor, matching the endpoint's existing bound: this is
+ * an operator triage list, not a feed. A tenant with more than 50 open
+ * conflicts has a problem paging cannot help with.
+ */
+export async function fetchSyncConflicts(
+  tx: Bun.SQL,
+  tenantId: string,
+  statusFilter?: SyncConflictStatus
+): Promise<SyncConflictSummary[]> {
+  const rows = (await tx`
+    SELECT id, node_id, batch_id, aggregate_type, aggregate_id, conflict_type,
+           payload_json, status, resolution, resolution_note, resolved_by,
+           resolved_at, created_at
+    FROM awcms_sync_conflicts
+    WHERE tenant_id = ${tenantId}
+      AND (${statusFilter ?? null}::text IS NULL OR status = ${statusFilter ?? null})
+    ORDER BY created_at DESC
+    LIMIT ${CONFLICT_LIMIT}
+  `) as SyncConflictRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    nodeId: row.node_id,
+    batchId: row.batch_id,
+    aggregateType: row.aggregate_type,
+    aggregateId: row.aggregate_id,
+    conflictType: row.conflict_type,
+    payload: row.payload_json,
+    status: row.status,
+    resolution: row.resolution,
+    resolutionNote: row.resolution_note,
+    resolvedBy: row.resolved_by,
+    resolvedAt: row.resolved_at?.toISOString() ?? null,
+    createdAt: row.created_at.toISOString()
+  }));
+}

@@ -1,0 +1,792 @@
+---
+/**
+ * Sync & storage console — the operator surface of offline/LAN replication.
+ *
+ * The module shipped node management, conflict resolution and the object
+ * upload queue with no screen, so an operator could see that sync was
+ * unhealthy on the dashboard and had no way to act on it except `curl`.
+ * `sync-directory.ts`'s own header comment has named "the future `/admin/sync`
+ * SSR page" since it was written. Under ADR-0051 this is that page.
+ *
+ * All six of this module's permissions are driven here.
+ *
+ * ## Reads
+ *
+ * Through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited sequentially — concurrent queries on a single
+ * transaction connection leak it.
+ *
+ * `fetchSyncConflicts` is new, and `GET /api/v1/sync/conflicts` now calls it
+ * too. The query used to be inline in that route, which was fine while it was
+ * the only reader; a screen that re-wrote it would be free to drift from the
+ * endpoint it is meant to mirror.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. The three mutations post to the guarded endpoints
+ * and NONE of them carries an `Idempotency-Key`, because none of them requires
+ * one — every one is a state transition that is naturally idempotent
+ * (`status = 'active'`, `status = 'resolved'`, `status = 'pending'`) rather
+ * than a request that does fresh work each time. Sending a key would imply a
+ * replay contract these endpoints do not have.
+ *
+ * ## Gates
+ *
+ * UX-only; `authorizeInTransaction` in the routes is the authority. The trap
+ * here is `conflict_resolution.approve`: resolving a conflict reads like
+ * `conflict_resolution.resolve` or `.update`, and neither is seeded. Pinned by
+ * `tests/admin-sync-page-contract.test.ts`.
+ *
+ * `POST /sync/push`, `/sync/pull`, `/sync/objects` and the two status
+ * endpoints are deliberately absent: those are the NODE's protocol, called by
+ * a machine with an HMAC signature (`sync-storage` §HMAC), not by an
+ * administrator with a session. Rendering a button for them would offer a
+ * control no browser can legitimately use.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import {
+  fetchObjectQueueEntries,
+  fetchSyncConflicts,
+  fetchSyncNodes,
+  type ObjectQueueEntry,
+  type SyncConflictSummary,
+  type SyncNodeSummary
+} from "../../modules/sync-storage/application/sync-directory";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canReadNodes = ssr.permissions.has(
+  permissionKey("sync_storage", "node_management", "read")
+);
+const canUpdateNodes = ssr.permissions.has(
+  permissionKey("sync_storage", "node_management", "update")
+);
+const canReadConflicts = ssr.permissions.has(
+  permissionKey("sync_storage", "conflict_resolution", "read")
+);
+// Resolving is `approve`, not a `resolve`/`update` that reads better and is
+// seeded nowhere.
+const canResolveConflicts = ssr.permissions.has(
+  permissionKey("sync_storage", "conflict_resolution", "approve")
+);
+const canReadQueue = ssr.permissions.has(
+  permissionKey("sync_storage", "object_queue", "read")
+);
+const canRetryQueue = ssr.permissions.has(
+  permissionKey("sync_storage", "object_queue", "retry")
+);
+
+const canSeeAnything = canReadNodes || canReadConflicts || canReadQueue;
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const CONFLICT_STATUS_OPTIONS = ["open", "resolved"] as const;
+const QUEUE_STATUS_OPTIONS = ["pending", "sent", "failed"] as const;
+
+const conflictStatusRaw = readParam("conflictStatus");
+const conflictStatusFilter = (
+  CONFLICT_STATUS_OPTIONS as readonly string[]
+).includes(conflictStatusRaw)
+  ? (conflictStatusRaw as (typeof CONFLICT_STATUS_OPTIONS)[number])
+  : undefined;
+
+const queueStatusRaw = readParam("queueStatus");
+const queueStatusFilter = (QUEUE_STATUS_OPTIONS as readonly string[]).includes(
+  queueStatusRaw
+)
+  ? (queueStatusRaw as (typeof QUEUE_STATUS_OPTIONS)[number])
+  : undefined;
+
+const cursorParam = readParam("cursor");
+// A malformed cursor is dropped rather than forwarded — a hand-edited query
+// string must not turn this screen into an error page.
+const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
+
+let nodes: SyncNodeSummary[] = [];
+let conflicts: SyncConflictSummary[] = [];
+let queue: ObjectQueueEntry[] = [];
+let queueNextCursor: string | null = null;
+let loadError = false;
+
+if (canSeeAnything) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      if (canReadNodes) {
+        nodes = await fetchSyncNodes(tx, ssr.tenantId);
+      }
+
+      if (canReadConflicts) {
+        conflicts = await fetchSyncConflicts(
+          tx,
+          ssr.tenantId,
+          conflictStatusFilter
+        );
+      }
+
+      if (canReadQueue) {
+        const page = await fetchObjectQueueEntries(
+          tx,
+          ssr.tenantId,
+          queueStatusFilter,
+          cursor ?? undefined
+        );
+        queue = page.objects;
+        queueNextCursor = page.nextCursor;
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "there are no conflicts".
+    loadError = true;
+    logAdminPageError(
+      "admin/sync.astro: failed to load the sync console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+/** Mirrors `VALID_RESOLUTIONS` in `sync-storage/domain/sync-validation.ts`. */
+const RESOLUTION_OPTIONS = [
+  "accept_incoming",
+  "keep_existing",
+  "manual"
+] as const;
+
+const QUEUE_VARIANT: Record<string, string> = {
+  pending: "info",
+  sent: "success",
+  failed: "danger"
+};
+
+function formatTimestamp(value: string | null): string {
+  return value ?? "—";
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Rebuilds the current query string with one key replaced — keeps filters across paging. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/sync?${query}` : "/admin/sync";
+}
+
+const activeNodeCount = nodes.filter((node) => node.status === "active").length;
+const openConflictCount = conflicts.filter(
+  (conflict) => conflict.status === "open"
+).length;
+const failedQueueCount = queue.filter(
+  (entry) => entry.status === "failed"
+).length;
+
+const nodeColumns = canUpdateNodes ? 6 : 5;
+const conflictColumns = canResolveConflicts ? 7 : 6;
+const queueColumns = canRetryQueue ? 7 : 6;
+---
+
+<AdminLayout title="Sync & storage">
+  <header class="page-header fade-in-up">
+    <h1 id="sync-heading">Sync &amp; storage</h1>
+    <p class="page-description">
+      Offline/LAN replication: the nodes that push and pull, the conflicts that
+      need a human decision, and the object upload queue. Nodes authenticate
+      with an HMAC signature, not a session — this screen manages them, it never
+      performs a sync.
+    </p>
+  </header>
+
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="sync-denied">
+        You do not have permission to view sync and storage.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="sync-error">
+        The sync console could not be loaded right now. This is a problem
+        reading it, not a healthy silence — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="sync-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <section class="admin-section fade-in-up" aria-label="Sync summary">
+        <div class="stat-grid stagger-children">
+          {canReadNodes && (
+            <div class="stat-card">
+              <span class="stat-label">Active nodes</span>
+              <span class="stat-value">
+                {activeNodeCount}/{nodes.length}
+              </span>
+            </div>
+          )}
+          {canReadConflicts && (
+            <div class="stat-card">
+              <span class="stat-label">Open conflicts</span>
+              <span class="stat-value">{openConflictCount}</span>
+              {openConflictCount > 0 && (
+                <span class="stat-hint">Each needs a human decision</span>
+              )}
+            </div>
+          )}
+          {canReadQueue && (
+            <div class="stat-card">
+              <span class="stat-label">Failed objects (this page)</span>
+              <span class="stat-value">{failedQueueCount}</span>
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadNodes && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="nodes-title"
+        id="sync-nodes"
+      >
+        <h2 class="admin-section-title" id="nodes-title">
+          Nodes
+          <span class="count-pill">{nodes.length}</span>
+        </h2>
+        <p class="page-description">
+          Deactivating a node stops it syncing. Its queued objects and past
+          conflicts are kept — deactivation is not deletion.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="sync-nodes-table">
+            <caption class="sr-only">Registered sync nodes.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Node</th>
+                <th scope="col">Status</th>
+                <th scope="col">Last push</th>
+                <th scope="col">Last pull</th>
+                <th scope="col">Pull sequence</th>
+                {canUpdateNodes && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={nodeColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⇅
+                      </span>
+                      <span class="empty-state-title">No sync nodes</span>
+                      <span class="empty-state-text">
+                        A node registers itself on its first authenticated push,
+                        inactive until an administrator activates it.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                nodes.map((node) => (
+                  <tr data-node-row={node.nodeId}>
+                    <td data-label="Node">
+                      <span class="cell-code">{node.nodeCode}</span>
+                      <span class="cell-muted"> · {node.nodeName}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          node.status === "active" ? "success" : "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {node.status}
+                      </span>
+                    </td>
+                    <td data-label="Last push">
+                      <span class="cell-muted">
+                        {formatTimestamp(node.lastPushedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Last pull">
+                      <span class="cell-muted">
+                        {formatTimestamp(node.lastPulledAt)}
+                      </span>
+                    </td>
+                    <td data-label="Pull sequence">{node.lastPullSequence}</td>
+                    {canUpdateNodes && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <button
+                            type="button"
+                            class={
+                              node.status === "active"
+                                ? "btn-inline btn-inline--danger node-status-btn"
+                                : "btn-inline node-status-btn"
+                            }
+                            data-node-id={node.nodeId}
+                            data-node-code={node.nodeCode}
+                            data-next-status={
+                              node.status === "active" ? "inactive" : "active"
+                            }
+                          >
+                            {node.status === "active"
+                              ? "Deactivate"
+                              : "Activate"}
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadConflicts && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="conflicts-title"
+        id="sync-conflicts"
+      >
+        <h2 class="admin-section-title" id="conflicts-title">
+          Conflicts
+          <span class="count-pill">{conflicts.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="conflict-filter-form">
+          <label for="filter-conflict-status">Status</label>
+          <select id="filter-conflict-status" name="conflictStatus">
+            <option value="" selected={conflictStatusFilter === undefined}>
+              Any status
+            </option>
+            {CONFLICT_STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={conflictStatusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">Apply</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="sync-conflicts-table">
+            <caption class="sr-only">
+              Sync conflicts, newest first, capped at 50 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Aggregate</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Resolution</th>
+                <th scope="col">Raised</th>
+                <th scope="col">Payload</th>
+                {canResolveConflicts && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {conflicts.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={conflictColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span class="empty-state-title">No conflicts</span>
+                      <span class="empty-state-text">
+                        Nothing is waiting on a human decision.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                conflicts.map((conflict) => (
+                  <tr data-conflict-row={conflict.id}>
+                    <td data-label="Aggregate">
+                      <span class="cell-code">{conflict.aggregateType}</span>
+                      <span class="cell-muted"> · {conflict.aggregateId}</span>
+                    </td>
+                    <td data-label="Type">
+                      <span class="cell-code">{conflict.conflictType}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          conflict.status === "open" ? "warning" : "success"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {conflict.status}
+                      </span>
+                    </td>
+                    <td data-label="Resolution">
+                      <span class="cell-code">
+                        {conflict.resolution ?? "—"}
+                      </span>
+                      {conflict.resolutionNote && (
+                        <span
+                          class="cell-muted"
+                          set:text={` · ${conflict.resolutionNote}`}
+                        />
+                      )}
+                    </td>
+                    <td data-label="Raised">
+                      <span class="cell-muted">{conflict.createdAt}</span>
+                    </td>
+                    <td data-label="Payload">
+                      <details>
+                        <summary>Payload</summary>
+                        {/* `set:text` rather than a child expression: <pre>
+                            preserves whitespace and prettier reindents .astro
+                            children, so an expression written between the tags
+                            comes back wrapped in template indentation that
+                            <pre> then renders. */}
+                        <pre
+                          class="cell-code"
+                          set:text={JSON.stringify(
+                            conflict.payload ?? {},
+                            null,
+                            2
+                          )}
+                        />
+                      </details>
+                    </td>
+                    {canResolveConflicts && (
+                      <td data-label="Actions">
+                        {conflict.status === "open" ? (
+                          <div class="row-actions">
+                            {RESOLUTION_OPTIONS.map((resolution) => (
+                              <button
+                                type="button"
+                                class="btn-inline conflict-resolve-btn"
+                                data-conflict-id={conflict.id}
+                                data-resolution={resolution}
+                              >
+                                {resolution.replace("_", " ")}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <span class="cell-muted">resolved</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadQueue && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="queue-title"
+        id="sync-object-queue"
+      >
+        <h2 class="admin-section-title" id="queue-title">
+          Object queue
+          <span class="count-pill">{queue.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="queue-filter-form">
+          <label for="filter-queue-status">Status</label>
+          <select id="filter-queue-status" name="queueStatus">
+            <option value="" selected={queueStatusFilter === undefined}>
+              Any status
+            </option>
+            {QUEUE_STATUS_OPTIONS.map((value) => (
+              <option value={value} selected={queueStatusFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">Apply</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="sync-queue-table">
+            <caption class="sr-only">
+              Object upload queue, newest first, 200 per page.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Object</th>
+                <th scope="col">Node</th>
+                <th scope="col">Status</th>
+                <th scope="col">Retries</th>
+                <th scope="col">Next retry</th>
+                <th scope="col">Last error</th>
+                {canRetryQueue && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {queue.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={queueColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">Queue is empty</span>
+                      <span class="empty-state-text">
+                        Nothing is waiting to upload under this filter.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                queue.map((entry) => (
+                  <tr data-queue-row={entry.objectQueueId}>
+                    <td data-label="Object">
+                      <span class="cell-code">{entry.objectKey}</span>
+                      <span class="cell-muted">
+                        {" "}
+                        · {formatBytes(entry.byteSize)}
+                      </span>
+                    </td>
+                    <td data-label="Node">
+                      <span class="cell-code">{entry.nodeCode}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={QUEUE_VARIANT[entry.status] ?? "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td data-label="Retries">{entry.retryCount}</td>
+                    <td data-label="Next retry">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.nextRetryAt)}
+                      </span>
+                    </td>
+                    <td data-label="Last error">
+                      {/* Escaped via `set:text`, never parsed. */}
+                      <span
+                        class="cell-muted"
+                        set:text={entry.lastError ?? "—"}
+                      />
+                    </td>
+                    {canRetryQueue && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {entry.status === "failed" ? (
+                            <button
+                              type="button"
+                              class="btn-inline queue-retry-btn"
+                              data-queue-id={entry.objectQueueId}
+                            >
+                              Retry
+                            </button>
+                          ) : (
+                            <span class="cell-muted">—</span>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {queueNextCursor && (
+          <div class="admin-toolbar">
+            {/* Keyset, not offset: the cursor carries full-precision
+                `created_at` TEXT, so a page boundary cannot skip rows sharing
+                a millisecond the way a re-parsed `Date` would. */}
+            <a class="quick-link" href={linkWith({ cursor: queueNextCursor })}>
+              Next page
+              <span class="quick-link-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          </div>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("sync-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".node-status-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const nodeId = button.dataset.nodeId;
+        const nextStatus = button.dataset.nextStatus;
+        if (!nodeId || !nextStatus) return;
+        const code = button.dataset.nodeCode ?? "this node";
+
+        if (
+          nextStatus === "inactive" &&
+          !window.confirm(
+            `Deactivate ${code}? It stops syncing immediately. Its queued objects and past conflicts are kept.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(
+          button,
+          nextStatus === "active" ? "Activating…" : "Deactivating…"
+        );
+
+        // No `Idempotency-Key`: this endpoint requires none, because setting a
+        // status to the value it already has is the same end state rather than
+        // fresh work.
+        const result = await sendJson("PATCH", `/api/v1/sync/nodes/${nodeId}`, {
+          status: nextStatus
+        });
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError("Could not update the node. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".conflict-resolve-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const conflictId = button.dataset.conflictId;
+        const resolution = button.dataset.resolution;
+        if (!conflictId || !resolution) return;
+
+        // Resolving is a decision about which version of the data wins, and it
+        // cannot be undone from this screen — confirm, then capture why.
+        if (
+          !window.confirm(
+            `Resolve this conflict as "${resolution}"? This decides which version of the data stands and cannot be undone here.`
+          )
+        ) {
+          return;
+        }
+
+        const note = window.prompt(
+          "Note for the resolution (optional — recorded with it):"
+        );
+        if (note === null) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Resolving…");
+
+        // `note` is optional on this endpoint, and an empty string is not the
+        // same as absent — omit it rather than sending "".
+        const body: Record<string, unknown> = { resolution };
+        if (note.trim() !== "") body.note = note.trim();
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/sync/conflicts/${conflictId}/resolve`,
+          body
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not resolve the conflict. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".queue-retry-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.queueId;
+        if (!id) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Retrying…");
+
+        // Bodyless and keyless: the endpoint takes no request body, and
+        // returning a failed entry to `pending` twice has the same end state.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/sync/object-queue/${id}/retry`
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not requeue the object. Please try again.");
+        unlock();
+      });
+    });
+</script>
