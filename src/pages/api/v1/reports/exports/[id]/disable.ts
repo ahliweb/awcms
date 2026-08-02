@@ -18,6 +18,10 @@ import {
 } from "../../../../../../modules/_shared/idempotency";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import { disableScheduledExport } from "../../../../../../modules/reporting/application/scheduled-export-store";
+import {
+  MAX_REASON_LENGTH,
+  MIN_REASON_LENGTH
+} from "../../../../../../modules/reporting/domain/operator-input-bounds";
 
 const IDEMPOTENCY_SCOPE = "reporting_scheduled_export_disable";
 
@@ -55,8 +59,12 @@ export const POST: APIRoute = async ({ request, cookies, locals, params }) => {
   }
 
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-  if (reason.length < 1 || reason.length > 500) {
-    return fail(400, "VALIDATION_ERROR", "reason must be 1-500 characters.");
+  if (reason.length < MIN_REASON_LENGTH || reason.length > MAX_REASON_LENGTH) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      `reason must be ${MIN_REASON_LENGTH}-${MAX_REASON_LENGTH} characters.`
+    );
   }
 
   const requestHash = computeRequestHash({ ...body, id, action: "disable" });

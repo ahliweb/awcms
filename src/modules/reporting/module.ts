@@ -60,6 +60,20 @@ export const reportingModule = defineModule({
     openApiPath: "openapi/modules/reporting.openapi.yaml",
     basePath: "/api/v1/reports"
   },
+  // `/admin` (a CORE_NAV_ENTRIES item, owned by no module) renders four of
+  // this module's five dashboard views. This entry is for the surface that
+  // had no page at all: projection freshness/rebuild/reconciliation,
+  // scheduled exports, and the fifth view, email queue health. Gated on
+  // `projections.read` rather than `dashboard.read` — that is the permission
+  // the largest part of the screen actually needs.
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_reporting",
+      path: "/admin/reporting",
+      order: 76,
+      requiredPermission: "reporting.projections.read"
+    }
+  ],
   permissions: [
     {
       activityCode: "dashboard",
