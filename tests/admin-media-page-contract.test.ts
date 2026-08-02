@@ -304,17 +304,22 @@ describe("/admin/media sidebar entry", () => {
 });
 
 describe("ADR-0021 criterion 1", () => {
-  test("no active module is left without an admin screen", () => {
+  test("no active module is left without an admin screen — ZERO exceptions", () => {
     const withoutScreen = listModules()
       .filter((module) => module.status === "active")
       .filter((module) => (module.navigation ?? []).length === 0)
       .map((module) => module.key);
 
-    // `media_library` was the last one. `idn_admin_regions` is deliberate and
-    // documented (ADR-0052 moved its lifecycle to operator jobs), so if it is
-    // the only survivor this criterion is met as written.
-    expect(withoutScreen.filter((key) => key !== "idn_admin_regions")).toEqual(
-      []
-    );
+    // `media_library` was the last one, and there is no carve-out. An earlier
+    // draft of this test excused `idn_admin_regions` as "deliberately
+    // screenless" — a claim `docs/PROJECT_STATE.md` also carried and PR #345's
+    // body repeated. It was stale: `/admin/idn-regions` landed in #332.
+    // ADR-0052 moved that module's dataset LIFECYCLE to operator jobs, not the
+    // whole module, and the two read permissions it kept are exactly what that
+    // screen drives.
+    //
+    // The excuse mattered in the wrong direction too: with it, `idn_admin_regions`
+    // could have LOST its screen and this test would still have passed.
+    expect(withoutScreen).toEqual([]);
   });
 });
