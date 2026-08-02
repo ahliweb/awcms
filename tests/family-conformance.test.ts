@@ -16,7 +16,8 @@ import {
   FAMILY_CONTRACT_VERSION,
   MANIFEST_SCHEMA_VERSION,
   validateFamilyManifestShape,
-  type FamilyCompatibilityManifest
+  type FamilyCompatibilityManifest,
+  type IntentionalDivergence
 } from "../src/modules/_shared/family-contract";
 import { computeRequestHash } from "../src/modules/_shared/idempotency";
 import {
@@ -55,6 +56,39 @@ function loadValidManifest(): FamilyCompatibilityManifest {
 
 function failedChecks(checks: EvidenceCheck[]): EvidenceCheck[] {
   return checks.filter((check) => check.status === "fail");
+}
+
+/**
+ * A synthetic, VALID divergence entry.
+ *
+ * The mutation tests below used to take `intentionalDivergences[0]` from the
+ * real manifest. ADR-0055 emptied that list — awcms-mini is an archive, so a
+ * standing obligation to re-review differences from it had no answer that could
+ * change — and an empty list left these tests with nothing to mutate.
+ *
+ * Deleting them would have been the wrong read. The validator still has to
+ * refuse a malformed or expired divergence the day a real one is declared
+ * again (against awcms-astro's contract, say). So the fixture is synthesised
+ * here instead: the SHIPPED manifest declaring none is exactly why the
+ * validator's teeth must be tested independently of it.
+ */
+function syntheticDivergence(): IntentionalDivergence {
+  return {
+    id: "synthetic-divergence-for-tests",
+    summary: "A deliberately valid entry used only to mutate.",
+    reason: "Exercises the validator without depending on the shipped list.",
+    owner: "@ahliweb",
+    // Comfortably after NOW, so only the mutation below makes it expire.
+    reviewDate: "2099-01-01",
+    adr: "0055-development-confined-to-awcms-and-awcms-astro.md"
+  };
+}
+
+/** The shipped manifest, plus one valid divergence to mutate. */
+function manifestWithDivergence() {
+  const manifest = structuredClone(loadValidManifest());
+  manifest.intentionalDivergences = [syntheticDivergence()];
+  return manifest;
 }
 
 describe("family conformance — committed manifest is valid and matches source", () => {
@@ -146,7 +180,7 @@ describe("family conformance — schema mutations turn the gate RED", () => {
   });
 
   test("a missing ADR for a divergence fails a check", () => {
-    const manifest = loadValidManifest();
+    const manifest = manifestWithDivergence();
     const actuals = { ...gatherActuals(NOW), adrExists: () => false };
     const checks = collectFamilyConformanceChecks(manifest, actuals);
     expect(
@@ -167,7 +201,7 @@ describe("family conformance — schema mutations turn the gate RED", () => {
   });
 
   test("a duplicate divergence id is a schema problem", () => {
-    const manifest = structuredClone(loadValidManifest());
+    const manifest = manifestWithDivergence();
     const dup = structuredClone(manifest.intentionalDivergences[0]!);
     manifest.intentionalDivergences.push(dup);
     const problems = validateFamilyManifestShape(manifest, NOW);
@@ -175,14 +209,14 @@ describe("family conformance — schema mutations turn the gate RED", () => {
   });
 
   test("a divergence with a past review date is a schema problem (expiry)", () => {
-    const manifest = structuredClone(loadValidManifest());
+    const manifest = manifestWithDivergence();
     manifest.intentionalDivergences[0]!.reviewDate = "2020-01-01";
     const problems = validateFamilyManifestShape(manifest, NOW);
     expect(problems.some((p) => p.includes("in the past"))).toBe(true);
   });
 
   test("a divergence missing reason/owner is a schema problem", () => {
-    const manifest = structuredClone(loadValidManifest());
+    const manifest = manifestWithDivergence();
     // @ts-expect-error deliberately break the contract for the mutation test
     delete manifest.intentionalDivergences[0]!.owner;
     const problems = validateFamilyManifestShape(manifest, NOW);
