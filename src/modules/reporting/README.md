@@ -228,15 +228,29 @@ finding, PR #781).
 
 ### Admin UI
 
-`/admin/reporting/projections` (`src/pages/admin/reporting/
-projections.astro`) — freshness-status table with rebuild/cancel/
-reconcile/export actions, scheduled-export management, export-run
-history with download links. Every mutation goes through the real
-`/api/v1/reports/*` endpoints via `submitJson`, no privileged shortcut.
+`/admin/reporting` (`src/pages/admin/reporting.astro`, ADR-0051) — the
+projection cards with live freshness status, metric values and the most
+recent reconciliation; rebuild / cancel-rebuild / reconcile actions;
+rebuild history; scheduled-export management (create, disable) and
+on-demand trigger; export-run history with checksum-verified download
+links. It also renders `email-health`, the one dashboard view `/admin`
+never picked up.
+
+Every mutation goes through the real `/api/v1/reports/*` endpoints — no
+privileged shortcut, no SQL in the page. Five of them send a fresh
+per-click `Idempotency-Key`; `reconcile` sends none, because that
+endpoint mutates no business state and requires none.
+
+> This section previously described `/admin/reporting/projections` and a
+> `submitJson` helper. Neither existed in this repo — the text came over
+> with the port and was never true here. Nothing rendered any of this
+> until the page above landed; the module simply had no `navigation`
+> entry, so the registry gate that would have caught a dangling path had
+> nothing to check. Docs are not gated the way descriptors are.
 
 ## Belum tersedia
 
 - **Tidak ada worker, materialized view, atau caching layer** untuk KELIMA endpoint live di atas — endpoint-endpoint ini sengaja tetap live aggregation setiap request, tidak berubah oleh §Projections di bawah. Untuk tenant dengan volume data besar (banyak sync node/decision log), latensi dashboard akan mengikuti biaya query langsung; optimasi (materialized view terjadwal, cache, dsb.) sengaja **di luar scope** issue 9.1 ini. Issue #753 (§Projections di bawah) menambahkan jalur BARU dan TERPISAH (proyeksi read-model + worker + freshness) yang membungkus SEBAGIAN dari dua endpoint ini (access-audit, module-usage) tanpa mengubah endpoint live itu sendiri — keduanya tetap tersedia berdampingan, bukan salah satu digantikan.
 - Tidak ada pagination/filter tanggal kustom pada `access-audit` — window 30 hari saat ini hardcoded (`ACCESS_AUDIT_DECISION_WINDOW_DAYS`).
 - Modul domain turunan (mis. AWPOS) menambah view reporting domainnya sendiri (penjualan, stok, pajak) di modul terpisah, bukan di modul generik ini.
-- `GET /api/v1/reports/email-health` (#5 di atas) belum ditambahkan ke SSR dashboard (`src/pages/admin/index.astro`) — dashboard admin baru menampilkan empat view pertama (tenant activity, access/audit, sync health, module usage); email queue health baru tersedia lewat endpoint API, belum lewat kartu di `/admin`.
+- `GET /api/v1/reports/email-health` (#5 di atas) tetap **belum** ada di SSR dashboard (`src/pages/admin/index.astro`) — dashboard admin masih menampilkan empat view pertama (tenant activity, access/audit, sync health, module usage). Sejak ADR-0051 view kelima ini dirender di `/admin/reporting` (§Admin UI di atas), jadi ia tidak lagi API-only; memindahkannya/menduplikasinya ke kartu `/admin` sengaja tidak dilakukan — satu view satu tempat.

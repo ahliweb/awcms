@@ -1,0 +1,1183 @@
+---
+/**
+ * Reporting operations console — the read-model side of `reporting`.
+ *
+ * `reporting` owns two very different surfaces, and only one of them had a
+ * screen. The five live dashboard views are rendered by `/admin/index.astro`
+ * — except `email-health`, which was never wired into it — while the entire
+ * projection/export machinery (Issue #753: registry, freshness, rebuild,
+ * reconciliation, scheduled exports, artifact download) had no page at all.
+ * Its seven permissions were reachable only by `curl`. Under ADR-0051 the
+ * screen belongs here; this is it.
+ *
+ * Deliberately NOT a second dashboard. The four aggregations `/admin` already
+ * renders are not repeated here — a projection's own card links to its
+ * `drillDownPath` instead. What this page adds on the dashboard side is the
+ * fifth view, `email-health`, which is the only one of the five with no
+ * rendering anywhere.
+ *
+ * ## Reads
+ *
+ * All reads go through this module's own application functions inside ONE
+ * `withTenantOrThrow`, awaited SEQUENTIALLY — concurrent queries on a single
+ * transaction connection leak it (`projection-directory.ts` records the
+ * confirmed empirical hang).
+ *
+ * `listProjectionSummariesForTenant` is handed `ssr.permissions` because it
+ * applies a SECOND filter beyond this page's coarse gate: each descriptor's
+ * own `requiredPermission`. Passing the real granted set — not a synthetic
+ * "everything" set — is what keeps that layer honest here too.
+ *
+ * The per-projection reconciliation history is one extra query per rendered
+ * projection. That is a fan-out, and it is bounded on purpose: the projection
+ * registry is CODE-declared (`listModules()`), so its size is a deployment
+ * constant a tenant cannot grow, and each call is itself `LIMIT 50`.
+ *
+ * ## Writes
+ *
+ * Nothing here writes SQL. Every mutation posts to the guarded endpoint, so
+ * its audit row, its idempotency record and its ABAC decision log cannot be
+ * bypassed by a screen that writes for itself.
+ *
+ * Five of the six mutations carry a fresh per-click `Idempotency-Key`
+ * (`IDEMPOTENCY_REQUIRED` otherwise). Reconcile carries NONE: that endpoint
+ * documents itself as mutating no business state — it only appends a
+ * comparison snapshot — and sending a key would imply a replay contract it
+ * does not have. This is the same split `/admin/data-lifecycle` makes for its
+ * dry-run.
+ *
+ * ## Gates
+ *
+ * Every gate here is UX-only; `authorizeInTransaction` in the routes is the
+ * authority. The triples are exactly the ones those routes enforce, pinned by
+ * `tests/admin-reporting-page-contract.test.ts`. Two of them are easy to guess
+ * wrong in a way that would deny everyone while looking correct:
+ *
+ * - cancelling a rebuild is `projections.rebuild`, not a `projections.cancel`
+ *   that no migration seeds;
+ * - reconciling is `projections.analyze`, not `projections.read`;
+ * - triggering an export is `exports.export`, not `exports.configure`.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  fetchEmailHealthReport,
+  type EmailHealthReport
+} from "../../modules/reporting/application/email-health-report";
+import {
+  listProjectionSummariesForTenant,
+  type ProjectionSummaryView
+} from "../../modules/reporting/application/projection-directory";
+import {
+  listRebuildRuns,
+  type RebuildRunRow
+} from "../../modules/reporting/application/rebuild-run-store";
+import {
+  listReconciliationRuns,
+  type ReconciliationRunRow
+} from "../../modules/reporting/application/reconciliation-run-store";
+import {
+  listScheduledExports,
+  type ScheduledExportRow
+} from "../../modules/reporting/application/scheduled-export-store";
+import {
+  listExportRuns,
+  type ExportRunRow
+} from "../../modules/reporting/application/export-run-store";
+import {
+  MAX_EXPORT_INTERVAL_MINUTES,
+  MAX_REASON_LENGTH,
+  MIN_EXPORT_INTERVAL_MINUTES,
+  MIN_REASON_LENGTH
+} from "../../modules/reporting/domain/operator-input-bounds";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canReadDashboard = ssr.permissions.has(
+  permissionKey("reporting", "dashboard", "read")
+);
+const canReadProjections = ssr.permissions.has(
+  permissionKey("reporting", "projections", "read")
+);
+const canRebuild = ssr.permissions.has(
+  permissionKey("reporting", "projections", "rebuild")
+);
+const canReconcile = ssr.permissions.has(
+  permissionKey("reporting", "projections", "analyze")
+);
+const canReadExports = ssr.permissions.has(
+  permissionKey("reporting", "exports", "read")
+);
+const canConfigureExports = ssr.permissions.has(
+  permissionKey("reporting", "exports", "configure")
+);
+const canTriggerExport = ssr.permissions.has(
+  permissionKey("reporting", "exports", "export")
+);
+
+const canSeeAnything = canReadDashboard || canReadProjections || canReadExports;
+
+let emailHealth: EmailHealthReport | null = null;
+let projections: ProjectionSummaryView[] = [];
+let reconciliationsByKey = new Map<string, ReconciliationRunRow[]>();
+let rebuildRuns: RebuildRunRow[] = [];
+let exportConfigs: ScheduledExportRow[] = [];
+let exportRuns: ExportRunRow[] = [];
+let loadError = false;
+
+if (canSeeAnything) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      if (canReadDashboard) {
+        emailHealth = await fetchEmailHealthReport(tx, ssr.tenantId);
+      }
+
+      if (canReadProjections) {
+        projections = await listProjectionSummariesForTenant(
+          tx,
+          ssr.tenantId,
+          ssr.permissions
+        );
+
+        const byKey = new Map<string, ReconciliationRunRow[]>();
+        for (const projection of projections) {
+          byKey.set(
+            projection.key,
+            await listReconciliationRuns(tx, ssr.tenantId, projection.key)
+          );
+        }
+        reconciliationsByKey = byKey;
+
+        rebuildRuns = await listRebuildRuns(tx, ssr.tenantId);
+      }
+
+      if (canReadExports) {
+        exportConfigs = await listScheduledExports(tx, ssr.tenantId);
+        exportRuns = await listExportRuns(tx, ssr.tenantId);
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "there are no projections".
+    loadError = true;
+    logAdminPageError(
+      "admin/reporting.astro: failed to load the reporting console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+/** Freshness status -> `status-badge` variant. `rebuilding` is progress, not a fault. */
+const FRESHNESS_VARIANT: Record<string, string> = {
+  current: "success",
+  delayed: "warning",
+  stale: "warning",
+  rebuilding: "info",
+  failed: "danger"
+};
+
+const REBUILD_VARIANT: Record<RebuildRunRow["status"], string> = {
+  running: "info",
+  completed: "success",
+  failed: "danger",
+  cancelled: "neutral"
+};
+
+const EXPORT_RUN_VARIANT: Record<ExportRunRow["status"], string> = {
+  completed: "success",
+  failed: "danger"
+};
+
+function formatTimestamp(value: Date | string | null): string {
+  if (value === null) return "—";
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+/** Seconds since the last successful update, rendered for a human. */
+function formatAge(ageSeconds: number | null): string {
+  if (ageSeconds === null) return "never updated";
+  if (ageSeconds < 90) return `${Math.round(ageSeconds)}s ago`;
+  if (ageSeconds < 5400) return `${Math.round(ageSeconds / 60)}m ago`;
+  if (ageSeconds < 172800) return `${Math.round(ageSeconds / 3600)}h ago`;
+  return `${Math.round(ageSeconds / 86400)}d ago`;
+}
+
+function formatInterval(minutes: number): string {
+  if (minutes % 1440 === 0) return `every ${minutes / 1440}d`;
+  if (minutes % 60 === 0) return `every ${minutes / 60}h`;
+  return `every ${minutes}m`;
+}
+
+/** `expiresAt` in the past means the download endpoint answers 410, not the bytes. */
+function isExpired(run: ExportRunRow): boolean {
+  return run.expiresAt !== null && run.expiresAt.getTime() <= Date.now();
+}
+
+const projectionKeys = projections.map((projection) => projection.key);
+const showExportActions = canTriggerExport && projectionKeys.length > 0;
+const exportConfigColumns = canConfigureExports ? 6 : 5;
+---
+
+<AdminLayout title="Reporting operations">
+  <header class="page-header fade-in-up">
+    <h1 id="reporting-heading">Reporting operations</h1>
+    <p class="page-description">
+      Read-model health and delivery: the freshness of every registered
+      projection, the rebuilds and reconciliations run against them, the email
+      queue, and the scheduled exports built from them. The tenant activity,
+      access &amp; audit, sync health and module usage views live on the
+      <a href="/admin">dashboard</a>.
+    </p>
+  </header>
+
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="reporting-denied">
+        You do not have permission to view reporting operations.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="reporting-error">
+        The reporting console could not be loaded right now. This is a problem
+        reading it, not an empty console — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <p
+        id="reporting-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canReadDashboard && !loadError && emailHealth && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="email-health-title"
+        id="reporting-email-health"
+      >
+        <h2 class="admin-section-title" id="email-health-title">
+          Email queue health
+          <span
+            class="status-badge"
+            data-variant={emailHealth.isHealthy ? "success" : "warning"}
+          >
+            <span class="status-dot" aria-hidden="true" />
+            {emailHealth.isHealthy ? "healthy" : "needs attention"}
+          </span>
+        </h2>
+        <p class="page-description">
+          The fifth management reporting view. An idle queue is healthy — only
+          failures and a retry backlog are not.
+        </p>
+
+        <div class="stat-grid stagger-children">
+          <div class="stat-card">
+            <span class="stat-label">Queued</span>
+            <span class="stat-value">{emailHealth.queuedCount}</span>
+            <span class="stat-hint">
+              Oldest: {formatTimestamp(emailHealth.oldestQueuedAt)}
+            </span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Awaiting retry</span>
+            <span class="stat-value">{emailHealth.retryWaitCount}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Failed</span>
+            <span class="stat-value">{emailHealth.failedCount}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Suppressed</span>
+            <span class="stat-value">{emailHealth.suppressedCount}</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Sent (24h)</span>
+            <span class="stat-value">{emailHealth.sentLast24hCount}</span>
+            <span class="stat-hint">
+              Last: {formatTimestamp(emailHealth.mostRecentSentAt)}
+            </span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Dispatch</span>
+            <span class="stat-value stat-value--mono">
+              {emailHealth.emailEnabled
+                ? (emailHealth.provider ?? "enabled")
+                : "disabled"}
+            </span>
+            {/* Process env, not a per-tenant setting — see `fetchEmailHealthReport`. */}
+            <span class="stat-hint">Deployment-wide setting</span>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadProjections && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="projections-title"
+        id="reporting-projections"
+      >
+        <h2 class="admin-section-title" id="projections-title">
+          Projections
+          <span class="count-pill">{projections.length}</span>
+        </h2>
+        <p class="page-description">
+          Freshness is computed live from the last successful update, never read
+          back from a stored column — a projection whose updater stopped running
+          ages into <code>stale</code> on its own rather than staying frozen at{" "}
+          <code>current</code>.
+        </p>
+
+        {projections.length === 0 ? (
+          <div class="empty-state">
+            <span class="empty-state-icon" aria-hidden="true">
+              ◔
+            </span>
+            <span class="empty-state-title">No projections visible</span>
+            <span class="empty-state-text">
+              Projections are declared in code by the modules that own them. Any
+              that exist require their own permission on top of this screen's,
+              so this can also mean none of them is granted to you.
+            </span>
+          </div>
+        ) : (
+          <div class="stagger-children">
+            {projections.map((projection) => {
+              const reconciliations =
+                reconciliationsByKey.get(projection.key) ?? [];
+              const latest = reconciliations[0] ?? null;
+              const isRebuilding = projection.freshness.status === "rebuilding";
+
+              return (
+                <article
+                  class="admin-panel hover-lift"
+                  data-projection-key={projection.key}
+                >
+                  <h3>
+                    <span class="cell-code">{projection.key}</span>
+                    <span
+                      class="status-badge"
+                      data-variant={
+                        FRESHNESS_VARIANT[projection.freshness.status] ??
+                        "neutral"
+                      }
+                    >
+                      <span class="status-dot" aria-hidden="true" />
+                      {projection.freshness.status}
+                    </span>
+                  </h3>
+                  <p class="page-description">{projection.description}</p>
+
+                  <dl class="stat-grid">
+                    <div class="stat-card">
+                      <dt class="stat-label">Owner</dt>
+                      <dd class="stat-value stat-value--mono">
+                        {projection.ownerModuleKey} v{projection.version}
+                      </dd>
+                    </div>
+                    <div class="stat-card">
+                      <dt class="stat-label">Last success</dt>
+                      <dd class="stat-value stat-value--mono">
+                        {formatAge(projection.freshness.ageSeconds)}
+                      </dd>
+                      <span class="stat-hint">
+                        {formatTimestamp(projection.freshness.lastSuccessAt)}
+                      </span>
+                    </div>
+                    <div class="stat-card">
+                      <dt class="stat-label">Consecutive failures</dt>
+                      <dd class="stat-value">
+                        {projection.freshness.consecutiveFailures}
+                      </dd>
+                    </div>
+                    {Object.entries(projection.metrics).map(
+                      ([metricKey, value]) => (
+                        <div class="stat-card">
+                          <dt class="stat-label">
+                            {projection.metricLabels[metricKey] ?? metricKey}
+                          </dt>
+                          <dd class="stat-value">{value}</dd>
+                        </div>
+                      )
+                    )}
+                  </dl>
+
+                  {projection.freshness.lastErrorMessage && (
+                    <p class="state-notice">
+                      Last error:
+                      <span
+                        class="cell-code"
+                        set:text={projection.freshness.lastErrorMessage}
+                      />
+                    </p>
+                  )}
+
+                  {latest && (
+                    <details>
+                      <summary>
+                        Reconciliation ·{" "}
+                        {latest.mismatch
+                          ? "mismatch against source"
+                          : "matched source"}{" "}
+                        · {formatTimestamp(latest.executedAt)}
+                      </summary>
+                      <table class="data-table data-table--stack">
+                        <caption class="sr-only">
+                          Most recent reconciliation of {projection.key}.
+                        </caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">Metric</th>
+                            <th scope="col">Projection</th>
+                            <th scope="col">Source</th>
+                            <th scope="col">Match</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {latest.details.map((detail) => (
+                            <tr>
+                              <td data-label="Metric">
+                                <span class="cell-code">
+                                  {detail.metricKey}
+                                </span>
+                              </td>
+                              <td data-label="Projection">
+                                {detail.projectionTotal}
+                              </td>
+                              <td data-label="Source">{detail.sourceTotal}</td>
+                              <td data-label="Match">
+                                {detail.mismatch ? "differs" : "equal"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  )}
+
+                  <div class="row-actions">
+                    {projection.drillDownPath && (
+                      <a class="quick-link" href={projection.drillDownPath}>
+                        Drill down
+                        <span class="quick-link-arrow" aria-hidden="true">
+                          →
+                        </span>
+                      </a>
+                    )}
+
+                    {canReconcile && (
+                      <button
+                        type="button"
+                        class="module-toggle projection-reconcile-btn"
+                        data-projection-key={projection.key}
+                      >
+                        Reconcile
+                      </button>
+                    )}
+
+                    {canRebuild && isRebuilding && (
+                      <button
+                        type="button"
+                        class="btn-inline btn-inline--danger projection-rebuild-cancel-btn"
+                        data-projection-key={projection.key}
+                      >
+                        Cancel rebuild
+                      </button>
+                    )}
+                  </div>
+
+                  {canRebuild && !isRebuilding && (
+                    <div class="admin-toolbar">
+                      <label for={`rebuild-reason-${projection.key}`}>
+                        Rebuild reason
+                      </label>
+                      <input
+                        type="text"
+                        id={`rebuild-reason-${projection.key}`}
+                        class="projection-rebuild-reason"
+                        data-projection-key={projection.key}
+                        minlength={MIN_REASON_LENGTH}
+                        maxlength={MAX_REASON_LENGTH}
+                        autocomplete="off"
+                        placeholder="Why this rebuild is needed"
+                      />
+                      <button
+                        type="button"
+                        class="btn-inline projection-rebuild-btn"
+                        data-projection-key={projection.key}
+                      >
+                        Rebuild
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canReadProjections && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="rebuild-history-title"
+        id="reporting-rebuild-history"
+      >
+        <h2 class="admin-section-title" id="rebuild-history-title">
+          Rebuild history
+          <span class="count-pill">{rebuildRuns.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Projection rebuild runs, newest first, capped at 100 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Projection</th>
+                <th scope="col">Status</th>
+                <th scope="col">Rows</th>
+                <th scope="col">Started</th>
+                <th scope="col">Finished</th>
+                <th scope="col">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rebuildRuns.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ↻
+                      </span>
+                      <span class="empty-state-title">No rebuilds yet</span>
+                      <span class="empty-state-text">
+                        Incremental updates keep a projection current without
+                        one; a rebuild is for recovering after a source or
+                        definition change.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                rebuildRuns.map((run) => (
+                  <tr>
+                    <td data-label="Projection">
+                      <span class="cell-code">{run.projectionKey}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={REBUILD_VARIANT[run.status]}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {run.status}
+                      </span>
+                      {run.cancelRequested && run.status === "running" && (
+                        <span class="cell-muted"> · cancelling</span>
+                      )}
+                    </td>
+                    <td data-label="Rows">{run.rowsProcessed}</td>
+                    <td data-label="Started">
+                      <span class="cell-muted">
+                        {formatTimestamp(run.startedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Finished">
+                      <span class="cell-muted">
+                        {formatTimestamp(run.completedAt)}
+                      </span>
+                    </td>
+                    <td data-label="Reason">
+                      <span set:text={run.reason ?? "—"} />
+                      {run.errorMessage && (
+                        <span class="cell-code" set:text={run.errorMessage} />
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canReadExports && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="export-configs-title"
+        id="reporting-export-configs"
+      >
+        <h2 class="admin-section-title" id="export-configs-title">
+          Scheduled exports
+          <span class="count-pill">{exportConfigs.length}</span>
+        </h2>
+        <p class="page-description">
+          Generated by <code>reporting:exports:dispatch</code>. Disabling a
+          schedule retires it — there is no re-enable, so an interval change
+          means creating a new schedule.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Scheduled export configurations for this tenant.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Projection</th>
+                <th scope="col">Format</th>
+                <th scope="col">Interval</th>
+                <th scope="col">State</th>
+                <th scope="col">Created</th>
+                {canConfigureExports && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {exportConfigs.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={exportConfigColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⇩
+                      </span>
+                      <span class="empty-state-title">
+                        No scheduled exports
+                      </span>
+                      <span class="empty-state-text">
+                        A projection can still be exported on demand below.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                exportConfigs.map((config) => (
+                  <tr>
+                    <td data-label="Projection">
+                      <span class="cell-code">{config.projectionKey}</span>
+                    </td>
+                    <td data-label="Format">
+                      <span class="cell-code">{config.format}</span>
+                    </td>
+                    <td data-label="Interval">
+                      {formatInterval(config.scheduleIntervalMinutes)}
+                    </td>
+                    <td data-label="State">
+                      <span
+                        class="status-badge"
+                        data-variant={config.enabled ? "success" : "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {config.enabled ? "enabled" : "retired"}
+                      </span>
+                    </td>
+                    <td data-label="Created">
+                      <span class="cell-muted">
+                        {formatTimestamp(config.createdAt)}
+                      </span>
+                    </td>
+                    {canConfigureExports && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          {config.enabled && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger export-disable-btn"
+                              data-export-id={config.id}
+                              data-export-label={config.projectionKey}
+                            >
+                              Disable
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {canConfigureExports && projectionKeys.length > 0 && (
+          <form id="export-create-form" class="admin-create-form">
+            <p class="form-legend">Schedule a new export</p>
+            <p
+              id="export-create-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+
+            <label for="export-projection-key">
+              Projection
+              <select id="export-projection-key" name="projectionKey" required>
+                {projectionKeys.map((key) => (
+                  <option value={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+
+            <label for="export-format">
+              Format
+              <select id="export-format" name="format" required>
+                <option value="csv">csv</option>
+                <option value="json">json</option>
+              </select>
+            </label>
+
+            <label for="export-interval">
+              Interval (minutes)
+              {/* Bounds come from the same constants the endpoint validates
+                  against, so the browser can never accept what the server
+                  rejects. */}
+              <input
+                type="number"
+                id="export-interval"
+                name="scheduleIntervalMinutes"
+                required
+                step="1"
+                min={MIN_EXPORT_INTERVAL_MINUTES}
+                max={MAX_EXPORT_INTERVAL_MINUTES}
+                value={String(MIN_EXPORT_INTERVAL_MINUTES * 4)}
+              />
+            </label>
+
+            <button type="submit" id="export-create-submit">
+              Create schedule
+            </button>
+          </form>
+        )}
+
+        {showExportActions && (
+          <form id="export-trigger-form" class="admin-create-form">
+            <p class="form-legend">Export once, now</p>
+            <p
+              id="export-trigger-error"
+              class="admin-create-error"
+              role="alert"
+              hidden
+            />
+
+            <label for="trigger-projection-key">
+              Projection
+              <select id="trigger-projection-key" name="projectionKey" required>
+                {projectionKeys.map((key) => (
+                  <option value={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+
+            <label for="trigger-format">
+              Format
+              <select id="trigger-format" name="format" required>
+                <option value="csv">csv</option>
+                <option value="json">json</option>
+              </select>
+            </label>
+
+            <button type="submit" id="export-trigger-submit">
+              Generate export
+            </button>
+          </form>
+        )}
+      </section>
+    )
+  }
+
+  {
+    canReadExports && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="export-runs-title"
+        id="reporting-export-runs"
+      >
+        <h2 class="admin-section-title" id="export-runs-title">
+          Export runs
+          <span class="count-pill">{exportRuns.length}</span>
+        </h2>
+        <p class="page-description">
+          Each artifact is checksum-verified when downloaded, and an expired one
+          is refused rather than served stale.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack">
+            <caption class="sr-only">
+              Export runs, newest first, capped at 100 rows.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Projection</th>
+                <th scope="col">Status</th>
+                <th scope="col">Rows</th>
+                <th scope="col">Created</th>
+                <th scope="col">Expires</th>
+                <th scope="col">Artifact</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exportRuns.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={6}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ⌸
+                      </span>
+                      <span class="empty-state-title">No export runs</span>
+                      <span class="empty-state-text">
+                        Runs appear here once a schedule fires or an on-demand
+                        export is generated.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                exportRuns.map((run) => (
+                  <tr>
+                    <td data-label="Projection">
+                      <span class="cell-code">{run.projectionKey}</span>
+                      <span class="cell-muted"> · {run.format}</span>
+                    </td>
+                    <td data-label="Status">
+                      <span
+                        class="status-badge"
+                        data-variant={EXPORT_RUN_VARIANT[run.status]}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {run.status}
+                      </span>
+                      {run.errorMessage && (
+                        <span class="cell-code" set:text={run.errorMessage} />
+                      )}
+                    </td>
+                    <td data-label="Rows">{run.rowCount}</td>
+                    <td data-label="Created">
+                      <span class="cell-muted">
+                        {formatTimestamp(run.createdAt)}
+                      </span>
+                    </td>
+                    <td data-label="Expires">
+                      <span class="cell-muted">
+                        {formatTimestamp(run.expiresAt)}
+                      </span>
+                    </td>
+                    <td data-label="Artifact">
+                      {run.status === "completed" && !isExpired(run) ? (
+                        // Cookie auth rides along on a plain navigation, and
+                        // the endpoint re-checks RBAC/ABAC at download time —
+                        // a link here grants nothing a fetch would not.
+                        <a
+                          class="quick-link"
+                          href={`/api/v1/reports/exports/runs/${run.id}/download`}
+                        >
+                          Download
+                          <span class="quick-link-arrow" aria-hidden="true">
+                            →
+                          </span>
+                        </a>
+                      ) : (
+                        <span class="cell-muted">
+                          {isExpired(run) ? "expired" : "unavailable"}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  // Bundled unconditionally (Astro hoists at build time): a viewer without a
+  // given permission renders no control, so its listener never binds.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("reporting-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  function showFormError(id: string, message: string): void {
+    const element = document.getElementById(id);
+    if (!element) return;
+    element.textContent = message;
+    element.hidden = false;
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".projection-rebuild-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const key = button.dataset.projectionKey;
+        if (!key) return;
+
+        const reasonInput = document.querySelector<HTMLInputElement>(
+          `.projection-rebuild-reason[data-projection-key="${key}"]`
+        );
+        const reason = reasonInput?.value.trim() ?? "";
+        if (reason === "") {
+          showActionError(
+            "A rebuild needs a reason — it is recorded in the audit trail."
+          );
+          reasonInput?.focus();
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Starting…");
+
+        // A fresh key per click: without one the endpoint answers
+        // `IDEMPOTENCY_REQUIRED`, and reusing one would replay the first
+        // response instead of starting the rebuild the operator just asked
+        // for.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/reports/projections/${key}/rebuild`,
+          { reason },
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError("Could not start the rebuild. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".projection-rebuild-cancel-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const key = button.dataset.projectionKey;
+        if (!key) return;
+
+        if (
+          !window.confirm(
+            `Cancel the running rebuild of ${key}? Its progress so far is kept, but the read model stays partial until a rebuild completes.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Cancelling…");
+
+        // Bodyless — the endpoint derives everything from the path.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/reports/projections/${key}/rebuild/cancel`,
+          undefined,
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not cancel the rebuild. Please try again.");
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".projection-reconcile-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const key = button.dataset.projectionKey;
+        if (!key) return;
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Reconciling…");
+
+        // No `Idempotency-Key`: this endpoint mutates no business state — it
+        // appends a comparison snapshot — so it requires none, and sending
+        // one would imply a replay contract it does not have.
+        const result = await sendJson(
+          "POST",
+          `/api/v1/reports/projections/${key}/reconcile`
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError(
+          "Could not reconcile the projection. Please try again."
+        );
+        unlock();
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".export-disable-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const id = button.dataset.exportId;
+        if (!id) return;
+        const label = button.dataset.exportLabel ?? "this schedule";
+
+        // Retiring is not undoable from this screen — there is no re-enable.
+        if (
+          !window.confirm(
+            `Disable the ${label} export schedule? It is retired, not paused — re-enabling means creating a new schedule.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Disabling…");
+
+        const result = await sendJson(
+          "POST",
+          `/api/v1/reports/exports/${id}/disable`,
+          { reason: "Disabled from the admin reporting operations screen." },
+          { "Idempotency-Key": crypto.randomUUID() }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not disable the schedule. Please try again.");
+        unlock();
+      });
+    });
+
+  const createForm = document.getElementById(
+    "export-create-form"
+  ) as HTMLFormElement | null;
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "export-create-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(createForm);
+    const interval = Number(data.get("scheduleIntervalMinutes"));
+    if (!Number.isInteger(interval)) {
+      showFormError(
+        "export-create-error",
+        "Interval must be a whole number of minutes."
+      );
+      return;
+    }
+
+    const errorElement = document.getElementById("export-create-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Creating…");
+
+    // `filter` is deliberately omitted: the endpoint rejects a non-empty one
+    // because generated exports do not consult it yet.
+    const result = await sendJson(
+      "POST",
+      "/api/v1/reports/exports",
+      {
+        projectionKey: String(data.get("projectionKey") ?? ""),
+        format: String(data.get("format") ?? ""),
+        scheduleIntervalMinutes: interval
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showFormError(
+      "export-create-error",
+      "Could not create the schedule. Please try again."
+    );
+    unlock();
+  });
+
+  const triggerForm = document.getElementById(
+    "export-trigger-form"
+  ) as HTMLFormElement | null;
+
+  triggerForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "export-trigger-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(triggerForm);
+    const errorElement = document.getElementById("export-trigger-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Generating…");
+
+    const result = await sendJson(
+      "POST",
+      "/api/v1/reports/exports/trigger",
+      {
+        projectionKey: String(data.get("projectionKey") ?? ""),
+        format: String(data.get("format") ?? "")
+      },
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showFormError(
+      "export-trigger-error",
+      "Could not generate the export. Please try again."
+    );
+    unlock();
+  });
+</script>
