@@ -83,10 +83,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek       | Nilai (per commit ini)                                                                                                   | Sumber kebenaran                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **53 changeset menunggu** rilis berikutnya                                                       | `package.json`, `CHANGELOG.md`, tag `v*`                                                |
+| Versi       | **6.4.0** (2026-07-26); **68 changeset menunggu** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`**            | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
 | Migrasi     | **88** (`sql/001`–`088`)                                                                                                 | `ls sql/`                                                                               |
-| ADR         | **0000**–**0056** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
+| ADR         | **0000**–**0057** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
 | Layar admin | **28** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -96,6 +96,13 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > sudah mendarat. Tak ada gerbang yang memeriksa tabel ini — kolom "Sumber kebenaran"
 > kini memuat perintah yang **menghasilkan** angkanya, jadi memverifikasinya butuh satu
 > tempel, bukan satu penghitungan manual.
+>
+> **Dan ia basi lagi dalam satu hari, di baris yang PR #339 tidak sentuh.** Baris
+> Versi berbunyi "53 changeset menunggu" sementara `.changeset/` memuat **68**.
+> Selisihnya bukan kosmetik: salah satunya bertipe `major`, jadi rilis berikutnya
+> adalah **`v7.0.0`**, bukan `6.5.0` — angka yang salah di sini menyesatkan
+> perencanaan rilis, bukan cuma pembaca. Kolom "Sumber kebenaran" baris itu kini
+> memuat perintah yang menghitungnya per tipe bump.
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -309,7 +316,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   - ~~`sync-storage`~~ **SELESAI (#338)** — `/admin/sync`.
   - ~~`blog-content`~~ **SELESAI (#340)** — `/admin/blog`, konsol siklus hidup post
     (sebelas permission dari 43). Sisanya menunggu layar saudaranya (pages,
-    taxonomy, presentation, settings, homepage). Dua absen yang digerbangi contract
+    taxonomy, presentation, settings, homepage) — **`pages` ternyata butuh
+    permukaannya lebih dulu**, lihat entri ADR-0057 di bawah. Dua absen yang digerbangi contract
     test karena BEDA KELAS: `posts.export` dideklarasikan + di-seed `sql/036` dan
     **tak ada endpoint mana pun yang menegakkannya**; `search.read` punya rute tapi
     daftar admin sudah punya pencarian sendiri yang mentoleransi query kosong.
@@ -390,6 +398,45 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     > berkas route saja memberi jawaban salah di dua arah sekaligus, karena
     > `media-object-directory.ts` juga penuh string `action: "..."` yang merupakan
     > nama aksi AUDIT, bukan gerbang permission.
+
+  - **`blog-content` — empat layar saudara tersisa, dan `pages` BUKAN salah satu
+    layar yang cuma hilang halamannya** ([ADR-0057](adr/0057-blog-page-lifecycle.md)).
+    Audit `pages.*` sebelum menulis layarnya mengulang temuan ADR-0056, lebih
+    tajam: **empat dari delapan permission `pages.*` tidak digerbangi apa pun**
+    (`publish`/`archive`/`restore`/`purge`), dan tak seperti `media_library` —
+    yang fungsi aplikasinya ada tapi nol pemanggil — di sini fungsinya **tidak
+    ada sama sekali**.
+
+    Akibatnya fungsional, bukan sekadar permission menganggur: `createBlogPage`
+    menulis literal `'draft'`, `updateBlogPage` tak pernah menyentuh `status`
+    atau `published_at`, dan `blog-scheduled-publish.ts` hanya membaca
+    `awcms_blog_posts`. **Tidak ada penulis lain untuk
+    `awcms_blog_pages.status` di seluruh repo — sebuah page tidak pernah bisa
+    meninggalkan `draft`.** Itu sudah hidup di permukaan publik: `blog-search.ts`
+    menyaring cabang page dengan `status = 'published' … AND published_at IS NOT
+NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
+    `awcms_blog_pages_tenant_status_published_idx` yang `sql/035` bangun persis
+    untuk query itu.
+
+    ADR-0057 memberi keempatnya permukaan (bukan mencabutnya — mencabut
+    `pages.publish` memberkati cacat itu sebagai desain), dengan siklus hidup
+    yang sengaja **lebih sempit** dari post: tanpa `review`, tanpa `scheduled`,
+    karena `sql/036` tak pernah men-seed `pages.schedule`. `purge` **melaporkan,
+    tidak menolak**, jumlah ad placement yang jadi inert — draf pertama ADR itu
+    memilih 409, dan `ad-placement-reference-validation.ts` membantahnya: modul
+    itu sudah memutuskan target yang hilang belakangan "is not an error and never
+    becomes one", dan soft delete hari ini punya efek render yang sama persis.
+    **Nol migrasi** — kolom, CHECK,
+    index dan baris katalog sudah ada; yang hilang murni lapisan aplikasi + route.
+    Urutan mengikat: permukaan dulu, `/admin/blog/pages` menyusul.
+
+    Tiga saudara sisanya (taxonomy, presentation, settings/homepage) sejauh
+    audit ini permukaannya lengkap — seluruhnya pasangan `read`/`configure`
+    ber-route. ADR-0057 §F menjadikan "sejauh audit ini" klaim yang dijaga:
+    gate baru menuntut tiap permission terdeklarasi punya call site
+    `authorizeInTransaction` atau terdaftar sebagai pengecualian ber-alasan.
+    Tanpa itu, kelas cacat yang sama sudah lolos DUA kali dan keduanya hanya
+    ketahuan karena seseorang hendak membangun layarnya.
 
   - ~~`idn-admin-regions`~~ **SUDAH PUNYA LAYAR** — `/admin/idn-regions`, mendarat
     di #332. Entri ini sebelumnya berbunyi "sengaja tanpa layar"; itu **usang**,
