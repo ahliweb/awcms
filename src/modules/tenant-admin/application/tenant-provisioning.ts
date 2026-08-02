@@ -35,12 +35,27 @@ export type ProvisionTenantResult =
 /** Postgres unique-violation. */
 const UNIQUE_VIOLATION = "23505";
 
+/**
+ * The SQLSTATE is on `errno`, NOT on `code`. This read `code` until ADR-0056
+ * §B's work turned up the same mistake in new code and probed the real error
+ * shape: Bun sets `code` to its own `"ERR_POSTGRES_SERVER_ERROR"` for every
+ * server error alike, so the comparison was always false. The pre-check SELECT
+ * above hid it for the ordinary case; the RACE this savepoint exists for — two
+ * callers submitting the same `tenant_code` concurrently — rethrew instead of
+ * answering `duplicate_tenant_code`, and `POST /api/v1/tenants` served a 500
+ * where it had promised a 409.
+ *
+ * `String()` because `errno` is typed loosely enough to be a number in other
+ * Bun error shapes. This is now the same idiom as the ten other violation
+ * checks in this repo (`role-admin.ts`, `office-directory.ts`, ...), which had
+ * it right all along.
+ */
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === UNIQUE_VIOLATION
+    "errno" in error &&
+    String((error as { errno?: unknown }).errno) === UNIQUE_VIOLATION
   );
 }
 

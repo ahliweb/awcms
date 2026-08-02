@@ -217,6 +217,170 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/media/objects/{id}:
+    delete:
+      operationId: mediaObjectSoftDelete
+      tags:
+        - News Media
+      summary: Soft delete one media object.
+      description: |
+        Gated on `media_library.media.delete`. High-risk, requires `Idempotency-Key`. Body: `{ "reason": string }` — required, trimmed, at most 500 characters, and recorded on the audit row.
+
+        Soft delete only: `deleted_at`/`deleted_by`/`delete_reason` are set and `status` is left alone. The R2 object is untouched.
+
+        This BREAKS live references on purpose — `GET /api/v1/media/objects` resolves only non-deleted objects, so a post whose `featured_media_id` points here begins resolving to nothing immediately. That is the intended outcome for the case this endpoint serves (a policy-violating image must stop being served), and it is recoverable through `POST /api/v1/media/objects/{id}/restore`. The endpoint deliberately does not scan for referencing rows first: that would require this module to know its own consumers.
+
+        An already-deleted object and an unknown id both answer 404 — a distinct "already deleted" would let a caller without `media.read` probe which ids exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SoftDeleteMediaObjectRequest"
+      responses:
+        "200":
+          description: The media object is soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/MediaObjectLifecycleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/objects/{id}/restore:
+    post:
+      operationId: mediaObjectRestore
+      tags:
+        - News Media
+      summary: Undo a soft delete.
+      description: |
+        Gated on `media_library.media.restore`. High-risk, requires `Idempotency-Key`. No body.
+
+        Clears `deleted_at`/`deleted_by`/`delete_reason` and stamps `restored_at`/`restored_by`. `status` is untouched — soft delete is orthogonal to it — so the object returns to whatever lifecycle state it was in.
+
+        Restoring an object that is NOT soft-deleted answers 404 rather than succeeding as a no-op: "there was nothing to undo" and "it worked" must not share a response.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The media object is restored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/MediaObjectRestored"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/media/objects/{id}/purge:
+    post:
+      operationId: mediaObjectPurge
+      tags:
+        - News Media
+      summary: Hard-delete the registry row of an already soft-deleted media object.
+      description: |
+        Gated on `media_library.media.purge`. High-risk, requires `Idempotency-Key`, and cannot be undone. No body.
+
+        **Clears the registry row, NOT the R2 bytes.** The `news-media:reconcile` job owns the bucket and has the ordering discipline for deleting from it; a second writer here would mean two processes with different ideas of what is safe to remove. Accepted, stated cost: a window where the R2 object outlives its registry row, closed by the next reconciliation tick, which sees a key with no row and treats it as an orphan-in-R2.
+
+        The object must ALREADY be soft-deleted — purging a live object answers 404 rather than destroying it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The registry row is gone. The R2 object is removed later by the reconciliation job.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/MediaObjectLifecycleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Another resource still holds a foreign key to this object (`MEDIA_OBJECT_REFERENCED` — remove the reference first), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/media/enforcement:
     get:
       tags:
@@ -285,6 +449,47 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    SoftDeleteMediaObjectRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Why the object is being removed. Trimmed before length-checking, so a whitespace-only value fails as "required". Written to the audit row, which outlives the object it describes — hence the bound.
+    MediaObjectLifecycleResult:
+      type: object
+      description: Result of a terminal lifecycle action. `status` here is the ACTION's outcome, not the object's `status` column.
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [deleted, purged]
+    MediaObjectRestored:
+      type: object
+      description: Result of a restore. `status` here IS the object's own lifecycle status column, untouched by soft delete and therefore whatever it was before.
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending_upload
+            - uploaded
+            - verified
+            - attached
+            - orphaned
+            - deleted
+            - failed
+        restoredAt:
+          type: string
+          format: date-time
+          nullable: true
     ResolvedMediaReference:
       type: object
       description: A media object safe to reference publicly (verified/attached, same tenant, not deleted).

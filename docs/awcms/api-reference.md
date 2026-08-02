@@ -4366,6 +4366,100 @@ Batch rather than one-per-id because a build feed resolves every image on a page
 | 401    | Missing or invalid session.                             | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                             | [`ApiError`](#standard-error-envelope) |
 
+### `DELETE /api/v1/media/objects/{id}` — Soft delete one media object.
+
+- **operationId**: `mediaObjectSoftDelete`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `media_library.media.delete`. High-risk, requires `Idempotency-Key`. Body: `{ "reason": string }` — required, trimmed, at most 500 characters, and recorded on the audit row.
+
+Soft delete only: `deleted_at`/`deleted_by`/`delete_reason` are set and `status` is left alone. The R2 object is untouched.
+
+This BREAKS live references on purpose — `GET /api/v1/media/objects` resolves only non-deleted objects, so a post whose `featured_media_id` points here begins resolving to nothing immediately. That is the intended outcome for the case this endpoint serves (a policy-violating image must stop being served), and it is recoverable through `POST /api/v1/media/objects/{id}/restore`. The endpoint deliberately does not scan for referencing rows first: that would require this module to know its own consumers.
+
+An already-deleted object and an unknown id both answer 404 — a distinct "already deleted" would let a caller without `media.read` probe which ids exist.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`SoftDeleteMediaObjectRequest`](#schema-softdeletemediaobjectrequest)
+
+**Responses**
+
+| Status | Description                                                                       | Schema                                 |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The media object is soft-deleted.                                                 | object                                 |
+| 400    | Validation error.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/media/objects/{id}/purge` — Hard-delete the registry row of an already soft-deleted media object.
+
+- **operationId**: `mediaObjectPurge`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `media_library.media.purge`. High-risk, requires `Idempotency-Key`, and cannot be undone. No body.
+
+**Clears the registry row, NOT the R2 bytes.** The `news-media:reconcile` job owns the bucket and has the ordering discipline for deleting from it; a second writer here would mean two processes with different ideas of what is safe to remove. Accepted, stated cost: a window where the R2 object outlives its registry row, closed by the next reconciliation tick, which sees a key with no row and treats it as an orphan-in-R2.
+
+The object must ALREADY be soft-deleted — purging a live object answers 404 rather than destroying it.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                              | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The registry row is gone. The R2 object is removed later by the reconciliation job.                                                                                                                      | object                                 |
+| 400    | Validation error.                                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | Another resource still holds a foreign key to this object (`MEDIA_OBJECT_REFERENCED` — remove the reference first), or the Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/media/objects/{id}/restore` — Undo a soft delete.
+
+- **operationId**: `mediaObjectRestore`
+- **Security**: bearerAuth + tenantHeader
+
+Gated on `media_library.media.restore`. High-risk, requires `Idempotency-Key`. No body.
+
+Clears `deleted_at`/`deleted_by`/`delete_reason` and stamps `restored_at`/`restored_by`. `status` is untouched — soft delete is orthogonal to it — so the object returns to whatever lifecycle state it was in.
+
+Restoring an object that is NOT soft-deleted answers 404 rather than succeeding as a no-op: "there was nothing to undo" and "it worked" must not share a response.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                       | Schema                                 |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The media object is restored.                                                     | object                                 |
+| 400    | Validation error.                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (`IDEMPOTENCY_CONFLICT`). | [`ApiError`](#standard-error-envelope) |
+
 ## Blog Content
 
 Tenant-scoped blog/content administration (blog_content module, ported from awcms-mini) — posts and pages with their full lifecycle (draft → review → scheduled/published → archived, soft delete/restore/purge), hierarchical categories/tags, append-only revision history (restore APPENDS a revision, never overwrites), PostgreSQL full-text search, presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements), per-tenant blog settings, internal tag-link policy, and the editorial content-quality checklist. The public, anonymous reader surface (`/blog/{tenantCode}/...` index/detail/archive/search/feed/sitemap, ADR-0009) is served by Astro text/html/xml routes and is deliberately NOT part of this REST contract. Publish/unpublish/purge and settings writes are ABAC-gated, idempotency-keyed, and audited.
@@ -8205,6 +8299,20 @@ Every field is optional — an omitted field keeps its current value.
   "suggestionsEnabled": false,
   "suggestionLimit": 1,
   "analyticsEnabled": false
+}
+```
+
+### Schema: SoftDeleteMediaObjectRequest
+
+| Field    | Type   | Required | Nullable | Description                                                                                                                                                                                          |
+| -------- | ------ | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reason` | string | yes      | no       | Why the object is being removed. Trimmed before length-checking, so a whitespace-only value fails as "required". Written to the audit row, which outlives the object it describes — hence the bound. |
+
+**Example**
+
+```json
+{
+  "reason": "string"
 }
 ```
 
