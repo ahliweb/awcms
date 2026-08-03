@@ -31,20 +31,24 @@ export const identityAccessModule = defineModule({
       "/register"
     ]
   },
-  // Issue #180 — the generic business-scope layer CONSUMES a hierarchy
-  // resolver from a DERIVED application (ADR-0011 capability port,
-  // `_shared/ports/business-scope-hierarchy-port.ts`). `optional: true`: the
-  // base ships a default no-op adapter, so identity_access degrades safely
-  // (scope resolution returns `resolved: false`, high-risk scope-gated
-  // actions default-deny) when no provider is composed in — the base
-  // registry therefore has no provider for this capability and
-  // `modules:compose:check` skips the missing-provider check for an optional
-  // consume. `providedBy` names the canonical derived provider
-  // (a legal-entity/organization-unit module that provides the
-  // `business_scope_hierarchy` capability, NOT part of this base); the
-  // test-support fixture `tests/fixtures/example-domain-modules/` provides a
-  // working dummy resolver for the same capability to exercise the binding
-  // end-to-end.
+  // Issue #180 / ADR-0060 — the generic business-scope layer CONSUMES a
+  // hierarchy resolver through the ADR-0011 capability port
+  // `_shared/ports/business-scope-hierarchy-port.ts`, and since ADR-0060 the
+  // provider is a REAL base module: `tenant_admin`, resolving `office` scopes
+  // against `awcms_offices`. It was `organization_structure` — a module
+  // ADR-0016 accepted but no one ever wrote here — which, once ADR-0034
+  // deleted the derived-application pathway, made the whole business-scope
+  // subsystem unreachable: `createBusinessScopeAssignment` denied
+  // `scope_unresolved` for every input in every deployment.
+  //
+  // `optional: true` stays. This module must keep working for a tenant that
+  // has no offices at all, and the degradation is the same fail-closed one as
+  // before (unresolved scope -> high-risk scope-gated actions default-deny).
+  // The relationship stays SOURCE-level: the adapter arrives as an injected
+  // parameter at composition roots, never as an import from here, so no
+  // Core-depends-on-Optional edge is created. The test-support fixture
+  // `tests/fixtures/example-domain-modules/` still provides a dummy resolver
+  // for exercising heterogeneous (non-office) ancestry.
   //
   // Wave 2 delta auth — `auth_notification` (ADR-0011 capability port,
   // `_shared/ports/auth-notification-port.ts`) is how the password-reset flow
@@ -59,7 +63,7 @@ export const identityAccessModule = defineModule({
     consumes: [
       {
         capability: "business_scope_hierarchy",
-        providedBy: "organization_structure",
+        providedBy: "tenant_admin",
         optional: true
       },
       {

@@ -14,7 +14,7 @@ membutuhkan contoh metadata modul domain.
   `listBaseModules()`.
 - `modules/example-crm/module.ts` — satu modul domain contoh (`example_crm`)
   yang bergantung pada dua modul base (`tenant_admin`, `identity_access`),
-  menyediakan capability `example_crm_directory` + `business_scope_hierarchy`
+  menyediakan capability `example_crm_directory` (sejak ADR-0060 **tidak lagi** mendeklarasikan `business_scope_hierarchy` — base yang memilikinya lewat `tenant_admin`; resolver dummy-nya tetap ada dan dipakai langsung oleh test untuk ancestry heterogen)
   (Issue #180), membawa lima-plus contoh rule SoD ilustratif (Issue #181),
   sebuah fragment OpenAPI (Issue #182), serta permission/navigation/job —
   cukup untuk membuktikan setiap check komposisi (Issue #178) berjalan pada

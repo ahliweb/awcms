@@ -25,23 +25,22 @@
  * which consults bounded, already-resolved `businessScopeFacts`, not this
  * port, keeping `evaluateAccess` I/O-free and pure).
  *
- * WHO PROVIDES AN ADAPTER. The base ships ONE adapter:
- * `identity-access/application/business-scope-hierarchy-port-adapter.ts` — a
- * default NO-OP that returns `resolved: false` for EVERY scope type (the base
- * owns no organization hierarchy, so it cannot resolve any real one). A
- * DERIVED application provides its own adapter (walking its real
- * effective-dated legal-entity/organization-unit/cost-center/etc. hierarchy
- * tables) and injects it at its composition roots (ADR-0011).
- * `tests/fixtures/example-domain-modules/` ships a working dummy resolver that
- * exercises exact/descendant/ancestor resolution end-to-end without any real
- * domain module. The composition root (a route handler or the expiry job
- * script) is
- * what decides which adapter to inject, exactly the ports-and-adapters
- * pattern `workflow-notification-port.ts` documents for the same reason. A
- * derived organization module can NEVER be a lifecycle/capability dependency
- * of `identity_access` (Core never depends on Optional) — this port is the
- * ONLY thing that lets `identity_access` benefit from a real hierarchy
- * without ever importing that module's tables.
+ * WHO PROVIDES AN ADAPTER. Since ADR-0060 the base ships a REAL one:
+ * `tenant-admin/application/office-scope-hierarchy-port-adapter.ts`, resolving
+ * the `office` scope type against `awcms_offices` (bounded, cycle-safe, live
+ * and same-tenant rows only) and returning `resolved: false` for every other
+ * scope type. It replaced a NO-OP that resolved NOTHING — correct while
+ * ADR-0011/0014 expected a derived application to inject its own resolver,
+ * and permanently unfillable once ADR-0034 deleted that pathway: with no
+ * derived app and no base provider, `createBusinessScopeAssignment` denied
+ * `scope_unresolved` for every input, in every deployment.
+ *
+ * A module that later owns a richer hierarchy (legal entity, cost center)
+ * either extends that adapter or replaces the binding at the composition
+ * roots — a route handler or a job script, never `application`/`domain` code
+ * (ADR-0011). `tests/fixtures/example-domain-modules/` still ships a dummy
+ * resolver that exercises heterogeneous, multi-type ancestry, which the
+ * office tree (homogeneous by construction) cannot.
  *
  * `resolved: false` is a DISTINCT outcome from "resolved but has no
  * ancestors/descendants" (an empty array with `resolved: true`) — callers

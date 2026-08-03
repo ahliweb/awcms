@@ -44,13 +44,16 @@ export const exampleCrmModule = defineModule({
     deploymentProfiles: ["development", "offline-lan"]
   },
   capabilities: {
-    // Issue #180 — this example module PROVIDES the `business_scope_hierarchy`
-    // capability that base `identity_access` optionally consumes. The
-    // concrete adapter is `business-scope-hierarchy-adapter.ts` in this same
-    // fixture directory (a dummy in-memory resolver); a real provider module
-    // would walk its own effective-dated organization tables. Proves the
-    // capability seam end-to-end without a real domain module in the base.
-    provides: ["example_crm_directory", "business_scope_hierarchy"],
+    // ADR-0060 — this fixture NO LONGER declares `business_scope_hierarchy`.
+    // The base owns that capability now (`tenant_admin` resolves `office`
+    // scopes against `awcms_offices`), and `module-composition.ts` allows at
+    // most ONE provider, so keeping the declaration here would make base +
+    // fixture compose with a `capability_provider_conflict` — modelling a
+    // deployment that can no longer exist. The dummy resolver itself STAYS
+    // (`business-scope-hierarchy-adapter.ts`, used directly by tests): it
+    // exercises heterogeneous, multi-type ancestry, which the homogeneous
+    // office tree cannot.
+    provides: ["example_crm_directory"],
     consumes: [
       {
         capability: "reporting_projection",

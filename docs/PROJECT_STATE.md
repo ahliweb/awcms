@@ -86,7 +86,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi       | **6.4.0** (2026-07-26); **68 changeset menunggu** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`**            | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
 | Migrasi     | **89** (`sql/001`–`089`)                                                                                                 | `ls sql/`                                                                               |
-| ADR         | **0000**–**0059** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
+| ADR         | **0000**–**0060** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
 | Layar admin | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -785,18 +785,34 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
 
   **Yang tersisa dan BUKAN milik repo ini:** resolusi gambar artikel, kartu
   share, dan pilihan `img-src` semuanya keputusan sisi `awcms-astro`. Yang
-  tersisa DAN milik repo ini tinggal **satu** — rute konten host-based sudah
-  mendarat (ADR-0059, di atas): **business-scope resolver** (masih NO-OP
-  fail-closed di `business-scope-hierarchy-port-adapter.ts`) yang diperlukan
-  BFF portal Jualanku — bukan oleh situs statisnya, dan butuh ADR sendiri.
+  tersisa DAN milik repo ini: **nol**. Rute konten host-based mendarat lewat
+  ADR-0059, dan business-scope resolver — yang diperlukan BFF portal Jualanku,
+  bukan situs statisnya — lewat ADR-0060. Bentuk scope merchant Jualanku sendiri
+  tetap butuh ADR admission-nya sendiri, tapi fondasinya tak lagi menolak
+  segalanya.
   `newsletter`/`social-publishing`/pustaka `src/components/ui/` tetap belum
   ada (21 modul, `src/components/ui` tidak ada), tapi tak satu pun memblokir
   `awcms-astro`.
 
 - **Port generator `repo:inventory`** dari mini agar `repo-inventory.md` jadi ter-generate.
-- **Seam yang menunggu penyedia**: business-scope resolver base masih NO-OP fail-closed;
-  SoD base kini ship **1 rule** (`data_lifecycle.legal_hold_maker_checker`, ADR-0037) — bukan
-  lagi 0 (rule ilustratif tambahan tetap di fixture).
+- **~~Seam yang menunggu penyedia~~ — business-scope resolver SUDAH PUNYA PENYEDIA
+  ([ADR-0060](adr/0060-business-scope-hierarchy-provided-by-tenant-admin.md)).**
+  `tenant_admin` me-resolve scope type `office` terhadap `awcms_offices`; NO-OP
+  lama dihapus. Yang ditemukan saat mengerjakannya lebih besar dari "seam kosong":
+  `POST /api/v1/identity/business-scope/assignments` — ter-guard, ter-audit,
+  ber-RLS, dievaluasi SoD — **menolak SETIAP input di SETIAP deployment**, karena
+  composition root-nya menyuntikkan NO-OP dan scope type cadangan `tenant`
+  ditolak validator sebagai tak-bisa-di-assign (#180 F2). Seluruh subsistem di
+  belakangnya ikut mati: nol baris untuk `businessScopeFacts`, nol untuk job
+  expiry, nol scope untuk SoD `same_scope_only`. NO-OP itu benar saat ditulis
+  (menunggu aplikasi turunan) lalu ADR-0034 menghapus jalur itu — dan
+  `providedBy`-nya menamai `organization_structure`, modul yang ADR-0016
+  `Accepted` tanpa satu baris kode. Hanya baris HIDUP yang resolve, tiap batas
+  (siklus/kedalaman/jumlah) MENOLAK alih-alih memotong, plus pengerasan jalur
+  baca: sentinel `tenant` hanya dipercaya bila menamai tenant itu sendiri.
+  Mutation-proven terhadap Postgres nyata. Nol migrasi.
+  SoD base tetap ship **1 rule** (`data_lifecycle.legal_hold_maker_checker`,
+  ADR-0037) — rule ilustratif tambahan tetap di fixture.
 
 ## 5. Kontrak alur kerja (ringkas)
 
