@@ -222,7 +222,11 @@ baris tiga tahun lebih tua yang kebetulan sudah ada.
 
 ### E. Satu migrasi untuk kedua pencabutan
 
-`sql/089`, mengikuti `sql/087` persis: grant lebih dulu (`awcms_role_permissions`
+Satu migrasi baru — nomor bebas berikutnya di `sql/` saat ia mendarat; ADR ini
+sengaja tidak menuliskannya, karena `check:docs` menolak token `sql/NNN` yang
+berkasnya belum ada dan sebuah nomor yang dipesan di dokumen adalah nomor yang
+bisa keliru saat PR lain mendarat lebih dulu. Bentuknya mengikuti `sql/087`
+persis: grant lebih dulu (`awcms_role_permissions`
 mereferensi `awcms_permissions`, jadi urutan terbalik menabrak FK), lalu baris
 katalog; keduanya delete tanpa syarat ber-natural-key sehingga idempoten; tanpa
 statement rollback, karena memulihkannya berarti mengiklankan ulang permukaan
