@@ -539,6 +539,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/comments/admin/{id}/delete:
+    post:
+      operationId: deleteCommentAsModerator
+      tags:
+        - Comments
+      summary: Soft delete a comment as a moderator.
+      description: >-
+        Requires `comments.moderation.delete` (ADR-0058 §B). Legal from every
+        non-terminal status. Non-destructive — the row, its body text and its
+        append-only moderation history are all retained; what is withdrawn is
+        visibility. Open reports on the comment are resolved, since a deleted
+        comment cannot be acted on again.
+
+
+        This is the only moderator transition with no way back through the API:
+        `deleted` is terminal, and recovering a deleted comment is an
+        operator/database action. Use `reject` for a reversible decision, or
+        `archive` to withdraw an approved comment while keeping it restorable.
+        Idempotency-keyed and audited at `warning` severity.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The comment was soft-deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ModerationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            Idempotency-Key conflict, or the comment is already deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/comments/admin/{id}/restore:
     post:
       operationId: restoreComment

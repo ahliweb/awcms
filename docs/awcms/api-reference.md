@@ -7541,6 +7541,32 @@ Requires `comments.moderation.archive`. Only an APPROVED comment can be archived
 | 404    | Resource not found.                                                                        | [`ApiError`](#standard-error-envelope) |
 | 409    | Idempotency-Key conflict, or the comment is not approved and therefore cannot be archived. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/comments/admin/{id}/delete` — Soft delete a comment as a moderator.
+
+- **operationId**: `deleteCommentAsModerator`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `comments.moderation.delete` (ADR-0058 §B). Legal from every non-terminal status. Non-destructive — the row, its body text and its append-only moderation history are all retained; what is withdrawn is visibility. Open reports on the comment are resolved, since a deleted comment cannot be acted on again.
+
+This is the only moderator transition with no way back through the API: `deleted` is terminal, and recovering a deleted comment is an operator/database action. Use `reject` for a reversible decision, or `archive` to withdraw an approved comment while keeping it restorable. Idempotency-keyed and audited at `warning` severity.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------ | -------------------------------------- |
+| 200    | The comment was soft-deleted.                                | object                                 |
+| 401    | Missing or invalid session.                                  | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                          | [`ApiError`](#standard-error-envelope) |
+| 409    | Idempotency-Key conflict, or the comment is already deleted. | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/comments/admin/{id}/moderate` — Approve, reject, or mark a comment as spam.
 
 - **operationId**: `moderateComment`
