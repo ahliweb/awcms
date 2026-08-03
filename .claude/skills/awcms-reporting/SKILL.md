@@ -186,7 +186,7 @@ lebih sempit yang didaftarkan modul turunan.
 
 ## Admin UI mutation client
 
-`/admin/reporting/projections` (`src/pages/admin/reporting/projections.astro`)
+`/admin/reporting` (`src/pages/admin/reporting.astro`, PR #335 — README modul sempat memerikan `/admin/reporting/projections` + helper `submitJson` yang TIDAK PERNAH ADA di repo ini)
 — setiap mutation (rebuild/cancel/reconcile/export) lewat endpoint
 `/api/v1/reports/*` yang REAL, tanpa shortcut privileged. Pakai
 `sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`, lihat skill

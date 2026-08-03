@@ -14,7 +14,7 @@ di repo ini — diport dari awcms-micro Issue #484.
 >   `WizardPanel`, `WizardActions`, `wizard-client.ts`) — baris Gelombang-0
 >   yang masih terbuka. Skill `awcms-wizard-form` masih BACAAN SAJA.
 > - `docs/awcms/examples/wizard-form-pattern.md` — tidak ada di repo ini.
-> - `src/pages/admin/examples/wizard.astro` (pilot micro) — tidak ada di repo
+> - `awcms-micro:src/pages/admin/examples/wizard.astro` (pilot micro) — tidak ada di repo
 >   ini; `src/pages/admin/examples/` sendiri tidak ada.
 >
 > Store ini tetap berguna tanpa ketiganya: yang dipanggil sebuah wizard adalah

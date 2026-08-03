@@ -160,7 +160,7 @@ migrasi ini jalan (di-seed owner saat setup-wizard bootstrap).
 
 ## Port adaptations vs awcms-micro (ADR-0034 Fase 3)
 
-- **Resolusi URL asset SUDAH ter-wire** (#251). `src/lib/theming/theme-media.ts`
+- **Resolusi URL asset SUDAH ter-wire** (#251). `src/modules/theming/presentation/theme-media.ts`
   me-resolve `config.assetRefs` (slotKey -> media object id) lewat
   `MediaLibraryPort` — capability yang sama yang dikonsumsi `blog_content` dan
   `news_portal` — dan `theming` mendeklarasikannya di `capabilities.consumes`.

@@ -1,6 +1,6 @@
 ---
 name: awcms-integration-hub
-description: BACAAN SAJA — modul integration_hub BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `integration-hub`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/adapter di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #754, epic platform-evolution #738 Wave 3). Gunakan saat menambah inbound webhook endpoint, outbound event subscription, adapter provider baru, atau mengubah SSRF guard/replay protection/circuit-breaker/secret-reference validation. Modul ini punya security surface tinggi (2 findings PR #784 sebelum merge) — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
+description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan port.** `awcms-mini`/`awcms-micro` kini ARSIP — boleh dibaca sebagai spesifikasi, tetapi jalur "port dari mini" DICABUT. Mengerjakannya berarti: ADR admission dulu, lalu bangun di repo ini dengan penjagaan ADR-0055 §3 (ADR wajib, security review untuk auth/access/sync, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS FORCE, ABAC default-deny). BACAAN SAJA / SPESIFIKASI TARGET — modul integration_hub TIDAK ADA di repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `integration-hub`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/adapter di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEMBANGUNNYA di sini (ADR admission dulu), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #754, epic platform-evolution #738 Wave 3). Gunakan saat menambah inbound webhook endpoint, outbound event subscription, adapter provider baru, atau mengubah SSRF guard/replay protection/circuit-breaker/secret-reference validation. Modul ini punya security surface tinggi (2 findings PR #784 sebelum merge) — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
 ---
 
 # AWCMS — Integration Hub Module
@@ -11,7 +11,7 @@ description: BACAAN SAJA — modul integration_hub BELUM di-port ke repo ini (ad
 > Semua rujukan `src/modules/integration-hub/...`, tabel
 > `awcms_integration_hub_*`, dan ADR-0019 di bawah adalah artefak
 > awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Pakai
-> skill ini sebagai spesifikasi target port (via `awcms-port-from-mini`),
+> skill ini sebagai spesifikasi target port (via ADR admission; `awcms-port-from-mini` HISTORIS),
 > bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
 > mengklaim apa pun ada.
 
