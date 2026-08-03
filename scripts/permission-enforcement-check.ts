@@ -36,11 +36,15 @@ const EXCEPTIONS: readonly EnforcementException[] = [
   },
 
   // ADR-0058 disposes of every entry left in this list, and the list is
-  // therefore shrinking on a schedule rather than sitting still: two get a
-  // surface, two are revoked. `profile_identity.profile_management.restore`
-  // was the first to go — `POST /api/v1/profiles/{id}/restore` (§A). Each
-  // remaining reason now names the section that decided it and the change that
-  // will delete the entry, so an exception cannot quietly become permanent.
+  // therefore shrinking on a schedule rather than sitting still. Two got a
+  // surface and are already gone: `profile_identity.profile_management.restore`
+  // (§A, `POST /api/v1/profiles/{id}/restore`) and `comments.moderation.delete`
+  // (§B, `POST /api/v1/comments/admin/{id}/delete`).
+  //
+  // The two below are the REVOCATIONS, and they are the whole remainder. One
+  // migration removes both rows from the catalogue and from every role grant,
+  // and this list becomes empty — at which point the next exception anyone adds
+  // is the only entry in it, and cannot hide in a long list.
   //
   // The first run listed six, and two of them — `visitor_analytics.settings`
   // read and update — were the gate's own bug, not a gap: it read the repo's
@@ -54,11 +58,6 @@ const EXCEPTIONS: readonly EnforcementException[] = [
     key: "blog_content.seo.configure",
     reason:
       'No route and no application function names activityCode "seo" anywhere — the only occurrence in the repo is the descriptor declaration itself. ADR-0058 §C REVOKES it: blog SEO defaults (seoDefaultTitle/seoDefaultDescription) are already managed through PATCH /api/v1/blog/settings under blog_content.settings.configure, so this row is a second authorisation axis over columns that already have one. Removed when the revocation migration lands.'
-  },
-  {
-    key: "comments.moderation.delete",
-    reason:
-      "The moderation surface enforces approve/reject (one conditional guard), archive and restore, plus a public delete-request flow — but nothing gates a moderator delete. ADR-0058 §B gives it a surface: the transition is already legal from all four non-terminal statuses and the admin queue can already filter `deleted`, while the only actor who can produce that state today is the comment's own author. Removed when that endpoint lands."
   }
 ];
 

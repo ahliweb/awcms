@@ -382,6 +382,11 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/comments/admin/[id]/delete.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/comments/admin/[id]/moderate.ts",
       "workClass": "interactive",
       "source": "default"

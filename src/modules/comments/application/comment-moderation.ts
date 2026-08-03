@@ -1,7 +1,16 @@
 /**
- * Admin/moderation flows (ADR-0041, ported from awcms-micro Issue #271): the moderation queue and the
- * approve/reject/spam/archive/restore/delete transitions (single + bulk). The
- * queue is the ONLY surface that exposes moderation metadata (reason codes,
+ * Admin/moderation flows (ADR-0041, ported from awcms-micro Issue #271): the
+ * moderation queue and the approve/reject/spam/archive/restore/delete
+ * transitions.
+ *
+ * This sentence used to end "(single + bulk)", and that was wrong in a way
+ * worth recording: `delete` had no route at all until ADR-0058 §B, and bulk
+ * moderation still only passes approve/reject — deliberately, since a bulk
+ * control for the one irreversible action turns a single mistake into a page
+ * of the queue. A header describing a surface that does not exist is how the
+ * gap survived review: readers saw confirmation instead of a question.
+ *
+ * The queue is the ONLY surface that exposes moderation metadata (reason codes,
  * masked email, report counts). Every transition is validated by the pure
  * `applyModerationAction` state machine, writes an append-only moderation-event
  * row, adjusts thread counters, publishes the `comment.approved` event when
@@ -229,7 +238,24 @@ export async function moderateComment(
   `;
 
   // Resolve open reports when a decision is taken.
-  if (action === "reject" || action === "spam" || action === "approve") {
+  //
+  // `delete` joined this set with ADR-0058 §B, which gave moderators the action
+  // at all. It belongs here for the reason the other three do, only more so: a
+  // deleted comment is the most final decision available and cannot be acted on
+  // again, so leaving its reports `open` would keep it counted in the queue's
+  // `report_count` forever — reported content nobody can do anything about,
+  // inflating every "reports needing attention" reading permanently.
+  //
+  // This touches no existing caller: `archive`/`restore` are unchanged, bulk
+  // moderation only passes approve/reject, and the author self-delete path
+  // (`requestCommentDeletion`) writes its row directly without coming through
+  // here. Before §B no code path could reach this branch with `delete` at all.
+  if (
+    action === "reject" ||
+    action === "spam" ||
+    action === "approve" ||
+    action === "delete"
+  ) {
     await tx`
       UPDATE awcms_comments_reports
       SET status = 'reviewed'
