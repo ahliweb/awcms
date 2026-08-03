@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { getDatabaseClient } from "../../../lib/database/client";
+import { publishEdgeCacheTenant } from "../../../lib/edge-cache/publish-tenant";
 import { escapeHtml } from "../../../lib/html/escape";
 import {
   notFoundHtmlResponse,
@@ -28,7 +29,7 @@ import {
  * unknown or soft-deleted term returns the same generic 404 as an unresolved
  * host.
  */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const slug = params.slug;
 
   if (!slug) {
@@ -76,6 +77,10 @@ ${renderPaginationNavHtml(page, posts.hasNextPage, termBasePath)}`;
           siteName: tenant.tenantName,
           variant: "list"
         });
+
+        // After the `!term` branch, never before it (ADR-0061 §3) — a missing
+        // term and an unknown host must annotate identically.
+        publishEdgeCacheTenant(locals, tenant.tenantId);
 
         return new Response(html, {
           status: 200,
