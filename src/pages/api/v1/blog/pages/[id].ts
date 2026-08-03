@@ -17,7 +17,6 @@ import {
   resolveModuleEnabled,
   resolveTenantContext
 } from "../../../../../modules/identity-access/application/auth-context";
-import { recordDecisionLog } from "../../../../../modules/identity-access/application/decision-log";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import {
   fetchBlogPageById,
@@ -190,31 +189,40 @@ export const PATCH: APIRoute = async ({ request, params, cookies, locals }) => {
       return fail(404, "RESOURCE_NOT_FOUND", "Blog page not found.");
     }
 
-    const grantedPermissionKeys = await fetchGrantedPermissionKeys(
+    // ADR-0063 — the ownership rule is a GRANT BASIS handed to the chokepoint,
+    // not a decision taken instead of it, so ABAC (including an explicit deny
+    // that overrules ownership), the platform-scope gate and SoD all apply.
+    const roleKeys = await fetchGrantedPermissionKeys(
       tx,
       tenantId,
       context.tenantUserId
     );
-    const decision = evaluatePageUpdateAccess(context, grantedPermissionKeys, {
+    const ownership = evaluatePageUpdateAccess(context, roleKeys, {
       authorTenantUserId: page.authorTenantUserId,
       status: page.status
     });
 
-    await recordDecisionLog(
+    const auth = await authorizeInTransaction(
       tx,
       tenantId,
-      context.tenantUserId,
+      tokenHash,
+      now,
       {
         ...UPDATE_ACTIVITY,
         action: "update",
         resourceType: "blog_page",
         resourceId: pageId
       },
-      decision
+      {
+        ownershipGrant: {
+          granted: ownership.allowed,
+          reason: "author of an unpublished page"
+        }
+      }
     );
 
-    if (!decision.allowed) {
-      return fail(403, "ACCESS_DENIED", decision.reason);
+    if (!auth.allowed) {
+      return auth.denied;
     }
 
     if (input.parentPageId) {

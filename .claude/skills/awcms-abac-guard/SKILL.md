@@ -39,8 +39,42 @@ kepemilikan sesudah.
 > permission ini punya penegak", bukan "apakah SETIAP situs penegakan memakai
 > chokepoint".
 
-Satu-satunya pengecualian sah adalah jalur **pra-autentikasi** (`auth/login.ts`),
-yang secara definisi belum punya subjek untuk diotorisasi.
+### Aturan kepemilikan? Pakai `ownershipGrant`, jangan keluar dari chokepoint
+
+Kalau akses diberikan pada sumbu yang katalog permission TIDAK bisa ekspresikan
+— "penulis boleh menyunting kontennya sendiri yang belum terbit meski tak
+memegang permission-nya" — jangan memutuskan di luar chokepoint. Serahkan
+sebagai basis grant ([ADR-0063](../../../docs/adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md)):
+
+```ts
+const ownership = evaluatePostUpdateAccess(context, roleKeys, { ... });
+
+const auth = await authorizeInTransaction(tx, tenantId, tokenHash, now, GUARD, {
+  ownershipGrant: {
+    granted: ownership.allowed,
+    reason: "author of an unpublished post"
+  }
+});
+```
+
+Ia **MELEBARKAN** himpunan permission yang dievaluasi, bukan memotong keputusan:
+tenant isolation, ABAC `deny`, business-scope dan SoD semuanya tetap bisa
+menolak. Kredensial mesin dikecualikan. Decision log menandainya
+`ownership_grant:<reason>` supaya allow kepemilikan tak terbaca seperti allow
+RBAC.
+
+**JANGAN** menulis `if (ownership.granted) return allowed` di guard — itu
+memotong keempat lapisan, lolos setiap test perilaku, dan digerbangi kontrak
+teks-sumber.
+
+Dua pengecualian sah, keduanya terdaftar di `access:chokepoint:check`:
+**pra-autentikasi** (`auth/login.ts#POST` — belum ada subjek) dan **introspeksi
+diri** (`access/evaluate.ts#POST` — memanggil `evaluateAccess` langsung, jadi
+ABAC diterapkan bukan dilewati).
+
+Digerbangi `bun run access:chokepoint:check` — di-iris **per HANDLER**, karena
+`blog/posts/[id].ts` pernah memanggil chokepoint di `GET`/`DELETE` sementara
+`PATCH` di berkas yang sama tidak, dan pembacaan per-berkas menyebutnya patuh.
 
 ## Prinsip
 
