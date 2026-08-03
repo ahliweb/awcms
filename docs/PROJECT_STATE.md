@@ -86,7 +86,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Versi       | **6.4.0** (2026-07-26); **68 changeset menunggu** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`**            | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
 | Migrasi     | **89** (`sql/001`–`089`)                                                                                                 | `ls sql/`                                                                               |
-| ADR         | **0000**–**0057** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
+| ADR         | **0000**–**0059** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
 | Layar admin | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -723,20 +723,43 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   - Sebelum tiap port berikutnya: **cek inversi-vs-net-baru** (mis. media sudah jadi satu modul
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).
     (`blog-content` SUDAH di-port — PR #214; `news-portal` dilebur ke dalamnya, ADR-0044.)
-- **Rute publik host-resolved**: `tenant-domain` sudah mendarat; adopsi rute `/news/**` +
-  rute konten host-based `/blog/{slug}` (agar `<loc>` sitemap SEO resolve tanpa tenantCode)
-  masih follow-up (lihat README `seo-distribution` §follow-up).
+- **Rute publik host-resolved — SELESAI ([ADR-0059](adr/0059-host-resolved-public-content-routes.md)).**
+  Keluarga `/news/**` (indeks, detail post, kategori, tag) kini ada:
+  tanpa segmen `tenantCode`, tenant diresolusi dari request lewat
+  `withHostResolvedBlogTenant` (sebentuk `site_search`/`comments`, ber-padding
+  latensi), digerbangi saklar per-tenant `publicRouteMode` yang simetris dengan
+  `legacyTenantRouteEnabled`. **Nol migrasi, nol permission, nol perubahan
+  OpenAPI.** `/news/feed.xml`/`sitemap-news.xml`/`search` sengaja TIDAK dibangun
+  — root host sudah melayani ketiganya host-resolved.
 
-  > **Verifikasi 3 Agustus 2026, dan ini lebih tajam dari "follow-up".**
-  > `createBlogContentSeoFactsAdapter` memakai `DEFAULT_PUBLIC_BASE_PATH`
-  > `/blog`, jadi tiap canonical/`<loc>`/tautan feed yang dipancarkan
-  > `seo_distribution` menunjuk **`/blog/{slug}`** — sementara satu-satunya rute
-  > konten yang ADA di repo ini adalah `/blog/[tenantCode]/[slug]` (ADR-0009).
-  > Artinya untuk tenant host-resolved, **setiap URL di sitemap dan feed
-  > menunjuk halaman yang 404**, dan tak satu gerbang pun merah — kelas cacat
-  > yang sama dengan page-yang-tak-bisa-terbit (ADR-0057) dan Restore-yang-tak-
-  > bisa-bekerja (#351): permukaan yang melapor sukses sambil tidak bekerja.
-  > Layak ADR sendiri, bukan sekadar butir backlog.
+  Yang paling penting untuk dibawa ke pekerjaan berikutnya, dan itu bukan
+  fiturnya:
+
+  > **Cacat yang dicatat entri sebelumnya di sini TIDAK ADA.** Entri itu
+  > berbunyi "untuk tenant host-resolved, **setiap URL di sitemap dan feed
+  > menunjuk halaman yang 404**" karena `createBlogContentSeoFactsAdapter`
+  > memakai default `/blog`. Diverifikasi ke kode: rute discovery tidak pernah
+  > memakai default itu — `discovery-providers.ts` memanggilnya dengan
+  > `` `/blog/${tenantCode}` `` **sejak modulnya mendarat** (`git log -S`,
+  > #223), docblock-nya bahkan menuliskan alasannya, dan singleton ber-default
+  > `/blog` itu **nol pemanggil di `src/`**. Enam rute discovery lewat satu
+  > choke point, jadi tak ada jalur kedua. Ini pengulangan ADR-0058 §1: sebuah
+  > dugaan yang ditulis sebagai temuan, lalu tersalin ke dokumen ini sebagai
+  > keputusan. Yang benar-benar hilang adalah **keluarga rutenya**, bukan
+  > kebenaran URL-nya.
+
+  Gantinya, invarian yang sekarang dijaga: **jangan pernah mengiklankan URL
+  yang tak kita layani.** `resolveEnabledSeoProviders` kini MEMILIH base path
+  dari keluarga yang benar-benar melayani, dan bila tenant mematikan KEDUA
+  keluarga ia menyumbang **nol provider** — sitemap kosong, bukan sitemap
+  berisi 404. Mutation-proven (kembalikan base path ke konstanta lama → dua
+  test integrasi merah).
+
+  Dan satu bukti yang menutup permintaan backlog aslinya: `/blog/{slug}`
+  **tak bisa** jadi bentuknya. Diprobe langsung — Astro memperingatkan rute itu
+  "is defined in both" berkas dengan `/blog/[tenantCode]/index.ts` dan **build
+  tetap sukses**, satu menaungi yang lain diam-diam, dengan catatan "a
+  collision will result in a hard error in following versions of Astro".
 
 - **Kesiapan `ahliweb/awcms-astro` — dianalisis 3 Agustus 2026, dan hasilnya
   membalik asumsi yang wajar.** ADR-0021 di repo itu **menahan** seluruh
@@ -762,10 +785,10 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
 
   **Yang tersisa dan BUKAN milik repo ini:** resolusi gambar artikel, kartu
   share, dan pilihan `img-src` semuanya keputusan sisi `awcms-astro`. Yang
-  tersisa DAN milik repo ini tinggal dua, masing-masing butuh ADR sendiri:
-  rute konten host-based di atas, dan **business-scope resolver** (masih
-  NO-OP fail-closed di `business-scope-hierarchy-port-adapter.ts`) yang
-  diperlukan BFF portal Jualanku — bukan oleh situs statisnya.
+  tersisa DAN milik repo ini tinggal **satu** — rute konten host-based sudah
+  mendarat (ADR-0059, di atas): **business-scope resolver** (masih NO-OP
+  fail-closed di `business-scope-hierarchy-port-adapter.ts`) yang diperlukan
+  BFF portal Jualanku — bukan oleh situs statisnya, dan butuh ADR sendiri.
   `newsletter`/`social-publishing`/pustaka `src/components/ui/` tetap belum
   ada (21 modul, `src/components/ui` tidak ada), tapi tak satu pun memblokir
   `awcms-astro`.

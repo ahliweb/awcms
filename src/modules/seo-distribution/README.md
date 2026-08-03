@@ -76,11 +76,12 @@ SAME `seo_facts` contract:
 | `/atom.xml`        | Atom 1.0      | Same item set; Atom `<id>`/`<published>`/`<updated>`.                                                                                |
 | `/feed.json`       | JSON Feed 1.1 | Same item set; `content_text` only (never tenant HTML).                                                                              |
 
-- **`<loc>` / feed links are resolvable.** The discovery composition root scopes
-  the blog `seo_facts` adapter to `/blog/{tenantCode}`, so every URL is
-  `https://{host}/blog/{tenantCode}/{slug}` — resolvable by the shipped
-  `/blog/[tenantCode]/[slug]` route today. When a host-based `/blog/{slug}`
-  content route lands (follow-up), the base path becomes `/blog`.
+- **`<loc>` / feed links are resolvable, and the base path is CHOSEN**
+  (ADR-0059 §C). `resolveEnabledSeoProviders` asks `blog_content` which of its
+  two public route families actually serves this tenant: `/news/{slug}` while
+  the host-resolved family is live, `/blog/{tenantCode}/{slug}` when the tenant
+  switched it off but kept the legacy one, and **no provider at all** when both
+  are off — an empty sitemap rather than one full of certain 404s.
 - **Tenant-wide `noindex` suppresses ALL discovery surfaces**, not just
   `robots.txt`: with `default_robots_noindex` on, `/sitemap.xml`,
   `/sitemap-{n}.xml`, and the three feeds all return 404 (no machine-readable URL
@@ -169,14 +170,14 @@ The redirect-governance scope completes the module (migrations `sql/060` schema 
 
 ## Documented follow-ups (out of discovery scope)
 
-- **Host-based public content route.** The `blog_content` `seo_facts` adapter builds
-  canonical paths under `/blog/{slug}` (host-relative, tenant-code-free) — the
-  natural shape for a host-resolved tenant on its own domain. The base currently
-  ships only the legacy `/blog/{tenantCode}/{slug}` content route (ADR-0009); a
-  host-based content route that these sitemap/feed URLs point at is a follow-up
-  (the same relationship awcms-micro's `/news` route had). The discovery surfaces
-  are correct and secure regardless; only the resolvability of the exact canonical
-  page depends on that route landing.
+- ~~**Host-based public content route.**~~ **CLOSED by
+  [ADR-0059](../../../docs/adr/0059-host-resolved-public-content-routes.md)** —
+  `blog_content` now ships the host-resolved family `/news/**`, and this
+  module's composition root picks the base path from whichever family serves
+  (above). Worth keeping the correction that came with it: this entry used to
+  be read as "sitemap URLs 404 for host-resolved tenants", which was never
+  true — the composition root has scoped the adapter to `/blog/{tenantCode}`
+  since #223.
 - **Resource-type coverage.** The `blog_content` adapter maps the `blog_post`
   resource type only. A generic `blog_page`, homepage/website identity, and
   `BreadcrumbList` facts are not yet produced by a provider — the contract is
