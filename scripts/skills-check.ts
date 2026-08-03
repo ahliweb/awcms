@@ -104,7 +104,88 @@ const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
     "historical: ADR-0055 retired the mini-first pathway; the skill is kept as the record of how ports were done."
 };
 
+/**
+ * Reference targets `scripts/README.md` §Ditunda declares as legitimately
+ * absent, which that section **explicitly permits** skills to name:
+ *
+ * > Nama-nama ini boleh disebut sebagai **target** di `docs/awcms/` dan
+ * > `.claude/skills/` … tetapi tidak boleh muncul sebagai `bun run <target>` di
+ * > berkas **current-state**.
+ *
+ * So rule 4 below is deliberately NARROW: it does not re-litigate that policy,
+ * it only catches targets that are neither real nor deferred — pure ghosts.
+ *
+ * Kept here as an explicit list rather than parsed out of the README (the
+ * section mixes full names, `performance:*` wildcards and `:pot:check`
+ * shorthand, and a parser for that would fail in the quiet direction). A test
+ * binds every entry back to the README so the two cannot drift.
+ */
+const DEFERRED_TARGET_PREFIXES: readonly string[] = [
+  "config:docs:check",
+  "database:capacity:check",
+  "i18n:",
+  "modules:sync",
+  "performance:",
+  "production:preflight",
+  "resilience:dr-drill"
+];
+
 export type SkillProblem = { skill: string; message: string };
+
+/** True when a `bun run` target is real, or declared deferred by `scripts/README.md` §Ditunda. */
+export function isKnownRunTarget(
+  target: string,
+  packageScripts: ReadonlySet<string>,
+  deferred: readonly string[] = DEFERRED_TARGET_PREFIXES
+): boolean {
+  if (packageScripts.has(target)) {
+    return true;
+  }
+
+  return deferred.some((entry) =>
+    entry.endsWith(":") ? target.startsWith(entry) : target === entry
+  );
+}
+
+/** Extract every `bun run <target>` a skill tells its reader to run. */
+export function extractCitedRunTargets(source: string): string[] {
+  return [
+    ...new Set(
+      [...source.matchAll(/bun run ([a-z0-9:_-]+)/g)].map((match) => match[1]!)
+    )
+  ];
+}
+
+/**
+ * Rule 4 — a skill must not tell its reader to run a command that neither
+ * exists nor is a declared deferred target.
+ *
+ * This is the same defect `check:docs` was widened to catch in source comments:
+ * six comments under `src/modules/module-management/` told readers to run
+ * `modules:sync`, a command that never existed here (the real mechanism is
+ * `POST /api/v1/modules/sync`). That was fixed in `src/` — and the skill for
+ * that same module still said it, because skills were outside every gate.
+ */
+export function checkCitedRunTargets(
+  skill: string,
+  citedTargets: readonly string[],
+  packageScripts: ReadonlySet<string>,
+  skillIsAspirational: boolean
+): SkillProblem[] {
+  if (skillIsAspirational) {
+    return [];
+  }
+
+  return citedTargets
+    .filter((target) => !isKnownRunTarget(target, packageScripts))
+    .map((target) => ({
+      skill,
+      message:
+        `tells the reader to run \`bun run ${target}\`, which is not in package.json and is not ` +
+        "listed as a deferred target in `scripts/README.md` §Ditunda. Name the real mechanism, or " +
+        "write the placeholder so it cannot be mistaken for a command."
+    }));
+}
 
 /** A skill directory's subject module key: `awcms-blog-content` → `blog_content`. */
 export function subjectModuleKey(skillName: string): string {
@@ -188,6 +269,15 @@ export function checkCitedAdrs(
 
 async function main(): Promise<void> {
   const liveModuleKeys = new Set(listModules().map((module) => module.key));
+  const packageScripts = new Set(
+    Object.keys(
+      (
+        JSON.parse(await readFile("package.json", "utf8")) as {
+          scripts?: Record<string, string>;
+        }
+      ).scripts ?? {}
+    )
+  );
   const adrNumbers = new Set(
     (await readdir(ADR_ROOT))
       .map((file) => /^(\d{4})-/.exec(file)?.[1])
@@ -218,7 +308,13 @@ async function main(): Promise<void> {
         moduleIsLive,
         existsSync
       ),
-      ...checkCitedAdrs(skill, extractCitedAdrNumbers(source), adrNumbers)
+      ...checkCitedAdrs(skill, extractCitedAdrNumbers(source), adrNumbers),
+      ...checkCitedRunTargets(
+        skill,
+        extractCitedRunTargets(source),
+        packageScripts,
+        skill in ASPIRATIONAL_SKILLS
+      )
     );
   }
 
@@ -261,7 +357,7 @@ async function main(): Promise<void> {
   console.log(
     `skills:check OK — ${skillDirs.length} skills, ` +
       `${Object.keys(ASPIRATIONAL_SKILLS).length} declared aspirational/historical, ` +
-      `every cited src path and ADR resolves.`
+      `every cited src path, ADR and \`bun run\` target resolves.`
   );
 }
 

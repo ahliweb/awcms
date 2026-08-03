@@ -85,7 +85,7 @@ ownership matrix — "no shared-table write").
        executionMode: "delegated", // ATAU "generic" — lihat pilihan di bawah
        existingAdopter: {
          // WAJIB bila executionMode "delegated", DILARANG bila "generic"
-         jobCommand: "bun run your:purge:job",
+         jobCommand: "bun run <modul>:purge", // ganti dengan target NYATA di package.json
          purgeFunctionRef:
            "src/modules/your_module/application/your-purge.ts#purgeYourTable",
          description: "..."

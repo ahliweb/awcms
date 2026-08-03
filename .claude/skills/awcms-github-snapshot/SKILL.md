@@ -35,7 +35,8 @@ sudah salah.
 
 ```bash
 gh auth status
-bun run github:snapshot:refresh   # default repo ahliweb/awcms
+# TIDAK ADA target `bun run` untuk ini — refresh dilakukan MANUAL dengan `gh`
+# (lihat perintah di bawah), lalu hasilnya ditulis ke docs/awcms/github/.
 ```
 
 `scripts/github-snapshot-refresh.ts` (Issue #464) meregenerasi bagian
@@ -71,7 +72,7 @@ menit kemudian bila baris itu perlu nilai terbaru.
 
 ```mermaid
 flowchart LR
-  A[gh auth status] --> B[bun run github:snapshot:refresh]
+  A[gh auth status] --> B["gh issue/pr list --json (manual)"]
   B --> C[bun run format]
   C --> D[bun run check:docs]
   D --> E{Narasi manual perlu update?}

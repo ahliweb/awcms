@@ -7,6 +7,41 @@ description: Terapkan kontrol akses RBAC+ABAC default-deny plus RLS pada endpoin
 
 Ikuti `docs/awcms/03_srs_detail_per_modul.md`, `docs/awcms/10_template_kode_coding_standard.md`, dan **`docs/awcms/17_default_seed_rbac_abac.md`** (matriks role→permission & default ABAC policy). Mekanisme RLS/tenant context konkret: `docs/awcms/16_backend_data_access_integration.md`.
 
+## ATURAN PERTAMA — satu chokepoint, `authorizeInTransaction`
+
+**Setiap keputusan otorisasi untuk permission tenant WAJIB lewat
+`authorizeInTransaction`** (`src/modules/identity-access/application/access-guard.ts`),
+atau lewat `defineTenantRoute` yang memanggilnya. Jangan menyusun jalur sendiri
+dari `resolveTenantContext` + `fetchGrantedPermissionKeys` + aturan domain.
+
+Alasannya bukan kerapian. Chokepoint itu adalah SATU-SATUNYA tempat berikut ini
+dievaluasi, dan jalur buatan sendiri melewatkan **semuanya** tanpa satu pun
+error:
+
+| Lapisan                                    | Kalau dilewati                                           |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `evaluateAccess` — evaluator ABAC DSL      | **policy `deny` eksplisit milik tenant tidak dihormati** |
+| `isPlatformScopedPermissionKey` (ADR-0053) | aksi lintas-tenant tak digerbangi                        |
+| `resolveBusinessScopeFacts` (ADR-0060)     | cakupan bisnis tak ikut memutuskan                       |
+| `isHighRiskAction` + SoD (#181)            | konflik segregation-of-duties tak diperiksa              |
+
+Aturan kepemilikan domain (mis. `evaluatePostUpdateAccess`) adalah lapisan
+**TAMBAHAN di atas** chokepoint, bukan pengganti. Pola benarnya ada di
+`src/pages/api/v1/blog/posts/[id].ts`: `authorizeInTransaction` dulu, aturan
+kepemilikan sesudah.
+
+> **Ini bukan aturan hipotetis.** Asesmen 4 Agustus 2026
+> ([`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md) §2)
+> menemukan `POST /api/v1/blog/posts/{id}/submit-review` menegakkan permission
+> yang SAMA dengan `PATCH /{id}` tanpa memanggil chokepoint sama sekali —
+> sehingga policy ABAC dihormati di satu rute dan diabaikan di rute lain.
+> `access:permissions:enforcement:check` tidak menangkapnya: ia bertanya "apakah
+> permission ini punya penegak", bukan "apakah SETIAP situs penegakan memakai
+> chokepoint".
+
+Satu-satunya pengecualian sah adalah jalur **pra-autentikasi** (`auth/login.ts`),
+yang secara definisi belum punya subjek untuk diotorisasi.
+
 ## Prinsip
 
 1. **Default deny** — tidak ada policy yang mengizinkan = tolak.

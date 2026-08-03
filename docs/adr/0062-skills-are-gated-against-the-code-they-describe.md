@@ -79,6 +79,20 @@ sebuah spesifikasi target disunting lalu berhenti dibaca; daftar skill hanya
 berubah ketika sebuah skill berubah SIFAT — persis saat seseorang memang harus
 melihat.
 
+**Aturan 4 — perintah yang disuruh dijalankan harus ada.** Setiap
+`bun run <target>` di sebuah skill wajib ada di `package.json` ATAU terdaftar di
+`scripts/README.md` §Ditunda. Aturan ini **sengaja sempit**: §Ditunda secara
+eksplisit MENGIZINKAN skill menyebut target acuan yang belum dibangun, jadi
+gerbang ini tidak menggugat kebijakan itu — ia hanya menangkap target yang bukan
+keduanya. Hari ini itu tepat dua, dan salah satunya menyuruh pembacanya
+menjalankan `github:snapshot:refresh` yang tak pernah ada padahal mekanismenya
+`gh` CLI di halaman yang sama.
+
+Ini kelas yang sama yang `check:docs` sudah tangkap di komentar kode: enam
+komentar di `src/modules/module-management/` menyuruh menjalankan `modules:sync`,
+perintah yang tak pernah ada di sini. Itu sudah diperbaiki di `src/` — dan skill
+untuk modul yang SAMA masih menyebutnya, karena skill ada di luar semua gerbang.
+
 ### Entri mati juga gagal
 
 Dua cara sebuah entri `ASPIRATIONAL_SKILLS` jadi tak bermakna, dan yang kedua

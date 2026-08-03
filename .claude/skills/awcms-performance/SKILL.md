@@ -3,6 +3,19 @@ name: awcms-performance
 description: Audit dan tingkatkan performa aplikasi & database AWCMS. Gunakan saat diminta "optimasi performa/query", ada endpoint lambat, N+1, masalah indexing/pagination, tuning connection pool, atau perencanaan materialized view/caching. Menegakkan pola akses data doc 16, pooling/backpressure, dan pagination keyset.
 ---
 
+> **PERINGATAN — perintah di halaman ini BELUM ADA di repo ini.**
+> `performance:suite`, `performance:query-plan:check`, `database:capacity:check`
+> terdaftar di [`scripts/README.md`](../../../scripts/README.md) §Ditunda sebagai
+> target acuan, bukan skrip nyata. Menjalankannya akan gagal. Pakai halaman ini
+> sebagai **daftar periksa manual + spesifikasi target**, bukan runbook.
+>
+> Asesmen 4 Agustus 2026 ([`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md) §5)
+> mencatat konsekuensinya: **nol dari 28 gerbang `bun run check` memeriksa
+> performa**, jadi query N+1 atau kolom FK tanpa index mendarat dengan CI hijau
+> penuh. Rekomendasi termurah-berdampak-terbesar di sana: gerbang index-FK murni
+> (tanpa DB), lalu anggaran query per-endpoint memakai pola Proxy-apply-trap yang
+> SUDAH terbukti di test SoD (#181).
+
 # AWCMS — Performance & Database Tuning
 
 Sumber kebenaran: **`docs/awcms/16_backend_data_access_integration.md`** (lapisan akses data, pooling/backpressure, transaction), **`docs/awcms/database-pooling.md`**, dan **`docs/awcms/07_sprint_testing_production_readiness.md`** (target performa). Skill ini **peningkatan**: ukur → temukan bottleneck → perbaiki → ukur ulang.

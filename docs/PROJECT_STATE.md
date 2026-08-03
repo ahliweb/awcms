@@ -302,6 +302,50 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **ASESMEN MENYELURUH 4 Agustus 2026 — [`awcms/repo-assessment-2026-08-04.md`](awcms/repo-assessment-2026-08-04.md).**
+  Repo dinilai terhadap empat sumbu (standar AWCMS, hubungan `awcms-astro`, performa
+  internasional, keamanan internasional). Tujuh rekomendasi berperingkat; tiga
+  teratas dicatat di sini karena mengubah backlog:
+
+  - **P0 — satu rute MELEWATI chokepoint otorisasi.**
+    `POST /api/v1/blog/posts/{id}/submit-review` tidak memanggil
+    `authorizeInTransaction` sama sekali; ia menyusun jalurnya sendiri
+    (`fetchGrantedPermissionKeys` + `evaluatePostUpdateAccess`). Yang dilewati:
+    **evaluator ABAC** (`evaluateAccess`), gerbang platform-scope (ADR-0053),
+    business-scope facts (ADR-0060), dan SoD (#181). Akibat konkretnya —
+    **policy ABAC `deny` atas `blog_content.posts.update` dihormati di
+    `PATCH /{id}` dan diam-diam diabaikan di rute ini.** Severity moderat (blast
+    radius sempit, RBAC + aturan kepemilikan tetap berlaku); yang serius adalah
+    KELASNYA. `access:permissions:enforcement:check` tak bisa melihatnya: ia
+    bertanya "apakah permission ini punya penegak", bukan "apakah setiap situs
+    penegakan memakai chokepoint" — pengulangan persis pelajaran PR #351.
+    Perbaikannya dua bagian: routekan lewat chokepoint, DAN gerbangi kelasnya.
+    Himpunan pelanggar hari ini **tepat dua** berkas, satu di antaranya
+    (`auth/login.ts`) memang pra-autentikasi — jadi daftar pengecualiannya lahir
+    dengan satu entri.
+  - **P1 — kontrak yang dipakai `awcms-astro` tidak dijaga test apa pun.**
+    Snapshot OpenAPI beku adalah snapshot **PRA-migrasi #182**, sedangkan kelima
+    permukaan yang benar-benar dikonsumsi repo itu mendarat SESUDAHNYA
+    (`/auth/session`, `/media/objects`, `/media/public-origin`,
+    `/access/machine-credentials`, dan traversal `/blog/posts`). Diverifikasi: nol
+    kemunculan di berkas snapshot. Mengubah bentuk respons salah satunya **hijau di
+    CI sini dan merusak build repo sana** — kegagalan yang muncul di tempat orang
+    yang menyebabkannya tidak melihat. Perbaikan: snapshot kontrak KONSUMEN kedua
+    (jangan perluas yang pra-migrasi — tugasnya berbeda dan ia harus tetap beku).
+  - **P1 — rate limiter tidak bertahan lintas instans.** `src/lib/security/rate-limit.ts`
+    memakai `Map` dalam-proses (berkasnya sendiri mencatatnya): dengan N replika,
+    batas efektif jadi N × batas terkonfigurasi, sehingga deployment yang paling
+    butuh perlindungan justru paling lemah. Redis SUDAH ada di repo. Tiga endpoint
+    autentikasi belum ber-limiter sama sekali (`session-handoff/issue`/`redeem`,
+    `sso/{providerKey}/callback`) — kelengkapan, bukan lubang (masing-masing punya
+    mitigasi lain), tapi ASVS menuntut anti-automation di seluruh permukaan auth.
+
+  Sisanya (gerbang index-FK, `overrides` postcss untuk GHSA-fxqj-rqcc-2cmp,
+  anggaran query, Core Web Vitals) ada di dokumen asesmen dengan urutan eksekusi
+  yang disarankan. Catatan penting dari asesmen: **nol dari 28 gerbang repo ini
+  memeriksa performa** — sebuah query N+1 atau FK tanpa index mendarat dengan CI
+  hijau penuh.
+
 - **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Gelombang kedua
   (PR #335–#338, 2 Agustus 2026) menutup EMPAT dari tujuh — verifikasi ulang dengan
   `grep -L 'navigation:' src/modules/*/module.ts`, bukan dari daftar ini:
