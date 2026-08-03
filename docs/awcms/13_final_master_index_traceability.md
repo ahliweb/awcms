@@ -136,10 +136,10 @@ flowchart LR
 
 Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 `src/modules/index.ts`, keduanya dibaca ulang saat menulis tabel ini.
-`repo-inventory.md` saat ini **hand-maintained** (bukan hasil generate
-nyata) — `bun run repo:inventory:generate` dan
-`scripts/repo-inventory-generate.ts` belum ada di repo ini; lihat
-disclaimer di puncak `repo-inventory.md` sendiri untuk statusnya. **79 file migration nyata** di
+`repo-inventory.md` kini **benar-benar di-generate**: tabel di antara penandanya
+diproduksi `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) dari
+registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`, dan
+`bun run repo:inventory:check` ada di rantai `bun run check`. **79 file migration nyata** di
 `sql/` (`001`..`081`), dipetakan ke **21 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,

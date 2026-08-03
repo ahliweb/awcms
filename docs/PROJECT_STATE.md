@@ -127,9 +127,12 @@ Modul (21, urutan `src/modules/index.ts`): `logging`, `tenant-admin`,
 `idn-admin-regions` (#312, ADR-0046) **bukan** hasil port — ia modul pertama yang
 dirintis langsung di sini setelah pembekuan ADR-0047.)
 
-> Catatan: generator `repo:inventory` **belum diport** dari `awcms-mini`, jadi
-> [`awcms/repo-inventory.md`](awcms/repo-inventory.md) adalah placeholder — jangan
-> jadikan sumber angka. Gunakan ARCHITECTURE.md / registry / `sql/`.
+> Catatan: [`awcms/repo-inventory.md`](awcms/repo-inventory.md) kini
+> **ter-generate** (`bun run repo:inventory:generate`, gerbang `:check` di rantai
+> `check`) — angka modul/migrasi/tabel-RLS/test/route di sana diturunkan dari
+> repo, jadi ia boleh dipakai sebagai sumber angka. Tabel §2 di atas tidak
+> digerbangi apa pun dan tetap harus diverifikasi dengan perintah di kolom
+> "Sumber kebenaran".
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
@@ -794,7 +797,22 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   ada (21 modul, `src/components/ui` tidak ada), tapi tak satu pun memblokir
   `awcms-astro`.
 
-- **Port generator `repo:inventory`** dari mini agar `repo-inventory.md` jadi ter-generate.
+- **~~Port generator `repo:inventory`~~ — SELESAI, dan dibangun di sini (bukan
+  port).** `bun run repo:inventory:generate|:check` (`scripts/repo-inventory.ts`)
+  mengisi blok ber-penanda di [`awcms/repo-inventory.md`](awcms/repo-inventory.md)
+  dari registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`;
+  `:check` masuk rantai `bun run check`. Dokumen itu sebelumnya membawa banner
+  "GENERATED FILE" tanpa generator, dan isinya menua ke arah paling merugikan:
+  "belum ada tabel"/"belum ada test file" terhadap 126 tabel dan 296 berkas
+  test, jumlah migrasi **45** di satu paragraf dan **89** di paragraf lain,
+  serta **20** modul saat registry memuat 21. Status RLS diparse dari teks
+  migrasi secara **kumulatif** (sql/020 mematikan FORCE untuk perbaikan data
+  lalu menyalakannya lagi — pembaca statement pertama ATAU terakhir saja akan
+  melaporkan kebalikan dari kebenaran); `security:readiness` tetap otoritas
+  untuk deployment nyata. Satu test lintas-artefak menjaga klaimnya: himpunan
+  tabel RLS-free yang diturunkan generator wajib SAMA dengan kunci
+  `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` — satu sisi diturunkan dari migrasi, satu
+  sisi dideklarasikan manusia dengan alasan per entri.
 - **~~Seam yang menunggu penyedia~~ — business-scope resolver SUDAH PUNYA PENYEDIA
   ([ADR-0060](adr/0060-business-scope-hierarchy-provided-by-tenant-admin.md)).**
   `tenant_admin` me-resolve scope type `office` terhadap `awcms_offices`; NO-OP
