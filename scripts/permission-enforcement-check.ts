@@ -35,17 +35,25 @@ const EXCEPTIONS: readonly EnforcementException[] = [
       "Declared by the descriptor and seeded by sql/036, with no endpoint anywhere that enforces it — recorded in /admin/blog's header and in ADR-0057 §F as a revocation candidate awaiting its own ADR. Building a surface to justify the catalogue row would be the tail wagging the dog."
   },
 
-  // The five below were found by this gate on its first run, and every one was
-  // verified against the code before being written down. They are NOT excused
-  // because they are acceptable — they are the same defect ADR-0057 documents
-  // for `pages`, in five more places, and each needs the decision ADR-0057 §A
-  // made: give it a surface, or revoke it.
+  // The three below were found by this gate on its first run. They are NOT
+  // excused because they are acceptable — they are the same defect ADR-0057
+  // documents for `pages`, in three more places, and each needs the decision
+  // ADR-0057 §A made: give it a surface, or revoke it.
   //
-  // They are recorded rather than fixed here because closing five unrelated
-  // holes inside a change about blog pages produces something nobody can
-  // review as either. `docs/PROJECT_STATE.md` §4 carries them as backlog. What
-  // this list buys today is that they are visible, counted, and that a SIXTH
-  // one turns CI red instead of waiting for the next manual audit.
+  // They are recorded rather than fixed here because closing unrelated holes
+  // inside a change about blog pages produces something nobody can review as
+  // either. `docs/PROJECT_STATE.md` §4 carries them as backlog. What this list
+  // buys today is that they are visible, counted, and that a FOURTH one turns
+  // CI red instead of waiting for the next manual audit.
+  //
+  // The first run listed FIVE, and two of them — `visitor_analytics.settings`
+  // read and update — were the gate's own bug, not a gap: it read the repo's
+  // constants as one flat namespace, `MODULE_KEY` is bound to four different
+  // values across five files, and the guard in `analytics/settings.ts` became
+  // invisible. Their written reasons asserted, of a route that exists, that no
+  // route names a settings activity. Constants now resolve file-first
+  // (`resolveConstantsForSource`), and the two entries are gone — the gate's
+  // stale-exception rule would now reject them anyway.
   {
     key: "blog_content.seo.configure",
     reason:
@@ -59,17 +67,7 @@ const EXCEPTIONS: readonly EnforcementException[] = [
   {
     key: "profile_identity.profile_management.restore",
     reason:
-      "profile_identity has no restore route at all; the five profile routes gate read/create/update/merge. Soft-deleted profiles therefore cannot be recovered through the API, which is a real hole rather than a spare permission — the same shape ADR-0056 §B closed for media objects. Needs its own ADR."
-  },
-  {
-    key: "visitor_analytics.settings.read",
-    reason:
-      "Every analytics route gates on the dashboard/sessions/retention activities; no route names a settings activity. Per-tenant analytics settings have no surface at all. Needs its own ADR, together with the update below."
-  },
-  {
-    key: "visitor_analytics.settings.update",
-    reason:
-      "Pair of the read above — declared and seeded, with no endpoint that enforces it."
+      "profile_identity has no restore route at all; the five profile routes gate read/create/update/delete. `awcms_profiles` carries deleted_at/restored_at/restored_by since sql/003 and party-directory.ts exports softDeleteParty with no counterpart, so a soft-deleted profile cannot be recovered through the API — a real hole rather than a spare permission, the same shape ADR-0056 §B closed for media objects. Needs its own ADR."
   }
 ];
 

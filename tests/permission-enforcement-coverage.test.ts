@@ -4,7 +4,8 @@ import {
   collectGuardTriples,
   collectStringConstants,
   evaluateEnforcementCoverage,
-  permissionTripleKey
+  permissionTripleKey,
+  resolveConstantsForSource
 } from "../src/modules/_shared/permission-enforcement-coverage";
 import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
 
@@ -16,10 +17,15 @@ import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
  * Draft 1 read string literals only and produced 39 false positives.
  * Draft 2 matched innermost braces and missed every guard with a nested field.
  * Draft 3 required a literal action and missed both conditional guards.
+ * Draft 4 — the one that SHIPPED — read every file's constants as one flat
+ * namespace, so a name bound to different values in different files became
+ * unresolvable in all of them.
  *
  * A scanner that answers "unenforced" for enforced permissions is worse than
  * no scanner: it trains its readers to add exceptions until the gate asks
- * nothing at all. Each case below is one of those drafts, frozen.
+ * nothing at all. Each case below is one of those drafts, frozen. Draft 4 is
+ * the proof that the warning was not hypothetical: it was written in this
+ * file's own header, and two exceptions were recorded on its strength anyway.
  */
 
 function guard(
@@ -94,6 +100,81 @@ describe("collectGuardTriples", () => {
         constants
       )
     ).toEqual([]);
+  });
+
+  test("a file's own constant beats a cross-file collision on the same name (draft 4)", () => {
+    // The shipped defect, reduced. `MODULE_KEY` is bound in five files to four
+    // different values, so the cross-file table resolves it to null — and the
+    // guard in `analytics/settings.ts`, whose own file binds it one line up,
+    // became invisible. `visitor_analytics.settings.read` and `.update` were
+    // then recorded as permissions nothing enforces.
+    const analyticsSettingsRoute = `
+      const MODULE_KEY = "visitor_analytics";
+      const READ_GUARD = {
+        moduleKey: MODULE_KEY,
+        activityCode: "settings",
+        action: "read" as const
+      };
+    `;
+    const emailDispatch = `const MODULE_KEY = "email";`;
+    const syncDispatch = `const MODULE_KEY = "sync_storage";`;
+
+    const crossFile = collectStringConstants([
+      analyticsSettingsRoute,
+      emailDispatch,
+      syncDispatch
+    ]);
+
+    // Unresolvable across the repo, and that much is correct.
+    expect(crossFile.get("MODULE_KEY")).toBeNull();
+
+    // Resolvable inside the file that binds it, which is the only scope that
+    // decides what this guard means.
+    const scoped = resolveConstantsForSource(analyticsSettingsRoute, crossFile);
+    expect(scoped.get("MODULE_KEY")).toBe("visitor_analytics");
+
+    expect(
+      collectGuardTriples(analyticsSettingsRoute, scoped).map(
+        permissionTripleKey
+      )
+    ).toEqual([guard("visitor_analytics", "settings", "read")]);
+  });
+
+  test("a name a file binds twice to different values stays unresolvable in that file", () => {
+    // Local scope wins, but locally ambiguous is still ambiguous — resolving
+    // to either value here would swap one false answer for the other.
+    const source = `
+      const ACTIVITY = "settings";
+      const ACTIVITY = "dashboard";
+      const G = { moduleKey: "visitor_analytics", activityCode: ACTIVITY, action: "read" };
+    `;
+
+    const scoped = resolveConstantsForSource(source, new Map());
+
+    expect(scoped.get("ACTIVITY")).toBeNull();
+    expect(collectGuardTriples(source, scoped)).toEqual([]);
+  });
+
+  test("an imported constant still resolves through the cross-file table", () => {
+    // File-first must not mean file-only: most guards name their module key
+    // through a constant that lives in another module entirely.
+    const constantsSource = `export const THEMING_MODULE_KEY = "theming";`;
+    const routeSource = `
+      const G = {
+        moduleKey: THEMING_MODULE_KEY,
+        activityCode: "version",
+        action: "publish"
+      };
+    `;
+
+    const scoped = resolveConstantsForSource(
+      routeSource,
+      collectStringConstants([constantsSource, routeSource])
+    );
+
+    expect(
+      collectGuardTriples(routeSource, scoped).map(permissionTripleKey)
+    ).toEqual([guard("theming", "version", "publish")]);
   });
 
   test("reads a guard that carries a nested object (draft 2)", () => {
@@ -222,6 +303,31 @@ describe("evaluateEnforcementCoverage", () => {
     expect(result.unenforced.map((entry) => entry.key)).toEqual([
       "blog_content.pages.publish"
     ]);
+  });
+
+  test("scopes constants per file end-to-end, not just in the helper (draft 4)", () => {
+    // The gate calls `evaluateEnforcementCoverage`, so scoping has to hold
+    // HERE. Passing the flat table through was the shipped bug, and it is one
+    // line — a helper that scopes correctly while its only caller does not
+    // would look fixed and behave exactly as before.
+    const result = evaluateEnforcementCoverage(
+      [
+        moduleWith("visitor_analytics", [
+          { activityCode: "settings", action: "read" }
+        ])
+      ],
+      [
+        `
+          const MODULE_KEY = "visitor_analytics";
+          const READ_GUARD = { moduleKey: MODULE_KEY, activityCode: "settings", action: "read" };
+        `,
+        `const MODULE_KEY = "email";`
+      ],
+      []
+    );
+
+    expect(result.unenforced).toEqual([]);
+    expect(result.valid).toBe(true);
   });
 
   test("reports an exception that has since gained an enforcer as stale", () => {
