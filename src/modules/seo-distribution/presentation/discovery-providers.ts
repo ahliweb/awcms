@@ -15,6 +15,10 @@
  * A tenant with a content module disabled simply contributes no facts / no
  * images — the aggregator degrades safely (`consumes` optional, ADR-0038 §2).
  */
+import {
+  fetchEffectivePublicRouteSettings,
+  resolvePublicContentBasePath
+} from "../../blog-content/application/public-route-settings";
 import { createBlogContentSeoFactsAdapter } from "../../blog-content/application/seo-facts-port-adapter";
 import { mediaLibraryPortAdapter } from "../../media-library/application/media-library-port-adapter";
 import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
@@ -34,11 +38,19 @@ const MEDIA_LIBRARY_MODULE_KEY = "media_library";
  * inside the caller's tenant transaction. Fail-closed: a missing tenant-module
  * entry (module not enabled) contributes nothing rather than defaulting on.
  *
- * `tenantCode` scopes the blog adapter's public base path to `/blog/{tenantCode}`
- * so that every emitted `<loc>`/feed link resolves against the SHIPPED
- * path-based content route `/blog/[tenantCode]/[slug]` (there is no host-based
- * `/blog/{slug}` route in this base yet — that is the deferred content-route
- * follow-up). Advertising `/blog/{slug}` would 404 for crawlers.
+ * ## The base path is chosen, never assumed (ADR-0059 §C)
+ *
+ * `blog_content` serves its public content through TWO route families —
+ * host-resolved `/news/**` and path-based `/blog/{tenantCode}/**` (ADR-0009) —
+ * each with its own per-tenant switch. `resolvePublicContentBasePath` picks the
+ * one that will actually answer, and returns `null` when a tenant has switched
+ * BOTH off. `null` contributes NO provider: a tenant with no public content URL
+ * gets an empty sitemap/feed rather than one full of links that are certain to
+ * 404, which is the invariant this whole composition root exists to hold.
+ *
+ * Both this pipeline and `/news/**` resolve their tenant with the same
+ * host resolver, so the two can never disagree about which tenant a request is
+ * for.
  */
 export async function resolveEnabledSeoProviders(
   tx: Bun.TransactionSQL,
@@ -59,7 +71,12 @@ export async function resolveEnabledSeoProviders(
 
   const providers: SeoFactsSource[] = [];
   if (blogEntry?.tenantEnabled ?? false) {
-    providers.push(createBlogContentSeoFactsAdapter(`/blog/${tenantCode}`));
+    const routeSettings = await fetchEffectivePublicRouteSettings(tx, tenantId);
+    const basePath = resolvePublicContentBasePath(routeSettings, tenantCode);
+
+    if (basePath !== null) {
+      providers.push(createBlogContentSeoFactsAdapter(basePath));
+    }
   }
 
   const mediaLibrary =

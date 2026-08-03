@@ -157,5 +157,13 @@ atas `default.vcl`.
   mempublikasikan tenant-nya. Menyambungkannya: alirkan `locals` melalui
   `serveDiscovery` + enam pemanggilnya, set `edgeCacheTenantId`, tambahkan tiga
   entri registry.
+- **Keluarga konten host-resolved `/news/**`** (ADR-0059 §E). Rutenya justru
+  MENERIMA `locals` (berbeda dari discovery di atas), jadi mempublikasikan
+  tenant bukan penghalangnya. Yang harus dipastikan lebih dulu: **kunci cache
+  memuat host**. Path `/news/hello-world` identik untuk setiap tenant, jadi
+  mendeklarasikannya sebelum VCL terbukti mem-hash `Host` adalah cara paling
+  langsung memasang kebocoran lintas-tenant di cache bersama. Sampai itu
+  diverifikasi, keempat rutenya jatuh ke `surface_not_declared` →
+  `Cache-Control: private, no-store`, yang benar dan tak pernah salah.
 - **Daftar publik komentar** (`GET /api/v1/comments`) — kandidat sah, ditunda.
 - **Purge dari UI admin.** Hanya lewat antrean dan worker.
