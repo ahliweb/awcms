@@ -143,7 +143,11 @@ describe("/admin/blog permission gates", () => {
 
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
-    expect(declared.size).toBe(43);
+    // 43 until ADR-0058 §C/§D revoked `seo.configure` and `posts.export`
+    // (`sql/089`). The number is pinned rather than derived so that a
+    // permission appearing or vanishing has to be a decision someone edits
+    // this line for.
+    expect(declared.size).toBe(41);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
@@ -168,19 +172,31 @@ describe("/admin/blog permission gates", () => {
     expect(declared.has("blog_content.posts.review" as Triple)).toBe(false);
   });
 
-  test("posts.export is declared, seeded, and has no route — so no control gates on it", async () => {
+  test("posts.export is REVOKED — undeclared, unseeded, unenforced, ungated", async () => {
     const declared = declaredTriples();
     const page = await readFile(PAGE, "utf8");
 
-    // Declared and seeded...
-    expect(declared.has("blog_content.posts.export" as Triple)).toBe(true);
+    // This test used to assert the opposite — declared and seeded with no
+    // enforcer — and recorded that state as a deliberate absence. ADR-0058 §D
+    // ended it: there was no export machinery anywhere in the repo, so the
+    // catalogue row promised authority over an action that could not be
+    // performed, granted to every tenant owner by `setup/initialize`.
+    expect(declared.has("blog_content.posts.export" as Triple)).toBe(false);
+
+    // `sql/036` still contains the original seed — an applied migration is
+    // immutable — so the revocation is a NEW migration, and it is the one that
+    // must be present.
     expect(
-      await readFile("sql/036_awcms_blog_content_permissions.sql", "utf8")
+      await readFile(
+        "sql/089_awcms_blog_content_revoke_seo_export_permissions.sql",
+        "utf8"
+      )
     ).toContain("'export'");
 
-    // ...and enforced by nothing. Proven by scanning EVERY blog route, not by
-    // trusting the list above, so a future export endpoint makes this test
-    // fail and forces the screen question to be answered rather than missed.
+    // Still enforced by nothing, proven by scanning EVERY blog route rather
+    // than trusting the descriptor: an export endpoint appearing without its
+    // permission being re-declared would be an ungated surface, which is the
+    // worse half of the defect this whole ADR is about.
     const enforced = new Set<Triple>();
     for await (const file of new Bun.Glob("src/pages/api/v1/blog/**/*.ts").scan(
       {

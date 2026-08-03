@@ -85,7 +85,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ----------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Versi       | **6.4.0** (2026-07-26); **68 changeset menunggu** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`**            | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                |
 | Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
-| Migrasi     | **88** (`sql/001`–`088`)                                                                                                 | `ls sql/`                                                                               |
+| Migrasi     | **89** (`sql/001`–`089`)                                                                                                 | `ls sql/`                                                                               |
 | ADR         | **0000**–**0057** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
 | Layar admin | **29** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
@@ -460,27 +460,34 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   > **dua pertanyaan berbeda**, dan sebuah kontrol bisa lulus yang pertama
   > sambil mustahil dipakai.
 
-- **Gate cakupan permission — BARU, dan ia menemukan TIGA gap lagi.**
+- **Gate cakupan permission — SELESAI SELURUHNYA, daftar pengecualiannya KOSONG
+  ([ADR-0058](adr/0058-unenforced-permissions-disposition.md), PR #359–#363).**
   `bun run access:permissions:enforcement:check` (ADR-0057 §F) menuntut tiap
   permission terdeklarasi punya call site `authorizeInTransaction` atau
   terdaftar sebagai pengecualian ber-alasan. Murni (registry + teks sumber),
-  masuk rantai `check`. Skor: **201/205 tergerbangi, 4 pengecualian**.
+  masuk rantai `check`. Skor: **203/203 tergerbangi, 0 pengecualian**.
 
-  Ketiganya **temuan baru**, semuanya diverifikasi ke kode, dan masing-masing
-  butuh keputusan yang sama dengan ADR-0057 §A — beri permukaan, atau cabut:
-  - `profile_identity.profile_management.restore` — **lubang nyata**: tak ada
-    rute restore sama sekali, jadi profil yang di-soft-delete tidak bisa
-    dipulihkan lewat API. `awcms_profiles` membawa
-    `deleted_at`/`restored_at`/`restored_by` sejak `sql/003` dan
-    `party-directory.ts` mengekspor `softDeleteParty` **tanpa pasangan** —
-    bentuk yang sama dengan yang ADR-0056 §B tutup untuk objek media.
-  - `blog_content.seo.configure` — satu-satunya kemunculan `"seo"` di repo
-    adalah deklarasi descriptor itu sendiri; kemungkinan besar **pencabutan**,
-    karena default SEO blog nyatanya dikonfigurasi lewat blog settings.
-  - `comments.moderation.delete` — model moderasi ADR-0041 adalah
-    arsip-bukan-hapus, jadi ini pun kandidat pencabutan.
+  Enam entri pertamanya habis, dan **tak satu pun dimaafkan**. ADR-0058
+  membelahnya jadi dua kelas yang berbeda — bukan satu:
+  - `profile_identity.profile_management.restore` — **PERMUKAAN** (§A, #361).
+    Lubang nyata: `party-directory.ts` mengekspor `softDeleteParty` tanpa
+    pasangan, jadi `restored_at`/`restored_by` (`sql/003`) tak pernah bisa
+    ditulis dan profil yang di-soft-delete permanen.
+  - `comments.moderation.delete` — **PERMUKAAN** (§B, #362). Seluruh mesinnya
+    ada sejak ADR-0041 (transisi legal dari keempat status non-terminal,
+    antrean bisa memfilter `deleted`); satu-satunya aktor yang bisa
+    memproduksinya adalah **penulis** komentar.
+  - `blog_content.seo.configure` — **DICABUT** (§C, `sql/089`). Sumbu otorisasi
+    KEDUA atas kolom yang `settings.configure` sudah kelola.
+  - `blog_content.posts.export` — **DICABUT** (§D, `sql/089`). Nol mesin ekspor
+    di mana pun; membangun fiturnya untuk membenarkan baris katalog adalah ekor
+    menggerakkan anjing.
+  - `visitor_analytics.settings.read`/`.update` — **BUKAN GAP** (#359), lihat
+    catatan di bawah.
 
-  Yang keempat sudah diketahui: `blog_content.posts.export` (ADR-0057 §F).
+  Nilai daftar yang **kosong** lebih besar dari daftar yang pendek: pengecualian
+  BERIKUTNYA akan jadi satu-satunya entri di situ, jadi ia tak bisa lewat tanpa
+  terlihat di tengah daftar yang sudah tampak mapan.
 
   > **Skor pertamanya 199/205 dengan 6 pengecualian, dan DUA di antaranya
   > adalah bug gate-nya sendiri.** `visitor_analytics.settings.read`/`.update`

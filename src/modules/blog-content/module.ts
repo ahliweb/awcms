@@ -149,11 +149,10 @@ export const blogContentModule = defineModule({
       action: "purge",
       description: "Purge soft-deleted blog posts"
     },
-    {
-      activityCode: "posts",
-      action: "export",
-      description: "Export blog posts"
-    },
+    // `posts.export` was declared here and seeded by sql/036 with no route, no
+    // application function and no export machinery of any kind. REVOKED by
+    // ADR-0058 §D + sql/089; a real export feature arrives with its own ADR and
+    // its own permission, not on the strength of a row that predates the need.
     { activityCode: "pages", action: "read", description: "Read blog pages" },
     {
       activityCode: "pages",
@@ -220,11 +219,11 @@ export const blogContentModule = defineModule({
       action: "configure",
       description: "Update blog module settings"
     },
-    {
-      activityCode: "seo",
-      action: "configure",
-      description: "Configure blog SEO metadata defaults"
-    },
+    // `seo.configure` was a SECOND authorisation axis over data
+    // `settings.configure` above already governs: blog SEO defaults are
+    // `seo_default_title`/`seo_default_description` in `awcms_blog_settings`,
+    // written through `PATCH /api/v1/blog/settings`. REVOKED by ADR-0058 §C +
+    // sql/089. Nothing about blog SEO itself changed.
     {
       activityCode: "search",
       action: "read",

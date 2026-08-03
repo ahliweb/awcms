@@ -27,39 +27,31 @@ import {
  * be enforced belongs in code, not here — and the gate reports an entry whose
  * permission has since gained an enforcer as stale, so an exception cannot
  * outlive its reason unnoticed.
+ *
+ * ## It is empty, and that is the point
+ *
+ * The gate's first run reported six entries. ADR-0058 disposed of all of them
+ * and none was excused:
+ *
+ * - `profile_identity.profile_management.restore` — SURFACE (§A,
+ *   `POST /api/v1/profiles/{id}/restore`);
+ * - `comments.moderation.delete` — SURFACE (§B,
+ *   `POST /api/v1/comments/admin/{id}/delete`);
+ * - `blog_content.seo.configure` — REVOKED (§C, `sql/089`);
+ * - `blog_content.posts.export` — REVOKED (§D, `sql/089`);
+ * - `visitor_analytics.settings.read` and `.update` — NOT GAPS AT ALL. Both are
+ *   fully gated by `src/pages/api/v1/analytics/settings.ts`; this gate resolved
+ *   the repo's constants as one flat namespace, `MODULE_KEY` is bound in five
+ *   files to four different values, and the guard became invisible. Both were
+ *   nonetheless written up here as reasoned decisions, asserting of a route that
+ *   exists that no route named a settings activity. Fixed in PR #359 by
+ *   resolving constants file-first (`resolveConstantsForSource`).
+ *
+ * An empty list is worth more than a short one: the NEXT exception anyone adds
+ * is the only entry in it and cannot pass unnoticed in the middle of a list
+ * that already looks settled. Adding one means naming the ADR that decided it.
  */
-const EXCEPTIONS: readonly EnforcementException[] = [
-  {
-    key: "blog_content.posts.export",
-    reason:
-      "Declared by the descriptor and seeded by sql/036, with no endpoint anywhere that enforces it — and no export machinery of any kind in the repo. ADR-0058 §D REVOKES it: building a surface to justify the catalogue row would be the tail wagging the dog. Removed when the revocation migration lands."
-  },
-
-  // ADR-0058 disposes of every entry left in this list, and the list is
-  // therefore shrinking on a schedule rather than sitting still. Two got a
-  // surface and are already gone: `profile_identity.profile_management.restore`
-  // (§A, `POST /api/v1/profiles/{id}/restore`) and `comments.moderation.delete`
-  // (§B, `POST /api/v1/comments/admin/{id}/delete`).
-  //
-  // The two below are the REVOCATIONS, and they are the whole remainder. One
-  // migration removes both rows from the catalogue and from every role grant,
-  // and this list becomes empty — at which point the next exception anyone adds
-  // is the only entry in it, and cannot hide in a long list.
-  //
-  // The first run listed six, and two of them — `visitor_analytics.settings`
-  // read and update — were the gate's own bug, not a gap: it read the repo's
-  // constants as one flat namespace, `MODULE_KEY` is bound to four different
-  // values across five files, and the guard in `analytics/settings.ts` became
-  // invisible. Their written reasons asserted, of a route that exists, that no
-  // route names a settings activity. Constants now resolve file-first
-  // (`resolveConstantsForSource`), and the two entries are gone — the gate's
-  // stale-exception rule would now reject them anyway.
-  {
-    key: "blog_content.seo.configure",
-    reason:
-      'No route and no application function names activityCode "seo" anywhere — the only occurrence in the repo is the descriptor declaration itself. ADR-0058 §C REVOKES it: blog SEO defaults (seoDefaultTitle/seoDefaultDescription) are already managed through PATCH /api/v1/blog/settings under blog_content.settings.configure, so this row is a second authorisation axis over columns that already have one. Removed when the revocation migration lands.'
-  }
-];
+const EXCEPTIONS: readonly EnforcementException[] = [];
 
 const SOURCE_ROOT = "src";
 const SOURCE_EXTENSIONS = [".ts", ".astro"];
