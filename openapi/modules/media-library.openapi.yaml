@@ -217,6 +217,68 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/media/public-origin:
+    get:
+      operationId: mediaPublicOrigin
+      tags:
+        - News Media
+      summary: The origin media public URLs are served from.
+      description: >-
+        Requires `media_library.media.read`. Deployment config, not tenant data:
+        every tenant on a deployment is served from the same bucket.
+
+
+        Exists for build clients such as `awcms-astro`, whose
+        Content-Security-Policy must name the media host in `img-src` BEFORE it
+        fetches any object — an image resolved correctly still renders as
+        nothing when the policy blocks the host it lives on. The alternative is
+        copying `NEWS_MEDIA_R2_PUBLIC_BASE_URL` into the consumer by hand, which
+        is two copies of one value that agree until one is edited.
+
+
+        `origin` is scheme + host + port, for the host-wide CSP form; `baseUrl`
+        includes the path, for the tighter prefix form. Both are reported
+        because neither choice is this API's to make.
+
+
+        A deployment that serves no public media (LAN/offline profiles) answers
+        `200` with `configured: false` rather than an error, so a build can omit
+        the `img-src` entry instead of failing. A value that is set but
+        unparseable, or on a scheme that cannot serve media, is reported the
+        same way and never echoed back.
+      responses:
+        "200":
+          description: The configured media origin, or an explicit "not configured".
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    required:
+                      - configured
+                      - origin
+                      - baseUrl
+                    properties:
+                      configured:
+                        type: boolean
+                      origin:
+                        type: string
+                        nullable: true
+                        example: https://media.example.com
+                      baseUrl:
+                        type: string
+                        nullable: true
+                        example: https://media.example.com/news
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/media/objects/list:
     get:
       operationId: mediaObjectList

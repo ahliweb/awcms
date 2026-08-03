@@ -647,6 +647,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/media/public-origin.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/modules/[moduleKey].ts",
       "workClass": "interactive",
       "source": "default"
