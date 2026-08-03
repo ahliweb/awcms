@@ -17,10 +17,11 @@ import { buildRobotsPayload } from "../modules/seo-distribution/application/seo-
  * `withSeoPublicTenant`, and cache validators (ETag/Last-Modified/304) in
  * `serveDiscovery`.
  */
-export const GET: APIRoute = ({ request }) =>
+export const GET: APIRoute = ({ locals, request }) =>
   serveDiscovery(
     request,
     "seo_discovery.robots.failed",
     (ctx) => buildRobotsPayload(ctx),
-    { notFound: notFoundTextResponse, serverError: serverErrorTextResponse }
+    { notFound: notFoundTextResponse, serverError: serverErrorTextResponse },
+    locals
   );

@@ -337,7 +337,15 @@ describe("surface registry", () => {
     ["/news/", "news-index"],
     ["/news/hello-world", "news-post"],
     ["/news/category/announcements", "news-taxonomy"],
-    ["/news/tag/bun", "news-taxonomy"]
+    ["/news/tag/bun", "news-taxonomy"],
+    // Root discovery (ADR-0061 §B).
+    ["/robots.txt", "seo-robots"],
+    ["/sitemap.xml", "seo-sitemap"],
+    ["/sitemap-1.xml", "seo-sitemap"],
+    ["/sitemap-42.xml", "seo-sitemap"],
+    ["/feed.xml", "seo-feed"],
+    ["/atom.xml", "seo-feed"],
+    ["/feed.json", "seo-feed"]
   ])("%s resolves to %s", (path, expected) => {
     expect(matchPublicCacheSurface(path)?.key).toBe(expected);
   });
@@ -360,7 +368,13 @@ describe("surface registry", () => {
     ["/news/%2E%2E"],
     ["/news/category/.."],
     ["/news/search"],
-    ["/robots.txt"]
+    // Shapes `Number()` would coerce but `^\d+$` — and the surface pattern —
+    // must not. The route file documents the same list.
+    ["/sitemap-1e3.xml"],
+    ["/sitemap-0x10.xml"],
+    ["/sitemap-abc.xml"],
+    ["/sitemap-.xml"],
+    ["/feed.rss"]
   ])("%s is not cacheable", (path) => {
     expect(matchPublicCacheSurface(path)).toBeNull();
   });
@@ -390,12 +404,40 @@ describe("surface registry", () => {
     expect(matchPublicCacheSurface("/news/category")?.key).toBe("news-post");
   });
 
+  test("a feed caches with ?locale= but not with anything else", () => {
+    const surface = matchPublicCacheSurface("/feed.xml")!;
+
+    expect(
+      decide({ surface, searchParams: new URLSearchParams({ locale: "id" }) })
+    ).toMatchObject({ cacheable: true });
+    expect(
+      decide({
+        surface,
+        searchParams: new URLSearchParams({ utm_source: "x" })
+      })
+    ).toMatchObject({ cacheable: false, reason: "query_not_allowed" });
+  });
+
+  test("robots.txt is not cached alongside the sitemap it advertises", () => {
+    // Same owner, different TTLs and different surrogate keys on purpose: robots
+    // is config-derived and stable, the sitemap is content-derived. Merging them
+    // into one entry would give the volatile body the stable body's TTL.
+    expect(matchPublicCacheSurface("/robots.txt")?.ttlSeconds).toBe(600);
+    expect(matchPublicCacheSurface("/sitemap.xml")?.ttlSeconds).toBe(300);
+    expect(matchPublicCacheSurface("/robots.txt")?.key).not.toBe(
+      matchPublicCacheSurface("/sitemap.xml")?.key
+    );
+  });
+
   test("every host-resolved surface requires a tenant, so an unpublished one is refused", () => {
-    // The whole safety argument for `/news/**` rests on this: middleware cannot
-    // derive the tenant from the URL, so a route that does not publish must fall
-    // through to `tenant_unresolved` rather than be cached under a guessed key.
-    for (const surface of PUBLIC_CACHE_SURFACES.filter((entry) =>
-      entry.key.startsWith("news-")
+    // The whole safety argument for the host-resolved families rests on this:
+    // middleware cannot derive the tenant from the URL, so a route that does not
+    // publish must fall through to `tenant_unresolved` rather than be cached
+    // under a guessed key. That is also what keeps an out-of-range
+    // `/sitemap-99999.xml` from filling the cache: its builder returns null, so
+    // nothing is published and nothing is stored.
+    for (const surface of PUBLIC_CACHE_SURFACES.filter(
+      (entry) => entry.key.startsWith("news-") || entry.key.startsWith("seo-")
     )) {
       expect(surface.requiresTenant).toBe(true);
       expect(

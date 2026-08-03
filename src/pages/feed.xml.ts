@@ -18,12 +18,13 @@ import { buildFeedPayload } from "../modules/seo-distribution/application/seo-di
  * Optional `?locale=` narrows to one locale. 404 when feeds are disabled. Public,
  * cacheable (ETag/Last-Modified/304).
  */
-export const GET: APIRoute = ({ request, url }) => {
+export const GET: APIRoute = ({ locals, request, url }) => {
   const locale = parseDiscoveryLocaleParam(url.searchParams.get("locale"));
   return serveDiscovery(
     request,
     "seo_discovery.rss.failed",
     (ctx) => buildFeedPayload(ctx, "rss", locale),
-    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse }
+    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse },
+    locals
   );
 };

@@ -720,10 +720,25 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   `/blog/{tenantCode}/**` (bentuk warisan) dan **tidak menyentuh** satu pun
   permukaan host-resolved.
 
-  **§A SELESAI** — keluarga `/news/**` (3 entri registry, dimiliki `blog_content`
-  yang purge modulnya sudah terpasang). **§B BELUM** — enam rute discovery root;
-  butuh `locals` mengalir lewat `serveDiscovery` + call site purge
-  `seo_distribution`.
+  **SELESAI SELURUHNYA.** §A — keluarga `/news/**` (3 entri, dimiliki
+  `blog_content`). §B — enam rute discovery root (`seo-robots`/`seo-sitemap`/
+  `seo-feed`); `serveDiscovery` menerima `locals` dan mempublikasikan setelah
+  `build(ctx)` memberi payload, sehingga `/sitemap-99999.xml` cocok pola tapi tak
+  pernah menerbitkan tenant — menyusuri nomor halaman tak bisa mengisi cache.
+
+  **Temuan §B yang berlaku untuk setiap surface agregat berikutnya: badan
+  discovery punya DUA penulis.** Konfigurasinya milik `seo_distribution`
+  (`PUT /api/v1/seo/config` kini mem-purge), tetapi ISI-nya diagregasi dari setiap
+  penyedia `seo_facts` — menerbitkan post mengubah `/sitemap.xml` tanpa menyentuh
+  satu baris pun milik `seo_distribution`, dan purge modul menandai
+  `t:<tenant>:m:<moduleKey>` sehingga purge `blog_content` tak menjangkaunya.
+  Tanpa perbaikan: `/blog/{code}/feed.xml` ter-purge saat publish sementara
+  `/feed.xml` — konten sama, ejaan host-resolved — basi sampai TTL, tanpa satu
+  pun laporan. `enqueueModuleContentPurge` kini juga mem-purge modul yang
+  `consumes` modul yang berubah DAN memiliki surface: dibaca dari REGISTRY (jadi
+  `blog_content` tak pernah menyebut `seo_distribution`) dan dibatasi ke pemilik
+  surface (ban untuk key yang tak menandai objek apa pun = upacara yang terlihat
+  seperti cakupan, aturan yang sama yang sudah dipakai untuk `media_library`).
 
   > **Dua jebakan yang tak terbaca dari kode, keduanya kini ditegakkan test.**
   > (1) Prasyarat "VCL mem-hash `Host`" itu **dua** properti: `hash_data(req.http.host)`

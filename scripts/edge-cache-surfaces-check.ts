@@ -136,6 +136,19 @@ export const MUST_NEVER_MATCH = [
   "/news/category/..",
   "/news/tag/%2e%2e",
   "/news/search",
+  // Root discovery (ADR-0061 §B). The child-sitemap pattern is the only one in
+  // this registry with a numeric segment, and `/sitemap-{page}.xml.ts` documents
+  // that a bare `Number()` would accept `1e3`/`0x10`/` 5 ` — so the SURFACE is
+  // probed for the same shapes the route rejects. A pattern that accepted them
+  // would hand a stranger an unbounded set of cache keys under one surface.
+  "/sitemap-abc.xml",
+  "/sitemap-1e3.xml",
+  "/sitemap-0x10.xml",
+  "/sitemap-.xml",
+  "/sitemap-1.xml.bak",
+  "/feed.rss",
+  "/robots.txt.bak",
+  "/api/v1/seo/config",
   "/theming/preview/abc123",
   "/theming/preview-tokens/abc123.css",
   "/search",

@@ -16,12 +16,13 @@ import { buildFeedPayload } from "../modules/seo-distribution/application/seo-di
  * entry identity. Optional `?locale=`. 404 when feeds are disabled. Public,
  * cacheable (ETag/Last-Modified/304).
  */
-export const GET: APIRoute = ({ request, url }) => {
+export const GET: APIRoute = ({ locals, request, url }) => {
   const locale = parseDiscoveryLocaleParam(url.searchParams.get("locale"));
   return serveDiscovery(
     request,
     "seo_discovery.atom.failed",
     (ctx) => buildFeedPayload(ctx, "atom", locale),
-    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse }
+    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse },
+    locals
   );
 };
