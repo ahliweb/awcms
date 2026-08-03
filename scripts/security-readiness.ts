@@ -459,7 +459,7 @@ export function checkLoginLockoutImplemented(): SecurityCheckResult {
  * deliberate edit here, with a reason — the correct place to force that
  * conversation.
  */
-const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
+export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   // Module registry (sql/008) — global, code-derived, full DML kept by design.
   awcms_modules: [],
   awcms_module_dependencies: [],

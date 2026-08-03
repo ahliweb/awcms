@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-65 target menjalankan berkas di `scripts/`; 24 di antaranya
+67 target menjalankan berkas di `scripts/`; 25 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -83,6 +83,8 @@ terjadwal, atau oleh workflow CI tertentu.
 | `openapi:bundle`                         | `openapi-bundle.ts`                            | —    |
 | `redis:health`                           | `redis-health.ts`                              | —    |
 | `release:verify`                         | `release-verify.ts`                            | —    |
+| `repo:inventory:check`                   | `repo-inventory.ts`                            | ✅   |
+| `repo:inventory:generate`                | `repo-inventory.ts`                            | —    |
 | `reporting:exports:dispatch`             | `reporting-exports-dispatch.ts`                | —    |
 | `reporting:projections:refresh`          | `reporting-projections-refresh.ts`             | —    |
 | `reporting:projections:registry:check`   | `reporting-projection-registry-check.ts`       | ✅   |
@@ -143,14 +145,13 @@ menjalankan target `modules:sync` — perintah yang tak pernah ada di repo ini
 (mekanisme sesungguhnya `POST /api/v1/modules/sync`) — sementara `bun run check`
 tetap hijau karena gate lamanya hanya membaca lima berkas markdown akar.
 
-| Target acuan                                    | Prasyarat yang belum ada                                                    |
-| ----------------------------------------------- | --------------------------------------------------------------------------- |
-| `repo:inventory:generate` / `:check`            | Generator inventaris repo lintas-artefak (OpenAPI + komposisi modul + docs) |
-| `config:docs:check`                             | Rekonsiliasi tiga-arah `.env.example` ↔ doc 18 ↔ `validate-env.ts`          |
-| `i18n:extract` / `:pot:check` / `:parity:check` | Setup i18n (`.po`/`.pot`) + UI                                              |
-| `database:capacity:check`                       | Validasi kapasitas lintas-instance (preflight)                              |
-| `production:preflight`, `resilience:dr-drill`   | Mengagregasi gate di atas + server berjalan                                 |
-| `performance:*`                                 | Harness beban + environment berukuran produksi                              |
+| Target acuan                                    | Prasyarat yang belum ada                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------ |
+| `config:docs:check`                             | Rekonsiliasi tiga-arah `.env.example` ↔ doc 18 ↔ `validate-env.ts` |
+| `i18n:extract` / `:pot:check` / `:parity:check` | Setup i18n (`.po`/`.pot`) + UI                                     |
+| `database:capacity:check`                       | Validasi kapasitas lintas-instance (preflight)                     |
+| `production:preflight`, `resilience:dr-drill`   | Mengagregasi gate di atas + server berjalan                        |
+| `performance:*`                                 | Harness beban + environment berukuran produksi                     |
 
 Lihat peta sprint di
 [`docs/awcms/11_implementation_blueprint.md`](../docs/awcms/11_implementation_blueprint.md)
