@@ -32,21 +32,17 @@ const EXCEPTIONS: readonly EnforcementException[] = [
   {
     key: "blog_content.posts.export",
     reason:
-      "Declared by the descriptor and seeded by sql/036, with no endpoint anywhere that enforces it — recorded in /admin/blog's header and in ADR-0057 §F as a revocation candidate awaiting its own ADR. Building a surface to justify the catalogue row would be the tail wagging the dog."
+      "Declared by the descriptor and seeded by sql/036, with no endpoint anywhere that enforces it — and no export machinery of any kind in the repo. ADR-0058 §D REVOKES it: building a surface to justify the catalogue row would be the tail wagging the dog. Removed when the revocation migration lands."
   },
 
-  // The three below were found by this gate on its first run. They are NOT
-  // excused because they are acceptable — they are the same defect ADR-0057
-  // documents for `pages`, in three more places, and each needs the decision
-  // ADR-0057 §A made: give it a surface, or revoke it.
+  // ADR-0058 disposes of every entry left in this list, and the list is
+  // therefore shrinking on a schedule rather than sitting still: two get a
+  // surface, two are revoked. `profile_identity.profile_management.restore`
+  // was the first to go — `POST /api/v1/profiles/{id}/restore` (§A). Each
+  // remaining reason now names the section that decided it and the change that
+  // will delete the entry, so an exception cannot quietly become permanent.
   //
-  // They are recorded rather than fixed here because closing unrelated holes
-  // inside a change about blog pages produces something nobody can review as
-  // either. `docs/PROJECT_STATE.md` §4 carries them as backlog. What this list
-  // buys today is that they are visible, counted, and that a FOURTH one turns
-  // CI red instead of waiting for the next manual audit.
-  //
-  // The first run listed FIVE, and two of them — `visitor_analytics.settings`
+  // The first run listed six, and two of them — `visitor_analytics.settings`
   // read and update — were the gate's own bug, not a gap: it read the repo's
   // constants as one flat namespace, `MODULE_KEY` is bound to four different
   // values across five files, and the guard in `analytics/settings.ts` became
@@ -57,17 +53,12 @@ const EXCEPTIONS: readonly EnforcementException[] = [
   {
     key: "blog_content.seo.configure",
     reason:
-      'No route and no application function names activityCode "seo" anywhere — the only occurrence in the repo is the descriptor declaration itself. Blog SEO defaults are in fact configured through blog settings (blog_content.settings.configure), so this is most likely a revocation, not a missing endpoint. Needs its own ADR.'
+      'No route and no application function names activityCode "seo" anywhere — the only occurrence in the repo is the descriptor declaration itself. ADR-0058 §C REVOKES it: blog SEO defaults (seoDefaultTitle/seoDefaultDescription) are already managed through PATCH /api/v1/blog/settings under blog_content.settings.configure, so this row is a second authorisation axis over columns that already have one. Removed when the revocation migration lands.'
   },
   {
     key: "comments.moderation.delete",
     reason:
-      "The moderation surface enforces approve/reject (one conditional guard), archive and restore, plus a public delete-request flow — but nothing gates a moderator delete. ADR-0041's moderation model is archive-not-delete, so this is a revocation candidate rather than a missing route. Needs its own ADR."
-  },
-  {
-    key: "profile_identity.profile_management.restore",
-    reason:
-      "profile_identity has no restore route at all; the five profile routes gate read/create/update/delete. `awcms_profiles` carries deleted_at/restored_at/restored_by since sql/003 and party-directory.ts exports softDeleteParty with no counterpart, so a soft-deleted profile cannot be recovered through the API — a real hole rather than a spare permission, the same shape ADR-0056 §B closed for media objects. Needs its own ADR."
+      "The moderation surface enforces approve/reject (one conditional guard), archive and restore, plus a public delete-request flow — but nothing gates a moderator delete. ADR-0058 §B gives it a surface: the transition is already legal from all four non-terminal statuses and the admin queue can already filter `deleted`, while the only actor who can produce that state today is the comment's own author. Removed when that endpoint lands."
   }
 ];
 
