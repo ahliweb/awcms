@@ -27,7 +27,7 @@ import {
   summarizeUserAgent
 } from "../../../../lib/security/client-fingerprint";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import {
@@ -234,7 +234,7 @@ export const POST: APIRoute = async ({
 
   const policy = resolveLoginPolicyConfig();
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`${clientIp}:${tenantId}`, {
+  const rateLimit = await checkSharedRateLimit(`${clientIp}:${tenantId}`, {
     maxAttempts: policy.rateLimitMaxAttempts,
     windowMs: policy.rateLimitWindowSec * 1000
   });

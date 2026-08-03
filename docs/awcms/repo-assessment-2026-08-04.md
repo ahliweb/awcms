@@ -132,7 +132,15 @@ serius, bukan instansnya.
    `access/evaluate.ts#POST` (introspeksi diri yang justru MEMANGGIL
    `evaluateAccess`). Skor: **331 handler, 6 memutuskan permission, 0 bypass.**
 
-## 3. Temuan P1 — rate limiter tidak bertahan di lebih dari satu instans
+## 3. ~~Temuan P1 — rate limiter tidak bertahan di lebih dari satu instans~~ — SELESAI
+
+> **[ADR-0066](../adr/0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (4 Agustus 2026).**
+> `checkSharedRateLimit` menghitung di Redis dengan nomor window sebagai bagian
+> dari KUNCI, sehingga dua instans sepakat tanpa read-modify-write. GAGAL-TERBUKA
+> saat Redis mati — dinyatakan keras karena kebalikan postur default repo ini, dan
+> jujur karena lockout per-identitas di PostgreSQL tak terpengaruh. Cakupan naik
+> dari delapan ke **sebelas** permukaan. Teks di bawah dipertahankan sebagai
+> konteks temuan.
 
 ### Apa yang ditemukan
 

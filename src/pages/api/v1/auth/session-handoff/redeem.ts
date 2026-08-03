@@ -10,6 +10,10 @@ import {
   redeemHandoffCode
 } from "../../../../../modules/identity-access/application/session-handoff-directory";
 import { log } from "../../../../../lib/logging/logger";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../lib/security/rate-limit";
 
 /**
  * `POST /api/v1/auth/session-handoff/redeem` (ADR-0050) — a registered BFF
@@ -46,6 +50,20 @@ export const POST = defineClientCredentialTenantRoute({
   // must not learn whether the tenant it named exists.
   onMissingTenant: () =>
     fail(401, "HANDOFF_REJECTED", "Session handoff could not be completed."),
+  // ADR-0066 — anti-automation on every authentication surface, not most.
+  // Server-to-server, so the ceiling is generous — but a leaked client secret
+  // otherwise buys unlimited code guesses, and the codes are short-lived rather
+  // than high-entropy-forever.
+  beforeTransaction: async ({ request, clientAddress }) => {
+    const rate = await checkSharedRateLimit(
+      `handoff-redeem:${resolveClientIp(request, clientAddress)}`,
+      { maxAttempts: 20, windowMs: 60_000 }
+    );
+
+    return rate.allowed
+      ? undefined
+      : fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.");
+  },
   handler: async ({ tx, tenantId, request, locals, now }) => {
     const bodyRead = await readJsonBody(request);
 

@@ -106,7 +106,7 @@ describe("the reset routes", () => {
       const source = await readFile(route, "utf8");
 
       // Call sites, not the import block at the top of the file.
-      const rateLimitCall = source.indexOf("checkRateLimit(");
+      const rateLimitCall = source.indexOf("checkSharedRateLimit(");
       const clientCall = source.indexOf("getDatabaseClient()");
 
       expect(rateLimitCall).toBeGreaterThan(-1);

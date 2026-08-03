@@ -16,10 +16,14 @@ description: Audit keamanan berbasis standar (OWASP Top 10, OWASP ASVS, ISO/IEC 
 >    dilewati untuk permission yang rute lain evaluasi penuh. Severity moderat
 >    (blast radius sempit); KELASNYA yang serius. Lihat `awcms-abac-guard`
 >    §ATURAN PERTAMA.
-> 2. **API4/ASVS V11.2 — rate limiter `Map` dalam-proses.** Dengan N replika,
->    batas efektif jadi N × batas terkonfigurasi. Redis sudah ada di repo. Tiga
->    endpoint auth belum ber-limiter (`session-handoff/issue`/`redeem`,
->    `sso/{providerKey}/callback`).
+> 2. ~~API4/ASVS V11.2 — rate limiter `Map` dalam-proses.~~ **DITUTUP
+>    ([ADR-0066](../../../docs/adr/0066-shared-rate-limiting-and-full-auth-surface-coverage.md)):**
+>    `checkSharedRateLimit` berbagi lewat Redis (window ada di KUNCI, jadi tak ada
+>    read-modify-write), cakupan naik ke **sebelas** permukaan auth. Ia
+>    **GAGAL-TERBUKA** saat Redis mati — sengaja, karena gagal-tertutup mengubah
+>    gangguan Redis jadi penolakan login total yang bisa dipicu penyerang; lockout
+>    per-identitas di PostgreSQL adalah kontrol yang mengikat, dan tidak
+>    terpengaruh.
 > 3. **Rantai pasok — `bun audit` melaporkan 1 moderate** (`postcss <=8.5.22`
 >    transitif lewat `astro › vite › postcss`, GHSA-fxqj-rqcc-2cmp; jalur build).
 

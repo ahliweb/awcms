@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { getDatabaseClient } from "../../../../../lib/database/client";
 import { recordCounter } from "../../../../../lib/observability/metrics-port";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../../lib/security/rate-limit";
 import {
@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, clientAddress, params }) => {
     return fail(400, "VALIDATION_ERROR", "Comment id is required.");
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rate = checkRateLimit(`comments:report:${clientIp}`, {
+  const rate = await checkSharedRateLimit(`comments:report:${clientIp}`, {
     maxAttempts: 30,
     windowMs: 60 * 60 * 1000
   });

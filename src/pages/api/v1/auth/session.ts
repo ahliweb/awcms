@@ -2,7 +2,7 @@ import { fail, jsonResponse } from "../../../../modules/_shared/api-response";
 import { defineSelfServiceTenantRoute } from "../../../../modules/_shared/tenant-route";
 import { isMachineCredentialToken } from "../../../../lib/auth/machine-credential-token";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import { introspectSession } from "../../../../modules/identity-access/application/session-introspection";
@@ -61,13 +61,13 @@ export const GET = defineSelfServiceTenantRoute({
           NO_STORE_HEADERS
         )
       : authRequired(),
-  beforeTransaction: ({ request, token, clientAddress }) => {
+  beforeTransaction: async ({ request, token, clientAddress }) => {
     // A machine credential has no session to introspect. Refused here, before
     // any database work, with the ordinary 401 shape.
     if (isMachineCredentialToken(token)) return authRequired();
 
     const clientIp = resolveClientIp(request, clientAddress);
-    const rateLimit = checkRateLimit(
+    const rateLimit = await checkSharedRateLimit(
       `session-introspect:${clientIp}`,
       RATE_LIMIT
     );
