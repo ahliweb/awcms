@@ -4,6 +4,30 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 
 > Baca [`../../AGENTS.md`](../../AGENTS.md) lebih dulu untuk aturan wajib & alur kerja.
 
+> **DIGERBANGI sejak 4 Agustus 2026 — [ADR-0062](../../docs/adr/0062-skills-are-gated-against-the-code-they-describe.md).**
+> `bun run skills:check` (bagian dari `bun run check`) menegakkan tiga hal, dan
+> menyunting skill kini bisa memerahkan CI:
+>
+> 1. **Skill modul HIDUP menjelaskan kode HIDUP.** Kalau `awcms-<x>` subjeknya ada
+>    di registry modul, setiap path `` `src/…` `` yang dikutipnya wajib ADA. Tidak
+>    ada pengecualian untuk aturan ini.
+> 2. **Setiap `ADR-NNNN` yang dikutip punya berkas** di `docs/adr/`.
+> 3. **Skill untuk kode yang TIDAK ada wajib terdaftar** di `ASPIRATIONAL_SKILLS`
+>    (`scripts/skills-check.ts`) dengan alasan: `target-spec`, `historical`, atau
+>    `cross-cutting`.
+>
+> **Menulis path milik repo ARSIP?** Tulis `` `awcms-mini:src/…` `` /
+> `` `awcms-micro:src/…` ``, bukan `` `src/…` ``. Badan banyak skill di sini
+> memuat spesifikasi mini apa adanya, dan menuliskan path sumber seolah path repo
+> ini persis kesalahan yang digerbangi.
+
+> **ADR-0055 (2 Agustus 2026) MENCABUT alur mini-first.** `awcms-mini`/`awcms-micro`
+> adalah **ARSIP**: boleh dibaca sebagai sejarah/spesifikasi, tidak menerima
+> perubahan, dan **bukan sumber pekerjaan terjadwal**. Skill yang badannya berbunyi
+> "port dari mini" adalah catatan historis — kemampuan yang diinginkan **dibangun di
+> repo ini** dengan ADR admission-nya sendiri. `awcms-port-from-mini` dipertahankan
+> sebagai catatan BAGAIMANA port dulu dikerjakan, bukan sebagai perintah kerja.
+
 > **Asal & status (diperbarui 2026-07-25).** Skill-skill ini diadaptasi dari
 > repo acuan [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini) dan
 > kini juga dari [`awcms-micro`](https://github.com/ahliweb/awcms-micro)

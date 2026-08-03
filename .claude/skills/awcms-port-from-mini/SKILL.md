@@ -1,11 +1,29 @@
 ---
 name: awcms-port-from-mini
-description: Port sebuah modul/fitur yang sudah matang & teruji dari repo awcms-mini ke repo awcms secara atomic, adaptasi (bukan copy), sampai semua cek hijau + commit atomic. Gunakan saat diminta "port modul <X> dari mini", "terapkan fitur mini ke awcms", atau saat sebuah modul fondasi awcms-mini belum ada di awcms. Menegakkan kontrak alur mini-first (docs/awcms/alur-pengembangan-mini-first.md): rename prefix awcms_mini_→awcms_, penomoran migrasi lanjutan, drop dependensi/toolchain yang belum ada di awcms, dan verifikasi DoD.
+description: HISTORIS / JANGAN DIIKUTI SEBAGAI PROSEDUR — [ADR-0055](../../../docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md) (2 Agustus 2026) MENCABUT alur mini-first. Pengembangan AWCMS kini hanya di `ahliweb/awcms` + `ahliweb/awcms-astro`; `awcms-mini` dan `awcms-micro` adalah **ARSIP** — boleh DIBACA sebagai sejarah/spesifikasi, tetapi **tidak ada pekerjaan yang dijadwalkan "di-port dari" sana**. Kemampuan yang diinginkan DIBANGUN di repo ini dengan ADR admission-nya sendiri. Skill ini dipertahankan sebagai catatan BAGAIMANA port dulu dikerjakan (dan §Adaptasi masih berguna saat MEMBACA kode arsip sebagai referensi), bukan sebagai perintah kerja. Kalau Anda diminta "port modul X dari mini": jawabannya adalah ADR admission + bangun di sini. Penjagaan yang dulu dibawa alur ini TETAP berlaku dan didaftar ulang di ADR-0055 §3: ADR wajib untuk perubahan standar, security review tambahan untuk `auth`/`access`/`sync`, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS FORCE, ABAC default-deny.
 ---
 
-# AWCMS — Port modul dari awcms-mini
+# AWCMS — Port modul dari awcms-mini (HISTORIS)
 
-Baca `AGENTS.md` §Relasi + [`docs/awcms/alur-pengembangan-mini-first.md`](../../../docs/awcms/alur-pengembangan-mini-first.md) lebih dulu. awcms adalah rebuild ber-skop ERP di atas fondasi awcms-mini; fitur **dimatangkan di mini dulu**, lalu diport ke sini. Ini playbook port itu — **adaptasi, bukan salin mentah**.
+> **DICABUT sebagai prosedur — [ADR-0055](../../../docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md), 2 Agustus 2026.**
+> Alur mini-first tidak berlaku lagi. `awcms-mini`/`awcms-micro` adalah **arsip**:
+> boleh dibaca, tidak menerima perubahan, dan **tidak menjadi sumber pekerjaan
+> terjadwal**. Sebuah kemampuan yang diinginkan **dibangun di repo ini** dengan ADR
+> admission-nya sendiri — bahwa arsip kebetulan sudah punya implementasinya bukan
+> lagi alasan untuk membangunnya, dan bukan pula desainnya.
+>
+> Kenapa dicabut, ringkas: posisi setengah ("beku tapi masih boleh di-port keluar")
+> memaksa dokumen dan gerbang terus memelihara hubungan dengan repo yang tidak
+> bergerak — manifest menyatakan `standard: awcms-mini`, dan sembilan divergence
+> terjadwal di-review ulang dengan `reviewDate` yang memerahkan CI saat lewat.
+>
+> **Yang MASIH berguna di halaman ini:** §Adaptasi. Saat Anda membaca kode arsip
+> sebagai referensi desain, daftar perbedaan di bawah (prefix tabel, penomoran
+> migrasi, toolchain yang tak ada di sini) tetap menjelaskan kenapa kode arsip
+> tidak bisa disalin apa adanya. Perlakukan sebagai catatan pembacaan, bukan
+> langkah kerja.
+
+Konteks historis di bawah dipertahankan apa adanya.
 
 - SUMBER (baca saja): `/home/data/dev_react/awcms-mini`
 - TARGET: `/home/data/dev_bun/awcms`

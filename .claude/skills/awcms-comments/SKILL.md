@@ -41,7 +41,7 @@ besar kamu sedang membalik panahnya.
 Jangan pakai capability `provides`: penyedia jamak memang diharapkan, dan yang
 kedua akan men-trip `capability_provider_conflict`.
 
-`src/lib/comments/commentable-resources.ts` adalah composition root — satu-satunya
+`src/modules/comments/presentation/commentable-resources.ts` adalah composition root — satu-satunya
 tempat yang boleh memanggil `listModules()`. Semua isi `domain/` dan
 `application/` menerima descriptor sebagai **parameter**.
 

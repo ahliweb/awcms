@@ -927,10 +927,25 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   `src/`/`scripts/`**. Sebelumnya hanya lima markdown akar, sehingga enam komentar di
   `src/modules/module-management/` bisa menyuruh pembacanya menjalankan target
   `modules:sync` yang tak pernah ada (mekanisme sesungguhnya `POST /api/v1/modules/sync`)
-  dengan `bun run check` tetap hijau. `docs/awcms/` + `.claude/skills/` tetap DI LUAR
-  gerbang: isinya target adaptasi awcms-mini yang memang boleh menyebut tooling belum-ada
-  (`production:preflight`, `repo:inventory:*`, `performance:*`, dst. — daftar lengkapnya
-  di [`../scripts/README.md`](../scripts/README.md) §Ditunda).
+  dengan `bun run check` tetap hijau. `docs/awcms/` tetap DI LUAR gerbang itu:
+  isinya campuran sejarah + spesifikasi yang memang boleh menyebut tooling belum-ada
+  (`production:preflight`, `performance:*`, dst. — daftar lengkapnya di
+  [`../scripts/README.md`](../scripts/README.md) §Ditunda).
+- **`.claude/skills/` KINI DIGERBANGI** ([ADR-0062](adr/0062-skills-are-gated-against-the-code-they-describe.md),
+  `bun run skills:check`) — pengecualian lamanya dicabut karena ADR-0055 mencabut
+  alasannya. Yang memaksanya: **sebelas ADR berurutan (0051–0061) mendarat tanpa SATU pun
+  skill menyebutnya**, empat skill modul HIDUP menunjuk `src/lib/<modul>/…` untuk berkas
+  yang sudah pindah ke `src/modules/<modul>/presentation/…`, dan beberapa mengumumkan layar
+  admin "TIDAK di-port" berbulan-bulan setelah layarnya mendarat. **Skill DIIKUTI, dokumen
+  dibaca** — dan arah menuanya terbalik: "modul ini belum ada di sini" mulai benar lalu
+  menua jadi kebohongan percaya diri yang menyuruh agen membangun ulang hal yang sudah ada.
+  Tiga aturannya bertumpu pada registry modul, bukan prosa: skill modul hidup wajib menunjuk
+  path nyata (tanpa pengecualian), tiap `ADR-NNNN` wajib punya berkas, dan skill untuk kode
+  yang TIDAK ada wajib terdaftar di `ASPIRATIONAL_SKILLS` dengan alasannya. Entri yang MATI
+  (modulnya dibangun → aturan 1 mengambil alih) ikut dilaporkan — tiga entri sudah mati saat
+  ditulis. **Efek samping yang perlu diketahui:** badan banyak skill memuat spesifikasi
+  awcms-mini apa adanya, jadi path milik repo sumber kini harus ditulis `awcms-mini:src/…`,
+  bukan `src/…`.
 - **Kurung tak-terkutip mematikan SELURUH diagram mermaid** di GitHub (bukan sebagian):
   di `flowchart`/`graph`, `(` adalah token pembuka bentuk node, jadi
   `-->|online (primary)|` atau `{... (x)?}` gagal parse dan diganti kotak "Unable to

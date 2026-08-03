@@ -1,6 +1,6 @@
 ---
 name: awcms-social-publishing
-description: BACAAN SAJA — modul social_publishing BELUM di-port ke repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `social-publishing`, tidak ada migration-nya di `sql/`). Dependensinya kini SATU modul, `blog_content` (`news_portal` dilebur ke dalamnya — ADR-0044/#300), dan sudah di-port (PR #214), jadi blocker fondasinya hilang — yang tersisa adalah port modul ini sendiri. Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEM-PORT (via `awcms-port-from-mini`), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #643-#647). Gunakan saat menambah/mengubah account connector, publish rule/template, outbox job/attempt, approval, retry/backoff, dispatcher, atau provider adapter (Meta/LinkedIn/Telegram) untuk auto-posting berita ke platform sosial. Merangkum keputusan arsitektur yang sudah dibuat di Issue #643 (fondasi) supaya issue adapter lanjutan (#644-#646) dan issue dokumentasi (#647) tidak mengulang/kontradiksi.
+description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan port.** `awcms-mini`/`awcms-micro` kini ARSIP — boleh dibaca sebagai spesifikasi, tetapi jalur "port dari mini" DICABUT. Mengerjakannya berarti: ADR admission dulu, lalu bangun di repo ini dengan penjagaan ADR-0055 §3 (ADR wajib, security review untuk auth/access/sync, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS FORCE, ABAC default-deny). BACAAN SAJA / SPESIFIKASI TARGET — modul social_publishing TIDAK ADA di repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `social-publishing`, tidak ada migration-nya di `sql/`). Dependensinya kini SATU modul, `blog_content` (`news_portal` dilebur ke dalamnya — ADR-0044/#300), dan sudah di-port (PR #214), jadi blocker fondasinya hilang — yang tersisa adalah port modul ini sendiri. Rujukan modul/tabel/`sql/NNN` di dalamnya adalah artefak awcms-mini, penomoran mini. Pakai sebagai spesifikasi target saat MEMBANGUNNYA di sini (ADR admission dulu), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #643-#647). Gunakan saat menambah/mengubah account connector, publish rule/template, outbox job/attempt, approval, retry/backoff, dispatcher, atau provider adapter (Meta/LinkedIn/Telegram) untuk auto-posting berita ke platform sosial. Merangkum keputusan arsitektur yang sudah dibuat di Issue #643 (fondasi) supaya issue adapter lanjutan (#644-#646) dan issue dokumentasi (#647) tidak mengulang/kontradiksi.
 ---
 
 # AWCMS — Social Publishing (auto-posting outbox foundation)
@@ -18,7 +18,7 @@ description: BACAAN SAJA — modul social_publishing BELUM di-port ke repo ini (
 > **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Nomor `sql/NNN`
 > memakai penomoran awcms-mini dan akan berubah saat di-port (melanjutkan
 > dari migration terakhir repo ini). Pakai skill ini sebagai spesifikasi
-> target port (via `awcms-port-from-mini`), bukan peta kode yang bisa
+> target port (via ADR admission; `awcms-port-from-mini` HISTORIS), bukan peta kode yang bisa
 > dipanggil. Verifikasi `ls src/modules` sebelum mengklaim apa pun ada.
 
 Epic `social_publishing` (#643-#647) menambah lapisan auto-posting
