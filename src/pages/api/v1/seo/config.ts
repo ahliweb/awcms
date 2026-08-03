@@ -7,6 +7,7 @@ import {
 } from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenant } from "../../../../lib/database/tenant-context";
+import { enqueueModuleContentPurge } from "../../../../lib/edge-cache/content-purge";
 import {
   authorizeInTransaction,
   resolveAuthInputs
@@ -206,6 +207,19 @@ export const PUT: APIRoute = async ({ request, cookies, locals }) => {
           correlationId
         });
       }
+    );
+
+    // In the SAME transaction as the write (ADR-0042 §9): this config shapes
+    // every discovery body — the tenant-wide `noindex` switch alone rewrites
+    // `/robots.txt` and can withdraw the sitemap — so a committed change that
+    // did not enqueue its purge would leave the old crawl policy being served
+    // to crawlers until TTL, which is the one staleness here with a lasting
+    // consequence.
+    await enqueueModuleContentPurge(
+      tx,
+      tenantId,
+      SEO_MODULE_KEY,
+      "seo_distribution.config.update"
     );
 
     const successResponse = ok(saved);

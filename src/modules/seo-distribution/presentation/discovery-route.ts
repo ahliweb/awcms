@@ -19,6 +19,10 @@
  * fixed generic error body (no message/stack), same discipline as `/blog/{tenantCode}`.
  */
 import { getDatabaseClient } from "../../../lib/database/client";
+import {
+  publishEdgeCacheTenant,
+  type EdgeCacheTenantPublisher
+} from "../../../lib/edge-cache/publish-tenant";
 import { log } from "../../../lib/logging/logger";
 import { withSeoPublicTenant } from "../application/public-seo-tenant-resolution";
 import {
@@ -89,12 +93,20 @@ export function finalizeDiscoveryResponse(
   return new Response(payload.body, { status: 200, headers });
 }
 
-/** Run the full discovery pipeline for one surface and return its Response. */
+/**
+ * Run the full discovery pipeline for one surface and return its Response.
+ *
+ * `locals` is optional and exists solely so the route can publish its resolved
+ * tenant to the edge-cache layer (ADR-0061 §B). These surfaces are
+ * HOST-resolved, so middleware cannot derive the tenant from the URL — a call
+ * that omits `locals` still serves correctly and is simply never cached.
+ */
 export async function serveDiscovery(
   request: Request,
   logEvent: string,
   build: DiscoveryBuilder,
-  fallbacks: DiscoveryFallbacks
+  fallbacks: DiscoveryFallbacks,
+  locals?: EdgeCacheTenantPublisher
 ): Promise<Response> {
   try {
     const sql = getDatabaseClient();
@@ -118,7 +130,22 @@ export async function serveDiscovery(
           mediaLibrary
         };
 
-        return build(ctx);
+        const built = await build(ctx);
+
+        // Published only when a payload EXISTS, and that condition is the whole
+        // rule (ADR-0061 §3). `build` returns `null` for "sitemaps disabled",
+        // "feeds disabled" and "page out of range" — all of which collapse into
+        // the same generic 404 as an unresolved host, and 404 is a cacheable
+        // status. Publishing before this check would annotate the
+        // surface-disabled 404 with `Surrogate-Control` while the unknown-host
+        // 404 gets `private, no-store`, which answers "does this hostname map to
+        // a live tenant?" through the channel `padUnresolvedSeoTenantLatency`
+        // exists to close.
+        if (built) {
+          publishEdgeCacheTenant(locals, tenant.tenantId);
+        }
+
+        return built;
       }
     );
 

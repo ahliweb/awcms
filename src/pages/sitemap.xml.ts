@@ -15,10 +15,11 @@ import { buildSitemapIndexPayload } from "../modules/seo-distribution/applicatio
  * host. 404 (as a generic XML error) when the tenant disables sitemaps. Public,
  * cacheable (ETag/Last-Modified/304 via `serveDiscovery`).
  */
-export const GET: APIRoute = ({ request }) =>
+export const GET: APIRoute = ({ locals, request }) =>
   serveDiscovery(
     request,
     "seo_discovery.sitemap_index.failed",
     (ctx) => buildSitemapIndexPayload(ctx),
-    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse }
+    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse },
+    locals
   );

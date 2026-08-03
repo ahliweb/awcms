@@ -22,13 +22,14 @@ import { buildSitemapPagePayload } from "../modules/seo-distribution/application
  * A `^\d+$` gate rejects those up front (→ `NaN` → the builder's `< 1` guard →
  * generic 404).
  */
-export const GET: APIRoute = ({ request, params }) => {
+export const GET: APIRoute = ({ locals, request, params }) => {
   const raw = params.page ?? "";
   const page = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   return serveDiscovery(
     request,
     "seo_discovery.sitemap_page.failed",
     (ctx) => buildSitemapPagePayload(ctx, page),
-    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse }
+    { notFound: notFoundXmlResponse, serverError: serverErrorXmlResponse },
+    locals
   );
 };

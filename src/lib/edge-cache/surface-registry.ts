@@ -37,9 +37,10 @@
  *
  * ## Host-resolved surfaces (ADR-0061)
  *
- * The `/news/**` family (ADR-0059) resolves its tenant from the request, not
- * from a path segment, so middleware cannot derive it from the URL — source (2)
- * in `tenant-key.ts` does not apply. Its four routes publish
+ * Two families here resolve their tenant from the request rather than from a
+ * path segment — the `/news/**` content routes (ADR-0059) and the root
+ * discovery routes (ADR-0038) — so middleware cannot derive it from the URL and
+ * source (2) in `tenant-key.ts` does not apply. Their routes publish
  * `locals.edgeCacheTenantId` instead, via `publishEdgeCacheTenant`, and only on
  * the path that actually serves the resource; see that file for why the timing
  * of the publish is a disclosure question rather than a style question.
@@ -47,37 +48,38 @@
  * Two properties had to hold before these entries were safe, and both are
  * asserted rather than assumed:
  *
- * - **The edge keys on `Host`.** `/news/hello-world` is the same path for every
- *   tenant, so a cache that keys on path alone would serve one tenant's article
- *   to another's visitors. `infra/varnish/default.vcl`'s `vcl_hash` hashes
- *   `req.http.host` explicitly (and does not `return (lookup)`, so builtin
- *   `req.url` hashing still runs). `tests/edge-cache.test.ts` asserts that line
- *   still exists.
- * - **An unpublished tenant fails closed.** `requiresTenant` is true for all
- *   three, so any request whose tenant did not resolve — or whose route chose
- *   not to publish — is refused with `tenant_unresolved` rather than cached
- *   under a guessed key.
+ * - **The edge keys on `Host`.** `/news/hello-world` and `/sitemap.xml` are the
+ *   same path for every tenant, so a cache that keys on path alone would serve
+ *   one tenant's article — or one tenant's entire URL inventory — to another's
+ *   visitors. `infra/varnish/default.vcl`'s `vcl_hash` hashes `req.http.host`
+ *   explicitly (and does not `return (lookup)`, so builtin `req.url` hashing
+ *   still runs). `tests/edge-cache.test.ts` asserts both halves.
+ * - **An unpublished tenant fails closed.** `requiresTenant` is true for every
+ *   one of them, so any request whose tenant did not resolve — or whose route
+ *   chose not to publish — is refused with `tenant_unresolved` rather than
+ *   cached under a guessed key.
  *
- * ## Deferred, and precisely why (not an oversight)
+ * ### Discovery bodies have TWO authors, and that shapes invalidation
  *
- * The **host-resolved root discovery surfaces** — `/robots.txt`, `/sitemap.xml`,
- * `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json` — are the single
- * best caching target in the codebase (identical body for every anonymous
- * reader, rebuilt from a content roll-up on each request). They are still absent
- * here: `serveDiscovery(request, …)` does not receive Astro's `locals`, so those
- * routes have no way to publish their tenant, and declaring them regardless
- * would produce surfaces that match, resolve no tenant, and are refused on every
- * single request — a registry entry that reads as "cached" while caching
- * nothing. A dead declaration is worse than an honest omission.
+ * The `seo-*` surfaces below are owned by `seo_distribution`, which is right for
+ * ownership (it owns the routes and the config that shapes them) and incomplete
+ * for invalidation: their bodies are aggregated from every `seo_facts` provider,
+ * so publishing a post changes `/sitemap.xml` and `/feed.xml` without touching
+ * anything `seo_distribution` writes.
  *
- * Wiring them is ADR-0061 §B: thread `locals` through `serveDiscovery` and its
- * six callers, publish from the resolved context, add the entries, and give
- * `seo_distribution` the purge call site that `findOwnersWithoutPurges` will
- * then require of it. Tracked in `docs/awcms/edge-cache-architecture.md`.
+ * A module purge tags `t:<tenant>:m:<moduleKey>`, so `blog_content`'s existing
+ * publish purge cannot reach an object tagged `m:seo_distribution`. Left there,
+ * `/blog/{code}/feed.xml` would be purged on publish while `/feed.xml` — the
+ * same content, the host-resolved spelling — sat stale until TTL, an asymmetry
+ * nothing would report. `enqueueModuleContentPurge` closes it by ALSO purging
+ * the modules that declare a `consumes` dependency on the changing module and
+ * own a declared surface. That is read from the module registry, so
+ * `blog_content` never names `seo_distribution`; the consumer's own `consumes`
+ * declaration is what wires it.
  *
  * The path-scoped blog feed and sitemap below (`/blog/{tenantCode}/feed.xml`,
- * `/blog/{tenantCode}/sitemap-blog.xml`) ARE covered, so tenants on the ADR-0009
- * path-scoped surface get feed caching today.
+ * `/blog/{tenantCode}/sitemap-blog.xml`) remain covered separately, so tenants
+ * on the ADR-0009 path-scoped surface keep the caching they already had.
  */
 
 /** A declared cacheable public surface. */
@@ -189,6 +191,36 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     allowedQueryParams: [],
     rationale:
       "A single published post at its host-resolved URL — the page every canonical, `<loc>` and feed link points at once the family is live. Purged by the same `blog_content` module purge that already covers `blog-post`."
+  },
+  {
+    key: "seo-robots",
+    moduleKey: "seo_distribution",
+    pattern: /^\/robots\.txt$/,
+    ttlSeconds: 600,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "The tenant's crawl policy at its verified primary domain root. Derived from config rather than content — it changes only when an operator edits SEO settings, which enqueues the module purge — so it carries the longest TTL here alongside theming tokens."
+  },
+  {
+    key: "seo-sitemap",
+    moduleKey: "seo_distribution",
+    pattern: /^\/sitemap(-\d+)?\.xml$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "The sitemap index and its bounded child pages. Identical for every anonymous reader and rebuilt from a content roll-up on each request today, which is the single most repeated piece of database work on the public surface."
+  },
+  {
+    key: "seo-feed",
+    moduleKey: "seo_distribution",
+    pattern: /^\/(feed\.xml|atom\.xml|feed\.json)$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: ["locale"],
+    rationale:
+      "RSS, Atom and JSON syndication of the latest published items. `locale` is the only permitted parameter and it is already validated to a short BCP-47-ish shape by `parseDiscoveryLocaleParam`, so the key space stays small and finite."
   },
   {
     key: "theming-tokens",

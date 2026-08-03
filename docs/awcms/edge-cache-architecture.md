@@ -151,16 +151,25 @@ atas `default.vcl`.
   `bun run edge-cache:surfaces:check` menuntut emisi purge dari **setiap modul
   yang memiliki surface**, dan gagal bila salah satu tidak punya.
 
-- **Surface discovery ber-resolusi-host** (`/robots.txt`, `/sitemap.xml`,
-  `/feed.xml`, `/atom.xml`, `/feed.json`). Kandidat terbaik, tetapi
-  `serveDiscovery(request, …)` tidak menerima `locals` sehingga rute tak bisa
-  mempublikasikan tenant-nya. Menyambungkannya
-  ([ADR-0061](../adr/0061-host-resolved-public-surfaces-are-edge-cacheable.md) §B):
-  alirkan `locals` melalui `serveDiscovery` + enam pemanggilnya, set
-  `edgeCacheTenantId`, tambahkan entri registry, DAN beri `seo_distribution` call
-  site purge — begitu ia memiliki surface, `findOwnersWithoutPurges` menuntutnya
-  (kandidat: `PUT /api/v1/seo/config` + mutasi redirect, karena keduanyalah yang
-  mengubah badan `robots.txt`/sitemap).
+- ~~**Surface discovery ber-resolusi-host**~~ **SUDAH** (ADR-0061 §B). Tiga entri
+  — `seo-robots` (600s), `seo-sitemap` (300s, indeks + anak `-{n}`), `seo-feed`
+  (300s, RSS/Atom/JSON, `?locale=` satu-satunya query). `serveDiscovery` menerima
+  `locals` opsional dan mempublikasikan tenant SETELAH `build(ctx)` memberi
+  payload; keenam rutenya meneruskan `locals`.
+
+  **Yang ditemukan saat menyambungkannya, dan ini berlaku untuk setiap surface
+  agregat berikutnya: badan discovery punya DUA penulis.** Konfigurasinya milik
+  `seo_distribution` (`PUT /api/v1/seo/config` kini mem-purge), tetapi ISI-nya
+  diagregasi dari setiap penyedia `seo_facts` — jadi menerbitkan sebuah post
+  mengubah `/sitemap.xml` tanpa menyentuh satu baris pun milik
+  `seo_distribution`. Karena purge modul menandai `t:<tenant>:m:<moduleKey>`,
+  purge `blog_content` tak menjangkaunya, dan hasilnya akan berupa asimetri yang
+  tak dilaporkan apa pun: `/blog/{code}/feed.xml` ter-purge saat publish,
+  `/feed.xml` basi sampai TTL. `enqueueModuleContentPurge` kini juga mem-purge
+  modul yang mendeklarasikan `consumes` terhadap modul yang berubah DAN memiliki
+  surface — dibaca dari registry (jadi `blog_content` tak pernah menyebut
+  `seo_distribution`), dan dibatasi ke pemilik surface (ban untuk key yang tak
+  menandai apa pun = upacara yang terlihat seperti cakupan).
 
 - ~~**Keluarga konten host-resolved `/news/**`**~~ **SUDAH** (ADR-0061 §A).
   Tiga entri — `news-index`/`news-taxonomy`/`news-post` — mencerminkan TTL dan

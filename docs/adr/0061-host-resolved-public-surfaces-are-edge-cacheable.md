@@ -138,15 +138,55 @@ sebagai kontrak yang dijaga test — bukan sebagai konvensi.
    `/news/../admin` — pola host-resolved satu segmen lebih pendek daripada
    pasangan path-scoped-nya, jadi probe `/blog` tidak menurunkannya.
 
-### §B — Rute discovery root (menyusul)
+### §B — Rute discovery root (SELESAI)
 
-Alirkan `locals` melalui `serveDiscovery` dan enam pemanggilnya, publikasikan
-dari konteks yang sudah ter-resolusi di dalamnya, tambahkan entri registry, dan
-beri `seo_distribution` call site purge yang `findOwnersWithoutPurges` akan
-menuntutnya begitu ia memiliki surface — kandidat call site-nya
-`PUT /api/v1/seo/config` dan mutasi redirect, karena keduanyalah yang mengubah
-badan `robots.txt`/sitemap. Dikerjakan terpisah supaya §A tidak menunggu
-perubahan tanda tangan lintas tujuh berkas.
+`serveDiscovery` menerima `locals` opsional dan mempublikasikan **setelah**
+`build(ctx)` mengembalikan payload; keenam rutenya meneruskan `locals`. Aturan
+waktu §3 berlaku identik di sini dan cabang `null`-nya bahkan LEBIH banyak —
+`build` mengembalikan `null` untuk "sitemap dimatikan", "feed dimatikan", dan
+"halaman di luar jangkauan", ketiganya runtuh ke 404 generik yang sama dengan
+host tak dikenal. Efek sampingnya menyenangkan: `/sitemap-99999.xml` cocok
+dengan pola surface tetapi tak pernah menerbitkan tenant, jadi berjalan menyusuri
+nomor halaman tak bisa dipakai mengisi cache.
+
+Tiga entri: `seo-robots` (600s — berbasis konfigurasi, paling stabil),
+`seo-sitemap` (300s, mencakup indeks DAN anak `-{n}`), `seo-feed` (300s, satu
+pola untuk RSS/Atom/JSON, `?locale=` satu-satunya query yang diizinkan dan sudah
+divalidasi `parseDiscoveryLocaleParam`). Probe never-cacheable ikut menegakkan
+bahwa pola anak-sitemap menolak bentuk yang `Number()` justru terima
+(`1e3`/`0x10`/`-abc`) — daftar yang sama dengan yang ditolak berkas rutenya.
+
+#### Temuan §B: badan discovery punya DUA penulis
+
+`PUT /api/v1/seo/config` mendapat call site purge — `findOwnersWithoutPurges`
+menuntutnya begitu modul memiliki surface, dan saklar `noindex` tenant-wide saja
+sudah menulis ulang `/robots.txt`. Tapi itu **hanya separuh** pemicunya.
+
+Badan sitemap dan feed diagregasi dari setiap penyedia `seo_facts`, jadi
+**menerbitkan sebuah post mengubahnya tanpa menyentuh satu baris pun yang ditulis
+`seo_distribution`.** Karena purge modul menandai `t:<tenant>:m:<moduleKey>`,
+purge publish milik `blog_content` tak bisa menjangkau objek bertanda
+`m:seo_distribution`. Yang tersisa akan berupa asimetri yang tak dilaporkan
+apa pun: `/blog/{code}/feed.xml` ter-purge saat publish, sementara `/feed.xml` —
+konten yang sama, ejaan host-resolved — basi sampai TTL.
+
+`enqueueModuleContentPurge` karena itu **juga** mem-purge modul yang
+mendeklarasikan `consumes` terhadap modul yang berubah **dan** memiliki surface
+terdeklarasi. Kedua syarat itu penting:
+
+- **Dibaca dari registry, bukan di-hardcode.** `blog_content` tidak pernah
+  menyebut `seo_distribution` di mana pun; deklarasi `capabilities.consumes`
+  milik konsumennya sendiri yang menjadi kabelnya. Penyedia `seo_facts`
+  berikutnya mewarisi ini, dan konsumen `blog_content` berikutnya tercakup pada
+  hari ia mendeklarasikan diri.
+- **Hanya konsumen yang memiliki surface.** Ban untuk module key yang tak
+  menandai objek ter-cache mana pun tidak cocok dengan apa pun sementara antrean
+  melaporkan sukses — persis "upacara yang terlihat seperti cakupan" yang
+  gerbang kepemilikan sudah tolak untuk `media_library`. Kewajibannya muncul
+  sendiri saat konsumen mendeklarasikan surface pertamanya.
+
+Keduanya tetap SATU statement enqueue, jadi purge commit atomik bersama
+perubahan kontennya.
 
 ## Konsekuensi
 
