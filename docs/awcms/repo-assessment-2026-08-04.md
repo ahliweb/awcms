@@ -309,9 +309,16 @@ pengguna — hanya ke beban origin.
 1. **Gerbang index-FK** (murni, tanpa DB): setiap kolom FK di `sql/` wajib punya
    index, atau terdaftar sebagai pengecualian ber-alasan. Ini gerbang termurah
    dengan hasil terbesar dan cocok dengan pola repo.
-2. **Anggaran query per-endpoint** untuk rute terpanas, memakai pola
-   Proxy-apply-trap yang **sudah ada** di test SoD (#181) — jadi tekniknya
-   terbukti di repo ini, tinggal diperluas.
+2. ~~**Anggaran query per-endpoint**~~ **SELESAI** — `tests/integration/query-budget.ts`
+   mengekstrak pola Proxy-apply-trap dari test SoD (#181) jadi helper
+   `countQueries`, dan `query-budget.integration.test.ts` mengikat jalur baca
+   publik terpanas (listing, paging, feed) ke plafon **3 query** di atas fixture
+   40 post. Fixture-nya sengaja lebih besar dari plafon: plafon di atas satu baris
+   tak membuktikan apa pun karena N+1 dan implementasi konstan sama-sama
+   mengeluarkan sekitar satu query. Mutation-proven dengan menyuntikkan N+1 NYATA
+   ke `listPublicBlogPosts` — dua test langsung merah. Satu test menjaga
+   instrumennya sendiri (Proxy yang berhenti menghitung akan membuat semua plafon
+   lolos secara hampa).
 3. Core Web Vitals: keputusan produk, bukan cacat. Bila diambil, tempatnya di
    `visitor_analytics` dengan ADR admission sendiri.
 
