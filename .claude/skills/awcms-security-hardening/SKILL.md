@@ -3,6 +3,26 @@ name: awcms-security-hardening
 description: Audit keamanan berbasis standar (OWASP Top 10, OWASP ASVS, ISO/IEC 27001 Annex A) untuk AWCMS. Gunakan saat diminta "security hardening", audit OWASP/ASVS/ISO, penilaian kepatuhan, atau pengerasan menjelang go-live/audit eksternal. Berbeda dari awcms-security-review (checklist DoD per modul) — skill ini memetakan kontrol ke kerangka standar industri.
 ---
 
+> **Asesmen terbaru: 4 Agustus 2026 — [`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md).**
+> Postur dasar KUAT dan sudah diverifikasi ke kode (security headers lengkap
+> termasuk CSP/HSTS/`X-Frame-Options: DENY`, 141 pernyataan RLS `FORCE` diuji
+> sebagai `awcms_app`, ABAC default-deny + decision log, MFA/OIDC/Turnstile/SoD,
+> kredensial mesin baca-saja, cakupan penegakan permission 203/203 nol
+> pengecualian). Tiga temuan terbuka yang WAJIB dibaca sebelum audit berikutnya:
+>
+> 1. **A01/API5 — satu rute melewati chokepoint otorisasi.**
+>    `POST /api/v1/blog/posts/{id}/submit-review` tidak memanggil
+>    `authorizeInTransaction`, sehingga ABAC/platform-scope/business-scope/SoD
+>    dilewati untuk permission yang rute lain evaluasi penuh. Severity moderat
+>    (blast radius sempit); KELASNYA yang serius. Lihat `awcms-abac-guard`
+>    §ATURAN PERTAMA.
+> 2. **API4/ASVS V11.2 — rate limiter `Map` dalam-proses.** Dengan N replika,
+>    batas efektif jadi N × batas terkonfigurasi. Redis sudah ada di repo. Tiga
+>    endpoint auth belum ber-limiter (`session-handoff/issue`/`redeem`,
+>    `sso/{providerKey}/callback`).
+> 3. **Rantai pasok — `bun audit` melaporkan 1 moderate** (`postcss <=8.5.22`
+>    transitif lewat `astro › vite › postcss`, GHSA-fxqj-rqcc-2cmp; jalur build).
+
 # AWCMS — Security Hardening (OWASP / ASVS / ISO)
 
 Sumber kebenaran: **`docs/awcms/20_threat_model_security_architecture.md`** (STRIDE, kontrol berlapis, trust boundary, **§Matrix kepatuhan OWASP/ASVS/ISO 27001** — matrix nyata dengan bukti per baris sudah ditulis di Issue #437, pakai sebagai template/precedent saat audit ulang atau menambah kontrol baru), **`docs/awcms/10_template_kode_coding_standard.md`** (guardrail), dan **`docs/awcms/13_final_master_index_traceability.md`** (matrix kontrol). Skill ini **memetakan** kontrol proyek ke kerangka standar; pakai bersama `awcms-security-review` (checklist per modul) dan subagent `awcms-security-auditor`.

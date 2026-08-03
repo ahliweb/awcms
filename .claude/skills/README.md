@@ -15,6 +15,10 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > 3. **Skill untuk kode yang TIDAK ada wajib terdaftar** di `ASPIRATIONAL_SKILLS`
 >    (`scripts/skills-check.ts`) dengan alasan: `target-spec`, `historical`, atau
 >    `cross-cutting`.
+> 4. **Setiap `bun run <target>` wajib ada** di `package.json` atau terdaftar di
+>    [`scripts/README.md`](../../scripts/README.md) §Ditunda. §Ditunda memang
+>    mengizinkan skill menyebut target acuan yang belum dibangun — aturan ini
+>    hanya menangkap yang bukan keduanya.
 >
 > **Menulis path milik repo ARSIP?** Tulis `` `awcms-mini:src/…` `` /
 > `` `awcms-micro:src/…` ``, bukan `` `src/…` ``. Badan banyak skill di sini

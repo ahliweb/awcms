@@ -15,8 +15,11 @@ import { describe, expect, test } from "bun:test";
 import {
   checkCitedAdrs,
   checkCitedPaths,
+  checkCitedRunTargets,
   extractCitedAdrNumbers,
+  extractCitedRunTargets,
   extractCitedSourcePaths,
+  isKnownRunTarget,
   subjectModuleKey
 } from "../scripts/skills-check";
 
@@ -152,6 +155,74 @@ describe("rule 2 — cited ADRs exist", () => {
     expect(
       checkCitedAdrs("awcms-example", ["0042"], new Set(["0042"]))
     ).toEqual([]);
+  });
+});
+
+describe("rule 4 — cited `bun run` targets are real or declared deferred", () => {
+  const scripts = new Set(["check", "skills:check"]);
+
+  test("extraction finds targets and deduplicates", () => {
+    expect(
+      extractCitedRunTargets(
+        "run `bun run check` then `bun run skills:check`, then `bun run check`"
+      )
+    ).toEqual(["check", "skills:check"]);
+  });
+
+  test("a real target passes", () => {
+    expect(isKnownRunTarget("check", scripts)).toBe(true);
+  });
+
+  test("a target declared deferred in scripts/README §Ditunda passes", () => {
+    // `scripts/README.md` §Ditunda EXPLICITLY permits skills to name these, so
+    // the rule must not re-litigate that policy.
+    expect(isKnownRunTarget("production:preflight", scripts)).toBe(true);
+    expect(isKnownRunTarget("performance:suite", scripts)).toBe(true);
+    expect(isKnownRunTarget("i18n:extract", scripts)).toBe(true);
+  });
+
+  test("a pure ghost fails", () => {
+    expect(isKnownRunTarget("github:snapshot:refresh", scripts)).toBe(false);
+
+    const problems = checkCitedRunTargets(
+      "awcms-github-snapshot",
+      ["github:snapshot:refresh"],
+      scripts,
+      false
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("Ditunda");
+  });
+
+  test("an aspirational skill may name its future tooling", () => {
+    expect(
+      checkCitedRunTargets(
+        "awcms-social-publishing",
+        ["social-publishing:dispatch"],
+        scripts,
+        true
+      )
+    ).toEqual([]);
+  });
+
+  test("every deferred prefix is actually documented in scripts/README §Ditunda", async () => {
+    // Binds the gate's explicit list back to the doc it claims to mirror. Without
+    // this, the list could quietly grow into a way to silence the rule.
+    const readme = await Bun.file("scripts/README.md").text();
+    const deferredSection = readme.slice(readme.indexOf("## Ditunda"));
+
+    for (const prefix of [
+      "config:docs:check",
+      "database:capacity:check",
+      "i18n:",
+      "modules:sync",
+      "performance:",
+      "production:preflight",
+      "resilience:dr-drill"
+    ]) {
+      expect(deferredSection).toContain(prefix.replace(/:$/, ""));
+    }
   });
 });
 
