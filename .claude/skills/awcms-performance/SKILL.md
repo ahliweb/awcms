@@ -11,10 +11,13 @@ description: Audit dan tingkatkan performa aplikasi & database AWCMS. Gunakan sa
 >
 > Asesmen 4 Agustus 2026 ([`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md) §5)
 > mencatat konsekuensinya: **nol dari 28 gerbang `bun run check` memeriksa
-> performa**, jadi query N+1 atau kolom FK tanpa index mendarat dengan CI hijau
-> penuh. Rekomendasi termurah-berdampak-terbesar di sana: gerbang index-FK murni
-> (tanpa DB), lalu anggaran query per-endpoint memakai pola Proxy-apply-trap yang
-> SUDAH terbukti di test SoD (#181).
+> performa**. Yang PERTAMA kini ada — `bun run db:fk-index:check`
+> ([ADR-0064](../../../docs/adr/0064-foreign-key-columns-must-be-index-reachable.md)):
+> tiap kolom FK wajib terjangkau index (memimpin, ATAU kolom kedua setelah
+> `tenant_id` — sadar-tenant karena RLS `FORCE` menjamin tiap query membawa
+> `tenant_id`). `sql/090` menutup tiga belas temuan. **Masih terbuka:** anggaran
+> query per-endpoint (pakai pola Proxy-apply-trap yang SUDAH terbukti di test SoD
+> #181) dan Core Web Vitals.
 
 # AWCMS — Performance & Database Tuning
 
