@@ -1,0 +1,271 @@
+/**
+ * ADR-0063 — the chokepoint rule and its gate.
+ *
+ * Two things are proven here, and the second is the one that earns the file.
+ *
+ * 1. `ownershipGrant` widens the permission set WITHOUT weakening anything else.
+ *    What makes that safe is that it WIDENS rather than SHORT-CIRCUITS: the
+ *    grant only makes `grantedPermissionKeys.has(key)` true, and every other
+ *    check in `evaluateAccess` — tenant isolation, ABAC deny, business scope —
+ *    still runs and can still refuse.
+ *
+ *    (An earlier draft of this file claimed the SAFETY came from ABAC being
+ *    matched before the RBAC key check. That is wrong, and mutating the order
+ *    proved it: a deny returns in either order. The order is irrelevant; not
+ *    short-circuiting is the whole property, so that is what is asserted —
+ *    including at the guard's source level, since the tempting wrong
+ *    implementation is `if (ownership.granted) return allowed` in the guard,
+ *    which no test of `evaluateAccess` could ever see.)
+ *
+ * 2. The gate slices per HANDLER, not per FILE. This is the exact mistake the
+ *    assessment that prompted ADR-0063 made: `blog/posts/[id].ts` calls
+ *    `authorizeInTransaction` in `GET` and `DELETE`, so a file-level reading —
+ *    by a script or by a human skimming — declares it compliant while `PATCH`
+ *    in the same file decided permissions on its own.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  findChokepointBypasses,
+  findStaleExemptions,
+  sliceHandlers
+} from "../scripts/access-chokepoint-check";
+import {
+  evaluateAccess,
+  permissionKey
+} from "../src/modules/identity-access/domain/access-control";
+import type {
+  AbacEvaluationInput,
+  TenantContext
+} from "../src/modules/identity-access/domain/access-control";
+
+const TENANT = "11111111-1111-4111-8111-111111111111";
+const USER = "22222222-2222-4222-8222-222222222222";
+
+const CONTEXT: TenantContext = {
+  tenantId: TENANT,
+  tenantUserId: USER,
+  identityId: "44444444-4444-4444-8444-444444444444",
+  roles: ["editor"]
+};
+
+const GUARD = {
+  moduleKey: "blog_content",
+  activityCode: "posts",
+  action: "update" as const,
+  resourceType: "blog_post",
+  resourceId: "post-1"
+};
+
+const REQUIRED_KEY = permissionKey(
+  GUARD.moduleKey,
+  GUARD.activityCode,
+  GUARD.action
+);
+
+/** Mirrors what the guard does when an ownership grant applies. */
+function withOwnership(roleKeys: ReadonlySet<string>): Set<string> {
+  return new Set([...roleKeys, REQUIRED_KEY]);
+}
+
+describe("ownership grant — widens RBAC, overrules nothing", () => {
+  test("without the permission and without ownership, access is denied", () => {
+    const decision = evaluateAccess(CONTEXT, GUARD, new Set());
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.matchedPolicy).toBe("default_deny");
+  });
+
+  test("ownership alone is enough when no policy says otherwise", () => {
+    // This is the behaviour the three migrated routes must keep: an author may
+    // act on their own unpublished content without holding the permission.
+    const decision = evaluateAccess(CONTEXT, GUARD, withOwnership(new Set()));
+
+    expect(decision.allowed).toBe(true);
+  });
+
+  test("an explicit ABAC deny still wins over an ownership grant", () => {
+    // The load-bearing assertion of ADR-0063: a tenant's explicit deny still
+    // refuses an action the ownership grant would otherwise have allowed.
+    const abac: AbacEvaluationInput = {
+      policies: [
+        {
+          policyCode: "hold_all_post_updates",
+          effect: "deny",
+          dslVersion: 1,
+          priority: 0,
+          applicability: {
+            moduleKey: GUARD.moduleKey,
+            activityCode: GUARD.activityCode,
+            action: GUARD.action,
+            resourceType: null
+          },
+          // `allOf: []` is vacuously true — an UNCONDITIONAL deny for every
+          // request in the applicability above.
+          condition: { allOf: [] }
+        }
+      ] as unknown as AbacEvaluationInput["policies"],
+      env: { now: new Date("2026-08-04T00:00:00.000Z"), ipTrusted: false }
+    };
+
+    const decision = evaluateAccess(
+      CONTEXT,
+      GUARD,
+      withOwnership(new Set()),
+      undefined,
+      abac
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.matchedPolicy).toBe("hold_all_post_updates");
+  });
+
+  test("tenant isolation still wins over an ownership grant", () => {
+    const decision = evaluateAccess(
+      CONTEXT,
+      {
+        ...GUARD,
+        resourceAttributes: { tenantId: "33333333-3333-4333-8333-333333333333" }
+      },
+      withOwnership(new Set())
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.matchedPolicy).toBe("tenant_isolation");
+  });
+});
+
+describe("the gate slices per handler, not per file", () => {
+  // The real shape of `blog/posts/[id].ts` before ADR-0063: two compliant
+  // handlers and one bypass, in one file.
+  const MIXED_FILE = `
+export const GET: APIRoute = async () => {
+  const auth = await authorizeInTransaction(tx, tenantId, hash, now, READ_GUARD);
+};
+export const PATCH: APIRoute = async () => {
+  const keys = await fetchGrantedPermissionKeys(tx, tenantId, userId);
+};
+export const DELETE: APIRoute = async () => {
+  const auth = await authorizeInTransaction(tx, tenantId, hash, now, DELETE_GUARD);
+};
+`;
+
+  test("finds the one bypassing handler among compliant siblings", () => {
+    const handlers = sliceHandlers("blog/posts/[id].ts", MIXED_FILE);
+
+    expect(handlers.map((handler) => handler.id)).toEqual([
+      "blog/posts/[id].ts#GET",
+      "blog/posts/[id].ts#PATCH",
+      "blog/posts/[id].ts#DELETE"
+    ]);
+
+    const problems = findChokepointBypasses(handlers, {});
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.handler).toBe("blog/posts/[id].ts#PATCH");
+  });
+
+  test("a file-level reading would have called that file compliant", () => {
+    // Stated as a test so the reason for slicing cannot be optimised away.
+    expect(MIXED_FILE).toContain("authorizeInTransaction(");
+    expect(
+      sliceHandlers("blog/posts/[id].ts", MIXED_FILE).some(
+        (handler) => handler.decidesPermissions && !handler.usesChokepoint
+      )
+    ).toBe(true);
+  });
+
+  test("defineTenantRoute covers every handler in its file", () => {
+    const source = `
+const route = defineTenantRoute({ guard: GUARD });
+export const POST: APIRoute = async () => {
+  const keys = await fetchGrantedPermissionKeys(tx, tenantId, userId);
+};
+`;
+
+    expect(findChokepointBypasses(sliceHandlers("x.ts", source), {})).toEqual(
+      []
+    );
+  });
+
+  test("an exemption is keyed to one handler and cannot widen to a sibling", () => {
+    const handlers = sliceHandlers("blog/posts/[id].ts", MIXED_FILE);
+    const problems = findChokepointBypasses(handlers, {
+      "blog/posts/[id].ts#POST": "a different handler entirely"
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.handler).toBe("blog/posts/[id].ts#PATCH");
+  });
+
+  test("a handler that decides nothing needs no chokepoint", () => {
+    const source = `
+export const GET: APIRoute = async () => {
+  return ok(await listPublicThings(tx));
+};
+`;
+
+    expect(findChokepointBypasses(sliceHandlers("x.ts", source), {})).toEqual(
+      []
+    );
+  });
+});
+
+describe("stale exemptions are reported", () => {
+  test("an exemption for a handler that no longer bypasses fails", () => {
+    const handlers = sliceHandlers(
+      "x.ts",
+      `
+export const POST: APIRoute = async () => {
+  const auth = await authorizeInTransaction(tx, t, h, n, G);
+  const keys = await fetchGrantedPermissionKeys(tx, t, u);
+};
+`
+    );
+
+    const problems = findStaleExemptions(handlers, {
+      "x.ts#POST": "was a bypass once"
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("no longer bypasses");
+  });
+
+  test("an exemption for a handler that vanished fails", () => {
+    expect(
+      findStaleExemptions([], { "gone.ts#POST": "removed route" })
+    ).toHaveLength(1);
+  });
+});
+
+describe("the guard widens, it never short-circuits", () => {
+  test("`ownershipApplied` only builds the key set — it never returns an allow", async () => {
+    // The wrong implementation is one line and passes every behavioural test of
+    // `evaluateAccess`, because it never reaches it:
+    //     if (options?.ownershipGrant?.granted) return { allowed: true, ... }
+    // That would skip ABAC, the platform-scope gate, business scope and SoD —
+    // the exact four things ADR-0063 exists to preserve. Only the guard's own
+    // source can rule it out.
+    const source = await Bun.file(
+      "src/modules/identity-access/application/access-guard.ts"
+    ).text();
+
+    const applied = source.indexOf("const ownershipApplied");
+    const evaluate = source.indexOf("evaluateAccess(");
+
+    expect(applied).toBeGreaterThan(-1);
+    // The grant is computed BEFORE the evaluator, and the evaluator still runs.
+    expect(evaluate).toBeGreaterThan(applied);
+    // No early allow keyed on the grant, in any spelling.
+    expect(source).not.toMatch(/ownershipGrant[^\n]*\n[^\n]*allowed:\s*true/);
+    expect(source).not.toMatch(/ownershipApplied[\s\S]{0,120}?allowed:\s*true/);
+  });
+});
+
+describe("the live route tree", () => {
+  test("access:chokepoint:check passes as committed", () => {
+    const result = Bun.spawnSync(["bun", "scripts/access-chokepoint-check.ts"]);
+
+    expect(result.exitCode).toBe(0);
+  });
+});

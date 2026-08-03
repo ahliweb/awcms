@@ -32,24 +32,37 @@ konteks penting untuk seluruh bagian berikut: **temuan di bawah bukan hal yang
 lolos karena tidak ada yang memeriksa — melainkan hal yang tidak ada
 pemeriksanya.**
 
-## 2. Temuan P0 — satu rute melewati chokepoint otorisasi
+## 2. Temuan P0 — TIGA handler melewati chokepoint otorisasi
+
+> **KOREKSI 4 Agustus 2026 (PR ADR-0063).** Versi pertama bagian ini menulis
+> temuan sebagai **satu** rute menyimpang, dan menyebut
+> `PATCH /api/v1/blog/posts/{id}` sebagai **contoh pola yang BENAR**. Itu salah.
+> Berkas `blog/posts/[id].ts` memanggil `authorizeInTransaction` di `GET` (baris 83) dan `DELETE` (baris 431), sementara `PATCH` di berkas yang sama **tidak
+> sama sekali** — pembacaan tingkat-BERKAS menggabungkannya jadi satu alur dan
+> menyimpulkan kepatuhan yang tidak ada. Analisis per-HANDLER atas 331 handler
+> menemukan **tiga** pelanggar, bukan satu, dan satu "pelanggar" keempat
+> (`access/evaluate.ts`) ternyata sah. Ini kelas kesalahan yang dokumen ini
+> sendiri peringatkan di pembukanya; dicatat utuh karena koreksinya adalah
+> alasan gerbang ADR-0063 §B mengiris per-handler. **Sudah DIPERBAIKI** — lihat
+> ADR-0063.
 
 ### Apa yang ditemukan
 
-`POST /api/v1/blog/posts/{id}/submit-review`
-([`src/pages/api/v1/blog/posts/[id]/submit-review.ts`](../../src/pages/api/v1/blog/posts/[id]/submit-review.ts))
-**tidak memanggil `authorizeInTransaction` sama sekali.** Ia menyusun
-otorisasinya sendiri:
+Tiga handler **tidak memanggil `authorizeInTransaction` sama sekali** —
+`PATCH /api/v1/blog/posts/{id}`, `POST /api/v1/blog/posts/{id}/submit-review`, dan
+`PATCH /api/v1/blog/pages/{id}`. Ketiganya menyusun otorisasinya sendiri:
 
 ```
 resolveTenantContext → resolveModuleEnabled → fetchGrantedPermissionKeys
   → evaluatePostUpdateAccess → recordDecisionLog
 ```
 
-Bandingkan dengan `PATCH /api/v1/blog/posts/{id}`, yang menegakkan **permission
-yang SAMA** (`blog_content.posts.update`) dan memanggil `authorizeInTransaction`
-lebih dulu, **lalu** `evaluatePostUpdateAccess` sebagai aturan kepemilikan
-tambahan.
+Dan ketiganya BUKAN kelalaian: mereka menegakkan aturan produk (#538) bahwa
+**penulis boleh menyunting kontennya sendiri yang belum terbit meski tidak
+memegang permission-nya** — sumbu otorisasi yang katalog permission tidak bisa
+ekspresikan. `authorizeInTransaction` mengembalikan `denied` sebelum aturan domain
+mana pun dikonsultasi, jadi menaruhnya di depan aturan itu akan MENGHAPUS jalur
+penulis. Cacatnya ada di seam chokepoint, bukan di disiplin penulis rutenya.
 
 ### Yang hilang di jalur itu
 
@@ -99,15 +112,20 @@ serius, bukan instansnya.
 
 ### Rekomendasi
 
-1. Routekan `submit-review` lewat `authorizeInTransaction` (pola `PATCH /{id}`
-   sudah jadi cetakannya: chokepoint dulu, aturan kepemilikan sesudah).
-2. **Tambah gerbang untuk KELASNYA**, bukan hanya instansnya: setiap berkas rute
-   di `src/pages/api/v1/**` yang menyentuh `fetchGrantedPermissionKeys` tanpa
-   `authorizeInTransaction` / `defineTenantRoute` gagal, dengan daftar
-   pengecualian ber-alasan. Hari ini himpunan itu **tepat dua** berkas —
-   `submit-review.ts` dan `auth/login.ts` (yang memang pra-autentikasi, sehingga
-   jadi satu-satunya entri daftar). Nilai daftar yang berisi satu entri sama
-   dengan yang ADR-0058 catat: entri BERIKUTNYA tak bisa masuk tanpa terlihat.
+**SELESAI — [ADR-0063](../adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md).**
+
+1. `authorizeInTransaction` mendapat `ownershipGrant`, yang **MELEBARKAN**
+   himpunan permission yang dievaluasi alih-alih memotong keputusan. Aturan
+   kepemilikan jadi masukan bagi chokepoint, bukan pengganti — sehingga ABAC
+   (termasuk `deny` eksplisit), platform-scope, business-scope, dan SoD tetap
+   bisa menolak. Kredensial mesin dikecualikan (ADR-0049 §3), dan decision log
+   menandai allow berbasis kepemilikan sebagai `ownership_grant:<reason>`.
+2. Gerbang `bun run access:chokepoint:check`, **di-iris per HANDLER** — bukan
+   per berkas, karena pembacaan per-berkas justru yang menghasilkan koreksi di
+   atas. Pengecualian berkunci `<berkas>#<METHOD>` sehingga tak bisa melebar ke
+   handler tetangga. Dua entri: `auth/login.ts#POST` (pra-autentikasi) dan
+   `access/evaluate.ts#POST` (introspeksi diri yang justru MEMANGGIL
+   `evaluateAccess`). Skor: **331 handler, 6 memutuskan permission, 0 bypass.**
 
 ## 3. Temuan P1 — rate limiter tidak bertahan di lebih dari satu instans
 

@@ -11,7 +11,7 @@ import {
   resolveModuleEnabled,
   resolveTenantContext
 } from "../../../../../../modules/identity-access/application/auth-context";
-import { recordDecisionLog } from "../../../../../../modules/identity-access/application/decision-log";
+import { authorizeInTransaction } from "../../../../../../modules/identity-access/application/access-guard";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import {
   fetchBlogPostById,
@@ -81,31 +81,43 @@ export const POST: APIRoute = async ({ request, params, locals }) => {
       return fail(404, "RESOURCE_NOT_FOUND", "Blog post not found.");
     }
 
-    const grantedPermissionKeys = await fetchGrantedPermissionKeys(
+    // ADR-0063 — the ownership rule is now a GRANT BASIS handed to the
+    // chokepoint, not a decision made instead of it. `evaluatePostUpdateAccess`
+    // still answers "may this author act without holding the permission", but
+    // `authorizeInTransaction` is what decides, so ABAC (including an explicit
+    // deny that overrules ownership), the platform-scope gate and SoD all apply
+    // here exactly as they do on every other guarded route.
+    const roleKeys = await fetchGrantedPermissionKeys(
       tx,
       tenantId,
       context.tenantUserId
     );
-    const decision = evaluatePostUpdateAccess(context, grantedPermissionKeys, {
+    const ownership = evaluatePostUpdateAccess(context, roleKeys, {
       authorTenantUserId: post.authorTenantUserId,
       status: post.status
     });
 
-    await recordDecisionLog(
+    const auth = await authorizeInTransaction(
       tx,
       tenantId,
-      context.tenantUserId,
+      tokenHash,
+      now,
       {
         ...ACTIVITY,
         action: "update",
         resourceType: "blog_post",
         resourceId: postId
       },
-      decision
+      {
+        ownershipGrant: {
+          granted: ownership.allowed,
+          reason: "author of an unpublished post"
+        }
+      }
     );
 
-    if (!decision.allowed) {
-      return fail(403, "ACCESS_DENIED", decision.reason);
+    if (!auth.allowed) {
+      return auth.denied;
     }
 
     if (!isValidStatusTransition(post.status, "review")) {

@@ -93,6 +93,20 @@ export type AuthorizeResult =
   | { allowed: false; denied: Response };
 
 /**
+ * A domain-supplied basis for allowing an action the subject's ROLES do not
+ * grant — ADR-0063.
+ *
+ * `reason` is not decoration: it is what the decision log carries so an auditor
+ * can tell an ownership allow from an RBAC allow after the fact. Supply a
+ * stable, specific phrase ("author of an unpublished post"), never a message
+ * assembled from user input.
+ */
+export type OwnershipGrant = {
+  granted: boolean;
+  reason: string;
+};
+
+/**
  * Runs the full guard chain inside an existing tenant transaction: resolve
  * session -> fetch granted permission keys -> evaluate ABAC (default deny,
  * deny overrides allow) -> record the decision log. Returns the authorized
@@ -117,6 +131,13 @@ export type AuthorizeResult =
  * pre-existing call site is unaffected: the base registry declares no SoD
  * rules, so the guard short-circuits at zero cost. A test/composition root may
  * inject a rule set here to exercise enforcement.
+ *
+ * `options.ownershipGrant` (ADR-0063) is OPTIONAL — a DOMAIN basis for allowing
+ * an action the subject's roles do not grant ("the author may edit their own
+ * unpublished post"). It WIDENS the permission set this function evaluates; it
+ * does not short-circuit anything. ABAC still runs and an explicit `deny` still
+ * wins (it is matched before the RBAC key check), the platform-scope gate still
+ * applies, and SoD still runs afterwards. Ignored for machine credentials.
  */
 export async function authorizeInTransaction(
   tx: Bun.SQL,
@@ -127,6 +148,7 @@ export async function authorizeInTransaction(
   options?: {
     hierarchyPort?: BusinessScopeHierarchyPort;
     sodRules?: readonly SoDRuleDescriptor[];
+    ownershipGrant?: OwnershipGrant;
   }
 ): Promise<AuthorizeResult> {
   // ADR-0049 — the bearer's KIND is carried by the hash namespace, so exactly
@@ -262,9 +284,37 @@ export async function authorizeInTransaction(
   // is the intersection with the credential's allow-list, so adding a role to
   // the service account leaves already-issued credentials exactly where they
   // were, and an allow-list naming a permission nobody holds grants nothing.
-  const grantedPermissionKeys = machine
+  const roleGrantedPermissionKeys = machine
     ? narrowPermissionKeys(accountPermissionKeys, machine.allowedPermissionKeys)
     : accountPermissionKeys;
+
+  // ADR-0063 — a DOMAIN grant basis, applied here rather than in the route.
+  //
+  // Some access is granted on an axis the permission catalogue cannot express:
+  // "an author may update their own not-yet-published post even without
+  // `blog_content.posts.update`". Before this seam existed, the three routes
+  // implementing that rule could not sit behind this function at all — it
+  // returns `denied` before any domain rule is consulted — so they evaluated
+  // permissions themselves and silently lost ABAC, the platform-scope gate,
+  // business-scope facts and SoD along with it.
+  //
+  // Widening the key set here rather than short-circuiting is what keeps every
+  // one of those intact, and the ORDER inside `evaluateAccess` is what makes it
+  // safe: an ABAC `deny` is matched BEFORE the RBAC key check, so an ownership
+  // grant can never overrule an explicit deny. Deny-overrides-allow still holds.
+  //
+  // A machine credential is deliberately excluded: it AUTHENTICATES and never
+  // AUTHORIZES (ADR-0049 §3), so a build token pointed at an author's account
+  // must not inherit that author's ownership.
+  const ownershipApplied = Boolean(
+    options?.ownershipGrant?.granted && !machine
+  );
+  const grantedPermissionKeys = ownershipApplied
+    ? new Set([
+        ...roleGrantedPermissionKeys,
+        permissionKey(guard.moduleKey, guard.activityCode, guard.action)
+      ])
+    : roleGrantedPermissionKeys;
 
   // Issue #180 — resolve the subject's business-scope facts only when the
   // guard opts into a required-scope check AND a hierarchy port is available.
@@ -294,13 +344,27 @@ export async function authorizeInTransaction(
   // defaults to false (fail-closed) until a deployment wires a trusted-network
   // resolver; `env.now` is the request timestamp already threaded through here.
   const policies = await loadActivePolicies(tx, tenantId);
-  const decision = evaluateAccess(
+  const evaluated = evaluateAccess(
     context,
     guard,
     grantedPermissionKeys,
     businessScopeFacts,
     { policies, env: { now, ipTrusted: false } }
   );
+
+  // An allow that only happened BECAUSE of the ownership grant is labelled as
+  // such in the decision log. Without this the log would read exactly like an
+  // RBAC allow, and an auditor asking "who could do this, and why" would get a
+  // wrong answer for the one case where the answer is not "a role granted it".
+  // A DENY is never relabelled: the reason it was denied is the reason it was
+  // denied.
+  const decision =
+    ownershipApplied && evaluated.allowed
+      ? {
+          ...evaluated,
+          matchedPolicy: `ownership_grant:${options!.ownershipGrant!.reason}`
+        }
+      : evaluated;
 
   await recordDecisionLog(
     tx,
