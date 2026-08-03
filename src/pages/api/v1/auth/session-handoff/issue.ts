@@ -8,6 +8,10 @@ import { resolveSessionAssurance } from "../../../../../modules/identity-access/
 import { issueHandoffCode } from "../../../../../modules/identity-access/application/session-handoff-directory";
 import { resolveTenantContext } from "../../../../../modules/identity-access/application/auth-context";
 import { log } from "../../../../../lib/logging/logger";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../lib/security/rate-limit";
 
 /**
  * `POST /api/v1/auth/session-handoff/issue` (ADR-0050) — the authenticated
@@ -49,6 +53,19 @@ export const POST = defineSelfServiceTenantRoute({
   // caller whether the tenant header it guessed is real.
   onUnauthenticated: () =>
     fail(401, "AUTH_REQUIRED", "Authentication required."),
+  // ADR-0066 — anti-automation on every authentication surface, not most.
+  // Self-service from a live session; the bound stops one compromised session
+  // minting handoff codes in a loop.
+  beforeTransaction: async ({ request, clientAddress }) => {
+    const rate = await checkSharedRateLimit(
+      `handoff-issue:${resolveClientIp(request, clientAddress)}`,
+      { maxAttempts: 30, windowMs: 60_000 }
+    );
+
+    return rate.allowed
+      ? undefined
+      : fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.");
+  },
   handler: async ({ tx, tenantId, tokenHash, request, locals }) => {
     const bodyRead = await readJsonBody(request);
 

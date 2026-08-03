@@ -6,7 +6,7 @@ import { withTenant } from "../../../../../lib/database/tenant-context";
 import { hashSessionToken } from "../../../../../lib/auth/session-token";
 import { resolveAuthInputs } from "../../../../../modules/identity-access/application/access-guard";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../../lib/security/rate-limit";
 import {
@@ -48,10 +48,13 @@ export const POST: APIRoute = async ({
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`${clientIp}:${tenantId}:mfa-stepup`, {
-    maxAttempts: resolveMfaRateLimitMax(),
-    windowMs: resolveMfaRateLimitWindowSec() * 1000
-  });
+  const rateLimit = await checkSharedRateLimit(
+    `${clientIp}:${tenantId}:mfa-stepup`,
+    {
+      maxAttempts: resolveMfaRateLimitMax(),
+      windowMs: resolveMfaRateLimitWindowSec() * 1000
+    }
+  );
 
   if (!rateLimit.allowed) {
     return fail(

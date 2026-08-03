@@ -14,6 +14,10 @@ import { resolveLoginPolicyConfig } from "../../../../../../modules/identity-acc
 import { isSsoEnabled } from "../../../../../../lib/auth/sso-config";
 import { completeTenantSsoCallback } from "../../../../../../modules/identity-access/application/tenant-sso";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
+import {
+  checkSharedRateLimit,
+  resolveClientIp
+} from "../../../../../../lib/security/rate-limit";
 
 /**
  * `GET /api/v1/auth/sso/{providerKey}/callback` (Issue #185) — the IdP's own
@@ -27,7 +31,14 @@ import { recordAuditEvent } from "../../../../../../modules/logging/application/
  * same-origin `returnTo` captured at `start`, defaulting to `/admin` (never a
  * client-controlled absolute URL — open-redirect safe).
  */
-export const GET: APIRoute = async ({ cookies, url, params, locals }) => {
+export const GET: APIRoute = async ({
+  cookies,
+  url,
+  params,
+  locals,
+  request,
+  clientAddress
+}) => {
   if (!isSsoEnabled()) {
     return fail(
       403,
@@ -59,6 +70,18 @@ export const GET: APIRoute = async ({ cookies, url, params, locals }) => {
       "SSO_OAUTH_STATE_INVALID",
       "Missing or invalid state parameter."
     );
+  }
+
+  // ADR-0066 — the callback is reachable without a session, and each hit costs a
+  // provider round trip plus a database read. Bounded by source, generously:
+  // a real user completes this once.
+  const rate = await checkSharedRateLimit(
+    `sso-callback:${resolveClientIp(request, clientAddress)}`,
+    { maxAttempts: 30, windowMs: 60_000 }
+  );
+
+  if (!rate.allowed) {
+    return fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.");
   }
 
   const sql = getDatabaseClient();

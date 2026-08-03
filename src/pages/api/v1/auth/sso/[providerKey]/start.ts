@@ -5,7 +5,7 @@ import { getDatabaseClient } from "../../../../../../lib/database/client";
 import { withTenant } from "../../../../../../lib/database/tenant-context";
 import { TENANT_COOKIE_NAME } from "../../../../../../lib/auth/ssr-session";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../../../lib/security/rate-limit";
 import {
@@ -75,10 +75,13 @@ export const GET: APIRoute = async ({
   }
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`${clientIp}:${tenantId}:sso-start`, {
-    maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
-    windowMs: RATE_LIMIT_WINDOW_SEC * 1000
-  });
+  const rateLimit = await checkSharedRateLimit(
+    `${clientIp}:${tenantId}:sso-start`,
+    {
+      maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
+      windowMs: RATE_LIMIT_WINDOW_SEC * 1000
+    }
+  );
 
   if (!rateLimit.allowed) {
     return fail(

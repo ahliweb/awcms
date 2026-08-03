@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { fail, jsonResponse } from "../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import {
@@ -147,17 +147,20 @@ export const POST: APIRoute = async ({
   // existing tenant from an unknown one (no enumeration oracle); a source that
   // exceeds the window is refused with 429 before it can touch the database.
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`analytics-collect:${clientIp}`, {
-    maxAttempts:
-      Number.isFinite(COLLECT_RATE_LIMIT_MAX) && COLLECT_RATE_LIMIT_MAX > 0
-        ? COLLECT_RATE_LIMIT_MAX
-        : 120,
-    windowMs:
-      (Number.isFinite(COLLECT_RATE_LIMIT_WINDOW_SEC) &&
-      COLLECT_RATE_LIMIT_WINDOW_SEC > 0
-        ? COLLECT_RATE_LIMIT_WINDOW_SEC
-        : 60) * 1000
-  });
+  const rateLimit = await checkSharedRateLimit(
+    `analytics-collect:${clientIp}`,
+    {
+      maxAttempts:
+        Number.isFinite(COLLECT_RATE_LIMIT_MAX) && COLLECT_RATE_LIMIT_MAX > 0
+          ? COLLECT_RATE_LIMIT_MAX
+          : 120,
+      windowMs:
+        (Number.isFinite(COLLECT_RATE_LIMIT_WINDOW_SEC) &&
+        COLLECT_RATE_LIMIT_WINDOW_SEC > 0
+          ? COLLECT_RATE_LIMIT_WINDOW_SEC
+          : 60) * 1000
+    }
+  );
 
   if (!rateLimit.allowed) {
     return fail(

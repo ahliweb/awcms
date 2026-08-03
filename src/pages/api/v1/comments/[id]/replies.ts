@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME } from "../../../../../lib/auth/ssr-session";
 import { getDatabaseClient } from "../../../../../lib/database/client";
 import { recordCounter } from "../../../../../lib/observability/metrics-port";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../../lib/security/rate-limit";
 import {
@@ -43,7 +43,7 @@ export const POST: APIRoute = async ({
     return fail(400, "VALIDATION_ERROR", "Comment id is required.");
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rate = checkRateLimit(`comments:reply:${clientIp}`, {
+  const rate = await checkSharedRateLimit(`comments:reply:${clientIp}`, {
     maxAttempts: 20,
     windowMs: 60 * 60 * 1000
   });

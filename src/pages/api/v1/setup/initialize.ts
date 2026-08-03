@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 import { fail, ok } from "../../../../modules/_shared/api-response";
 import { getSetupDatabaseClient } from "../../../../lib/database/client";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import {
@@ -41,7 +41,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   // bootstrap) — mirrors login.ts. Keyed by source so a caller can't drive
   // unbounded siteverify round-trips or bootstrap attempts.
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`setup:${clientIp}`, {
+  const rateLimit = await checkSharedRateLimit(`setup:${clientIp}`, {
     maxAttempts:
       Number.isFinite(SETUP_RATE_LIMIT_MAX) && SETUP_RATE_LIMIT_MAX > 0
         ? SETUP_RATE_LIMIT_MAX

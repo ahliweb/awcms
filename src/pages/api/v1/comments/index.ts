@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME } from "../../../../lib/auth/ssr-session";
 import { getDatabaseClient } from "../../../../lib/database/client";
 import { recordCounter } from "../../../../lib/observability/metrics-port";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import {
@@ -47,7 +47,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   const clientIp = resolveClientIp(request, clientAddress);
-  const rate = checkRateLimit(`comments:list:${clientIp}`, {
+  const rate = await checkSharedRateLimit(`comments:list:${clientIp}`, {
     maxAttempts: 120,
     windowMs: 60 * 1000
   });
@@ -106,7 +106,7 @@ export const POST: APIRoute = async ({
   locals
 }) => {
   const clientIp = resolveClientIp(request, clientAddress);
-  const rate = checkRateLimit(`comments:submit:${clientIp}`, {
+  const rate = await checkSharedRateLimit(`comments:submit:${clientIp}`, {
     maxAttempts: 20,
     windowMs: RATE_LIMIT_WINDOW_MS
   });

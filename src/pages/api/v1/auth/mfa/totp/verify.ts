@@ -5,7 +5,7 @@ import { getDatabaseClient } from "../../../../../../lib/database/client";
 import { withTenant } from "../../../../../../lib/database/tenant-context";
 import { TENANT_COOKIE_NAME } from "../../../../../../lib/auth/ssr-session";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../../../lib/security/rate-limit";
 import {
@@ -61,10 +61,13 @@ export const POST: APIRoute = async ({
 
   const rateMax = resolveMfaRateLimitMax();
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`${clientIp}:${tenantId}:mfa-verify`, {
-    maxAttempts: rateMax,
-    windowMs: resolveMfaRateLimitWindowSec() * 1000
-  });
+  const rateLimit = await checkSharedRateLimit(
+    `${clientIp}:${tenantId}:mfa-verify`,
+    {
+      maxAttempts: rateMax,
+      windowMs: resolveMfaRateLimitWindowSec() * 1000
+    }
+  );
 
   if (!rateLimit.allowed) {
     return fail(

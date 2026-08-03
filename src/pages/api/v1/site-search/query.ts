@@ -6,7 +6,7 @@ import {
   recordHistogram
 } from "../../../../lib/observability/metrics-port";
 import {
-  checkRateLimit,
+  checkSharedRateLimit,
   resolveClientIp
 } from "../../../../lib/security/rate-limit";
 import { ok, fail } from "../../../../modules/_shared/api-response";
@@ -39,10 +39,13 @@ const RATE_LIMIT_WINDOW_SEC = Number(
 export const GET: APIRoute = async ({ request, url, clientAddress }) => {
   const started = Date.now();
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = checkRateLimit(`site-search:query:${clientIp}`, {
-    maxAttempts: RATE_LIMIT_MAX,
-    windowMs: RATE_LIMIT_WINDOW_SEC * 1000
-  });
+  const rateLimit = await checkSharedRateLimit(
+    `site-search:query:${clientIp}`,
+    {
+      maxAttempts: RATE_LIMIT_MAX,
+      windowMs: RATE_LIMIT_WINDOW_SEC * 1000
+    }
+  );
   if (!rateLimit.allowed) {
     recordCounter("site_search_queries_total", {
       surface: "search",
