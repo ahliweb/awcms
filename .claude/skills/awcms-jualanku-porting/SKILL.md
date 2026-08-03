@@ -1,6 +1,6 @@
 ---
 name: awcms-jualanku-porting
-description: "RENCANA — porting Jualanku.info (direktori merchant + portal penjual + portal affiliate) ke keluarga AWCMS, diputuskan [ADR-0045](../../../docs/adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md) di repo ini + ADR-0014/0015 di `awcms-astro`. BELUM ADA KODE: tidak ada modul/tabel/migrasi/rute/permission `jualanku_*`, dan registry tetap 20 modul. Gunakan saat mengerjakan bagian mana pun dari Jualanku — ia memuat keputusan yang TIDAK bisa disimpulkan dari kode: merchant dimodelkan sebagai BUSINESS SCOPE (bukan atribut ABAC baru — allow-list ABAC TERTUTUP), RLS memisahkan tenant BUKAN merchant, browser tidak pernah memanggil awcms langsung (BFF di awcms-astro), lima bounded context bukan tujuh, dan gap sesi yang sebenarnya adalah introspeksi lintas-origin bukan dukungan cookie. Rancangan lengkap: `docs/awcms/jualanku/`."
+description: "RENCANA — porting Jualanku.info (direktori merchant + portal penjual + portal affiliate) ke keluarga AWCMS, diputuskan [ADR-0045](../../../docs/adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md) di repo ini + ADR-0014/0015 di `awcms-astro`. BELUM ADA KODE: tidak ada modul/tabel/migrasi/rute/permission `jualanku_*`, dan registry kini 21 modul (bukan 20 — diperiksa 4 Agustus 2026). Gunakan saat mengerjakan bagian mana pun dari Jualanku — ia memuat keputusan yang TIDAK bisa disimpulkan dari kode: merchant dimodelkan sebagai BUSINESS SCOPE (bukan atribut ABAC baru — allow-list ABAC TERTUTUP), RLS memisahkan tenant BUKAN merchant, browser tidak pernah memanggil awcms langsung (BFF di awcms-astro), lima bounded context bukan tujuh, dan gap sesi yang sebenarnya adalah introspeksi lintas-origin bukan dukungan cookie. Rancangan lengkap: `docs/awcms/jualanku/`."
 ---
 
 # AWCMS — Porting Jualanku.info (rencana, belum ada kode)
@@ -28,8 +28,14 @@ Rancangan penuh ada di [`docs/awcms/jualanku/`](../../../docs/awcms/jualanku/REA
    evaluasi. `subject.merchantIds`/`resource.merchantId` **tidak ada di sana**
    dan **tidak boleh ditambahkan** — melebarkannya untuk satu produk menghapus
    properti yang membuatnya bernilai. Yang dipakai: `resource.businessScopeId`
-   (sudah ada) + port hierarki scope ADR-0030 yang base-nya mengembalikan
-   `resolved: false` **fail-closed**. `jualanku_directory` yang mengisinya.
+   (sudah ada) + port hierarki scope ADR-0030. **Base-nya tidak lagi NO-OP:**
+   [ADR-0060](../../../docs/adr/0060-business-scope-hierarchy-provided-by-tenant-admin.md)
+   (4 Agustus 2026) membuat `tenant_admin` menyelesaikan hierarki scope kantor,
+   jadi port itu punya penyedia. Yang belum: **bentuk scope MERCHANT** —
+   memetakan merchant Jualanku ke scope tetap butuh ADR admission-nya sendiri,
+   dan `jualanku_directory` yang akan mengisinya. Catatan sebelumnya di sini
+   berbunyi "base-nya mengembalikan `resolved: false` fail-closed"; itu benar
+   sampai ADR-0060 dan menyesatkan sesudahnya.
 2. **RLS memisahkan tenant, bukan merchant.** Satu tenant penyelenggara
    (`JUALANKU_MAIN`), banyak merchant. Isolasi merchant butuh TIGA lapis: RLS
    tenant + grant scope ber-effective-dating + **predikat kepemilikan di setiap
