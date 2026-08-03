@@ -1,0 +1,687 @@
+---
+/**
+ * Blog taxonomy console — categories and tags.
+ *
+ * Third sibling of `/admin/blog` (posts) and `/admin/blog-pages` (pages). This
+ * one is smaller than both and deliberately so: taxonomy is low-cardinality
+ * configuration, not a queue, and `listBlogTerms` is a bounded `LIMIT 100`
+ * name-ascending read rather than a paginated listing.
+ *
+ * ## Scope: two permissions, and ONE of them gates three writes
+ *
+ * `taxonomies.read` and `taxonomies.configure` — that is the whole activity.
+ * `configure` gates create, update AND delete together, which is a decision the
+ * catalogue already made (`sql/036` seeds no `taxonomies.create`/`.update`/
+ * `.delete`), and the module README records the reasoning: the permission is
+ * the capability "manage taxonomy", not one flag per verb. The same shape as
+ * `sync_storage.conflict_resolution.approve` gating a whole resolve endpoint
+ * whatever its outcome.
+ *
+ * So there is no per-verb gating to do here, and inventing one would imply
+ * authority that no `authorizeInTransaction` call anywhere would honour.
+ *
+ * ## Delete is ONE WAY, and the screen has to say so
+ *
+ * `softDeleteBlogTerm` sets `deleted_at`, `listBlogTerms` filters
+ * `deleted_at IS NULL` hard, and there is no restore function and no restore
+ * route — because `sql/036` seeds no `taxonomies.restore`/`.purge`. This is a
+ * documented decision (module README §Taxonomy, and the `DELETE` route's own
+ * comment), NOT the defect #351 fixed on `/admin/blog`, where the endpoint
+ * existed and the screen called it on rows that could only 404.
+ *
+ * The consequence for this screen is the opposite of the pages console: there
+ * is deliberately **no bin view**, because a bin implies a way back. What the
+ * screen owes the operator instead is a confirmation that states the finality
+ * plainly, so a one-way action is never taken for a reversible one.
+ *
+ * ## Re-parenting is offered on CREATE and withheld on UPDATE
+ *
+ * Both routes verify a `parentId` exists and belongs to the tenant, and
+ * NEITHER performs cycle detection. On create that is harmless — a term being
+ * created has no children yet, so it cannot close a loop. On update it is not:
+ * pointing a parent at its own descendant produces a cycle the API accepts and
+ * every reader then walks forever.
+ *
+ * `/admin/blog-pages` withheld re-parenting for exactly this reason. The
+ * difference here is that create is genuinely safe, so the control appears
+ * where it cannot cause the defect and is absent where it can.
+ *
+ * A tag may not have a parent at all — `awcms_blog_terms_tag_no_parent_check`
+ * is a database CHECK, not a convention — so the parent control is bound to the
+ * category branch of the form.
+ *
+ * ## Reads / writes / gates
+ *
+ * The read goes through this module's own application function inside ONE
+ * `withTenantOrThrow`. Nothing here writes SQL; every mutation is a request to
+ * a guarded endpoint, so audit rows cannot be bypassed.
+ *
+ * **No `Idempotency-Key` anywhere on this screen**, and that mirrors the
+ * endpoints exactly: none of the three term routes reads the header. Sending
+ * one would imply a replay contract they never offered — the split is
+ * per-endpoint, not per-repo.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes
+ * is the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listBlogTerms,
+  type BlogTermView
+} from "../../modules/blog-content/application/blog-taxonomy-directory";
+import {
+  isTaxonomyType,
+  type TaxonomyType
+} from "../../modules/blog-content/domain/taxonomy-policy";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("blog_content", "taxonomies", "read")
+);
+/** One permission, three writes — see the header. */
+const canConfigure = ssr.permissions.has(
+  permissionKey("blog_content", "taxonomies", "configure")
+);
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const typeRaw = readParam("taxonomyType");
+// An unknown value is dropped rather than forwarded: a hand-edited query
+// string must not turn this screen into an error page.
+const typeFilter: TaxonomyType | undefined = isTaxonomyType(typeRaw)
+  ? typeRaw
+  : undefined;
+
+/** `?edit=<id>` opens the edit form for one term, below the table. */
+const editingTermId = readParam("edit");
+
+let terms: BlogTermView[] = [];
+let loadError = false;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      terms = await listBlogTerms(tx, ssr.tenantId, {
+        taxonomyType: typeFilter
+      });
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has no terms".
+    loadError = true;
+    logAdminPageError(
+      "admin/blog-taxonomy.astro: failed to load terms",
+      error,
+      {
+        correlationId: Astro.locals.correlationId
+      }
+    );
+  }
+}
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString() : "—";
+}
+
+/** Rebuilds the current query string with keys replaced — keeps the filter across links. */
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/blog-taxonomy?${query}` : "/admin/blog-taxonomy";
+}
+
+const nameById = new Map(terms.map((term) => [term.id, term.name]));
+
+/**
+ * Only categories can be a parent, and only a category may have one. Built
+ * from the loaded list, so it is the same bounded 100 the table shows.
+ */
+const parentChoices = terms.filter((term) => term.taxonomyType === "category");
+
+const editingTerm = editingTermId
+  ? (terms.find((entry) => entry.id === editingTermId) ?? null)
+  : null;
+
+const showsRowActions = canConfigure;
+const termColumns = 5 + (showsRowActions ? 1 : 0);
+const hasFilter = typeFilter !== undefined;
+---
+
+<AdminLayout title="Blog taxonomy">
+  <header class="page-header fade-in-up">
+    <h1 id="taxonomy-heading">Blog taxonomy</h1>
+    <p class="page-description">
+      Categories and tags for <a href="/admin/blog">blog posts</a>. Categories
+      may nest; tags may not. Terms are assigned to a post from the post itself,
+      not from here.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="taxonomy-denied">
+        You do not have permission to view blog taxonomy.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="taxonomy-error">
+        Terms could not be loaded right now. This is a problem reading the list,
+        not an empty list — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="taxonomy-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <form method="get" class="admin-toolbar fade-in-up" id="term-filter-form">
+        <label for="filter-taxonomy-type">Type</label>
+        <select id="filter-taxonomy-type" name="taxonomyType">
+          <option value="" selected={typeFilter === undefined}>
+            Categories and tags
+          </option>
+          <option value="category" selected={typeFilter === "category"}>
+            category
+          </option>
+          <option value="tag" selected={typeFilter === "tag"}>
+            tag
+          </option>
+        </select>
+
+        <button type="submit">Apply filter</button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="term-list-title"
+      >
+        <h2 class="admin-section-title" id="term-list-title">
+          Terms
+          <span class="count-pill">{terms.length}</span>
+        </h2>
+
+        {/* Bounded read, and the screen says so rather than implying the
+            tenant has no more. `listBlogTerms` is LIMIT 100. */}
+        {terms.length === 100 && (
+          <p class="state-notice" id="taxonomy-truncated">
+            Showing the first 100 terms by name. Filter by type to narrow the
+            list.
+          </p>
+        )}
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-terms-table">
+            <caption class="sr-only">
+              Blog categories and tags, by name.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Parent</th>
+                <th scope="col">Description</th>
+                <th scope="col">Updated</th>
+                {showsRowActions && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {terms.length === 0 ? (
+                <tr>
+                  <td class="data-table-empty" colspan={termColumns}>
+                    <div class="empty-state">
+                      <span class="empty-state-icon" aria-hidden="true">
+                        ▤
+                      </span>
+                      <span class="empty-state-title">
+                        {hasFilter
+                          ? "No terms of this type"
+                          : "No categories or tags yet"}
+                      </span>
+                      <span class="empty-state-text">
+                        {hasFilter
+                          ? "Clear the filter above to see every term."
+                          : "Create one below to start organising posts."}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                terms.map((entry) => (
+                  <tr data-term-row={entry.id}>
+                    <td data-label="Name">
+                      <span set:text={entry.name} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{entry.slug}</span>
+                      </span>
+                    </td>
+                    <td data-label="Type">
+                      <span
+                        class="status-badge"
+                        data-variant={
+                          entry.taxonomyType === "category" ? "info" : "neutral"
+                        }
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.taxonomyType}
+                      </span>
+                    </td>
+                    <td data-label="Parent">
+                      {entry.parentId ? (
+                        <span set:text={nameById.get(entry.parentId) ?? "—"} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Description">
+                      {entry.description ? (
+                        <span set:text={entry.description} />
+                      ) : (
+                        <span class="cell-muted">—</span>
+                      )}
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.updatedAt)}
+                      </span>
+                    </td>
+                    {showsRowActions && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: entry.id })}
+                          >
+                            Edit
+                            <span class="quick-link-arrow" aria-hidden="true">
+                              →
+                            </span>
+                          </a>
+                          <button
+                            type="button"
+                            class="btn-inline term-delete-btn"
+                            data-term-id={entry.id}
+                            data-term-name={entry.name}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && canConfigure && editingTerm && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="term-edit-title"
+      >
+        <h2 class="admin-section-title" id="term-edit-title">
+          Edit term
+        </h2>
+
+        <form class="admin-form" id="term-edit-form">
+          <input type="hidden" id="edit-term-id" value={editingTerm.id} />
+
+          <div class="admin-form-row">
+            <label for="edit-name">Name</label>
+            <input
+              id="edit-name"
+              name="name"
+              type="text"
+              required
+              value={editingTerm.name}
+            />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="edit-slug">Slug</label>
+            <input
+              id="edit-slug"
+              name="slug"
+              type="text"
+              required
+              value={editingTerm.slug}
+            />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="edit-description">Description</label>
+            <input
+              id="edit-description"
+              name="description"
+              type="text"
+              value={editingTerm.description ?? ""}
+            />
+          </div>
+
+          {/* Type and parent are READ-ONLY here, and for two different
+              reasons. Parent: neither route detects cycles, so pointing a
+              parent at its own descendant is accepted and every reader then
+              walks forever — the same call `/admin/blog-pages` made. Type: a
+              category with children flipping to `tag` would violate
+              `awcms_blog_terms_tag_no_parent_check` for its children, which
+              the API cannot express as one atomic edit. */}
+          <p class="form-hint" id="term-edit-immutable-hint">
+            Type is <strong set:text={editingTerm.taxonomyType} /> and parent is{" "}
+            <strong
+              set:text={
+                editingTerm.parentId
+                  ? (nameById.get(editingTerm.parentId) ?? "—")
+                  : "none"
+              }
+            />
+            . Neither can be changed after creation: the API performs no cycle
+            detection, so re-parenting here could create a loop no reader can
+            escape. Delete the term and create it again instead.
+          </p>
+
+          <p
+            class="admin-create-error"
+            id="term-edit-error"
+            role="alert"
+            hidden
+          />
+
+          <div class="admin-form-actions">
+            <button type="submit" id="term-edit-submit">
+              Save term
+            </button>
+            <a class="quick-link" href={linkWith({ edit: null })}>
+              Cancel
+            </a>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    canRead && !loadError && canConfigure && !editingTerm && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="term-create-title"
+      >
+        <h2 class="admin-section-title" id="term-create-title">
+          Create a term
+        </h2>
+
+        <form class="admin-form" id="term-create-form">
+          <div class="admin-form-row">
+            <label for="create-taxonomy-type">Type</label>
+            <select id="create-taxonomy-type" name="taxonomyType" required>
+              <option value="category">category</option>
+              <option value="tag">tag</option>
+            </select>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="create-name">Name</label>
+            <input id="create-name" name="name" type="text" required />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="create-slug">Slug</label>
+            <input id="create-slug" name="slug" type="text" required />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="create-parent">Parent category</label>
+            <select id="create-parent" name="parentId">
+              <option value="">No parent</option>
+              {parentChoices.map((choice) => (
+                <option value={choice.id}>{choice.name}</option>
+              ))}
+            </select>
+            {/* Safe here in a way it is not on edit: a term being created has
+                no children, so it cannot close a loop. The client clears this
+                field for `tag`, which the database forbids from having one. */}
+            <p class="form-hint" id="term-create-parent-hint">
+              Categories only — a tag may not have a parent.
+            </p>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="create-description">Description</label>
+            <input id="create-description" name="description" type="text" />
+          </div>
+
+          <p
+            class="admin-create-error"
+            id="term-create-error"
+            role="alert"
+            hidden
+          />
+
+          <div class="admin-form-actions">
+            <button type="submit" id="term-create-submit">
+              Create term
+            </button>
+          </div>
+        </form>
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("taxonomy-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  // NOTE: no `idempotency()` helper on this screen, unlike `/admin/blog-pages`.
+  // None of the three term endpoints reads `Idempotency-Key`, and sending one
+  // would imply a replay contract they never offered.
+
+  document
+    .querySelectorAll<HTMLButtonElement>(".term-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const termId = button.dataset.termId;
+        if (!termId) return;
+
+        // States the finality, because it IS final: there is no restore route
+        // and no `taxonomies.restore` permission to build one against. Copy
+        // that promised "recoverable" is exactly what made #351 hard to spot.
+        const name = button.dataset.termName ?? "this term";
+        if (
+          !window.confirm(
+            `Delete "${name}"? This cannot be undone from the admin — there is ` +
+              `no restore for taxonomy terms. Posts keep their other terms.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        // `reason` is required by the endpoint, same convention as posts and
+        // pages. The screen supplies a constant rather than prompting: the
+        // operator already confirmed, and a second modal to type prose is
+        // friction that produces "asdf" in the audit trail.
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/blog/terms/${termId}`,
+          {
+            reason: "Deleted from the blog taxonomy console."
+          }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        // Generic copy only — never surface internal detail.
+        showActionError("Could not delete the term. Please try again.");
+        unlock();
+      });
+    });
+
+  const editForm = document.getElementById(
+    "term-edit-form"
+  ) as HTMLFormElement | null;
+
+  editForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "term-edit-submit"
+    ) as HTMLButtonElement | null;
+    const idField = document.getElementById(
+      "edit-term-id"
+    ) as HTMLInputElement | null;
+    if (!submit || submit.disabled || !idField) return;
+
+    const data = new FormData(editForm);
+    const errorElement = document.getElementById("term-edit-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Saving…");
+
+    const description = String(data.get("description") ?? "").trim();
+
+    // PATCH is a partial update, and `taxonomyType`/`parentId` are deliberately
+    // NOT sent: the form does not offer them, so it must not assert them.
+    const result = await sendJson(
+      "PATCH",
+      `/api/v1/blog/terms/${idField.value}`,
+      {
+        name: String(data.get("name") ?? "").trim(),
+        slug: String(data.get("slug") ?? "").trim(),
+        // Explicit `null` rather than omitted: clearing a description is a real
+        // edit, and omitting the key would silently keep the old one.
+        description: description === "" ? null : description
+      }
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        result.errorCode === "CONFLICT"
+          ? "A term of this type already exists with that slug."
+          : "Could not save the term. Check the name and slug, then try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+
+  const createForm = document.getElementById(
+    "term-create-form"
+  ) as HTMLFormElement | null;
+
+  const createType = document.getElementById(
+    "create-taxonomy-type"
+  ) as HTMLSelectElement | null;
+  const createParent = document.getElementById(
+    "create-parent"
+  ) as HTMLSelectElement | null;
+
+  /**
+   * A tag may not have a parent — `awcms_blog_terms_tag_no_parent_check` is a
+   * database CHECK. Disabling the control keeps the browser from offering what
+   * the database will reject with a 400 the operator cannot act on.
+   */
+  function syncParentAvailability(): void {
+    if (!createType || !createParent) return;
+    const isTag = createType.value === "tag";
+    createParent.disabled = isTag;
+    if (isTag) createParent.value = "";
+  }
+
+  createType?.addEventListener("change", syncParentAvailability);
+  syncParentAvailability();
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "term-create-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(createForm);
+    const errorElement = document.getElementById("term-create-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Creating…");
+
+    const taxonomyType = String(data.get("taxonomyType") ?? "category");
+    const parentId = String(data.get("parentId") ?? "").trim();
+    const description = String(data.get("description") ?? "").trim();
+
+    const result = await sendJson("POST", "/api/v1/blog/terms", {
+      taxonomyType,
+      name: String(data.get("name") ?? "").trim(),
+      slug: String(data.get("slug") ?? "").trim(),
+      // `null`, never "": the validator treats a parent as absent-or-uuid, and
+      // a tag must send `null` outright.
+      parentId: taxonomyType === "tag" || parentId === "" ? null : parentId,
+      description: description === "" ? null : description
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    if (errorElement) {
+      errorElement.textContent =
+        result.errorCode === "CONFLICT"
+          ? "A term of this type already exists with that slug."
+          : "Could not create the term. Check the name and slug, then try again.";
+      errorElement.hidden = false;
+    }
+    unlock();
+  });
+</script>
