@@ -4584,6 +4584,27 @@ The projection omits `bucket_name`/`storage_driver` (deployment facts) and `owne
 | 401    | Missing or invalid session.              | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.              | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/media/public-origin` — The origin media public URLs are served from.
+
+- **operationId**: `mediaPublicOrigin`
+- **Security**: bearerAuth + tenantHeader
+
+Requires `media_library.media.read`. Deployment config, not tenant data: every tenant on a deployment is served from the same bucket.
+
+Exists for build clients such as `awcms-astro`, whose Content-Security-Policy must name the media host in `img-src` BEFORE it fetches any object — an image resolved correctly still renders as nothing when the policy blocks the host it lives on. The alternative is copying `NEWS_MEDIA_R2_PUBLIC_BASE_URL` into the consumer by hand, which is two copies of one value that agree until one is edited.
+
+`origin` is scheme + host + port, for the host-wide CSP form; `baseUrl` includes the path, for the tighter prefix form. Both are reported because neither choice is this API's to make.
+
+A deployment that serves no public media (LAN/offline profiles) answers `200` with `configured: false` rather than an error, so a build can omit the `img-src` entry instead of failing. A value that is set but unparseable, or on a scheme that cannot serve media, is reported the same way and never echoed back.
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 200    | The configured media origin, or an explicit "not configured". | object                                 |
+| 401    | Missing or invalid session.                                   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                   | [`ApiError`](#standard-error-envelope) |
+
 ## Blog Content
 
 Tenant-scoped blog/content administration (blog_content module, ported from awcms-mini) — posts and pages with their full lifecycle (draft → review → scheduled/published → archived, soft delete/restore/purge), hierarchical categories/tags, append-only revision history (restore APPENDS a revision, never overwrites), PostgreSQL full-text search, presentation/monetization extensions (templates, hierarchical menus, position-based widgets, advertisements), per-tenant blog settings, internal tag-link policy, and the editorial content-quality checklist. The public, anonymous reader surface (`/blog/{tenantCode}/...` index/detail/archive/search/feed/sitemap, ADR-0009) is served by Astro text/html/xml routes and is deliberately NOT part of this REST contract. Publish/unpublish/purge and settings writes are ABAC-gated, idempotency-keyed, and audited.
