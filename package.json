@@ -126,6 +126,9 @@
     "typescript": "^7.0.2",
     "yaml": "^2.9.0"
   },
+  "overrides": {
+    "postcss": "^8.5.23"
+  },
   "dependencies": {
     "@astrojs/node": "^11.0.3",
     "astro": "^7.1.6"
