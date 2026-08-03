@@ -275,6 +275,17 @@ export type ListBlogPagesForAdminFilter = {
   search?: string;
   status?: BlogContentStatus;
   pageType?: PageType;
+  /**
+   * `true` lists ONLY soft-deleted pages — the bin — instead of only live ones.
+   *
+   * Present from this list's first admin consumer rather than added after,
+   * because the post list shipped without it and that single omission made
+   * `posts.restore` undrivable: with `deleted_at IS NULL` hard-filtered, the
+   * console hung Restore off `status = 'archived'`, which is a different axis
+   * and a guaranteed 404. See the same field on
+   * `ListBlogPostsForAdminFilter` for the full account.
+   */
+  deletedOnly?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -310,11 +321,13 @@ export async function listBlogPagesForAdmin(
   const search = filter.search?.trim() || null;
   const status = filter.status ?? null;
   const pageType = filter.pageType ?? null;
+  const deletedOnly = filter.deletedOnly === true;
 
   const rows = (await tx`
     SELECT id, tenant_id, title, slug, status, visibility, page_type, parent_page_id, menu_order, locale, updated_at
     FROM awcms_blog_pages
-    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+    WHERE tenant_id = ${tenantId}
+      AND (CASE WHEN ${deletedOnly} THEN deleted_at IS NOT NULL ELSE deleted_at IS NULL END)
       AND (${status}::text IS NULL OR status = ${status})
       AND (${pageType}::text IS NULL OR page_type = ${pageType})
       AND (${search}::text IS NULL OR title ILIKE '%' || ${search} || '%')
@@ -325,7 +338,8 @@ export async function listBlogPagesForAdmin(
   const countRows = (await tx`
     SELECT count(*)::int AS count
     FROM awcms_blog_pages
-    WHERE tenant_id = ${tenantId} AND deleted_at IS NULL
+    WHERE tenant_id = ${tenantId}
+      AND (CASE WHEN ${deletedOnly} THEN deleted_at IS NOT NULL ELSE deleted_at IS NULL END)
       AND (${status}::text IS NULL OR status = ${status})
       AND (${pageType}::text IS NULL OR page_type = ${pageType})
       AND (${search}::text IS NULL OR title ILIKE '%' || ${search} || '%')

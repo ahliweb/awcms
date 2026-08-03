@@ -180,6 +180,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_data_lifecycle": "Data lifecycle",
   "admin.layout.nav_idn_regions": "Region datasets",
   "admin.layout.nav_blog": "Blog posts",
+  "admin.layout.nav_blog_pages": "Blog pages",
   "admin.layout.nav_media": "Media library",
   "admin.layout.nav_reporting": "Reporting operations",
   "admin.layout.nav_approvals": "Approvals",
