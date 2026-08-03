@@ -199,14 +199,23 @@ export async function resolveBusinessScopeFacts(
     // A tenant-wide grant (reserved scope type) is intrinsic — it needs no
     // hierarchy resolution and always covers, so it is trusted (`resolved`)
     // by construction.
+    //
+    // ADR-0060: trusted only when it names THIS TENANT. The fact minted here
+    // covers EVERY required scope, so accepting an arbitrary `scope_id` under
+    // the reserved type would turn any row whose `scope_type` happens to read
+    // `tenant` into a blanket grant. No supported path can write such a row —
+    // `validateCreateBusinessScopeAssignmentInput` rejects the reserved type
+    // as unassignable (#180 review F2) — which is exactly why the check
+    // belongs here: a row carrying it did not come through the service, so it
+    // has passed no validation at all.
     if (row.scope_type === TENANT_WIDE_SCOPE_TYPE) {
       facts.push({
         scopeType: row.scope_type,
         scopeId: row.scope_id,
-        resolved: true,
+        resolved: row.scope_id === tenantId,
         ancestorScopes: [],
         descendantScopes: [],
-        tenantWide: true
+        tenantWide: row.scope_id === tenantId
       });
       continue;
     }

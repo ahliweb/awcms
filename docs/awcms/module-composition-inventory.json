@@ -132,7 +132,7 @@
       "capabilitiesConsumed": [
         {
           "capability": "business_scope_hierarchy",
-          "providedBy": "organization_structure",
+          "providedBy": "tenant_admin",
           "optional": true
         },
         {
@@ -316,7 +316,7 @@
       "status": "active",
       "type": null,
       "dependencies": [],
-      "capabilitiesProvided": [],
+      "capabilitiesProvided": ["business_scope_hierarchy"],
       "capabilitiesConsumed": [],
       "permissionCount": 8,
       "navigationCount": 2,

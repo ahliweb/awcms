@@ -191,9 +191,14 @@ export async function createBusinessScopeAssignment(
 
   // "Scope derived dari request harus diverifikasi terhadap resource
   // server-side; jangan percaya scopeId dari klien sebagai fakta otorisasi"
-  // (issue #180 security model). The base default adapter resolves every
-  // scope to `resolved: false`, so in a pure-base deployment this always
-  // denies — a derived application injects a real resolver.
+  // (issue #180 security model) — this port call IS that verification.
+  //
+  // ADR-0060 changed WHO answers it, not the shape of the question: the
+  // composition root now injects `tenant_admin`'s office resolver instead of a
+  // NO-OP that denied every input. The reserved tenant-wide sentinel never
+  // reaches here at all — `validateCreateBusinessScopeAssignmentInput` rejects
+  // it as unassignable (#180 review F2), which is why this call has no
+  // special case for it.
   const resolution = await deps.hierarchyPort.resolveScope(
     tx,
     tenantId,

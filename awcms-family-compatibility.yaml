@@ -68,6 +68,12 @@ contracts:
     # because the reverse edge is impossible: `email` already depends on
     # `identity_access`, so a direct import would close a module cycle.
     auth_notification: "1.0.0"
+    # business_scope_hierarchy is owned (provided) by the base `tenant_admin`
+    # module since ADR-0060, which resolves the `office` scope type against
+    # `awcms_offices`. The port itself is unchanged since #180; what changed is
+    # that a base module finally provides an adapter for it, so it belongs here
+    # for the first time. `identity_access` consumes it, still `optional: true`.
+    business_scope_hierarchy: "1.0.0"
   apiResponseEnvelopeVersion: "1.0.0"
   restApiInfoVersion: "0.1.0"
   eventApiInfoVersion: "0.1.0"

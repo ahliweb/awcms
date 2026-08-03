@@ -5,7 +5,7 @@ import {
   DUMMY_HIERARCHY_MAX_DEPTH,
   type DummyScopeNode
 } from "./fixtures/example-domain-modules/modules/example-crm/business-scope-hierarchy-adapter";
-import { defaultBusinessScopeHierarchyPortAdapter } from "../src/modules/identity-access/application/business-scope-hierarchy-port-adapter";
+import { createOfficeScopeHierarchyPortAdapter } from "../src/modules/tenant-admin/application/office-scope-hierarchy-port-adapter";
 
 // The dummy adapter never touches the DB — pass a stand-in for `tx`.
 const NO_TX = null as unknown as Bun.SQL;
@@ -165,20 +165,38 @@ describe("dummy BusinessScopeHierarchyPort resolver", () => {
   });
 });
 
-describe("base default (no-op) BusinessScopeHierarchyPort adapter", () => {
-  test("resolves EVERY scope type to resolved:false (base owns no hierarchy)", async () => {
-    for (const scopeType of ["office", "legal_entity", "tenant", "anything"]) {
-      const res = await defaultBusinessScopeHierarchyPortAdapter.resolveScope(
+describe("base office adapter — scope types it does not own (ADR-0060)", () => {
+  // The one branch that needs no database: an unowned scope type, and a
+  // malformed id, must both be refused BEFORE any query runs. `NO_TX` proves
+  // it — if either branch reached SQL, this test would throw rather than fail
+  // an assertion.
+  const adapter = createOfficeScopeHierarchyPortAdapter();
+
+  test("every scope type other than `office` stays unresolved, without touching the database", async () => {
+    for (const scopeType of ["legal_entity", "tenant", "cost_center", ""]) {
+      const res = await adapter.resolveScope(
         NO_TX,
         TENANT_A,
         scopeType,
-        "any-id"
+        "3f6a2b1c-0e5d-4a7b-8c9d-1e2f3a4b5c6d"
       );
       expect(res).toEqual({
         resolved: false,
         ancestorScopes: [],
         descendantScopes: []
       });
+    }
+  });
+
+  test("an `office` scope whose id is not a uuid is refused before the query, not by it", async () => {
+    for (const scopeId of ["", "not-a-uuid", "1; DROP TABLE awcms_offices"]) {
+      const res = await adapter.resolveScope(
+        NO_TX,
+        TENANT_A,
+        "office",
+        scopeId
+      );
+      expect(res.resolved).toBe(false);
     }
   });
 });

@@ -8,6 +8,15 @@ export const tenantAdminModule = defineModule({
   description:
     "Tenant root entity, office hierarchy, tenant settings, and the one-time setup wizard that bootstraps the first tenant, owner, office, role, and access assignment.",
   dependencies: [],
+  // ADR-0060: this module owns `awcms_offices`, the only real hierarchy the
+  // base has, so it provides the `business_scope_hierarchy` adapter that
+  // `identity_access` consumes (optionally) for scope resolution. A `provides`
+  // is a SOURCE-level relationship, not a lifecycle edge — `identity_access`
+  // receives the adapter as an injected parameter at composition roots and
+  // never imports this module.
+  capabilities: {
+    provides: ["business_scope_hierarchy"]
+  },
   api: {
     openApiPath: "openapi/modules/tenant-admin.openapi.yaml",
     // `basePath` stays the primary display prefix; `routes` is what actually

@@ -21,7 +21,7 @@ import {
   createBusinessScopeAssignment,
   listBusinessScopeAssignments
 } from "../../../../../../modules/identity-access/application/business-scope-assignment-service";
-import { defaultBusinessScopeHierarchyPortAdapter } from "../../../../../../modules/identity-access/application/business-scope-hierarchy-port-adapter";
+import { officeScopeHierarchyPortAdapter } from "../../../../../../modules/tenant-admin/application/office-scope-hierarchy-port-adapter";
 import { collectSoDRuleDescriptors } from "../../../../../../modules/identity-access/domain/sod-rule-registry";
 import { listModules } from "../../../../../../modules";
 
@@ -33,13 +33,14 @@ const IDEMPOTENCY_SCOPE = "identity_access_business_scope_assignment_create";
 // detection is a no-op there.
 const SOD_RULES = collectSoDRuleDescriptors(listModules());
 
-// Composition root (Issue #180): the base wires only its own default no-op
-// hierarchy adapter, which resolves every scope to `resolved: false` (so in a
-// pure-base deployment CREATE always denies `scope_unresolved`). A DERIVED
-// application replaces this route — or injects its own adapter here — to
-// resolve its real organization hierarchy. `application`/`domain` code never
-// imports an adapter; only this composition root does (ADR-0011).
-const HIERARCHY_PORT = defaultBusinessScopeHierarchyPortAdapter;
+// Composition root (Issue #180, provider chosen by ADR-0060): `tenant_admin`
+// resolves `office` scopes against `awcms_offices` — the only real hierarchy
+// the base owns — and returns `resolved: false` for every other scope type,
+// which stays the fail-closed default. The reserved tenant-wide scope type
+// never reaches the port at all (the service resolves it intrinsically, and
+// requires it to name this tenant). `application`/`domain` code never imports
+// an adapter; only this composition root does (ADR-0011).
+const HIERARCHY_PORT = officeScopeHierarchyPortAdapter;
 
 /** `GET /api/v1/identity/business-scope/assignments` (Issue #180) — list this tenant's business-scope assignments, optionally filtered by `status`/`tenantUserId`/`scopeType`. */
 export const GET: APIRoute = async ({ request, cookies, url }) => {

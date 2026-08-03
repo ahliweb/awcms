@@ -87,5 +87,11 @@ export const CAPABILITY_CONTRACT_VERSIONS: Readonly<Record<string, string>> =
     // password-reset flow, which cannot import `email`'s application tree
     // directly (that would close a cycle: `email` depends on
     // `identity_access`). First assigned number, not a stability milestone.
-    auth_notification: "1.0.0"
+    auth_notification: "1.0.0",
+    // tenant_admin provides (ADR-0060) — the office hierarchy resolver behind
+    // `business_scope_hierarchy`. The port itself is unchanged from the day it
+    // landed (#180); what changed is that a BASE module finally provides an
+    // adapter for it, so it belongs in this registry for the first time. First
+    // assigned number, not a stability milestone.
+    business_scope_hierarchy: "1.0.0"
   });

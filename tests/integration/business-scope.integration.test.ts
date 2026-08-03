@@ -45,7 +45,6 @@ import {
   revokeBusinessScopeAssignment
 } from "../../src/modules/identity-access/application/business-scope-assignment-service";
 import { resolveBusinessScopeFacts } from "../../src/modules/identity-access/application/business-scope-facts";
-import { defaultBusinessScopeHierarchyPortAdapter } from "../../src/modules/identity-access/application/business-scope-hierarchy-port-adapter";
 import { runBusinessScopeExpiry } from "../../src/modules/identity-access/application/business-scope-expiry-job";
 import { evaluateAccess } from "../../src/modules/identity-access/domain/access-control";
 import {
@@ -82,6 +81,19 @@ const HIERARCHY: DummyScopeNode[] = [
   { tenantId: TENANT_B, scopeType: "office", scopeId: OFFICE_B, parent: null }
 ];
 const hierarchyPort = createDummyBusinessScopeHierarchyResolver(HIERARCHY);
+
+/**
+ * A port that resolves NOTHING — what the base shipped before ADR-0060 replaced
+ * it with `tenant_admin`'s office resolver. Kept as a local stub because the
+ * self-grant test below exists to prove the identity guard runs BEFORE any port
+ * I/O: with a resolver that would deny everything, a `self_grant_denied` answer
+ * can only mean the guard came first.
+ */
+const unresolvedHierarchyPort = {
+  async resolveScope() {
+    return { resolved: false, ancestorScopes: [], descendantScopes: [] };
+  }
+};
 
 async function seedFixtures(): Promise<void> {
   const admin = getAdminSql();
@@ -235,7 +247,7 @@ suite("business-scope hierarchy + assignments (Issue #180)", () => {
           reason: null
         },
         {
-          hierarchyPort: defaultBusinessScopeHierarchyPortAdapter,
+          hierarchyPort: unresolvedHierarchyPort,
           sodRules: []
         },
         now
