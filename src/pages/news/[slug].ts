@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { getDatabaseClient } from "../../lib/database/client";
+import { publishEdgeCacheTenant } from "../../lib/edge-cache/publish-tenant";
 import { escapeHtml } from "../../lib/html/escape";
 import {
   notFoundHtmlResponse,
@@ -40,7 +41,7 @@ const NEWS_SHARE_CLIENT_SCRIPT_SRC = "/js/news-share.js";
  * tenant resolution and therefore in the base path every self-referential link
  * is built under.
  */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const slug = params.slug;
 
   if (!slug) {
@@ -132,6 +133,12 @@ ${shareButtonsHtml}
           structuredDataJsonLd: seoMetadata.structuredDataJsonLd,
           variant: "article"
         });
+
+        // Published HERE, after the `!post` branch above, and not one line
+        // earlier (ADR-0061 §3): a missing post and an unknown host must annotate
+        // identically, or the cache headers answer the question the latency
+        // padding refuses to.
+        publishEdgeCacheTenant(locals, tenant.tenantId);
 
         return new Response(html, {
           status: 200,

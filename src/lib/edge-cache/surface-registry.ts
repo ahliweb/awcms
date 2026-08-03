@@ -35,24 +35,45 @@
  *   The public comments list is a genuine candidate and is a documented
  *   follow-up, not an omission.
  *
+ * ## Host-resolved surfaces (ADR-0061)
+ *
+ * The `/news/**` family (ADR-0059) resolves its tenant from the request, not
+ * from a path segment, so middleware cannot derive it from the URL — source (2)
+ * in `tenant-key.ts` does not apply. Its four routes publish
+ * `locals.edgeCacheTenantId` instead, via `publishEdgeCacheTenant`, and only on
+ * the path that actually serves the resource; see that file for why the timing
+ * of the publish is a disclosure question rather than a style question.
+ *
+ * Two properties had to hold before these entries were safe, and both are
+ * asserted rather than assumed:
+ *
+ * - **The edge keys on `Host`.** `/news/hello-world` is the same path for every
+ *   tenant, so a cache that keys on path alone would serve one tenant's article
+ *   to another's visitors. `infra/varnish/default.vcl`'s `vcl_hash` hashes
+ *   `req.http.host` explicitly (and does not `return (lookup)`, so builtin
+ *   `req.url` hashing still runs). `tests/edge-cache.test.ts` asserts that line
+ *   still exists.
+ * - **An unpublished tenant fails closed.** `requiresTenant` is true for all
+ *   three, so any request whose tenant did not resolve — or whose route chose
+ *   not to publish — is refused with `tenant_unresolved` rather than cached
+ *   under a guessed key.
+ *
  * ## Deferred, and precisely why (not an oversight)
  *
  * The **host-resolved root discovery surfaces** — `/robots.txt`, `/sitemap.xml`,
  * `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json` — are the single
  * best caching target in the codebase (identical body for every anonymous
- * reader, rebuilt from a content roll-up on each request). They are absent here
- * anyway, because they are **host**-resolved, not path-resolved: their tenant is
- * established inside `withSeoPublicTenant` with the full ADR-0010 host
- * configuration, and `serveDiscovery(request, …)` does not receive Astro's
- * `locals`, so the route cannot publish `edgeCacheTenantId`.
+ * reader, rebuilt from a content roll-up on each request). They are still absent
+ * here: `serveDiscovery(request, …)` does not receive Astro's `locals`, so those
+ * routes have no way to publish their tenant, and declaring them regardless
+ * would produce surfaces that match, resolve no tenant, and are refused on every
+ * single request — a registry entry that reads as "cached" while caching
+ * nothing. A dead declaration is worse than an honest omission.
  *
- * Declaring them regardless would have produced surfaces that match, resolve no
- * tenant, and are then refused by `decideCacheability` on every single request —
- * a registry entry that reads as "cached" while caching nothing. A dead
- * declaration is worse than an honest omission. Wiring them is a mechanical
- * follow-up: thread `locals` through `serveDiscovery` and its six callers, set
- * `locals.edgeCacheTenantId` from the resolved context, and re-add the three
- * entries. Tracked in `docs/awcms/edge-cache-architecture.md`.
+ * Wiring them is ADR-0061 §B: thread `locals` through `serveDiscovery` and its
+ * six callers, publish from the resolved context, add the entries, and give
+ * `seo_distribution` the purge call site that `findOwnersWithoutPurges` will
+ * then require of it. Tracked in `docs/awcms/edge-cache-architecture.md`.
  *
  * The path-scoped blog feed and sitemap below (`/blog/{tenantCode}/feed.xml`,
  * `/blog/{tenantCode}/sitemap-blog.xml`) ARE covered, so tenants on the ADR-0009
@@ -138,6 +159,36 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     allowedQueryParams: [],
     rationale:
       "Per-tenant blog feed and sitemap; content-derived, anonymous, identical for every reader."
+  },
+  {
+    key: "news-index",
+    moduleKey: "blog_content",
+    pattern: /^\/news\/?$/,
+    ttlSeconds: 120,
+    requiresTenant: true,
+    allowedQueryParams: ["page"],
+    rationale:
+      "Host-resolved published-post listing (ADR-0059). Same body, same reasoning and the same TTL as `blog-index`; the ONE difference is that its tenant arrives from the request rather than from a path segment."
+  },
+  {
+    key: "news-taxonomy",
+    moduleKey: "blog_content",
+    pattern: /^\/news\/(category|tag)\/[^/]+$/,
+    ttlSeconds: 120,
+    requiresTenant: true,
+    allowedQueryParams: ["page"],
+    rationale:
+      "Host-resolved listing filtered by a taxonomy term; the `blog-taxonomy` counterpart. Declared before `news-post` matters only to a reader — `matchPublicCacheSurface` orders specific-first by pattern length, and a test pins that."
+  },
+  {
+    key: "news-post",
+    moduleKey: "blog_content",
+    pattern: /^\/news\/[^/]+$/,
+    ttlSeconds: 300,
+    requiresTenant: true,
+    allowedQueryParams: [],
+    rationale:
+      "A single published post at its host-resolved URL — the page every canonical, `<loc>` and feed link points at once the family is live. Purged by the same `blog_content` module purge that already covers `blog-post`."
   },
   {
     key: "theming-tokens",

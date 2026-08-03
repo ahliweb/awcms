@@ -126,6 +126,16 @@ export const MUST_NEVER_MATCH = [
   "/blog/%2e%2e/admin",
   "/blog/../admin/users",
   "/blog/tenant/../../admin",
+  // The host-resolved family (ADR-0061). Its patterns are one segment shorter
+  // than the path-scoped ones, so the shape that satisfies `news-post` on its
+  // face is `/news/..` rather than `/news/../admin` — a different probe for the
+  // same class of mistake, and the reason these are enumerated instead of
+  // assumed to follow from the `/blog` ones.
+  "/news/..",
+  "/news/%2e%2e",
+  "/news/category/..",
+  "/news/tag/%2e%2e",
+  "/news/search",
   "/theming/preview/abc123",
   "/theming/preview-tokens/abc123.css",
   "/search",

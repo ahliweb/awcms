@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { getDatabaseClient } from "../../lib/database/client";
+import { publishEdgeCacheTenant } from "../../lib/edge-cache/publish-tenant";
 import { escapeHtml } from "../../lib/html/escape";
 import {
   notFoundHtmlResponse,
@@ -33,7 +34,7 @@ import {
  * `publicRouteMode: "disabled"` — is the same generic 404 produced by the same
  * `null`, latency-normalized inside `withHostResolvedBlogTenant`.
  */
-export const GET: APIRoute = async ({ request, url }) => {
+export const GET: APIRoute = async ({ locals, request, url }) => {
   try {
     const sql = getDatabaseClient();
     const page = parsePageParam(url.searchParams.get("page"));
@@ -63,6 +64,11 @@ ${renderPaginationNavHtml(page, posts.hasNextPage, HOST_RESOLVED_PUBLIC_BASE_PAT
           siteName: tenant.tenantName,
           variant: "list"
         });
+
+        // The index has no missing-resource branch — a gated tenant always
+        // serves a 200 — so "gated" and "serving" are the same instant here
+        // (ADR-0061 §3).
+        publishEdgeCacheTenant(locals, tenant.tenantId);
 
         return new Response(html, {
           status: 200,

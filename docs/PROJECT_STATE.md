@@ -707,9 +707,38 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   `bun run edge-cache:purge`, gate `bun run edge-cache:surfaces:check`.
   **SUDAH sejak #246:** emisi purge dari `theming` (publish/rollback/retire, satu
   transaksi dengan perubahannya) dan gate kepemilikan — tiap modul yang memiliki
-  surface ter-deklarasi WAJIB punya call-site purge. **BELUM:** surface discovery
-  ber-resolusi-host (`serveDiscovery` tak menerima `locals`). Rinci di
+  surface ter-deklarasi WAJIB punya call-site purge. Rinci di
   [`awcms/edge-cache-architecture.md`](awcms/edge-cache-architecture.md).
+
+  **Permukaan host-resolved boleh di-cache ([ADR-0061](adr/0061-host-resolved-public-surfaces-are-edge-cacheable.md)).**
+  Yang ditemukan saat mengerjakannya lebih besar dari "satu keluarga rute belum
+  di-cache": **sumber tenant nomor satu ADR-0042 §8 tidak pernah punya penulis.**
+  `locals.edgeCacheTenantId` dideklarasikan di `src/env.d.ts`, dibaca
+  `src/middleware.ts`, didahulukan `resolveEdgeCacheTenantId` — dan nol rute
+  pernah meng-assign-nya, jadi cabang itu tak bisa dieksekusi sejak ADR-0042
+  mendarat. Akibatnya persis terbalik dari arah ADR-0059: cache tepi mempercepat
+  `/blog/{tenantCode}/**` (bentuk warisan) dan **tidak menyentuh** satu pun
+  permukaan host-resolved.
+
+  **§A SELESAI** — keluarga `/news/**` (3 entri registry, dimiliki `blog_content`
+  yang purge modulnya sudah terpasang). **§B BELUM** — enam rute discovery root;
+  butuh `locals` mengalir lewat `serveDiscovery` + call site purge
+  `seo_distribution`.
+
+  > **Dua jebakan yang tak terbaca dari kode, keduanya kini ditegakkan test.**
+  > (1) Prasyarat "VCL mem-hash `Host`" itu **dua** properti: `hash_data(req.http.host)`
+  > ADA, tetapi sub itu juga harus TIDAK `return (lookup)` — sub kustom yang
+  > `return` mengakhiri rantai sehingga `vcl_hash` milik `builtin.vcl` (yang
+  > mem-hash `req.url`) tak pernah jalan, dan seluruh path pada satu host runtuh
+  > ke SATU entri cache. Menambahkan baris itu terbaca seperti melengkapi
+  > subroutine. (2) **Kapan** rute mempublikasikan tenant adalah pertanyaan
+  > disclosure, bukan gaya: 404 boleh di-cache, jadi publikasi sebelum cabang
+  > "post/term tidak ada" membuat 404 resource-hilang ber-`Surrogate-Control`
+  > sementara 404 host-tak-dikenal ber-`private, no-store` — menjawab "apakah
+  > hostname ini memetakan ke tenant hidup?" dari SATU permintaan, lewat kanal
+  > kedua atas pertanyaan yang `padUnresolvedHostRouteLatency` justru dibangun
+  > untuk menutup. Satu baris beberapa baris terlalu tinggi; tetap meng-compile,
+  > tetap menyajikan HTML benar, lolos setiap test fungsional.
   - **Wave 2 — INTI SELESAI:** delta auth/admin. **SUDAH:** penataan sidebar per-tenant
     (#272, `sql/071`–`072`); **password reset lewat email** (`sql/073`) — dua endpoint publik
     enumeration-safe + `/forgot-password`/`/reset-password`, single-use ditegakkan dengan row
@@ -726,6 +755,7 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   - Sebelum tiap port berikutnya: **cek inversi-vs-net-baru** (mis. media sudah jadi satu modul
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).
     (`blog-content` SUDAH di-port — PR #214; `news-portal` dilebur ke dalamnya, ADR-0044.)
+
 - **Rute publik host-resolved — SELESAI ([ADR-0059](adr/0059-host-resolved-public-content-routes.md)).**
   Keluarga `/news/**` (indeks, detail post, kategori, tag) kini ada:
   tanpa segmen `tenantCode`, tenant diresolusi dari request lewat

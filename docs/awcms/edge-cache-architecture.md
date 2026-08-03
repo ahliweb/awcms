@@ -154,16 +154,34 @@ atas `default.vcl`.
 - **Surface discovery ber-resolusi-host** (`/robots.txt`, `/sitemap.xml`,
   `/feed.xml`, `/atom.xml`, `/feed.json`). Kandidat terbaik, tetapi
   `serveDiscovery(request, …)` tidak menerima `locals` sehingga rute tak bisa
-  mempublikasikan tenant-nya. Menyambungkannya: alirkan `locals` melalui
-  `serveDiscovery` + enam pemanggilnya, set `edgeCacheTenantId`, tambahkan tiga
-  entri registry.
-- **Keluarga konten host-resolved `/news/**`** (ADR-0059 §E). Rutenya justru
-  MENERIMA `locals` (berbeda dari discovery di atas), jadi mempublikasikan
-  tenant bukan penghalangnya. Yang harus dipastikan lebih dulu: **kunci cache
-  memuat host**. Path `/news/hello-world` identik untuk setiap tenant, jadi
-  mendeklarasikannya sebelum VCL terbukti mem-hash `Host` adalah cara paling
-  langsung memasang kebocoran lintas-tenant di cache bersama. Sampai itu
-  diverifikasi, keempat rutenya jatuh ke `surface_not_declared` →
-  `Cache-Control: private, no-store`, yang benar dan tak pernah salah.
+  mempublikasikan tenant-nya. Menyambungkannya
+  ([ADR-0061](../adr/0061-host-resolved-public-surfaces-are-edge-cacheable.md) §B):
+  alirkan `locals` melalui `serveDiscovery` + enam pemanggilnya, set
+  `edgeCacheTenantId`, tambahkan entri registry, DAN beri `seo_distribution` call
+  site purge — begitu ia memiliki surface, `findOwnersWithoutPurges` menuntutnya
+  (kandidat: `PUT /api/v1/seo/config` + mutasi redirect, karena keduanyalah yang
+  mengubah badan `robots.txt`/sitemap).
+
+- ~~**Keluarga konten host-resolved `/news/**`**~~ **SUDAH** (ADR-0061 §A).
+  Tiga entri — `news-index`/`news-taxonomy`/`news-post` — mencerminkan TTL dan
+  alasan pasangan `blog-*`-nya, dimiliki `blog_content` yang purge modulnya sudah
+  terpasang.
+
+  Dua hal yang perlu dibawa saat menyentuhnya lagi:
+
+  - **Prasyarat host-hash itu DUA properti, bukan satu.** `vcl_hash` memang
+    memanggil `hash_data(req.http.host)` — tetapi sub itu juga harus TIDAK
+    `return (lookup)`, karena sub kustom yang `return` mengakhiri rantai sehingga
+    `vcl_hash` milik `builtin.vcl` (yang mem-hash `req.url`) tak pernah jalan dan
+    seluruh path pada satu host runtuh ke satu entri. Keduanya kini ditegakkan
+    `tests/edge-cache.test.ts`.
+  - **Waktu publikasi tenant adalah pertanyaan disclosure.** 404 boleh di-cache,
+    jadi mempublikasikan tenant sebelum cabang "post/term tidak ada" membuat 404
+    resource-hilang ber-`Surrogate-Control` sementara 404 host-tak-dikenal
+    ber-`private, no-store` — menjawab "apakah hostname ini tenant hidup?" dari
+    SATU permintaan, lewat kanal yang `padUnresolvedHostRouteLatency` dibangun
+    untuk menutup. Aturannya: publikasikan hanya pada jalur yang menyajikan,
+    dijaga `tests/news-routes-edge-cache-contract.test.ts` (mutation-proven).
+
 - **Daftar publik komentar** (`GET /api/v1/comments`) — kandidat sah, ditunda.
 - **Purge dari UI admin.** Hanya lewat antrean dan worker.

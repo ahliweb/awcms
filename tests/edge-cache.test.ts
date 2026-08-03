@@ -27,6 +27,7 @@ import {
   escapeForBanRegex,
   UnsafeSurrogateKeyError
 } from "../src/lib/edge-cache/surrogate-keys";
+import { publishEdgeCacheTenant } from "../src/lib/edge-cache/publish-tenant";
 import { extractTenantCodeFromPath } from "../src/lib/edge-cache/tenant-key";
 
 const ON_CONFIG = loadEdgeCacheConfig({ EDGE_CACHE_MODE: "on" });
@@ -297,6 +298,27 @@ describe("the shipped VCL agrees with the origin", () => {
   test("regex metacharacters are escaped for the ban expression", () => {
     expect(escapeForBanRegex("a.*b")).toBe("a\\.\\*b");
   });
+
+  test("vcl_hash keys on Host AND still reaches the builtin's req.url hashing", async () => {
+    // This is the prerequisite for declaring the host-resolved `/news/**`
+    // surfaces (ADR-0061 §2), and it is TWO properties, not one:
+    //
+    // 1. `Host` is hashed. `/news/hello-world` is the same path for every
+    //    tenant, so a cache keyed on path alone serves one tenant's article to
+    //    another's visitors. That is not a staleness bug; it is the disclosure
+    //    the whole subsystem exists to prevent.
+    // 2. The custom `vcl_hash` does NOT `return (lookup)`. In Varnish a custom
+    //    subroutine that returns terminates the chain, so `builtin.vcl`'s
+    //    `vcl_hash` — the one that hashes `req.url` — never runs, and every path
+    //    on one host collapses onto a single cache entry. Adding that return
+    //    looks like a harmless completion of the subroutine.
+    const vcl = await Bun.file("infra/varnish/default.vcl").text();
+    const hashBody = vcl.split("sub vcl_hash {")[1]?.split("\n}")[0] ?? "";
+
+    expect(hashBody).toContain("hash_data(req.http.host)");
+    expect(hashBody).not.toContain("return (lookup)");
+    expect(hashBody).not.toContain("return(lookup)");
+  });
 });
 
 describe("surface registry", () => {
@@ -308,7 +330,14 @@ describe("surface registry", () => {
     ["/blog/acme/tag/bun", "blog-taxonomy"],
     ["/blog/acme/feed.xml", "blog-discovery"],
     ["/blog/acme/sitemap-blog.xml", "blog-discovery"],
-    ["/theming/acme/tokens.css", "theming-tokens"]
+    ["/theming/acme/tokens.css", "theming-tokens"],
+    // The host-resolved family (ADR-0061) — no tenant segment, so the patterns
+    // are one segment shorter than their `/blog/{tenantCode}` counterparts.
+    ["/news", "news-index"],
+    ["/news/", "news-index"],
+    ["/news/hello-world", "news-post"],
+    ["/news/category/announcements", "news-taxonomy"],
+    ["/news/tag/bun", "news-taxonomy"]
   ])("%s resolves to %s", (path, expected) => {
     expect(matchPublicCacheSurface(path)?.key).toBe(expected);
   });
@@ -324,6 +353,13 @@ describe("surface registry", () => {
     ["/theming/preview-tokens/tok.css"],
     ["/blog/../admin"],
     ["/blog/%2E%2E/admin"],
+    // `/news/..` — not `/news/../admin` — is the shape that satisfies
+    // `news-post` on its face, because the host-resolved patterns carry no
+    // tenant segment. The traversal guard is the only thing that stops it.
+    ["/news/.."],
+    ["/news/%2E%2E"],
+    ["/news/category/.."],
+    ["/news/search"],
     ["/robots.txt"]
   ])("%s is not cacheable", (path) => {
     expect(matchPublicCacheSurface(path)).toBeNull();
@@ -338,6 +374,66 @@ describe("surface registry", () => {
     expect(matchPublicCacheSurface("/blog/acme/feed.xml")?.key).toBe(
       "blog-discovery"
     );
+  });
+
+  test("the news taxonomy pattern beats the generic news post pattern", () => {
+    // `/news/category/x` satisfies neither `news-post` (three segments) nor a
+    // careless reading of the ordering rule — but `/news/category` DOES satisfy
+    // `news-post`, and a future two-segment taxonomy shape would collide. Pin
+    // the resolution that matters today so a reordering is loud.
+    expect(matchPublicCacheSurface("/news/category/x")?.key).toBe(
+      "news-taxonomy"
+    );
+    expect(matchPublicCacheSurface("/news/category/x")?.ttlSeconds).toBe(120);
+    // Two segments: Astro routes this to `[slug].ts`, which 404s for the slug
+    // "category". Cached as a post 404, which is correct and purgeable.
+    expect(matchPublicCacheSurface("/news/category")?.key).toBe("news-post");
+  });
+
+  test("every host-resolved surface requires a tenant, so an unpublished one is refused", () => {
+    // The whole safety argument for `/news/**` rests on this: middleware cannot
+    // derive the tenant from the URL, so a route that does not publish must fall
+    // through to `tenant_unresolved` rather than be cached under a guessed key.
+    for (const surface of PUBLIC_CACHE_SURFACES.filter((entry) =>
+      entry.key.startsWith("news-")
+    )) {
+      expect(surface.requiresTenant).toBe(true);
+      expect(
+        decide({ surface, tenantId: null, effectiveTtlSeconds: 60 })
+      ).toEqual({
+        cacheable: false,
+        reason: "tenant_unresolved"
+      });
+    }
+  });
+});
+
+describe("edge-cache tenant publication", () => {
+  test("publishes a resolved tenant onto locals", () => {
+    const locals: { edgeCacheTenantId?: string | null } = {};
+
+    publishEdgeCacheTenant(locals, TENANT);
+
+    expect(locals.edgeCacheTenantId).toBe(TENANT);
+  });
+
+  test.each([[null], [undefined], [""]])(
+    "an absent tenant id (%p) leaves locals untouched rather than clearing it",
+    (tenantId) => {
+      const locals: { edgeCacheTenantId?: string | null } = {};
+
+      publishEdgeCacheTenant(locals, tenantId as string | null | undefined);
+
+      expect(locals.edgeCacheTenantId).toBeUndefined();
+    }
+  );
+
+  test("a missing locals object is tolerated, not thrown on", () => {
+    // ADR-0042's standing rule: no fault in the cache layer may turn a working
+    // public page into a 500. A caller outside a request context is a fault of
+    // exactly that shape.
+    expect(() => publishEdgeCacheTenant(undefined, TENANT)).not.toThrow();
+    expect(() => publishEdgeCacheTenant(null, TENANT)).not.toThrow();
   });
 });
 
