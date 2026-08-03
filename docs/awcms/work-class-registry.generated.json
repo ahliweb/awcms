@@ -732,6 +732,11 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/profiles/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/profiles/index.ts",
       "workClass": "interactive",
       "source": "default"

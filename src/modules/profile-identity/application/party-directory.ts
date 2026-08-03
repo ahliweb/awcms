@@ -227,3 +227,67 @@ export async function softDeleteParty(
 
   return true;
 }
+
+/**
+ * The counterpart `softDeleteParty` shipped without (ADR-0058 §A).
+ *
+ * `sql/003` gave `awcms_profiles` `restored_at`/`restored_by` and an index on
+ * `(tenant_id, deleted_at)`, and until this function existed nothing in the
+ * repo could write either column — a soft-deleted profile was permanent, with
+ * `profile_management.restore` seeded in the catalogue and enforced by nothing.
+ *
+ * The precondition lives in the `WHERE`, not in a read before the write, for
+ * the same reason `canRestorePost` does: two concurrent restores that both read
+ * `deleted_at IS NOT NULL` first would both proceed and write two "restored"
+ * audit rows for one restoration. Zero rows affected is the 404.
+ *
+ * `delete_reason` is deliberately KEPT. It records why the profile was deleted,
+ * which stays true after a restore and is the only trace of the deletion left
+ * in the row once `deleted_at` is cleared; `restored_at` is what says the
+ * deletion no longer holds.
+ *
+ * There is no `23505` path here, and that is a property of the schema rather
+ * than luck: `awcms_profiles` carries no unique constraint at all, and this
+ * write touches one table. The partial unique that a restore would normally
+ * collide with (`awcms_profile_identifiers_dedup_key … WHERE deleted_at IS
+ * NULL`) is on the identifier table, which `softDeleteParty` never cascaded to
+ * — so a deleted profile's identifiers stayed live and there is nothing to
+ * re-insert.
+ */
+export async function restoreParty(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  profileId: string,
+  correlationId?: string
+): Promise<PartyRecordForProjection | null> {
+  const rows = (await tx`
+    UPDATE awcms_profiles
+    SET deleted_at = NULL, deleted_by = NULL,
+        restored_at = now(), restored_by = ${actorTenantUserId},
+        updated_by = ${actorTenantUserId}, updated_at = now()
+    WHERE tenant_id = ${tenantId} AND id = ${profileId} AND deleted_at IS NOT NULL
+    RETURNING id, tenant_id, profile_type, display_name, legal_name, status,
+      verification_status, risk_level, merged_into_profile_id, created_at, updated_at,
+      created_by, updated_by, deleted_at, deleted_by, delete_reason, restored_at, restored_by
+  `) as PartyRow[];
+
+  if (rows.length === 0) return null;
+
+  const record = toRecord(rows[0]!);
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "restore",
+    resourceType: AUDIT_RESOURCE_TYPE,
+    resourceId: record.id,
+    severity: "warning",
+    message: "Profile restored.",
+    attributes: { deleteReason: record.deleteReason },
+    correlationId
+  });
+
+  return record;
+}

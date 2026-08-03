@@ -2117,6 +2117,31 @@ Canonical person/organization profile lifecycle, identifiers, and entity links.
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/profiles/{id}/restore` — Restore a soft-deleted profile.
+
+- **operationId**: `restoreProfile`
+- **Security**: bearerAuth + tenantHeader
+
+Counterpart of `DELETE /api/v1/profiles/{id}` (ADR-0058 §A). Clears `deleted_at`/`deleted_by` and stamps `restored_at`/`restored_by`; `delete_reason` is kept, since why the profile was deleted stays true after it is restored. A profile that does not exist and a profile that is not soft-deleted both answer 404 — a distinguishable answer would let a caller probe which profile ids exist.
+
+**Parameters**
+
+| Name              | In     | Required | Type          | Description |
+| ----------------- | ------ | -------- | ------------- | ----------- |
+| `id`              | path   | yes      | string (uuid) |             |
+| `Idempotency-Key` | header | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | Profile restored.                                              | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was already used with a different request. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/profiles/resolve` — Resolve a profile by a typed identifier (email/phone/national_id/tax_id/...).
 
 - **operationId**: `resolveProfile`

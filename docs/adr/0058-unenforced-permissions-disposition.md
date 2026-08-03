@@ -68,14 +68,19 @@ barisnya ada, index-nya ada, kolom pemulihannya ada, dan tak ada satu pun jalur
 kode yang bisa menulisinya. Bentuk yang persis sama dengan yang ADR-0056 §B
 tutup untuk objek media.
 
-README modul ini ikut mengaburkannya, dengan cara yang sudah dikenal: ia
-menulis bahwa rutenya menggerbangi
-`read`/`create`/`update`/**`merge`** — padahal descriptor mendeklarasikan
-`read`/`create`/`update`/`delete`/`restore`, tidak ada permission `merge`, dan
-tidak ada implementasi merge di repo ini (lapis merge #748 ada di `awcms-mini`
-dan belum di-port). Sebuah README yang menyebut permission yang tak ada
-sekaligus menghilangkan dua yang ada adalah cara paling efektif membuat audit
-manual berikutnya melewatkan keduanya.
+> **Koreksi terhadap edisi pertama ADR ini.** Paragraf di sini semula menuduh
+> `profile-identity/README.md` menulis bahwa rutenya menggerbangi
+> `read`/`create`/`update`/**`merge`**. Itu **salah**, dan salah dengan cara
+> yang pantas dicatat: README-nya benar (`{read,create,update,delete}`) —
+> kalimat "merge" itu ada di **teks alasan pengecualian gate**, ditulis pada
+> run pertamanya dan sudah dikoreksi di PR #359. Saya mengutip catatan gate
+> lalu mengatribusikannya ke README tanpa membuka README-nya.
+>
+> Yang membuatnya layak disimpan alih-alih dihapus diam-diam: ini contoh KETIGA
+> dari pola yang sama dalam satu rangkaian kerja — teks yang salah dari sebuah
+> gate menjadi sumber untuk dokumen berikutnya, yang lalu terbaca sebagai
+> temuan independen. Persis mekanisme yang membuat dua tuduhan palsu di §1
+> bertahan. Aturannya: **kutip berkas, bukan catatan tentang berkas.**
 
 #### `comments.moderation.delete` — separuh yang mendarat adalah separuh penulis
 

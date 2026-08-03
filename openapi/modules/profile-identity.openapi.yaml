@@ -267,6 +267,59 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/profiles/{id}/restore:
+    post:
+      operationId: restoreProfile
+      tags:
+        - Profile Identity
+      summary: Restore a soft-deleted profile.
+      description: >-
+        Counterpart of `DELETE /api/v1/profiles/{id}` (ADR-0058 §A). Clears
+        `deleted_at`/`deleted_by` and stamps `restored_at`/`restored_by`;
+        `delete_reason` is kept, since why the profile was deleted stays true
+        after it is restored. A profile that does not exist and a profile that
+        is not soft-deleted both answer 404 — a distinguishable answer would let
+        a caller probe which profile ids exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile restored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/ProfileMasked"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/profiles/{id}/identifiers:
     post:
       operationId: addProfileIdentifier
