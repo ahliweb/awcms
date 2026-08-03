@@ -14,7 +14,7 @@
 | Tabel RLS-free (global, by design) | 11    |
 | Berkas test                        | 304   |
 | Berkas route                       | 312   |
-| ADR                                | 67    |
+| ADR                                | 68    |
 
 ### Modul
 
