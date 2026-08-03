@@ -38,15 +38,21 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **75
-> script**, termasuk yang dulu ditandai belum ada (`openapi:bundle`,
-> `data-lifecycle:*`, `reporting:*`, dan — **koreksi 2026-07-27** —
-> `db:work-class:generate`/`db:work-class:check`, yang catatan sebelumnya masih
-> menyebut tidak ada). Yang masih **benar-benar tidak ada**: `repo:inventory:*`
-> (yang ada `modules:composition:inventory:*`, cakupannya lain), `i18n:*`, dan
-> `extension:check` (yang terakhir **DIHAPUS** oleh ADR-0034, bukan tertunda —
-> jangan merujuknya). Tetap cek `package.json` sebelum mengeksekusi command dari
-> sebuah skill; daftar ini bergerak tiap kali modul baru mendarat.
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **82
+> script** (diperiksa 4 Agustus 2026), termasuk yang dulu ditandai belum ada:
+> `openapi:bundle`, `data-lifecycle:*`, `reporting:*`,
+> `db:work-class:generate`/`db:work-class:check`, dan — **koreksi 4 Agustus
+> 2026** — `repo:inventory:generate`/`repo:inventory:check`, yang catatan
+> sebelumnya masih menyebut "benar-benar tidak ada". Keduanya mendarat di #374
+> bersama generator `awcms/repo-inventory.md`.
+>
+> Yang masih benar-benar tidak ada: `i18n:*`, dan `extension:check` (yang
+> terakhir **DIHAPUS** oleh ADR-0034, bukan tertunda — jangan merujuknya).
+>
+> Tetap cek `package.json` sebelum mengeksekusi command dari sebuah skill;
+> daftar ini bergerak tiap kali modul baru mendarat, dan **paragraf ini bukan
+> yang digerbangi** — `skills:check` (ADR-0062) menegakkan `SKILL.md`, bukan
+> berkas ini.
 
 ## Katalog
 
