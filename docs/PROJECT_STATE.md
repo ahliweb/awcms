@@ -460,28 +460,54 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   > **dua pertanyaan berbeda**, dan sebuah kontrol bisa lulus yang pertama
   > sambil mustahil dipakai.
 
-- **Gate cakupan permission — BARU, dan ia menemukan lima gap lagi.**
+- **Gate cakupan permission — BARU, dan ia menemukan TIGA gap lagi.**
   `bun run access:permissions:enforcement:check` (ADR-0057 §F) menuntut tiap
   permission terdeklarasi punya call site `authorizeInTransaction` atau
   terdaftar sebagai pengecualian ber-alasan. Murni (registry + teks sumber),
-  masuk rantai `check`. Skor pertama: **199/205 tergerbangi, 6 pengecualian**.
+  masuk rantai `check`. Skor: **201/205 tergerbangi, 4 pengecualian**.
 
-  Lima di antaranya **temuan baru**, semuanya diverifikasi ke kode, dan
-  masing-masing butuh keputusan yang sama dengan ADR-0057 §A — beri permukaan,
-  atau cabut:
+  Ketiganya **temuan baru**, semuanya diverifikasi ke kode, dan masing-masing
+  butuh keputusan yang sama dengan ADR-0057 §A — beri permukaan, atau cabut:
   - `profile_identity.profile_management.restore` — **lubang nyata**: tak ada
     rute restore sama sekali, jadi profil yang di-soft-delete tidak bisa
-    dipulihkan lewat API. Bentuk yang sama dengan yang ADR-0056 §B tutup untuk
-    objek media.
-  - `visitor_analytics.settings.read` + `.update` — setting analitik per-tenant
-    tak punya permukaan apa pun.
+    dipulihkan lewat API. `awcms_profiles` membawa
+    `deleted_at`/`restored_at`/`restored_by` sejak `sql/003` dan
+    `party-directory.ts` mengekspor `softDeleteParty` **tanpa pasangan** —
+    bentuk yang sama dengan yang ADR-0056 §B tutup untuk objek media.
   - `blog_content.seo.configure` — satu-satunya kemunculan `"seo"` di repo
     adalah deklarasi descriptor itu sendiri; kemungkinan besar **pencabutan**,
     karena default SEO blog nyatanya dikonfigurasi lewat blog settings.
   - `comments.moderation.delete` — model moderasi ADR-0041 adalah
     arsip-bukan-hapus, jadi ini pun kandidat pencabutan.
 
-  Yang keenam sudah diketahui: `blog_content.posts.export` (ADR-0057 §F).
+  Yang keempat sudah diketahui: `blog_content.posts.export` (ADR-0057 §F).
+
+  > **Skor pertamanya 199/205 dengan 6 pengecualian, dan DUA di antaranya
+  > adalah bug gate-nya sendiri.** `visitor_analytics.settings.read`/`.update`
+  > **tergerbangi** — `src/pages/api/v1/analytics/settings.ts` membangun
+  > `READ_GUARD`/`UPDATE_GUARD` tepat pada activity itu. Yang salah: scanner
+  > membaca konstanta seluruh repo sebagai **satu namespace datar**, sementara
+  > `MODULE_KEY` terikat ke **empat nilai berbeda di lima berkas**, sehingga
+  > aturan "nama berkonflik = tak-terpecahkan" mematikannya di **semua** berkas
+  > — termasuk berkas yang mengikatnya sendiri satu baris di atas guard-nya.
+  > Alasan tertulis kedua pengecualian itu bahkan menyatakan, tentang rute yang
+  > ada, bahwa "no route names a settings activity".
+  >
+  > Ini persis peringatan yang tertulis di header berkas scanner itu sendiri,
+  > dan ia tetap dipercaya. Draf 4 kini beku sebagai test bersama tiga draf
+  > sebelumnya: konstanta diselesaikan **file-first**
+  > (`resolveConstantsForSource`), tabel lintas-berkas hanya untuk nama yang
+  > tak diikat berkas itu — yakni persis himpunan yang cuma bisa datang lewat
+  > `import`. Nama yang diikat DUA KALI di dalam satu berkas tetap
+  > tak-terpecahkan; menebak di situ hanya menukar satu jawaban salah dengan
+  > lawannya. Mutation-proven di dua lapis: helper DAN
+  > `evaluateEnforcementCoverage`, karena helper yang benar dengan satu-satunya
+  > pemanggilnya masih meneruskan tabel datar akan **tampak** diperbaiki.
+  >
+  > Pelajaran yang lebih umum, dan ini yang ketiga kalinya di repo ini: sebuah
+  > gate yang menjawab "tak tergerbangi" untuk yang tergerbangi tidak berhenti
+  > pada satu laporan salah — ia **melahirkan dokumen**. Kedua entri itu ditulis
+  > sebagai KEPUTUSAN ber-alasan, bukan sebagai temuan yang menunggu verifikasi.
 
   > **Gate-nya sendiri butuh tiga kali tulis ulang, dan itu pelajarannya.**
   > Draf 1 hanya membaca literal string → **39 false positive**, termasuk tiga

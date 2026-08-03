@@ -108,6 +108,11 @@ function stripComments(source: string): string {
  * UNRESOLVED rather than guessed: the resulting report of "unenforced" is
  * visible and fixable, whereas guessing one of the two values could mark a
  * permission enforced on the strength of an unrelated file's constant.
+ *
+ * That conflict rule is right for names that arrive by IMPORT and wrong for
+ * names a file binds itself, which is why callers resolve through
+ * `resolveConstantsForSource` rather than passing the cross-file table
+ * directly. See its comment for the two permissions the flat table lost.
  */
 function readStringField(
   literal: string,
@@ -193,6 +198,40 @@ export function collectStringConstants(
   }
 
   return constants;
+}
+
+/**
+ * The bindings visible to ONE source file: its own `const NAME = "value"`
+ * first, and the cross-file table only for names it does not bind itself.
+ *
+ * Reading the repo as one flat namespace instead is not a rounding error — it
+ * is the very false-positive class this file's header warns about, produced by
+ * the gate's own first release, and it was believed. `MODULE_KEY` is bound in
+ * five files to four different values (`visitor_analytics`, `email` twice,
+ * `sync_storage`, `domain_event_runtime`), so the conflict rule above left it
+ * unresolvable EVERYWHERE. The guard in `src/pages/api/v1/analytics/settings.ts`
+ * — `moduleKey: MODULE_KEY`, with `const MODULE_KEY = "visitor_analytics"` two
+ * dozen lines above it — was therefore invisible, and
+ * `visitor_analytics.settings.read`/`.update` were written into the exception
+ * list as decisions, with a stated reason ("no route names a settings
+ * activity") that the route disproves line by line.
+ *
+ * A name the file binds itself wins outright; the cross-file table is consulted
+ * only for the names that can only have arrived by import. A file that binds
+ * one name to two values still resolves to `null` — locally unresolvable is
+ * still unresolvable, and guessing there would reintroduce the opposite defect.
+ */
+export function resolveConstantsForSource(
+  source: string,
+  crossFileConstants: ReadonlyMap<string, string | null>
+): Map<string, string | null> {
+  const resolved = new Map(crossFileConstants);
+
+  for (const [name, value] of collectStringConstants([source])) {
+    resolved.set(name, value);
+  }
+
+  return resolved;
 }
 
 /**
@@ -339,10 +378,12 @@ export function evaluateEnforcementCoverage(
   sources: readonly string[],
   exceptions: readonly EnforcementException[]
 ): EnforcementCoverageResult {
-  const constants = collectStringConstants(sources);
+  const crossFileConstants = collectStringConstants(sources);
   const enforced = new Set<string>();
 
   for (const source of sources) {
+    const constants = resolveConstantsForSource(source, crossFileConstants);
+
     for (const triple of collectGuardTriples(source, constants)) {
       enforced.add(permissionTripleKey(triple));
     }
