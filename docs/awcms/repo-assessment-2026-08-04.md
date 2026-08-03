@@ -319,8 +319,16 @@ pengguna — hanya ke beban origin.
    ke `listPublicBlogPosts` — dua test langsung merah. Satu test menjaga
    instrumennya sendiri (Proxy yang berhenti menghitung akan membuat semua plafon
    lolos secara hampa).
-3. Core Web Vitals: keputusan produk, bukan cacat. Bila diambil, tempatnya di
-   `visitor_analytics` dengan ADR admission sendiri.
+3. Core Web Vitals: keputusan produk, bukan cacat — dan kini **tertulis sebagai
+   keputusan yang menunggu**, [ADR-0067](../adr/0067-core-web-vitals-collection.md)
+   (`Proposed`). Ia satu-satunya dari tujuh rekomendasi yang tidak mendarat, dengan
+   sengaja: bukan memperbaiki cacat melainkan MENAMBAH pengumpulan data tentang
+   pengunjung nyata, dan itu bertabrakan dengan postur privacy-first yang
+   `visitor_analytics` sudah nyatakan (purge-nya DELETE tanpa arsip, dengan alasan
+   tertulis). ADR itu memberi tiga opsi dengan trade-off sebenarnya dan
+   merekomendasikan **agregat-saja** — tanpa baris mentah — bila diambil sama
+   sekali. **Tidak mengambilnya adalah jawaban yang sah**, dan lebih baik dicatat
+   sebagai keputusan daripada dibiarkan sebagai celah terbuka.
 
 ## 6. Keamanan — postur dasar kuat
 
