@@ -1,0 +1,1070 @@
+---
+/**
+ * Blog presentation console — templates, menus, widgets and theme.
+ *
+ * Fourth sibling of `/admin/blog`, `/admin/blog-pages` and
+ * `/admin/blog-taxonomy`. These four activities are one screen rather than
+ * four because they answer one question — how the blog LOOKS — and each is a
+ * short bounded list that would not fill a page of its own.
+ *
+ * ## Sections, not tabs
+ *
+ * `?section=` picks one of `templates` / `menus` / `widgets` / `theme`, and
+ * only that section is READ. Loading all four on every visit would run four
+ * queries to render one, and the read budget of an admin screen is not free.
+ * A section the operator cannot read is not offered at all, so an operator
+ * granted `widgets.read` alone lands on widgets rather than on a denial.
+ *
+ * ## Eight permissions, four independent pairs
+ *
+ * `templates`, `menus`, `widgets` and `theme` each have their own
+ * `read`/`configure`. They are gated INDEPENDENTLY here: holding
+ * `widgets.configure` must not reveal a template control. That is the
+ * `/admin/data-lifecycle` lesson — one combined gate looks tidier and is wrong
+ * for every real operator.
+ *
+ * ## What this screen deliberately does not offer
+ *
+ * - **Menu ITEMS.** `PATCH /api/v1/blog/menus/{id}` accepts an `items` array
+ *   with FULL-REPLACE semantics — send a partial list and the rest are gone.
+ *   Menu items are a nested tree with ordering; a flat form that replaces the
+ *   whole structure on every save is a data-loss control, not an editor. Menus
+ *   here are name/key only, which is what the list genuinely owns.
+ * - **Clearing a theme override.** `upsertBlogThemeSettings` only ever INSERTs
+ *   or UPDATEs `awcms_blog_theme_settings`, and there is no delete function and
+ *   no route: `isOverride` goes `false → true` and never back. Offering a
+ *   "revert to tenant default" button would be the #351 shape exactly — a
+ *   control rendered on a path that cannot succeed. The screen states the
+ *   one-way nature instead.
+ * - **Restore for soft-deleted templates/menus/widgets.** All three have
+ *   `softDelete*` and no counterpart, and no `*.restore` permission exists to
+ *   build one against. Same call as taxonomy: no bin, and a confirmation that
+ *   says so.
+ *
+ * ## Reads / writes / gates
+ *
+ * The read goes through this module's own application functions inside ONE
+ * `withTenantOrThrow`. Nothing here writes SQL; every mutation is a request to
+ * a guarded endpoint.
+ *
+ * **No `Idempotency-Key` anywhere**: none of these endpoints reads one.
+ *
+ * Permission gates below are UX-only — `authorizeInTransaction` in the routes
+ * is the authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  listTemplates,
+  type BlogTemplateView
+} from "../../modules/blog-content/application/template-directory";
+import {
+  listMenus,
+  type BlogMenuView
+} from "../../modules/blog-content/application/menu-directory";
+import {
+  listWidgets,
+  type BlogWidgetView
+} from "../../modules/blog-content/application/widget-directory";
+import {
+  fetchBlogThemeSettings,
+  type BlogThemeSettings
+} from "../../modules/blog-content/application/theme-settings-directory";
+import {
+  WIDGET_POSITIONS,
+  isWidgetPosition
+} from "../../modules/blog-content/domain/widget-policy";
+import { BLOG_THEME_MODES } from "../../modules/blog-content/domain/theme-policy";
+
+const ssr = Astro.locals.ssrContext!;
+
+const can = (activity: string, action: string): boolean =>
+  ssr.permissions.has(permissionKey("blog_content", activity, action));
+
+const canReadTemplates = can("templates", "read");
+const canConfigureTemplates = can("templates", "configure");
+const canReadMenus = can("menus", "read");
+const canConfigureMenus = can("menus", "configure");
+const canReadWidgets = can("widgets", "read");
+const canConfigureWidgets = can("widgets", "configure");
+const canReadTheme = can("theme", "read");
+const canConfigureTheme = can("theme", "configure");
+
+type Section = "templates" | "menus" | "widgets" | "theme";
+
+/** Only sections the operator can READ — see the header. */
+const availableSections: Section[] = [
+  ...(canReadTemplates ? (["templates"] as const) : []),
+  ...(canReadMenus ? (["menus"] as const) : []),
+  ...(canReadWidgets ? (["widgets"] as const) : []),
+  ...(canReadTheme ? (["theme"] as const) : [])
+];
+
+function readParam(name: string): string {
+  return (Astro.url.searchParams.get(name) ?? "").trim();
+}
+
+const sectionRaw = readParam("section");
+// An unreadable or unknown section falls back to the first the operator CAN
+// read, rather than rendering a denial for a link the screen itself drew.
+const section: Section | null =
+  availableSections.find((entry) => entry === sectionRaw) ??
+  availableSections[0] ??
+  null;
+
+const positionRaw = readParam("position");
+const positionFilter = isWidgetPosition(positionRaw) ? positionRaw : undefined;
+
+/** `?edit=<id>` opens the edit form for one row of the active section. */
+const editingId = readParam("edit");
+
+let templates: BlogTemplateView[] = [];
+let menus: BlogMenuView[] = [];
+let widgets: BlogWidgetView[] = [];
+let theme: BlogThemeSettings | null = null;
+let loadError = false;
+
+if (section !== null) {
+  try {
+    const sql = getDatabaseClient();
+    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
+      // Sequential by section: only the visible one is read, and a single
+      // transaction connection cannot serve concurrent queries anyway.
+      if (section === "templates") {
+        templates = await listTemplates(tx, ssr.tenantId);
+      } else if (section === "menus") {
+        menus = await listMenus(tx, ssr.tenantId);
+      } else if (section === "widgets") {
+        widgets = await listWidgets(tx, ssr.tenantId, {
+          position: positionFilter
+        });
+      } else {
+        theme = await fetchBlogThemeSettings(tx, ssr.tenantId);
+      }
+    });
+  } catch (error) {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "this tenant has nothing configured".
+    loadError = true;
+    logAdminPageError(
+      "admin/blog-presentation.astro: failed to load presentation settings",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+}
+
+function formatTimestamp(value: Date | null): string {
+  return value ? value.toISOString() : "—";
+}
+
+function linkWith(overrides: Record<string, string | null>): string {
+  const params = new URLSearchParams(Astro.url.search);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  // Switching section carries neither the row being edited nor a filter that
+  // belongs to a different list.
+  if ("section" in overrides) {
+    params.delete("edit");
+    params.delete("position");
+  }
+  const query = params.toString();
+  return query
+    ? `/admin/blog-presentation?${query}`
+    : "/admin/blog-presentation";
+}
+
+const SECTION_LABEL: Record<Section, string> = {
+  templates: "Templates",
+  menus: "Menus",
+  widgets: "Widgets",
+  theme: "Theme"
+};
+
+const editingTemplate =
+  section === "templates" && editingId
+    ? (templates.find((entry) => entry.id === editingId) ?? null)
+    : null;
+const editingMenu =
+  section === "menus" && editingId
+    ? (menus.find((entry) => entry.id === editingId) ?? null)
+    : null;
+const editingWidget =
+  section === "widgets" && editingId
+    ? (widgets.find((entry) => entry.id === editingId) ?? null)
+    : null;
+---
+
+<AdminLayout title="Blog presentation">
+  <header class="page-header fade-in-up">
+    <h1 id="presentation-heading">Blog presentation</h1>
+    <p class="page-description">
+      How the blog looks: page templates, navigation menus, sidebar and footer
+      widgets, and the theme mode. Content itself lives on <a href="/admin/blog"
+        >the blog console</a
+      >.
+    </p>
+  </header>
+
+  {
+    section === null && (
+      <p class="state-notice fade-in-up" id="presentation-denied">
+        You do not have permission to view any blog presentation settings.
+      </p>
+    )
+  }
+
+  {
+    section !== null && loadError && (
+      <p class="state-notice fade-in-up" id="presentation-error">
+        Presentation settings could not be loaded right now. This is a problem
+        reading them, not an empty configuration — please try again later.
+      </p>
+    )
+  }
+
+  {
+    section !== null && (
+      <nav class="admin-toolbar fade-in-up" aria-label="Presentation sections">
+        {availableSections.map((entry) => (
+          <a
+            class="quick-link"
+            href={linkWith({ section: entry })}
+            aria-current={entry === section ? "page" : undefined}
+          >
+            {SECTION_LABEL[entry]}
+          </a>
+        ))}
+      </nav>
+    )
+  }
+
+  {
+    section !== null && !loadError && (
+      <p
+        id="presentation-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    /* ---------------------------------------------------------------- Templates */
+  }
+  {
+    section === "templates" && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="template-list-title"
+      >
+        <h2 class="admin-section-title" id="template-list-title">
+          Templates
+          <span class="count-pill">{templates.length}</span>
+        </h2>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-templates-table">
+            <caption class="sr-only">Blog page templates.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Layout</th>
+                <th scope="col">Active</th>
+                <th scope="col">Updated</th>
+                {canConfigureTemplates && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {templates.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={canConfigureTemplates ? 5 : 4}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-title">No templates yet</span>
+                      <span class="empty-state-text">
+                        Create one below to offer a layout choice on posts and
+                        pages.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                templates.map((entry) => (
+                  <tr data-template-row={entry.id}>
+                    <td data-label="Name">
+                      <span set:text={entry.name} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{entry.key}</span>
+                      </span>
+                    </td>
+                    <td data-label="Layout">
+                      <span class="cell-muted">
+                        {entry.layoutJson.columns} column
+                        {entry.layoutJson.columns === 1 ? "" : "s"} · sidebar{" "}
+                        {entry.layoutJson.sidebarPosition}
+                      </span>
+                    </td>
+                    <td data-label="Active">
+                      <span
+                        class="status-badge"
+                        data-variant={entry.isActive ? "success" : "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.isActive ? "active" : "inactive"}
+                      </span>
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.updatedAt)}
+                      </span>
+                    </td>
+                    {canConfigureTemplates && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: entry.id })}
+                          >
+                            Edit
+                          </a>
+                          <button
+                            type="button"
+                            class="btn-inline presentation-delete-btn"
+                            data-entity="templates"
+                            data-entity-id={entry.id}
+                            data-entity-name={entry.name}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    section === "templates" && !loadError && canConfigureTemplates && (
+      <section class="admin-section fade-in-up">
+        <h2 class="admin-section-title">
+          {editingTemplate ? "Edit template" : "Create a template"}
+        </h2>
+
+        <form class="admin-form" id="template-form">
+          <input
+            type="hidden"
+            id="template-id"
+            value={editingTemplate?.id ?? ""}
+          />
+
+          {!editingTemplate && (
+            <div class="admin-form-row">
+              <label for="template-key">Key</label>
+              <input id="template-key" name="key" type="text" required />
+              {/* Immutable after creation: `UpdateTemplateInput` has no `key`,
+                  and posts/pages reference a template by it. */}
+              <p class="form-hint">
+                Stable identifier. Cannot be changed after creation.
+              </p>
+            </div>
+          )}
+
+          <div class="admin-form-row">
+            <label for="template-name">Name</label>
+            <input
+              id="template-name"
+              name="name"
+              type="text"
+              required
+              value={editingTemplate?.name ?? ""}
+            />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="template-columns">Columns</label>
+            <select id="template-columns" name="columns">
+              {[1, 2, 3].map((value) => (
+                <option
+                  value={String(value)}
+                  selected={
+                    (editingTemplate?.layoutJson.columns ?? 1) === value
+                  }
+                >
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="template-sidebar">Sidebar</label>
+            <select id="template-sidebar" name="sidebarPosition">
+              {["left", "right", "none"].map((value) => (
+                <option
+                  value={value}
+                  selected={
+                    (editingTemplate?.layoutJson.sidebarPosition ?? "none") ===
+                    value
+                  }
+                >
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="template-active">
+              <input
+                id="template-active"
+                name="isActive"
+                type="checkbox"
+                checked={editingTemplate?.isActive ?? true}
+              />
+              Active
+            </label>
+          </div>
+
+          <p
+            class="admin-create-error"
+            id="template-error"
+            role="alert"
+            hidden
+          />
+
+          <div class="admin-form-actions">
+            <button type="submit" id="template-submit">
+              {editingTemplate ? "Save template" : "Create template"}
+            </button>
+            {editingTemplate && (
+              <a class="quick-link" href={linkWith({ edit: null })}>
+                Cancel
+              </a>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    /* -------------------------------------------------------------------- Menus */
+  }
+  {
+    section === "menus" && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="menu-list-title"
+      >
+        <h2 class="admin-section-title" id="menu-list-title">
+          Menus
+          <span class="count-pill">{menus.length}</span>
+        </h2>
+
+        <p class="form-hint" id="menu-items-note">
+          Menu <strong>items</strong> are not edited here. The API replaces the
+          entire item list on every save, so a flat form would delete every item
+          it did not happen to render.
+        </p>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-menus-table">
+            <caption class="sr-only">Blog navigation menus.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Updated</th>
+                {canConfigureMenus && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {menus.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={canConfigureMenus ? 3 : 2}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-title">No menus yet</span>
+                      <span class="empty-state-text">
+                        Create one below to group navigation links.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                menus.map((entry) => (
+                  <tr data-menu-row={entry.id}>
+                    <td data-label="Name">
+                      <span set:text={entry.name} />
+                      <span class="cell-muted">
+                        {" "}
+                        · <span class="cell-code">{entry.key}</span>
+                      </span>
+                    </td>
+                    <td data-label="Updated">
+                      <span class="cell-muted">
+                        {formatTimestamp(entry.updatedAt)}
+                      </span>
+                    </td>
+                    {canConfigureMenus && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: entry.id })}
+                          >
+                            Edit
+                          </a>
+                          <button
+                            type="button"
+                            class="btn-inline presentation-delete-btn"
+                            data-entity="menus"
+                            data-entity-id={entry.id}
+                            data-entity-name={entry.name}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    section === "menus" && !loadError && canConfigureMenus && (
+      <section class="admin-section fade-in-up">
+        <h2 class="admin-section-title">
+          {editingMenu ? "Edit menu" : "Create a menu"}
+        </h2>
+
+        <form class="admin-form" id="menu-form">
+          <input type="hidden" id="menu-id" value={editingMenu?.id ?? ""} />
+
+          {!editingMenu && (
+            <div class="admin-form-row">
+              <label for="menu-key">Key</label>
+              <input id="menu-key" name="key" type="text" required />
+              <p class="form-hint">
+                Stable identifier. Cannot be changed after creation.
+              </p>
+            </div>
+          )}
+
+          <div class="admin-form-row">
+            <label for="menu-name">Name</label>
+            <input
+              id="menu-name"
+              name="name"
+              type="text"
+              required
+              value={editingMenu?.name ?? ""}
+            />
+          </div>
+
+          <p class="admin-create-error" id="menu-error" role="alert" hidden />
+
+          <div class="admin-form-actions">
+            <button type="submit" id="menu-submit">
+              {editingMenu ? "Save menu" : "Create menu"}
+            </button>
+            {editingMenu && (
+              <a class="quick-link" href={linkWith({ edit: null })}>
+                Cancel
+              </a>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    /* ------------------------------------------------------------------ Widgets */
+  }
+  {
+    section === "widgets" && !loadError && (
+      <section
+        class="admin-section fade-in-up"
+        aria-labelledby="widget-list-title"
+      >
+        <h2 class="admin-section-title" id="widget-list-title">
+          Widgets
+          <span class="count-pill">{widgets.length}</span>
+        </h2>
+
+        <form method="get" class="admin-toolbar" id="widget-filter-form">
+          <input type="hidden" name="section" value="widgets" />
+          <label for="filter-position">Position</label>
+          <select id="filter-position" name="position">
+            <option value="" selected={positionFilter === undefined}>
+              Any position
+            </option>
+            {WIDGET_POSITIONS.map((value) => (
+              <option value={value} selected={positionFilter === value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <button type="submit">Apply filter</button>
+        </form>
+
+        <div class="data-table-scroll">
+          <table class="data-table data-table--stack" id="blog-widgets-table">
+            <caption class="sr-only">
+              Blog widgets, in render order within each position.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Position</th>
+                <th scope="col">Order</th>
+                <th scope="col">Active</th>
+                {canConfigureWidgets && <th scope="col">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {widgets.length === 0 ? (
+                <tr>
+                  <td
+                    class="data-table-empty"
+                    colspan={canConfigureWidgets ? 5 : 4}
+                  >
+                    <div class="empty-state">
+                      <span class="empty-state-title">No widgets here</span>
+                      <span class="empty-state-text">
+                        Create one below, or clear the position filter.
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                widgets.map((entry) => (
+                  <tr data-widget-row={entry.id}>
+                    <td data-label="Title">
+                      <span set:text={entry.title} />
+                    </td>
+                    <td data-label="Position">
+                      <span class="cell-code">{entry.position}</span>
+                    </td>
+                    <td data-label="Order">
+                      <span class="cell-muted">{entry.sortOrder}</span>
+                    </td>
+                    <td data-label="Active">
+                      <span
+                        class="status-badge"
+                        data-variant={entry.isActive ? "success" : "neutral"}
+                      >
+                        <span class="status-dot" aria-hidden="true" />
+                        {entry.isActive ? "active" : "inactive"}
+                      </span>
+                    </td>
+                    {canConfigureWidgets && (
+                      <td data-label="Actions">
+                        <div class="row-actions">
+                          <a
+                            class="quick-link"
+                            href={linkWith({ edit: entry.id })}
+                          >
+                            Edit
+                          </a>
+                          <button
+                            type="button"
+                            class="btn-inline presentation-delete-btn"
+                            data-entity="widgets"
+                            data-entity-id={entry.id}
+                            data-entity-name={entry.title}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    section === "widgets" && !loadError && canConfigureWidgets && (
+      <section class="admin-section fade-in-up">
+        <h2 class="admin-section-title">
+          {editingWidget ? "Edit widget" : "Create a widget"}
+        </h2>
+
+        <form class="admin-form" id="widget-form">
+          <input type="hidden" id="widget-id" value={editingWidget?.id ?? ""} />
+
+          <div class="admin-form-row">
+            <label for="widget-position">Position</label>
+            <select id="widget-position" name="position">
+              {WIDGET_POSITIONS.map((value) => (
+                <option
+                  value={value}
+                  selected={(editingWidget?.position ?? "sidebar") === value}
+                >
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="widget-title">Title</label>
+            <input
+              id="widget-title"
+              name="title"
+              type="text"
+              required
+              value={editingWidget?.title ?? ""}
+            />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="widget-body">Body text</label>
+            {/* Plain text, escaped at render — the module rejects raw HTML
+                rather than sanitising it. */}
+            <textarea id="widget-body" name="bodyText" rows="4" required>
+              {editingWidget?.bodyText ?? ""}
+            </textarea>
+          </div>
+
+          <div class="admin-form-row">
+            <label for="widget-sort">Sort order</label>
+            <input
+              id="widget-sort"
+              name="sortOrder"
+              type="number"
+              min="0"
+              value={String(editingWidget?.sortOrder ?? 0)}
+            />
+          </div>
+
+          <div class="admin-form-row">
+            <label for="widget-active">
+              <input
+                id="widget-active"
+                name="isActive"
+                type="checkbox"
+                checked={editingWidget?.isActive ?? true}
+              />
+              Active
+            </label>
+          </div>
+
+          <p class="admin-create-error" id="widget-error" role="alert" hidden />
+
+          <div class="admin-form-actions">
+            <button type="submit" id="widget-submit">
+              {editingWidget ? "Save widget" : "Create widget"}
+            </button>
+            {editingWidget && (
+              <a class="quick-link" href={linkWith({ edit: null })}>
+                Cancel
+              </a>
+            )}
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  {
+    /* -------------------------------------------------------------------- Theme */
+  }
+  {
+    section === "theme" && !loadError && theme !== null && (
+      <section class="admin-section fade-in-up" aria-labelledby="theme-title">
+        <h2 class="admin-section-title" id="theme-title">
+          Theme
+        </h2>
+
+        <p class="page-description" id="theme-source">
+          Current mode is <strong class="cell-code">{theme.mode}</strong>,{" "}
+          {theme.isOverride
+            ? "set as a blog-specific override."
+            : "inherited from the tenant default."}
+        </p>
+
+        {/* No "revert to tenant default" control: `upsertBlogThemeSettings`
+            only INSERTs or UPDATEs, and no delete function or route exists, so
+            an override cannot be removed through the API. A button that cannot
+            succeed is the #351 shape. */}
+        <p class="form-hint" id="theme-one-way-note">
+          Setting a blog theme creates an override that{" "}
+          <strong>cannot be removed</strong> from here — the API has no way to
+          clear it, only to change it. Until one is set, the blog follows the
+          tenant default.
+        </p>
+
+        {canConfigureTheme && (
+          <form class="admin-form" id="theme-form">
+            <div class="admin-form-row">
+              <label for="theme-mode">Mode</label>
+              <select id="theme-mode" name="mode">
+                {BLOG_THEME_MODES.map((value) => (
+                  <option value={value} selected={theme.mode === value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <p
+              class="admin-create-error"
+              id="theme-error"
+              role="alert"
+              hidden
+            />
+
+            <div class="admin-form-actions">
+              <button type="submit" id="theme-submit">
+                Save theme
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // script with no imports, and this app's CSP has no 'unsafe-inline', so an
+  // inlined script is blocked and the page's behaviour dies silently.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("presentation-action-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  // No idempotency helper: none of these endpoints reads the header.
+
+  /** Templates, menus and widgets all soft-delete one way — no restore exists. */
+  document
+    .querySelectorAll<HTMLButtonElement>(".presentation-delete-btn")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        const entity = button.dataset.entity;
+        const id = button.dataset.entityId;
+        if (!entity || !id) return;
+
+        const name = button.dataset.entityName ?? "this item";
+        if (
+          !window.confirm(
+            `Delete "${name}"? This cannot be undone from the admin — there is ` +
+              `no restore for blog presentation records.`
+          )
+        ) {
+          return;
+        }
+
+        if (actionError) actionError.hidden = true;
+        const unlock = lockElement(button, "Deleting…");
+
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/blog/${entity}/${id}`,
+          {
+            reason: "Deleted from the blog presentation console."
+          }
+        );
+
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+
+        showActionError("Could not delete it. Please try again.");
+        unlock();
+      });
+    });
+
+  function showFormError(elementId: string, message: string): void {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    element.textContent = message;
+    element.hidden = false;
+  }
+
+  /**
+   * One create-or-update submit path per entity. `id` empty means create.
+   *
+   * `create` and `update` payloads differ deliberately: `key` is only ever sent
+   * on create, because `UpdateTemplateInput`/the menu PATCH have no `key` and
+   * an update that asserted one would be rejected — or worse, silently ignored.
+   */
+  function wireForm(
+    formId: string,
+    idFieldId: string,
+    submitId: string,
+    errorId: string,
+    collection: string,
+    build: (data: FormData, isCreate: boolean) => Record<string, unknown>,
+    conflictMessage: string
+  ): void {
+    const form = document.getElementById(formId) as HTMLFormElement | null;
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = document.getElementById(
+        submitId
+      ) as HTMLButtonElement | null;
+      const idField = document.getElementById(
+        idFieldId
+      ) as HTMLInputElement | null;
+      if (!submit || submit.disabled) return;
+
+      const id = idField?.value ?? "";
+      const isCreate = id === "";
+      const data = new FormData(form);
+      const errorElement = document.getElementById(errorId);
+      if (errorElement) errorElement.hidden = true;
+      const unlock = lockElement(submit, isCreate ? "Creating…" : "Saving…");
+
+      const result = isCreate
+        ? await sendJson(
+            "POST",
+            `/api/v1/blog/${collection}`,
+            build(data, true)
+          )
+        : await sendJson(
+            "PATCH",
+            `/api/v1/blog/${collection}/${id}`,
+            build(data, false)
+          );
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showFormError(
+        errorId,
+        result.errorCode === "CONFLICT"
+          ? conflictMessage
+          : "Could not save. Check the fields and try again."
+      );
+      unlock();
+    });
+  }
+
+  wireForm(
+    "template-form",
+    "template-id",
+    "template-submit",
+    "template-error",
+    "templates",
+    (data, isCreate) => {
+      const body: Record<string, unknown> = {
+        name: String(data.get("name") ?? "").trim(),
+        layoutJson: {
+          columns: Number(data.get("columns") ?? 1),
+          sidebarPosition: String(data.get("sidebarPosition") ?? "none")
+        },
+        isActive: data.get("isActive") !== null
+      };
+      if (isCreate) body.key = String(data.get("key") ?? "").trim();
+      return body;
+    },
+    "A template with that key already exists."
+  );
+
+  wireForm(
+    "menu-form",
+    "menu-id",
+    "menu-submit",
+    "menu-error",
+    "menus",
+    (data, isCreate) => {
+      const body: Record<string, unknown> = {
+        name: String(data.get("name") ?? "").trim()
+      };
+      if (isCreate) body.key = String(data.get("key") ?? "").trim();
+      // `items` is deliberately never sent: the PATCH replaces the whole list,
+      // so omitting the key is the only way to leave existing items intact.
+      return body;
+    },
+    "A menu with that key already exists."
+  );
+
+  wireForm(
+    "widget-form",
+    "widget-id",
+    "widget-submit",
+    "widget-error",
+    "widgets",
+    (data) => ({
+      position: String(data.get("position") ?? "sidebar"),
+      title: String(data.get("title") ?? "").trim(),
+      bodyText: String(data.get("bodyText") ?? "").trim(),
+      sortOrder: Number(data.get("sortOrder") ?? 0),
+      isActive: data.get("isActive") !== null
+    }),
+    "A widget with those details already exists."
+  );
+
+  const themeForm = document.getElementById(
+    "theme-form"
+  ) as HTMLFormElement | null;
+
+  themeForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "theme-submit"
+    ) as HTMLButtonElement | null;
+    if (!submit || submit.disabled) return;
+
+    const data = new FormData(themeForm);
+    const errorElement = document.getElementById("theme-error");
+    if (errorElement) errorElement.hidden = true;
+    const unlock = lockElement(submit, "Saving…");
+
+    // PATCH, not POST: the theme is one row per tenant, upserted.
+    const result = await sendJson("PATCH", "/api/v1/blog/theme", {
+      mode: String(data.get("mode") ?? "system")
+    });
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showFormError("theme-error", "Could not save the theme. Please try again.");
+    unlock();
+  });
+</script>

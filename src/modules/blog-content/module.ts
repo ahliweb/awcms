@@ -111,6 +111,12 @@ export const blogContentModule = defineModule({
       path: "/admin/blog-taxonomy",
       order: 38,
       requiredPermission: "blog_content.taxonomies.read"
+    },
+    {
+      labelKey: "admin.layout.nav_blog_presentation",
+      path: "/admin/blog-presentation",
+      order: 39,
+      requiredPermission: "blog_content.templates.read"
     }
   ],
   permissions: [
