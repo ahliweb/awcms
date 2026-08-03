@@ -15,19 +15,24 @@
 
 | Dimensi                           | Angka      |
 | --------------------------------- | ---------- |
-| Modul terdaftar                   | 22         |
-| Migrasi `sql/`                    | 89         |
+| Modul terdaftar                   | 21         |
+| Migrasi `sql/`                    | 90         |
 | Tabel (`CREATE TABLE`)            | 130        |
 | Pernyataan RLS `ENABLE` / `FORCE` | 118 / 141  |
 | Rute API `/api/v1`                | 255 berkas |
 | Layar admin                       | 31         |
 | Berkas test                       | 292        |
 | Baris `src/` (ts + astro)         | ~156.000   |
-| Gerbang di rantai `bun run check` | 28         |
-| ADR                               | 63         |
-| Index database                    | 253        |
+| Gerbang di rantai `bun run check` | 29         |
+| ADR                               | 65         |
+| Index database                    | 266        |
 
-Ini bukan repo muda. Kepadatan gerbangnya (28) tinggi untuk ukurannya, dan itu
+> **Koreksi.** Versi pertama tabel ini menulis **22** modul — itu menghitung
+> `src/modules/_shared/`, yang bukan modul. `listModules()` mengembalikan **21**.
+> Angka migrasi/gerbang/ADR/index sudah dimutakhirkan setelah ADR-0063/0064
+> mendarat.
+
+Ini bukan repo muda. Kepadatan gerbangnya (29) tinggi untuk ukurannya, dan itu
 konteks penting untuk seluruh bagian berikut: **temuan di bawah bukan hal yang
 lolos karena tidak ada yang memeriksa — melainkan hal yang tidak ada
 pemeriksanya.**
@@ -251,7 +256,17 @@ lain yang gagal.
   pool.
 - **Redis** cache-aside tersedia dengan fail-open.
 
-### Celah 1 — tidak ada gerbang performa sama sekali
+### ~~Celah 1 — tidak ada gerbang performa sama sekali~~ — DITUTUP SEBAGIAN
+
+> **[ADR-0064](../adr/0064-foreign-key-columns-must-be-index-reachable.md) (4 Agustus 2026)**
+> memberi repo ini gerbang performa PERTAMANYA: `bun run db:fk-index:check`.
+> 182 kolom FK diukur, **14 tak terjangkau index**; `sql/090` mengindeks tiga
+> belas dan satu dikecualikan ber-alasan (`awcms_setup_state` singleton keras).
+> Aturannya sadar-tenant (`(tenant_id, fk)` dihitung terjangkau) karena aturan
+> literal "wajib memimpin" melanggar 40 dari 182 — dan gerbang yang menuntut 40
+> migrasi di hari mendaratnya adalah daftar pengecualian yang menunggu ditulis.
+> Anggaran query per-endpoint dan Core Web Vitals TETAP terbuka. Teks di bawah
+> dipertahankan sebagai konteks temuan aslinya.
 
 Tidak ada `*:check` untuk index coverage, query budget, atau anggaran ukuran
 bundel. Repo ini menggerbangi 28 hal; **nol** di antaranya performa. Konsekuensi
