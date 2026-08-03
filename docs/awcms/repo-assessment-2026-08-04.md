@@ -185,7 +185,14 @@ menutup login (ketersediaan menang atas pengetatan di jalur ini), tapi harus
 melaporkan diri lewat `security:readiness`. Lalu lengkapi ketiga endpoint yang
 kosong.
 
-## 4. Temuan P1 — kontrak yang dipakai `awcms-astro` tidak dijaga test apa pun
+## 4. ~~Temuan P1 — kontrak yang dipakai `awcms-astro` tidak dijaga test apa pun~~ — SELESAI
+
+> **[ADR-0065](../adr/0065-awcms-astro-consumer-contract-is-frozen.md) (4 Agustus 2026).**
+> `bun run api:consumer-contract:check` membekukan **6 path + 16 komponen** —
+> closure `$ref` penuh, karena membekukan objek path saja nyaris tak berguna
+> ketika kerusakan yang menarik terjadi di schema. Aturannya subset aditif;
+> mutation-proven dua arah (rename field di dalam komponen → merah; tambah field
+> opsional → lolos). Teks di bawah dipertahankan sebagai konteks temuan.
 
 ### Hubungan kedua repo hari ini
 
