@@ -35,16 +35,27 @@ description: Audit dan tingkatkan performa aplikasi & database AWCMS. Gunakan sa
 >
 > **Tiga celah performa terbuka (asesmen §9):**
 >
-> 1. **Tidak ada kompresi respons di mana pun** — bukan di aplikasi, bukan di
->    `infra/varnish/default.vcl` (nol kemunculan `gzip`/`do_gzip`), bukan sebagai
->    middleware Traefik yang dideklarasikan di repo. Varnish **tidak**
->    mengompresi atas inisiatifnya sendiri. Sementara itu
->    `src/lib/edge-cache/response-headers.ts` sudah memancarkan
->    `Vary: Accept-Encoding` — **jangan membacanya sebagai bukti kompresi sudah
->    ditangani**; ia negosiasi yang tak pernah terjadi. Diukur: aset teks
->    `dist/client` 139.048 B → 49.679 B gzip (2,79×), dan HTML/JSON/sitemap
->    kompres lebih baik lagi. `awcms-astro` sudah mengompresi (Brotli); repo ini
->    dengan permukaan jauh lebih besar, belum.
+> 1. **Purge menjangkau Varnish, BUKAN tier yang menyajikan pembaca.** Jalur
+>    nyatanya tiga lapis — `Cloudflare (proxied) -> Traefik -> varnish -> app`
+>    ([`environments.md`](../../../docs/awcms/environments.md) §Cache tepi) —
+>    sementara `EDGE_CACHE_PURGE_ENDPOINT` menunjuk container Varnish saja. Nol
+>    pemanggilan API zona Cloudflare di `src/`. Diprobe: `/robots.txt` staging
+>    balas `cf-cache-status: HIT`, `age: 182`, di saat aplikasi menandai
+>    `x-edge-cache-skip: surface_not_declared`. Kebasiannya **berbatas**
+>    `s-maxage` (`EDGE_CACHE_MAX_TTL_SECONDS=300`) jadi ini jeda, bukan
+>    kebocoran — tetapi tabel uji penerimaan di `environments.md` mengukur
+>    `X-Cache` dari Varnish, tier yang bukan penjawabnya, sehingga jeda itu tak
+>    akan muncul di pengujian mana pun.
+>
+>    > **Dan JANGAN menambah kompresi di aplikasi/VCL.** Putaran kedua asesmen
+>    > sempat merekomendasikannya atas dasar "nol kompresi di jalur penyajian" —
+>    > benar untuk apa yang repo miliki, **salah** untuk apa yang diterima
+>    > pembaca: staging dan produksi mengembalikan `content-encoding: gzip` dari
+>    > Cloudflare. Rekomendasi itu **DICABUT**; menambahkannya sekarang
+>    > menciptakan dua tempat yang memutuskan hal yang sama. Yang tersisa: sebuah
+>    > deployment template ini di luar CDN pengompresi tidak dapat kompresi, dan
+>    > tak ada gerbang yang mengatakannya.
+>
 > 2. **Tidak ada anggaran ukuran aset klien.** 139 KB hari ini — inilah saat
 >    termurah menggerbanginya.
 > 3. **Core Web Vitals belum diukur.**

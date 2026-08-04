@@ -466,9 +466,40 @@ manusia** dan 42 halaman ber-render, sehingga isolasi konteks penjelajahan
 lintas-origin adalah kontrol yang benar-benar berlaku — berbeda dari situs
 statis tanpa sesi. Biayanya satu baris dan satu asersi.
 
-### 9.3 Performa — tidak ada kompresi respons di mana pun
+### 9.3 Performa — repo tak mengompresi apa pun, dan itu tidak sama dengan "respons tak terkompresi"
 
-Diverifikasi ke tiga lapisan, bukan diasumsikan dari satu:
+> **KOREKSI 4 Agustus 2026, diprobe ke staging DAN produksi.** Judul asli bagian
+> ini berbunyi _"tidak ada kompresi respons di mana pun"_ dan itu **salah pada
+> bagian yang paling penting**. Kedua environment ter-deploy mengembalikan
+> `content-encoding: gzip`:
+>
+> ```
+> $ curl -sSI -H 'Accept-Encoding: gzip, br' https://awcms.ahlikoding.com/api/v1/health
+> content-encoding: gzip
+> server: cloudflare
+> ```
+>
+> Cloudflare berada di depan Traefik dan mengompresi. Dan topologi itu **sudah
+> tertulis** — [`environments.md`](environments.md) §Cache tepi menggambar
+> `Cloudflare (proxied) -> Traefik :443 -> varnish:80 -> app` — sehingga draf
+> pertama koreksi ini pun nyaris melaporkan "tier CDN tak terdokumentasi",
+> sebuah temuan kedua yang juga salah, karena ia dibaca dari 180 baris pertama
+> sebuah berkas 330 baris.
+>
+> **Dua kali dalam satu putaran, membaca sebagian sumber menghasilkan temuan
+> yang percaya diri dan keliru** — persis kelas yang pembuka dokumen ini
+> peringatkan, dan persis alasan gerbang ADR-0063 mengiris per-handler.
+>
+> Yang **tetap benar** dan karena itu tetap dicatat, dengan severity yang jauh
+> lebih rendah: repo ini tidak mengompresi apa pun yang ia miliki, jadi sebuah
+> deployment template ini yang tidak berada di belakang CDN pengompresi tidak
+> mendapat kompresi sama sekali — dan tak satu pun gerbang, `config:validate`,
+> atau `security:readiness` yang mengatakannya. Ia berpindah dari "cacat
+> performa" menjadi "ketergantungan tak tercatat pada lapisan luar".
+>
+> Yang **lahir** dari probe yang sama jauh lebih tajam: lihat §9.3b.
+
+Yang diverifikasi ke tiga lapisan repo, dan tetap akurat:
 
 | Lapisan                                 | Hasil pencarian                                       |
 | --------------------------------------- | ----------------------------------------------------- |
@@ -501,9 +532,72 @@ daripada 2,79×.
 
 - **ISO/IEC 25010 — performance efficiency (resource utilization)**;
   praktik transport standar (RFC 9110 §8.4 content coding).
-- Perbaikan: kompresi di aplikasi (pola `awcms-astro`, yang menegosiasikan
-  Brotli) **atau** `beresp.do_gzip` di VCL. Yang tidak boleh: dua tempat yang
-  memutuskan hal yang sama.
+- Perbaikan (opsional, prioritas rendah): kompresi di aplikasi (pola
+  `awcms-astro`, yang menegosiasikan Brotli) **atau** `beresp.do_gzip` di VCL.
+  Yang tidak boleh: dua tempat yang memutuskan hal yang sama — dan dengan
+  Cloudflare sudah mengompresi, menambah lapisan kedua di sini justru
+  menciptakan tepat masalah itu. Yang lebih murah dan lebih jujur: satu baris di
+  `security:readiness` yang menyatakan bahwa kompresi diwarisi dari lapisan luar.
+
+### 9.3b Performa — purge menjangkau Varnish, bukan tier yang menyajikan pembaca
+
+Probe yang mengoreksi §9.3 juga membongkar sesuatu yang tidak terlihat dari kode
+mana pun, karena ia hanya muncul ketika ketiga lapisan berjalan bersama.
+
+Pada satu permintaan yang sama ke staging:
+
+```
+$ curl -sSI https://awcms-staging.ahlikoding.com/robots.txt
+cache-control: public, max-age=300, s-maxage=300, stale-while-revalidate=600
+x-edge-cache-skip: surface_not_declared     <- aplikasi: Varnish tak meng-cache ini
+age: 182
+cf-cache-status: HIT                        <- Cloudflare: SAYA yang menjawab
+```
+
+Dua tier, dua jawaban berbeda, dan yang menjawab pembaca adalah tier yang
+**tidak** dijangkau antrean purge. `EDGE_CACHE_PURGE_ENDPOINT` menunjuk
+`http://awcms-staging-varnish:80` ([`environments.md`](environments.md) §Cache
+tepi), jadi `bun run edge-cache:purge` mem-ban surrogate key **di Varnish
+saja**. Tidak ada pemanggilan API zona Cloudflare di mana pun di `src/` — nol
+kemunculan.
+
+Akibatnya: menerbitkan konten meng-invalidasi tier yang tidak menyajikan, dan
+membiarkan tier yang menyajikan tetap basi.
+
+**Severity: rendah, dan batasnya yang membuatnya rendah.** Kebasiannya berbatas
+`s-maxage` (`EDGE_CACHE_MAX_TTL_SECONDS=300`, jadi ≤5 menit), respons
+tenant-spesifik dikunci per-host oleh kunci cache Cloudflare, dan apa pun yang
+aplikasi tandai `private, no-store` tidak di-cache CF (`cf-cache-status:
+DYNAMIC`, diverifikasi). Jadi ini **jeda, bukan kebocoran**.
+
+Yang membuatnya layak dicatat bukan besarnya, melainkan bahwa **tidak ada
+pengujian yang bisa melihatnya**: tabel uji penerimaan di `environments.md`
+mengukur `X-Cache` dari Varnish — tier yang bukan penjawabnya. Sebuah lapisan
+yang benar-benar menyajikan pembaca sementara seluruh instrumen menunjuk
+lapisan lain adalah bentuk yang sama dengan tiga bug yang pengaktifan Varnish
+sendiri bongkar: melapor sukses sambil tidak bekerja.
+
+Perbaikan: purge Cloudflare di worker yang sama (API zona menerima daftar URL
+atau tag), **atau** — sah dan lebih murah — pernyataan tertulis di ADR-0042
+bahwa `s-maxage` adalah batas kebasian yang diterima, sehingga tier CF sengaja
+tidak di-purge dan uji penerimaannya berhenti mengukur tier yang salah.
+
+### 9.3c Operasional — staging menjalankan build yang tertinggal
+
+Ditemukan saat memakai staging sebagai target verifikasi, dan ia membatasi
+apa yang staging bisa buktikan hari ini:
+
+| Probe                             | Staging                                               | Artinya                             |
+| --------------------------------- | ----------------------------------------------------- | ----------------------------------- |
+| `GET /api/v1/media/public-origin` | **404**                                               | #370 belum ter-deploy               |
+| `GET /news`                       | **404**                                               | #372 (ADR-0059) belum ter-deploy    |
+| `GET /robots.txt`                 | 200, tetapi `x-edge-cache-skip: surface_not_declared` | #376 (ADR-0061 §B) belum ter-deploy |
+
+Konsekuensinya bukan sekadar "perlu deploy": klaim **"cache tepi AKTIF di
+staging"** di [`environments.md`](environments.md) benar untuk Varnish sebagai
+proses, dan **tidak** benar untuk permukaan yang ADR-0061 deklarasikan — di
+build yang berjalan, keenam rute discovery tidak dideklarasikan sama sekali.
+Bukti penerimaan yang dokumen itu kutip mendahului PR-nya.
 
 ### 9.4 Standar — 22.328 baris `.astro` tidak pernah diperiksa tipe
 
@@ -700,22 +794,33 @@ lab mengukur halaman, bukan pengunjung.
 
 ### 9.10 Rekomendasi berperingkat putaran kedua
 
-| #   | Rekomendasi                                                        | Sumbu    | Butuh ADR?              |
-| --- | ------------------------------------------------------------------ | -------- | ----------------------- |
-| 1   | `AUTH_COOKIE_SECURE` gagal-tertutup saat tidak diset (§9.1)        | Keamanan | Tidak — perbaikan cacat |
-| 2   | Kompresi respons, satu tempat saja (§9.3)                          | Performa | Ya — memilih lapisannya |
-| 3   | `astro check` masuk rantai `check` (§9.4)                          | Standar  | Tidak — gerbang murni   |
-| 4   | Pisahkan `CONSUMED` dari `COMMITTED` di kontrak konsumen (§9.5)    | Interop  | Ya — mengubah ADR-0065  |
-| 5   | COOP + CORP (§9.2)                                                 | Keamanan | Tidak                   |
-| 6   | Persempit pembebasan `ASPIRATIONAL_SKILLS` ke blok bertanda (§9.6) | Standar  | Ya — mengubah ADR-0062  |
-| 7   | Opsi D (lab) di ADR-0067 (§9.9)                                    | Performa | Ya — mengubah ADR-0067  |
-| 8   | Anggaran query untuk layar admin + anggaran ukuran aset (§9.0)     | Performa | Tidak                   |
-| 9   | Rilis `v7.0.0` (§9.8)                                              | Standar  | Tidak                   |
-| 10  | Kosakata status ADR untuk "diputuskan, belum dibangun" (§9.7)      | Standar  | Ya                      |
-| 11  | Catat divergence HSTS di manifest keluarga                         | Standar  | Tidak                   |
-| 12  | ADR tingkat keluarga untuk pin edisi OWASP                         | Keamanan | Ya                      |
+| #   | Rekomendasi                                                             | Sumbu    | Butuh ADR?                     |
+| --- | ----------------------------------------------------------------------- | -------- | ------------------------------ |
+| 1   | `AUTH_COOKIE_SECURE` gagal-tertutup saat tidak diset (§9.1)             | Keamanan | Tidak — perbaikan cacat        |
+| 2   | `astro check` masuk rantai `check` (§9.4)                               | Standar  | Tidak — gerbang murni          |
+| 3   | COOP + CORP (§9.2)                                                      | Keamanan | Tidak                          |
+| 4   | Pisahkan `CONSUMED` dari `COMMITTED` di kontrak konsumen (§9.5)         | Interop  | Ya — mengubah ADR-0065         |
+| 5   | Catat divergence HSTS di manifest keluarga                              | Standar  | Tidak                          |
+| 6   | Deploy staging ke `main` (§9.3c) — prasyarat verifikasi apa pun di sana | Operasi  | Tidak                          |
+| 7   | Putuskan purge Cloudflare vs `s-maxage` sebagai batas kebasian (§9.3b)  | Performa | Ya — mengubah ADR-0042         |
+| 8   | Anggaran query untuk layar admin + anggaran ukuran aset (§9.0)          | Performa | Tidak                          |
+| 9   | Persempit pembebasan `ASPIRATIONAL_SKILLS` ke blok bertanda (§9.6)      | Standar  | Ya — mengubah ADR-0062         |
+| 10  | Opsi D (lab) di ADR-0067 (§9.9)                                         | Performa | Ya — mengubah ADR-0067         |
+| 11  | Kosakata status ADR untuk "diputuskan, belum dibangun" (§9.7)           | Standar  | Ya                             |
+| 12  | ADR tingkat keluarga untuk pin edisi OWASP                              | Keamanan | Ya                             |
+| 13  | Rilis `v7.0.0` (§9.8)                                                   | Standar  | Tidak                          |
+| —   | ~~Kompresi respons di lapisan yang repo miliki~~ (§9.3)                 | Performa | **DICABUT** — Cloudflare sudah |
 
-**Urutan yang disarankan: 1 → 3 → 5 → 2 → 4 → 11 → 8 → 9 → 6 → 7 → 10 → 12.**
-Nomor 1 lebih dulu karena ia satu-satunya cacat kontrol keamanan yang aktif;
-3 dan 5 menyusul karena keduanya berbiaya satu baris ditambah satu asersi;
-2 sesudahnya karena ia butuh keputusan lapisan, bukan hanya kode.
+**Urutan yang disarankan: sesuai nomor.** Nomor 1 lebih dulu karena ia
+satu-satunya cacat kontrol keamanan yang aktif; 2–5 menyusul karena masing-masing
+berbiaya satu baris ditambah satu asersi. Nomor 6 mendahului sisanya bukan karena
+penting melainkan karena **prasyarat**: sampai staging menjalankan `main`, ia
+tidak bisa membuktikan apa pun tentang perubahan ini.
+
+Rekomendasi kompresi **dicabut, bukan ditunda.** Probe ke staging dan produksi
+membuktikan respons memang terkompresi (oleh Cloudflare), jadi menambah lapisan
+kedua akan menciptakan tepat dua tempat yang memutuskan hal yang sama — persis
+yang rekomendasi aslinya larang. Yang tersisa dari §9.3 hanyalah mencatat
+ketergantungan itu, dan itu masuk sebagai baris di
+[`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9, bukan
+sebagai pekerjaan.

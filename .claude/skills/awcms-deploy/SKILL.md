@@ -56,13 +56,24 @@ kesalahan konfigurasi yang melapor sukses:
    melaporkan konfigurasi bersih. Untuk setiap profil online: setel eksplisit
    `AUTH_COOKIE_SECURE=true` dan **verifikasi dengan `curl -I`** bahwa
    `Set-Cookie` login membawa `Secure`.
-2. **Tidak ada yang mengompresi respons.** Tidak aplikasi, tidak
-   `infra/varnish/default.vcl` (nol `do_gzip`), dan tidak ada middleware
-   `compress` Traefik yang dideklarasikan di repo ini. Varnish **tidak**
-   mengompresi atas inisiatifnya sendiri, dan Traefik juga tidak tanpa middleware
-   yang dinyatakan. Bila deployment-mu punya reverse proxy, kompresi boleh
-   dipasang di sana — tapi **pilih satu tempat** dan catat di mana, karena dua
-   lapisan yang sama-sama mengompresi menghasilkan `Content-Encoding` ganda.
+2. **Kompresi datang dari lapisan LUAR, dan repo ini tak memeriksanya.** Repo
+   tidak mengompresi apa pun (nol di aplikasi, nol `do_gzip` di
+   `infra/varnish/default.vcl`, nol middleware `compress` Traefik). Deployment
+   `ahlikoding.com` tetap mengompresi karena **Cloudflare** ada di depan —
+   topologi ter-deploy adalah `Cloudflare (proxied) -> Traefik :443 -> varnish
+-> app`, tertulis di [`environments.md`](../../../docs/awcms/environments.md)
+   §Cache tepi. **Deployment template ini di luar CDN pengompresi tidak mendapat
+   kompresi sama sekali, dan tak ada gerbang yang mengatakannya** — verifikasi
+   sendiri dengan `curl -sSI -H 'Accept-Encoding: gzip' <host>/api/v1/health`
+   dan cari `content-encoding`. Bila harus menambahkannya, **pilih satu tempat**;
+   dua lapisan yang sama-sama mengompresi menghasilkan `Content-Encoding` ganda.
+3. **Antrean purge tidak menjangkau Cloudflare.** `EDGE_CACHE_PURGE_ENDPOINT`
+   menunjuk Varnish; tak ada pemanggilan API zona CF di mana pun. Menerbitkan
+   konten karena itu meng-invalidasi Varnish sementara CF tetap menyajikan salinan
+   lamanya sampai `s-maxage` habis (`EDGE_CACHE_MAX_TTL_SECONDS`, bawaan 300 detik).
+   Berbatas dan bukan kebocoran — tetapi uji penerimaan `X-Cache` di
+   `environments.md` mengukur Varnish, jadi jeda ini tak akan terlihat di sana.
+   Untuk menguji tier yang benar, baca `cf-cache-status` dan `age`.
 
 ## Command inti (semua profil)
 
