@@ -436,13 +436,27 @@ Runtime membacanya sebagai `process.env.AUTH_COOKIE_SECURE === "true"`
 Kedua sisi memakai perbandingan string ketat, dan keduanya condong ke arah
 berlawanan:
 
-- **Tidak diset** → runtime: cookie **tanpa** `Secure`. Validator: **lolos**.
-- `AUTH_COOKIE_SECURE=1` / `TRUE` / `yes` → sama persis: cookie tanpa `Secure`,
-  validator lolos.
+Dijalankan, bukan dibaca — `validateEnv` dengan `APP_ENV=production`:
+
+| Nilai           | Hasil validator                    |
+| --------------- | ---------------------------------- |
+| **tidak diset** | **DITERIMA** ← satu-satunya lubang |
+| `"false"`       | ditolak (aturan silang produksi)   |
+| `"1"`           | ditolak (aturan tipe `bool`)       |
+| `"TRUE"`        | ditolak (aturan tipe `bool`)       |
+| `"yes"`         | ditolak (aturan tipe `bool`)       |
+| `"true"`        | diterima                           |
+
+> **Koreksi terhadap draf pertama bagian ini**, yang menulis bahwa
+> `1`/`TRUE`/`yes` ikut lolos. Itu **salah**: `BOOL_VALUES` sudah menolak
+> ketiganya di environment mana pun. Menjalankan validator memberi jawaban yang
+> membaca berkasnya tidak beri — dan menyempitkan temuan ini dari empat keadaan
+> menjadi satu. Yang satu itu tetap yang paling mungkin terjadi, karena ia
+> keadaan **bawaan**: `required: false` mengizinkan variabel itu absen.
 
 Jadi `bun run config:validate` melaporkan konfigurasi produksi bersih sementara
-cookie sesi bisa dikirim lewat kanal plaintext. HSTS memitigasinya **setelah**
-kunjungan pertama; kunjungan pertama justru yang tidak dijaganya.
+cookie sesi dikirim tanpa `Secure`. HSTS memitigasinya **setelah** kunjungan
+pertama; kunjungan pertama justru yang tidak dijaganya.
 
 **Ini bukan pilihan desain di berkas itu.** Dua aturan produksi lain di berkas
 yang sama justru memperlakukan "tidak diset" sebagai pelanggaran —
@@ -451,9 +465,13 @@ konsisten dengan runtime-nya, bukan dengan tetangganya.
 
 - **ASVS 4.0.3 V3.4.1** (cookie sesi ber-`Secure`), **OWASP Top 10 A05**,
   **API8**, **ISO 27001 A.8.9**.
-- Perbaikan: balik ke "bukan `true` berarti gagal", plus test yang membuktikan
-  `APP_ENV=production` tanpa variabel itu DITOLAK — pengujian pada nilai
-  `"false"` saja akan tetap hijau pada cacat ini.
+- **SELESAI.** Aturannya dibalik ke `!== "true"` dan pesannya menyebut nilai
+  yang benar-benar terbaca. Dua test menjaga kedua arah: produksi TANPA variabel
+  itu ditolak (mutation-proven — kembalikan `=== "false"` dan ia merah), dan
+  non-produksi tetap TIDAK menuntutnya, karena dev berjalan di `http://` dan
+  `environments.md` mencatat selisih itu sebagai keputusan per-environment.
+  Menguji nilai `"false"` saja akan tetap hijau di atas cacat aslinya — itulah
+  sebabnya asersinya menyasar keadaan ABSEN.
 
 ### 9.2 Keamanan — dua header yang dianjurkan tidak dikirim
 

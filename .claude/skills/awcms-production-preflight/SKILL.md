@@ -36,13 +36,13 @@ bun run production:preflight
 > seksi baru di akhir output — deprecation notices (informational, tidak pernah
 > menggagalkan check ini), didorong oleh registry config's field `deprecated`."_
 
-**Sebelum go-live, periksa satu hal yang `config:validate` TIDAK tangkap:**
-`AUTH_COOKIE_SECURE`. Aturan produksinya hanya menolak string literal `"false"`,
-sementara runtime menuntut `=== "true"` — jadi variabel yang **tidak diset**
-(atau berisi `1`/`TRUE`/`yes`) menghasilkan cookie sesi **tanpa** `Secure`
-sementara preflight melaporkan bersih. Verifikasi nilainya dengan mata di env
-produksi; jangan mengandalkan gerbangnya sampai ia diperbaiki
-(asesmen 4 Agustus 2026 §9.1).
+**`AUTH_COOKIE_SECURE` kini benar-benar dijaga preflight** (4 Agustus 2026):
+aturan produksinya menuntut nilai persis `"true"`. Sebelumnya ia hanya menolak
+string literal `"false"`, sehingga variabel yang **tidak diset** — keadaan
+bawaannya — menghasilkan cookie sesi tanpa `Secure` dengan preflight melaporkan
+bersih. Tetap **verifikasi respons**, bukan hanya konfigurasi: `curl -I` pada
+login produksi harus menunjukkan `Set-Cookie … Secure`. Validator memeriksa apa
+yang dikonfigurasi; hanya respons yang membuktikan apa yang dikirim.
 
 Sejak Issue #684 (epic #679), `bun run production:preflight` (Issue 12.2)
 adalah SATU perintah **read-only** yang menjalankan urutan lengkap sendiri

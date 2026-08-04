@@ -43,15 +43,17 @@ description: Audit keamanan berbasis standar (OWASP Top 10, OWASP ASVS, ISO/IEC 
 >
 > **TEMUAN TERBUKA per 4 Agustus 2026 (putaran kedua asesmen, §9):**
 >
-> 1. **ASVS V3.4.1 / A05 — `AUTH_COOKIE_SECURE` GAGAL-TERBUKA saat tidak diset.**
->    `scripts/validate-env.ts` hanya menolak string literal `"false"` di produksi,
->    sementara runtime menuntut `=== "true"` (`auth/login.ts`,
->    `mfa-session-assurance.ts`, `analytics/collect.ts`). Variabel yang **tidak
->    diset** — atau berisi `1`/`TRUE`/`yes` — menghasilkan cookie sesi **tanpa**
->    `Secure` sementara `bun run config:validate` melaporkan bersih. Tetangganya
->    di berkas yang sama (`TRUSTED_PROXY_ENABLED`) justru memerahkan saat kosong,
->    jadi ini inkonsistensi, bukan keputusan. **Saat mengaudit, uji dengan
->    variabel DIHAPUS — menguji nilai `"false"` saja akan hijau di atas cacat ini.**
+> 1. ~~ASVS V3.4.1 / A05 — `AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset.~~
+>    **DITUTUP 4 Agustus 2026.** Aturan produksi `scripts/validate-env.ts` kini
+>    `!== "true"`, sejajar dengan perbandingan runtime (`auth/login.ts`,
+>    `mfa-session-assurance.ts`, `analytics/collect.ts`). Non-produksi sengaja
+>    tidak dituntut — dev berjalan di `http://`. **Pelajaran yang tetap
+>    berlaku saat mengaudit apa pun yang berbentuk seperti ini:** cacatnya hanya
+>    terlihat pada keadaan **ABSEN**; ejaan salah (`1`/`TRUE`/`yes`) sudah
+>    ditolak aturan tipe `bool`, jadi menguji nilai `"false"` — atau nilai salah
+>    apa pun — tetap hijau di atas cacat aslinya. Draf pertama temuan ini
+>    mengklaim keempat keadaan lolos; **menjalankan validator** membantahnya dan
+>    menyempitkannya jadi satu. Jalankan, jangan baca.
 > 2. **OWASP Secure Headers — `Cross-Origin-Opener-Policy` dan
 >    `Cross-Origin-Resource-Policy` tidak dikirim.** Untuk aplikasi ber-sesi
 >    manusia dengan 42 halaman ber-render, COOP `same-origin` adalah kontrol yang

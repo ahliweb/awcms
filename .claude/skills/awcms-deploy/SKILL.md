@@ -49,13 +49,13 @@ syntax error/env var yang tidak resolve sampai lolos ke deploy.
 Keduanya ditemukan asesmen 4 Agustus 2026 (§9.1 dan §9.3) dan keduanya adalah
 kesalahan konfigurasi yang melapor sukses:
 
-1. **`AUTH_COOKIE_SECURE` gagal-TERBUKA saat tidak diset.** Runtime menuntut
-   nilai persis `"true"`; aturan produksi `config:validate` hanya menolak nilai
-   persis `"false"`. Jadi variabel yang **hilang** — atau berisi `1`/`TRUE`/`yes`
-   — memberikan cookie sesi **tanpa** `Secure` sementara `bun run config:validate`
-   melaporkan konfigurasi bersih. Untuk setiap profil online: setel eksplisit
-   `AUTH_COOKIE_SECURE=true` dan **verifikasi dengan `curl -I`** bahwa
-   `Set-Cookie` login membawa `Secure`.
+1. ~~`AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset.~~ **DITUTUP 4 Agustus
+   2026** — `config:validate` kini menuntutnya bernilai persis `"true"` di
+   produksi (sebelumnya hanya menolak `"false"`, sehingga variabel yang **hilang**
+   lolos dan cookie sesi terkirim tanpa `Secure`). Tetap setel eksplisit
+   `AUTH_COOKIE_SECURE=true` untuk tiap profil online, dan **verifikasi dengan
+   `curl -I`** bahwa `Set-Cookie` login membawa `Secure` — validator memeriksa
+   konfigurasi, bukan respons.
 2. **Kompresi datang dari lapisan LUAR, dan repo ini tak memeriksanya.** Repo
    tidak mengompresi apa pun (nol di aplikasi, nol `do_gzip` di
    `infra/varnish/default.vcl`, nol middleware `compress` Traefik). Deployment
