@@ -117,6 +117,8 @@ Sumber kebenaran: **`docs/awcms/16_backend_data_access_integration.md`** (lapisa
       sebagai "optimasi" tanpa membaca `awcms-edge-cache` §Tulang punggung dulu —
       cache bersama di depan aplikasi multi-tenant adalah mesin kebocoran.
 
+<!-- aspirational:mulai -->
+
 ## Performance suite representatif (Issue #744) — SPESIFIKASI TARGET, BUKAN RUNBOOK
 
 > **`src/lib/performance/` tidak ada di repo ini** dan ketiga perintah di bawah
@@ -150,6 +152,8 @@ ke pembangun sitemap. Polanya sudah terbukti dua kali (test SoD #181, lalu
 #385), dan plafon di atas fixture yang lebih besar dari plafonnya adalah yang
 membuktikan sesuatu — plafon di atas satu baris tidak, karena N+1 dan
 implementasi konstan sama-sama mengeluarkan sekitar satu query.
+
+<!-- aspirational:selesai -->
 
 ## Skill terkait
 

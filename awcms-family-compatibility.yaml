@@ -121,7 +121,59 @@ stack:
 # keep justified: reason + accountable owner + review date + backing ADR. The
 # gate fails once a reviewDate is in the past (an unreviewed divergence cannot
 # live forever) or its ADR file is missing.
-intentionalDivergences: []
+# REFILLED by ADR-0068 — and by the contract the comment above predicted:
+# `awcms-astro`'s. All three are deliberate, all three were previously recorded
+# nowhere on this side, and each carries the reviewDate that brings it back to
+# the table without anyone having to remember.
+intentionalDivergences:
+  - id: hsts-include-subdomains
+    summary: This repo sends `Strict-Transport-Security` with `includeSubDomains`; awcms-astro sends it without.
+    reason: >-
+      Both are correct for their own surface, and copying either direction would be wrong. This repo is ONE
+      deployment whose operator knows every subdomain it owns, so `includeSubDomains` costs nothing and closes
+      the sibling-host gap. awcms-astro is a TEMPLATE that runs on domains belonging to organisations that
+      almost certainly serve other things on other subdomains; there the directive forces every one of them
+      to HTTPS-only for a year, in the browser of every visitor, and the cost is borne by services whose
+      owners never took part in the decision (awcms-astro ADR-0029). Recorded here because an unrecorded
+      difference gets rediscovered as a finding and "fixed" toward parity — a one-word change that relocates
+      a context-dependent decision to the place with none of the context.
+    owner: "@ahliweb"
+    reviewDate: "2027-02-04"
+    adr: 0068-family-standards-posture-editions-and-recorded-divergences.md
+    since: "2026-08-04"
+
+  - id: astro-files-not-type-checked
+    summary: awcms-astro runs `astro check`; this repo cannot, so 42 `.astro` files (22,328 lines) have no type checker.
+    reason: >-
+      Not a discipline gap — a toolchain one, and it points the opposite way from what the file counts
+      suggest. `@astrojs/check` requires the TypeScript 6.x programmatic API; this repo is on TypeScript
+      7.0.2, whose native compiler does not ship it ("does not expose the programmatic API that `astro check`
+      relies on" — verified by installing it and running it, not by reading). awcms-astro is on `^6.0.3`,
+      which is the only reason its gate runs. Downgrading this repo to 6.x to satisfy one checker would
+      regress the toolchain under 33 gates and ~156,000 lines that `tsc --noEmit` keeps clean today.
+      Mitigation until then is explicit rather than hopeful: `awcms-testing` and `awcms-pr-review` both
+      instruct that any diff touching `.astro` is read for types by eye, naming the class most likely to slip
+      (`withTenant`, which returns `T | Response`, used where `withTenantOrThrow` is meant).
+    owner: "@ahliweb"
+    reviewDate: "2027-02-04"
+    adr: 0068-family-standards-posture-editions-and-recorded-divergences.md
+    since: "2026-08-04"
+
+  - id: owasp-edition-pin-owned-here
+    summary: The family pins OWASP Top 10 2021 / ASVS 4.0.3 / API Security Top 10 2023, and this repo owns the pin.
+    reason: >-
+      awcms-astro ADR-0028 states in writing that it matches this repo's OWASP editions and will not move
+      ahead of it. The decision it defers to had never been taken: the pin arrived through the
+      `awcms-security-hardening` skill, written when those were current, and was then followed because it was
+      already written. Recording it as a divergence with a reviewDate is what turns an inherited default into
+      a decision — and what stops one repo waiting on a signal the other does not know it holds. Raising an
+      edition is family-level work (it remaps the whole matrix in
+      docs/awcms/standar-performa-dan-keamanan.md §3-§7 and obliges telling the neighbour in the same
+      breath), so it needs its own ADR rather than an edit to a table.
+    owner: "@ahliweb"
+    reviewDate: "2027-02-04"
+    adr: 0068-family-standards-posture-editions-and-recorded-divergences.md
+    since: "2026-08-04"
 # EMPTIED by ADR-0055, not lost. The ten entries that lived here recorded how
 # this repo deliberately differed from the awcms-mini standard, each with an
 # owner and a `reviewDate` that turned CI red on expiry.

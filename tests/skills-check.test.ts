@@ -20,6 +20,7 @@ import {
   extractCitedRunTargets,
   extractCitedSourcePaths,
   isKnownRunTarget,
+  stripAspirationalBlocks,
   subjectModuleKey
 } from "../scripts/skills-check";
 
@@ -223,6 +224,84 @@ describe("rule 4 — cited `bun run` targets are real or declared deferred", () 
     ]) {
       expect(deferredSection).toContain(prefix.replace(/:$/, ""));
     }
+  });
+});
+
+/**
+ * The two holes the assessment of 4 August 2026 §9.6 found in this gate.
+ *
+ * Both are cases where rule 1 silently narrowed itself, and neither was written
+ * down anywhere — which is the part that matters: a gate that answers a
+ * narrower question than its documentation claims trains its readers to trust
+ * an answer it is not giving.
+ */
+describe("§9.6 — line-wrapped paths are still claims", () => {
+  test("a path broken across lines by markdown wrapping is extracted", () => {
+    // Prettier produces exactly this when the line runs long, and it is how
+    // `src/lib/config/registry.ts` sat in `awcms-production-preflight` — a file
+    // that has never existed here — inside a skill that is NOT exempt.
+    const wrapped = "… didorong oleh `src/lib/config/\nregistry.ts`'s field.";
+
+    expect(extractCitedSourcePaths(wrapped)).toEqual([
+      "src/lib/config/registry.ts"
+    ]);
+  });
+
+  test("the single-line form is unchanged", () => {
+    expect(
+      extractCitedSourcePaths("see `src/lib/security/security-headers.ts` here")
+    ).toEqual(["src/lib/security/security-headers.ts"]);
+  });
+
+  test("normalising whitespace does not invent a path out of prose", () => {
+    // The join must not reach across a code span boundary and glue two
+    // unrelated spans into one plausible-looking path.
+    expect(
+      extractCitedSourcePaths("`src/a.ts` and then `src/b.ts`").sort()
+    ).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+});
+
+describe("§9.6 — the aspirational exemption is scoped to a block", () => {
+  const body = [
+    "Gated prose cites `src/real.ts`.",
+    "<!-- aspirational:mulai -->",
+    "Target spec cites `src/imaginary.ts` and `bun run never:existed`.",
+    "<!-- aspirational:selesai -->",
+    "More gated prose cites `src/also-real.ts`."
+  ].join("\n");
+
+  test("paths inside the block are not treated as claims", () => {
+    expect(
+      extractCitedSourcePaths(stripAspirationalBlocks(body)).sort()
+    ).toEqual(["src/also-real.ts", "src/real.ts"]);
+  });
+
+  test("commands inside the block are not treated as instructions", () => {
+    expect(extractCitedRunTargets(stripAspirationalBlocks(body))).toEqual([]);
+  });
+
+  test("the rest of the body stays gated — that is the whole point", () => {
+    // The old per-skill exemption switched rule 1 off for the ENTIRE file, so
+    // `src/real.ts` disappearing would have gone unnoticed in a skill like
+    // `awcms-performance`. It does not now.
+    const problems = checkCitedPaths(
+      "awcms-example",
+      extractCitedSourcePaths(stripAspirationalBlocks(body)),
+      false,
+      (candidate) => candidate === "src/also-real.ts"
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("src/real.ts");
+  });
+
+  test("an unterminated marker exempts nothing", () => {
+    // Fail closed: a half-written block must not silently swallow the rest of
+    // the file. The regex requires both markers, so the body is unchanged.
+    const unterminated = "<!-- aspirational:mulai -->\ncites `src/x.ts`";
+
+    expect(stripAspirationalBlocks(unterminated)).toBe(unterminated);
   });
 });
 

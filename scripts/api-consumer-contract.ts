@@ -49,21 +49,68 @@ const FIXTURE_PATH =
   "tests/fixtures/awcms-astro-consumer-contract.openapi.yaml";
 
 /**
- * The paths `ahliweb/awcms-astro` calls, each with why it calls them.
+ * Surfaces `ahliweb/awcms-astro` CALLS today.
  *
- * Derived by grepping that repo for `/api/v1/` — not from memory, and not from
- * what this repo assumes a static-site build "probably" needs.
+ * The neighbour repo is the authority for this list, and it has a gate for it:
+ * `tests/kontrak-awcms.test.mjs` there asserts "the source calls exactly three
+ * surfaces", derived from `src/` **with comments stripped first**, and bound
+ * two-ways to a marker block in its own skill.
+ *
+ * ## Why this list used to hold six, and why that was wrong
+ *
+ * The first version was derived by grepping the neighbour for `/api/v1/` —
+ * WITHOUT stripping comments. Three of the six hits were prose, not calls:
+ *
+ *   - `/api/v1/blog/posts/{id}` appears in a type docblock. That repo's
+ *     ADR-0018 REMOVED the per-id fetch; posts are rendered from the
+ *     `view=full` traversal. The reason recorded here even said "single-post
+ *     rendering", describing a call that does not happen.
+ *   - `/api/v1/auth/session` appears in a comment explaining why the build
+ *     deliberately does NOT call it (ADR-0049 refuses machine credentials
+ *     there with the same 401 an unknown token gets — anti-oracle).
+ *   - `/api/v1/access/machine-credentials` appears in an ERROR MESSAGE telling
+ *     a human how to mint a token. Issuing one is a human act, not a build call.
+ *
+ * That is the same defect class this repo keeps re-learning: reading a file at
+ * the wrong granularity and concluding something confident and false. It cost
+ * nothing here only because freezing extra paths is conservative — but it made
+ * "the contract is guarded" read as more complete than it was, and it bound
+ * this repo's evolution to shapes nobody consumes.
  */
-export const CONSUMER_PATHS: Readonly<Record<string, string>> = {
+export const CONSUMED_PATHS: Readonly<Record<string, string>> = {
   "/api/v1/blog/posts":
-    "feed + sitemap build: `view=full` traversal with a stable `created_at` cursor and `?locale=` (#317).",
-  "/api/v1/blog/posts/{id}": "single-post rendering.",
-  "/api/v1/media/objects": "batch image resolution for a built page (#318).",
+    "feed + sitemap build: `view=full` traversal with a stable `created_at` cursor and `?locale=` (#317). `src/lib/content.ts`.",
+  "/api/v1/media/objects":
+    "batch image resolution for a built page (#318). `src/lib/awcms/media.ts`, `src/lib/article-images.ts`.",
   "/api/v1/media/public-origin":
-    "the media origin the build must name in `img-src` BEFORE pulling a single object (#370).",
-  "/api/v1/auth/session": "session introspection for the BFF (ADR-0049).",
+    "the media origin the build must name in `img-src` BEFORE pulling a single object (#370). `scripts/asal-media.mjs`."
+};
+
+/**
+ * Surfaces this repo has COMMITTED to a consumer that does not call them yet.
+ *
+ * Kept frozen on purpose, and kept SEPARATE from `CONSUMED_PATHS` on purpose.
+ * A promise and a dependency both deserve stability, but they fail differently:
+ * breaking a consumed path breaks a build that exists today; breaking a
+ * committed one breaks a design that has been agreed and not yet built. Merging
+ * the two lists loses that distinction, and the lost distinction is exactly
+ * what let three non-calls sit here labelled as calls.
+ *
+ * Each entry must name the ADR that makes the promise. No ADR, no entry —
+ * otherwise this list becomes the place where "might be needed someday" goes to
+ * acquire the authority of a contract.
+ */
+export const COMMITTED_PATHS: Readonly<Record<string, string>> = {
+  "/api/v1/auth/session":
+    "ADR-0049 — session introspection for the BFF of ADR-0050. The static build must NOT call it (it refuses machine credentials by design); the BFF that will is not built yet.",
   "/api/v1/access/machine-credentials":
-    "the read-only build credential itself (ADR-0049)."
+    "ADR-0049 — how a human mints the read-only build credential. Never a build call, but the build cannot exist if this shape changes."
+};
+
+/** Every path frozen by the fixture: consumed today plus promised by ADR. */
+export const CONSUMER_PATHS: Readonly<Record<string, string>> = {
+  ...CONSUMED_PATHS,
+  ...COMMITTED_PATHS
 };
 
 type AnyRecord = Record<string, unknown>;

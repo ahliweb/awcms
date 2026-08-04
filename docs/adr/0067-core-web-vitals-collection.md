@@ -79,11 +79,51 @@ Simpan sampel per-kunjungan, purge lewat `dataLifecycle`.
 (drill-down) yang tak ada satu pun kebutuhan tercatat menuntutnya. Kalau suatu
 saat dibutuhkan, ia layak ADR-nya sendiri dengan kebutuhan itu tertulis.
 
+### Opsi D — Pengukuran LAB, dan ia ortogonal terhadap A/B/C
+
+> **Ditambahkan 4 Agustus 2026 (asesmen putaran kedua §9.9).** Draf pertama ADR
+> ini menawarkan tiga opsi yang **semuanya RUM** — semuanya mengumpulkan data
+> dari pengunjung nyata. Itu membuat seluruh keputusan bertabrakan dengan postur
+> privasi `visitor_analytics`, dan karena itu menunggu. Ada jalan keempat yang
+> tidak pernah ditimbang, dan ia tidak menunggu apa pun.
+
+Jalankan Lighthouse/Playwright terhadap build sendiri di CI. **Nol** data
+pengunjung: tidak ada skrip klien, tidak ada endpoint publik, tidak ada tabel,
+tidak ada sentuhan pada `visitor_analytics`. Repo ini **sudah** memasang
+Playwright dan punya suite E2E ber-gerbang env, jadi biayanya konfigurasi, bukan
+kemampuan baru.
+
+**Yang membuatnya bukan pengganti A/B/C:** lab dan lapangan menjawab pertanyaan
+yang berbeda, dan menukar satu dengan yang lain adalah kesalahan yang jauh lebih
+umum daripada tidak mengukur sama sekali.
+
+| Pertanyaan                                           | Dijawab oleh |
+| ---------------------------------------------------- | ------------ |
+| "Apakah perubahan ini membuat halaman lebih lambat?" | **Lab**      |
+| "Apa yang benar-benar dialami pengunjung kami?"      | RUM (B)      |
+
+Lab mengukur satu mesin, satu jaringan, satu jalankan — ia **tidak** bisa
+menjawab p75 kunjungan nyata, dan menuliskan angkanya seolah bisa akan menjadi
+kelas cacat yang dokumen ini ada untuk mencegah. Yang bisa ia lakukan, dan yang
+tak bisa dilakukan A: **memerahkan CI** saat sebuah perubahan meregresi LCP di
+halaman yang sama pada mesin yang sama.
+
+Batasnya yang harus ikut ditulis kalau opsi ini diambil: sebuah gerbang lab yang
+melewati dirinya sendiri saat tidak ada sumber konten adalah gerbang yang
+membusuk (`awcms-astro` mencatat persis itu sebagai alasan celah 8-nya tetap
+terbuka di repo template). Di sini masalahnya lebih kecil — repo ini punya
+tenant dan konten nyata di staging — tetapi gerbangnya tetap harus **menyatakan**
+saat ia tidak berjalan.
+
 ## Rekomendasi
 
-**Opsi B**, bila dan hanya bila pemilik produk memang menginginkan angka
-lapangan. Kalau tidak, **Opsi A adalah jawaban yang sah** dan asesmen sebaiknya
-mencatatnya sebagai keputusan, bukan sebagai celah terbuka.
+**Opsi D sekarang, dan Opsi B hanya bila pemilik produk memang menginginkan
+angka lapangan.** Keduanya bisa hidup bersama; D tidak menunggu keputusan atas B,
+dan itulah alasan utama memisahkannya.
+
+Kalau angka lapangan tidak diinginkan, **Opsi A tetap jawaban yang sah** untuk
+bagian RUM — dan dengan D diambil, "tidak mengukur sama sekali" berhenti menjadi
+konsekuensinya.
 
 Yang TIDAK direkomendasikan dalam keadaan apa pun: menambahkannya sebagai
 "cuma tabel lagi" tanpa keputusan eksplisit, karena postur privasi modul

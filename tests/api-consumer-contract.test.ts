@@ -9,9 +9,14 @@
  */
 import { describe, expect, test } from "bun:test";
 
+import { existsSync, readdirSync } from "node:fs";
+
 import {
   buildConsumerContract,
   collectRefs,
+  COMMITTED_PATHS,
+  CONSUMED_PATHS,
+  CONSUMER_PATHS,
   findContractBreaks,
   isAdditiveSuperset
 } from "../scripts/api-consumer-contract";
@@ -160,5 +165,83 @@ describe("the live contract", () => {
     const result = Bun.spawnSync(["bun", "scripts/api-consumer-contract.ts"]);
 
     expect(result.exitCode).toBe(0);
+  });
+});
+
+/**
+ * CONSUMED vs COMMITTED (assessment §9.5).
+ *
+ * The first version of this contract froze six paths because it was derived by
+ * grepping the neighbour repo for `/api/v1/` **without stripping comments**.
+ * Three of the six were prose: a type docblock, a comment explaining why the
+ * build deliberately does NOT call `/auth/session`, and an error message
+ * telling a human how to mint a credential.
+ *
+ * The neighbour has the authoritative answer and gates it —
+ * `tests/kontrak-awcms.test.mjs` there asserts "the source calls exactly three
+ * surfaces", comments removed first, bound two-ways to a marker block.
+ *
+ * These tests cannot read that repo. What they CAN do is make the two lists
+ * unable to drift apart quietly: pin the count that the neighbour also pins, so
+ * a fourth consumed surface here has to be a deliberate edit in both places.
+ */
+describe("consumed vs committed", () => {
+  test("exactly three surfaces are CONSUMED — the same number the neighbour's gate asserts", () => {
+    // If this fails, one of two things happened, and they need opposite fixes:
+    //   - awcms-astro started (or stopped) calling a surface -> update both
+    //     this list and the marker block in that repo, in the same change;
+    //   - someone added a surface here that nobody calls -> it belongs in
+    //     COMMITTED_PATHS with the ADR that promises it, or nowhere.
+    expect(Object.keys(CONSUMED_PATHS)).toEqual([
+      "/api/v1/blog/posts",
+      "/api/v1/media/objects",
+      "/api/v1/media/public-origin"
+    ]);
+  });
+
+  test("every COMMITTED path names an ADR that resolves to a real file", () => {
+    const adrFiles = readdirSync("docs/adr");
+
+    for (const [path, reason] of Object.entries(COMMITTED_PATHS)) {
+      const cited = reason.match(/ADR-(\d{4})/);
+
+      expect(
+        cited,
+        `${path} must cite the ADR that promises it`
+      ).not.toBeNull();
+
+      const prefix = `${cited![1]}-`;
+      const resolved = adrFiles.some((file) => file.startsWith(prefix));
+
+      expect(
+        resolved,
+        `${path} cites ADR-${cited![1]}, which has no file`
+      ).toBe(true);
+    }
+  });
+
+  test("the two lists are disjoint, and together they are the frozen set", () => {
+    for (const path of Object.keys(COMMITTED_PATHS)) {
+      expect(CONSUMED_PATHS).not.toHaveProperty(path);
+    }
+
+    expect(Object.keys(CONSUMER_PATHS).sort()).toEqual(
+      [...Object.keys(CONSUMED_PATHS), ...Object.keys(COMMITTED_PATHS)].sort()
+    );
+  });
+
+  test("`/api/v1/blog/posts/{id}` is deliberately in NEITHER list", () => {
+    // awcms-astro ADR-0018 removed the per-id fetch — posts render from the
+    // `view=full` traversal. It is not consumed, and no ADR here promises it,
+    // so freezing it would bind this repo to a shape with no reader.
+    //
+    // Written as an assertion rather than a comment because the entry was
+    // present for a whole release with the reason "single-post rendering",
+    // describing a call that never happened. The next person to re-add it
+    // should have to delete a test that says why.
+    expect(CONSUMER_PATHS).not.toHaveProperty("/api/v1/blog/posts/{id}");
+    expect(
+      existsSync("docs/adr/0065-awcms-astro-consumer-contract-is-frozen.md")
+    ).toBe(true);
   });
 });

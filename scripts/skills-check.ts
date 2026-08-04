@@ -88,8 +88,13 @@ const ASPIRATIONAL_SKILLS: Readonly<Record<string, string>> = {
     "cross-cutting: names design-system surfaces including the `src/components/ui` library this base has not built.",
   "awcms-ux-review":
     "cross-cutting: names design-system surfaces including the `src/components/ui` library this base has not built.",
-  "awcms-performance":
-    "cross-cutting: names deferred performance tooling listed under `scripts/README.md` §Ditunda.",
+  // `awcms-performance` used to live here. It was the entry that proved the
+  // list's shape is wrong: its reason named COMMANDS while the exemption also
+  // covered PATHS, so the skill could say "these commands do not exist" in its
+  // banner and "use the suite that already exists in `src/lib/performance/`"
+  // sixty lines later, and the gate had no opinion. It now marks that one
+  // passage with `<!-- aspirational:mulai -->` and is gated everywhere else.
+  // Any skill here that is only PARTLY aspirational belongs in that shape too.
   "awcms-codeql-triage":
     "historical: cites `src/modules/application-registry.ts`, deleted by ADR-0034, as the site of a real triaged finding.",
   "awcms-new-module":
@@ -193,16 +198,79 @@ export function subjectModuleKey(skillName: string): string {
 }
 
 /**
+ * Passages a skill marks as ASPIRATIONAL — target specs, historical layouts,
+ * and family surfaces this repo does not ship.
+ *
+ * ```md
+ * <!-- aspirational:mulai -->
+ * …paths and commands here are exempt from rules 1 and 4…
+ * <!-- aspirational:selesai -->
+ * ```
+ *
+ * ## Why a block and not (only) a per-skill list
+ *
+ * `ASPIRATIONAL_SKILLS` exempts a skill **entirely**, and the assessment of
+ * 4 August 2026 (§9.6) showed what that costs. `awcms-performance` is listed
+ * with the reason "names deferred performance tooling" — a reason about
+ * COMMANDS — and the exemption silently covered PATHS too. The result lived in
+ * one file: a banner saying "these commands do not exist here", and sixty lines
+ * below it, "use the suite that already exists in `src/lib/performance/`", a
+ * directory that does not exist. A skill that contradicts itself is worse than
+ * one that is merely wrong, because the reader picks whichever sentence matches
+ * the task in front of them — and skills are FOLLOWED (ADR-0062's premise).
+ *
+ * The block scopes the exemption to the passage that earns it and leaves the
+ * rest of the body gated. It is the same marker technique `repo-inventory.md`
+ * uses here and `<!-- permukaan:dipanggil:mulai -->` uses in `awcms-astro`.
+ *
+ * It also gives a correction somewhere to live. The gate cannot tell "this path
+ * exists" from "this path does NOT exist, and saying so is the point" — so
+ * before this block existed, writing an honest correction that named a missing
+ * file turned the gate RED for being right, and the only escape was exempting
+ * the whole skill. That pressure is what produced the blanket list.
+ */
+const ASPIRATIONAL_BLOCK =
+  /<!--\s*aspirational:mulai\s*-->[\s\S]*?<!--\s*aspirational:selesai\s*-->/g;
+
+/** Body with every marked aspirational passage removed. Rules 1 and 4 read this. */
+export function stripAspirationalBlocks(source: string): string {
+  return source.replace(ASPIRATIONAL_BLOCK, "");
+}
+
+/**
  * Extract the backtick-quoted `src/…` paths a skill cites.
  *
  * Only backticked paths count: prose mentions a directory in passing all the
  * time, and treating those as claims would make the gate noisy enough to be
  * disabled. Globs and bare directory prefixes are skipped for the same reason.
+ *
+ * ## Whitespace inside the backticks is normalised first, and that is not tidying
+ *
+ * Prettier wraps long markdown lines, and it will happily break INSIDE a code
+ * span:
+ *
+ * ```md
+ * … didorong oleh `src/lib/config/
+ * registry.ts`'s field `deprecated`.
+ * ```
+ *
+ * Matching the raw text meant such a path was invisible to this gate. So rule 1
+ * was really "a cited path that HAPPENS TO FIT ON ONE LINE must exist", and
+ * that difference was written down nowhere. Three such paths existed when this
+ * was found; one of them — `src/lib/config/registry.ts` in
+ * `awcms-production-preflight`, a skill NOT on the exemption list — named a
+ * file that has never existed in this repo, and passed purely because of where
+ * the line happened to wrap.
  */
 export function extractCitedSourcePaths(source: string): string[] {
+  const joined = source.replace(
+    /`(src\/[^`]*?)`/g,
+    (_match, path: string) => `\`${path.replace(/\s+/g, "")}\``
+  );
+
   return [
     ...new Set(
-      [...source.matchAll(/`(src\/[A-Za-z0-9_./[\]-]+?)`/g)]
+      [...joined.matchAll(/`(src\/[A-Za-z0-9_./[\]-]+?)`/g)]
         .map((match) => match[1]!)
         .filter((cited) => !cited.includes("*") && !cited.endsWith("/"))
     )
@@ -301,17 +369,23 @@ async function main(): Promise<void> {
     const source = await readFile(file, "utf8");
     const moduleIsLive = liveModuleKeys.has(subjectModuleKey(skill));
 
+    // Rules 1 and 4 read the body with marked aspirational passages removed;
+    // rule 2 reads the WHOLE body on purpose. An ADR citation is checkable no
+    // matter which passage it sits in — a target spec that cites ADR-9999 is
+    // still pointing its reader at a decision nobody can read.
+    const gated = stripAspirationalBlocks(source);
+
     problems.push(
       ...checkCitedPaths(
         skill,
-        extractCitedSourcePaths(source),
+        extractCitedSourcePaths(gated),
         moduleIsLive,
         existsSync
       ),
       ...checkCitedAdrs(skill, extractCitedAdrNumbers(source), adrNumbers),
       ...checkCitedRunTargets(
         skill,
-        extractCitedRunTargets(source),
+        extractCitedRunTargets(gated),
         packageScripts,
         skill in ASPIRATIONAL_SKILLS
       )
