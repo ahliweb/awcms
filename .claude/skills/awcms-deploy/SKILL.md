@@ -44,6 +44,26 @@ perintah generate `userlist.txt` dari `pg_authid`. CI
 kedua compose file di setiap PR — jangan biarkan salah satu file punya
 syntax error/env var yang tidak resolve sampai lolos ke deploy.
 
+## Dua hal yang TIDAK dijaga gerbang mana pun — periksa dengan mata
+
+Keduanya ditemukan asesmen 4 Agustus 2026 (§9.1 dan §9.3) dan keduanya adalah
+kesalahan konfigurasi yang melapor sukses:
+
+1. **`AUTH_COOKIE_SECURE` gagal-TERBUKA saat tidak diset.** Runtime menuntut
+   nilai persis `"true"`; aturan produksi `config:validate` hanya menolak nilai
+   persis `"false"`. Jadi variabel yang **hilang** — atau berisi `1`/`TRUE`/`yes`
+   — memberikan cookie sesi **tanpa** `Secure` sementara `bun run config:validate`
+   melaporkan konfigurasi bersih. Untuk setiap profil online: setel eksplisit
+   `AUTH_COOKIE_SECURE=true` dan **verifikasi dengan `curl -I`** bahwa
+   `Set-Cookie` login membawa `Secure`.
+2. **Tidak ada yang mengompresi respons.** Tidak aplikasi, tidak
+   `infra/varnish/default.vcl` (nol `do_gzip`), dan tidak ada middleware
+   `compress` Traefik yang dideklarasikan di repo ini. Varnish **tidak**
+   mengompresi atas inisiatifnya sendiri, dan Traefik juga tidak tanpa middleware
+   yang dinyatakan. Bila deployment-mu punya reverse proxy, kompresi boleh
+   dipasang di sana — tapi **pilih satu tempat** dan catat di mana, karena dua
+   lapisan yang sama-sama mengompresi menghasilkan `Content-Encoding` ganda.
+
 ## Command inti (semua profil)
 
 ```bash

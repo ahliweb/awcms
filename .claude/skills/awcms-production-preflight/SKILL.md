@@ -14,14 +14,35 @@ bun install
 bun run production:preflight
 ```
 
-Sejak Issue #689 (epic #679), `config:validate`'s CLI report menambahkan
-satu seksi baru di akhir output — **deprecation notices** (informational,
-tidak pernah menggagalkan check ini), didorong oleh `src/lib/config/
-registry.ts`'s field `deprecated`. Bentuk/urutan/exit-code stage lain di
-bawah ini tidak berubah. `bun run config:docs:check` (bagian dari `bun run
-check`, BUKAN bagian dari `production:preflight` — lihat doc 18 §Config
-registry) menjaga registry ini, `.env.example`, dan doc 18 tetap sinkron;
-jalankan itu terpisah sebelum preflight bila baru saja mengubah env var.
+> **KOREKSI 4 Agustus 2026 — dua klaim di paragraf ini tidak berlaku di repo
+> ini.** Registry config yang dulu disebut di sini (di bawah src/lib/config/)
+> **tidak ada** — direktori itu sendiri tidak ada — dan `config:docs:check` bukan
+> target di `package.json`. Keduanya artefak `awcms-mini` yang ikut terbawa. Yang
+> NYATA di sini: `scripts/validate-env.ts` (`bun run config:validate`) memegang
+> aturan env beserta aturan silang produksi, dan
+> `bun run config:env:coverage:check` — bagian dari rantai `bun run check` —
+> menjaga tiap variabel yang dibaca kode tetap terdaftar.
+>
+> **Kenapa klaim itu bertahan berbulan-bulan, dan ini berlaku untuk setiap
+> skill:** path-nya **terpotong baris** oleh pembungkusan markdown, dan
+> ekstraktor `bun run skills:check` hanya melihat path berbacktick **satu
+> baris** — jadi gerbangnya tak pernah melihatnya. (Dibuktikan saat koreksi ini
+> ditulis: menyatukannya kembali ke satu baris langsung memerahkan gerbang.
+> Karena itu path di atas ditulis **tanpa backtick** — gerbang tidak punya cara
+> membedakan "path ini ada" dari "path ini TIDAK ada", dan menandainya sebagai
+> klaim akan salah.) Teks aslinya dipertahankan di bawah sebagai catatan sejarah.
+>
+> _"Sejak Issue #689 (epic #679), `config:validate`'s CLI report menambahkan satu
+> seksi baru di akhir output — deprecation notices (informational, tidak pernah
+> menggagalkan check ini), didorong oleh registry config's field `deprecated`."_
+
+**Sebelum go-live, periksa satu hal yang `config:validate` TIDAK tangkap:**
+`AUTH_COOKIE_SECURE`. Aturan produksinya hanya menolak string literal `"false"`,
+sementara runtime menuntut `=== "true"` — jadi variabel yang **tidak diset**
+(atau berisi `1`/`TRUE`/`yes`) menghasilkan cookie sesi **tanpa** `Secure`
+sementara preflight melaporkan bersih. Verifikasi nilainya dengan mata di env
+produksi; jangan mengandalkan gerbangnya sampai ia diperbaiki
+(asesmen 4 Agustus 2026 §9.1).
 
 Sejak Issue #684 (epic #679), `bun run production:preflight` (Issue 12.2)
 adalah SATU perintah **read-only** yang menjalankan urutan lengkap sendiri

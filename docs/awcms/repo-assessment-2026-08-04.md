@@ -389,3 +389,333 @@ melihatnya; nomor 5 disisipkan lebih awal hanya karena biayanya satu baris.
 - **Membangun `newsletter`/`social-publishing` sekarang.** Keduanya butuh ADR
   admission, dan tak satu pun memblokir `awcms-astro` — itu kesimpulan kedua repo,
   bukan penilaian sepihak.
+
+## 9. Putaran kedua — 4 Agustus 2026, setelah enam rekomendasi mendarat
+
+> **Kenapa ada putaran kedua di hari yang sama.** Enam dari tujuh rekomendasi §7
+> mendarat berurutan (ADR-0063 → #380, postcss → #381, ADR-0064 → #382,
+> ADR-0065 → #383, ADR-0066 → #384, anggaran query → #385, ADR-0067 → #386).
+> Putaran ini menilai ulang repo **setelah** semuanya masuk, dan menemukan
+> tiga belas hal yang putaran pertama tidak lihat — sebagian karena ia mengukur
+> permukaan yang berbeda, sebagian karena repo sebelah menyelesaikan latihan
+> yang sama dan hasilnya membantah satu angka di sini.
+>
+> Mulai putaran ini, status kontrol **tidak lagi hidup di dokumen ini**. Ia
+> pindah ke [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md),
+> yang dirancang untuk **dimutakhirkan**. Dokumen ini tetap potret: ia tidak
+> boleh menua menjadi daftar tugas.
+
+### 9.0 Skala terukur, dimutakhirkan
+
+| Dimensi                           | Putaran 1 | Sekarang              | Perintah yang menghasilkannya                 |
+| --------------------------------- | --------- | --------------------- | --------------------------------------------- |
+| Modul terdaftar                   | 21        | 21                    | `listModules()`                               |
+| Migrasi `sql/`                    | 90        | 90                    | `ls sql/*.sql \| wc -l`                       |
+| Gerbang di rantai `bun run check` | 29        | **33**                | pisah `scripts.check` pada `&&`               |
+| ADR                               | 65        | **68**                | `ls docs/adr/0*.md \| wc -l`                  |
+| Berkas test                       | 292       | **293**               | `find tests -name '*.test.ts' \| wc -l`       |
+| Index database                    | 266       | **268**               | `grep -h 'CREATE .*INDEX' sql/*.sql \| wc -l` |
+| Changeset menunggu                | 68        | **100**               | `ls .changeset/*.md \| wc -l`                 |
+| Berkas `.astro`                   | —         | **42** (22.328 baris) | `find src -name '*.astro'`                    |
+
+Skor gerbang hari ini, dijalankan bukan dikutip: **331 handler / 6 memutuskan
+permission / 0 bypass**, **203/203 permission tergerbangi / 0 pengecualian**,
+**182 kolom FK / semua terjangkau index / 1 pengecualian**, **11 surface cache
+tepi / 3 modul pengemisi purge**, `bun audit` **bersih**.
+
+### 9.1 Keamanan — `AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset
+
+`scripts/validate-env.ts` baris 510:
+
+```ts
+if (isProduction && env.AUTH_COOKIE_SECURE === "false") {
+```
+
+Runtime membacanya sebagai `process.env.AUTH_COOKIE_SECURE === "true"`
+(`auth/login.ts:583`, `mfa-session-assurance.ts:217`, `analytics/collect.ts:194`).
+Kedua sisi memakai perbandingan string ketat, dan keduanya condong ke arah
+berlawanan:
+
+- **Tidak diset** → runtime: cookie **tanpa** `Secure`. Validator: **lolos**.
+- `AUTH_COOKIE_SECURE=1` / `TRUE` / `yes` → sama persis: cookie tanpa `Secure`,
+  validator lolos.
+
+Jadi `bun run config:validate` melaporkan konfigurasi produksi bersih sementara
+cookie sesi bisa dikirim lewat kanal plaintext. HSTS memitigasinya **setelah**
+kunjungan pertama; kunjungan pertama justru yang tidak dijaganya.
+
+**Ini bukan pilihan desain di berkas itu.** Dua aturan produksi lain di berkas
+yang sama justru memperlakukan "tidak diset" sebagai pelanggaran —
+`TRUSTED_PROXY_ENABLED` (baris 622) memerahkan saat kosong. Yang satu ini
+konsisten dengan runtime-nya, bukan dengan tetangganya.
+
+- **ASVS 4.0.3 V3.4.1** (cookie sesi ber-`Secure`), **OWASP Top 10 A05**,
+  **API8**, **ISO 27001 A.8.9**.
+- Perbaikan: balik ke "bukan `true` berarti gagal", plus test yang membuktikan
+  `APP_ENV=production` tanpa variabel itu DITOLAK — pengujian pada nilai
+  `"false"` saja akan tetap hijau pada cacat ini.
+
+### 9.2 Keamanan — dua header yang dianjurkan tidak dikirim
+
+`buildSecurityHeaders` mengirim enam header dan **tidak** mengirim
+`Cross-Origin-Opener-Policy` maupun `Cross-Origin-Resource-Policy`. Keduanya
+masuk kategori _dianjurkan_ OWASP Secure Headers Project.
+
+Untuk repo ini COOP `same-origin` bukan formalitas: aplikasi ini punya **sesi
+manusia** dan 42 halaman ber-render, sehingga isolasi konteks penjelajahan
+lintas-origin adalah kontrol yang benar-benar berlaku — berbeda dari situs
+statis tanpa sesi. Biayanya satu baris dan satu asersi.
+
+### 9.3 Performa — tidak ada kompresi respons di mana pun
+
+Diverifikasi ke tiga lapisan, bukan diasumsikan dari satu:
+
+| Lapisan                                 | Hasil pencarian                                       |
+| --------------------------------------- | ----------------------------------------------------- |
+| Aplikasi (`src/`, `astro.config.mjs`)   | nol middleware kompresi                               |
+| `infra/varnish/default.vcl` (209 baris) | **nol** kemunculan `gzip`/`do_gzip`/`Accept-Encoding` |
+| `deploy/`                               | nol middleware `compress` yang dideklarasikan         |
+
+Varnish tidak mengompresi atas inisiatifnya sendiri: tanpa
+`beresp.do_gzip = true` ia menyimpan apa yang backend kirim, dan backend tidak
+pernah mengirim terkompresi. Traefik juga tidak mengompresi tanpa middleware
+yang dinyatakan — argumen yang sama yang `awcms-astro` gunakan untuk membantah
+"HSTS itu urusan lapisan di depan".
+
+Yang membuatnya lebih dari kelalaian: `src/lib/edge-cache/response-headers.ts`
+**sudah** memancarkan `Vary: Accept-Encoding` pada respons yang bisa di-cache,
+dengan komentar yang menjelaskan negosiasi kompresi. Header itu adalah janji
+tanpa penepat — ia melipatgandakan ruang kunci cache untuk negosiasi yang tak
+pernah terjadi, dan terbaca seolah kompresi sudah ditangani.
+
+Diukur, bukan diperkirakan — aset teks `dist/client` hari ini:
+
+```
+raw = 139.048 B    gzip -9 = 49.679 B    rasio 2,79× (hemat 64%)
+```
+
+Dan aset klien adalah bagian yang **paling kecil**: yang benar-benar besar
+adalah HTML 42 halaman, respons JSON `/api/v1`, serta `sitemap.xml`/`feed.xml`
+yang justru dibangun untuk di-crawl berulang. Ketiganya kompres lebih baik
+daripada 2,79×.
+
+- **ISO/IEC 25010 — performance efficiency (resource utilization)**;
+  praktik transport standar (RFC 9110 §8.4 content coding).
+- Perbaikan: kompresi di aplikasi (pola `awcms-astro`, yang menegosiasikan
+  Brotli) **atau** `beresp.do_gzip` di VCL. Yang tidak boleh: dua tempat yang
+  memutuskan hal yang sama.
+
+### 9.4 Standar — 22.328 baris `.astro` tidak pernah diperiksa tipe
+
+`bun run typecheck` adalah `tsc --noEmit`. `tsc` **tidak bisa mengurai
+`.astro`** — ia melewatinya diam-diam, meskipun `tsconfig.json` menulis
+`"include": ["src/**/*"]`. `@astrojs/check` tidak terpasang, dan `astro build`
+tidak memeriksa tipe.
+
+Akibatnya **42 berkas / 22.328 baris** — seluruh 31 layar admin, halaman login,
+dan halaman publik — tidak punya pemeriksa tipe sama sekali, sementara 33
+gerbang lain berjalan di atasnya.
+
+Kelas cacat yang ini lewatkan bukan hipotetis. `withTenant` mengembalikan
+`T | Response`; `withTenantOrThrow` melempar. Sebuah halaman `.astro` yang
+memakai bentuk pertama lalu memperlakukan hasilnya sebagai data akan
+**meng-compile** dan merender halaman rusak tanpa satu pun gerbang merah.
+
+> **Diperiksa, dan hasilnya bersih hari ini.** Sebelas kemunculan `withTenant`
+> di `src/pages/**/*.astro` ternyata **seluruhnya di dalam komentar** yang
+> menjelaskan kenapa `withTenantOrThrow` yang dipakai (78 kemunculan). Disiplin
+> penulisnya benar. Yang tidak ada adalah **yang menjaganya tetap begitu** —
+> dan itu justru yang ditemukan berulang di repo ini: kebenaran hari ini tanpa
+> pemeriksa adalah kebenaran yang menunggu diubah.
+
+`awcms-astro` menjalankan `astro check` di rantai `check`-nya. Repo dengan
+42 berkas `.astro` tidak; repo dengan lebih sedikit, iya.
+
+### 9.5 Interop — kontrak konsumen membekukan enam permukaan; konsumennya memanggil tiga
+
+[ADR-0065](../adr/0065-awcms-astro-consumer-contract-is-frozen.md) menyatakan
+`CONSUMER_PATHS` "diturunkan dengan mem-grep repo sebelah". Repo sebelah kini
+punya jawaban yang **digerbangi**, dan angkanya berbeda.
+
+`tests/kontrak-awcms.test.mjs` di `awcms-astro` (ADR-0030 di repo itu)
+menegakkan **"kode sumber memanggil tepat tiga permukaan"**, dengan komentar
+**dibuang lebih dulu** — docblock-nya sendiri menyebutkan alasannya: berkas di
+sana MEMERIKAN permukaan yang tidak dipanggil, jadi gerbang yang menghitung
+docblock akan melaporkan permukaan yang justru salah.
+
+Diverifikasi langsung ke `src/` repo itu:
+
+| Permukaan                                 | Di `CONSUMER_PATHS` | Benar-benar dipanggil `src/`                                             |
+| ----------------------------------------- | ------------------- | ------------------------------------------------------------------------ |
+| `GET /api/v1/blog/posts`                  | ya                  | **ya** — `src/lib/content.ts`                                            |
+| `GET /api/v1/media/objects`               | ya                  | **ya** — `src/lib/awcms/media.ts`, `src/lib/article-images.ts`           |
+| `GET /api/v1/media/public-origin`         | ya                  | **ya** — `scripts/asal-media.mjs`, `src/lib/awcms/media.ts`              |
+| `GET /api/v1/blog/posts/{id}`             | ya                  | **tidak** — hanya komentar tipe; ADR-0018 di sana menghapus fetch per-id |
+| `GET /api/v1/auth/session`                | ya                  | **tidak** — komentar yang menjelaskan kenapa build TIDAK memanggilnya    |
+| `POST /api/v1/access/machine-credentials` | ya                  | **tidak** — muncul di pesan error; menerbitkan token adalah aksi MANUSIA |
+
+Alasan yang tertulis untuk satu entri bahkan menyatakan hal yang tidak terjadi:
+`/blog/posts/{id}` diberi alasan `"single-post rendering"`, sementara repo itu
+merender post dari traversal `view=full`.
+
+**Kenapa ini merugikan, bukan sekadar kelebihan ketelitian.** Kontrak beku yang
+memuat permukaan tak-terpakai (a) mengikat repo ini pada bentuk yang tak
+seorang pun butuhkan, dan (b) membuat "kontraknya terjaga" terasa lebih lengkap
+daripada kenyataannya. Repo sebelah menuliskan keberatan ini sebelum putaran
+ini menulisnya.
+
+Perbaikan yang benar **bukan** memangkas jadi tiga: `/auth/session` dan
+`/access/machine-credentials` adalah kontrak yang memang dijanjikan ke BFF
+ADR-0050 yang belum dibangun. Yang benar adalah **memisahkan dua daftar** —
+`CONSUMED` (diturunkan dari blok bertanda di repo sebelah, sehingga tak bisa
+menyimpang diam-diam) dan `COMMITTED` (dijanjikan, belum dipanggil, dengan ADR
+yang menjanjikannya) — lalu membekukan keduanya dengan alasan yang jujur pada
+masing-masing.
+
+> **Ironi yang layak dicatat.** Cacat ini lahir dari mem-grep tanpa membuang
+> komentar. Putaran ini nyaris melaporkan cacat kembar di repo INI dengan cara
+> yang sama persis (§9.4): sebelas `withTenant` di `.astro` yang ternyata
+> seluruhnya komentar. Bedanya cuma satu — yang kedua diperiksa sebelum ditulis.
+
+### 9.6 Standar — pengecualian skill bersifat per-SKILL dan total
+
+`skills-check.ts` menjaga `.claude/skills/` dengan tiga aturan, dan sebuah
+daftar `ASPIRATIONAL_SKILLS` (18 entri) yang **membebaskan sebuah skill
+seluruhnya** dari aturan path (1) dan aturan perintah (4).
+
+`awcms-performance` masuk daftar itu dengan alasan
+`"cross-cutting: names deferred performance tooling"`. Alasannya menyebut
+**perintah**; pembebasannya mencakup **path juga**. Akibatnya di badan skill
+yang sama:
+
+- Bagian atas: _"PERINGATAN — perintah di halaman ini BELUM ADA di repo ini."_
+- Enam puluh baris di bawahnya: _"gunakan suite yang sudah ada di
+  `src/lib/performance/`, jangan bangun tooling ad hoc baru"_ — direktori yang
+  **tidak ada**.
+
+Sebuah skill yang membantah dirinya sendiri lebih buruk daripada skill yang
+salah, karena pembacanya akan memilih kalimat yang paling cocok dengan
+pekerjaannya. Dan skill **DIIKUTI** — itu premis ADR-0062.
+
+Diukur di seluruh direktori: **16 dari 55 skill** memuat setidaknya satu klaim
+`src/…` atau `bun run …` yang tidak resolve. Sebagian besar sah (target-spec
+dan historis). Yang tidak sah tidak bisa dibedakan dari yang sah oleh gerbang
+mana pun, karena pembebasannya sepaket.
+
+**Lubang kedua, mekanis, dan lebih mudah ditutup.** Ekstraktor path gerbang itu
+hanya melihat path berbacktick **satu baris**. Prettier membungkus baris panjang
+di markdown, jadi sebuah path bisa jatuh menjadi:
+
+```
+… didorong oleh `src/lib/config/
+registry.ts`'s field `deprecated`.
+```
+
+— dan menjadi **tak terlihat oleh gerbang**. Hari ini ada **tiga** path
+semacam itu di `.claude/skills/`. Dua ada di skill yang memang dibebaskan; satu
+tidak: `awcms-production-preflight` mengklaim `src/lib/config/registry.ts`,
+sebuah berkas yang tidak ada (tidak ada direktori `src/lib/config/` sama sekali)
+di skill yang **tidak** dibebaskan. Ia lolos murni karena posisi pembungkusan
+baris.
+
+Itu berarti aturan 1 hari ini bukan "path yang disebut wajib ada" melainkan
+"path yang disebut **dan kebetulan muat dalam satu baris** wajib ada" — dan
+selisih itu tidak ditulis di mana pun.
+
+> **Dibuktikan, bukan didalilkan.** Saat koreksi untuk skill itu ditulis,
+> path-nya disatukan kembali ke satu baris — dan `bun run skills:check` yang
+> sebelumnya `OK` **langsung merah**, menamai persis berkas itu. Lubangnya
+> mekanis, dan mutation-proof-nya gratis.
+
+**Lubang ketiga, dan ia yang menjelaskan kenapa dua yang pertama ada.** Gerbang
+itu tidak punya cara membedakan _"path ini ada"_ dari _"path ini TIDAK ada, dan
+itulah maksud kalimatnya"_. Sebuah koreksi yang menulis nama berkas hilang
+dengan backtick akan **memerahkan gerbang justru karena benar**. Itulah tekanan
+yang melahirkan daftar pembebasan sepaket: ketika satu-satunya cara menulis
+kebenaran adalah membebaskan seluruh skill, orang akan membebaskan seluruh
+skill.
+
+Perbaikan: (a) persempit pembebasan ke **blok bertanda** di dalam skill (pola
+penanda sudah dipakai `repo-inventory.md` di sini dan
+`<!-- permukaan:dipanggil:mulai -->` di repo sebelah) — blok itu sekaligus
+menjadi tempat sah untuk menamai berkas yang memang tidak ada; dan (b)
+normalkan whitespace di dalam backtick sebelum mencocokkan path. Yang kedua satu
+baris kode, dan menemukan cacat nyata pada hari ia mendarat.
+
+### 9.7 Standar — enam ADR `Accepted` tanpa satu baris kode
+
+| ADR      | Menyatakan                                 | Di kode                                                         |
+| -------- | ------------------------------------------ | --------------------------------------------------------------- |
+| ADR-0016 | admission modul `organization_structure`   | `src/modules/organization-structure` **tidak ada**              |
+| ADR-0017 | admission modul `document_infrastructure`  | **tidak ada**                                                   |
+| ADR-0018 | admission modul `data_exchange`            | **tidak ada**                                                   |
+| ADR-0019 | admission modul `integration_hub`          | **tidak ada**                                                   |
+| ADR-0021 | admission modul `reference_data`           | **tidak ada**                                                   |
+| ADR-0020 | kontrak kesiapan ekstensi ERP di `_shared` | ketiga berkasnya **dihapus** ADR-0034; `_shared/` tak memuatnya |
+
+ADR-0020 kasus terburuknya: statusnya `Accepted` sementara artefak yang ia
+putuskan sudah **dicabut oleh ADR lain** yang tidak menandainya `Superseded`.
+
+Ini kelas yang sama persis dengan yang ADR-0062 tutup untuk skill: `Accepted`
+terbaca sebagai "ada di kode", dan tak ada yang memeriksanya. Bedanya, ADR
+tidak bisa digerbangi seketat skill — sebuah ADR admission memang sah mendahului
+implementasinya. Yang kurang bukan gerbangnya melainkan **kosakatanya**: status
+`Accepted` mengemas dua keadaan berbeda ("diputuskan, belum dibangun" dan
+"diputuskan, berjalan") menjadi satu kata.
+
+### 9.8 Standar — utang rilis
+
+`v6.4.0` di-tag 26 Juli 2026. Sejak itu: **108 commit, 100 changeset menunggu**,
+satu di antaranya `major` — jadi rilis berikutnya `v7.0.0`.
+
+Angka di `PROJECT_STATE.md` berbunyi 68 sembilan hari lalu; dokumen itu bahkan
+memuat catatan tentang bagaimana angka itu basi sebelumnya. Ia basi lagi, di
+baris yang sama.
+
+Yang membuat ini lebih dari kerapian: satu rilis dengan 100 changeset
+menghasilkan CHANGELOG yang tak seorang pun baca, dan sebuah `major` yang
+terkubur di tengahnya. Rilis kecil-sering adalah kontrol mutu, bukan proses.
+
+### 9.9 Performa — ADR-0067 belum menimbang pengukuran lab
+
+ADR-0067 menawarkan tiga opsi: **A** tidak mengumpulkan, **B** agregat-saja,
+**C** baris mentah (ditolak). Ketiganya adalah bentuk **RUM** — mengumpulkan
+data dari pengunjung nyata — dan itulah kenapa ADR-nya bertabrakan dengan
+postur privasi `visitor_analytics` dan berakhir menunggu keputusan pemilik
+produk.
+
+Yang tidak ada di ADR itu: **pengukuran lab**. Lighthouse/Playwright terhadap
+build sendiri mengumpulkan **nol** data pengunjung, tidak menyentuh
+`visitor_analytics`, tidak butuh tabel, tidak butuh endpoint publik — dan repo
+ini **sudah punya Playwright terpasang serta suite E2E ber-gerbang env**.
+
+Keduanya menjawab pertanyaan yang berbeda, dan itu justru alasan keduanya bisa
+hidup bersama: lab menjawab _"apakah perubahan ini membuat halaman lebih
+lambat"_, RUM menjawab _"apa yang dialami pengunjung"_. Menunggu keputusan atas
+yang kedua tidak menghalangi yang pertama.
+
+Rekomendasi: tambahkan **Opsi D — pengukuran lab** ke ADR-0067 sebagai opsi
+yang ortogonal (bisa diambil bersama A), dengan keterbatasannya dinyatakan:
+lab mengukur halaman, bukan pengunjung.
+
+### 9.10 Rekomendasi berperingkat putaran kedua
+
+| #   | Rekomendasi                                                        | Sumbu    | Butuh ADR?              |
+| --- | ------------------------------------------------------------------ | -------- | ----------------------- |
+| 1   | `AUTH_COOKIE_SECURE` gagal-tertutup saat tidak diset (§9.1)        | Keamanan | Tidak — perbaikan cacat |
+| 2   | Kompresi respons, satu tempat saja (§9.3)                          | Performa | Ya — memilih lapisannya |
+| 3   | `astro check` masuk rantai `check` (§9.4)                          | Standar  | Tidak — gerbang murni   |
+| 4   | Pisahkan `CONSUMED` dari `COMMITTED` di kontrak konsumen (§9.5)    | Interop  | Ya — mengubah ADR-0065  |
+| 5   | COOP + CORP (§9.2)                                                 | Keamanan | Tidak                   |
+| 6   | Persempit pembebasan `ASPIRATIONAL_SKILLS` ke blok bertanda (§9.6) | Standar  | Ya — mengubah ADR-0062  |
+| 7   | Opsi D (lab) di ADR-0067 (§9.9)                                    | Performa | Ya — mengubah ADR-0067  |
+| 8   | Anggaran query untuk layar admin + anggaran ukuran aset (§9.0)     | Performa | Tidak                   |
+| 9   | Rilis `v7.0.0` (§9.8)                                              | Standar  | Tidak                   |
+| 10  | Kosakata status ADR untuk "diputuskan, belum dibangun" (§9.7)      | Standar  | Ya                      |
+| 11  | Catat divergence HSTS di manifest keluarga                         | Standar  | Tidak                   |
+| 12  | ADR tingkat keluarga untuk pin edisi OWASP                         | Keamanan | Ya                      |
+
+**Urutan yang disarankan: 1 → 3 → 5 → 2 → 4 → 11 → 8 → 9 → 6 → 7 → 10 → 12.**
+Nomor 1 lebih dulu karena ia satu-satunya cacat kontrol keamanan yang aktif;
+3 dan 5 menyusul karena keduanya berbiaya satu baris ditambah satu asersi;
+2 sesudahnya karena ia butuh keputusan lapisan, bukan hanya kode.
