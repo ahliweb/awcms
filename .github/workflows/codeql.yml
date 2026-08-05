@@ -35,10 +35,19 @@ jobs:
         include:
           - language: actions
             build-mode: none
-          # TypeScript/Astro source (route handlers, middleware, security
-          # helpers, sync, logging, data access). `build-mode: none` uses
-          # CodeQL's no-build source extraction — no Astro/Bun build step,
-          # so this stays Bun-only and never runs application code.
+          # TypeScript/JavaScript source (route handlers, middleware,
+          # security helpers, sync, logging, data access). `build-mode: none`
+          # uses CodeQL's no-build source extraction — no Astro/Bun build
+          # step, so this stays Bun-only and never runs application code.
+          #
+          # It does NOT cover `.astro`: CodeQL has no Astro extractor, so
+          # every `.astro` file under `src/` is outside every scan this
+          # workflow runs. That limit is stated — with counts taken from the
+          # work tree — by the `State coverage` step below, rather than left
+          # for a reader to assume from a comment. Same honesty condition
+          # `awcms-astro` binds itself to (its ADR-0032 §A); gap C16 of
+          # `docs/awcms/standar-performa-dan-keamanan.md` §9 records why this
+          # comment had to be rewritten.
           - language: javascript-typescript
             build-mode: none
 
@@ -57,3 +66,32 @@ jobs:
         uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
         with:
           category: "/language:${{ matrix.language }}"
+
+      # Counted from the work tree at run time, never written by hand: a
+      # hand-written number stops being true the moment a file is added, and a
+      # stale summary is just another way of claiming more coverage than the
+      # scan has. `git ls-files`, not `find` over a directory list — the
+      # directory list is itself a hand-written number, and it is the shape
+      # that silently drops files at the repo root.
+      #
+      # `tests/codeql-coverage-statement.test.ts` keeps this step from being
+      # removed quietly. Runs only for the source language; the `actions`
+      # matrix leg analyses workflow YAML, where the `.astro` limit has no
+      # meaning.
+      - name: State coverage
+        if: always() && matrix.language == 'javascript-typescript'
+        run: |
+          ANALYSED=$(git ls-files '*.ts' '*.mjs' '*.js' | wc -l)
+          ASTRO=$(git ls-files '*.astro' | wc -l)
+          ASTRO_LINES=$(git ls-files '*.astro' | xargs --no-run-if-empty wc -l | tail -1 | awk '{print $1}')
+          {
+            echo "## Static analysis coverage"
+            echo ""
+            echo "- **Analysed:** ${ANALYSED} \`.ts\`/\`.mjs\`/\`.js\` files — API routes, middleware, security helpers, sync, logging, data access, scripts."
+            echo "- **NOT analysed:** ${ASTRO} \`.astro\` files (${ASTRO_LINES:-0} lines) — CodeQL ships no Astro extractor."
+            echo ""
+            echo "The uncovered surface is the same one gap C4 names for type checking:"
+            echo "\`.astro\` is analysed by neither \`astro check\` (blocked on TypeScript 6.x)"
+            echo "nor CodeQL. Every risky data path this repo owns — tenant context, ABAC"
+            echo "evaluation, sync HMAC, audit logging — lives in the analysed set."
+          } >> "$GITHUB_STEP_SUMMARY"

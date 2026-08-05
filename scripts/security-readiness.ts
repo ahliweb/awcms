@@ -2273,6 +2273,178 @@ export function checkSecurityHeadersBuilt(): SecurityCheckResult {
 }
 
 // ---------------------------------------------------------------------------
+// 14. Response compression is owned here, or its inheritance is declared
+// (warning) — gap C3 of docs/awcms/standar-performa-dan-keamanan.md §9
+// ---------------------------------------------------------------------------
+
+/**
+ * The layers this repo SHIPS that could compress a response. Anything else in
+ * the delivery path (Cloudflare, the Traefik instance Coolify runs) is set by
+ * an operator, is not in this tree, and cannot be read from here — which is
+ * the entire point of the check below.
+ */
+export const OWNED_RESPONSE_LAYER_FILES = [
+  "src/middleware.ts",
+  "astro.config.mjs",
+  "infra/varnish/default.vcl",
+  "infra/varnish/docker-compose.varnish.yml",
+  "Dockerfile.production"
+];
+
+/**
+ * A compression *enabler*, not a mention of compression. `Vary:
+ * Accept-Encoding` (which `edge-cache/response-headers.ts` really does emit)
+ * deliberately does not match: advertising that a response varies by encoding
+ * is a promise about caching, not an act of compressing — reading it as one is
+ * exactly the misreading that made the original C3 finding overstate itself.
+ */
+const COMPRESSION_ENABLER_PATTERN =
+  /\bdo_gzip\b|\bCompressionStream\b|\bcontent-encoding\b|\bbrotli\b|\.compress\b|\bgzip\s+(?:on|_static)\b/i;
+
+/**
+ * Comment text is stripped before matching, in the three comment syntaxes the
+ * files above actually use (`//`, `#`, and `*` continuation lines). Without
+ * this, a line that says compression is deliberately NOT enabled would flip
+ * the check to "we compress" — a gate that reads a denial as a confirmation.
+ * Its honest limit: a trailing comment on a code line is not separated out, so
+ * `set beresp.do_gzip = true; # ...` counts as enabled, which is correct, and
+ * `# see beresp.do_gzip` on its own line does not, which is also correct.
+ */
+function stripCommentText(line: string): string {
+  const trimmed = line.trimStart();
+
+  if (
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("*") ||
+    trimmed.startsWith("<!--")
+  ) {
+    return "";
+  }
+
+  return line;
+}
+
+export const INHERITED_COMPRESSION_DOC = "docs/awcms/environments.md";
+export const INHERITED_COMPRESSION_MARKER_START =
+  "<!-- kompresi-tepi:mulai -->";
+export const INHERITED_COMPRESSION_MARKER_END =
+  "<!-- kompresi-tepi:selesai -->";
+
+/**
+ * Gap C3: this repo compresses nothing at any layer it owns, and the readers
+ * of both deployed environments nevertheless receive `content-encoding: gzip`
+ * — from Cloudflare, which sits in front of Traefik (`environments.md` §Cache
+ * tepi, probed 4 August 2026). Both halves are true, and the dangerous one is
+ * the second: a deployment of this base that is NOT behind a compressing CDN
+ * serves every byte of HTML, JSON, `sitemap.xml` and `feed.xml` uncompressed,
+ * and nothing in the repo says so.
+ *
+ * C3's own prescription offered two closures — assert `Content-Encoding` once
+ * compression moves to a layer this repo owns, OR record the dependency in
+ * `security:readiness`. The assessment (§9.3) withdrew the first as a
+ * recommendation rather than deferring it: Cloudflare already compresses, so
+ * adding a second compressor here creates precisely the "two places deciding
+ * the same thing" this repo refuses elsewhere. So this is the second closure —
+ * and it is a check, not a sentence, because a hand-written note goes stale in
+ * both directions:
+ *
+ * - if someone later enables compression here, the note keeps claiming every
+ *   byte comes from the CDN → the first branch below detects it and says so;
+ * - if the note itself is deleted or rewritten past recognition, the
+ *   dependency becomes invisible again → the last branch fails.
+ *
+ * `warning`, never `critical`: uncompressed responses are slow, not unsafe,
+ * and the deployed topology today does compress. What must not happen is that
+ * an operator reaches go-live without ever being told the compression belongs
+ * to a layer this repo neither ships nor checks.
+ */
+export async function checkResponseCompressionOwnership(
+  rootDir = process.cwd()
+): Promise<SecurityCheckResult> {
+  const name =
+    "Response compression is owned here, or its inheritance is declared";
+  const severity: CheckSeverity = "warning";
+
+  const owned: string[] = [];
+
+  for (const relative of OWNED_RESPONSE_LAYER_FILES) {
+    let content: string;
+
+    try {
+      content = await readFile(path.join(rootDir, relative), "utf8");
+    } catch {
+      // A layer this tree does not ship compresses nothing. Absence is not a
+      // finding: `infra/varnish/` is optional (EDGE_CACHE_MODE is off by
+      // default), and a derived app may drop it entirely.
+      continue;
+    }
+
+    const lines = content.split("\n");
+    const index = lines.findIndex((line) =>
+      COMPRESSION_ENABLER_PATTERN.test(stripCommentText(line))
+    );
+
+    if (index !== -1) {
+      owned.push(`${relative}:${index + 1}`);
+    }
+  }
+
+  if (owned.length > 0) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence: `Compression is enabled at a layer this repo ships: ${owned.join(", ")}. Assert Content-Encoding on a real text response there, and rewrite the ${INHERITED_COMPRESSION_MARKER_START} block in ${INHERITED_COMPRESSION_DOC} — it still tells operators that every compressed byte comes from a CDN this repo does not control.`
+    };
+  }
+
+  let doc: string;
+
+  try {
+    doc = await readFile(path.join(rootDir, INHERITED_COMPRESSION_DOC), "utf8");
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `No layer this repo ships compresses anything (checked ${OWNED_RESPONSE_LAYER_FILES.join(", ")}), and ${INHERITED_COMPRESSION_DOC} — where the inherited-compression dependency is declared — could not be read: ${errorMessage(error)}.`
+    };
+  }
+
+  const start = doc.indexOf(INHERITED_COMPRESSION_MARKER_START);
+  const end = doc.indexOf(INHERITED_COMPRESSION_MARKER_END);
+  const declaration =
+    start === -1 || end === -1 || end < start
+      ? ""
+      : doc
+          .slice(start + INHERITED_COMPRESSION_MARKER_START.length, end)
+          .trim();
+
+  if (declaration === "") {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `No layer this repo ships compresses anything (checked ${OWNED_RESPONSE_LAYER_FILES.join(", ")}), and ${INHERITED_COMPRESSION_DOC} carries no non-empty ${INHERITED_COMPRESSION_MARKER_START} block. The compression readers actually receive would then come from a tier nothing in this repo names, ships, or checks — and a deployment outside a compressing CDN would serve every text response uncompressed with nothing to say so.`
+    };
+  }
+
+  const firstLine =
+    declaration
+      .split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim() ?? "";
+
+  return {
+    name,
+    severity,
+    status: "pass",
+    evidence: `No layer this repo ships compresses anything (checked ${OWNED_RESPONSE_LAYER_FILES.join(", ")}) — the dependency is declared in ${INHERITED_COMPRESSION_DOC}: "${firstLine.slice(0, 240)}". Verify \`content-encoding\` at the real edge of THIS deployment before go-live: outside a compressing CDN, every text response ships uncompressed.`
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Out-of-scope items — printed as their own report section, never silently
 // dropped.
 // ---------------------------------------------------------------------------
@@ -2418,7 +2590,8 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkSsoBreakGlassReady(),
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
-    checkSecurityHeadersBuilt()
+    checkSecurityHeadersBuilt(),
+    await checkResponseCompressionOwnership()
   ];
 }
 

@@ -1132,8 +1132,16 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   dari Cloudflare, karena kedua host proxied (`Cloudflare (proxied) → Traefik
 :443 → varnish:80 → app`, [`awcms/environments.md`](awcms/environments.md)
   §Cache tepi). Konsekuensinya: deployment template ini di luar CDN pengompresi
-  tidak mendapat kompresi sama sekali, dan tidak ada gerbang yang akan merah
-  bila lapisan warisan itu hilang.
+  tidak mendapat kompresi sama sekali. Sejak 5 Agustus 2026 ketergantungan itu
+  **dinyatakan, bukan disembunyikan** (celah C3 DITUTUP):
+  `bun run security:readiness` memuat `checkResponseCompressionOwnership`, yang
+  memindai lima lapisan yang repo ini kirim dan — karena tak satu pun
+  mengompresi — menuntut blok bertanda `kompresi-tepi` di `environments.md`
+  menyebut tier pengompresinya. Batasnya tetap harus dibaca: yang digerbangi
+  adalah **deklarasinya**, bukan lapisan luarnya. Tidak ada gerbang di repo ini
+  yang akan merah bila Cloudflare berhenti mengompresi atau dilepas dari depan
+  Traefik — itu hanya terlihat dengan memeriksa `content-encoding` di tepi
+  environment yang sebenarnya.
 
 Detail lebih dalam ada di skill terkait (`awcms-new-migration`, `awcms-abac-guard`,
 `awcms-testing`, `awcms-sync-hmac`, dst.) dan di ADR.
