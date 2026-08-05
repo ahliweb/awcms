@@ -1,19 +1,19 @@
 # CI AWCMS — kualitas dokumentasi, kontrak, unit/integration test, & hygiene
 # (Bun-only).
 #
-# Setiap step di job `quality` dinamai sesuai, dan dijaga urutannya sama
-# dengan, script `check` di package.json — script itu tetap satu-satunya
-# sumber kebenaran; step di sini adalah cerminannya yang di-orkestrasi CI,
-# bukan daftar independen yang bisa drift darinya. Diadaptasi dari
-# awcms-mini (`.github/workflows/ci.yml`), dipangkas ke apa yang benar-benar
-# ada di repo ini: belum ada docker-compose*.yml untuk divalidasi. Job
-# `quality` sengaja menjalankan `bun test` TANPA service Postgres — jadi
-# `DATABASE_URL` kosong dan keempat berkas
-# `tests/integration/*.integration.test.ts` (lihat gerbang `integrationEnabled`
-# di `tests/integration/harness.ts`) skip bersih di sini; test itu baru
-# benar-benar jalan saat seorang developer menyalakan `DATABASE_URL` lokal,
-# atau di job `integration-tests` di bawah yang menyalakan Postgres-nya
-# sendiri untuk itu. Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun):
+# Job `quality` menjalankan `bun run check` PENUH — script `check` di
+# package.json adalah satu-satunya sumber kebenaran, dan menjalankannya
+# langsung berarti CI tidak bisa drift darinya. Bentuk sebelumnya (daftar
+# step manual per gerbang) sempat mengklaim "cermin yang tidak bisa drift"
+# sambil kehilangan 16 dari 34 gerbang: `access:chokepoint:check` masuk
+# rantai lewat PR #380 tanpa pernah ditambahkan ke sini — persis pelajaran
+# PR #770 yang guard-nya (tests/family-conformance-ci-parity.test.ts) hanya
+# dibangun untuk satu gerbang. `DATABASE_URL` dikosongkan pada step itu
+# (pola yang sama dengan job Validate release.yml): `bun test` di dalam
+# `check` men-skip bersih suite DB-gated (lihat gerbang `integrationEnabled`
+# di `tests/integration/harness.ts`); suite itu benar-benar jalan di job
+# `integration-tests` di bawah yang menyalakan Postgres-nya sendiri.
+# Sejak Issue #166 ada job `e2e-smoke` (Playwright + Bun):
 # 404 + login render tidak butuh DB, tapi alur admin ter-autentikasi butuh,
 # jadi job-nya menyalakan service `postgres:18.4`, `db:migrate`, lalu men-seed
 # satu tenant+owner lewat `POST /api/v1/setup/initialize` (bootstrap
@@ -60,59 +60,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Prettier check
-        run: bun run lint
-
-      - name: Docs checks (mermaid, internal links, naming)
-        run: bun run check:docs
-
-      - name: Docs translation staleness check (ADR-0023)
-        run: bun run check:docs:translation
-
-      - name: API spec + route contract check (fragments + bundle freshness)
-        run: bun run api:spec:check
-
-      - name: API reference docs freshness check (Issue #182)
-        run: bun run api:docs:check
-
-      - name: Module dependency graph check
-        run: bun run modules:dag:check
-
-      - name: Module route ownership check (Issue #256)
-        run: bun run modules:routes:check
-
-      - name: Module composition check (Issue #178)
-        run: bun run modules:compose:check
-
-      - name: Module composition inventory freshness check (Issue #178)
-        run: bun run modules:composition:inventory:check
-
-      - name: Reporting projection registry check
-        run: bun run reporting:projections:registry:check
-
-      - name: SoD rule registry check (Issue #181)
-        run: bun run identity-access:sod-registry:check
-
-      - name: Family compatibility conformance check (Issue #183)
-        run: bun run family:conformance:check
-
-      - name: Logging redaction lint check
-        run: bun run logging:lint:check
-
-      - name: Tenant-route factory check (Issue #255)
-        run: bun run api:tenant-route:check
-
-      - name: Work-class registry freshness check (Issue #263)
-        run: bun run db:work-class:check
-
-      - name: Typecheck (tsc --noEmit)
-        run: bun run typecheck
-
-      - name: Unit tests (bun test)
-        run: bun test
-
-      - name: Build Astro foundation
-        run: bun run build
+      - name: Full quality gate (bun run check — seluruh 34 gerbang)
+        # `check` memuat `bun test` polos. Suite DB-gated lama (masing-masing
+        # membuka koneksi ad-hoc ke `DATABASE_URL`) tidak dirancang jalan
+        # bersamaan atas satu database ter-migrasi dalam satu proses `bun
+        # test` — komentar job `integration-tests` di bawah mendokumentasikan
+        # tabrakan 26-kegagalan yang direproduksi empiris dari pemicu persis
+        # itu. `DATABASE_URL` dikosongkan untuk step ini sehingga suite
+        # DB-gated skip bersih; cakupan DB/RLS nyata jalan di job
+        # `integration-tests`. Pola identik dengan job Validate release.yml.
+        run: bun run check
+        env:
+          DATABASE_URL: ""
 
       # Diagnostik ringkas, hanya di-upload bila ada step di atas yang
       # gagal. Sengaja sempit (bukan seluruh workspace/node_modules) dan
