@@ -292,6 +292,38 @@ Topologi staging sejak 2026-07-26:
 Cloudflare (proxied) -> Traefik :443 -> varnish:80 -> app 10.0.1.61:4321
 ```
 
+### Kompresi respons DIWARISI dari topologi ini, bukan dimiliki repo
+
+<!-- kompresi-tepi:mulai -->
+
+**Tier pengompresi adalah Cloudflare** — lapisan paling kiri pada topologi di
+atas, dan satu-satunya yang mengompresi apa pun. Repo ini tidak mengompresi di
+lapisan mana pun yang ia kirim: nol middleware kompresi di aplikasi
+(`src/middleware.ts`, `astro.config.mjs`), nol `beresp.do_gzip` di
+`infra/varnish/default.vcl` (Varnish tidak mengompresi atas inisiatif
+sendiri), nol middleware `compress` Traefik yang dideklarasikan repo. Yang
+memancar dari sini hanyalah `Vary: Accept-Encoding` pada respons yang bisa
+di-cache — sebuah janji tentang caching, bukan tindakan mengompresi.
+
+Dibuktikan probe 4 Agustus 2026: **kedua** environment ter-deploy menjawab
+`content-encoding: gzip`, karena kedua host proxied Cloudflare. Jadi klaim
+"tidak ada kompresi di mana pun" salah untuk apa yang pembaca terima, dan
+benar untuk apa yang repo ini miliki.
+
+**Konsekuensi yang harus dibaca sebelum go-live:** sebuah deployment basis ini
+yang TIDAK di belakang CDN pengompresi menyajikan seluruh HTML, JSON,
+`sitemap.xml`, dan `feed.xml` tanpa kompresi — aset teks `dist/client` saja
+menyusut 2,79× oleh gzip, dan HTML/JSON menyusut lebih baik lagi. Verifikasi
+`content-encoding` di tepi environment yang sebenarnya, bukan di Varnish.
+
+Blok ini dibaca `bun run security:readiness` (pemeriksa
+`checkResponseCompressionOwnership` di `scripts/security-readiness.ts`, celah
+C3 [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9):
+menghapusnya memerahkan pemeriksa itu, dan menyalakan kompresi di lapisan yang
+repo ini kirim membuat pemeriksa itu menuntut blok ini ditulis ulang.
+
+<!-- kompresi-tepi:selesai -->
+
 Varnish **bukan** resource Coolify. Ia container compose biasa
 (`/home/admin1/awcms-varnish/`) di network `coolify`, memegang label Traefik
 untuk `awcms-staging.ahlikoding.com`; FQDN app dikosongkan supaya Traefik tidak

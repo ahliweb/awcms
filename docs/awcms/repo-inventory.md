@@ -12,7 +12,7 @@
 | Tabel `awcms_*`                    | 126   |
 | Tabel dengan `FORCE` RLS           | 115   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 309   |
+| Berkas test                        | 311   |
 | Berkas route                       | 312   |
 | ADR                                | 70    |
 
@@ -272,7 +272,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 260        |
+| `(root)`      | 262        |
 | `e2e`         | 12         |
 | `integration` | 36         |
 | `unit`        | 1          |
