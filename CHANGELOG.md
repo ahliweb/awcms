@@ -1,5 +1,2519 @@
 # awcms
 
+## 7.0.0
+
+### Major Changes
+
+- 611286f: **Security / breaking:** region-dataset activation and rollback become operator jobs; their HTTP endpoints are removed and their permissions revoked.
+
+  `POST /api/v1/idn-regions/datasets/{id}/activate` and `POST /api/v1/idn-regions/datasets/rollback` both swapped the Indonesia administrative-region dataset served to **every** tenant — those tables are global, with no `tenant_id` and no RLS. But `sql/081` seeded their permissions (`idn_admin_regions.dataset.configure` / `.restore`) into the **global** ABAC catalogue, and `POST /api/v1/setup/initialize` grants the whole catalogue to each new tenant's `owner` role. So an ordinary tenant owner held authority over data served to other tenants, and ABAC could not see anything wrong: it evaluates the permission, not who the action ultimately affects.
+
+  Replaced by `bun run idn-regions:activate -- --dataset <code|uuid>` and `bun run idn-regions:rollback`, both dry-run by default and writing only with `--commit`, running as `awcms_worker`. This matches `bun run idn-regions:import`, which ADR-0046 §5 had already made job-only for the identical reason: a global action has no request-time tenant subject for an ABAC guard to evaluate.
+
+  `sql/084` revokes both permissions and any role grants that already reference them. Two permissions remain for this module, both genuinely read-only: `region.read` and `dataset.read`.
+
+  **Breaking:** two OpenAPI paths are removed. No consumer existed — no screen in this repo called them, and a repo-wide search found no caller.
+
+  **Accepted cost, stated rather than hidden:** these actions no longer write an `awcms_audit_events` row. That table is tenant-scoped while the action is global; the old row landed in whichever tenant's log the clicking owner belonged to, misrepresenting a global change as that tenant's and staying invisible to every other affected tenant. Evidence now lives on the dataset row itself (`status`, `activated_at`, `activated_by`) plus the command's own output. A correct cross-tenant audit needs a global log this base does not have yet.
+
+  See ADR-0052.
+
+### Minor Changes
+
+- dc54236: ADR-0044 §4 Fase 2, langkah pertama: `awcms_news_portal_ad_placements` kini
+  punya targeting (`target_type` global/widget/post/page + `target_id`), sehingga
+  ia bisa menyatakan segala yang bisa dinyatakan sistem iklan free-URL yang akan
+  dipensiunkan.
+
+  Penggabungan ADR-0044 meninggalkan `blog_content` memiliki DUA sistem iklan,
+  masing-masing punya kemampuan yang tidak dimiliki lawannya. Yang lama menerima
+  `image_url` bebas — URL apa pun, tanpa registry media — tetapi bisa menarget
+  post dan page. Yang baru mengikat `media_object_id` sebagai foreign key ke objek
+  media terverifikasi, tetapi setiap barisnya efektif site-wide.
+
+  Yang berbasis media adalah yang bertahan, karena `image_url text` persis
+  merupakan jalan pintas yang dituju ADR-0036 saat membalik kepemilikan media.
+  Tetapi menghapus yang lama LEBIH DULU akan diam-diam memusnahkan targeting
+  per-post dan per-page — iklan yang dibeli untuk satu artikel berhenti muncul,
+  tanpa satu pun error. Karena itu pelebaran ini berdiri sendiri, sebelum satu
+  baris pun dipindahkan.
+
+  Migrasi 078 SENGAJA tidak memindahkan data dan tidak menghapus tabel. Ingest
+  `awcms_blog_ads.image_url` ke `media_library` (dengan laporan residu yang bisa
+  di-dry-run) dan penghapusan kedua tabel lama adalah langkah terpisah
+  berikutnya, dalam urutan itu.
+
+  - `placement_key` tetap SLOT (di mana pada halaman); `target_type`/`target_id`
+    adalah SCOPE (halaman mana). Keduanya ortogonal.
+  - Render sebuah halaman mengembalikan iklan bertarget halaman itu DIGABUNG
+    dengan setiap iklan `global` untuk slot yang sama — perbaikan yang disengaja
+    atas sistem lama yang mencocokkan satu scope persis dan menyerahkan
+    penggabungan ke pemanggil.
+  - Aturan berpasangan (`target_id` wajib untuk tipe bertarget, terlarang untuk
+    `global`) adalah CHECK di basis data, bukan hanya di validator seperti tabel
+    lama. Diuji dengan INSERT sebagai peran admin — penulis yang persis tidak bisa
+    dijangkau aturan tingkat-aplikasi.
+  - `target_id` polimorfik (post/page/widget), jadi tidak ada foreign key yang
+    bisa menjangkaunya. Keberadaannya diperiksa saat tulis; target yang dihapus
+    KEMUDIAN bukan error dan tidak pernah menjadi error — barisnya sekadar
+    berhenti cocok.
+  - Baris yang ditulis dengan bentuk pra-078 bernilai `global`, jadi tidak ada
+    iklan lama yang berubah perilakunya. Dibuktikan terhadap PostgreSQL 16 nyata,
+    bukan disimpulkan dari default kolom.
+
+- 52e333a: Add the `/admin/approvals` inbox and put `workflow_approval` in the admin sidebar.
+
+  The module shipped a complete engine — graph definitions, quorum, delegation, escalation, administrative recovery — and no screen, so every approval in this base could only be decided with `curl`. Under ADR-0051 the screen belongs here.
+
+  The inbox lists tasks with the same filters the JSON route accepts (status, workflow key, resource type, overdue, safe search) over keyset pagination, and offers approve/reject, reassign and force-decision per row, a per-instance history panel carrying the cancel action, and the delegation ledger with create and revoke. Reads go through this module's own application functions inside one `withTenantOrThrow`, awaited sequentially; instance history is fetched only when `?instance=` names one, because doing it per row would be up to 100 queries for a list nobody expanded.
+
+  Writes go to the guarded endpoints, all six with a fresh `Idempotency-Key` per click — unlike `/admin/reporting` there is no exception here, because every one of them requires the header.
+
+  Cancel sits on the instance panel rather than the task row: cancelling ends the whole instance and every pending task under it, so offering it beside a single task would misrepresent its blast radius.
+
+  `tests/admin-approvals-page-contract.test.ts` pins the page's eight permission keys against what the routes enforce and the descriptor declares. Two traps are specific to this module and both would deny every caller while reading perfectly: the permission namespace is `workflow`, not `workflow_approval` (the directory, README and descriptor name all say the latter), and approve/reject share one permission — `approval.approve` is the ability to decide, not its direction, and `approval.reject` is seeded nowhere.
+
+  The six `definition.*` permissions are deliberately left to their own screen: authoring a node graph needs a real editor, and a raw-JSON textarea that accepts a malformed graph until publish rejects it is a worse affordance than none. The contract test asserts they stay off this page, so the split remains a decision rather than a gap.
+
+  `MAX_REASON_LENGTH` — written out as a bare `500` in five separate files — moves to `workflow-approval/domain/reason-bounds.ts`, imported by all of them and by the form that renders it as `maxlength`.
+
+  Also corrects `workflow-approval/README.md`, which described an `/admin/workflows` page that never existed in this repo.
+
+- 4b998bf: feat(blog-content): `/admin/blog-pages` — the page console (ADR-0057 step 3)
+
+  Completes ADR-0057. The screen drives **all eight** `pages.*` permissions —
+  `read`/`create`/`update`/`publish`/`archive`/`delete`/`restore`/`purge` — four
+  of which had no surface at all until the previous change, and so no screen
+  could have driven them.
+
+  Two views, because delete and archive are different axes: the default lists
+  live pages, `?view=deleted` lists the bin. Control placement follows what each
+  endpoint accepts — Restore on bin rows, Publish/Archive/Delete on live rows,
+  Purge on both. `listBlogPagesForAdmin` gains the `deletedOnly` filter that makes
+  the bin reachable.
+
+  `pages.update` is driven through the structure fields this screen owns (title,
+  slug, page type, menu order), not a body editor. Re-parenting is deliberately
+  absent: the API performs no cycle detection, and a control that can make a page
+  its own ancestor is worse than none.
+
+  The status filter offers the three states a page can reach, not all five —
+  there is no `pages.schedule` and no review queue.
+
+  Sidebar gains a second `blog_content` entry, gated on `pages.read` rather than
+  `posts.read`.
+
+- c0163b1: Add the `/admin/blog` post lifecycle console and put `blog_content` in the admin sidebar.
+
+  `blog_content` is the largest module in this repo — 43 permissions across 15 activity codes and ~30 route files — and until now it had no screen at all. Under ADR-0051 the screens belong here; this is the first, and it covers the surface an editor uses every day.
+
+  The console lists posts with the module's own admin search/status filters and page-number pagination, and drives eleven permissions: `posts.read`/`create`/`update`/`publish`/`schedule`/`archive`/`delete`/`restore`/`purge` plus `revisions.read`/`restore`. Reads go through `listBlogPostsForAdmin` and `listBlogRevisions` inside one `withTenantOrThrow`, awaited sequentially; revisions are fetched only when `?post=` names one. Every mutation posts to the guarded endpoint.
+
+  Pagination is page-number rather than keyset, which is the opposite of `/admin/approvals` — deliberately. `listBlogPostsForAdmin` is LIMIT/OFFSET by design for a human-browsed table with "page 2, 3" controls, and its own header comment records that choice.
+
+  The other 32 permissions belong to sibling screens that are not in this change (pages, taxonomy, templates/menus/widgets, settings/seo/theme, internal links, homepage sections, ad placements). Two absences are different in kind, and `tests/admin-blog-page-contract.test.ts` asserts both rather than leaving them to look like gaps:
+
+  - **`posts.export` is declared and seeded by `sql/036`, and no endpoint anywhere enforces it.** The test proves this by scanning every route under `src/pages/api/v1/blog/`, so a future export endpoint fails it and forces the screen question to be answered instead of missed.
+  - **`search.read` has a route and the page still does not use it.** The admin list already searches by title `ILIKE`, which tolerates the empty query that the `websearch_to_tsquery` surface behind `search.read` rejects.
+
+  There is also no body/content editor: authoring a post body needs a rich-text surface plus SEO fields, terms and featured media. `posts.update` is still driven, through "submit for review".
+
+  The module-specific trap the contract test pins: `submit-review` is gated on `posts.update`, not a `posts.submit` or `posts.review` — neither is seeded anywhere — and that route builds its guard in two pieces, so a regex over guard triples cannot see it and the test asserts it directly. Idempotency splits too: six lifecycle mutations require an `Idempotency-Key`, while `POST /api/v1/blog/posts` requires none by documented design, because a retry duplicating a create is caught by the `(tenant_id, locale, slug)` partial unique index.
+
+  `MAX_TITLE_LENGTH`/`MAX_EXCERPT_LENGTH` are now exported from `content-validation.ts` so the form's `maxlength` comes from the same constants the validator enforces.
+
+  Also corrects `blog-content/README.md`, whose §Admin UI described a fifteen-screen `/admin/blog/*` tree that never existed in this repo. It is kept, clearly marked as the awcms-mini specification, because it is a useful target for the sibling screens.
+
+- 9e0da39: `/admin/blog-presentation` — templates, menus, widgets and theme, the fourth
+  blog console.
+
+  Four activities on one screen because they answer one question (how the blog
+  looks) and each is a short bounded list. `?section=` reads only the section
+  being shown, and a section the operator cannot read is not offered at all.
+
+  The eight permissions are gated as four INDEPENDENT pairs: holding
+  `widgets.configure` must not reveal a template control.
+
+  Three deliberate absences, each mutation-proven:
+
+  - **menu ITEMS are not editable.** `PATCH /api/v1/blog/menus/{id}` replaces the
+    whole item list, so a flat form would delete every item it did not render.
+    The client never sends the key at all;
+  - **no "revert to tenant default" for the theme.** `upsertBlogThemeSettings`
+    only INSERTs or UPDATEs and no delete route exists, so an override is
+    one-way. The screen states that instead of offering a control that cannot
+    succeed;
+  - **no bin, no Restore.** Templates, menus and widgets all soft-delete with no
+    counterpart and no `*.restore` permission to build one against.
+
+  `key` is sent on create and never on update, because the update inputs have no
+  `key` field.
+
+- e20c942: `/admin/blog-taxonomy` — the categories-and-tags console, third sibling of
+  `/admin/blog` and `/admin/blog-pages`.
+
+  Drives both `taxonomies.*` permissions. `configure` gates create, update AND
+  delete together, because `sql/036` seeds no per-verb rows — the permission is
+  the capability "manage taxonomy", not one flag per verb, and a screen that
+  invented `taxonomies.create` would gate on authority nothing honours.
+
+  Three deliberate absences, each held by the contract test:
+
+  - **no bin view and no Restore.** Term soft delete is one-way BY DESIGN (no
+    restore route, no `taxonomies.restore` to build one against), so a bin would
+    imply a way back that does not exist. The confirmation states the finality
+    instead — copy promising recoverability is what made #351 hard to see;
+  - **no re-parenting on edit.** Neither term route detects cycles, so pointing a
+    parent at its own descendant is accepted and every reader then walks forever.
+    Create still offers a parent: a term with no children cannot close a loop;
+  - **no `Idempotency-Key`.** None of the three term endpoints reads it.
+
+- 5368c23: Add the `/admin/domain-events` operator console and put `domain_event_runtime` in the admin sidebar.
+
+  The module shipped consumers, deliveries, retry/dead-letter and replay with no screen, so the only way to see why an event never arrived — or to unstick it — was `curl`. Under ADR-0051 the screen belongs here.
+
+  All five of the module's permissions are driven from this one page: the consumer registry with pause state and backlog counts (pause/resume), the delivery list filtered by status/consumer/event type with replay on dead-lettered rows, and the outbox itself with a payload inspector. Reads go through this module's own application functions inside one `withTenantOrThrow`, awaited sequentially; every mutation posts to the guarded endpoint.
+
+  The interesting part is the idempotency split, which the screen reproduces exactly: `replay` sends an `Idempotency-Key` because each call does new work (it enqueues another attempt), while `pause` and `resume` send none because setting a flag twice has the same end state — `resume` takes no body at all. Sending a key to `pause` would imply a replay contract that endpoint does not have; omitting it on `replay` would render a button that always fails with `IDEMPOTENCY_REQUIRED`.
+
+  `tests/admin-domain-events-page-contract.test.ts` pins all five permission keys against what the routes enforce and the descriptor declares, pins the three-way idempotency split per request rather than as a global count, and asserts the endpoints themselves still disagree the way the page assumes. The module-specific trap: pause and resume are opposite actions sharing ONE permission, `consumers.manage` — `consumers.pause` and `consumers.resume` read better and are seeded nowhere, so inventing them would hide both buttons from every operator including the owner.
+
+  `MAX_REASON_LENGTH`, written out twice, moves to `domain-event-runtime/domain/reason-bounds.ts`.
+
+- 05c247c: Add `/admin/media` and put `media_library` in the admin sidebar — the last module in this base without a screen.
+
+  It was listed for two waves beside modules that were genuinely only missing a page, and that was wrong for this one. [ADR-0056](docs/adr/0056-media-library-admin-surface.md) found that five of eleven permissions were enforced by nothing, five application functions had zero callers, and there was **no list function at all** — so this screen could not have been built on the surface that existed, whatever the permission catalog said. `attach`/`detach` were revoked (§A), `delete`/`restore`/`purge` got endpoints (§B), and the browse listing got its own function and route (§C). This is what those three were for.
+
+  The console browses with §C's filters — status, mime type, and the three-way `live`/`deleted`/`all` — then deletes, restores, and purges. Reads go through `listMediaObjects` inside one `withTenantOrThrow`; writes post to the guarded endpoints, each with a fresh `Idempotency-Key`. Unlike `/admin/blog` there is no opt-out, and unlike `/admin/sync` there is no endpoint that declines the header: all three here require it.
+
+  **Three deliberate absences**, each pinned by `tests/admin-media-page-contract.test.ts` so they stay decisions rather than becoming gaps:
+
+  - **Upload** (`media.create`/`.verify`/`.cancel`) — a three-step browser flow (create session → PUT the bytes straight to R2 → finalize) with real file input, progress, and client-side failure modes. A button that starts a session this page cannot finish leaves a `pending_upload` row behind on every misclick, which is precisely the litter the reconciliation job exists to clean up.
+  - **`enforcement.read`/`.enable`** — a tenant-wide, ONE-WAY content policy switch, not an object action. It belongs on `/admin/security` with the other policy controls; offering it beside a row of files would misrepresent its blast radius.
+  - **No `<img>` preview.** A registry row can be `pending_upload` or `failed` — the bytes may be absent, unverified, or the very thing an operator is here to delete. Rendering them is how a policy-violating image gets shown one more time, to the person removing it.
+
+  The delete prompt asks for a real reason rather than sending a placeholder, because it lands on an audit row that outlives the object, and its `maxlength` comes from the constant the validator enforces. Purge is the only irreversible action and is the only one behind a `confirm`. It is also the only failure this screen names specifically: `MEDIA_OBJECT_REFERENCED` gets "remove that reference first" rather than "please try again", because retrying will never succeed while the foreign key is live.
+
+  **This closes ADR-0021's first criterion.** `idn-admin-regions` is now the only module without a screen, and that is a documented decision (ADR-0052 moved its lifecycle to operator jobs). The contract test asserts it repo-wide, so the next module to land without `navigation` turns CI red instead of quietly becoming a second exception.
+
+  Mutation-proven four ways: gating a control on the revoked `media.detach`, dropping one mutation's `Idempotency-Key`, rendering a preview `<img>`, and removing the navigation entry each turn it red.
+
+- 821387b: Add the `/admin/reporting` console and put `reporting` in the admin sidebar.
+
+  `reporting` had seven permissions and, between them, one page: `/admin` renders four of its five dashboard views. Everything Issue #753 built — the projection registry, live freshness, rebuild, reconciliation, scheduled exports and artifact download — had no screen at all, and neither did `email-health`, the fifth dashboard view. All of it was reachable only by `curl`. Under ADR-0051 the screen belongs here.
+
+  The console renders each registered projection with its live freshness status, metric values and most recent reconciliation, plus rebuild history, scheduled-export management, on-demand export, and the export-run history with checksum-verified download links. It deliberately does not repeat the four aggregations `/admin` already shows; a projection links to its own `drillDownPath` instead.
+
+  Reads reuse this module's own application functions inside one `withTenantOrThrow` transaction, awaited sequentially. `listProjectionSummariesForTenant` is handed the caller's real granted-permission set, so the per-descriptor `requiredPermission` filter stays honest on this path too. Writes go to the guarded `/api/v1/reports/*` endpoints — five with a fresh `Idempotency-Key` per click, `reconcile` with none, because that endpoint mutates no business state and requires none.
+
+  `tests/admin-reporting-page-contract.test.ts` pins all seven permission keys against what the routes enforce and the descriptor declares. Three plausible-but-wrong guesses would each have rendered a control that denies every caller including the owner: `projections.cancel` for cancelling a rebuild (it is `projections.rebuild`), `projections.read` for reconciling (it is `projections.analyze`), and `exports.configure` for triggering an export (it is `exports.export`).
+
+  `MIN_EXPORT_INTERVAL_MINUTES` / `MAX_EXPORT_INTERVAL_MINUTES` / `MIN_REASON_LENGTH` / `MAX_REASON_LENGTH` move to `reporting/domain/operator-input-bounds.ts` and are now imported by both the three routes that validate them and the form that renders them as `min` / `max` / `maxlength`, so the browser cannot accept what the server rejects.
+
+  Also corrects `reporting/README.md`, which described an `/admin/reporting/projections` page and a `submitJson` helper that never existed in this repo.
+
+- 48d5bcb: Add `/admin/security` — the screen for authentication policy that the endpoints
+  have been waiting for since #184/#185.
+
+  Tenant auth policy (password/SSO/break-glass/JIT/allowed domains) and MFA
+  enforcement have been fully implemented and guarded for two releases, reachable
+  only by hand-writing `curl`. This renders them: deployment posture (read-only),
+  the tenant authentication policy, MFA enforcement level, and a read-only list of
+  configured OIDC providers.
+
+  **It adds no enforcement of its own.** Every mutation posts to the real endpoint
+  and inherits its ABAC guard, its break-glass rule and its audit row. The
+  permission checks decide what to render, never what is allowed.
+
+  **The gates reuse the endpoints' exact permission keys** — including
+  `mfa_admin.reset` as the MFA _read_ gate, which reads like a mistake and is
+  precisely what `GET /api/v1/auth/mfa/policy` requires. Inventing a friendlier
+  `mfa_admin.read` that no migration seeds would hide the section from everyone
+  including the owner, which is the latent-authz bug this repo has already shipped
+  twice. `tests/admin-security-page-contract.test.ts` extracts the guard triples
+  from the route sources and the `permissionKey(...)` triples from the page and
+  requires the second to be a subset of the first; mutation-proven — swapping in
+  `mfa_admin.read` turns three tests red.
+
+  **Deployment posture is shown because the tenant policy cannot be judged without
+  it.** `ssoRequired` with `AUTH_SSO_ENABLED=false` produces a tenant nobody
+  outside the break-glass list can sign into, and that contradiction was
+  previously invisible from any screen. It now renders as a warning. No key or
+  secret value is displayed — only whether a control is active.
+
+  **The break-glass picker deals in identity ids**, not tenant_user ids: the
+  policy column stores identity ids, both are uuid, and passing the wrong one is
+  accepted by the endpoint, filtered out as ineligible, and saved as an empty
+  list — a silent no-op exactly where an operator is trying to keep themselves
+  able to log in. New `listBreakGlassCandidates` uses the same predicate as
+  `fetchEligibleBreakGlassIdentityIds`, and an integration test pins the two
+  together across inactive identities, inactive memberships, locked identities and
+  cross-tenant rows, so the picker can never offer an option the save path
+  discards.
+
+  `409 BREAK_GLASS_REQUIRED` surfaces verbatim rather than collapsing into a
+  generic failure: the caller is already an authenticated admin holding
+  `sso_policy.update`, so it leaks nothing they cannot read directly, and a
+  generic message would leave them retrying the one change the server will never
+  accept.
+
+  OIDC provider CRUD stays API-only — a form that posts a client secret deserves
+  its own change.
+
+- b993159: Render the admin sidebar from the module registry instead of a hand-written array.
+
+  `ModuleDescriptor.navigation` was already synced to `awcms_module_navigation`
+  and served by `GET /api/v1/modules`, while `AdminLayout.astro` rendered a
+  separate static list. Nothing compared them and both had rotted: three declared
+  entries pointed at admin pages that do not exist (`/admin/blog`, two
+  `/admin/news-portal/*`) and were being published as valid menu items, while
+  eight pages that do exist were unknown to the registry.
+
+  The sidebar now composes from `listModules()` through the new
+  `module-management/domain/sidebar-menu.ts` (ported from awcms-micro, without
+  its per-tenant override tables). Tenant-disabled modules and the caller's
+  permissions both filter it, so an operator no longer sees links to screens that
+  will only deny them. `tests/admin-navigation-registry.test.ts` binds
+  declarations to the filesystem in both directions.
+
+  `AdminLayout`'s `active` prop is gone — the current entry derives from the
+  request path, which cannot disagree with itself the way `/admin/comments` did
+  (it never passed one and was never highlighted).
+
+- 16cf031: Add the `/admin/sync` operator console and put `sync_storage` in the admin sidebar.
+
+  The module shipped node management, conflict resolution and the object upload queue with no screen, so an operator could see on the dashboard that sync was unhealthy and had no way to act on it except `curl`. `application/sync-directory.ts` has named "the future `/admin/sync` SSR page" in its own header comment since it was written. Under ADR-0051 this is that page.
+
+  All six of the module's permissions are driven here: the node list with activate/deactivate, the conflict list with the three resolutions and an optional note, and the object queue with retry on `failed` entries, keyset-paginated. Reads go through this module's own application functions inside one `withTenantOrThrow`, awaited sequentially.
+
+  `fetchSyncConflicts` is new in `sync-directory.ts`, and `GET /api/v1/sync/conflicts` now calls it too — the query used to be inline in that route, which was fine while it was the only reader; a screen that re-wrote it would be free to drift from the endpoint it is meant to mirror. The endpoint keeps its exact wire format: `fetchSyncConflicts` returns `null` for an unresolved conflict's resolution fields, and the route maps them back to `undefined` so they stay absent from the JSON rather than becoming `null` — that is a contract change, not a refactor.
+
+  **None of the three mutations sends an `Idempotency-Key`**, because none of the endpoints requires one: all three are naturally idempotent state transitions (`status = 'active'`, `'resolved'`, `'pending'`) rather than requests that do fresh work per call. Sending one would imply a replay contract they do not have. `tests/admin-sync-page-contract.test.ts` pins that in both directions, so an endpoint that later starts requiring a key turns the contract red instead of failing silently at runtime.
+
+  The HMAC node protocol (`push`/`pull`/`objects`/`status`) gets no controls, and the test asserts the page never names those paths: they authenticate a node by signature, not an administrator by session, so a button for them would be a control no browser can legitimately use and whose failure would read as a bug rather than a category error.
+
+  The module-specific latent-authz trap the test also pins: resolving a conflict is `conflict_resolution.approve`. Both `conflict_resolution.resolve` and `.update` read better than the permission that exists, and neither is seeded anywhere.
+
+- 2c722ee: Add the `/admin/audit-trail` viewer and put `logging` in the admin sidebar.
+
+  `logging` has exactly one HTTP surface (`GET /api/v1/logs/audit`) and had no screen, so the tenant's audit history — the record of every high-risk action the system takes — was readable only by `curl`. For the module whose whole purpose is accountability, that is a poor place to have no UI.
+
+  The screen lists events newest-first with a resource-type filter and a per-event detail disclosure (correlation id + the already-redacted `attributes`, rendered as escaped text, never as HTML). It is read-only and ships **no client script at all**: the audit trail is append-only by design, so the filter is a plain `method="get"` form that works with JavaScript disabled.
+
+  `listAuditEvents` clamps to 100 rows and has no cursor, so the page states that bound whenever the view is full rather than letting a truncated audit log read as "this is everything that happened". Adding keyset pagination to that endpoint is a follow-up with its own OpenAPI change, deliberately not smuggled in here.
+
+- c6b9ceb: Freeze and gate the API slice `ahliweb/awcms-astro` consumes (ADR-0065).
+
+  The existing frozen snapshot is the pre-#182-migration monolith, and every
+  surface that repo actually calls landed after it — `/auth/session` and
+  `/access/machine-credentials` (ADR-0049), `/media/objects` (#318),
+  `/media/public-origin` (#370), the `/blog/posts` cursor traversal (#317).
+  Searching the snapshot for them returns zero. So a response-shape change to any
+  of them was green here and broke the other repo's build: a failure surfacing
+  where whoever caused it is not looking.
+
+  `bun run api:consumer-contract:check` freezes 6 paths plus the 16 components
+  their `$ref`s reach. The closure is the point — freezing path objects alone
+  would be near-useless, since a path is a few lines of `$ref` and the interesting
+  breakages happen in the schema.
+
+  The rule is additive-superset: a new optional field passes, a rename or retype
+  fails. Regenerating is deliberate and means the consumer must change too, which
+  the fixture header and the failure message both say — whoever reads that message
+  is in the wrong repo to realise it unaided. A missing consumer path throws
+  rather than silently shrinking the contract.
+
+  This is a schema contract, not a behavioural one: a change of meaning with an
+  unchanged shape is not caught.
+
+  No migrations, no permissions, no runtime change.
+
+- da9b51f: ADR-0044 §4 Fase 2, langkah kedua: job `bun run blog:ads:ingest` yang
+  memindahkan sistem iklan free-URL ke sistem berbasis media — dan **melaporkan
+  setiap baris yang tidak bisa dipindahkan**.
+
+  Pratinjau adalah default, bukan flag. Job scheduled lain memakai `--dry-run`
+  sebagai opt-in karena mereka berjalan tanpa penunggu dan mode normalnya adalah
+  bekerja. Yang ini kebalikannya: ia tidak menulis apa pun sampai diberi
+  `--apply`. Kesalahan mahal di sini bukan "lupa pratinjau", melainkan
+  "sudah pratinjau, lalu tidak pernah membaca residunya" — oleh operator yang
+  sebentar lagi menghapus tabel sumbernya.
+
+  **Yang otomatis hanya satu kasus, dan itu disengaja.** Sebuah iklan pindah bila
+  `image_url`-nya sudah merupakan URL publik salah satu objek media tenant itu
+  yang **terdaftar** di registry. Selain itu — remote, malformed, object key milik
+  tenant lain, atau byte di bucket yang tidak diklaim baris registry mana pun —
+  menjadi residu, dilaporkan lengkap dengan URL-nya untuk diunggah ulang manusia
+  lewat media library.
+
+  Dua jalan pintas yang ditolak, dan alasannya:
+
+  - **Mengambil URL eksternal dari server.** Itu primitif SSRF, dan tempat
+    terburuk untuk membangunnya adalah skrip migrasi data yang dijalankan sekali,
+    di bawah tekanan waktu, oleh operator yang sedang mengawasi jumlah baris
+    alih-alih egress. Repo ini sudah memutuskan sikapnya soal ini di jalur
+    discovery OIDC (ADR-0031).
+  - **Mendaftarkan objek yang ada di bucket tapi tanpa baris registry.** Itu akan
+    membuat skrip migrasi mencetak baris `verified` untuk byte yang tidak pernah
+    ia ambil, sniff, atau batasi ukurannya — persis pernyataan yang menjadi alasan
+    keberadaan pipeline unggah. Peran `awcms_worker` bahkan tidak diberi INSERT
+    yang memungkinkannya (`sql/079`).
+
+  Rincian lain:
+
+  - `--apply` **wajib** disertai `--placement-key=<key>`. Sistem lama tidak punya
+    konsep slot, yang baru menuntut satu dari dua belas, dan tidak ada di data
+    lama yang menyatakan mana. Job menolak menebak.
+  - Idempoten lewat `source_legacy_ad_id` di bawah unique index PARSIAL dengan
+    `NULLS NOT DISTINCT` (`sql/079`). Keduanya load-bearing: tanpa `NULLS NOT
+DISTINCT` sebuah run kedua menggandakan seluruh iklan `global`; tanpa
+    predikat parsial, index itu justru menolak pekerjaan editorial biasa. Kedua
+    sisi dibuktikan dengan mutasi terhadap PostgreSQL 16 nyata.
+  - Job tidak menulis satu pun statement sendiri — semuanya di
+    `application/legacy-ad-ingest-directory.ts`, milik modul pemilik tabel
+    (`modules:table-writes:check`).
+  - Tidak ada tabel yang dihapus. Menghapus `awcms_blog_ads` adalah keputusan
+    manusia yang sudah membaca laporan residu, bukan efek samping dari job yang
+    menghasilkannya.
+
+  Ditemukan sambil jalan: seluruh blok `NEWS_MEDIA_R2_*` tidak pernah ada di
+  `.env.example`, jadi operator yang menyalin berkas itu tak punya cara menemukan
+  lima variabel wajib `media_library`. Sekarang terdokumentasi.
+
+- 3f9a2ab: ADR-0044 §4 Fase 2, langkah ketiga: jalur TULIS iklan free-URL ditutup, dan
+  gerbang kesiapan yang membuat penghapusan tabel bisa dibuktikan alih-alih
+  dipercaya.
+
+  `POST /api/v1/blog/ads` dan `PATCH /api/v1/blog/ads/{id}` sekarang menjawab
+  **410 ENDPOINT_RETIRED**, tanpa auth dan tanpa sentuhan basis data. Keduanya
+  menyimpan `imageUrl` teks bebas — URL apa pun yang diketik admin, dirender
+  langsung ke `<img src>` halaman publik. Itulah bypass managed-media yang ditutup
+  ADR-0036, dan ia terbuka selama masih ada rute yang bisa menulisnya.
+
+  **Urutannya yang menjadi isi perubahan ini.** Job ingest memindahkan apa yang
+  ada saat ia berjalan. Jalur tulis yang masih terbuka membiarkan editor membuat
+  iklan free-URL di jendela antara ingest dan penghapusan — iklan yang tidak
+  bermigrasi ke mana pun dan lenyap saat tabelnya hilang, tanpa satu pun laporan
+  menyebut ia pernah ada.
+
+  Menutup `POST` saja tidak cukup: `PATCH` bisa menulis ulang `imageUrl` pada
+  iklan yang sudah ada — bypass yang sama lewat rute yang lebih senyap, dan yang
+  tidak menghasilkan baris baru untuk diperhatikan siapa pun.
+
+  `GET` dan `DELETE` sengaja bertahan. Operator yang menyelesaikan laporan residu
+  harus bisa membaca baris yang disebut laporan itu, dan mempensiunkan yang tidak
+  ingin ia buat ulang — `blog:ads:drop-readiness` menghitung iklan yang
+  soft-delete sebagai sudah-diputuskan.
+
+  **`bun run blog:ads:drop-readiness`** menjawab "bolehkah kedua tabel lama
+  dihapus sekarang?" dari data, dan keluar non-nol selama jawabannya belum.
+  Migrasi penghapusan tak bisa dibatalkan dan membawa serta iklan situs hidup;
+  seluruh pengaman epik ini menjadi hiasan bila langkah terakhirnya diambil atas
+  dasar ingatan seseorang bahwa ia sudah menjalankan ingest. Kolom
+  `source_legacy_ad_id` (`sql/079`) membuatnya jadi sebuah join.
+
+  Iklan lama terhitung sudah-diputuskan bila ada baris penerus yang menyebutnya,
+  ATAU bila ia soft-delete. Selain itu memblokir. **Tidak ada flag override** —
+  gerbang yang bisa disuruh lulus adalah gerbang yang tak perlu dipenuhi siapa
+  pun.
+
+  Catatan proses: mutasi pertama saya terhadap query kesiapan (menghapus predikat
+  `p.tenant_id = a.tenant_id`) **lolos ketujuh test** — RLS diam-diam mengerjakan
+  apa yang diklaim predikat itu. Dua mekanisme diklaim, dan test yang tak bisa
+  membedakannya hanya membuktikan setidaknya satu ada. Test kedelapan menjalankan
+  penilaian yang sama sebagai peran admin yang melewati RLS sepenuhnya, sehingga
+  predikatnya menjadi satu-satunya penghalang — dan mutasi itu kini merah.
+
+- 267749e: feat(blog-content): blog pages can be published (ADR-0057)
+
+  `pages.publish`, `pages.archive`, `pages.restore` and `pages.purge` have been
+  seeded since `sql/036` and enforced by nothing. That was not a spare catalogue
+  row: `createBlogPage` wrote a literal `'draft'`, `updateBlogPage` never touched
+  `status`, and the scheduled-publish job reads only posts — so **no code path
+  could publish a page**, while public page search filtered on
+  `status = 'published'` and always returned nothing.
+
+  Four guarded, audited, `Idempotency-Key`-bearing routes close it:
+  `POST /api/v1/blog/pages/{id}/publish`, `/archive`, `/restore`, `/purge`.
+  Publish runs the same content-quality checklist posts do, which the page
+  preview endpoint has been reporting with nothing to gate.
+
+  The page lifecycle is deliberately narrower than posts' — no `review`, no
+  `scheduled`, since no `pages.schedule` permission was ever seeded. `purge`
+  reports the ad placements it leaves inert rather than refusing or cascading.
+
+  Also adds `bun run access:permissions:enforcement:check`: every declared
+  permission must have an `authorizeInTransaction` guard or a recorded reason.
+  It found five further gaps beyond pages, all now recorded and tracked.
+
+  No migrations — the columns, CHECK, index and catalogue rows already existed.
+
+- 505a5e4: `GET /api/v1/blog/posts` dapat traversal stabil ber-cursor — build feed tidak
+  lagi berhenti di 100 post.
+
+  Endpoint ini hanya punya `?limit=` (maks 100) dan tanpa cursor, jadi tidak ada
+  cara membaca lebih dari 100 post. Adapter `awcms-astro` **melempar** saat
+  menyentuh batas itu alih-alih memotong diam-diam, sehingga situs dengan lebih
+  dari 100 artikel tidak bisa di-build sama sekali.
+
+  Yang TIDAK dilakukan: menambahkan `?cursor=` ke urutan yang sudah ada.
+  Default-nya `updated_at DESC` — benar untuk tabel admin dan tidak sah sebagai
+  kunci keyset, karena menyunting sebuah post memindahkannya: satu baris bisa
+  melintasi batas halaman di antara dua permintaan lalu terlewat atau muncul dua
+  kali, dan tak ada apa pun yang bisa mendeteksinya. Sebuah cursor hanya sah di
+  atas urutan yang tidak berubah oleh tulisan yang dibalapinya.
+
+  Jadi `?order=created_at` memilih traversal stabil (kolom immutable) dan
+  `?cursor=` hanya berlaku bersamanya; `?cursor=` di atas urutan default **ditolak
+  400** dengan alasannya, bukan diam-diam dilayani. Default endpoint tidak berubah
+  sama sekali — tabel admin tetap urut `updated_at`.
+
+  `nextCursor` dicetak di lapisan yang masih memegang teks presisi mikrodetik,
+  tidak pernah diturunkan ulang dari `Date` JS di rute. Itu bukan kehati-hatian
+  teoretis: `timestamptz` menyimpan mikrodetik, `Date` hanya milidetik, dan driver
+  MEMBULATKAN KE BAWAH — cursor dari `Date` menunjuk instant yang lebih awal dari
+  barisnya sendiri dan melewatkan setiap baris yang berbagi milidetik itu (Issue
+  #158; terukur: 105 baris → halaman 2 berisi 4, batch-insert → halaman 2 berisi
+  0).
+
+  Diverifikasi terhadap PostgreSQL nyata dengan kasus terburuknya: 25 post
+  di-insert dalam SATU statement sehingga berbagi `created_at` sampai mikrodetik.
+  Mutation-proven — mengganti sumber cursor jadi `new Date(row.created_at)`
+  memerahkan 3 dari 5 test.
+
+  `BlogPostSummary` mendapat field `createdAt` (aditif).
+
+- 300a407: Add `?locale=` to `GET /api/v1/blog/posts`.
+
+  This closes item 2 of `awcms-astro`'s ADR-0021 hold list, which recorded on 2 August 2026 that the filter was still absent and that the build therefore had to pull **every** locale and pair them up client-side — correct, and wasteful for a single-language site.
+
+  Exact match, not a prefix: `en` does not sweep in `en-GB`. A `LIKE 'en%'` implementation would look right until someone published a regional variant they did not want served.
+
+  Absent means every locale, which stays the correct default for the admin table — hiding a translation because the operator did not name its language would be the surprising answer. An **empty** `?locale=` is a 400 rather than being read as absent: a caller that meant to filter and silently got the unfiltered feed builds a site containing every translation of every article, and nothing anywhere fails.
+
+  The shape is deliberately **not** validated beyond non-empty and a 35-character bound. `awcms_blog_posts.locale` is plain `text NOT NULL DEFAULT 'id'` and the write path accepts any non-empty string, so a read filter stricter than the write path would make a stored locale unreachable — a row that exists, that the admin table shows, and that no query can select.
+
+  All three list functions take it (`listBlogPosts`, `listBlogPostsPage`, `listBlogPostsFullPage`), because the route branches between them on `view`/`order` and a filter wired into two of the three would stay invisible until someone changed a query string. `listBlogPosts` collapses its two-branch `status ? … : …` into the single `${param}::text IS NULL` statement its paged siblings already use — two optional filters written the old way is four copies of one SELECT, and a third would make it eight.
+
+  Verified against a real database (`tests/integration/blog-post-locale-filter.integration.test.ts`, six tests) because the failure mode of a parsed-but-unapplied parameter is a 200 with the wrong rows — the same shape as the `view=full` defect this endpoint already shipped once. Mutation-proven: dropping the SQL predicate turns all six red, and dropping the parameter at one of the three route call sites turns the pure contract test red.
+
+- a526e69: Give `business_scope_hierarchy` a real provider: `tenant_admin` resolves `office` scopes against `awcms_offices` (ADR-0060).
+
+  `POST /api/v1/identity/business-scope/assignments` is permission-gated, SoD-evaluated, audited, idempotency-keyed and RLS-protected — and until now it refused **every input in every deployment**. Its only composition root injected a NO-OP adapter that resolved every scope to `resolved: false`, and the reserved `tenant` scope type is rejected by the validator as unassignable (#180 review F2), so both roads led to a denial. Everything downstream was dead with it: no assignment rows to read, so `businessScopeFacts` was never populated, the expiry job never had anything to expire, and SoD's `same_scope_only` matching never had a scope to match.
+
+  The NO-OP was correct when written — ADR-0011/0014 expected a DERIVED application to inject its own hierarchy resolver — and then ADR-0034 deleted that pathway and ADR-0055 confined development to this repo. Its `providedBy` named `organization_structure`, a module ADR-0016 accepted and nobody ever wrote here. What was missing was never the hierarchy: `awcms_offices` has had `parent_office_id` since `sql/002`, FORCE RLS since `sql/017`, and a composite cross-tenant-proof parent FK since `sql/020`.
+
+  The new adapter resolves the `office` scope type and nothing else. Only LIVE rows resolve — not soft-deleted, not `inactive`, same tenant only — and dead rows are skipped anywhere in a chain, so a live office under a deactivated parent gets a shorter ancestor chain rather than borrowing coverage through a resource its tenant switched off. Every bound REFUSES rather than truncates (cycle, depth, result count): a truncated list still claims `resolved: true`, which would answer a coverage question from part of the graph with no signal the rest existed.
+
+  One read-path hardening ships with it: `resolveBusinessScopeFacts` minted a covers-everything fact from `scope_type = 'tenant'` alone. It now requires that row to name this tenant. No supported path can write such a row, which is exactly why the check belongs there — a row carrying it came from outside the service and passed no validation at all.
+
+  The NO-OP adapter is deleted (zero callers once the root is rewired); `optional: true` stays on the consumption, so a tenant with no offices still works and still fails closed. Zero migrations, zero new permissions, no change to any existing endpoint's behaviour — a route must still opt into scope-gated authorization explicitly, and none does today.
+
+- 1551473: `POST /api/v1/comments/admin/{id}/delete` — the moderator half of a transition
+  this module has implemented since ADR-0041 (ADR-0058 §B).
+
+  `applyModerationAction` has accepted `"delete"` all along, it is legal from all
+  four non-terminal statuses, and the moderation queue can already filter on
+  `deleted` — so moderators could see soft-deleted comments without being able to
+  delete one. The only actor who could reach that state was the comment's own
+  author, inside the edit window.
+
+  This is the one irreversible moderator action, and it stays that way: `deleted`
+  remains terminal and recovering a deleted comment remains an operator/database
+  action. It is accepted because the state was already reachable, the row, body
+  and append-only moderation history all survive, and every other moderator
+  action is reversible and keeps the body in the queue — leaving no in-band
+  answer for content that must be pulled permanently. Bulk moderation
+  deliberately does not gain it.
+
+  `delete` now also resolves the comment's open reports, alongside
+  `approve`/`reject`/`spam`: a deleted comment cannot be acted on again, so
+  leaving them open would inflate the queue's report count forever. No existing
+  caller is affected — nothing could reach that branch with `delete` before.
+
+  Permission-enforcement coverage moves from 202/205 with 3 exceptions to 203/205
+  with 2, and the two that remain are exactly the revocations ADR-0058 §C/§D
+  decided.
+
+- 0385fb1: Terbitkan kosakata blok `content_json` sebagai kontrak yang bisa dibaca mesin,
+  dan patok ketiga tempat ia dinyatakan agar tak bisa menyimpang diam-diam.
+
+  Sampai perubahan ini kosakata itu hidup di dua tempat: tipe TypeScript
+  `ContentBlock` (tak terlihat siapa pun di luar `tsc`) dan **satu kalimat prosa**
+  di salah satu dari lima kemunculan `contentJson` di OpenAPI — empat sisanya
+  hanya menyebut `type: object`. Konsumen yang membaca kontrak punya peluang empat
+  dari lima untuk tidak mempelajari apa pun tentang isi field itu.
+
+  Akibatnya nyata dan sudah terjadi: `awcms-astro` menurunkan ulang kosakata itu
+  dengan membaca, lalu keliru dalam tiga hal sekaligus — mengarang tipe
+  `ordered_list` yang tak ada, dan menjatuhkan `gallery` serta `video_news` karena
+  keduanya tak punya field `text` sementara fallback-nya merender `text`. Tidak
+  ada yang gagal di mana pun. Daftar bernomor keluar berbutir dan bagian bermedia
+  lenyap dari halaman yang tayang.
+
+  Kosakata yang hanya hidup di prosa akan diturunkan ulang, dan penurunan ulang
+  itulah tempat ia patah.
+
+  - `CONTENT_BLOCK_TYPES` — kosakata sebagai nilai RUNTIME, disatukan dengan union
+    `ContentBlock` lewat assertion saling-assignable. Menambah varian ke union
+    tanpa menambahnya ke konstanta (atau sebaliknya) **memerahkan typecheck**,
+    bukan sebuah test yang mungkin tak dijalankan orang. Terbukti dua arah.
+  - Skema `BlogContentBlock` + `BlogContentJson` di OpenAPI: `oneOf` enam varian
+    lengkap dengan field-nya, dirujuk dari **kelima** kemunculan `contentJson`.
+    Dua bentuk yang paling mudah salah tebak diberi catatan eksplisit — urutan
+    adalah FIELD pada `list` (bukan tipe `ordered_list`), dan `gallery`/
+    `video_news` TIDAK punya field `text`.
+  - `tests/content-block-contract.test.ts` memaku kontrak OpenAPI dan `switch`
+    renderer ke konstanta yang sama, plus menegaskan setiap tipe merender sesuatu
+    yang tak kosong dan tak ada varian HTML mentah. Diuji dengan mutasi: kontrak
+    menyebut tipe berbeda (1 merah), satu `contentJson` kembali `type: object`
+    polos (1 merah), renderer berhenti menangani `gallery` (2 merah).
+
+- c244697: Tutup dua celah keamanan yang asesmen 4 Agustus 2026 (§9.1, §9.2) temukan, keduanya
+  di lapisan yang tak punya pemeriksa sendiri.
+
+  **`AUTH_COOKIE_SECURE` tidak lagi gagal-terbuka saat tidak diset.** Aturan produksi
+  `scripts/validate-env.ts` dulu hanya menolak string literal `"false"`, sementara
+  runtime menyetel `secure: process.env.AUTH_COOKIE_SECURE === "true"`. Ejaan salah
+  (`"1"`/`"TRUE"`/`"yes"`) memang sudah ditolak aturan tipe `bool` — diverifikasi
+  dengan menjalankan validator, bukan membacanya — sehingga yang benar-benar lolos
+  tepat satu keadaan, dan ia justru keadaan **bawaan**: variabel tidak diset sama
+  sekali. Produksi seperti itu mengirim cookie sesi tanpa atribut `Secure` sambil
+  `bun run config:validate` melaporkan konfigurasi bersih. Aturannya kini `!== "true"`
+  dengan pesan yang menyebutkan nilai terbaca. Non-produksi sengaja tidak dituntut:
+  dev berjalan di `http://`, dan `environments.md` sudah mencatat itu sebagai selisih
+  per-environment yang disengaja.
+
+  **`Cross-Origin-Opener-Policy` dan `Cross-Origin-Resource-Policy` kini dikirim**
+  (`same-origin`, keduanya tanpa gerbang produksi — tidak seperti HSTS, keduanya tidak
+  menunggu TLS). Keduanya "dianjurkan" OWASP Secure Headers Project dan berlaku di sini
+  justru karena repo ini punya sesi manusia dan 42 halaman ber-render: COOP memutus
+  tautan browsing-context-group ke window mana pun yang membuka kita, dan CORP menutup
+  jalur penyematan `no-cors` yang CORS sendiri tidak tutup. Tidak ada kapabilitas yang
+  hilang — repo ini tak pernah memancarkan `Access-Control-Allow-Origin`, gambar artikel
+  disajikan origin R2 yang berbeda, dan Turnstile berjalan di frame anak yang tidak
+  diatur COOP.
+
+  Kedua perbaikan mutation-proven: mengembalikan aturan lama membuat test keadaan-ABSEN
+  merah, dan asersi header menyasar NILAI-nya, bukan sekadar keberadaannya.
+
+- 3beee6c: Core Web Vitals kini diukur di LAB — Opsi D ADR-0067, nol data pengunjung.
+
+  Spec baru `tests/e2e/cwv-lab.e2e.ts` (harness E2E Playwright yang sudah ada,
+  bukan harness kedua) mengukur **LCP** dan **CLS** halaman `/login` via
+  `PerformanceObserver` ber-`buffered: true`, dengan CLS dihitung per definisi
+  session-window CWV. Ambang kelulusan = ambang "baik" CWV (LCP ≤ 2500 ms,
+  CLS ≤ 0,1) — sebagai batas LAB satu mesin: detektor regresi, BUKAN p75
+  lapangan. INP sengaja tidak diukur/diklaim (tanpa interaksi nyata ia tidak
+  bermakna di lab).
+
+  Gerbangnya env-gated (`E2E_CWV_LAB=1`, dinyalakan job CI `e2e-smoke`); saat
+  env tidak diset ia MENCETAK pernyataan skip eksplisit, dan saat berjalan LCP
+  yang tidak terekam adalah kegagalan — gerbang ini tidak pernah hijau senyap.
+  Script baru: `bun run perf:cwv:lab`. Tidak ada skrip klien, endpoint, tabel,
+  atau sentuhan pada `visitor_analytics`; keputusan RUM (Opsi B) tetap milik
+  pemilik produk — status ADR-0067 tidak berubah.
+
+- 36d012f: Add the `/admin/data-lifecycle` console and put `data_lifecycle` in the admin sidebar.
+
+  The module shipped its registry / legal-hold / dry-run / run-history API (ADR-0037) with no screen at all, so the entire surface was reachable only by `curl` and its own README recorded the screen as an open follow-up. The console renders the code-declared lifecycle registry, the legal-hold ledger with a place-hold form and per-hold release, the on-demand dry-run planner with its categorized counts, and the run history that is itself retention evidence.
+
+  Reads reuse the same application functions the JSON endpoints call, inside one `withTenantOrThrow` transaction. Writes go to the guarded `/api/v1/data-lifecycle/*` endpoints — the two hold mutations with a fresh `Idempotency-Key` per click, the dry-run with none, because that endpoint mutates nothing and requires none. Real archive and purge stay job-only; the screen has no control for them because they have no HTTP surface.
+
+  `legal_hold.create` and `legal_hold.release` are gated **separately**: `data_lifecycle.legal_hold_maker_checker` makes holding both a `critical` SoD conflict, so gating both controls on one permission — the tidier-looking choice — would be wrong for every real operator. `tests/admin-data-lifecycle-page-contract.test.ts` pins that, plus the page's six permission keys against what the routes enforce and the descriptor declares, so a plausible-but-unseeded key (`legal_hold.delete`, `plan.read`) cannot silently hide a panel from everyone including the owner.
+
+- 9800a0e: Buat penolakan pool database tak bisa lagi menyamar sebagai data, dan hentikan
+  inversi backpressure yang sudah hidup di jalur job.
+
+  `withTenant<T>(...): Promise<T>` mengembalikan `503 DATABASE_BUSY` (breaker
+  open / work-class saturasi) dan `409` idempotency lewat `as T` — cast yang
+  artinya persis "berhenti memeriksa". Header-nya menyatakan "in practice every
+  real call site uses `T = Response`"; itu sudah lama tidak benar. **58 berkas di
+  `src/`+`scripts/` yang bukan handler HTTP** (15 di antaranya `.astro`) dan 24
+  berkas test memakainya untuk mengambil DATA; begitu tipe-nya dijujurkan,
+  compiler membuktikan 30 di antaranya benar-benar membaca field dari nilai yang
+  bisa berupa `Response`.
+
+  Kerusakannya nyata, bukan teoretis. `purgeExpiredAuditEvents` berjanji
+  `Promise<number>`; di bawah work-class `maintenance` (SATU slot) ia
+  mengembalikan `Response`. `runBoundedBatches` berhenti "sampai satu pass
+  mengembalikan `count: 0`" — dan `Response` tak pernah `=== 0`, sehingga job yang
+  seluruh tujuannya mengalah justru menjalankan 50 pass penuh per tenant ke
+  database yang baru saja menolak, lalu melaporkan `totalCount` sebagai string
+  `"0[object Response]…"` (karena `number + Response` itu konkatenasi). Test
+  mutasinya mereproduksi persis output itu.
+
+  Sekarang ada dua bentuk, dan compiler yang memilihkan:
+
+  - **`withTenant(...)` → `Promise<T | Response>`.** Jalur request meneruskan
+    `503`-nya apa adanya, lengkap dengan `Retry-After`; 275 pemanggilan di 204
+    berkas rute yang callback-nya memang sudah mengembalikan `Response` tidak
+    berubah satu baris pun (`Response | Response` itu `Response`).
+  - **`withTenantOrThrow<T>(...)` → `Promise<T>`.** Untuk semua yang bukan handler
+    HTTP. Melempar `DatabaseBusyError` yang MEMBAWA response `503` yang sama
+    (jadi kedua bentuk tak bisa menyimpang), dan kini diklasifikasi `retryable`
+    oleh job runner alih-alih jatuh ke `unknown`.
+
+  Tak ada lagi satu pun `as T` di modul itu.
+
+  `db:tenant-context:check` (baru, di rantai `check`) menutup dua sisa yang tak
+  terlihat compiler: hasil `withTenant` yang **dibuang** (`await withTenant(...)`
+  sebagai statement — 503-nya lenyap tanpa jejak), dan pemanggilan dari `.astro`,
+  yang tak pernah dibaca `tsc --noEmit`. Gate itu langsung menemukan tiga
+  pembuangan nyata di jalur auth: dua di antaranya melewatkan audit event
+  `sso_account_linked`/`mfa_challenge_issued` sambil tetap menjawab seolah sudah
+  tertulis.
+
+- 4430aa4: The root discovery surfaces are edge-cacheable, and aggregate surfaces are now
+  invalidated by the modules that author them (ADR-0061 §B).
+
+  `serveDiscovery` accepts Astro's `locals` and publishes the resolved tenant after
+  `build(ctx)` produces a payload; all six routes (`/robots.txt`, `/sitemap.xml`,
+  `/sitemap-{n}.xml`, `/feed.xml`, `/atom.xml`, `/feed.json`) forward it. Three
+  registry entries follow: `seo-robots` (600s, config-derived and the most stable),
+  `seo-sitemap` (300s, index and child pages), `seo-feed` (300s, RSS/Atom/JSON with
+  `?locale=` as the only permitted parameter).
+
+  Publishing after the payload check matters here even more than it did for
+  `/news/**`: `build` returns `null` for "sitemaps disabled", "feeds disabled" and
+  "page out of range", all of which collapse into the same generic 404 as an
+  unknown host. It also means `/sitemap-99999.xml` matches the surface but never
+  publishes a tenant, so walking page numbers cannot fill the cache.
+
+  Discovery bodies turn out to have two authors, and only one of them owned the
+  surface. `PUT /api/v1/seo/config` now enqueues a purge — the tenant-wide
+  `noindex` switch alone rewrites `/robots.txt`. But the bodies are aggregated from
+  every `seo_facts` provider, so publishing a post changes `/sitemap.xml` without
+  touching anything `seo_distribution` writes, and a module purge tags
+  `t:<tenant>:m:<moduleKey>`, so `blog_content`'s purge could not reach it. Left
+  alone that would have purged `/blog/{code}/feed.xml` on publish while `/feed.xml`
+  — the same content — sat stale until TTL, with nothing reporting it.
+
+  `enqueueModuleContentPurge` therefore also covers modules that declare a
+  `consumes` dependency on the changing module and own a declared surface. It is
+  read from the module registry, so `blog_content` never names `seo_distribution`;
+  and it is limited to surface owners, because a ban on a key that tags no cached
+  object matches nothing while the queue reports success.
+
+  No migration, no permission, no OpenAPI change. With `EDGE_CACHE_MODE` unset the
+  subsystem remains a no-op.
+
+- dfd8e64: Host-resolved public surfaces can be cached at the edge (ADR-0061 §A).
+
+  ADR-0042 §8 defines two sources for the tenant a cached object is tagged with,
+  and prefers the one a route publishes on `locals.edgeCacheTenantId` — the only
+  source available to a surface whose tenant comes from the request rather than
+  from a path segment. That branch had no writer anywhere in the repo, so it was
+  unreachable and every host-resolved surface was uncacheable by construction:
+  edge caching accelerated `/blog/{tenantCode}/**` (the legacy shape) and nothing
+  of the `/news/**` family that ADR-0059 made the go-forward one.
+
+  The four `/news/**` routes now publish their resolved tenant through
+  `publishEdgeCacheTenant`, and the registry declares `news-index`,
+  `news-taxonomy` and `news-post` — mirroring the TTLs and reasoning of their
+  `blog-*` counterparts, owned by `blog_content`, whose existing module purge
+  already invalidates them.
+
+  Publication happens only on the path that actually serves the resource. A 404 is
+  a cacheable status, so publishing before the "no such post/term" branch would
+  annotate a missing-resource 404 with `Surrogate-Control` while an unknown-host
+  404 gets `private, no-store` — answering "does this hostname map to a live
+  tenant?" from one request, through a second channel over the question the
+  route family's latency padding exists to close.
+
+  No migration, no permission, no OpenAPI change. With `EDGE_CACHE_MODE` unset
+  (every deployment's default) the whole subsystem remains a no-op.
+
+- a3d1dc2: Tegakkan bahwa setiap variabel env yang dibaca kode ada di `.env.example`.
+
+  `tests/env-required-vars-doc.test.ts` sudah membandingkan daftar var **WAJIB**
+  yang didokumentasikan dengan yang ditegakkan. Separuh yang lebih besar tak
+  terjaga: var yang opsional tapi **mengubah perilaku**. Sebelas menumpuk di sana,
+  termasuk:
+
+  - **`TENANT_DOMAIN_DNS_PROVIDER`** — dua nilainya adalah "tak melakukan panggilan
+    keluar sama sekali" dan "bicara ke API DNS sungguhan". Tak ada di
+    `.env.example`, doc 18, maupun `validate-env.ts`.
+  - **`R2_ACCOUNT_ID`/`R2_BUCKET`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`** —
+    `R2_ENABLED=false` dikirim sendirian, jadi operator yang menyalakannya tak
+    punya template untuk empat kredensial yang lalu diwajibkan uploader.
+  - **Empat `SITE_SEARCH_*_RATE_LIMIT_*`** — kontrol penyalahgunaan pada dua
+    endpoint publik anonim, bukan sekadar tuning.
+  - `FORM_DRAFT_RETENTION_DAYS`, `OBJECT_SYNC_UPLOAD_TIMEOUT_MS`, dan blok
+    `TENANT_DOMAIN_CLOUDFLARE_*`.
+
+  Yang terakhir lebih buruk dari sekadar absen: `.env.example` merujuk "the
+  `TENANT_DOMAIN_CLOUDFLARE_*` settings **above**" padahal tak ada satu pun di
+  seluruh berkas itu.
+
+  Nilai default yang dicatat diverifikasi ke kode, bukan ditebak — retensi form
+  draft 30 hari (bukan 90) dan timeout object-sync 10000ms (bukan 30000).
+
+  `config:env:coverage:check` (baru, di rantai `check`) menargetkan `.env.example`,
+  bukan doc 18: berkas itulah yang **disalin** operator, sementara var yang hanya
+  ada di prosa harus sudah diketahui lebih dulu untuk bisa dicari. Placeholder
+  ber-komentar sudah cukup — pola yang sudah dipakai `EMAIL_MAILKETING_*` — jadi
+  secret tetap tak masuk repo. Batas yang dinyatakan terbuka di header gate: ia
+  hanya mencocokkan `process.env.X`, jadi modul config yang mengoper
+  `env: NodeJS.ProcessEnv` lalu membaca `env.X` tak terlihat.
+
+- c244697: Postur standar keluarga dan kontrak konsumen: tiga celah asesmen putaran kedua
+  ditutup, satu dinyatakan terblokir dengan alasan eksternal yang diverifikasi.
+
+  **Kontrak konsumen `awcms-astro` dipisah `CONSUMED` vs `COMMITTED`** (§9.5).
+  `CONSUMER_PATHS` semula membekukan enam permukaan karena diturunkan dengan
+  mem-grep repo sebelah **tanpa membuang komentar** — tiga di antaranya prosa: sebuah
+  docblock tipe, sebuah komentar yang menjelaskan kenapa build justru TIDAK memanggil
+  `/auth/session`, dan sebuah pesan error yang memberi tahu manusia cara menerbitkan
+  kredensial. Repo sebelah punya jawaban otoritatifnya dan menggerbanginya ("tepat
+  tiga permukaan", komentar dibuang lebih dulu). Kini tiga permukaan yang benar-benar
+  dipanggil dipisahkan dari dua yang **dijanjikan ADR** tetapi belum dipanggil
+  (`/auth/session`, `/access/machine-credentials` — keduanya milik BFF ADR-0050 yang
+  belum dibangun). `/api/v1/blog/posts/{id}` keluar dari kontrak sepenuhnya:
+  ADR-0018 di repo sebelah menghapus fetch per-id, jadi membekukannya mengikat repo
+  ini pada bentuk yang tak punya pembaca. Tiap entri `COMMITTED` wajib menyebut ADR
+  yang menjanjikannya, dan sebuah test menegakkan bahwa ADR itu punya berkas.
+
+  **Dua lubang `bun run skills:check` ditutup** (§9.6). Pembebasan
+  `ASPIRATIONAL_SKILLS` dulu bersifat per-SKILL dan **total**: `awcms-performance`
+  terdaftar dengan alasan yang menyebut PERINTAH sementara pembebasannya juga menutupi
+  PATH, sehingga skill itu bisa berkata "perintah ini tidak ada" di banner-nya dan
+  "gunakan suite yang sudah ada di `src/lib/performance/`" enam puluh baris kemudian —
+  direktori yang tidak ada — tanpa gerbang berpendapat. Kini ada blok bertanda
+  `<!-- aspirational:mulai -->` yang membatasi pembebasan ke passage yang memang
+  memerlukannya; sisanya tetap digerbangi, dan `awcms-performance` keluar dari daftar.
+  Lubang kedua mekanis: ekstraktor path hanya melihat path berbacktick **satu baris**,
+  sehingga path yang terpotong pembungkusan markdown tak terlihat — aturan 1 sebenarnya
+  berbunyi "path yang disebut DAN kebetulan muat satu baris wajib ada", dan selisih itu
+  tak tertulis di mana pun. Keduanya mutation-proven.
+
+  **ADR-0068 menuliskan pin edisi standar dan tiga divergence keluarga.**
+  `awcms-astro` ADR-0028 menyatakan mengikuti edisi OWASP repo ini dan tidak
+  mendahuluinya — sementara keputusan itu tidak pernah ada, karena pinnya datang lewat
+  sebuah skill lalu diikuti karena sudah tertulis. `intentionalDivergences` yang kosong
+  sejak ADR-0055 kini memuat tiga entri ber-`reviewDate`: HSTS `includeSubDomains`
+  (benar di kedua sisi, alasan berbeda), `.astro` tak-terperiksa-tipe, dan pin edisi itu
+  sendiri.
+
+  **`astro check` TIDAK bisa ditambahkan, dan itu diverifikasi bukan diasumsikan.**
+  `@astrojs/check` menuntut API programatik TypeScript 6.x; repo ini di 7.0.2, yang
+  tidak menyediakannya. Dipasang, dijalankan, ditolak, lalu dependensinya dicabut lagi
+  alih-alih meninggalkan 73 paket yang tak bisa berbuat apa-apa. Dicatat sebagai
+  divergence bertanggal, bukan sebagai janji.
+
+  **ADR-0067 mendapat Opsi D — pengukuran lab.** Ketiga opsi draf pertama semuanya RUM,
+  sehingga seluruh keputusan bertabrakan dengan postur privasi `visitor_analytics` dan
+  menunggu. Pengukuran lab (Playwright, sudah terpasang) mengumpulkan **nol** data
+  pengunjung dan menjawab pertanyaan yang berbeda — "apakah perubahan ini membuat
+  halaman lebih lambat" — jadi ia tidak perlu menunggu keputusan RUM.
+
+- 703f666: Foreign-key columns must be index-reachable — the repo's first performance gate
+  (ADR-0064, `sql/090`).
+
+  The 2026-08-04 assessment measured **zero of 28 gates** touching performance, so
+  an unindexed foreign key lands with CI fully green and surfaces months later as
+  "the admin screen got slow".
+
+  Postgres indexes a foreign key's referenced side automatically and its
+  referencing side not at all, so a bare FK column pays twice: every parent
+  `DELETE`/`UPDATE` sequentially scans the child table to enforce the constraint,
+  and the parent→child join has no index either. Measured here: 182 FK columns, 14
+  unreachable, with `awcms_blog_ads` carrying no index at all beyond its primary
+  key.
+
+  The rule is tenant-aware — reachable means leading an index, or being the second
+  column after `tenant_id`. The literal "must lead" rule is violated by 40 of 182,
+  and forty migrations on the day a gate lands is not a gate but an exemption list
+  waiting to be written. Since RLS `FORCE` guarantees every tenant-scoped query
+  carries `tenant_id`, a `(tenant_id, fk)` composite is the index those joins
+  actually use. The residual is stated rather than hidden: that composite does not
+  help enforce the constraint on a parent delete. The relaxation is bounded and
+  tested both ways — a second column after anything else does not count, and
+  neither does a third column after `tenant_id`.
+
+  `sql/090` adds thirteen indexes (additive, `IF NOT EXISTS`, no data moved).
+  `awcms_setup_state.tenant_id` is the single exemption: a hard singleton holding
+  exactly one row.
+
+  Zero permissions, zero OpenAPI change, zero runtime change.
+
+- 40f645a: feat(form-drafts): add the `/admin/form-drafts` ops screen and its sidebar entry
+
+  `form_drafts` shipped a complete admin API but no screen and no `navigation`
+  entry, so the module was invisible in the admin sidebar and the only way to see
+  or clear a tenant's accumulated drafts was the JSON API or the daily
+  `form-drafts:purge` job.
+
+  Adds `/admin/form-drafts`: a filter bar (module key / wizard key / status)
+  driving the same filters `GET /api/v1/form-drafts` accepts, the bounded
+  newest-first list, a collapsed read-only payload inspector, and a per-row
+  delete that calls `DELETE /api/v1/form-drafts/{id}`. Registered in the sidebar
+  under System, gated on `form_drafts.draft.read`.
+
+  Deliberately not included: a create form, a step editor, and a submit button.
+  Drafts are produced by other modules' wizards, and submitting is a domain
+  transition that wizard owns — a janitor screen that flipped a draft to
+  `submitted` would report work as finished while nothing downstream ran.
+
+  No schema, endpoint, or permission change.
+
+- 1922f79: Add the host-resolved public content family `/news/**` (ADR-0059), and make the SEO discovery base path follow the route family that actually serves.
+
+  `tenant_domain` has mapped hosts to tenants since #219 and the discovery surfaces (`robots.txt`, sitemaps, feeds) and `/search` have been host-resolved since #223/#231 — but the content those surfaces point at could only be read through `/blog/{tenantCode}/{slug}`. A tenant on its own domain therefore published URLs carrying the very identifier the domain exists to remove. Four routes close that: `/news`, `/news/{slug}`, `/news/category/{slug}`, `/news/tag/{slug}`, resolving the tenant from the request through `withHostResolvedBlogTenant` — the same shape as `site_search`/`comments`, including the latency padding that keeps "unknown host" and "live tenant" indistinguishable in time as well as in body. The family has its own per-tenant switch, `publicRouteMode`, symmetric with the legacy family's `legacyTenantRouteEnabled`.
+
+  The backlog asked for `/blog/{slug}`, and that shape was refused with evidence: probed in this repo, Astro reports the route "is defined in both" `src/pages/blog/[slug].ts` and `src/pages/blog/[tenantCode]/index.ts`, still builds, and lets one silently shadow the other — "a collision will result in a hard error in following versions of Astro". Resolving the ambiguity at runtime would be worse: whoever can write a post slug could shadow another tenant's listing URL. The archived `publicBasePath`/`publicLabel` settings are not adopted either, because they move a page's links without moving the route that serves them.
+
+  `seo_distribution` now chooses its base path instead of assuming one: `/news` while the host-resolved family is live, `/blog/{tenantCode}` when a tenant switched that off but kept the legacy family, and **no provider at all** when both are off — an empty sitemap rather than one full of certain 404s. That invariant is mutation-proven against a real database.
+
+  Also corrected, because it was recorded as a decision: the "every sitemap `<loc>` 404s for host-resolved tenants" defect in `docs/PROJECT_STATE.md` never existed. `discovery-providers.ts` has scoped the adapter to `/blog/{tenantCode}` since the module landed (#223), and the `/blog` default it was blamed on has zero callers in `src/`.
+
+  Zero migrations, zero permissions, zero OpenAPI change. `/news/**` is deliberately not yet a declared edge-cache surface: its path is identical for every tenant, so the cache key has to carry the host first.
+
+- 2739d31: Tambah modul `idn_admin_regions` — master data wilayah administratif Indonesia
+  yang ber-versi, ter-provenance, dan bisa di-rollback (ADR-0046).
+
+  Hampir setiap aplikasi bisnis Indonesia di atas template ini butuh wilayah resmi:
+  alamat pelanggan, cabang, wilayah kerja, agregasi laporan per provinsi. Tanpa
+  modul bersama, setiap aplikasi menyalin CSV-nya sendiri — versi berbeda-beda,
+  tanpa asal-usul, tanpa cara membuktikan versi mana yang sedang dipakai.
+
+  Yang mendarat:
+
+  - **Skema ber-versi** (`sql/080`): `awcms_idn_region_datasets` (satu baris per
+    impor, dengan repo/commit/checksum/nomor Kepmendagri) dan
+    `awcms_idn_admin_regions` (91.599 wilayah milik satu versi). Impor berikutnya
+    menulis **di samping**, bukan menimpa — itulah yang membuat rollback jadi
+    pembalikan status, bukan impor ulang.
+  - **Impor sebagai JOB** (`bun run idn-regions:import`, dry-run default): mem-parse
+    dump upstream sebagai TEKS (tanpa mesin SQL, tanpa MySQL, tanpa jaringan) dan
+    menolak impor parsial — baris tak terparse, kode ganda, induk hilang, atau satu
+    tingkat kosong semuanya menggagalkan impor. Dataset baru selalu mendarat
+    `validated`, tak pernah langsung `active`.
+  - **Aktivasi/rollback sebagai aksi admin ter-audit** (ABAC + `Idempotency-Key`),
+    dengan aturan "hanya satu dataset aktif" ditegakkan **partial unique index di
+    database** — bukan pemeriksaan aplikasi yang bisa disusupi dua request
+    bersamaan.
+  - **Lookup API** `/api/v1/idn-regions/*`: filter tingkat/induk/nama, paginasi
+    keyset, default ke dataset aktif, dan `?dataset=<code>` untuk membandingkan
+    versi lama.
+  - **Dataset ter-vendor** (`data/idn-admin-regions/`, ~4,2 MB): agar impor
+    deterministik dan offline, dan agar "versi wilayah mana yang jalan di build
+    ini" terjawab dari commit, bukan dari keadaan internet hari itu.
+
+  Dua keputusan yang mengikat pembaca berikutnya:
+
+  - **Kedua tabel GLOBAL** — tanpa `tenant_id`, tanpa RLS. Provinsi "Aceh" sama
+    untuk semua tenant. Yang menggantikan RLS bukan kepercayaan: keduanya wajib
+    terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` sehingga privilege tiap role
+    dinyatakan eksplisit (`awcms_app` SELECT + UPDATE dataset saja, `awcms_worker`
+    jalur tulis, **nol DELETE untuk keduanya**), dan setiap endpoint tetap melewati
+    sesi + konteks tenant + ABAC default-deny. Yang global adalah BARISNYA, bukan
+    izinnya.
+  - **Ini bukan API resmi Kemendagri.** Dataset komunitas (`cahyadsn/wilayah`, MIT)
+    yang mengemas Kepmendagri. Caveat itu dibawa di kode, di respons API, dan di
+    layar admin — bukan hanya di dokumen. Nomor keputusan direkam **per berkas**
+    dari header masing-masing: berkas yang diimpor menyebut **300.2.2-2138/2025**,
+    sementara `awcms-mini` merekam satu kalimat menyebut 2430 untuk semua berkas —
+    koreksi yang digerbangi test provenance.
+
+  Diverifikasi terhadap PostgreSQL 18.4 nyata: 81 migrasi bersih, impor 91.599
+  baris (38 provinsi / 514 kabupaten-kota / 7.285 kecamatan / 83.762 desa-kelurahan),
+  impor ulang byte identik = no-op, dan nilai turunan yang mudah salah terbukti
+  benar pada baris nyata (`Desa Adat` di Papua, `Kota Administrasi` di DKI, jalur
+  leluhur "Papua, Kabupaten Jayapura, Sentani, Desa Adat Yoboi").
+
+- fc138df: Kredensial mesin baca-saja + `GET /api/v1/auth/session` — dua kontrak yang
+  menahan `awcms-astro`, dibangun sebagai satu desain (ADR-0049).
+
+  Satu-satunya bearer yang repo ini terima adalah token **sesi** ber-hash, dan
+  sebuah build tidak bisa memegangnya: sesi kedaluwarsa, dicabut seluruhnya saat
+  password reset, dan dirotasi step-up MFA. `.env.example` milik `awcms-astro`
+  menyuruh operator mengisi "a BUILD-TIME, READ-ONLY token" — instruksi untuk
+  menerbitkan sesuatu yang tidak bisa diterbitkan siapa pun, di repo mana pun di
+  keluarga ini.
+
+  **Kredensial MENGAUTENTIKASI; ia tidak pernah MENGOTORISASI.** Setiap baris
+  `awcms_machine_credentials` (`sql/082`, tenant-scoped, `FORCE` RLS, FK komposit)
+  terikat pada satu `awcms_tenant_users` yang sudah ada. Setelah prinsipalnya
+  resolve, rantai module-enabled → RBAC → ABAC → decision log → SoD berjalan apa
+  adanya. Kredensial yang membawa daftar izinnya sendiri akan menjadi permukaan
+  otorisasi KEDUA — persis yang ADR-0048 §1 larang.
+
+  Tiga pembatas, semuanya fail-closed:
+
+  - **Menyempitkan, tak pernah melebarkan.** Izin efektif = irisan
+    `allowed_permission_keys` dengan izin service account. Menambah role ke akun
+    itu tidak melebarkan kredensial yang sudah terbit; daftar kosong berarti tidak
+    bisa apa-apa, bukan "tanpa batas".
+  - **Baca-saja**, diputus SEBELUM izin dilihat dan terlepas dari apa pun yang
+    dipegang akunnya — token yang bocor tak bisa mengubah apa pun walau diarahkan
+    ke `owner`.
+  - **Kedaluwarsa wajib** (maks 365 hari) dan pencabutan berlaku pada permintaan
+    berikutnya, karena autentikasi membaca baris yang sama. Itulah yang token buram
+    ber-hash beli dan JWT bertanda tangan tidak punya jawabannya.
+
+  **Token membawa tenant-nya sendiri** (`awcmsm_<tenantIdHex>_<rahasia>`), jadi
+  klien build cukup satu env var dan header tenant tidak lagi relevan untuknya —
+  menutup cacat header ADR-0047 tanpa menambah alias `X-Tenant-Code` yang setiap
+  rute masa depan harus ingat menghormatinya. Hash-nya ber-ruang-nama
+  `mc-sha256:`, dan `hashSessionToken()` men-dispatch pada prefix token, sehingga
+  183 rute yang sudah memanggilnya mendapat dukungan ini tanpa satu pun perubahan
+  tanda tangan — dan satu jenis bearer tak pernah bisa dicari di ruang nama
+  jenis lain.
+
+  `GET /api/v1/auth/session` mengembalikan klaim aman saja untuk BFF lintas-origin
+  (`identityId`/`tenantId`/`displayName`/`roles`/`assuranceLevel`/`expiresAt`/`scopes`)
+  — bukan duplikat `/auth/me`, yang justru mengembalikan email mentah dan diam soal
+  peran/assurance/kedaluwarsa. Satu bentuk 401 untuk setiap kegagalan, termasuk
+  saat yang disodorkan kredensial mesin, supaya endpoint ini tak bisa dipakai
+  mengklasifikasi bearer. Ia memperkenalkan `defineSelfServiceTenantRoute` —
+  seam untuk rute terautentikasi yang subjeknya pemanggil itu sendiri, sehingga
+  `workClass` tetap wajib dan `api:tenant-route:check` tetap satu-arah alih-alih
+  menumbuhkan allowlist kedua.
+
+  Decision log mendapat `machine_credential_id` nullable: beberapa kredensial boleh
+  menunjuk service account yang sama, jadi tanpa kolom itu "token yang MANA yang
+  membaca ini" tak punya jawaban.
+
+  Diverifikasi terhadap PostgreSQL nyata (83 migrasi bersih, 18 test integrasi) —
+  dan verifikasi itulah yang menemukan jebakan yang lolos typecheck: **`Bun.SQL`
+  tidak mem-bind array JS sebagai array Postgres**. `${["a","b"]}` sampai ke server
+  sebagai teks `a,b` (22P02), dan bentuk satu elemen paling berbahaya karena tiba
+  sebagai `a` yang terlihat seperti string biasa.
+
+  Dicatat sebagai divergence keluarga di `awcms-family-compatibility.yaml` **saat
+  mendarat**, sesuai ADR-0047 §4 — fitur fondasi pertama yang dirintis langsung di
+  sini selama pembekuan `awcms-mini`/`awcms-micro`.
+
+  Security review pra-merge menemukan dua hal dan menutup keduanya: deaktivasi
+  service account kini **langsung** mematikan kredensialnya (jalur mesin
+  mensyaratkan status tenant-user **dan** identitas aktif — sengaja lebih ketat
+  dari jalur sesi, karena tak ada apa pun yang mencabut kredensial saat akun
+  dinonaktifkan dan umurnya bisa setahun), dan respons penerbitan kini
+  `private, no-store` karena badannya membawa kredensial hidup. Yang pertama
+  dibuktikan dengan mengembalikan cacatnya: dua test integrasi merah, lalu hijau
+  lagi setelah dipulihkan.
+
+- 1b852b8: Revoke `media_library.media.attach` and `media_library.media.detach` (ADR-0056 §A).
+
+  Both were seeded into the global permission catalog by `sql/052`, and `POST /api/v1/setup/initialize` grants that catalog whole to every new tenant's `owner` role. Neither was ever checked: no route, no application function, no job. They named a write that stopped existing at ADR-0036 — before that inversion, `awcms_news_media_objects.owner_resource_type`/`.owner_resource_id` held the object→content relation and attach/detach were real operations on this module's own table; after it, a media object's attachment is stated by the consumer's FK (`awcms_blog_posts.featured_media_id`, `awcms_news_portal_ad_placements.media_object_id`), so attaching means updating the consumer's row under the consumer's permission.
+
+  `sql/087` deletes the grants first, then the catalog rows — reversed, the catalog delete hits the `awcms_role_permissions` FK. The two zero-caller functions (`attachNewsMediaObject`, `detachNewsMediaObject`) are deleted with them, and `media-object-directory.ts` keeps a marker where they were so the next reader learns why the module has no attach path rather than assuming one is missing.
+
+  The `attached` **status** survives deliberately: `sql/041`'s CHECK still admits it and `isNewsMediaObjectSafeForPublicReference` still treats it as safe to reference, so any row already in that state keeps resolving. What is gone is the ability to write it — which nothing did. `verified` is what the finalize flow produces and it is equally referenceable.
+
+  This is a real authorization change, and it is the narrow half of the ADR: `delete`/`restore`/`purge` are equally ungated today and are deliberately left alone here, because unlike these two they describe operator needs that currently have no answer at all. §B gives them endpoints.
+
+  Also corrects ADR-0056 §A, whose first edition said all five dead functions were deleted — contradicting §B, which uses three of them. Two are deleted; three are kept and given a surface.
+
+- ad5f1e6: Give `media_library`'s delete/restore/purge permissions the endpoints they never had (ADR-0056 §B), and fix a Postgres error-code check that could never be true.
+
+  All three permissions have been in the global catalog since `sql/052`, granted whole to every tenant owner, and enforced by nothing — no route, no application function, no job. The functions behind them were written and had zero callers. So an object uploaded by mistake, orphaned, or violating policy disappeared only if the reconciliation job happened to categorise it that way, on the job's own schedule; there was no way for an administrator to remove one, and no way to undo it if they were wrong.
+
+  - `DELETE /api/v1/media/objects/{id}` — soft delete, body `{ reason }` required and bounded at 500 characters. The reason is part of the request hash, so replaying one key with a different reason is a different request rather than a stored response describing a reason nobody sent.
+  - `POST /api/v1/media/objects/{id}/restore` — the undo. A live object answers 404: "there was nothing to undo" and "it worked" must not share a response.
+  - `POST /api/v1/media/objects/{id}/purge` — hard-deletes the registry row of an already soft-deleted object.
+
+  All three are `HIGH_RISK_ACTIONS` and require `Idempotency-Key`, each under its own scope so a delete's key cannot collide with a purge's.
+
+  **Soft delete breaks live references, deliberately.** `resolveMediaReferences` filters `deleted_at IS NULL`, so a post whose `featured_media_id` points at a deleted object resolves to nothing immediately. That is the intended outcome for the case this serves, and `restore` is what makes it recoverable. Nothing here scans for referencing rows first: that would make a System Foundation module know its own consumers.
+
+  **`purge` clears the registry, not the R2 bytes.** The `news-media:reconcile` job owns the bucket; a second writer would mean two processes with different ideas of what is safe to remove. Accepted, stated cost: a window where the R2 object outlives its registry row, closed by the next reconciliation tick.
+
+  `awcms_news_portal_ad_placements.media_object_id` is a hard NOT NULL FK, so purging a still-referenced object answers `409 MEDIA_OBJECT_REFERENCED`. That path runs inside a **savepoint** — in PostgreSQL a `23503` aborts the whole transaction, so catching it without one turns a caller-actionable 409 into a 500 at the COMMIT `withTenant` performs. Verified against a real database rather than reasoned about.
+
+  That verification turned up a second thing. **The SQLSTATE is on `error.errno`, not `error.code`** — Bun sets `code` to its own `"ERR_POSTGRES_SERVER_ERROR"` for every server error alike, so `error.code === "23505"` is not a subtly wrong check but one that can never be true, leaving everything downstream of it dead. Ten sites in this repo already used `String(error.errno)`. One did not: `tenant-provisioning.ts`, where `POST /api/v1/tenants` promises `409 duplicate_tenant_code` and served a 500 on the concurrent-duplicate race the savepoint exists for (its pre-check SELECT hid the ordinary case). Fixed here rather than filed, and `tests/postgres-sqlstate-detection.test.ts` now gates it repo-wide — mutation-proven by restoring the original defect.
+
+  `media_library` now has zero ungated permissions. ADR-0056 §C (a list function and its own route) is what remains before the screen.
+
+- e5225e3: Add `listMediaObjects` and `GET /api/v1/media/objects/list` (ADR-0056 §C) — the last piece before `/admin/media`.
+
+  Until now the application layer had only point lookups: `fetchNewsMediaObjectById`, `fetchNewsMediaObjectsByIds`, `fetchNewsMediaObjectByObjectKey`. There was no way to ask "what media does this tenant have", so a browse screen could not be built on the existing surface at all, whatever the permission catalog said.
+
+  **It gets its own route rather than a mode on the resolver.** `GET /api/v1/media/objects` demands `?ids=` — it is a batch resolver built for the `awcms-astro` build to swap ids for public URLs. Teaching it a "no `ids` means list everything" branch would turn a request that is a 400 today into a dump of the entire registry: a contract change wearing the clothes of an addition, and one no existing caller could opt out of.
+
+  `list` cannot be read as an object id, because `[id].ts` and its children now require a uuid and answer 400 otherwise. That closes the path ambiguity from the other side, so Astro's static-before-dynamic precedence is not the only thing keeping `/list` and `/{id}` apart.
+
+  **The listing deliberately outgrows the resolver's safety rule.** It returns rows in any status — `pending_upload`, `failed`, `orphaned` — and, with `deletion=deleted|all`, soft-deleted ones. `isNewsMediaObjectSafeForPublicReference` admits only `verified`/`attached`; an administrator opens this list precisely because of the objects that are _not_ healthy, and §B's lifecycle endpoints would otherwise have no way to find their targets. `media.read` keeps it inside the tenant, and nothing returned here may be used as a public reference.
+
+  `deletion` is three states rather than a boolean `includeDeleted`: "show me what I deleted" is the question restore and purge exist to answer, and a boolean cannot ask it. It defaults to `live`, so deleted objects are opt-in.
+
+  Filters and cursors are **refused when malformed, never ignored** — a silently dropped filter answers 200 with a page nobody asked for, and a corrupt cursor treated as "no cursor" serves page 1 to a caller paging through page 4, forever.
+
+  The cursor carries full-precision `created_at` text, never a JS `Date`. A media registry is one of the likeliest places to resurrect Issue #158, because a batch upload writes many rows inside a single millisecond. `tests/integration/media-object-list.integration.test.ts` inserts 107 rows in ONE statement — so they share a transaction timestamp exactly — and walks every page; reverting the cursor to `Date` loses 57 of them and turns four tests red.
+
+  The projection omits `bucket_name`/`storage_driver` (deployment facts a browse screen has no use for) and `owner_resource_type`/`owner_resource_id` (vestigial since ADR-0036 moved attachment to the consumer's FK — shipping them would invite a screen to present them as current).
+
+  ADR-0056 is now complete. What remains is the `/admin/media` screen itself.
+
+- 7ff6aa9: `GET /api/v1/media/objects` — resolusi referensi media batch, sehingga artikel
+  terbit tidak lagi kehilangan gambarnya di konsumen luar.
+
+  `awcms_blog_posts` membawa `featured_media_id` dan `seo_image_media_id`, tetapi
+  `media_library` **tidak mengekspos satu pun endpoint baca** — hanya upload
+  session dan flag enforcement. Konsumen di luar proses karena itu bisa melihat
+  bahwa sebuah post PUNYA gambar tanpa cara apa pun mengetahui URL-nya. Itulah
+  sebab `article-images.ts` di `awcms-astro` mengembalikan `src: undefined` dan
+  setiap artikel terbit tanpa gambarnya, sementara tidak ada satu pun yang gagal.
+
+  Logika resolusinya bukan hal baru: `MediaLibraryPort.resolveMediaReferences`
+  sudah melakukannya untuk konsumen in-process sejak ADR-0036. Ini panggilan yang
+  sama lewat HTTP, dengan aturan keamanan yang sama — hanya objek `verified` /
+  `attached`, satu tenant, tidak soft-deleted, yang resolve. Tanpa migrasi:
+  permission `media_library.media.read` sudah diseed sejak `sql/052` sambil
+  menunggu permukaannya (ADR-0026 langkah 5d).
+
+  Dua keputusan bentuk yang tidak sepele:
+
+  - **Batch, bukan satu-per-id.** Build feed me-resolve seluruh gambar satu halaman
+    sekaligus; satu request per id membuat situs 200 post jadi ribuan round-trip,
+    sementara query di bawahnya memang sudah satu `id = ANY(...)`.
+  - **Id yang gagal DILAPORKAN, bukan dibuang.** Mengembalikan hanya yang berhasil
+    membuat "resource ini tidak punya gambar" dan "referensi gambarnya rusak"
+    menjadi respons yang sama — ambiguitas yang membuat celah ini bertahan tanpa
+    disadari. Semua sebab kegagalan dilebur ke satu ember (`unresolved`) supaya
+    endpoint-nya tidak jadi oracle atas sebab mana; id yang bukan uuid ditolak 400
+    karena "Anda mengirim sampah" adalah fakta yang berbeda.
+
+  Read-only, jadi kredensial mesin (ADR-0049) boleh memegangnya — inilah yang
+  melengkapi build feed.
+
+  Diverifikasi terhadap PostgreSQL nyata (7 test): objek belum-terverifikasi,
+  soft-deleted, dan milik tenant lain masing-masing TIDAK PERNAH resolve; batch
+  campuran resolve sebagian alih-alih gagal utuh; dan objek yang sama tetap
+  resolve dari tenant pemiliknya (memastikan kegagalan lintas-tenant itu memang
+  tenant scoping, bukan baris rusak).
+
+- 2ac4708: `GET /api/v1/media/public-origin` — the origin media public URLs are served
+  from, so a build client never holds a second copy of it.
+
+  `awcms-astro` ships a strict CSP and must name the media host in `img-src` at
+  BUILD time: an image resolved correctly still renders as nothing when
+  `img-src 'self'` blocks the host it lives on. Reading the origin off a
+  `publicUrl` does not help, because the policy is written before any object is
+  fetched, and a build with no images would then emit no `img-src` at all. The
+  only alternative left was copying `NEWS_MEDIA_R2_PUBLIC_BASE_URL` into the
+  consumer by hand — two copies of one value that agree until one is edited, with
+  a failure (images silently blocked) that names its cause nowhere.
+
+  Reports `origin` (scheme + host + port, for the host-wide CSP form) and
+  `baseUrl` (path included, for the tighter prefix form); neither choice is this
+  API's to make.
+
+  A deployment serving no public media answers `200` with `configured: false`
+  rather than an error, so a LAN/offline build omits the entry instead of
+  failing. A value that is set but unparseable — or on a scheme that cannot serve
+  media, `data:` above all — is reported the same way and never echoed back:
+  handing a consumer a malformed origin puts it in a CSP header, where a browser
+  either rejects the whole policy or allows something nobody wrote down.
+
+  Gated on `media_library.media.read`, the permission a build client already
+  holds; no new authority on any credential, and machine credentials stay
+  read-only (ADR-0049). No migration.
+
+- 68da201: Lebur `news_portal` ke `blog_content` — satu modul konten, tanpa fitur hilang.
+
+  `news_portal` sudah berhenti membawa bebannya sendiri. 11 berkas melawan 59,
+  3 tabel melawan 18, nol capability disediakan, nol rute publik, dan konsumen
+  WAJIB `public_content` milik `blog_content` — setiap tipe section homepage-nya
+  dibangun di atas data modul itu. Seam capability ada untuk menggambarkan
+  hubungan dua modul yang masuk akal berubah sendiri-sendiri; dua ini tidak bisa.
+
+  Yang lebih menentukan: keduanya mengapalkan sistem iklan, dan yang satu
+  melemahkan kontrol keamanan yang lain. `awcms_blog_ads.image_url` menerima URL
+  apa pun, sementara `awcms_news_portal_ad_placements.media_object_id` adalah FK
+  ke objek media terverifikasi. Selama keduanya hidup, sebuah tenant bisa
+  menyalakan enforcement managed-media (ADR-0036) dan tetap menerbitkan gambar
+  remote sembarangan lewat pintu yang lain.
+
+  Tapi keduanya bukan fitur sama dengan dua ejaan. Yang lama punya penargetan
+  `post`/`page` yang tidak dimiliki yang baru; yang baru punya 12 slot penempatan,
+  4 mode rotasi, dan prioritas yang tidak dimiliki yang lama. Mengganti salah satu
+  dengan yang lain akan menghapus kemampuan tanpa suara — jebakan yang justru
+  menjadi alasan perubahan ini ditulis sebagai UNION, dan alasan penyatuan tabel
+  iklan dikerjakan terpisah setelah tabel tujuannya diperlebar lebih dulu.
+
+  Perubahan ini:
+
+  - memindahkan 8 berkas `domain/`+`application/` ke `src/modules/blog-content/`;
+  - **mempertahankan nama tabel dan path API** (`awcms_news_portal_*`,
+    `/api/v1/news-portal/*`), mengikuti preseden ADR-0036 yang memindahkan
+    registry media tanpa me-rename `awcms_news_media_objects`. Rename memakan
+    setiap FK, policy, index, dan konsumen sambil tidak membeli apa pun yang
+    descriptor dan inventori belum catat;
+  - me-repoint 4 permission lewat `sql/076` dengan urutan insert → pindahkan
+    grant → hapus. Urutannya adalah keseluruhan poinnya: menghapus lebih dulu
+    akan mencabut kapabilitas dari setiap tenant yang memilikinya, dengan semua
+    gerbang tetap hijau;
+  - menaikkan `media_library` dari `optional` menjadi capability wajib bagi
+    `blog_content`, karena ad placement yang diserap memegang FK nyata — itulah
+    alasan `news_portal` dulu mendeklarasikannya non-optional;
+  - men-DROP `awcms_news_portal_tenant_state` (`sql/077`). Penulisnya tidak pernah
+    diport, jadi tabel itu inert; tabel FORCE-RLS tanpa pemilik dan tanpa penulis
+    adalah klaim palsu yang berdiri di depan setiap gerbang inventori;
+  - mempertahankan preset `news_portal` dengan namanya. Preset menamai niat, bukan
+    modul, dan niatnya tidak berubah.
+
+  `tests/news-portal-merge.test.ts` menjaga janji "union, bukan pengurangan":
+  setiap fitur yang selamat dipaku ke sesuatu yang bisa diamati — entri registry,
+  permission terdeklarasi, prefix rute yang diklaim, berkas di disk, atau urutan
+  statement di migrasinya.
+
+- 9ce56e2: Bandingkan dua registry job yang selama ini mendeskripsikan skrip yang sama tanpa
+  ada yang membandingkannya.
+
+  `JOB_WORK_CLASS_REGISTRY` menyatakan anggaran pool sebuah skrip, dan sudah
+  ditegakkan ke ground truth — generatornya MENOLAK jalan saat peta dan disk
+  berselisih. `ModuleDescriptor.jobs` menyatakan sebuah job untuk APA dan seberapa
+  sering operator harus menjalankannya (`recommendedSchedule`), dan disajikan lewat
+  `GET /api/v1/modules/{moduleKey}/jobs`. Yang pertama ditegakkan ke filesystem;
+  yang kedua tidak ditegakkan ke apa pun.
+
+  Akibatnya sebuah skrip worker bisa sepenuhnya masuk model kapasitas tapi tetap
+  tak terlihat di satu-satunya permukaan yang dibaca operator untuk tahu bahwa job
+  itu perlu dijadwalkan — dan dua memang begitu:
+
+  - **`tenant-domain:dns:sync`** — modul `tenant_domain` tak mendeklarasikan `jobs`
+    sama sekali. Deskriptornya ditambahkan (jadwal: tiap 15 menit; `manual` sebagai
+    default tak melakukan panggilan keluar).
+  - **`edge-cache:purge`** — tak ada modul `edge_cache` untuk menggantungkan
+    deskriptornya: edge cache adalah infrastruktur `src/lib/` (ADR-0043), sementara
+    `ModuleDescriptor.jobs` di-key per modul. Dicatat sebagai pengecualian dengan
+    alasan STRUKTURAL, bukan "belum sempat".
+
+  `modules:jobs:check` (baru, di rantai `check`) menegakkan keduanya: tiap skrip di
+  work-class registry wajib punya deskriptor dengan `recommendedSchedule` tak
+  kosong. Job yang tak dijadwalkan tak pernah jalan dan tak ada yang memberi tahu —
+  tak ada gate, tak ada health check, tak ada alarm.
+
+  Tabel §Job registry di `deployment-profiles.md` dihapus alih-alih diperbarui: ia
+  salinan tangan yang menua persis seperti yang diperkirakan, memuat tiga command
+  ERP yang tak pernah ada sambil melewatkan sepuluh job yang benar-benar dikirim.
+  §Shared worker runner juga dikoreksi — ia mengklaim ketujuh dispatcher memakai
+  `runJob`, padahal `email:dispatch` dan `sync:objects:dispatch` memakai claim-lease
+  per baris, yang justru MENGIZINKAN worker paralel; empat job lain belum memakai
+  keduanya dan kini terdaftar apa adanya.
+
+- 285b73d: Tenant-module matrix and per-module audit summary — the rest of #261.
+
+  `GET /api/v1/tenant/modules/matrix` returns every module with this tenant's
+  enabled state, its protected flag, and two lifecycle warnings computed by
+  re-running the REAL `evaluateModuleEnable`/`evaluateModuleDisable` rather than a
+  UI-side re-derivation that would drift from the endpoints. Two queries total;
+  the rest is pure.
+
+  The warnings are one-directional on purpose — `dependencyWarning` only for a
+  disabled module, `reverseDependencyWarning` only for an enabled one. The other
+  combinations cannot arise, and asking `evaluateModuleEnable` about an
+  already-enabled module short-circuits to `MODULE_ALREADY_ENABLED`: an answer
+  that looks like a check and is not one.
+
+  No health column, unlike awcms-micro's matrix: that one is fed by a batched
+  health reader this base does not have, and a per-row read would be 21 queries
+  inside one transaction.
+
+  `GET /api/v1/modules/{moduleKey}/audit` returns recent module-management
+  activity for one module, guarded by `logging.audit_trail.read` — these are
+  audit-log rows, so the audit-log permission governs them. The caller-supplied
+  `?limit=` is clamped to 1..50, with NaN/Infinity falling back to the default.
+
+- 1ffb11c: Tenant module presets: named profiles a tenant can be brought to in one action.
+
+  `minimal`, `website`, `news_portal` and `back_office`. A preset ENABLES what it
+  lists and DISABLES every enabled, unlisted, unprotected module — enable-only
+  would make presets useless as a way to REACH a profile, since a tenant that once
+  enabled `blog_content` and then applied `minimal` would stay non-minimal
+  forever.
+
+  Ported from awcms-micro (Issue #261) with its planning logic intact, but not its
+  preset set: `back_office` has no counterpart there, and micro's R2/SaaS presets
+  are not reproduced because the subsystems that distinguished them do not exist
+  in this base — a preset naming an absent module is a dead profile.
+
+  `GET /api/v1/tenant/modules/presets?preset=<name>` returns a dry-run plan,
+  because applying one disables things and an operator should see that list first.
+  `POST /api/v1/tenant/modules/presets/{presetName}/apply` executes it through the
+  existing lifecycle primitives, so each change runs the real validation and a
+  rejection is reported per module rather than swallowed.
+
+  No migration and no new permission: an apply is a sequence of enables and
+  disables, so it guards on `module_management.tenant_modules.disable`.
+
+- 049e36d: Make route ownership derivable: `ModuleApiContract.routes` and
+  `modules:routes:check`.
+
+  `basePath` was the only ownership claim a descriptor could make, and
+  `tenant_admin` declared `basePath: "/api/v1"` — a prefix of every route in the
+  application. Resolving a route to its longest-matching `basePath` handed
+  `tenant_admin` 36 routes it does not own (all of
+  `/api/v1/{access,roles,users,abac,identity}`, which are `identity_access`, plus
+  `/api/v1/tenant/modules`, which is `module_management`), while 30 public routes
+  matched nothing at all.
+
+  `api.routes` is a list of owned prefixes, longest-prefix wins — because
+  ownership genuinely is not one prefix: `/api/v1/tenant` is split between
+  `tenant_domain` and `module_management`, and public surfaces (`/blog`,
+  `/robots.txt`, `/search`, `/theming`, `/login`) belong to modules too.
+
+  `bun run modules:routes:check` (check chain + `ci.yml`) requires every file
+  under `src/pages` outside `/admin/**` to resolve to exactly one module or be
+  named in a reviewed `PLATFORM_ROUTES` allow-list. It also rejects `/`, `/api`
+  and `/api/v1` as claims outright — a coverage-only rule cannot see them, since a
+  prefix matching everything leaves nothing uncovered.
+
+  `MODULE_CONTRACT_VERSION` 2.3.0 -> 2.4.0 (additive; `routes` omitted means
+  `[basePath]`). `openapi_documented` readiness now checks every owned prefix
+  rather than the display `basePath`, which for `tenant_admin` had been matching
+  any path at all.
+
+- f8d9c39: `bun run identity-access:permissions:backfill` — tutup celah yang dibuka SETIAP
+  migrasi seed permission, tanpa menghidupkan kembali grant yang sengaja dicabut.
+
+  Role `owner` sebuah tenant menerima izinnya **sekali**, saat tenant itu dibuat
+  (`platform-bootstrap.ts`: `INSERT … SELECT id FROM awcms_permissions`). Migrasi
+  seed berikutnya hanya memperluas katalog global. Jadi setiap tenant yang lebih
+  tua dari sebuah modul akan menerima `403 ACCESS_DENIED` pada permukaan admin
+  modul itu, dan tidak ada satu pun yang mengatakannya. Ini sudah terjadi di
+  produksi (2026-07-26: owner kehilangan 18 permission setelah migrasi 062–070) dan
+  akan terjadi lagi pada `sql/083`.
+
+  **Kenapa "grant semua yang hilang" ditolak.** Bentuk itulah yang dianjurkan
+  `environments.md` sebelumnya (`LEFT JOIN … WHERE rp.permission_id IS NULL`), dan
+  ia tidak bisa membedakan "belum pernah ada saat tenant dibuat" dari "dicabut
+  admin dengan sengaja" — surface role admin memang menyediakan penghapusan itu.
+  Ia akan mengembalikan persis grant yang seseorang putuskan untuk dihapus, di
+  seluruh tenant sekaligus, tanpa jejak. Arah kegagalannya juga yang paling buruk:
+  melewatkan sebuah permission terlihat sebagai 403 yang bisa dilaporkan; memberi
+  permission yang tak seharusnya tidak terlihat sama sekali.
+
+  **Aturannya**: hanya permission yang **baris katalognya lebih baru** dari role
+  owner yang di-grant. Yang lebih tua tidak mungkin merupakan tambahan yang
+  terlewat — ia ada saat seed pertama, jadi ketidakhadirannya adalah keputusan.
+  Perbandingannya `>` bukan `>=`: bootstrap menulis role dan grant-nya dalam satu
+  transaksi, sehingga permission ber-stempel sama dengan role-nya JUSTRU bagian
+  dari seed asli.
+
+  Dry-run **default** (`--commit` untuk menulis, `--tenant <kode>` untuk rollout
+  bertahap), idempoten (`ON CONFLICT DO NOTHING`), satu entri audit per tenant yang
+  benar-benar berubah — dan tidak ada entri saat tak ada perubahan, karena log
+  pemeliharaan yang berbunyi di setiap no-op melatih pembacanya untuk
+  mengabaikannya. Role kustom tidak pernah disentuh.
+
+  Diverifikasi terhadap PostgreSQL nyata (6 test integrasi) termasuk hal yang
+  paling penting: 403 yang jadi alasan tool ini ada benar-benar hilang setelah
+  backfill, sementara permission yang sengaja dicabut **tetap** ditolak sesudahnya.
+  Aturannya mutation-proven: mengganti seleksinya jadi "semua yang hilang"
+  memerahkan 3 test unit dan 4 test integrasi.
+
+- 5702ab1: Ownership-based grants now run through the authorization chokepoint (ADR-0063).
+
+  Three handlers — `PATCH /api/v1/blog/posts/{id}`,
+  `POST /api/v1/blog/posts/{id}/submit-review` and `PATCH /api/v1/blog/pages/{id}`
+  — decided permissions themselves from `fetchGrantedPermissionKeys` plus a domain
+  rule, never calling `authorizeInTransaction`. That skipped the ABAC evaluator,
+  the ADR-0053 platform-scope gate, ADR-0060 business-scope facts and #181 SoD. The
+  visible consequence: a tenant's explicit ABAC `deny` was honoured on some routes
+  and silently ignored on these three.
+
+  None of the three was sloppiness. They enforce the product rule that an author
+  may edit their own unpublished content **even without** holding the permission —
+  an authorization axis the permission catalogue cannot express — while the
+  chokepoint returns `denied` before any domain rule is consulted. Putting it in
+  front would have deleted the author path: a functional regression that looks like
+  a security tightening.
+
+  `authorizeInTransaction` therefore gains `ownershipGrant`, which **widens** the
+  permission set being evaluated instead of short-circuiting the decision. Tenant
+  isolation, an ABAC deny, business scope and SoD can all still refuse. Machine
+  credentials are excluded, since a credential authenticates and never authorizes.
+  The decision log labels ownership allows `ownership_grant:<reason>` so an auditor
+  can tell them from RBAC allows.
+
+  New gate `bun run access:chokepoint:check` holds the class: every handler calling
+  `fetchGrantedPermissionKeys` must go through the chokepoint or be a reasoned
+  exemption keyed `<file>#<METHOD>`. It slices **per handler**, because a per-file
+  reading is what produced the original mis-analysis — `blog/posts/[id].ts` calls
+  the chokepoint in `GET` and `DELETE` while `PATCH` did not. Two exemptions:
+  pre-authentication login, and the self-introspection endpoint that calls
+  `evaluateAccess` directly.
+
+  Behaviour changes in one direction only: an action that previously slipped past
+  ABAC can now be refused by a tenant's own policy.
+
+  No migrations, no new permissions, no OpenAPI change.
+
+- 6ed60e0: Add email password reset — the flow this repo has shipped a template for since
+  `sql/014` and never had a caller for.
+
+  `email`'s `auth.password_reset` category, default template, and declared
+  variables (`userName`/`resetUrl`/`expiresInMinutes`) have existed unused all
+  along, so an operator who locked themselves out had no in-band recovery. Two
+  public endpoints (`POST /api/v1/auth/password/{forgot,reset}`), two pages
+  (`/forgot-password`, `/reset-password`), and one table (`sql/073`,
+  `awcms_password_reset_tokens`, RLS `FORCE`, only a `sha256` of a 256-bit CSPRNG
+  token ever stored) close it. Adapted from awcms-micro Issue #496.
+
+  **Neither endpoint is an oracle.** `forgot` returns one fixed 200 body for
+  every outcome — unknown identifier, inactive identity or tenant-user, SSO-only
+  identity, a non-mailable identifier, and a queued email are indistinguishable.
+  `reset` returns one generic rejection for not-found, expired, already-used,
+  deactivated-since-issue and password-login-disabled-since-issue. The specific
+  reason survives only in the tenant-scoped, RLS-protected audit trail.
+
+  **Single use is enforced by the database, not by JavaScript.** Redemption reads
+  the token `FOR UPDATE`; without that lock two requests carrying the same link
+  both observe `used_at IS NULL` and both reset the password. That is
+  mutation-proven — removing the lock turns the concurrency test red.
+
+  **An SSO-only identity cannot recover a password**, checked on the request path
+  and re-read at redemption so a live link does not survive the tenant turning
+  password login off. Without it, reset would be a supported, unauthenticated way
+  to mint a working password on a tenant that deliberately disabled them.
+  Break-glass identities are exempt, matching `login.ts`.
+
+  **A completed reset revokes every session of that identity**, `aal2` included,
+  and clears the lockout counters — the link holder proved control of the mailbox.
+
+  **Delivery goes through a new `auth_notification` capability port**, not an
+  `INSERT` into `awcms_email_messages`. That table belongs to `email` (ADR-0013
+  §6) and the micro original wrote into it directly; it also cannot be a
+  `dependencies` edge, because `email` already depends on `identity_access` and
+  the reverse would close a cycle. A tenant with no active template reports
+  `delivery_unavailable` — logged and audited for the operator, invisible to the
+  caller.
+
+  Optional hardening: with `AUTH_URL_PARAM_ENCRYPTION_KEY` set, the emailed link
+  carries one opaque AES-256-GCM `?p=` value instead of `?token=…&tenantId=…`.
+  Unset, it falls back to plain params — the token is a 256-bit CSPRNG value
+  either way, so this tightens a deployment rather than gating the feature.
+
+  Also: `/login`'s auth styles move to a shared `src/styles/auth.css` and its
+  tenant picker to `tenant-admin`'s `tenant-picker-directory.ts`, both now used by
+  all three auth pages instead of being copied twice.
+
+- a30eb06: Add PLATFORM-scoped permissions, and bring back the region-dataset console at `/admin/idn-regions`.
+
+  ADR-0051 made a rule normative — an action whose effect crosses tenant boundaries must have a platform-scoped gate and must not sit in the catalogue seeded to tenant roles — but the primitive that rule needs did not exist. ADR-0052 therefore could not guard region-dataset activation/rollback; it could only delete them. This builds the gate (ADR-0053) and restores the surface behind it.
+
+  `awcms_permissions` gains a `scope` column (`tenant` | `platform`, default `tenant`), declared in code as `ModulePermissionDescriptor.scope` (`MODULE_CONTRACT_VERSION` 2.5.0, additive). The blanket grant in `bootstrapPlatformTenant` — `SELECT id FROM awcms_permissions`, which is what handed cross-tenant authority to every tenant owner in the first place — now filters on it, so the next platform permission is safe the moment it is declared rather than the moment someone remembers. The owner backfill excludes them too.
+
+  Platform authority belongs to the platform tenant, resolved `PLATFORM_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_CODE` → `awcms_setup_state.tenant_id`, and held by that tenant's `owner` role. `authorizeInTransaction` refuses a platform-scoped permission unless the acting tenant is that tenant — decided before permissions are looked up, and fail-closed when none resolves, so a grant row that reached the wrong tenant is inert rather than sufficient. The trigger is read from the code declaration, not the database column: were both the database, one `UPDATE` would remove the gate along with the grant filter and nothing would go red.
+
+  Tenancy mode (`single`/`multi`) is derived from the active-tenant count, never configured — a stored flag would have to be flipped by whoever provisions tenant number two, and forgetting means the deployment keeps behaving as if one tenant owned everything. The mode never relaxes a gate.
+
+  While `PLATFORM_TENANT_ID` is unset, `PUBLIC_DEFAULT_TENANT_ID` is a security control: repointing which site renders on an unmatched host also repoints platform authority. That is a deliberate trade-off, made separable without a migration by the dedicated variable, and made visible by a new `security:readiness` check that reports which tenant holds the authority and warns when it is not the bootstrap tenant.
+
+- bc0ab66: `POST /api/v1/profiles/{id}/restore` — the counterpart `DELETE
+/api/v1/profiles/{id}` shipped without (ADR-0058 §A).
+
+  `sql/003` gave `awcms_profiles` `restored_at`/`restored_by` and an index on
+  `(tenant_id, deleted_at)`, and `party-directory.ts` exported `softDeleteParty`
+  with nothing to undo it. Nothing in the repo could write either column, so a
+  soft-deleted profile was permanent while `profile_management.restore` sat
+  seeded in the catalogue and enforced by nothing.
+
+  The precondition is the `WHERE … deleted_at IS NOT NULL`, not a read before the
+  write: two concurrent restores that both read first would both proceed and
+  audit two restorations of one profile. `delete_reason` is kept — why the
+  profile was deleted stays true after it is restored. A profile that does not
+  exist and a profile that is not soft-deleted answer the same 404, so the route
+  cannot be used to probe which profile ids exist.
+
+  Permission-enforcement coverage moves from 201/205 with 4 exceptions to 202/205
+  with 3.
+
+- a21f684: Beri `--dry-run` pada dua job retensi destruktif yang selama ini tak punya, dan
+  hentikan headernya mengklaim kemiripan yang tidak ada.
+
+  `form-drafts:purge` **menghapus baris secara fisik**; `comments:retention`
+  meng-NULL-kan kolom identitas penulis **secara tak terbalikkan** lalu menghapus
+  langganan yang tak pernah dikonfirmasi. Keduanya menyatakan di headernya sendiri
+  bahwa mereka meniru `scripts/audit-log-purge.ts` — yang sudah punya pratinjau
+  sejak dikirim. Keduanya tidak. Jadi satu-satunya cara mengetahui radius ledakan
+  run pertama adalah menjalankannya.
+
+  Dua hal yang membuat pratinjau ini bukan sekadar penghitung:
+
+  - **Satu fungsi cutoff, dipakai bersama.** `resolveFormDraftRetentionCutoff` dan
+    `resolveCommentsRetentionCutoff` diekstrak, lalu jalur nyatanya ikut memakai —
+    dua salinan `now - days * 86400000` akan menyimpang begitu salah satunya
+    diedit, dan pratinjau yang tak sepakat dengan run yang dipratinjaunya lebih
+    buruk daripada tak ada.
+  - **Legal hold ditanya, dan dilaporkan.** Deskriptor yang di-hold membuat run
+    nyata tak menyentuh apa pun; pratinjau yang mengabaikannya akan melaporkan
+    backlog yang tak akan pernah disentuh run mana pun — justru angka yang paling
+    mungkin ditindaklanjuti operator. `comments:retention` melaporkan
+    `heldTenants` supaya "tak ada yang perlu dikerjakan" bisa dibedakan dari
+    "sedang di-hold".
+
+  Header keduanya juga dikoreksi: alih-alih mengklaim meniru job yang memakai
+  `runJob`, keduanya kini menyatakan apa yang memang TIDAK mereka punya (advisory
+  lock, telemetry `JobResult`, cancellation kooperatif) dan bahwa karenanya
+  keduanya harus dijadwalkan dari SATU entri cron. Migrasi ke `runJob` tetap
+  dilacak di isu #291.
+
+- 5935dc7: Revoke `blog_content.seo.configure` and `blog_content.posts.export`
+  (ADR-0058 §C/§D, `sql/089`), completing the ADR and emptying the
+  permission-enforcement exception list.
+
+  Both were seeded by `sql/036` and declared by the descriptor, and neither ever
+  had an enforcer. They are revoked rather than surfaced for different reasons:
+  `seo.configure` is a second authorisation axis over
+  `seo_default_title`/`seo_default_description`, which
+  `blog_content.settings.configure` already governs through
+  `PATCH /api/v1/blog/settings`; `posts.export` has no export machinery anywhere
+  in the repo, so building one to justify a catalogue row would be the tail
+  wagging the dog.
+
+  Because `POST /api/v1/setup/initialize` grants the whole catalogue to each new
+  tenant's `owner` role, every tenant owner has been holding authority over two
+  actions nothing checks. No behaviour changes — nothing ever read them.
+
+  The migration deletes the role grants before the catalogue rows (the FK runs
+  that way), is idempotent, and ships no rollback: restoring the grants would
+  re-advertise a surface that does not exist.
+
+  `bun run access:permissions:enforcement:check` now reports **203/203 with zero
+  exceptions** — every declared permission in the repo has an enforcer.
+
+- ac7503d: Add admin-approved self-registration — off by default, and it never stores a
+  credential.
+
+  `POST /api/v1/auth/register` records a request; `/admin/registrations` reviews
+  it; approval creates the account. Two migrations (`sql/074` schema, `sql/075`
+  permissions), one public page (`/register`), three guarded admin endpoints.
+
+  **Off unless `AUTH_SELF_REGISTRATION_ENABLED=true`**, and a disabled deployment
+  answers `404` — the same answer a nonexistent route gives, so the switch is not
+  discoverable by probing. An always-on public endpoint that writes a row is a
+  spam surface every deployment would otherwise inherit. It is a deployment-level
+  gate like `AUTH_MFA_ENABLED`, so turning it on opens registration for every
+  tenant; per-tenant granularity is recorded as a follow-up rather than implied.
+
+  **The public path creates no account and accepts no password.** It writes a
+  `pending` row and nothing else, rejects every privilege field (`roleIds`,
+  `status`, `tenantUserId`), and the validator returns exactly two keys — proven
+  twice, at runtime by asserting the returned key set and structurally by
+  enumerating which fields are read off the untrusted body. Mutation-proven:
+  leaking `roleIds` through the validator turns both red.
+
+  **Approval issues a credential the applicant must claim, which is a deliberate
+  departure from awcms-micro.** micro stores an argon2id hash chosen by an
+  unverified stranger for an account that may never exist. Here the identity is
+  created with an _unusable_ password — the hash of 32 CSPRNG bytes discarded
+  immediately — and the applicant receives a password-reset link through the same
+  flow `/forgot-password` uses. So no anonymous submitter's secret is ever stored,
+  a rejected or abandoned request leaves no credential behind, a spam flood costs
+  an INSERT rather than an argon2id hash, and the applicant proves mailbox control
+  before the account works. The cost is stated rather than hidden: `approve`
+  returns `delivery: "queued" | "unavailable"` so the admin screen can say when
+  the link could not be sent instead of showing a success for an account nobody
+  can get into.
+
+  **Enumeration-safe.** An address that already has an account, one with a request
+  already pending, an inactive tenant and a fresh request all return the identical
+  200 — "this address is already registered" is the single most useful sentence an
+  attacker could be handed here. The audit event records which it was, without the
+  submitted address on a miss.
+
+  **`approve` and `reject` are separate permissions** under a new
+  `registration_requests` activity. `access_control` is the RBAC catalog, not the
+  authority to admit a person, and `/api/v1/users` in this repo is read-only — so
+  approval is the first admin path that materializes an identity at all, and
+  clearing spam should not require the ability to admit anyone. `roleIds` is
+  optional and defaults to none; an unknown role refuses the whole approval rather
+  than granting the subset that resolved.
+
+  **Approval is race-safe**, with `FOR UPDATE` on a `status = 'pending'`
+  predicate. Mutation-proven: without the lock two concurrent reviewers trip
+  `awcms_identities_tenant_login_key` mid-transaction and the second gets a 500;
+  with it, a clean 404. Correctness was never at risk — the failure mode was.
+
+  Rejection notifies nobody: a rejection email would confirm to an anonymous
+  submitter that this tenant exists and reviewed them, which is exactly the
+  disclosure the submit endpoint refuses to make.
+
+  Reviewed rows are purged by the existing `data_lifecycle` GENERIC engine (90d
+  default, 7d floor so the `registration_approved` audit row still points at
+  something); the worker grant is `SELECT, DELETE` only — one able to write here
+  could manufacture an approved registration.
+
+- 2b92a68: Admin screen for `seo_distribution` at `/admin/seo`, plus the sidebar entry that makes it reachable.
+
+  The module shipped a complete admin API (tenant SEO defaults, redirect rules, redirect policy, 404 governance) but no screen, and declared no `navigation` — so every one of its permissions was routed while the module stayed invisible in the sidebar. One page now carries four panels: SEO defaults, redirect policy, redirect rules (create with a read-only dry run, inline edit, activate/deactivate/archive, soft delete, and an id-addressed restore/purge panel because soft-deleted rules are excluded from the list), and the privacy-minimized 404 log (resolve / dismiss).
+
+  Reads run server-side through the same application-layer functions the JSON routes use, inside one tenant transaction; every write goes out over `fetch` to the guarded endpoints, with a fresh `Idempotency-Key` per click on the four high-risk mutations. Permission gates are UX-only — notably the lifecycle endpoint's dynamic guard is honored: Purge is gated on `seo_distribution.redirect.delete` and activate/deactivate/archive/restore on `seo_distribution.redirect.update`. Bulk import and URL-change capture stay API-only.
+
+- f0d90a6: Build the `awcms` half of ADR-0050: a BFF obtains a human session with a one-time handoff code, never by proxying a password.
+
+  ADR-0049 answered half the question — a BFF that already holds a session token can ask "whose session is this". Where the token came from was still document-only. `awcms_session` is an httpOnly cookie on the `awcms` origin; a browser on the `awcms-astro` origin will never send it, and must not.
+
+  The obvious workaround — a login form in `awcms-astro` proxying `POST /api/v1/auth/login` — was rejected twice over: a password would cross a repo that is not the identity store, and **login here is not one step**. It can answer `401 MFA_REQUIRED`, redirect into a tenant's OIDC provider, or demand a Turnstile token, so proxying means a second implementation of MFA continuation, OIDC callback, and the Turnstile widget in a second repo.
+
+  **Two endpoints, two different principals:**
+
+  - `POST /api/v1/auth/session-handoff/issue` — the already-authenticated human asks for a code. Self-service rather than permission-gated: the identity and assurance come from the presented **session**, never from the body, so a caller can only ever mint a code for themselves. Inventing a permission here would be the latent-authz trap this repo has shipped twice.
+  - `POST /api/v1/auth/session-handoff/redeem` — a registered client, server-to-server, with a client secret. The only endpoint in this repo authenticated that way, which is why `_shared/tenant-route.ts` gains a third factory: this is the request that _obtains_ a session, so there is none to present, and a machine credential (read-only by construction) minting a human session would be an escalation path.
+
+  **What binds the security:**
+
+  - **Exact-match `redirect_uri` allow-list.** ADR-0050 names the open redirect here as the way this design fails. Not a prefix — `https://app.example.com` prefix-matches `https://app.example.com.evil.test` — and not an origin match either, since an attacker who can choose the path on a permitted origin is enough. Query strings and fragments are refused rather than stripped.
+  - **The code carries no token.** The row stores `identity_id` plus the assurance the login actually _reached_; redemption mints a fresh session. Nothing credential-bearing is stored but the one-way hash of the code, and assurance never rises, so an `aal1` login cannot be laundered into an `aal2` session.
+  - **Single-use under concurrency**, claimed with `UPDATE … WHERE redeemed_at IS NULL RETURNING …`. The read-then-write version lets two simultaneous redemptions both succeed.
+  - **The spent row is kept**, so a replay is answered from evidence — a deleted row and a code that never existed are indistinguishable, and that difference is what an incident needs.
+  - **One answer for every failure** (`401 HANDOFF_REJECTED`), including a malformed body: a 400 for "you forgot a field" and a 401 for "your secret is wrong" already separates well-formed guesses from malformed ones.
+  - The ≤60 second TTL is a database CHECK, not only a TypeScript constant.
+
+  **A trap the integration test caught, and reading would not have.** `created_at DEFAULT now()` is the _transaction start_ instant while `expires_at` is derived from the application clock — two different clocks, so the `expires_at <= created_at + 60 seconds` CHECK rejected perfectly ordinary codes once a transaction had been open for a moment. The application now writes both from one clock.
+
+  Ten integration tests, including two concurrent redemptions on separate connections (mutation-proven: dropping the `redeemed_at IS NULL` guard mints two sessions from one code) and cross-tenant isolation. Eighteen pure tests over the redirect-uri and redemption decisions.
+
+  What remains is `awcms-astro`'s: `/internal/login`, server-side BFF session storage, the portal cookie, and CSRF.
+
+- 9c7eeb7: Rate limiting becomes a property of the deployment, and covers the whole
+  authentication surface (ADR-0066).
+
+  The limiter counted in an in-process `Map`, so with N replicas the effective
+  limit was N × the configured one — anti-brute-force weakening in direct
+  proportion to replica count, leaving the deployments that most need protection
+  the weakest.
+
+  `checkSharedRateLimit` counts in Redis, which the repo already had. The window
+  number is part of the KEY rather than a stored timestamp, which is what makes it
+  correct where the `Map` is not: two instances agree without a read-modify-write,
+  so there is no race to win. `PEXPIRE` fires only on a window's first hit —
+  re-setting it every hit would slide the window and let a steady attacker hold
+  the key alive indefinitely. With no Redis configured it falls back to the map,
+  since a single-instance deployment has nothing to share.
+
+  **It fails OPEN when Redis is unreachable.** That is the opposite of this repo's
+  default posture, so: a rate limiter is availability tooling on the login path,
+  and failing closed would turn a Redis outage into "nobody can log in" — an
+  attacker-triggerable denial of the whole control plane. The per-identity lockout
+  is enforced atomically in PostgreSQL and is unaffected, so this is the
+  source-scoped backstop rather than the last line.
+
+  Coverage rises from eight surfaces to eleven: `session-handoff/issue`,
+  `session-handoff/redeem` and `sso/{providerKey}/callback` had none. Each had
+  other mitigations, so this is completeness rather than a hole — but ASVS V11.2
+  wants anti-automation across the whole authentication surface.
+
+  No migrations, no permissions, no OpenAPI change.
+
+- c74d4d1: Per-tenant admin sidebar arrangement: reorder, hide, relabel, move between
+  sections, and custom sections.
+
+  The sidebar has been rendered from the module registry since #259. This adds the
+  override layer on top of it (`sql/071`, `sql/072`), plus
+  `/api/v1/tenant/navigation/sidebar` and an `/admin/sidebar-menu` editor.
+
+  Stored as a DELTA, never a snapshot: a tenant with no rows renders exactly the
+  code default, so a newly added module's nav entry appears everywhere without a
+  data migration. A snapshot would freeze each tenant's sidebar at the moment they
+  first touched it.
+
+  A tenant can override, never inject. Every stored row is resolved by key against
+  the code-derived model and one that matches nothing is ignored, so there is no
+  path from a request body to a new menu link. Overrides are applied BEFORE
+  permission and tenant-disable filtering, so relabelling or moving an entry
+  cannot carry it past `requiredPermission`.
+
+  `module_management.navigation.configure` gates the mutations. Existing tenants
+  do not gain it automatically — `sql/072` carries the operator backfill note.
+
+- 23ce7bb: Add the `/admin/site-search` operations console and put `site_search` in the admin sidebar.
+
+  The module shipped its index/settings/diagnostics API (ADR-0040) without a screen, so the whole surface was reachable only by `curl` and `site_search` was invisible in the sidebar. The console renders index status and freshness, documents by resource type, the ten most recent index runs, and the failed-item diagnostics, and drives reconcile, rebuild, and the search-configuration form.
+
+  Reads call the same application functions the JSON endpoints use, inside one `withTenantOrThrow` transaction. Writes go to the guarded `/api/v1/site-search/*` endpoints with a fresh `Idempotency-Key` per click, so a deliberate second run really runs instead of replaying the first run's stored response. Every permission gate on the page is UX-only — the endpoints remain the authority.
+
+  `tests/admin-site-search-page-contract.test.ts` pins the page's six permission keys to what the routes enforce and the descriptor declares, so a plausible-but-unseeded key (`settings.configure`, `index.update`) cannot silently hide a panel from everyone including the owner.
+
+- 40315d2: `.claude/skills/` is gated against the code it describes (ADR-0062).
+
+  `bun run skills:check` joins the `check` chain. The exemption it retires was
+  justified when written — skills carried awcms-mini adaptation notes that
+  legitimately named absent tooling — but ADR-0055 removed that justification:
+  once mini/micro became archives, a skill that reads as a porting instruction
+  points work at a repo that does not move.
+
+  What the exemption cost, measured when the gate was written: eleven consecutive
+  ADRs (0051–0061) landed with **zero** skills referencing any of them; four
+  skills for live modules pointed at `src/lib/<module>/…` for files that now live
+  at `src/modules/<module>/presentation/…`; several announced admin screens as
+  un-ported months after those screens shipped; and six still taught the
+  mini-first pathway two days after it was retired.
+
+  Stale skills decay in the dangerous direction. A stale doc makes a reader pause;
+  a skill is followed. "This module is not in this repo" starts out true, the
+  module gets built, and the sentence ages into a confident falsehood.
+
+  Three rules, none of which read intent — each keys off the module registry:
+
+  1. A live module's skill must cite `src/…` paths that exist. No exception list:
+     a skill for shipped code has no reason to name a file that is not there.
+  2. Every cited `ADR-NNNN` must resolve to a file in `docs/adr/`.
+  3. A skill for code that does not exist must be listed in `ASPIRATIONAL_SKILLS`
+     as `target-spec`, `historical` or `cross-cutting`, with its reason. Dead
+     entries — where the module has since been built — are reported too.
+
+  All 55 skills were brought into line: 10 wrong paths fixed, the six mini-first
+  skills reframed as "build here with an admission ADR", and the edge-cache,
+  media-library, blog-content and seo-distribution skills corrected against what
+  actually shipped.
+
+  Zero migrations, zero permissions, zero runtime change — no file under `src/`
+  changes behaviour.
+
+- 0b97e67: Tambah `checkSsoBreakGlassReady` ke `bun run security:readiness` (critical) —
+  menutup sisi kedua jaminan break-glass yang selama ini tak ditegakkan apa pun.
+
+  `saveTenantAuthPolicy` menolak (`409 BREAK_GLASS_REQUIRED`) menyimpan
+  `sso_required=true` atau `password_login_enabled=false` tanpa minimal satu
+  identity break-glass yang eligible **saat itu**. Tapi eligibility bukan properti
+  policy — ia properti `awcms_identities` dan `awcms_tenant_users`. Menonaktifkan
+  identity itu, atau mencabut membership tenant-nya, membuat policy yang tersimpan
+  menjadi salah **tanpa policy-nya pernah ditulis ulang**; keduanya aksi
+  administrasi user biasa yang tak seorang pun mengaitkannya dengan lockout SSO.
+  Setelah itu tenant hanya berjarak satu outage IdP dari tidak punya jalan masuk
+  sama sekali, dan seluruh check lama tetap hijau.
+
+  Check baru menurunkan ULANG eligibility dari database untuk setiap tenant aktif
+  memakai `fetchEligibleBreakGlassIdentityIds` + `evaluateBreakGlassRequirement`
+  yang **sama persis** dengan jalur simpan — bukan salinan aturan kedua yang bebas
+  melenceng. Satu `withTenant` per tenant (tabel policy FORCE RLS; check berjalan
+  di bawah isolasi yang sama dengan aplikasi), tanpa cap/LIMIT — sebuah batas akan
+  membuat tenant terkunci di luar batas tak terlaporkan sementara check mencetak
+  PASS. Evidence menyebut tiap tenant bermasalah beserta pemicunya:
+  `password_login_enabled=false` (login lokal MATI sekarang) atau `sso_required`
+  saja (advisory, login password masih jalan), dan tak pernah mencetak
+  `login_identifier`.
+
+  Terbukti lewat mutasi, bukan diasumsikan: mengganti hitungan eligible dengan
+  `breakGlassIdentityIds.length` — persis bug yang check ini cari — memerahkan 4
+  test integrasi; membuang separuh `password_login_enabled` dari pemicu memerahkan
+  1. Test kontrak menegakkan pemanggilan di CALL SITE, karena mutasi pertama itu
+     tak menyentuh baris import sama sekali.
+
+- ed324d3: Tegakkan ADR-0013 §6 ("no shared-table write") sebagai gate, dan hentikan satu
+  pelanggaran nyata yang sudah menyimpang.
+
+  `_shared/module-contract.ts` menyebut aturan itu **empat kali** — di dokumentasi
+  `dataLifecycle`, `searchSources`, `commentableResources`, dan
+  `reportingProjections` — sebagai alasan tiap seam mengoper metadata deklaratif ke
+  engine pusat alih-alih menjangkau skema modul lain. Keempat seam itu menaatinya.
+  SQL tulis-tangan di luar seam tak pernah diperiksa siapa pun, dan **enam tabel
+  ditulis lebih dari satu modul**.
+
+  Biayanya sudah terlihat dalam bentuk terkecil: `identity_access` punya DUA
+  `INSERT INTO awcms_profiles` independen (JIT provisioning #185 dan approval
+  self-registration #276) yang sudah menyimpang pada `verification_status` — dua
+  akun yang dibuat berselang menit mendapat postur verifikasi berbeda tanpa ada
+  yang pernah memutuskannya. Keduanya kini lewat
+  `profile_identity`'s `createPersonProfileForIdentity`, dengan argumen
+  `emailVerified` yang eksplisit.
+
+  `bun run modules:table-writes:check` (baru, di rantai `check`) menegakkan
+  "paling banyak satu penulis per tabel". Kepemilikan **diturunkan, bukan
+  dideklarasikan**: aturannya adalah properti kode apa adanya, jadi tabel baru
+  ikut tercakup tanpa perlu didaftarkan — gate tak bisa basi ke arah berbahaya.
+  Rute `src/pages` diatribusikan lewat `api.routes`, jadi `INSERT` di rute milik
+  sebuah modul bukan penulis kedua. Tulis dinamis (`${tableName}` milik engine
+  `data_lifecycle`/`reporting`) sengaja di luar cakupan dan dinyatakan di header —
+  itu justru mekanisme yang diresepkan §6.
+
+  Satu pengecualian ber-alasan: `tenant_admin/application/platform-bootstrap.ts`,
+  wizard sekali-jalan yang membuat tenant/office/profil/identity/tenant-user/role
+  dalam satu transaksi sebelum modul mana pun bisa dipanggil lewat permukaan
+  normalnya. Bentuk pengecualiannya `excusedOwner` (memaafkan SATU penulis
+  tambahan), bukan daftar owner yang boleh — versi pertama memakai daftar owner
+  dan diam-diam mengizinkan kembali tulis `identity_access` yang baru saja
+  dihapus; test pertama gate ini yang menangkapnya.
+
+- d7f16c7: Add tenant provisioning: `GET`/`POST /api/v1/tenants` and the `/admin/tenants` screen, both PLATFORM-scoped.
+
+  Until this, a second tenant could not be created at all — `POST /api/v1/setup/initialize` claims the `awcms_setup_state` singleton, so it succeeds exactly once and nothing else touches `awcms_tenants`. Every deployment was permanently single-tenant, which also meant ADR-0053's `multi` tenancy mode was unreachable and its platform gate had never met a real second tenant.
+
+  `createTenantWithOwner` is extracted from `bootstrapPlatformTenant` and shared by both callers. That is a security control rather than tidiness: the one thing that must never differ between them is `WHERE scope = 'tenant'` on the owner grant, and an independently written provisioning routine would carry a copy of an `INSERT` that, for most of this repo's life, did not have that filter — handing every customer authority over every other customer's served data, in a diff that reviews cleanly. `grantPlatformScope` is a parameter rather than a branch on "is this the first tenant?", so the answer is stated at the call site instead of inferred.
+
+  Both permissions are platform-scoped. `create` obviously — adding a tenant adds a party to the deployment. `read` too, and that one is easy to miss: the directory lists EVERY tenant, so a tenant-scoped read would let any customer's owner enumerate the platform's customer list, and no RLS policy would object because `awcms_tenants` is deliberately the RLS-free root table. Because both are platform-scoped, a provisioned tenant never receives them — including the tenant created through this very endpoint.
+
+  A duplicate `tenant_code` needs both a pre-check and a savepoint: in PostgreSQL a `23505` aborts the transaction, so catching it and carrying on does not work, and the commit `withTenant` performs on a returned 4xx would fail too. The `SELECT` answers the ordinary case; the savepoint makes the racing case recoverable instead of a 500.
+
+  The owner password never enters the idempotency hash — that hash is stored, and a stored hash of a credential is a credential at rest.
+
+- da21f77: Close the authorization chokepoint: `defineTenantRoute` + `api:tenant-route:check`.
+
+  The auth/tenant opening that 204 route files copy verbatim now lives once in
+  `src/modules/_shared/tenant-route.ts`. `workClass` is REQUIRED in the factory
+  type with no default — 176 of those 204 files pass none today, so they share
+  login's pool budget by omission rather than by decision.
+
+  The four `/api/v1/reports/*` routes are migrated. They had hand-rolled the guard
+  chain and called `evaluateAccess` with three arguments of five, which skipped
+  `resolveModuleEnabled` and dynamic ABAC entirely: a tenant that disabled
+  `reporting` was still served, and a `deny` policy authored through
+  `/api/v1/access/policies` was silently inert. Both are now enforced, so those
+  endpoints newly return `403 MODULE_DISABLED` when the module is off and honour
+  ABAC. They also accept a session cookie as well as a bearer token, because
+  `resolveAuthInputs` reads both.
+
+  `bun run api:tenant-route:check` rejects any NEW route that calls `withTenant`
+  directly. The 204 pre-existing routes are listed in a `NOT_YET_MIGRATED` ledger
+  that can only shrink: a stale entry fails the gate too.
+
+- a7963d8: Add `/admin/theming` — the console for the theme lifecycle the `theming`
+  endpoints have been serving since ADR-0034 Fase 3 with no screen at all.
+
+  Draft, validate, preview, publish, rollback and retire were fully implemented,
+  ABAC-gated, idempotency-keyed and audited, yet reachable only by hand-writing
+  `curl`, and the module declared no `navigation` — so it was also invisible in the
+  sidebar. The screen and the navigation entry land together: an entry without a
+  page is a permanent 404 in the menu, and a page no descriptor claims can never
+  appear in it.
+
+  **The draft editor is generated from the theme descriptor, not hand-written.**
+  `ThemeDescriptor` bounds the configurable surface completely, so the form renders
+  one control per declared token (typed by `token.kind` — `<select>` for
+  `font_family`, a numeric input for `number`, text for colour/dimension), one
+  `<select>` per slot restricted to that slot's own variants, one field per
+  declared asset slot, plus section order and nav placement. A JSON textarea would
+  have been the honest fallback for an open-ended config and is not needed here.
+  Colour tokens stay text inputs on purpose: `<input type="color">` normalises
+  every value to hex and would silently rewrite a stored `rgb()`/`hsl()` value that
+  `validateColorValue` accepts. Because each theme declares its own tokens, the
+  theme picker navigates to `?theme=<key>` and the server re-renders that
+  descriptor's field set rather than merging a superset.
+
+  **The gates reuse the endpoints' exact permission keys**, which is harder than it
+  looks here because the screen's verbs and the seeded actions disagree: the button
+  says "Roll back" and the permission is `theming.version.restore`; the button says
+  "Retire" and the permission is `theming.version.archive`. Inventing the tidier
+  `version.rollback`/`version.retire` that no migration seeds would hide those
+  controls from everyone including the owner — the latent-authz bug this repo has
+  already shipped twice. `tests/admin-theming-page-contract.test.ts` extracts the
+  guard triples from the seven route sources and the `permissionKey(...)` triples
+  from the page, and requires the page's set to be a subset of both what the routes
+  enforce and what the descriptor declares. Mutation-proven: `version.rollback` and
+  `config.publish` each turn two tests red.
+
+  **Draft-save, publish, rollback and retire each mint a fresh `Idempotency-Key`
+  per click; validate sends none.** A reused key replays the stored response
+  instead of acting, so a deliberate second publish would silently do nothing;
+  validate writes nothing and requires no key, and the test pins both halves.
+
+  **Preview shows its result instead of reloading it away.** The raw preview token
+  is returned exactly once, so that one action reads the response body through a
+  small page-local helper rather than the shared `sendJson`, whose narrow
+  `{ ok, errorCode }` return is a deliberate guard for the dozen other call sites.
+  The returned URL is accepted only when it is in the documented
+  `/theming/preview/` namespace, so an unexpected body can never become an
+  arbitrary link. Every mutation on the page still goes through `sendJson`.
+
+  The responsive-preview dashboard (side-by-side breakpoint rendering) remains a
+  documented follow-up.
+
+### Patch Changes
+
+- 26db824: Correct a stale claim: `idn-admin-regions` is not screenless, so ADR-0021's criterion 1 has **zero** exceptions rather than one.
+
+  `docs/PROJECT_STATE.md` §4 listed `idn-admin-regions` as "deliberately without a screen, see ADR-0052", the contract test added with `/admin/media` carried a matching carve-out, and PR #345's own body repeated it as fact. All three were wrong: `/admin/idn-regions` landed in #332.
+
+  ADR-0052 moved that module's dataset **lifecycle** to operator jobs — not the whole module — and the two read permissions it kept are exactly what that screen drives. Verified against the code rather than the documents: `grep -L 'navigation:' src/modules/*/module.ts` now returns nothing at all.
+
+  The carve-out also failed in the other direction. With `idn_admin_regions` excused, that module could have **lost** its screen and the test would still have passed — an exception written for a module that did not need one, protecting it from the check it was supposed to be under. The assertion is now a plain `toEqual([])`, mutation-proven by removing `idn-admin-regions`' navigation entry.
+
+- d8a6c34: ADR-0050 — BFF `awcms-astro` memperoleh sesi manusia lewat **kode handoff
+  sekali-pakai**, bukan dengan mem-proksi password.
+
+  ADR-0048 sengaja meninggalkan "bagaimana layar internal login". ADR-0049
+  menyelesaikan setengahnya (BFF yang sudah memegang token bisa mengintrospeksinya);
+  yang belum dijawab adalah dari mana token itu datang.
+
+  Keputusannya: `awcms` tetap satu-satunya tempat kredensial diterima. Pengguna
+  login DI `awcms` — password, MFA, OIDC, Turnstile, semuanya alur yang sudah ada —
+  lalu dialihkan balik membawa `code` berumur ≤60 detik yang ditukar BFF
+  **server-ke-server**. Token sesi tidak pernah sampai ke browser.
+
+  Alternatif "BFF mem-proksi password" ditolak, dan alasan yang menentukan BUKAN
+  bahwa password melintasi repo lain: **login di sini bukan satu langkah**. Ia bisa
+  berbalas `401 MFA_REQUIRED` + `mfaChallengeToken`, bisa dialihkan ke OIDC provider
+  tenant, dan bisa mensyaratkan Turnstile. Mem-proksinya berarti mengimplementasi
+  ulang ketiganya di repo kedua — salinan kedua dari alur MFA adalah tempat paling
+  mahal untuk membuat kesalahan pertama.
+
+  Dokumen, belum kode. Yang harus dibangun berikutnya dicatat eksplisit di
+  §Konsekuensi, termasuk yang paling mudah salah: allow-list `redirect_uri` yang
+  ketat (open-redirect di sini berarti menyerahkan kode ke penyerang) dan
+  penukaran kode yang atomik di bawah kunci baris.
+
+- 712e1bc: ADR-0058 — disposition for the four declared permissions with no enforcer.
+
+  `profile_identity.profile_management.restore` and `comments.moderation.delete`
+  get a surface: both have all of their machinery except the endpoint. The first
+  leaves `softDeleteParty` without a counterpart, so `restored_at`/`restored_by`
+  can never be written and a soft-deleted profile is effectively permanent. The
+  second has a legal `delete` transition from all four non-terminal statuses and
+  an admin queue that can filter `deleted`, while the only actor able to produce
+  that state is the comment's own author.
+
+  `blog_content.seo.configure` and `blog_content.posts.export` are revoked: the
+  first is a second authorisation axis over columns `settings.configure` already
+  manages, the second has no export machinery anywhere in the repo.
+
+  Decision only — no code or migration in this change.
+
+- d17e240: ADR-0067 (`Proposed`) — Core Web Vitals collection, put as a decision rather
+  than left as an open gap.
+
+  This is the only one of the assessment's seven recommendations deliberately not
+  landed. It does not fix a defect; it adds collection of data about real
+  visitors, and that collides with a posture `visitor_analytics` has already
+  stated — its purge does DELETE/UPDATE-to-null with no archive step, on the
+  written grounds that raw visitor detail is deliberately not retained.
+
+  The gap it describes is real: LCP/INP/CLS are measured nowhere, so the entire
+  edge-cache investment is proven against origin load and never against user
+  experience.
+
+  Three options with their real trade-offs, recommending aggregate-only — buckets
+  per tenant, normalised route and day holding counts plus p75, never raw rows —
+  if it is taken at all. Not taking it is a legitimate answer, better recorded as
+  a decision than left open.
+
+  Awaiting the product owner's call.
+
+- f0d2daf: Menutup celah C12 (standar §9): enam ADR ber-status `Accepted` tanpa satu baris kode (0016 organization_structure, 0017 document_infrastructure, 0018 data_exchange, 0019 integration_hub, 0020 kontrak ERP-extension yang berkas `_shared`-nya sudah dihapus, 0021 reference_data) kini ber-status jujur `Accepted (belum diimplementasikan)` dengan catatan bertanggal, indeks ADR dwibahasa ikut diperbarui, dan gerbang murni baru `tests/adr-implementation-status.test.ts` mengikat status itu ke keberadaan artefak yang dijanjikan DUA ARAH: artefak tidak ada → kualifikasi wajib; artefak mendarat → status wajib kembali `Accepted` polos; entri peta yang mati (ADR hilang/superseded) ikut gagal; dan kualifikasi tidak boleh dipakai di luar peta.
+- 74e9c45: Naikkan `astro` 7.1.1 → 7.1.3.
+
+  Ikut memperbarui `stack.astro.declared` di `awcms-family-compatibility.yaml`.
+  Manifest itu menyematkan versi stack ke `package.json` sebagai sumber
+  kebenaran, jadi setiap bump Astro memerahkan `family:conformance:check`
+  (`[FAIL] stack: Astro (declared ^7.1.1 vs actual ^7.1.3)`) sampai deklarasinya
+  diperbarui di perubahan yang sama — persis perilaku yang diinginkan ADR-0032:
+  pinning-nya bukan free-floating, jadi bump toolchain tak bisa lewat tanpa
+  terlihat.
+
+- 6f5998e: Bump the Astro stack: `astro` 7.1.3 → 7.1.6 and `@astrojs/node` 11.0.2 →
+  11.0.3, together with the two `stack` entries in
+  `awcms-family-compatibility.yaml` that pin them.
+
+  The manifest is what makes this one change rather than three: `family:conformance:check`
+  reads `package.json` and fails on any drift from the declared range, so either
+  bump alone turns CI red until its `declared` value moves with it. That gate is
+  the reason the version a consumer reads has never silently diverged from the
+  version this repo actually runs.
+
+- 58b7fd2: `GET /api/v1/blog/posts` mengembalikan apa yang kontraknya janjikan, dan
+  mendapat mode `?view=full` untuk build feed.
+
+  Kontrak OpenAPI menyatakan endpoint ini mengembalikan `BlogPost` — lengkap
+  dengan `contentJson`, `excerpt`, `metaDescription`, `canonicalUrl`, dan
+  `translationGroupId`. Implementasinya mengembalikan ringkasan yang tidak memuat
+  satu pun dari itu. Selisih itu tidak pernah gagal di mana pun: klien yang
+  mempercayai dokumen membaca field-field tersebut sebagai `undefined`.
+
+  Akibatnya nyata dan sudah terjadi. Sebuah situs `awcms-astro` membangun hijau
+  dengan **badan setiap artikel kosong** — dan karena seksi tempat artikel berada
+  juga tinggal di dalam `contentJson`, **seluruh seksinya kosong juga**. Tidak ada
+  error di build mana pun, tidak ada 4xx, tidak ada baris log.
+
+  Tiga perubahan:
+
+  - **`?view=full`** mengembalikan baris penuh (`BlogPost`) dengan cursor keyset
+    yang sama, batas halaman 50 karena barisnya membawa `contentJson`. Ia
+    **mensyaratkan** `order=created_at`: traversal penuh hanya sehat di atas
+    urutan yang tidak berubah, dan syaratnya dinyatakan alih-alih diam-diam
+    disubstitusi — sikap yang sama seperti penolakan `cursor` atas urutan mutable.
+    Tanpa mode ini, satu-satunya cara membangun situs adalah menyusuri daftar lalu
+    mengambil ulang setiap post satu per satu (N+1 permintaan per build, ke
+    endpoint admin, pada setiap publish).
+  - **`translationGroupId` kini benar-benar dikembalikan** — oleh `view=full`
+    maupun `GET /api/v1/blog/posts/{id}`. Kolomnya sudah ada dan bisa ditulis
+    sejak awal, tetapi tidak satu pun endpoint baca mengembalikannya, sehingga
+    klien bisa menyetel pasangan terjemahan dan tidak pernah bisa membacanya lagi.
+  - **Bentuk ringkasannya dinyatakan sebagai skema tersendiri**
+    (`BlogPostSummary`) alih-alih dibiarkan disimpulkan pembaca. Dokumen yang
+    menjanjikan lebih dari yang dikirim kode adalah dokumen yang membuat klien
+    salah dengan yakin.
+
+  Validasi query dipindahkan ke `parseBlogPostListQuery` (domain, murni) supaya
+  setiap penolakan punya tes tanpa basis data — sebelumnya ia inline di route dan
+  tidak bisa dijangkau tes mana pun tanpa sesi dan Postgres.
+
+- f309d00: Naikkan `actions/checkout` 7.0.0 → 7.0.1 di keempat workflow (`ci`, `codeql`,
+  `changesets`, `release`). Patch release, tanpa perubahan perilaku pada repo ini.
+- f9f8b29: Anggaran ukuran aset klien, digerbangi pada `build` (menutup celah C6).
+
+  Diukur 2026-08-05, `dist/client` berbobot 139.048 byte dalam 45 berkas (35 JS = 77.449 B, 10 CSS = 61.599 B; berkas terbesar `css/public-content.css` 16.800 B) — momen termurah untuk memasang anggaran, karena setiap momen berikutnya berangkat dari baseline yang lebih besar. `scripts/client-asset-budget.ts` gagal bila total melewati 180.000 B (baseline + ~29%) atau satu berkas melewati 21.000 B (terbesar + 25%); dua aturan karena dua mode kegagalan berbeda — akresi pelan versus satu island yang mem-bundle dependensi 200 KB. `dist/client` yang tidak ada atau kosong juga GAGAL keras ("jalankan build dulu"), bukan lolos senyap. Target `build` kini merantai `bun run build:asset-budget:check` setelah `astro build`, sehingga gerbang ikut jalan di CI Quality dan release tanpa entri rantai `check` baru. Tidak ada kelas aset yang dikecualikan: seluruh isi `dist/client` hari ini adalah app shell JS+CSS (gambar konten hidup di R2 via `media_library`), jadi pengecualian dini hanya akan jadi titik buta.
+
+- d3c424a: Naikkan `github/codeql-action` 4.37.1 → 4.37.3 untuk `init` DAN `analyze` dalam
+  satu perubahan.
+
+  Dependabot memecah bump ini jadi dua PR (#284 `init`, #286 `analyze`) karena
+  keduanya dilacak sebagai action terpisah. Dipecah, masing-masing PR menjalankan
+  `init` dan `analyze` pada versi yang BERBEDA, dan job `Analyze` gagal dengan
+  version mismatch — persis itu yang terjadi: kedua PR merah di `Analyze
+(actions)` dan `Analyze (javascript-typescript)` sementara seluruh check lain
+  hijau. Keduanya menunjuk SHA yang sama (`e4fba868`), jadi digabung di sini dan
+  kedua PR dependabot ditutup.
+
+- 94c9ed5: Bump `github/codeql-action` from 4.37.3 to 4.37.4 (`init` and `analyze`
+  together).
+
+  Dependabot raises these as two PRs because they are two action paths, and
+  neither can go green alone: `init` and `analyze` must run from the SAME commit,
+  so each half-bump fails both Analyze jobs with a version mismatch. Landing them
+  in one commit pinned to one SHA is the only shape that passes.
+
+- 11babb3: ADR-0069: selisih COOP/CORP dengan `awcms-astro` dicatat sebagai divergence keluarga keempat di `awcms-family-compatibility.yaml` (ber-`reviewDate` 2027-02-04). Nol perubahan runtime — pencatatan postur.
+- e90a316: Stop the admin dashboard reporting a permanent false alarm when a tenant has no sync nodes.
+
+  `shapeSyncHealth`'s `isHealthy` is deliberately `false` for a tenant with zero registered sync nodes — "there is nothing actively syncing" is the right answer for the report. The dashboard rendered that same boolean directly as an amber "Needs attention" badge, so an online-first deployment that never enrols an offline node (ADR-0035 makes sync the resilience mode, not the main path) sat at `0/0` showing a warning with no action behind it. A badge that is always lit is one operators learn to ignore, including on the day it means something.
+
+  The dashboard now distinguishes the two states that boolean conflates: **no nodes registered** renders a muted "Not configured", while **nodes enrolled but none active**, open conflicts, or failed objects still render "Needs attention". The `GET /api/v1/reports/sync-health` contract is unchanged — `isHealthy` still answers exactly as before.
+
+  The decision is a pure `classifySyncHealthDisplay` in `reporting/domain/sync-health.ts` rather than inline `.astro` frontmatter, so it is reachable by unit tests at all (`tsc --noEmit` does not read `.astro`).
+
+- 0227229: Naikkan `docker/login-action` 4.4.0 → 4.5.1 di workflow `release`. Hanya dipakai
+  pada jalur publikasi image; tanpa perubahan perilaku pada build/test.
+- ef7c51d: Bump `docker/login-action` from 4.5.1 to 4.6.0 in the release workflow (both
+  call sites).
+
+  Release-workflow only — it authenticates the GHCR push during
+  sign/attest/publish and has no effect on any PR build.
+
+- 720dc19: Sinkronkan dokumentasi, skill agen, dan knowledge graph dengan kode pasca-Gelombang 2.
+
+  `docs/ARCHITECTURE.md` sebelumnya masih menyebut delapan layar admin dan tidak
+  menyebut password reset, self-registration, maupun `/admin/security` sama sekali —
+  tiga permukaan auth yang sudah mendarat di #273/#276/#274.
+
+  `.claude/skills/awcms-auth-online-hardening/SKILL.md` memuat peringatan bahwa
+  seluruh epic hardening auth "FIKTIF, tidak ada kodenya". Audit yang menghasilkan
+  peringatan itu (2026-07-18) benar untuk saat itu, tetapi MFA (#184), OIDC/SSO
+  (#185), Turnstile (#186), dan admin policy UI (#274) sudah dibangun sejak itu —
+  agen yang mempercayai peringatannya akan membangun ulang semuanya. Peringatan
+  diganti dengan §Peta ke artefak nyata awcms yang memetakan nama/path/nomor
+  migrasi milik awcms-micro ke padanan awcms, dan menandai satu-satunya item yang
+  memang sengaja tidak ada (login Google-spesifik).
+
+  `.claude/skills/README.md` menyatakan `work-class` "benar-benar tidak ada",
+  padahal `db:work-class:generate`/`:check` sudah ada dan ikut di rantai
+  `bun run check`. Hitungan script juga dikoreksi 63 → 67.
+
+  `graphify-out/` di-update inkremental (231 berkas berubah; 8159 node, 21470 edge).
+  `.graphify_analysis.json` dikeluarkan dari tracking: langkah terakhir pipeline
+  graphify menghapusnya, jadi salinan yang ter-commit hanya bisa basi.
+
+- 8390e71: Buat `edge-cache:surfaces:check` bisa diuji, lalu uji dia.
+
+  Dari 21 gate di rantai `bun run check`, ini satu-satunya yang membawa logika
+  substansial (278 baris) **tanpa satu pun test** — dan alasannya struktural,
+  bukan kelalaian: berkasnya berakhir dengan `await main()` di scope modul, jadi
+  meng-`import`-nya akan MENJALANKAN gate-nya, dan `process.exit(1)`-nya akan
+  membawa serta test runner. Gate lain yang tak diuji semuanya pembungkus tipis
+  (35–66 baris) di atas kolektor yang diuji terpisah.
+
+  Itu penting justru di sini. Registry ini adalah **allow-list** yang memutuskan
+  apa yang boleh disimpan shared cache; kesalahan di dalamnya adalah pengungkapan
+  lintas-tenant, bukan halaman lambat. Header berkasnya sendiri menyebut daftar
+  probe `MUST_NEVER_MATCH` sebagai "the check that earns this file's existence" —
+  dan sampai sekarang tak ada apa pun yang pernah menyaksikan daftar itu menolak
+  sesuatu.
+
+  Perubahannya: entrypoint dijaga `import.meta.main`, tiga aturannya diekspor
+  sebagai fungsi murni (`validateSurfaces`, `findCacheableForbiddenPaths`,
+  `findOwnersWithoutPurges`), dan `process.exit(1)` diganti `process.exitCode`
+  sehingga gate tak lagi mematikan proses pemanggilnya. 20 test menanam
+  pelanggaran nyata untuk tiap aturan.
+
+  Dibuktikan dengan menghapus **traversal guard** di `matchPublicCacheSurface` —
+  persis cacat yang digambarkan header gate ini. Hasilnya: `/blog/../admin` dan
+  `/blog/%2e%2e/admin` dilaporkan cocok dengan surface `blog-post`, gate exit 1,
+  test merah. URL admin yang cacheable, ditangkap oleh check yang sebelumnya tak
+  pernah diamati bekerja.
+
+- 4f20773: fix(blog-content): `/admin/blog`'s Restore control could never work
+
+  `listBlogPostsForAdmin` hard-filtered `deleted_at IS NULL`, so a soft-deleted
+  post was never on screen, and the console offered no way to see the bin. The
+  Restore control was therefore hung off `status === "archived"` — a different
+  axis. An archived post is not soft-deleted, and `POST .../restore` requires
+  `canRestorePost` (`deleted_at IS NOT NULL`), so the button was rendered exactly
+  where it must answer 404, and never where it would succeed.
+
+  The delete confirmation already promised the opposite ("It is soft-deleted —
+  recoverable until it is purged"), a promise the UI could not keep.
+
+  `listBlogPostsForAdmin` gains a `deletedOnly` filter and the screen gains a
+  `?view=deleted` bin. Restore now belongs to bin rows; the lifecycle controls
+  belong to live rows, because `transitionBlogPostStatus` also matches
+  `deleted_at IS NULL`; Purge appears in both, because `canPurgePost` accepts
+  archived or soft-deleted.
+
+  No schema change.
+
+- 0e8021f: Segarkan artefak graph graphify yang ter-track, dan berhenti melacak
+  `.graphify_labels.json`.
+
+  Regenerasi ini menjangkau 1.435 berkas (dari 1.412) dan menghasilkan graf yang
+  lebih padat: 23.752 edge (dari 21.477) dengan ekstraksi 99% EXTRACTED (dari
+  98%). Ia dihasilkan sepenuhnya dari cache — 0 token input — jadi tidak ada biaya
+  ekstraksi baru yang ditambahkan.
+
+  `.graphify_labels.json` adalah intermediate build: langkah cleanup skill
+  menghapusnya di akhir setiap run, sehingga salinan yang ter-track hanya bisa
+  berupa sisa run yang terputus — persis alasan `.graphify_analysis.json` sudah
+  di-ignore lebih dulu. Isinya (label komunitas) sudah dirender GRAPH_REPORT.md
+  §Community Hubs dan diturunkan dari `graph.json` yang memang ter-track.
+
+- a2cc43a: Segarkan graf graphify di atas dokumen dan skill yang sudah disinkronkan.
+
+  Jalur inkremental (`--update`): 105 berkas berubah (50 kode + 55 dokumen), 13
+  berkas terhapus. Hasilnya 8.247 node · 24.098 edge · 495 komunitas, ekstraksi 98%
+  EXTRACTED, biaya 791.182 token input.
+
+  Guard penyusutan graphify (#479) menyala pada −25 node dan **benar** menyala:
+  penurunan itu diverifikasi sah sebelum `force` dipakai — 13 berkas
+  `src/modules/news-portal/**` beserta dua test-nya nol di disk **dan** nol di
+  `git ls-tree HEAD`, sisa penghapusan modul ADR-0044 yang belum pernah masuk graf.
+  Diagnostik integritas pasca-build bersih: nol dangling, nol missing-endpoint, nol
+  self-loop, nol edge kolaps.
+
+  Berkas ber-titik di `graphify-out/` (labels, penanda path, sig) tidak ikut
+  ter-commit — aturan `graphify-out/.*` yang mendarat di PR sebelumnya bekerja
+  persis seperti maksudnya.
+
+- 3493656: Stop the DB-gated integration suite racing bun's 5s per-hook default, and stop
+  it misreporting the result.
+
+  `setupIntegrationDatabase()` creates an ephemeral database and applies every
+  file in `sql/` as a subprocess, inside `beforeAll` — thirteen files each do
+  that, and the cost grows with every migration added. The CI step now passes
+  `--timeout 60000` (~30x the ~1-2s a warm setup takes, still far under the job
+  timeout) in both `ci.yml` and `release.yml`.
+
+  When it does get killed, the harness now says so. Exit 143 is 128 + SIGTERM: the
+  migration did not fail, it was terminated. The old message read "db:migrate
+  failed against the ephemeral integration database (exit 143)", which points a
+  reader at `sql/` — the one place the problem is not. Observed on PR #259 (run
+  30188228406), green on a re-run with no code change.
+
+- 12594f5: Define the `src/lib` boundary and extend the module-boundary gate to `src/pages`
+  (ADR-0043).
+
+  `src/lib` had become a second, ungated module system: four namespaces (`seo`,
+  `theming`, `comments`, `search`) carried the name of an existing module and held
+  that module's code, and `seo_distribution` referred UP into `src/lib/seo` along
+  a path the DAG validator cannot see. `src/lib` is now technical infrastructure
+  with no domain name; module presentation/delivery code lives in
+  `src/modules/<m>/presentation/`. Eight files moved with `git mv`; no behaviour,
+  API, migration, event, permission or registry change.
+
+  `modules:dag:check` fails on a `src/lib/<x>/` namespace that collides with a
+  module key — exactly or via a registered domain alias (without aliases, two of
+  the four real cases would have passed). `src/lib/logging/` is a recorded
+  exception, and the test proves it is DETECTED and merely excused.
+
+  `tests/module-boundary.test.ts` now also covers `src/pages` (38k lines,
+  previously scanned by nothing), attributing each route to its owner via
+  `api.routes`. That surfaced four hidden edges: three are now declared
+  (`theming` -> `module_management`, `visitor_analytics` -> `data_lifecycle` and
+  -> `module_management`) and one was removed instead — `extractReferrerDomain`
+  moved to `_shared`, because a pure string-to-hostname function should not make
+  SEO telemetry depend on the analytics module being enabled.
+
+- 0403e54: Perbaiki dua diagram mermaid yang gagal di-render GitHub, dan gerbangi kelas
+  cacatnya di `check:docs`.
+
+  Saat parse gagal, GitHub tidak merender sebagian — ia mengganti **seluruh**
+  diagram dengan kotak "Unable to render rich display". Dua diagram di repo ini
+  gagal parse sementara `bun run check` tetap hijau, karena `checkMermaid` hanya
+  memvalidasi pagar blok dan tipe diagram, tak pernah isinya.
+
+  Grammar flowchart mermaid memperlakukan `(` sebagai token pembuka bentuk node,
+  jadi kurung di posisi TEKS mematikan diagram:
+
+  - `README.md`/`README.id.md` — label SISI `-->|online (primary)|`, yang dilihat
+    langsung di halaman depan GitHub;
+  - `docs/awcms/21_module_admission_governance.md` — empat label NODE rhombus
+    (`Q2{... (bukan fitur produk berdiri sendiri)?}` dst.). Diagram ini rusak
+    diam-diam dan tak pernah dilaporkan.
+
+  Perbaikannya sama untuk keduanya: kutip labelnya. Bentuk silinder `[( )]` di
+  README TIDAK diubah — di sana kurung adalah sintaks bentuk, bukan teks.
+
+  Gerbangnya diperluas: untuk blok `flowchart`/`graph`, setiap `(`/`)` yang
+  tersisa setelah teks ber-kutip dan pembatas bentuk (`[( )]`, `([ ])`, `(( ))`,
+  `[[ ]]`, `{{ }}`) dibuang = temuan, dengan pesan yang menyebut perbaikannya.
+  Aturan ini sengaja TIDAK berlaku untuk `sequenceDiagram` dkk., tempat kurung
+  dalam teks memang sah.
+
+  Setiap klaim di atas diverifikasi terhadap parser mermaid 11 NYATA — engine yang
+  sama dengan yang dipakai GitHub — bukan disimpulkan dari dokumentasi: tanpa
+  kutip GAGAL, dengan kutip LOLOS, bentuk ber-kurung LOLOS apa adanya, dan kurung
+  di `sequenceDiagram` LOLOS. Sesudah perbaikan, 85 blok mermaid di seluruh
+  markdown ter-track di-parse dengan nol rusak, dan gerbangnya menandai tepat lima
+  baris cacat itu — nol temuan palsu di 85 blok tersebut.
+
+  Cakupan gerbang dinyatakan terbuka di kode: ini pemeriksa sintaksis satu kelas
+  cacat, bukan parser mermaid.
+
+- 66c1122: Perbaiki katalog tag OpenAPI dan kepemilikan fragment — 55 operasi yang selama
+  ini hilang dari referensi API kini terdokumentasi, dan dua gerbang baru mencegah
+  kelas cacat ini terulang.
+
+  `scripts/api-docs-generate.ts` mengelompokkan operasi menurut tag yang
+  **dideklarasikan** di katalog root. Konsekuensinya tidak pernah terlihat: sebuah
+  operasi yang membawa tag tak-terdeklarasi tidak muncul di seksi mana pun — ia
+  hilang tanpa memerahkan apa pun. Itulah yang terjadi pada empat modul sekaligus.
+  `docs/awcms/api-reference.md` tidak memuat **satu pun** operasi REST milik
+  `blog_content` (30 path), `visitor_analytics` (12), `tenant_domain` (7), dan
+  `data_lifecycle` (6), meski bundel memuat semuanya dan `bun run check` hijau.
+
+  Sisi sebaliknya sama sunyinya: katalog masih mengumumkan tag `News Portal *`
+  sebagai milik modul `news_portal` yang sudah dipensiunkan ADR-0044, dan
+  `openapi/modules/news-portal.openapi.yaml` masih ada sebagai fragment untuk
+  modul yang tidak lagi terdaftar. Yang membuatnya bertahan adalah tidak adanya
+  aturan yang menghubungkan fragment ke registry: `api.openApiPath` milik
+  `blog_content` dan `media_library` malah menunjuk **bundel** hasil generate,
+  sehingga fragment asli mereka tidak diklaim siapa pun.
+
+  Perubahan ini:
+
+  - menambah empat tag yang kurang (`Blog Content`, `Visitor Analytics`,
+    `Tenant Domains`, `Data Lifecycle`) dan meng-atribusikan ulang tag
+    `News Media`/`News Portal *` ke modul pemiliknya hari ini (`media_library`,
+    `blog_content`). **Nama tag dan path publik sengaja tidak diubah** — mengikuti
+    alasan ADR-0044 §3/§6 dan preseden ADR-0036: merge memindahkan kepemilikan,
+    bukan permukaan publik;
+  - melebur `openapi/modules/news-portal.openapi.yaml` ke fragment
+    `blog-content`, dan me-repoint `api.openApiPath` `blog_content` +
+    `media_library` ke fragment mereka sendiri (ADR-0026: modul menunjuk
+    fragmentnya, tak pernah bundel);
+  - menambah dua gerbang murni di `bun run api:spec:check`:
+    `collectTagCatalogProblems` (setiap operasi ber-tag, setiap tag operasi
+    terdeklarasi, **dan** setiap tag terdeklarasi dipakai — separuh kedua itulah
+    yang menangkap tag modul pensiunan) dan `collectFragmentOwnershipProblems`
+    (satu fragment = satu modul terdaftar, dua arah, dengan
+    `foundation.openapi.yaml` sebagai satu-satunya pengecualian ter-review);
+  - meluruskan deskripsi `media_library` yang masih menyebut `news_portal` sebagai
+    konsumen wajib yang hidup.
+
+  Bundel yang dihasilkan **tidak berubah selain katalog tag** (11 baris tambah, 3
+  kurang, nol path dan nol schema) — bukti bahwa pemindahan fragment tidak
+  menyentuh kontrak yang diterbitkan. Kedua gerbang dibuktikan MERAH dengan
+  mengembalikan cacat aslinya (menghapus tag `Blog Content`: 49 temuan;
+  mengembalikan fragment `news-portal`: 1 temuan), lalu hijau lagi setelah
+  dipulihkan.
+
+- 75b46ed: Fix `access:permissions:enforcement:check` reporting enforced permissions as unenforced.
+
+  The gate resolved `const NAME = "value"` bindings across the whole repo as one
+  flat namespace. `MODULE_KEY` is bound in five files to four different values, so
+  the "a name bound to two values is unresolvable" rule silenced it everywhere —
+  including in the file that binds it one line above its own guard. The guards in
+  `src/pages/api/v1/analytics/settings.ts` were therefore invisible, and
+  `visitor_analytics.settings.read`/`.update` were recorded in the exception list
+  as permissions nothing enforces, with a stated reason the route disproves.
+
+  Constants now resolve file-first (`resolveConstantsForSource`); the cross-file
+  table is consulted only for names a file does not bind itself, which is exactly
+  the set that can only have arrived by import. A name a file binds twice to
+  different values stays unresolvable. Both exception entries are removed; the
+  score moves from 199/205 with 6 exceptions to 201/205 with 4.
+
+- def014c: Naikkan `@playwright/test` 1.61.1 → 1.62.0 (devDependency). Dipakai suite E2E
+  smoke yang env-gated; suite tetap hijau di CI.
+- cc16c0c: Bump `@playwright/test` from 1.62.0 to 1.62.1 (dev dependency, E2E runner).
+
+  Unlike the Astro stack, Playwright is not pinned in
+  `awcms-family-compatibility.yaml`, so this bump touches nothing but the
+  lockfile — a consumer of this repo binds against its contracts, not its test
+  runner.
+
+- c3af89f: Close GHSA-fxqj-rqcc-2cmp by pinning `postcss` to `^8.5.23` via `overrides`.
+
+  `bun audit` reported one moderate advisory: PostCSS's incomplete fix of
+  GHSA-6g55-p6wh-862q lets an attacker-controlled `sourceMappingURL` read
+  arbitrary `.map` files when `from` is unset. It reaches this repo transitively
+  through `astro › vite › postcss`, which resolved to 8.5.19.
+
+  A dependency override rather than waiting for the upstream bump: the path is
+  three levels deep, so nothing this repo declares can move it, and `overrides`
+  is the same mechanism `awcms-astro` used to close its `fast-uri` advisory.
+
+  Build-path only — PostCSS does not run at request time — so this is hygiene
+  rather than an exposure. `bun audit` is now clean, and `bun install
+--frozen-lockfile` still resolves unchanged.
+
+- 4eea13e: Naikkan `prettier` 3.9.5 → 3.9.6 (devDependency). Formatter menggerbangi
+  `bun run lint`; patch release ini tidak mengubah format berkas mana pun di repo
+  (`lint` tetap hijau tanpa reformat).
+- 3dad5ce: Record the `awcms-astro` readiness analysis and correct two stale counts in
+  `docs/PROJECT_STATE.md`.
+
+  The analysis inverts a reasonable assumption: every content and session
+  contract `awcms-astro` actually calls is complete (five surfaces, all landed),
+  so what holds its ADR-0021 containment is not a missing contract. The one real
+  gap found is closed in the same wave, and the two that remain — a host-based
+  public content route and the business-scope resolver — each need their own ADR.
+
+  Also sharpens the host-resolved route entry from "follow-up" to what the code
+  shows: `seo_distribution` emits every canonical and `<loc>` under `/blog/{slug}`
+  while the only content route is `/blog/{tenantCode}/{slug}`, so for a
+  host-resolved tenant every sitemap and feed URL points at a 404 with no gate
+  red.
+
+- 707baa0: Tabel inventori §2 `docs/PROJECT_STATE.md` kini di-generate dan digerbangi.
+
+  Tabel itu basi EMPAT kali dengan CI hijau — tiga di antaranya pada baris yang sama — dan blockquote-nya sendiri sudah menyimpulkan: pola ini berhenti hanya bila tabelnya di-generate. `bun run project-state:inventory:generate` menulis blok di antara marker `<!-- project-state-inventory:mulai/selesai -->`, dan `bun run project-state:inventory:check` di rantai `check` memerahkan CI bila ia basi (dibandingkan per-konten, bukan per-byte, supaya padding prettier bukan drift).
+
+  Baris LAMBAT di-generate: versi, jumlah modul, jumlah/rentang migrasi, ADR tertinggi + statusnya, layar admin + modul tanpa `navigation:`, jumlah/baris `.astro`, jumlah gerbang rantai `check`, `MODULE_CONTRACT_VERSION`. Baris CEPAT (changeset per tipe bump, commit sejak rilis) DIHAPUS angkanya — angka yang bergerak tiap commit di dokumen ter-versioning akan selalu basi, dan menggerbanginya memaksa tiap PR meregenerasi dokumen; sel nilainya kini menunjuk perintah di kolom kanan, yang dipertahankan (dan rentang `git rev-list`-nya ikut ter-generate dari versi `package.json`).
+
+  Gerbangnya mutation-proven di `tests/project-state-inventory.test.ts`: satu digit dimutasi di antara marker → check gagal dan menamai barisnya; marker hilang → gagal keras; dokumen nyata dibuktikan sinkron oleh test itu sendiri.
+
+- 600b8ba: Extend the query budgets to the heaviest admin screens and the sitemap builder (gap C5 of the second-pass assessment — the first budget file covered only the public blog read paths).
+
+  Every `src/pages/admin/*.astro` screen was ranked by the number of read functions it calls inside `withTenantOrThrow`. Two stand above the rest and are now budgeted at their measured actuals: `/admin` — the dashboard's four report aggregations, 15 queries across nine tables — and `/admin/blog` — the editorial list at 2 queries, 3 with the revision panel, plus a paging-depth constancy check. Every other screen (including `/admin/media`) calls one read function issuing one or two queries, so a budget there would restate a single function's shape rather than guard an aggregation.
+
+  The sitemap builder is the other classic N+1 shape: `seo_distribution`'s discovery aggregator crosses module boundaries through injected `seo_facts` providers and resolves media in batches, on a public unauthenticated surface rebuilt on every edge-cache MISS. The index build is budgeted at 4 queries and a child page at 6, both constant across a 40-post fixture.
+
+  Budgets are ceilings set at the exact measured count — no headroom, because headroom is exactly the space a small regression hides in. Fixtures seed more rows than any budget allows (40 posts, 40 rows in each dashboard-aggregated table, 30 revisions), with time anchors taken from the database rather than a JS clock, so per-item work cannot pass unnoticed. Test infrastructure only: no ADR, no new gate in `bun run check`; the suite is DB-gated by the same `integrationEnabled` mechanism as every other integration file and runs in CI's Integration tests job.
+
+- 3e877a7: Query budgets on the hot public read paths.
+
+  An N+1 is invisible to every other kind of test: the rows are right, the
+  assertions pass, the response is byte-identical, and only the number of round
+  trips differs. It surfaces in production as latency that grows with content,
+  months after the code landed.
+
+  `tests/integration/query-budget.ts` extracts the Proxy-apply-trap the SoD suite
+  already proved out into a reusable `countQueries`, and the accompanying
+  integration test binds the listing, paging and feed paths to a ceiling of three
+  queries against a 40-post fixture.
+
+  The fixture size is the point: a bound asserted against one row proves nothing,
+  since an N+1 and a constant-query implementation both issue about one query.
+  Mutation-proven by injecting a real N+1 into `listPublicBlogPosts` — two budgets
+  turn red. A fourth test guards the instrument itself, because a Proxy that
+  silently stopped counting would make every budget pass vacuously.
+
+  These are the paths the edge cache fronts, which is why the count matters: a
+  cache MISS pays the full cost, and auto-activation only engages once the origin
+  is already under pressure.
+
+  No ADR: this adds no standing rule and no gate to `bun run check`.
+
+- c2808b6: Repo-wide assessment against four axes, and the skill corrections it produced.
+
+  [`docs/awcms/repo-assessment-2026-08-04.md`](docs/awcms/repo-assessment-2026-08-04.md)
+  measures the repo against AWCMS's own development standards, its relationship
+  with `ahliweb/awcms-astro`, international performance standards (ISO/IEC 25010,
+  RFC 9111/5861, Core Web Vitals) and international security standards (OWASP Top
+  10 2021, OWASP API Security Top 10 2023, OWASP ASVS 4.0, ISO/IEC 27001:2022
+  Annex A). Every finding is verified against code, with file and line.
+
+  Three findings change the backlog:
+
+  - **P0 — one route bypasses the authorization chokepoint.**
+    `POST /api/v1/blog/posts/{id}/submit-review` never calls
+    `authorizeInTransaction`, so ABAC policy evaluation, the platform-scope gate,
+    business-scope facts and SoD are all skipped for a permission that
+    `PATCH /{id}` evaluates in full. An explicit ABAC `deny` on
+    `blog_content.posts.update` is honoured on one route and silently ignored on
+    the other. `access:permissions:enforcement:check` cannot see it: it asks
+    whether a permission has an enforcer, not whether every enforcement site uses
+    the chokepoint.
+  - **P1 — nothing tests the contract `awcms-astro` consumes.** The frozen
+    OpenAPI snapshot is the pre-#182-migration baseline; all five surfaces that
+    repo actually calls landed after it. Changing any response shape is green here
+    and breaks the build there.
+  - **P1 — the rate limiter is an in-process `Map`**, so with N replicas the
+    effective limit is N × configured. Redis is already in the repo.
+
+  Also: zero of the 28 `check` gates measure performance, and `bun audit` reports
+  one moderate transitive advisory (postcss via astro › vite).
+
+  `skills:check` gains **rule 4**: every `bun run <target>` a skill names must
+  exist in `package.json` or be declared deferred in `scripts/README.md` §Ditunda.
+  Deliberately narrow — that section explicitly permits skills to name deferred
+  reference targets, so the rule only catches targets that are neither. It found
+  two, one of which told readers to run a refresh command that never existed while
+  the real `gh` invocations sat on the same page.
+
+  Skills corrected: `awcms-abac-guard` now leads with the chokepoint rule that the
+  P0 finding shows was never written down; `awcms-performance` warns that its
+  commands do not exist yet; `awcms-security-hardening` carries the three open
+  findings; `awcms-github-snapshot` and `awcms-data-lifecycle` lose their ghost
+  commands.
+
+  No migrations, no permissions, no runtime change.
+
+- d4677f2: Make `docs/awcms/repo-inventory.md` an actually-generated document (`bun run repo:inventory:generate|:check`).
+
+  It carried a "GENERATED FILE — jangan diedit manual" banner while no generator existed, and it aged in the direction that does the most damage: the body said "belum ada tabel" and "belum ada test file" against 126 tables and 295 test files, gave the migration count as **45** in one paragraph and **89** in another, and listed **20** modules where the registry holds 21. A negative claim is the dangerous kind — "X does not exist yet" gets more wrong with time and never fails on its own.
+
+  The derivable half is now derived and the prose half is not, following `scripts-inventory.ts` exactly: everything between the markers comes from the module registry, `sql/*.sql`, `tests/`, `src/pages/` and `docs/adr/`, and `repo:inventory:check` joins the `check` chain. The check parses the block back into rows rather than comparing bytes, because prettier owns markdown padding and the two would otherwise fight forever.
+
+  RLS state is parsed from the migrations, not read from a database, so the inventory is available where it is most useful (CI, a fresh clone, a review). That parse is cumulative and order-sensitive on purpose: `sql/020` toggles `NO FORCE` on `awcms_offices` for a data repair and turns it back on 40 lines later, so a parser reading the first or last statement alone would report the opposite of the truth. `security-readiness.ts` remains the authority for a live deployment.
+
+  One cross-artefact test ships with it, and it is the part with teeth: the set of tables the generator derives as RLS-free must equal the keys of `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` in `security-readiness.ts` — one side derived from the migrations, the other hand-maintained with a reason per entry. A disagreement means either a new global table shipped without declaring which privileges `awcms_app` must not hold on it, or a tenant-scoped table shipped without RLS. Today both sides are the same eleven.
+
+- 2dc50c9: Menonaktifkan tenant user kini benar-benar mengakhiri aksesnya — seketika,
+  bukan "paling lama satu masa berlaku sesi".
+
+  `setTenantUserStatus` menulis `status = 'inactive'` dan komentar dokumennya
+  sendiri menyatakan itu "revokes all of a user's access". Rantai guard tidak
+  pernah membaca kolom itu: `resolveTenantContext` mencari sesi dan BARIS tenant
+  user, bukan statusnya. Jadi pengguna yang baru dinonaktifkan tetap bekerja
+  normal sampai sesinya kebetulan kedaluwarsa — dan satu-satunya cara
+  menyadarinya adalah mencoba.
+
+  Deaktivasi kini mencabut setiap sesi hidup identitas itu, **di dalam transaksi
+  yang sama** dengan penulisan status: deaktivasi yang ter-commit sementara
+  pencabutannya gagal akan meninggalkan sesi hidup persis untuk akun yang baru
+  saja diputuskan untuk ditutup.
+
+  Kredensial mesin tidak butuh sapuan terpisah — jalur prinsipal mesin (ADR-0049)
+  mensyaratkan tenant user AKTIF, jadi keduanya berhenti pada instan yang sama.
+  Test membuktikan keduanya bekerja terpisah: menghapus pencabutan sesi
+  memerahkan 3 test, sementara test kredensial mesin tetap hijau.
+
+  Diverifikasi terhadap PostgreSQL nyata (6 test), termasuk dua yang menjaga arah
+  sebaliknya: sesi pengguna lain tidak tersentuh, dan reaktivasi **tidak**
+  menghidupkan kembali sesi yang sudah dicabut — urutan deactivate/reactivate
+  justru yang dipakai operator saat mencurigai sebuah sesi.
+
+- 2f9c253: Perluas gerbang rujukan `bun run` ke README modul dan **komentar kode**, lalu
+  perbaiki tujuh rujukan hantu yang selama ini hidup di balik `check` hijau.
+
+  `checkKnownScripts` hanya membaca lima berkas markdown akar (`README*.md`,
+  `AGENTS.md`, `CONTRIBUTING.md`, `docs/ARCHITECTURE.md`). Di luar lima itu, sebuah
+  perintah yang tidak pernah ada tetap bisa berdiri sebagai instruksi. Tujuh
+  ditemukan:
+
+  - Enam komentar di `src/lib/jobs/` + `src/modules/module-management/` menyuruh
+    pembacanya menjalankan target `modules:sync`. Target itu **tidak pernah ada di
+    repo ini** — mekanismenya `POST /api/v1/modules/sync`, dan `enableTenantModule`
+    bahkan sudah memanggil `syncModuleDescriptors` sendiri supaya operator tak
+    perlu mengingat apa pun.
+  - `src/modules/blog-content/README.md` mendaftarkan `bun run production:preflight`
+    di antara perintah verifikasi nyata. Orkestrator itu belum diport; tiga
+    tahapnya yang sudah nyata (`config:validate`, `security:readiness`,
+    `db:pool:health`) menggantikannya.
+
+  Komentar kode adalah dokumentasi current-state yang paling dipercaya sekaligus
+  yang paling tidak pernah diaudit — ia dibaca persis saat seseorang sedang
+  memutuskan tindakan. Karena itu cakupan gerbang kini: lima berkas akar +
+  `docs/PROJECT_STATE.md` + `scripts/README.md` + README modul `src/**` + seluruh
+  sumber `src/`/`scripts/`. `docs/awcms/` dan `.claude/skills/` tetap di luar —
+  isinya target adaptasi awcms-mini yang memang boleh menyebut tooling belum-ada —
+  begitu pula `tests/`, yang fixture-nya sengaja memakai nama fiktif untuk menguji
+  gerbang ini.
+
+  Kelas cacatnya dibuktikan dua arah sebelum ditutup: mengembalikan komentar
+  `modules:sync` yang asli DAN menambahkan satu rujukan hantu ke
+  `docs/PROJECT_STATE.md` masing-masing memerahkan gerbang. Gerbangnya juga
+  langsung menangkap komentar penjelasnya sendiri pada run pertama — kali kelima
+  bentuk itu muncul di repo ini, dan alasan komentar itu kini sengaja tidak menulis
+  nama target dalam bentuk `bun run …`.
+
+  Dokumen current-state ikut disegarkan agar tidak berbohong ke arah sebaliknya:
+  `docs/ARCHITECTURE.md` masih menulis "20 modul terdaftar" (21) dan **dua kali**
+  menyebut `idn-admin-regions` sebagai "belum di-port" padahal modul itu sudah
+  mendarat (#312) — klaim negatif yang makin salah seiring waktu tanpa pernah gagal
+  sendiri. `docs/PROJECT_STATE.md` disetel ulang ke 21 modul / ADR 0000–0048, dan
+  kontrak alur kerjanya tidak lagi mewajibkan mini-first yang sudah **ditangguhkan**
+  ADR-0047.
+
+- 8d4e0f2: Turunkan inventaris `scripts/README.md` dari `package.json`, dan tolak klaim
+  "belum ada" untuk tooling yang sudah ada.
+
+  README itu punya dua tabel dan keduanya salah. Yang pertama mendaftar **12 dari
+  52** skrip sebagai aktif. Yang kedua menyebut lima belas tooling sebagai "belum
+  diport" padahal semuanya sudah mendarat — dan sebagian sudah berada di rantai
+  `bun run check`: `api:docs:check`, `modules:compose:check`,
+  `db:work-class:check`, `modules:composition:inventory:*`, serta seluruh worker
+  per-modul (`email:*`, `analytics:*`, `reporting:*`, `workflow:*`,
+  `form-drafts:*`, `identity-access:*`).
+
+  Keduanya butuh aturan berbeda, karena mode kegagalannya berbeda:
+
+  - **Kelalaian** ditutup dengan menurunkan tabelnya. Blok bertanda di README kini
+    dihasilkan `bun run scripts:inventory:generate` dan diperiksa
+    `scripts:inventory:check` — pola generate/check yang sama dengan artefak
+    `.generated` lain, karena artefak generated TANPA pasangan itu adalah klaim
+    palsu yang justru lebih dipercaya daripada prosa.
+  - **Klaim ABSENSI palsu** ditutup dengan aturan tersendiri: sebuah target yang
+    tercatat di §Ditunda tapi ADA di `package.json` memerahkan gate. Ini arah yang
+    berbahaya — klaim negatif makin salah seiring waktu dan tak pernah gagal
+    sendiri, jadi pembacanya menyimpulkan `db:work-class:check` masih perlu
+    dibangun lalu membangun duplikatnya.
+
+  Pemindaian klaim absensi hanya membaca BARIS TABEL, bukan prosa: prosa di
+  bagian itu menjelaskan aturannya sambil menyebut nama target nyata, dan
+  memindainya utuh membuat gate melaporkan dirinya sendiri pada run pertama —
+  kali keempat bentuk itu muncul di repo ini.
+
+- ccc1fd9: Skill catalogue: correct two claims that stopped being true
+
+  `.claude/skills/README.md` told readers `repo:inventory:*` is "genuinely absent"
+  and that `package.json` has 75 scripts. Both landed since: #374 shipped
+  `repo:inventory:generate`/`:check` with the generator for `awcms/repo-inventory.md`,
+  and the script count is 82. A catalogue that names a real script as missing sends
+  the next reader to build what already exists — the same failure shape ADR-0062
+  gates for `SKILL.md`, in the one file that gate does not read.
+
+  `awcms-jualanku-porting` carried two more. Its description said the registry is
+  "still 20 modules" (it is 21), and its first binding decision described the
+  ADR-0030 scope-hierarchy port as base returning `resolved: false` fail-closed —
+  true until ADR-0060 gave it a provider, and misleading after. What is still open
+  is narrower and now stated: the merchant scope SHAPE needs its own admission ADR.
+
+  Verified against code, not memory: `Object.keys(scripts).length`, the module
+  registry, and the ADR files themselves.
+
+- d02b17f: Confine AWCMS development to `ahliweb/awcms` and `ahliweb/awcms-astro` (ADR-0055), and re-anchor the compatibility manifest.
+
+  ADR-0047 froze `awcms-mini`/`awcms-micro` as references that could still be ported OUT. That half position had a running cost: the manifest still declared `standard: awcms-mini`, and its nine `intentionalDivergences` each carried a `reviewDate` that turns CI red on expiry — scheduling this repo to keep re-justifying its differences from a repo nobody develops. The backlog framed work as moving existing code rather than deciding what to build, and the four most recent foundation features (ADR-0046, -0049, -0053, -0054) were all built here anyway. The written rule had fallen behind the actual one.
+
+  `awcms-mini` and `awcms-micro` are now archives: readable as history, never a scheduled source of ports. Wanted capabilities are built here with their own admission ADR, judged on today's need.
+
+  The manifest stays gated and self-anchored — its 23 contract-version checks against real source constants are untouched, because the mechanism was never the problem. `intentionalDivergences` is emptied and the nine entries are preserved verbatim in `docs/awcms/family-compatibility.md`, where their ADR links are still verified to exist by `check:docs`.
+
+  ADR-0047 §4 (record every foundation feature as a divergence as it lands) is retired: the ADR is the record, and the duplicate was only ever another thing to keep in step. Every other §3 guardrail stands — ADR for standard changes, extra security review for `auth`/`access`/`sync`, full `bun run check`, OpenAPI/AsyncAPI in sync, `FORCE` RLS, ABAC default-deny, applied migrations immutable.
+
+  Docs-only: no runtime code changes.
+
+- a78b774: Build the work-class registry generator + freshness gate, and retire the ghost
+  artifact it was supposed to produce.
+
+  `docs/awcms/work-class-registry.generated.json` carried a `.generated` suffix
+  with no generator and no check behind it. It listed ~284 awcms-mini routes,
+  mostly ghosts, while its own `_disclaimer` claimed to describe "96 real routes"
+  in a repo that has 221 — the data was stale and so was the warning meant to stop
+  readers trusting it. Both `docs/awcms/README.md` and the capacity runbook cited
+  it.
+
+  `bun run db:work-class:generate` / `db:work-class:check` now produce and verify
+  it from this repo's own routes and jobs, wired into `bun run check` and
+  `ci.yml`. Routes are derived from source (`defineTenantRoute`'s required
+  `workClass`, an explicit literal on `withTenant`, or the documented default);
+  jobs come from `JOB_WORK_CLASS_REGISTRY`, cross-checked against the scripts that
+  actually open a worker connection.
+
+  That cross-check refused to generate on its first run, correctly: four worker
+  scripts from the awcms-micro wave (`comments-retention`, `edge-cache-purge`,
+  `site-search-reconcile`, `tenant-domain-dns-sync`) had no entry and were outside
+  the capacity model, and four entries described scripts that do not exist here.
+  Both directions are fixed.
+
+  `tests/generated-artifacts-have-tooling.test.ts` makes this a class of defect
+  rather than one incident: any `.generated` file without a generate/check pair
+  wired into the check chain now fails CI.
+
 ## 6.4.0
 
 ### Minor Changes
