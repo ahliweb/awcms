@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-72 target menjalankan berkas di `scripts/`; 29 di antaranya
+73 target menjalankan berkas di `scripts/`; 29 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -42,6 +42,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `blog:ads:drop-readiness`                | `blog-ads-drop-readiness.ts`                   | —    |
 | `blog:ads:ingest`                        | `blog-ads-ingest.ts`                           | —    |
 | `blog:publish:scheduled`                 | `blog-scheduled-publish.ts`                    | —    |
+| `build:asset-budget:check`               | `client-asset-budget.ts`                       | —    |
 | `changesets:policy:check`                | `changeset-policy-check.ts`                    | —    |
 | `check:docs`                             | `check-docs.mjs`                               | ✅   |
 | `check:docs:translation`                 | `check-docs-translation.mjs`                   | ✅   |
