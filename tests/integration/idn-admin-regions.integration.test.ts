@@ -342,4 +342,46 @@ suite("idn_admin_regions (real PostgreSQL)", () => {
     const named = await queryRegions(sql, { datasetCode: "does-not-exist" });
     expect(named.reason).toBe("dataset_not_found");
   });
+
+  /**
+   * `tx.array(values, "text")` cannot carry a SQL NULL — Bun serialises a JS
+   * `null` element into the four-character string `"null"`. Before the
+   * sentinel/`NULLIF` pairing in `dataset-import.ts`, a real import of the
+   * vendored dump wrote `'null'` into every nullable column: all 38 provinces
+   * got `parent_code = 'null'` and all 7,285 districts `local_term = 'null'`,
+   * which a lookup screen renders to the reader verbatim.
+   *
+   * Only a real database can catch this — the defect lives at the serialisation
+   * boundary, so it is invisible to a typecheck and to any pure test. Removing
+   * either half of the fix turns the first assertion red.
+   */
+  test("nullable columns land as SQL NULL, never the string 'null'", async () => {
+    const sql = getAdminSql();
+
+    await asTx(sql, (tx) => commitDatasetImport(tx, planFor("-nulls")));
+
+    const [counts] = (await sql.unsafe(`
+      SELECT
+        count(*) FILTER (
+          WHERE parent_code = 'null' OR local_term = 'null'
+             OR province_code = 'null' OR regency_code = 'null'
+             OR district_code = 'null' OR village_code = 'null'
+             OR full_path_code = 'null' OR full_path_name = 'null'
+        ) AS literal_null_strings,
+        count(*) FILTER (WHERE level = 1 AND parent_code IS NULL) AS provinces_without_parent,
+        count(*) FILTER (WHERE level = 3 AND local_term IS NULL) AS districts_without_term
+      FROM awcms_idn_admin_regions
+    `)) as {
+      literal_null_strings: string;
+      provinces_without_parent: string;
+      districts_without_term: string;
+    }[];
+
+    expect(Number(counts?.literal_null_strings)).toBe(0);
+    // The fixture carries two provinces (Aceh, Jakarta) and two districts
+    // (Bakongan, Gambir); asserting the counts rather than "> 0" keeps the test
+    // honest if the fixture is ever trimmed.
+    expect(Number(counts?.provinces_without_parent)).toBe(2);
+    expect(Number(counts?.districts_without_term)).toBe(2);
+  });
 });
