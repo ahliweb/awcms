@@ -202,6 +202,11 @@ jobs:
           E2E_LOGIN_IDENTIFIER: e2e-owner@example.com
           E2E_PASSWORD: e2e-password-123
           E2E_OFFICE_CODE: HQ-E2E
+          # Nyalakan gerbang Core Web Vitals LAB (ADR-0067 Opsi D):
+          # tests/e2e/cwv-lab.e2e.ts mengukur LCP+CLS /login terhadap build
+          # ini — angka LAB satu mesin (detektor regresi), bukan p75 lapangan.
+          # Tanpa env ini spec-nya mencetak pernyataan skip, tidak diam.
+          E2E_CWV_LAB: "1"
         run: |
           bun ./dist/server/entry.mjs &
           APP_PID=$!
