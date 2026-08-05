@@ -1,6 +1,7 @@
 # ADR-0020 — Kontrak kesiapan ekstensi ERP (business transaction, posting, period-lock, item, report-projection)
 
-- **Status:** Accepted
+- **Status:** Accepted (belum diimplementasikan)
+- **Catatan status (2026-08-05):** Keputusan kontrak ini tetap berlaku, tetapi artefaknya (`_shared/business-transaction-contract.ts`, `_shared/erp-reference-data-contract.ts`, `_shared/ports/period-lock-port.ts`) sudah tidak ada di repo ini — ikut terhapus bersama jalur aplikasi-turunan (ADR-0034) — dan sejak ADR-0055 pengadaannya kembali menunggu ADR admission di repo ini.
 - **Tanggal:** 2026-07-15
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #755 (epic #738 `platform-evolution`, Wave 4), ADR-0013 (extension layers & boundary model), ADR-0011 (capability ports), ADR-0014 (deterministic build-time module composition), ADR-0015 (derived-application compatibility manifest), Issue #746 (business-scope assignments), Issue #748 (canonical party/`party_directory`), Issue #749 (organization-structure/`organization_hierarchy_resolution`), Issue #742 (domain-event-runtime outbox), Issue #751 (document-infrastructure numbering), Issue #753 (reporting projections), Issue #750 (`reference_data` — **belum merge**, lihat §Status di bawah), `docs/awcms/erp-extension-contracts.md`, `docs/awcms/21_module_admission_governance.md`, `docs/awcms/derived-application-guide.md`

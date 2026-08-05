@@ -1,6 +1,7 @@
 # ADR-0016 — Admission of `organization_structure` as an Official Optional Business Foundation module
 
-- **Status:** Accepted
+- **Status:** Accepted (belum diimplementasikan)
+- **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/organization-structure/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
 - **Tanggal:** 2026-07-14
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #749 (epic #738 `platform-evolution`, Wave 2), Issue #739 / ADR-0013 (extension layers, tenant vs legal entity vs organization unit vocabulary), Issue #746 (business-scope assignments + `BusinessScopeHierarchyPort`, PR #776), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
