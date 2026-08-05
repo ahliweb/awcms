@@ -1,6 +1,7 @@
 # ADR-0019 — Admission of `integration_hub` as a System Foundation module
 
-- **Status:** Accepted
+- **Status:** Accepted (belum diimplementasikan)
+- **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/integration-hub/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
 - **Tanggal:** 2026-07-14
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #754 (epic #738 `platform-evolution`, Wave 3), Issue #742/#745 (`domain_event_runtime`, `data_lifecycle` — keduanya dependency), Issue #739/ADR-0013 §1/§6 (pre-klasifikasi `integration_hub` sebagai System Foundation kandidat + data-ownership matrix), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
