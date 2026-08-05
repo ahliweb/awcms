@@ -12,7 +12,7 @@ Ikuti `docs/awcms/12_generator_prompt.md` (Prompt Security Review) dan `docs/awc
 - [ ] Tidak ada hardcoded secret; provider credential dari env.
 - [ ] Auth required kecuali endpoint public eksplisit.
 - [ ] Tenant context diset; query tenant-scoped filter `tenant_id`.
-- [ ] ABAC default deny + deny overrides allow (`awcms-abac-guard`).
+- [ ] ABAC default deny + deny overrides allow (`awcms-abac-guard`). Verifikasi mekanis: jalankan `bun run access:chokepoint:check` dan `bun run access:permissions:enforcement:check`.
 - [ ] RLS aktif pada semua tabel tenant-scoped.
 - [ ] Audit high-risk tertulis + redaksi (`awcms-audit-log`).
 - [ ] Idempotency pada mutation high-risk (`awcms-idempotency`).

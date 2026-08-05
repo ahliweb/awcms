@@ -1,0 +1,328 @@
+# awcms — Standar Performa dan Keamanan
+
+Peta antara kontrol yang benar-benar berjalan di repo ini dan **standar
+internasional yang menamainya**, beserta daftar celah yang jujur.
+
+Dokumen ini **tidak menambah satu pun aturan baru**. Aturannya sudah ada — di
+[`AGENTS.md`](../../AGENTS.md), di 68 ADR, dan di 33 gerbang rantai
+`bun run check`. Yang belum ada sampai hari ini adalah **satu tempat** yang
+menyatakan standar mana yang diikuti, edisi mana, dan kontrol mana yang **tidak**
+dipenuhi.
+
+Bedanya dengan [`repo-assessment-2026-08-04.md`](repo-assessment-2026-08-04.md):
+asesmen itu **potret satu titik waktu** dan tidak boleh diedit belakangan
+(kalau diedit, ia berhenti menjadi potret). Dokumen ini **hidup** — ia
+dimutakhirkan setiap kali sebuah kontrol mendarat atau dicabut.
+
+> **Aturan isi.** Status tiap baris **diverifikasi ke berkas**, bukan
+> diasumsikan. Baris yang tidak bisa dibuktikan ditulis `belum diukur`, bukan
+> `terpenuhi`. Repo ini punya sejarah panjang dugaan yang ditulis sebagai temuan
+> lalu tersalin jadi keputusan (ADR-0058 §1, ADR-0059, ADR-0060) — dan sejarah
+> yang sama berlaku ke arah sebaliknya.
+
+## 1. Standar yang diikat, beserta edisinya
+
+| Standar                   | Edisi yang dipakai | Mengatur                                           | Mengikat di sini lewat                                                                   |
+| ------------------------- | ------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| OWASP Top 10              | 2021               | Kategori risiko aplikasi web                       | §3                                                                                       |
+| OWASP API Security Top 10 | 2023               | Risiko khas API                                    | §4 — repo ini **menyajikan** 255 berkas rute `/api/v1`                                   |
+| OWASP ASVS                | 4.0.3 (L1/L2)      | Verifikasi kontrol per kategori                    | §5                                                                                       |
+| OWASP Secure Headers      | berjalan           | Header respons HTTP                                | [`src/lib/security/security-headers.ts`](../../src/lib/security/security-headers.ts)     |
+| ISO/IEC 27001             | 2022, Annex A      | Kontrol organisasi yang menyentuh kode             | §6                                                                                       |
+| ISO/IEC 25010             | 2023               | Model mutu produk (performa, kompatibilitas)       | §8                                                                                       |
+| NIST SSDF                 | SP 800-218 v1.1    | Praktik rantai pasok perangkat lunak               | §7                                                                                       |
+| RFC 9111 (+ RFC 5861)     | —                  | Semantik `Cache-Control`, `stale-while-revalidate` | [`src/lib/edge-cache/response-headers.ts`](../../src/lib/edge-cache/response-headers.ts) |
+| Core Web Vitals           | LCP · INP · CLS    | Performa yang dirasakan pengguna                   | §8                                                                                       |
+| WCAG                      | 2.1 AA             | Aksesibilitas layar admin & publik                 | [`14_ui_ux_design_system.md`](14_ui_ux_design_system.md)                                 |
+
+### Edisi adalah keputusan tingkat KELUARGA, dan pemiliknya repo ini
+
+`ahliweb/awcms-astro` menyatakan secara eksplisit (ADR-0028 §A di repo itu)
+bahwa ia **menyamakan edisi OWASP dengan repo ini dan tidak akan
+mendahuluinya**. Alasannya benar dan berlaku dua arah: dua repo keluarga yang
+memetakan diri ke dua edisi berbeda menghasilkan dua matriks yang tidak bisa
+dijumlahkan, dan yang membacanya akan membaca selisih penomoran sebagai celah
+kontrol.
+
+Konsekuensinya yang perlu dinyatakan di sini, karena tidak ada tempat lain yang
+menyatakannya: **pin 2021/4.0.3 di atas adalah warisan, bukan keputusan yang
+pernah diambil.** Ia berasal dari skill `awcms-security-hardening` yang ditulis
+saat itu edisi terbaru. Edisi yang lebih baru sudah ada di luar sana. Menaikkannya
+berarti memetakan ulang §3 dan §5 **dan** memberi tahu repo sebelah — itu
+pekerjaan ber-ADR, bukan penyuntingan tabel. Sampai ADR itu ditulis, pin ini
+berlaku, dan sekarang ia **terbaca sebagai pin**, bukan sebagai kemutakhiran.
+Lihat celah **C10**.
+
+## 2. Header respons — dan satu selisih sengaja dari `awcms-astro`
+
+Yang benar-benar dikirim
+[`buildSecurityHeaders`](../../src/lib/security/security-headers.ts), dipasang
+[`src/middleware.ts`](../../src/middleware.ts) ke **setiap** respons (JSON API,
+HTML 404, 42 halaman `.astro`):
+
+| Header                         | Nilai di sini                                                                                                                                                                 | Nilai di `awcms-astro`                           | OWASP Secure Headers                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `Content-Security-Policy`      | `default-src 'self'`; `object-src 'none'`; `base-uri 'none'`; `form-action 'self'`; `frame-ancestors 'none'`; `script-src 'self' <hash tema>` (+ origin Turnstile bila aktif) | sama, tanpa hash tema, plus origin media         | Wajib                                                                        |
+| `X-Content-Type-Options`       | `nosniff`                                                                                                                                                                     | sama                                             | Wajib                                                                        |
+| `X-Frame-Options`              | `DENY`                                                                                                                                                                        | sama                                             | Wajib                                                                        |
+| `Referrer-Policy`              | `strict-origin-when-cross-origin`                                                                                                                                             | sama                                             | Wajib                                                                        |
+| `Permissions-Policy`           | `geolocation=(), camera=(), microphone=(), payment=()`                                                                                                                        | sama persis                                      | Wajib                                                                        |
+| `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`, digerbangi `isProduction`                                                                                                              | `max-age=31536000` **tanpa** `includeSubDomains` | Wajib                                                                        |
+| `Cross-Origin-Opener-Policy`   | `same-origin`, tanpa gerbang produksi                                                                                                                                         | tidak dikirim                                    | Dianjurkan — C2 **DITUTUP** di sini; selisihnya kini terbalik, celah **C15** |
+| `Cross-Origin-Resource-Policy` | `same-origin`, tanpa gerbang produksi                                                                                                                                         | tidak dikirim — **ditolak eksplisit** di sana    | Dianjurkan — C2 **DITUTUP** di sini; celah **C15**                           |
+
+**Tak ada `'unsafe-inline'` di mana pun, dan itu bukan kebetulan.** Satu-satunya
+skrip inline di repo ini (theme-init admin) diizinkan lewat **hash SHA-256** —
+satu urutan byte persis, bukan kelas. `tests/theme-init-script.test.ts` merah
+bila badan skrip dan hash-nya melenceng; tanpa gerbang itu, ketidakcocokan hash
+gagal **senyap** (skrip diblokir, tanpa error, tanpa log).
+
+### Selisih `includeSubDomains` adalah divergence yang benar — dan kini tercatat
+
+`awcms-astro` sengaja tidak mengirim `includeSubDomains` (ADR-0029 di repo itu):
+ia **template** yang berjalan di domain milik organisasi yang hampir pasti punya
+layanan lain di subdomain lain, dan direktif itu memaksa seluruhnya HTTPS-saja
+selama setahun di browser setiap pengunjung. Repo ini adalah **satu deployment**
+yang operatornya tahu subdomainnya, jadi `includeSubDomains` benar di sini.
+
+Keduanya benar, dan sejak [ADR-0068](../adr/0068-family-standards-posture-editions-and-recorded-divergences.md)
+selisihnya **tercatat**: [`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml)
+kini memuat **tiga** entri `intentionalDivergences` ber-alasan/ber-pemilik/
+ber-`reviewDate` 2027-02-04 (`hsts-include-subdomains`,
+`astro-files-not-type-checked`, edisi OWASP). Celah **C9 DITUTUP**.
+
+Selisih yang **belum** tercatat justru yang baru lahir dari penutupan C2:
+repo ini kini mengirim COOP/CORP `same-origin`, `awcms-astro` tidak — CORP
+bahkan **ditolak eksplisit** di sana ("memblokir situs lain menyematkan gambar
+dari situs ini — keputusan yang bukan milik sebuah TEMPLATE", ADR-0028 repo itu),
+sedangkan COOP belum pernah dibahas di sana sama sekali. Dan dokumen standar
+repo sebelah kini **menyatakan fakta yang keliru tentang repo ini** (tabelnya
+masih menulis kolom `awcms` = "tidak dikirim" untuk keduanya). Lihat celah
+**C15**.
+
+## 3. OWASP Top 10 (2021) → permukaan repo ini
+
+| #   | Kategori                       | Keadaan       | Bukti (diverifikasi, bukan diasumsikan)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --- | ------------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A01 | Broken Access Control          | **Terpenuhi** | ABAC default-deny + deny-overrides (ADR-0004); RLS `ENABLE`+`FORCE` (**115 tabel `FORCE`** per angka ter-generate [`repo-inventory.md`](repo-inventory.md) — grep tangan atas riwayat `sql/` selalu sedikit berbeda, jangan tulis-tangan angkanya; diuji sebagai `awcms_app` LOGIN bukan superuser); `bun run access:chokepoint:check` — **331 handler, 6 memutuskan permission, 2 pengecualian ber-alasan** (`auth/login.ts#POST` pra-autentikasi; `access/evaluate.ts#POST` introspeksi-diri yang memanggil evaluator yang sama — [ADR-0063](../adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md)); `bun run access:permissions:enforcement:check` — **203/203 tergerbangi, 0 pengecualian** ([ADR-0058](../adr/0058-unenforced-permissions-disposition.md)) |
+| A02 | Cryptographic Failures         | **Terpenuhi** | Password argon2id (digerbangi `security:readiness` sebagai `critical`); token sesi opaque, hanya hash disimpan; rahasia MFA terenkripsi dengan kunci tanpa default; identifier sensitif `value_hash` + `masked_value`; HSTS di produksi; cookie `Secure` ditegakkan **gagal-tertutup** di produksi (aturan `!== "true"` + test keadaan-ABSEN — C1 **DITUTUP**)                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| A03 | Injection                      | **Terpenuhi** | Seluruh query lewat tagged template parametrik `Bun.SQL` — tidak ada konkatenasi SQL; `tx.unsafe`/`SET LOCAL` hanya untuk nilai tervalidasi (`assertUuid`); komentar disimpan sebagai teks polos dan di-escape saat render (tidak ada XSS tersimpan, ADR-0041)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| A04 | Insecure Design                | **Terpenuhi** | Threat model [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md); fail-closed sebagai default (GUC tenant zero-UUID); immutability + idempotency; SoD menolak self-approval; ADR wajib untuk perubahan standar                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| A05 | Security Misconfiguration      | **Terpenuhi** | `bun run config:validate` + `bun run security:readiness` (temuan `critical` memblokir go-live); **delapan header** (tujuh tanpa syarat + HSTS produksi); error tanpa stack trace; `.env` gitignored + ditolak CI; aturan produksi `AUTH_COOKIE_SECURE` kini **gagal-tertutup** — C1 **DITUTUP**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| A06 | Vulnerable Components          | **Terpenuhi** | `bun audit` bersih per 4 Agustus 2026 (`overrides` postcss `^8.5.23` menutup GHSA-fxqj-rqcc-2cmp); Dependabot; `bun install --frozen-lockfile` di CI dan image; CodeQL sebagai required check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| A07 | Identification & Auth Failures | **Terpenuhi** | Lockout per-identitas **atomik di DB** (CAS/`FOR UPDATE`, bukan read-modify-write JS); pesan generik anti-enumeration; MFA TOTP + session-assurance aal1/aal2 dengan rotasi anti-fixation; `checkSharedRateLimit` berbagi lewat Redis di **18 berkas rute** ([ADR-0066](../adr/0066-shared-rate-limiting-and-full-auth-surface-coverage.md)); deaktivasi mencabut sesi seketika                                                                                                                                                                                                                                                                                                                                                                                                     |
+| A08 | Software & Data Integrity      | **Terpenuhi** | Checksum migration (`validateAppliedChecksums`); audit append-only; rilis ber-SBOM ×2 + sign/attest lewat `.github/workflows/release.yml` dengan approval gate environment; HMAC v2 terikat tenant+node untuk kanal sync                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| A09 | Logging & Monitoring Failures  | **Terpenuhi** | Audit high-risk + decision log + correlation ID otomatis di seluruh `/api/*`; `bun run logging:lint:check` menolak pola log yang membocorkan; retensi/purge audit; extension point `setLogSink`/`setAuditExportHook` untuk SIEM                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| A10 | SSRF                           | **Terpenuhi** | [`src/lib/auth/ssrf-guard.ts`](../../src/lib/auth/ssrf-guard.ts) — blokir IP privat/metadata, batas hop, `AbortController` yang membentang fetch **dan** pembacaan body, plus cap ukuran respons. URL provider dari env tepercaya, bukan input pengguna                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+
+## 4. OWASP API Security Top 10 (2023)
+
+Kategori ini **tidak berlaku** di `awcms-astro` (repo itu tidak menyajikan API).
+Ia berlaku penuh di sini, dan itu salah satu alasan matriks kedua repo tidak
+boleh disalin bolak-balik.
+
+| #     | Kategori                               | Keadaan   | Bukti                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----- | -------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API1  | Broken Object Level Authorization      | Terpenuhi | RLS `FORCE` per tenant + filter kepemilikan eksplisit; tabel global terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` dengan alasan per entri                                                                                                                                                                                                                                                                                                                        |
+| API2  | Broken Authentication                  | Terpenuhi | Lihat A07. Kredensial mesin **mengautentikasi, tidak pernah mengotorisasi** ([ADR-0049](../adr/0049-machine-credentials-and-session-introspection.md))                                                                                                                                                                                                                                                                                                              |
+| API3  | Broken Object Property Level Authz     | Terpenuhi | DTO eksplisit per endpoint; masking identifier sensitif; `bun run api:spec:check` mengikat bentuk respons ke fragment OpenAPI pemiliknya                                                                                                                                                                                                                                                                                                                            |
+| API4  | Unrestricted Resource Consumption      | Terpenuhi | Rate limit berbagi lewat Redis (ADR-0066); pagination keyset di 34 berkas; `OFFSET` berbatas keras (`MAX_PAGE_NUMBER` 10.000, clamp dua sisi); work-class pool + backpressure `503 DATABASE_BUSY`; `statement_timeout`                                                                                                                                                                                                                                              |
+| API5  | Broken Function Level Authorization    | Terpenuhi | Chokepoint tunggal `authorizeInTransaction`, digerbangi **per handler** (ADR-0063) — bukan per berkas, karena pembacaan per-berkas justru yang melahirkan temuan salah di asesmen                                                                                                                                                                                                                                                                                   |
+| API6  | Unrestricted Access to Sensitive Flows | Terpenuhi | Idempotency-Key wajib pada mutasi high-risk; kode handoff sesi ≤60 detik sekali pakai ([ADR-0050](../adr/0050-bff-session-handoff-code.md))                                                                                                                                                                                                                                                                                                                         |
+| API7  | Server Side Request Forgery            | Terpenuhi | Lihat A10                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| API8  | Security Misconfiguration              | Terpenuhi | Lihat A05 — C1 **DITUTUP**                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| API9  | Improper Inventory Management          | Terpenuhi | OpenAPI modular per-modul + bundler deterministik (ADR-0026); `api:spec:check` menuntut tiap operasi ber-tag terdeklarasi **dan** tiap tag terdeklarasi dipakai; `api:consumer-contract:check` membekukan kontrak konsumen ([ADR-0065](../adr/0065-awcms-astro-consumer-contract-is-frozen.md)), kini dipisah `CONSUMED_PATHS` (3) / `COMMITTED_PATHS` (2) — C8 **DITUTUP** ([ADR-0068](../adr/0068-family-standards-posture-editions-and-recorded-divergences.md)) |
+| API10 | Unsafe Consumption of APIs             | Terpenuhi | Setiap panggilan keluar berbatas waktu (`withTimeout`/`AbortController`) dan bergerbang circuit breaker; provider di luar transaksi (ADR-0006)                                                                                                                                                                                                                                                                                                                      |
+
+## 5. OWASP ASVS 4.0.3 — kategori yang punya permukaan di sini
+
+| Kategori                 | Keadaan   | Catatan                                                                                                                                                                                                                                                       |
+| ------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V2 Authentication        | Terpenuhi | argon2id, lockout atomik-di-DB, anti-enumeration, MFA TOTP, break-glass yang direkonsiliasi dengan MFA                                                                                                                                                        |
+| V3 Session Management    | Terpenuhi | Token opaque server-side, TTL, rotasi aal1→aal2 anti-fixation, logout mencabut, deaktivasi mencabut seketika. `HttpOnly` + `SameSite=Lax` **tanpa syarat**; `Secure` ditegakkan validator di produksi, gagal-tertutup — C1 **DITUTUP**                        |
+| V4 Access Control        | Terpenuhi | Lihat A01/API5                                                                                                                                                                                                                                                |
+| V5 Validation & Encoding | Terpenuhi | Validasi per endpoint; Astro auto-escape; tak ada jalur HTML mentah dari konten                                                                                                                                                                               |
+| V7 Error & Logging       | Terpenuhi | Error generik tanpa detail internal; `logging:lint:check` menolak `String(error)` mentah                                                                                                                                                                      |
+| V9 Communications        | Terpenuhi | HSTS produksi; HMAC v2 untuk kanal mesin-ke-mesin                                                                                                                                                                                                             |
+| V11 Anti-automation      | Terpenuhi | ADR-0066 — dan **gagal-terbuka saat Redis mati dinyatakan keras**, bukan disembunyikan: gagal-tertutup akan mengubah gangguan Redis menjadi penolakan login total yang bisa dipicu penyerang, sementara lockout per-identitas di PostgreSQL tidak terpengaruh |
+| V12 Files & Resources    | Terpenuhi | Sniff magic-byte + SHA-256 pada unggahan media; presigned direct-to-R2; path objek tak pernah dari input tak tepercaya                                                                                                                                        |
+| V13 API & Web Service    | Terpenuhi | Kontrak OpenAPI terdefinisi dan digerbangi; kontrak konsumen dipisah "dikonsumsi" (3, dipin ke hitungan gerbang repo sebelah) vs "dijanjikan" (2, tiap entri ber-ADR) — C8 **DITUTUP**                                                                        |
+| V14 Configuration        | Terpenuhi | **Delapan header** + `config:validate` + `security:readiness`. COOP/CORP kini dikirim `same-origin` (C2 **DITUTUP**), aturan `AUTH_COOKIE_SECURE` produksi gagal-tertutup (C1 **DITUTUP**)                                                                    |
+
+## 6. ISO/IEC 27001:2022 Annex A — kontrol yang menyentuh kode
+
+| Kontrol                                  | Bagaimana dipenuhi di sini                                                                                                       |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| A.5.15 / A.8.3 Access control            | RBAC + ABAC default-deny lewat satu chokepoint; RLS `FORCE` sebagai pertahanan berlapis                                          |
+| A.8.2 Privileged access                  | Pemisahan role DB `awcms_app` / `awcms_worker` / `awcms_setup`, matriks grant digerbangi `security:readiness` sebagai `critical` |
+| A.8.5 Secure authentication              | Lihat A07/V2                                                                                                                     |
+| A.8.8 Technical vulnerability management | `bun audit`, Dependabot, CodeQL, GitGuardian sebagai required check                                                              |
+| A.8.9 Configuration management           | `config:validate` + `config:env:coverage:check` — tiap variabel yang dibaca kode wajib terdaftar beserta konsekuensi salah isi   |
+| A.8.12 Data leakage prevention           | Masking/redaction identifier sensitif; `logging:lint:check`                                                                      |
+| A.8.15 / A.8.16 Logging & monitoring     | Audit + decision log + correlation ID; extension point SIEM (bukan implementasi SIEM)                                            |
+| A.8.24 Cryptography                      | argon2id, HMAC v2, enkripsi rahasia MFA dengan kunci wajib                                                                       |
+| A.8.25 Secure development lifecycle      | ADR wajib; changeset per perubahan perilaku; 33 gerbang di rantai `check`                                                        |
+| A.8.26 Application security requirements | Threat model doc 20; module admission ber-ADR ([`21_module_admission_governance.md`](21_module_admission_governance.md))         |
+| A.8.28 Secure coding                     | [`10_template_kode_coding_standard.md`](10_template_kode_coding_standard.md) + guardrail `AGENTS.md`                             |
+| A.8.31 Separation of environments        | Tiga fase setara (produksi/staging/dev) dengan DB & secret terpisah; `APP_ENV` menggerbangi aturan produksi                      |
+
+## 7. NIST SSDF (SP 800-218 v1.1)
+
+| Praktik                                    | Keadaan                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PS.1 Lindungi seluruh bentuk kode          | Terpenuhi — branch protection, tanpa commit langsung ke `main`                                                                                                                                                                                                                                         |
+| PS.2 Verifikasi integritas rilis           | Terpenuhi — SBOM ×2 + sign/attest + GitHub Release, dengan required reviewer di environment `release`                                                                                                                                                                                                  |
+| PW.4 Komponen pihak ketiga yang aman       | Terpenuhi — lockfile di-commit, install ter-freeze, audit di CI                                                                                                                                                                                                                                        |
+| PW.7 Review kode                           | Terpenuhi — PR + CI wajib hijau                                                                                                                                                                                                                                                                        |
+| PW.8 Uji kode yang dieksekusi              | **Sebagian** — 293 berkas test (`find tests -name '*.test.ts'`; inventori ter-generate menghitung 304 dengan pola lebih luas — dua definisi, dua angka, keduanya benar) dengan pola mutation-proven, tetapi **42 berkas `.astro` (22.328 baris) tak pernah diperiksa tipe sama sekali** — celah **C4** |
+| RV.1 Identifikasi kerentanan berkelanjutan | Terpenuhi — CodeQL + Dependabot + `bun audit`                                                                                                                                                                                                                                                          |
+
+## 8. Performa
+
+### Target hasil, dan status pengukurannya
+
+| Metrik                          | Ambang "baik"   | Keadaan                                                                                    |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------ |
+| LCP — Largest Contentful Paint  | ≤ 2,5 detik     | **belum diukur** — [ADR-0067](../adr/0067-core-web-vitals-collection.md) `Proposed`        |
+| INP — Interaction to Next Paint | ≤ 200 milidetik | **belum diukur**                                                                           |
+| CLS — Cumulative Layout Shift   | ≤ 0,1           | **belum diukur**                                                                           |
+| Query per permintaan baca panas | ≤ 3             | **diukur** — `tests/integration/query-budget.integration.test.ts`, di atas fixture 40 post |
+
+Menuliskan tiga target pertama tanpa mengatakan bahwa belum satu pun diukur akan
+menjadi persis kelas cacat yang gerbang repo ini dibangun untuk menangkap.
+
+### Yang sudah benar
+
+| Keputusan                                    | Akibat performa                                                                                         | Di mana                                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Cache tepi Varnish, default MATI             | 11 surface ter-deklarasi, allow-list fail-closed, TTL ber-ramp otomatis, invalidasi lewat surrogate key | [`edge-cache-architecture.md`](edge-cache-architecture.md), ADR-0042/ADR-0061                        |
+| Validator kondisional (ETag/`Last-Modified`) | 304 di seluruh rute discovery — sitemap/feed tidak dikirim ulang tanpa perubahan                        | modul `seo_distribution`                                                                             |
+| Pagination keyset                            | Konstan terhadap kedalaman halaman; kursor membawa presisi mikrodetik sebagai teks                      | `src/modules/_shared/keyset-pagination.ts` (34 berkas)                                               |
+| `OFFSET` berbatas keras                      | Bukan permukaan amplifikasi — clamp dua sisi, `MAX_PAGE_NUMBER` 10.000                                  | `src/modules/_shared/offset-pagination.ts`                                                           |
+| Work-class pool + backpressure               | Laporan berat tak menjenuhkan pool interaktif; saturasi → `503`, bukan antrean tak berujung             | `bun run db:work-class:check`                                                                        |
+| Setiap kolom FK terjangkau index             | 182 kolom FK, semuanya terjangkau, 1 pengecualian ber-alasan                                            | `bun run db:fk-index:check` ([ADR-0064](../adr/0064-foreign-key-columns-must-be-index-reachable.md)) |
+| Panggilan keluar selalu berbatas waktu       | Provider lambat tidak menahan koneksi DB — `withTimeout`/`AbortController` di keempat adapter keluar    | `src/lib/integration/timeout.ts`                                                                     |
+
+### Gerbang performa: satu dari 33
+
+Rantai `bun run check` memuat **33** gerbang. Yang memeriksa performa:
+**`db:fk-index:check`**, satu. Anggaran query hidup sebagai **test integrasi**
+(DB-gated), bukan gerbang rantai — jadi pada mesin tanpa PostgreSQL ia
+di-`skip`, dan `bun run check` tetap hijau.
+
+Itu bukan cacat pada test-nya; itu batas yang perlu diketahui saat membaca
+"CI hijau" sebagai jaminan performa. **Ia bukan.**
+
+## 9. Celah
+
+Diurutkan menurut akibat, bukan menurut usaha. Aturan yang mengikat
+penutupannya diambil dari repo ini sendiri: **aturan tanpa pemeriksanya adalah
+aturan yang akan dilanggar** — dan itu berlaku juga bagi aturan yang datang dari
+standar luar. Karena itu tiap baris menyebut pemeriksa yang harus ikut mendarat.
+
+Baris yang tertutup **tetap di tabel**. Dihapus, ia akan diusulkan lagi sebagai
+temuan baru enam bulan kemudian, dan pemeriksanya akan dilonggarkan oleh orang
+yang tidak tahu kenapa ia ada.
+
+| #   | Celah                                                                                                                                                                                                                                          | Sumbu    | Keadaan                                                                                                                                                                                                             | Pemeriksa yang harus ikut mendarat                                                                                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | ~~`AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset~~                                                                                                                                                                                        | Keamanan | **DITUTUP** — aturan `!== "true"`; test keadaan-ABSEN, mutation-proven                                                                                                                                              | Balik aturan `scripts/validate-env.ts` dari `=== "false"` menjadi "bukan `true`", plus test yang membuktikan `APP_ENV=production` tanpa variabel itu DITOLAK                                                                      |
+| C2  | ~~COOP / CORP tidak dikirim~~                                                                                                                                                                                                                  | Keamanan | **DITUTUP** — keduanya `same-origin`, tanpa gerbang produksi; asersi menyasar NILAI                                                                                                                                 | Tambahkan di `buildSecurityHeaders` + asersi di test header yang sudah ada                                                                                                                                                        |
+| C3  | Repo tak mengompresi apa pun; kompresi **diwarisi** dari Cloudflare, lapisan yang repo ini tak kontrol dan tak periksa                                                                                                                         | Performa | **TERBUKA (diturunkan)**                                                                                                                                                                                            | Asersi `Content-Encoding` pada respons teks bila kompresi dipindah ke lapisan yang repo miliki; ATAU catat ketergantungannya di `security:readiness`                                                                              |
+| C14 | Purge menjangkau Varnish, **bukan** tier yang benar-benar menyajikan pembaca                                                                                                                                                                   | Performa | **TERBUKA**                                                                                                                                                                                                         | Purge Cloudflare (API zona) di worker yang sama, ATAU pernyataan tertulis bahwa `s-maxage` adalah batas kebasian yang diterima                                                                                                    |
+| C4  | 42 berkas `.astro` (22.328 baris) tidak diperiksa tipe — TERBLOKIR eksternal                                                                                                                                                                   | Standar  | **TERBLOKIR** — `@astrojs/check` menuntut API TypeScript 6.x; repo di 7.0.2. Dicatat sebagai divergence ber-`reviewDate` ([ADR-0068](../adr/0068-family-standards-posture-editions-and-recorded-divergences.md) §C) | `astro check` di rantai `bun run check` (butuh `@astrojs/check`)                                                                                                                                                                  |
+| C5  | Anggaran query hanya menutup jalur baca publik blog                                                                                                                                                                                            | Performa | **TERBUKA**                                                                                                                                                                                                         | Perluas `countQueries` ke layar admin terberat + pembangun sitemap                                                                                                                                                                |
+| C6  | Tidak ada anggaran ukuran aset klien                                                                                                                                                                                                           | Performa | **TERBUKA**                                                                                                                                                                                                         | Jumlahkan byte `dist/client` per halaman di `build`; hari ini 139 KB mentah — inilah saat termurah menggerbanginya                                                                                                                |
+| C7  | Core Web Vitals belum diukur; ADR-0067 kini punya Opsi D (lab) dan menunggu pemilik produk                                                                                                                                                     | Performa | **MENUNGGU PEMILIK PRODUK** — Opsi D (lab, nol data pengunjung) kini tertulis dan tidak menunggu keputusan RUM                                                                                                      | Keputusan pemilik produk atas ADR-0067, ditambah opsi lab (Playwright sudah ada) yang **nol** data pengunjung                                                                                                                     |
+| C8  | ~~Kontrak konsumen membekukan 6 permukaan; konsumennya memanggil 3~~                                                                                                                                                                           | Interop  | **DITUTUP** — `CONSUMED_PATHS` (3, dipin ke hitungan gerbang repo sebelah) vs `COMMITTED_PATHS` (2, tiap entri wajib menyebut ADR)                                                                                  | Pisahkan "dikonsumsi" dari "dijanjikan", dan turunkan yang pertama dari blok bertanda di repo sebelah                                                                                                                             |
+| C9  | ~~Divergence `includeSubDomains` tidak tercatat~~                                                                                                                                                                                              | Standar  | **DITUTUP** — entri manifest ber-`reviewDate` 2027-02-04 ([ADR-0068](../adr/0068-family-standards-posture-editions-and-recorded-divergences.md))                                                                    | Satu entri di `awcms-family-compatibility.yaml` (mekanismenya sudah ada dan sudah digerbangi)                                                                                                                                     |
+| C10 | ~~Pin edisi OWASP tidak pernah jadi keputusan tertulis~~                                                                                                                                                                                       | Standar  | **DITUTUP** — ADR-0068 §A menuliskannya beserta tanggal tinjau                                                                                                                                                      | ADR tingkat keluarga; §1 dokumen ini sudah membuatnya terbaca sebagai pin                                                                                                                                                         |
+| C11 | ~~`skills:check` punya DUA lubang~~: pembebasan per-SKILL yang total, dan ekstraktor path yang buta terhadap path terpotong baris                                                                                                              | Standar  | **DITUTUP** — blok `<!-- aspirational:mulai -->` + normalisasi whitespace dalam backtick; keduanya mutation-proven                                                                                                  | Persempit pembebasan ke blok bertanda; normalkan whitespace di dalam backtick sebelum mencocokkan path                                                                                                                            |
+| C12 | Enam ADR ber-status `Accepted` tanpa satu baris kode (**ADR-0016–0021**: organization_structure, document_infrastructure, data_exchange, integration_hub, kontrak ERP-extension yang berkasnya sudah dihapus, reference_data)                  | Standar  | **TERBUKA**                                                                                                                                                                                                         | Gerbang yang mengikat status ADR ke keberadaan modul/berkasnya, atau status baru (`Accepted (belum diimplementasikan)`)                                                                                                           |
+| C13 | 101 changeset menunggu, 113 commit sejak `v6.4.0` (per 5 Agustus 2026 — angka ini bergerak tiap commit, verifikasi dengan perintah di PROJECT_STATE §2), salah satunya `major`                                                                 | Standar  | **TERBUKA**                                                                                                                                                                                                         | Rilis `v7.0.0`, atau ambang changeset yang memerahkan CI                                                                                                                                                                          |
+| C15 | Selisih COOP/CORP lintas-repo tidak tercatat, dan dokumen `awcms-astro` kini menyatakan fakta keliru tentang repo ini — tabel headernya masih menulis kolom `awcms` = "tidak dikirim" untuk keduanya (basi sejak commit `769292d7`, 4 Agustus) | Interop  | **TERBUKA** (putaran ketiga, 5 Agustus 2026) — CORP **ditolak eksplisit** di sana sebagai keputusan template; COOP belum pernah dibahas di sana                                                                     | Entri divergence di `awcms-family-compatibility.yaml` + koreksi tabel di dua berkas repo sebelah (`docs/awcms-astro/standar-performa-dan-keamanan.md`, skill `awcms-astro-performa-keamanan`); COOP di sana butuh ADR-nya sendiri |
+
+> **C3 diturunkan pada 4 Agustus 2026 setelah diprobe ke staging DAN produksi,
+> dan koreksinya penting.** Klaim aslinya — "tidak ada kompresi respons di mana
+> pun di jalur penyajian" — benar untuk **apa yang repo ini miliki** (nol
+> kompresi di aplikasi, nol `do_gzip` di `infra/varnish/default.vcl`, nol
+> middleware `compress` di `deploy/`), dan **salah untuk apa yang diterima
+> pembaca**: kedua environment ter-deploy mengembalikan `content-encoding: gzip`,
+> karena Cloudflare berada di depan Traefik dan mengompresi. Topologi itu
+> **sudah tertulis** di [`environments.md`](environments.md) §Cache tepi
+> (`Cloudflare (proxied) -> Traefik :443 -> varnish:80 -> app`) — putaran kedua
+> nyaris melaporkannya sebagai "tier CDN tak terdokumentasi" karena membaca
+> separuh berkas. Yang tersisa dan tetap benar: sebuah deployment template ini
+> yang **tidak** di belakang CDN pengompresi tidak mendapat kompresi apa pun, dan
+> tidak ada satu pun gerbang atau `security:readiness` yang mengatakannya.
+>
+> **C14 lahir dari probe yang sama, dan ia lebih tajam daripada C3 pernah.**
+> `EDGE_CACHE_PURGE_ENDPOINT` menunjuk container Varnish
+> (`http://awcms-staging-varnish:80`), jadi antrean purge ADR-0042 mem-ban di
+> Varnish — sementara yang benar-benar menjawab pembaca hari ini adalah
+> Cloudflare: `/robots.txt` staging balas `cf-cache-status: HIT`, `age: 182`,
+> di saat yang sama aplikasi menandai `x-edge-cache-skip: surface_not_declared`.
+> Menerbitkan konten karena itu meng-invalidasi tier yang **tidak** menyajikan
+> dan membiarkan tier yang menyajikan tetap basi sampai `s-maxage` habis.
+> Kebasiannya **berbatas** (`EDGE_CACHE_MAX_TTL_SECONDS=300`, jadi ≤5 menit)
+> sehingga ini bukan kebocoran melainkan jeda — tetapi uji penerimaan di
+> `environments.md` mengukur `X-Cache` dari Varnish, yaitu tier yang bukan
+> penjawabnya, sehingga jeda itu tak akan pernah muncul di pengujian mana pun.
+
+Rincian bukti tiap celah ada di
+[`repo-assessment-2026-08-04.md`](repo-assessment-2026-08-04.md) §9.
+
+## 10. Yang sengaja TIDAK diadopsi
+
+Sama pentingnya untuk ditulis: sebuah kontrol yang direkomendasikan standar dan
+**ditolak dengan alasan** tidak akan diusulkan lagi enam bulan kemudian sebagai
+temuan baru.
+
+- **`EDGE_CACHE_MODE` menyala sebagai default.** Cache bersama di depan aplikasi
+  multi-tenant adalah mesin kebocoran lintas-tenant bila salah dikonfigurasi.
+  Default MATI adalah keputusan ADR-0042 dan tetap benar.
+- **Rate limiting yang gagal-TERTUTUP.** Ditolak di ADR-0066 dengan alasan yang
+  masih berlaku: ia mengubah gangguan Redis menjadi penolakan login total yang
+  bisa dipicu penyerang, sementara kontrol yang benar-benar mengikat — lockout
+  per-identitas di PostgreSQL — tidak bergantung pada Redis sama sekali.
+- **Baris Core Web Vitals mentah per kunjungan (Opsi C ADR-0067).** Ia membalik
+  postur privasi `visitor_analytics` yang sudah tertulis (purge = `DELETE` tanpa
+  arsip) demi kemampuan drill-down yang tak ada kebutuhan tercatat menuntutnya.
+- **Menggerbangi `docs/awcms/` seperti `.claude/skills/`.** Isinya sengaja
+  campuran sejarah + spesifikasi dan tidak dieksekusi sebagai instruksi;
+  [ADR-0062](../adr/0062-skills-are-gated-against-the-code-they-describe.md) §3
+  sudah menyatakan batas itu. Dokumen **ini** adalah pengecualian yang dinyatakan:
+  ia current-state, jadi ia harus dimutakhirkan saat kontrol berubah.
+- **Menaikkan cakupan test demi persentase.** 293 berkas test dengan pola
+  mutation-proven yang konsisten lebih bernilai daripada angka cakupan — yang
+  hilang bukan kuantitas melainkan **kelas** (celah C4, C5).
+
+## 11. Hubungannya dengan `ahliweb/awcms-astro`
+
+Repo itu **mengonsumsi** repo ini dan tidak menyajikan API apa pun. Sebagian
+besar kontrol di atas — RLS, ABAC, idempotency, audit trail, HMAC — ditegakkan
+di sini dan tidak punya padanan di sana. Yang **bukan** berarti tidak relevan:
+keputusan di sini mengubah apa yang benar di sana, dan sebaliknya.
+
+| Fakta lintas-repo                                                             | Akibatnya                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edisi OWASP di-pin oleh **repo ini**                                          | `awcms-astro` menyatakan mengikuti, tidak mendahului. Menaikkan edisi tanpa memberi tahu repo sana menghasilkan dua matriks yang tidak bisa dijumlahkan — celah **C10**                                                                                                                                                                       |
+| `awcms-astro` memanggil **tiga** permukaan, bukan enam                        | C8 **DITUTUP**: `CONSUMED_PATHS` di sini kini dipin ke blok bertanda repo sana (yang membuang komentar sebelum mengekstrak, dan digerbangi dua arah oleh `tests/kontrak-awcms.test.mjs`-nya). Catatan putaran ketiga: repo sana **belum mengenal ADR-0065/0068** (nol rujukan) — rujukan terbarunya masih asesmen 4 Agustus dengan angka enam |
+| `awcms-astro` mengompresi di PENYAJInya; repo ini mewarisinya dari Cloudflare | Bukan selisih kualitas melainkan selisih **kepemilikan** — repo sana menepati janjinya sendiri, repo ini menepatinya lewat lapisan yang tak dimilikinya. Deployment template ini di luar CDN pengompresi tak dapat kompresi apa pun, dan tak ada gerbang yang mengatakannya — celah **C3** (diturunkan)                                       |
+| `awcms-astro` menjalankan `astro check`, repo ini tidak                       | Repo dengan 42 berkas `.astro` tidak memeriksanya; repo dengan lebih sedikit memeriksanya — celah **C4**                                                                                                                                                                                                                                      |
+| HSTS berbeda **dengan sengaja**                                               | Benar di kedua sisi; kini tercatat sebagai divergence ber-`reviewDate` di manifest keluarga — C9 **DITUTUP** (ADR-0068)                                                                                                                                                                                                                       |
+| COOP/CORP dikirim di sini, **tidak** di sana                                  | Selisih baru hasil penutupan C2: CORP ditolak eksplisit di sana (keputusan template), COOP tak pernah dibahas; dokumen repo sana kini salah menyatakan repo ini "tidak mengirim" keduanya — celah **C15**                                                                                                                                     |
+| ADR-0059 (`/news/**` host-resolved) mendarat di sini                          | "Kapan memakai `awcms-astro` alih-alih rute publik `awcms`" menjadi pertanyaan nyata. Dijawab di README repo sana; jawabannya **nol panggilan ke CMS saat pembaca meminta halaman**, bukan bentuk URL                                                                                                                                         |
+
+## 12. Cara memakai dokumen ini
+
+1. **Sebelum audit/go-live** — baca §9. Celah `TERBUKA` yang tidak muncul di
+   `bun run security:readiness` adalah persis yang tidak akan ada yang
+   mengingatkan.
+2. **Saat menambah kontrol** — tambahkan barisnya di §3–§8 **beserta bukti
+   berkasnya**, dan pindahkan celahnya ke `DITUTUP` dengan pemeriksa yang
+   benar-benar mendarat. Baris tanpa pemeriksa adalah klaim, bukan kontrol.
+3. **Saat ditanya kepatuhan** — §3 sampai §7 adalah jawaban yang bisa dikirimkan.
+   §9 adalah bagian yang membuatnya bisa dipercaya.
+4. **Saat menaikkan edisi standar** — itu ADR tingkat keluarga, dan repo sebelah
+   ikut, tidak mendahului.

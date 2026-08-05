@@ -81,14 +81,16 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek       | Nilai (per commit ini)                                                                                                   | Sumber kebenaran                                                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Versi       | **6.4.0** (2026-07-26); **68 changeset menunggu** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`**            | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                |
-| Modul base  | **21** (lihat daftar di ARCHITECTURE.md)                                                                                 | `src/modules/index.ts`                                                                  |
-| Migrasi     | **90** (`sql/001`–`090`)                                                                                                 | `ls sql/`                                                                               |
-| ADR         | **0000**–**0060** (`0000` = template)                                                                                    | `ls docs/adr/`                                                                          |
-| Layar admin | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Kontrak     | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.4.0**                                                | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek           | Nilai (per commit ini)                                                                                                             | Sumber kebenaran                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Versi           | **6.4.0** (2026-07-26); **101 changeset menunggu** atas **113 commit** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`** | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`, `git rev-list --count v6.4.0..HEAD` |
+| Modul base      | **21** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                                        |
+| Migrasi         | **90** (`sql/001`–`090`)                                                                                                           | `ls sql/`                                                                                                     |
+| ADR             | **0000**–**0068** (`0000` = template; `0067` masih `Proposed`)                                                                     | `ls docs/adr/`                                                                                                |
+| Layar admin     | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja           | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts`                       |
+| Berkas `.astro` | **42** (22.328 baris) — **tak satu pun diperiksa tipe**, lihat §6                                                                  | `find src -name '*.astro'`                                                                                    |
+| Gerbang         | **33** di rantai `bun run check`; **1** di antaranya memeriksa performa                                                            | `scripts.check` di `package.json`, dipisah pada `&&`                                                          |
+| Kontrak         | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                                         |
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
 > berbunyi "20 berkas / 7 dari 21 modul" sementara `main` sudah memuat 22 berkas dan
@@ -103,6 +105,19 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > adalah **`v7.0.0`**, bukan `6.5.0` — angka yang salah di sini menyesatkan
 > perencanaan rilis, bukan cuma pembaca. Kolom "Sumber kebenaran" baris itu kini
 > memuat perintah yang menghitungnya per tipe bump.
+>
+> **Dan basi untuk KETIGA kalinya, di baris yang sama, sembilan hari kemudian.**
+> Asesmen putaran kedua (4 Agustus 2026) menemukan **100** changeset, bukan 68 —
+> dan tiga baris lain ikut basi: ADR berhenti di `0060` padahal `0067` sudah ada,
+> `MODULE_CONTRACT_VERSION` tertulis `2.4.0` padahal sumbernya `2.5.0`. Pola ini
+> tidak akan berhenti dengan menuliskan angka yang lebih baru; ia berhenti hanya
+> bila tabel ini **di-generate**. Sampai itu terjadi: **jangan pernah mengutip
+> tabel ini sebagai fakta — jalankan perintah di kolom kanan.** Untuk angka yang
+> memang sudah ter-generate, pakai
+> [`awcms/repo-inventory.md`](awcms/repo-inventory.md). Putaran ketiga
+> (5 Agustus 2026) menemukan episode **keempat** pada baris yang sama —
+> changeset 100→101, commit 108→113 — plus baris ADR yang berhenti di `0067`
+> padahal `0068` sudah `Accepted`; instruksi di atas berlaku tanpa pengecualian.
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -296,7 +311,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 - **Dua environment ter-deploy nyata** — produksi `awcms.ahlikoding.com`, staging
   `awcms-staging.ahlikoding.com` (Coolify, host yang sama, DB & secret terpisah). Staging
-  ter-migrasi penuh (69) dan berjalan sebagai role least-privilege terpisah. Rincian,
+  ter-migrasi penuh (69 per 2026-07-26; repo kini memuat 90 migrasi — angka ini bergerak,
+  verifikasi dengan `ls sql/`) dan berjalan sebagai role least-privilege terpisah. Rincian,
   termasuk jebakan "user Coolify itu superuser sehingga RLS inert", di
   [`awcms/environments.md`](awcms/environments.md).
 
@@ -304,10 +320,70 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 - **ASESMEN MENYELURUH 4 Agustus 2026 — [`awcms/repo-assessment-2026-08-04.md`](awcms/repo-assessment-2026-08-04.md).**
   Repo dinilai terhadap empat sumbu (standar AWCMS, hubungan `awcms-astro`, performa
-  internasional, keamanan internasional). Tujuh rekomendasi berperingkat; tiga
-  teratas dicatat di sini karena mengubah backlog:
+  internasional, keamanan internasional). Tujuh rekomendasi berperingkat.
 
-  - **P0 — satu rute MELEWATI chokepoint otorisasi.**
+  > **PUTARAN 1 SELESAI — enam dari tujuh mendarat di hari yang sama.**
+  > ADR-0063 (#380) chokepoint per-handler, `overrides` postcss (#381),
+  > ADR-0064 (#382) gerbang index-FK, ADR-0065 (#383) kontrak konsumen beku,
+  > ADR-0066 (#384) rate limit berbagi lewat Redis, anggaran query (#385).
+  > Yang ketujuh — Core Web Vitals — sengaja **tidak** mendarat: ia jadi
+  > [ADR-0067](adr/0067-core-web-vitals-collection.md) `Proposed` yang menunggu
+  > keputusan pemilik produk. Teks P0/P1 di bawah dipertahankan sebagai konteks;
+  > jangan dibaca sebagai pekerjaan tersisa.
+
+  > **PUTARAN 2 — tiga belas temuan baru, [`§9 dokumen asesmen`](awcms/repo-assessment-2026-08-04.md).**
+  > Dinilai ulang SETELAH keenam perbaikan masuk. Empat teratas, yang mengubah
+  > backlog:
+  >
+  > 1. **SELESAI (commit 769292d7, celah C1 DITUTUP).** Teks asli dipertahankan
+  >    sebagai konteks: `scripts/validate-env.ts` kini menolak produksi dengan
+  >    `AUTH_COOKIE_SECURE !== "true"` — termasuk saat variabel **tidak diset**
+  >    (gagal-tertutup); keadaan-absen digerbangi `tests/validate-env.test.ts`.
+  >    **`AUTH_COOKIE_SECURE` gagal-TERBUKA saat tidak diset.** Aturan produksi
+  >    di `validate-env.ts` hanya menolak string literal `"false"`, sementara
+  >    runtime menuntut `"true"` — jadi variabel yang **tidak diset** memberi
+  >    cookie sesi tanpa `Secure` dengan `config:validate` hijau. Tetangganya di
+  >    berkas yang sama (`TRUSTED_PROXY_ENABLED`) justru memerahkan saat kosong.
+  > 2. **CATATAN (5 Agustus 2026): temuan ini di-reframe, C3 diturunkan.**
+  >    Pembaca produksi/staging TERNYATA menerima gzip — dari Cloudflare, karena
+  >    kedua host proxied (`Cloudflare (proxied) → Traefik :443 → varnish:80 → app`,
+  >    [`awcms/environments.md`](awcms/environments.md) §Cache tepi). Yang tersisa
+  >    dan tetap benar: repo ini sendiri tak mengompresi apa pun, kompresinya
+  >    diwarisi dari lapisan yang tak diperiksa gerbang mana pun, dan deployment
+  >    template di luar CDN pengompresi tidak mendapat kompresi. Teks asli:
+  >    **Tidak ada kompresi respons di mana pun** — bukan di aplikasi, bukan di
+  >    `infra/varnish/default.vcl` (nol kemunculan `gzip`), bukan sebagai
+  >    middleware Traefik yang dideklarasikan. Sementara itu
+  >    `edge-cache/response-headers.ts` sudah memancarkan `Vary: Accept-Encoding`
+  >    — janji tanpa penepat. Diukur: aset teks `dist/client` 139 KB → 49,7 KB
+  >    (2,79×), dan HTML/JSON/sitemap kompres lebih baik lagi.
+  > 3. **CATATAN (5 Agustus 2026): TERBLOKIR eksternal.** `@astrojs/check`
+  >    menuntut API TypeScript 6.x sedangkan repo sudah di 7.0.2 — celah C4
+  >    tak bisa ditutup dari sini hari ini; keadaan itu dicatat sebagai
+  >    divergence keluarga di ADR-0068 §C (`awcms-family-compatibility.yaml`,
+  >    reviewDate 2027-02-04). Teks asli:
+  >    **42 berkas `.astro` (22.328 baris) tidak pernah diperiksa tipe.** `tsc`
+  >    tidak bisa mengurai `.astro` dan melewatinya diam-diam; `@astrojs/check`
+  >    tidak terpasang. `awcms-astro` menjalankan `astro check`; repo ini —
+  >    dengan berkas `.astro` jauh lebih banyak — tidak.
+  > 4. **SELESAI (ADR-0068, celah C8 DITUTUP).** `scripts/api-consumer-contract.ts`
+  >    kini memisahkan `CONSUMED_PATHS` (3: `/api/v1/blog/posts`,
+  >    `/api/v1/media/objects`, `/api/v1/media/public-origin`) dari
+  >    `COMMITTED_PATHS` (2: `/api/v1/auth/session`,
+  >    `/api/v1/access/machine-credentials`, tiap entri ber-ADR) — ADR-0065 +
+  >    ADR-0068. Teks asli:
+  >    **Kontrak konsumen membekukan enam permukaan; `awcms-astro` memanggil
+  >    tiga.** Daftar di sana diekstrak dari kode **dengan komentar dibuang** dan
+  >    digerbangi dua arah; daftar di sini disusun dengan mem-grep repo sana
+  >    tanpa membuang komentar, sehingga tiga entri membekukan panggilan yang
+  >    tidak pernah terjadi (satu di antaranya dihapus ADR-0018 di repo sana).
+  >
+  > Status kontrol pindah ke dokumen yang memang dirancang untuk dimutakhirkan:
+  > [`awcms/standar-performa-dan-keamanan.md`](awcms/standar-performa-dan-keamanan.md)
+  > — peta kontrol ↔ standar (OWASP Top 10 2021 / API Top 10 2023 / ASVS 4.0.3 /
+  > ISO 27001:2022 / ISO 25010 / NIST SSDF / RFC 9111 / Core Web Vitals), tiga
+  > belas celah ber-pemeriksa, dan daftar kontrol yang **sengaja ditolak**.
+  - **P0 (SELESAI, ADR-0063) — satu rute MELEWATI chokepoint otorisasi.**
     `POST /api/v1/blog/posts/{id}/submit-review` tidak memanggil
     `authorizeInTransaction` sama sekali; ia menyusun jalurnya sendiri
     (`fetchGrantedPermissionKeys` + `evaluatePostUpdateAccess`). Yang dilewati:
@@ -323,7 +399,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     Himpunan pelanggar hari ini **tepat dua** berkas, satu di antaranya
     (`auth/login.ts`) memang pra-autentikasi — jadi daftar pengecualiannya lahir
     dengan satu entri.
-  - **P1 — kontrak yang dipakai `awcms-astro` tidak dijaga test apa pun.**
+  - **P1 (SELESAI, ADR-0065) — kontrak yang dipakai `awcms-astro` tidak dijaga test apa pun.**
     Snapshot OpenAPI beku adalah snapshot **PRA-migrasi #182**, sedangkan kelima
     permukaan yang benar-benar dikonsumsi repo itu mendarat SESUDAHNYA
     (`/auth/session`, `/media/objects`, `/media/public-origin`,
@@ -332,7 +408,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     CI sini dan merusak build repo sana** — kegagalan yang muncul di tempat orang
     yang menyebabkannya tidak melihat. Perbaikan: snapshot kontrak KONSUMEN kedua
     (jangan perluas yang pra-migrasi — tugasnya berbeda dan ia harus tetap beku).
-  - **P1 — rate limiter tidak bertahan lintas instans.** `src/lib/security/rate-limit.ts`
+  - **P1 (SELESAI, ADR-0066) — rate limiter tidak bertahan lintas instans.** `src/lib/security/rate-limit.ts`
     memakai `Map` dalam-proses (berkasnya sendiri mencatatnya): dengan N replika,
     batas efektif jadi N × batas terkonfigurasi, sehingga deployment yang paling
     butuh perlindungan justru paling lemah. Redis SUDAH ada di repo. Tiga endpoint
@@ -340,11 +416,12 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     `sso/{providerKey}/callback`) — kelengkapan, bukan lubang (masing-masing punya
     mitigasi lain), tapi ASVS menuntut anti-automation di seluruh permukaan auth.
 
-  Sisanya (gerbang index-FK, `overrides` postcss untuk GHSA-fxqj-rqcc-2cmp,
-  anggaran query, Core Web Vitals) ada di dokumen asesmen dengan urutan eksekusi
-  yang disarankan. Catatan penting dari asesmen: **nol dari 28 gerbang repo ini
-  memeriksa performa** — sebuah query N+1 atau FK tanpa index mendarat dengan CI
-  hijau penuh.
+  Catatan asesmen yang masih berlaku, dan sekarang dengan angka yang lebih
+  tepat: dari **33** gerbang rantai `check`, **satu** memeriksa performa
+  (`db:fk-index:check`). Anggaran query (#385) hidup sebagai **test integrasi
+  DB-gated**, bukan gerbang rantai — pada mesin tanpa PostgreSQL ia di-`skip`
+  dan `bun run check` tetap hijau. Cakupannya pun hanya jalur baca publik blog:
+  31 layar admin dan pembangun sitemap belum beranggaran.
 
 - **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Gelombang kedua
   (PR #335–#338, 2 Agustus 2026) menutup EMPAT dari tujuh — verifikasi ulang dengan
@@ -739,7 +816,9 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   `awcms.ahlikoding.com`, staging `awcms-staging.ahlikoding.com`, dan
   development lokal kini identik: migrasi **70**, 118 tabel, 197 permission, RLS
   `ENABLE`+`FORCE` 109/118, runtime sebagai `awcms_app` (bukan superuser), owner
-  `admin@ahlikoding.com` dengan role `owner` 197/197, dan
+  `admin@ahlikoding.com` dengan role `owner` 197/197 (angka-angka itu potret saat
+  fase disetarakan; per 5 Agustus 2026 repo memuat **90** migrasi dan **203**
+  permission — verifikasi dengan `ls sql/` dan katalog, jangan kutip dari sini), dan
   `PUBLIC_DEFAULT_TENANT_*` di-pin per fase. Isolasi dibuktikan sebagai
   `awcms_app` (`0 / 1 / 0`), bukan diasumsikan. Suite DB-gated jalan di dev
   (harness 142 + legacy 64, nol gagal). Detail dan jebakannya di
@@ -1006,6 +1085,32 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   picu ulang dengan empty commit; flake Postgres CI → `gh run rerun --failed`.
 - **Subagent di working tree bersama** bisa memindahkan HEAD → verifikasi
   `git branch --show-current` sebelum commit.
+- **`.astro` adalah titik buta SETIAP gerbang berbasis tipe.** `bun run typecheck`
+  adalah `tsc --noEmit`, dan `tsc` tidak bisa mengurai `.astro` — ia melewatinya
+  **diam-diam**, meskipun `tsconfig.json` menulis `"include": ["src/**/*"]`.
+  `astro build` juga tidak memeriksa tipe. Jadi 42 berkas / 22.328 baris (seluruh
+  layar admin + login + halaman publik) menulis TypeScript yang tak pernah
+  diperiksa siapa pun. Kelas yang paling mungkin lolos: `withTenant`
+  (mengembalikan `T | Response`) dipakai di tempat `withTenantOrThrow`
+  (melempar) yang benar — halaman tetap ter-compile dan merender data yang
+  sebetulnya sebuah `Response`. Sampai `astro check` masuk rantai, **baca ulang
+  tipe di `.astro` dengan mata**, jangan percaya CI hijau. Status 5 Agustus 2026:
+  memasukkan `astro check` **TERBLOKIR eksternal** — `@astrojs/check` menuntut
+  API TypeScript 6.x sedangkan repo di 7.0.2; keadaan ini tercatat sebagai
+  divergence ADR-0068 §C (`awcms-family-compatibility.yaml`, reviewDate
+  2027-02-04), jadi jebakan ini tetap berlaku penuh.
+- **Repo ini tidak mengompresi apa pun — dan kompresi yang pembaca terima
+  diwarisi dari lapisan yang tak diperiksa gerbang mana pun.**
+  `edge-cache/response-headers.ts` memancarkan `Vary: Accept-Encoding` pada
+  respons yang bisa di-cache, tetapi tak ada kompresi di aplikasi, tak ada
+  `beresp.do_gzip` di `infra/varnish/default.vcl`, dan tak ada middleware
+  `compress` Traefik yang dideklarasikan di repo; Varnish **tidak** mengompresi
+  atas inisiatifnya sendiri. Pembaca produksi/staging TETAP menerima gzip —
+  dari Cloudflare, karena kedua host proxied (`Cloudflare (proxied) → Traefik
+:443 → varnish:80 → app`, [`awcms/environments.md`](awcms/environments.md)
+  §Cache tepi). Konsekuensinya: deployment template ini di luar CDN pengompresi
+  tidak mendapat kompresi sama sekali, dan tidak ada gerbang yang akan merah
+  bila lapisan warisan itu hilang.
 
 Detail lebih dalam ada di skill terkait (`awcms-new-migration`, `awcms-abac-guard`,
 `awcms-testing`, `awcms-sync-hmac`, dst.) dan di ADR.
@@ -1014,7 +1119,10 @@ Detail lebih dalam ada di skill terkait (`awcms-new-migration`, `awcms-abac-guar
 
 - Mulai unit kerja: skill `awcms-implement-issue` (orkestrator) → `awcms-new-module` /
   `awcms-new-migration` / `awcms-new-endpoint` / `awcms-new-event`.
-- Port dari mini: skill `awcms-port-from-mini`.
+- Kapabilitas dari arsip mini/micro: **bukan port** — [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)
+  menjadikan mini/micro arsip; kapabilitas baru masuk lewat **ADR admission dan
+  dibangun di repo ini**. Skill `awcms-port-from-mini` HISTORIS (catatan cara
+  port dulu dikerjakan; §Adaptasi-nya masih berguna saat membaca kode arsip).
 - Review/keamanan: skill `awcms-pr-review`, `awcms-security-review`, subagent
   `awcms-reviewer` / `awcms-security-auditor`.
 - Perbarui **dokumen ini** setiap ada perubahan state besar (modul/migrasi baru, keputusan

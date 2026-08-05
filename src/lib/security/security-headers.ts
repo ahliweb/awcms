@@ -136,7 +136,44 @@ export function buildSecurityHeaders(
     [
       "Permissions-Policy",
       "geolocation=(), camera=(), microphone=(), payment=()"
-    ]
+    ],
+    // Cross-origin isolation (OWASP Secure Headers Project, "recommended").
+    //
+    // WHY THESE ARE RIGHT HERE AND WERE REJECTED IN `awcms-astro`
+    // ----------------------------------------------------------
+    // `awcms-astro` ADR-0028 §D declines a blanket
+    // `Cross-Origin-Resource-Policy: same-origin` for a good reason that does
+    // NOT transfer: it is a TEMPLATE for public sites, and CORP would decide,
+    // on behalf of sites that do not exist yet, whether other origins may embed
+    // their images.
+    //
+    // This repo serves a different surface, and it has no such resource:
+    //   - HTML pages are NAVIGATIONS, which CORP does not govern at all;
+    //   - the JSON API is already unreachable cross-origin from a browser —
+    //     nothing here emits `Access-Control-Allow-Origin` (verified: zero
+    //     occurrences in `src/`), so `same-origin` removes no capability that
+    //     any browser client has today;
+    //   - `public/` holds exactly two files (`js/news-share.js`,
+    //     `css/public-content.css`) and `_astro/*` is hashed output — all of it
+    //     loaded by this origin's own pages;
+    //   - article images are served from R2 by `media_library`, a DIFFERENT
+    //     origin, so image embedding is not this app's decision to make.
+    //
+    // What they buy: `COOP: same-origin` severs the browsing-context-group tie
+    // to any window that opened us (or that we open), which is what stops a
+    // cross-origin opener from holding a `window` reference into an
+    // authenticated admin session; `CORP: same-origin` blocks `no-cors`
+    // subresource embedding of our responses, the side-channel path CORS alone
+    // does not close.
+    //
+    // Turnstile is unaffected: its challenge runs in a CHILD frame (governed by
+    // `frame-src`, already allow-listed above), and COOP governs openers and
+    // popups, not embedded frames. OIDC/SSO is likewise unaffected — those
+    // flows are top-level redirects, not `window.open` handshakes. If a future
+    // flow ever needs a cross-origin popup to talk back, THAT is the change
+    // that must revisit this line, not this one.
+    ["Cross-Origin-Opener-Policy", "same-origin"],
+    ["Cross-Origin-Resource-Policy", "same-origin"]
   ];
 
   if (options.isProduction) {

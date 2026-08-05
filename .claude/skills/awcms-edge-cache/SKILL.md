@@ -133,6 +133,19 @@ ketiga yang senyap.
   benar-benar mem-prune baris `done`. Baris `failed` sengaja TIDAK di-prune — itu
   satu-satunya jejak bahwa invalidasi tak pernah mendarat.
 
+## Tier di ATAS Varnish (Cloudflare)
+
+Topologi ter-deploy menaruh Cloudflare (proxied) di depan:
+`Cloudflare -> Traefik -> Varnish -> app`. `EDGE_CACHE_PURGE_ENDPOINT` hanya
+menjangkau **Varnish** — purge/ban tidak menyentuh cache Cloudflare, padahal
+yang menjawab pembaca adalah Cloudflare (`cf-cache-status: HIT` bahkan saat
+aplikasi menandai skip). Ini celah C14 di
+[`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md) §9.
+Konsekuensinya: saat men-debug konten basi, ukur `cf-cache-status`/`age` dari
+sisi Cloudflare, bukan hanya `X-Cache` Varnish; dan kebasian di tier itu hanya
+berbatas `s-maxage`, bukan purge. Materi debug lengkap: skill `awcms-deploy`
+butir "cf-cache-status".
+
 ## Perintah
 
 ```bash

@@ -22,6 +22,24 @@ Ikuti `docs/awcms/12_generator_prompt.md` (Prompt Review PR), `docs/awcms/09_roa
 11. Sensitive data masked.
 12. Test relevan ada & pass; build pass.
 13. Docs diperbarui; commit mengikuti convention `<type>(<scope>): <summary>`.
+14. **Diff menyentuh `.astro`? Baca tipenya dengan MATA.** `bun run typecheck`
+    (`tsc --noEmit`) **tidak bisa mengurai `.astro`** dan melewatinya diam-diam,
+    jadi CI hijau tidak mengatakan apa pun tentang 22.328 baris itu. Yang wajib
+    diperiksa manual: `withTenantOrThrow` (bukan `withTenant` — bentuk kedua
+    mengembalikan `T | Response` dan akan merender `Response` sebagai data),
+    bentuk hasil fungsi aplikasi yang dipakai halaman, dan nilai `null` vs key
+    absen saat satu fungsi baca dipakai bersama halaman DAN endpoint.
+15. **Menambah/mengubah permukaan yang dikonsumsi `awcms-astro`?** `bun run api:consumer-contract:check`
+    wajib hijau, dan **regenerasi kontrak bukan langkah rutin** — ia berarti
+    "konsumennya harus ikut berubah", jadi PR-nya wajib menyebut apa yang harus
+    dikerjakan di repo sebelah. Daftarnya **sudah dipisah** (ADR-0068) di
+    `scripts/api-consumer-contract.ts`: `CONSUMED_PATHS` diturunkan dari blok
+    bertanda di repo `awcms-astro` (benar-benar dipanggil), `COMMITTED_PATHS`
+    wajib menyebut ADR-nya.
+16. **Perubahan yang menyentuh postur keamanan atau performa** (header, cookie,
+    rate limit, cache, index, anggaran query) wajib memutakhirkan
+    [`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md).
+    Baris di sana tanpa pemeriksa adalah klaim, bukan kontrol.
 
 ## Konsistensi kontrak
 

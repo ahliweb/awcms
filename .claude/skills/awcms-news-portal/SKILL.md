@@ -12,7 +12,7 @@ description: "BACAAN SAJA / HISTORIS — modul `news_portal` SUDAH TIDAK ADA di 
 > satu baris pun kode ditulis dari skill ini:
 >
 > - `src/modules/news-portal/` **dihapus**; `src/modules/index.ts` **tidak**
->   memuatnya (registry = 20 modul). Tidak ada `basePath /api/v1/news-portal`.
+>   memuatnya (registry = 21 modul). Tidak ada `basePath /api/v1/news-portal`.
 > - Fiturnya **tidak hilang**: homepage-section composer dan ad placement
 >   ber-`media_object_id` terverifikasi kini **dimiliki `blog_content`**, dengan
 >   penargetan yang dilebarkan (#301), job ingest iklan lama (#302), jalur tulis

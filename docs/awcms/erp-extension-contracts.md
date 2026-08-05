@@ -1,5 +1,14 @@
 # Kontrak Kesiapan Ekstensi ERP
 
+> **⚠️ HISTORIS/DEPRECATED ([ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), dipertegas [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)).**
+> Jalur repo turunan yang dokumen ini asumsikan sudah DIHAPUS — ERP kini
+> dibangun sebagai **modul domain langsung di `src/modules/`** repo ini, dengan
+> ADR admission-nya sendiri. Berkas kontrak `_shared` yang dirujuk di bawah
+> (`business-transaction-contract.ts`, `erp-reference-data-contract.ts`,
+> `ports/period-lock-port.ts`) **sudah dihapus dari repo**. Dokumen ini
+> dipertahankan sebagai catatan historis desain kontraknya, bukan peta kode
+> hari ini.
+
 Issue #755, epic #738 (`platform-evolution`), Wave 4 — issue TERAKHIR
 epic ini. `docs/adr/0020-erp-extension-readiness-contracts.md` adalah
 keputusan arsitektural yang mengikat; dokumen ini adalah referensi

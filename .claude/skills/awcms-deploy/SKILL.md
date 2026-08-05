@@ -44,6 +44,37 @@ perintah generate `userlist.txt` dari `pg_authid`. CI
 kedua compose file di setiap PR — jangan biarkan salah satu file punya
 syntax error/env var yang tidak resolve sampai lolos ke deploy.
 
+## Dua hal yang TIDAK dijaga gerbang mana pun — periksa dengan mata
+
+Keduanya ditemukan asesmen 4 Agustus 2026 (§9.1 dan §9.3) dan keduanya adalah
+kesalahan konfigurasi yang melapor sukses:
+
+1. ~~`AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset.~~ **DITUTUP 4 Agustus
+   2026** — `config:validate` kini menuntutnya bernilai persis `"true"` di
+   produksi (sebelumnya hanya menolak `"false"`, sehingga variabel yang **hilang**
+   lolos dan cookie sesi terkirim tanpa `Secure`). Tetap setel eksplisit
+   `AUTH_COOKIE_SECURE=true` untuk tiap profil online, dan **verifikasi dengan
+   `curl -I`** bahwa `Set-Cookie` login membawa `Secure` — validator memeriksa
+   konfigurasi, bukan respons.
+2. **Kompresi datang dari lapisan LUAR, dan repo ini tak memeriksanya.** Repo
+   tidak mengompresi apa pun (nol di aplikasi, nol `do_gzip` di
+   `infra/varnish/default.vcl`, nol middleware `compress` Traefik). Deployment
+   `ahlikoding.com` tetap mengompresi karena **Cloudflare** ada di depan —
+   topologi ter-deploy adalah `Cloudflare (proxied) -> Traefik :443 -> varnish
+-> app`, tertulis di [`environments.md`](../../../docs/awcms/environments.md)
+   §Cache tepi. **Deployment template ini di luar CDN pengompresi tidak mendapat
+   kompresi sama sekali, dan tak ada gerbang yang mengatakannya** — verifikasi
+   sendiri dengan `curl -sSI -H 'Accept-Encoding: gzip' <host>/api/v1/health`
+   dan cari `content-encoding`. Bila harus menambahkannya, **pilih satu tempat**;
+   dua lapisan yang sama-sama mengompresi menghasilkan `Content-Encoding` ganda.
+3. **Antrean purge tidak menjangkau Cloudflare.** `EDGE_CACHE_PURGE_ENDPOINT`
+   menunjuk Varnish; tak ada pemanggilan API zona CF di mana pun. Menerbitkan
+   konten karena itu meng-invalidasi Varnish sementara CF tetap menyajikan salinan
+   lamanya sampai `s-maxage` habis (`EDGE_CACHE_MAX_TTL_SECONDS`, bawaan 300 detik).
+   Berbatas dan bukan kebocoran — tetapi uji penerimaan `X-Cache` di
+   `environments.md` mengukur Varnish, jadi jeda ini tak akan terlihat di sana.
+   Untuk menguji tier yang benar, baca `cf-cache-status` dan `age`.
+
 ## Command inti (semua profil)
 
 ```bash

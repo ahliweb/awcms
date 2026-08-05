@@ -1,20 +1,20 @@
 # Alur pengembangan: awcms-mini dulu, lalu port ke awcms
 
-> **DITANGGUHKAN sejak 31 Juli 2026.** `awcms-mini` dibekukan sebagai referensi
-> dan tidak menerima perubahan, sehingga alur di dokumen ini tidak bisa ditempuh:
-> langkah pertamanya tidak punya tujuan. Selama pembekuan berlaku, fitur fondasi
-> dirintis **langsung di `awcms`**, dengan seluruh penjagaan penggantinya
-> dinyatakan eksplisit di [ADR-0047](../adr/0047-mini-micro-frozen-foundation-built-here.md).
->
-> Dokumen ini **tidak** dihapus dan tidak diubah isinya: ia kembali berlaku utuh
-> begitu pembekuan dicabut, dan langkah rename prefix di dalamnya justru yang
-> akan dipakai untuk memulangkan pekerjaan ke hulu — dengan arah terbalik.
+> **DICABUT PERMANEN ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md), 2 Agustus 2026).**
+> Penangguhan ADR-0047 (31 Juli 2026) berubah menjadi pencabutan: `awcms-mini`
+> dan `awcms-micro` kini **arsip** — boleh dibaca sebagai referensi sejarah,
+> tetapi alur mini-first **tidak akan kembali**. Kapabilitas baru masuk lewat
+> **ADR admission dan dibangun langsung di repo ini**, dengan penjagaan yang
+> didaftar ulang di ADR-0055 §3 (ADR wajib untuk perubahan standar, security
+> review tambahan `auth`/`access`/`sync`, `bun run check` penuh, OpenAPI/AsyncAPI
+> sinkron, RLS `FORCE`, ABAC default-deny).
 
-> **Status:** kontrak kerja operasional. Wajib dipatuhi setiap agent/kontributor
-> yang menambah atau mengubah fitur di repo ini. Melengkapi
-> [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md) (rebuild di
-> atas fondasi awcms-mini) dan [`../ARCHITECTURE.md`](../ARCHITECTURE.md) (apa
-> yang sudah ada di kode).
+> **Status:** catatan sejarah — dokumen ini merekam kontrak kerja mini-first
+> sebagaimana dulu berlaku, dan **tidak lagi mengikat siapa pun**. Klaim di
+> badan dokumen ("wajib", "tetap berlaku", angka modul/migrasi) adalah potret
+> eranya; keadaan kini ada di
+> [`../ARCHITECTURE.md`](../ARCHITECTURE.md) dan
+> [`../PROJECT_STATE.md`](../PROJECT_STATE.md).
 
 ## 1. Relasi dua repo
 

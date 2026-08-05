@@ -332,6 +332,17 @@ Setiap bug di lapisan ini melapor sukses sambil tidak bekerja. Yang sah hanya:
 | permintaan berikutnya             | `HIT` lagi        |
 | baris antrean                     | `done attempts=1` |
 
+> **Peringatan — tabel di atas mengukur Varnish, dan Varnish BUKAN tier yang
+> menjawab pembaca.** Kedua host (produksi & staging) proxied Cloudflare, jadi
+> tier penjawab pembaca adalah **Cloudflare** — dibuktikan probe staging
+> 4 Agustus 2026 (`cf-cache-status: HIT` plus header `age:`). Baca
+> `cf-cache-status`/`age` juga, bukan hanya `X-Cache`; dan `MISS` pasca-purge
+> di Varnish **tidak membuktikan pembaca melihat konten segar**, karena antrean
+> purge ADR-0042 mem-BAN Varnish dan **tidak menjangkau Cloudflare** — celah
+> C14 di [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md)
+> §9. Kebasian yang pembaca lihat berbatas `s-maxage` ≤
+> `EDGE_CACHE_MAX_TTL_SECONDS` (300 detik pada konfigurasi staging).
+
 ## Cache tepi di produksi — mode `auto`
 
 Produksi memakai **`EDGE_CACHE_MODE=auto`**, bukan `on`: inilah perilaku

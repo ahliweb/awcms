@@ -1,5 +1,11 @@
 # Bagian 20 — Threat Model dan Arsitektur Keamanan
 
+> **Potret era-desain (ditulis sebelum modul pertama ada; repo kini memuat
+> 21 modul).** Status kontrol yang **hidup dan ter-verifikasi** ada di
+> [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) —
+> baca dokumen itu untuk keadaan kini; dokumen ini tetap berguna sebagai
+> model ancaman dan alasan desainnya.
+
 > **Status dokumen — PENTING.** Repo `awcms` baru pada tahap fondasi ulang
 > ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) —
 > **belum ada satu pun modul ERP yang diimplementasikan**, belum ada

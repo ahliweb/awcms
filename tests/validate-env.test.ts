@@ -69,6 +69,63 @@ describe("validateEnv", () => {
     );
   });
 
+  /**
+   * The defect this pins is NOT "`false` is rejected" — that always worked, and
+   * the test above already covers it. It is the state the old rule could not
+   * see: `AUTH_COOKIE_SECURE` **absent**.
+   *
+   * `required: false` permits absence, and the old production cross-rule only
+   * matched the literal string `"false"`. Runtime, meanwhile, evaluates
+   * `process.env.AUTH_COOKIE_SECURE === "true"` — so an absent variable in
+   * production means session cookies without `Secure` while
+   * `bun run config:validate` reports the configuration clean.
+   *
+   * Assert on the ABSENT case explicitly. A test that only feeds `"false"` is
+   * green on the defective rule, which is exactly how the gap survived.
+   */
+  test("production rejects AUTH_COOKIE_SECURE when it is not set at all", () => {
+    const production: Record<string, string | undefined> = {
+      ...base,
+      APP_ENV: "production",
+      APP_URL: "https://awcms.example",
+      TRUSTED_PROXY_ENABLED: "true"
+    };
+
+    expect(production.AUTH_COOKIE_SECURE).toBeUndefined();
+
+    const problems = validateEnv(production).filter((problem) =>
+      problem.startsWith("AUTH_COOKIE_SECURE")
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("tidak diset");
+
+    // And the only accepted spelling is the one runtime compares against.
+    expect(
+      validateEnv({ ...production, AUTH_COOKIE_SECURE: "true" }).filter((p) =>
+        p.startsWith("AUTH_COOKIE_SECURE")
+      )
+    ).toEqual([]);
+  });
+
+  /**
+   * Non-production is deliberately untouched: development runs over plain
+   * `http://`, where a `Secure` cookie would never be sent at all
+   * (`environments.md` records that as an intentional per-environment
+   * difference). Widening the rule to every environment would have made the
+   * documented dev setup fail its own validator.
+   */
+  test("non-production does not require AUTH_COOKIE_SECURE", () => {
+    expect(
+      validateEnv(base).filter((p) => p.startsWith("AUTH_COOKIE_SECURE"))
+    ).toEqual([]);
+    expect(
+      validateEnv({ ...base, AUTH_COOKIE_SECURE: "false" }).filter((p) =>
+        p.startsWith("AUTH_COOKIE_SECURE")
+      )
+    ).toEqual([]);
+  });
+
   test("sync secret only required when sync is enabled", () => {
     expect(validateEnv({ ...base, AWCMS_SYNC_ENABLED: "false" }).length).toBe(
       0

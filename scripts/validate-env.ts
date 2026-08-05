@@ -507,8 +507,37 @@ export function validateEnv(env: EnvBag): string[] {
     }
   }
 
-  if (isProduction && env.AUTH_COOKIE_SECURE === "false") {
-    problems.push("AUTH_COOKIE_SECURE harus true di produksi.");
+  // Cocokkan arah runtime, bukan kebalikannya. `auth/login.ts`,
+  // `mfa-session-assurance.ts` dan `analytics/collect.ts` semuanya menyetel
+  // `secure: process.env.AUTH_COOKIE_SECURE === "true"`, jadi apa pun yang
+  // bukan persis `"true"` menghasilkan cookie sesi TANPA `Secure`.
+  //
+  // Versi sebelumnya menolak hanya nilai literal `"false"`. Ejaan salah seperti
+  // `"1"`/`"TRUE"`/`"yes"` TIDAK lolos — aturan tipe `bool` di atas
+  // (`BOOL_VALUES`) sudah menolaknya di environment mana pun, dan itu
+  // diverifikasi dengan menjalankannya, bukan dibaca. Yang lolos tepat SATU
+  // keadaan, dan ia justru keadaan bawaannya: **variabel tidak diset sama
+  // sekali**. `required: false` mengizinkannya, dan aturan silang lama tidak
+  // menyentuhnya — sehingga produksi mengirim cookie sesi lewat kanal plaintext
+  // dengan `bun run config:validate` melaporkan bersih.
+  //
+  // HSTS tidak menutupi lubang itu: yang TIDAK dijaga HSTS justru permintaan
+  // PERTAMA seorang pengguna, sebelum kebijakannya pernah diterima browser.
+  //
+  // Bentuk "wajib diset eksplisit" ini bukan hal baru di berkas ini:
+  // `TRUSTED_PROXY_ENABLED` di bawah sudah memperlakukan kosong sebagai
+  // pelanggaran, dengan alasan yang sama persis.
+  if (isProduction && env.AUTH_COOKIE_SECURE !== "true") {
+    const actual =
+      env.AUTH_COOKIE_SECURE === undefined
+        ? "tidak diset"
+        : `"${env.AUTH_COOKIE_SECURE}"`;
+
+    problems.push(
+      `AUTH_COOKIE_SECURE wajib bernilai persis "true" di produksi (sekarang: ${actual}). ` +
+        'Runtime membandingkannya dengan === "true", jadi tidak diset berarti cookie sesi ' +
+        "dikirim TANPA atribut Secure."
+    );
   }
 
   // visitor_analytics: enabling collection REQUIRES a real hash salt. Visitor

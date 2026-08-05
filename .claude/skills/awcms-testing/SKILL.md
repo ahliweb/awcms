@@ -3,6 +3,34 @@ name: awcms-testing
 description: Tulis test AWCMS sesuai strategi berlapis (unit, integration, API contract, security, performance). Gunakan saat menambah fitur, sebelum PR, atau saat diminta menambah/melengkapi test. Sesuai doc 07.
 ---
 
+> **TITIK BUTA YANG WAJIB DIKETAHUI — `.astro` tidak diperiksa tipe sama
+> sekali.** `bun run typecheck` adalah `tsc --noEmit`, dan `tsc` **tidak bisa
+> mengurai `.astro`**: ia melewatinya diam-diam meskipun `tsconfig.json` menulis
+> `"include": ["src/**/*"]`. `astro build` juga tidak memeriksa tipe, dan
+> `@astrojs/check` tidak terpasang. Akibatnya **42 berkas / 22.328 baris**
+> (seluruh 31 layar admin + login + halaman publik) hanya dijaga oleh test yang
+> kamu tulis sendiri. Sejak ADR-0068 §C keadaan "nol typecheck `.astro`" ini
+> tercatat sebagai divergence keluarga ber-`reviewDate` (TERBLOKIR:
+> `@astrojs/check` menuntut TypeScript 6.x, repo di 7.0.2).
+>
+> Konsekuensi untuk cara menulis test:
+>
+> - **Layar `.astro` butuh contract test, bukan hanya "halamannya render".**
+>   Pola yang sudah mapan di repo ini: `tests/admin-<modul>-page-contract.test.ts`
+>   mengikat tiap permission yang halaman gerbangi ke yang route tegakkan DAN
+>   descriptor deklarasikan — dua arah, dan **mutation-proven** (kembalikan cacat
+>   aslinya, pastikan MERAH, baru revert).
+> - **Kelas yang paling mungkin lolos:** `withTenant` (mengembalikan
+>   `T | Response`) dipakai di tempat `withTenantOrThrow` (melempar) yang benar.
+>   Halaman tetap ter-compile dan merender `Response` sebagai data. Hari ini
+>   sebelas kemunculan `withTenant` di `.astro` seluruhnya ada di **komentar**,
+>   jadi disiplin penulisnya benar — yang tidak ada adalah yang menjaganya tetap
+>   begitu.
+> - **Contract test layar dan gerbang cakupan permission menjawab dua pertanyaan
+>   berbeda.** `access:permissions:enforcement:check` bertanya "apakah permission
+>   ini punya penegak"; ia lulus untuk tombol Restore yang dirender pada baris
+>   yang pasti 404 (PR #351). Tulis keduanya.
+
 # AWCMS — Testing Strategy
 
 Ikuti `docs/awcms/07_sprint_testing_production_readiness.md`. Jalankan dengan `bun test`.
@@ -44,7 +72,7 @@ Konvensi nyata repo ini (bukan sub-folder per domain): file **flat** langsung di
 
 ### Menjalankan suite DB-gated di lokal (sejak 2026-07-26)
 
-Dev sudah setara produksi (migrasi 70, `awcms_app`, RLS FORCE) — lihat
+Dev sudah setara produksi (migrasi penuh — 90 per 2026-08-05, `awcms_app`, RLS FORCE) — lihat
 `docs/awcms/environments.md` §Development lokal. Tiga hal yang WAJIB diketahui
 sebelum menjalankan:
 

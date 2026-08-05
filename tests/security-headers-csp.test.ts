@@ -106,6 +106,64 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
   });
 });
 
+/**
+ * Cross-origin isolation (assessment of 4 August 2026 §9.2).
+ *
+ * These two are OWASP Secure Headers Project "recommended", and this repo is
+ * the family member they actually apply to: it has human sessions and 42
+ * rendered pages, where `awcms-astro` is a static template whose ADR-0028 §D
+ * declines CORP for a reason that does not transfer (it would decide image
+ * embedding on behalf of sites that do not exist yet).
+ *
+ * The assertions below are deliberately NOT "the header is present". They pin
+ * the two properties that make them worth having and would be lost first by an
+ * innocent-looking edit: the VALUES (a weaker `unsafe-none`/`cross-origin`
+ * would still be a header), and that they are NOT gated on production the way
+ * HSTS is (an attacker does not wait for TLS, and staging carries the same
+ * admin session shape as production).
+ */
+describe("buildSecurityHeaders — cross-origin isolation (§9.2)", () => {
+  const valueOf = (name: string, isProduction: boolean): string | undefined =>
+    buildSecurityHeaders({ isProduction }).find(
+      ([header]) => header === name
+    )?.[1];
+
+  test("sends Cross-Origin-Opener-Policy: same-origin, severing the opener tie to an authenticated admin window", () => {
+    expect(valueOf("Cross-Origin-Opener-Policy", true)).toBe("same-origin");
+  });
+
+  test("sends Cross-Origin-Resource-Policy: same-origin, closing the no-cors embedding path CORS alone leaves open", () => {
+    expect(valueOf("Cross-Origin-Resource-Policy", true)).toBe("same-origin");
+  });
+
+  test("both are unconditional — unlike HSTS they are NOT a TLS-gated header", () => {
+    expect(valueOf("Cross-Origin-Opener-Policy", false)).toBe("same-origin");
+    expect(valueOf("Cross-Origin-Resource-Policy", false)).toBe("same-origin");
+  });
+
+  test("adding them did not disturb the CSP single-owner guarantee", () => {
+    // The whole point of §9.2 was that these are additive. If a future edit
+    // reaches for `unsafe-none` to make some popup flow work, this file should
+    // fail before the popup does.
+    const enabled = buildSecurityHeaders({
+      isProduction: true,
+      turnstileEnabled: true
+    });
+    const disabled = buildSecurityHeaders({ isProduction: true });
+
+    for (const headers of [enabled, disabled]) {
+      const csp = headers.find(([name]) => name === "Content-Security-Policy");
+
+      expect(csp?.[1]).toContain("default-src 'self'");
+      expect(csp?.[1]).not.toContain("unsafe-inline");
+    }
+
+    expect(enabled.map(([name]) => name)).toEqual(
+      disabled.map(([name]) => name)
+    );
+  });
+});
+
 describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
   const CF = "https://challenges.cloudflare.com";
 

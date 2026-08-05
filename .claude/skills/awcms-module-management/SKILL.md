@@ -224,8 +224,9 @@ masing-masing.
 `synced`/`missing`/`orphaned`/`mismatched_description` — **read-only**,
 tidak pernah menulis ke `awcms_permissions`.
 
-Per 2026-07-29 di repo INI: **SEMUA 20 modul** mendeklarasikan `permissions` di
-descriptornya (#251 menutup `email`, yang terakhir). Artinya `orphaned` sekarang
+Per 2026-08-05 di repo INI: **SEMUA 21 modul** (termasuk `idn-admin-regions`,
+ADR-0046) mendeklarasikan `permissions` di descriptornya (#251 menutup `email`,
+yang terakhir dari gelombang itu). Artinya `orphaned` sekarang
 BUKAN lagi kondisi normal untuk modul mana pun — kalau laporan menampilkannya,
 itu sinyal nyata, bukan latar belakang yang bisa diabaikan.
 
@@ -393,9 +394,9 @@ referensi dipertahankan untuk `descriptor-sync`).
 - **Fixture test**: `tests/fixtures/example-domain-modules/` (contoh modul domain
   untuk menguji enforcement base #180 business-scope + #181 SoD + komposisi #178),
   BUKAN "derived application".
-- **`MODULE_CONTRACT_VERSION` = 2.3.0** per 2026-07-25. ADR-0034 menaikkannya ke
+- **`MODULE_CONTRACT_VERSION` = 2.5.0** per 2026-08-05. ADR-0034 menaikkannya ke
   **2.0.0** (breaking: tipe `ApplicationModuleRegistry`/`ModuleMigrationNamespace`
-  dihapus). Sejak itu tiga MINOR aditif, semuanya seam **descriptor-list** yang
+  dihapus). Tiga MINOR pertama sesudahnya adalah seam **descriptor-list** yang
   ditemukan agregator lewat `listModules()` — bukan capability `provides`, karena
   penyedia jamak memang diharapkan dan provider kedua akan men-trip
   `capability_provider_conflict`:
@@ -403,6 +404,10 @@ referensi dipertahankan untuk `descriptor-sync`).
   - **2.2.0** `searchSources` (#231, ADR-0040) — sumber indeks `site_search`.
   - **2.3.0** `commentableResources` (in-flight `feat/port-comments`, ADR-0041) —
     resource yang boleh dikomentari.
+  - **2.5.0** `ModulePermissionDescriptor.scope` (ADR-0053) — bukan seam
+    descriptor-list, melainkan field aditif pada descriptor permission; absen
+    berarti `"tenant"`. (Riwayat di `src/modules/_shared/module-contract.ts`
+    melompat dari 2.3.0 ke 2.5.0 — tidak ada entri 2.4.0.)
 
   Setiap kenaikan **wajib** ikut memperbarui pin
   `contracts.moduleDescriptorContractVersion` di `awcms-family-compatibility.yaml`

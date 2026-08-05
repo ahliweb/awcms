@@ -1,5 +1,11 @@
 # Roadmap Penyerapan Tulang Punggung awcms-mini → awcms
 
+> **Dibaca lewat kacamata [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) (2 Agustus 2026):**
+> `awcms-mini`/`awcms-micro` kini **arsip**, jadi dokumen ini adalah daftar
+> **kebutuhan kapabilitas**, bukan antrean port. Tiap butir masuk lewat **ADR
+> admission-nya sendiri dan dibangun di repo ini**; kode arsip boleh dibaca
+> sebagai spesifikasi/referensi, bukan sumber yang di-port.
+
 > **Pendamping** [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), bukan
 > penggantinya. Roadmap micro menyerap klaster **website/e-commerce**; dokumen ini
 > menyerap klaster **fondasi bisnis + SaaS control plane** dari `awcms-mini`.
