@@ -1,6 +1,7 @@
 # ADR-0018 — Admission of `data_exchange` as an Official Optional Business Foundation module
 
-- **Status:** Accepted
+- **Status:** Accepted (belum diimplementasikan)
+- **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/data-exchange/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
 - **Tanggal:** 2026-07-14
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #752 (epic #738 `platform-evolution`, Wave 3), Issue #739 / ADR-0013 §3 (data_exchange sudah dipre-klasifikasikan sebagai kandidat Official Optional Business Foundation), Issue #742 / domain_event_runtime (outbox/dispatcher generik yang dikonsumsi modul ini sebagai producer event), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
