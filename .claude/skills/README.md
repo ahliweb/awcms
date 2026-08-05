@@ -42,8 +42,8 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > Skill yang badannya masih menandai dirinya "BACAAN SAJA" tetap begitu — itu
 > per-skill, bukan pernyataan tentang repo secara keseluruhan.
 
-> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **82
-> script** (diperiksa 4 Agustus 2026), termasuk yang dulu ditandai belum ada:
+> **Verifikasi command sebelum menjalankannya.** `package.json` kini punya **87
+> script** (diperiksa 5 Agustus 2026), termasuk yang dulu ditandai belum ada:
 > `openapi:bundle`, `data-lifecycle:*`, `reporting:*`,
 > `db:work-class:generate`/`db:work-class:check`, dan — **koreksi 4 Agustus
 > 2026** — `repo:inventory:generate`/`repo:inventory:check`, yang catatan
@@ -64,7 +64,7 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `awcms-implement-issue`                      | Orkestrator: kerjakan satu issue/sprint atomic end-to-end                                                                                                                          | 06, 11, 12                                  |
 | `awcms-new-module`                           | Scaffold modul baru di `src/modules/`                                                                                                                                              | 10, 11                                      |
-| `awcms-port-from-mini`                       | Port modul matang dari awcms-mini ke awcms (rename prefix, konsolidasi migrasi, drop dep/toolchain absen, DoD, commit atomic)                                                      | alur-pengembangan-mini-first.md             |
+| `awcms-port-from-mini`                       | **HISTORIS** — alur mini-first dicabut ADR-0055; catatan bagaimana port dulu dikerjakan (rename prefix, konsolidasi migrasi, DoD), bukan perintah kerja                            | alur-pengembangan-mini-first.md             |
 | `awcms-module-management`                    | Kelola/konsumsi sistem Module Management (registry, lifecycle, settings, health)                                                                                                   | module-management/README.md                 |
 | `awcms-new-migration`                        | Buat/ubah migration SQL (tabel, index, RLS)                                                                                                                                        | 04, 10                                      |
 | `awcms-new-endpoint`                         | Tambah/ubah endpoint REST + OpenAPI                                                                                                                                                | 05, 10                                      |

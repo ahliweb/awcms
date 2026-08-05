@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:e43f369a9cbec3d517c478ff66e686386b832c80c4778934b96aea50c02588e6 -->
+<!-- i18n-source-hash: sha256:7696350bf7a45f2a74ec4c5551c99149e41c99a4ca7e6d41bc75076e2788441f -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -8,7 +8,7 @@
 
 > **AWCMS is the AWCMS-family ERP/back-office template — used DIRECTLY**, developed from the awcms-mini technical base. Its operating mode is **hybrid online + offline with an online-first priority** (online is the primary path; offline/LAN is the resilience mode), and it is **ERP-ready and built for integrated SaaS**. It is the family's **superset** template: it absorbs the full website/e-commerce module cluster, UI/UX, and auth hardening of `awcms-micro` on top of the awcms-mini foundation and ERP scope ([ADR-0035](docs/adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), refining [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)). By contrast, `awcms-mini` stays hybrid **offline-first** (SaaS-ready) and `awcms-micro` stays the lean **full-online website-only** template. The base provides **reusable foundation modules + neutral ERP-readiness contracts** ([ADR-0020](docs/adr/0020-erp-extension-readiness-contracts.md)); domain modules — ERP and website/content alike — are added **directly in `src/modules/`**, not a separate derived repo. Absorption map: [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md). See also [`docs/awcms/erp-extension-contracts.md`](docs/awcms/erp-extension-contracts.md).
 
-> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Twenty modules are already live (the authoritative list is the registry in [`src/modules/index.ts`](src/modules/index.ts); see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state) — ten foundation modules plus ten website/content modules (`theming`, `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`) — as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
+> **Status: foundation actively developed.** Legacy code files in this repo have already been removed (see commit `chore(foundation): remove legacy repository files`) and this repo has been **rebuilt from scratch** on a modular-monolith technical standard (Bun + Astro 7 + PostgreSQL/RLS). Twenty-one modules are already live (the authoritative list is the registry in [`src/modules/index.ts`](src/modules/index.ts); see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current code state) — ten foundation modules, ten website/content modules (`theming`, `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`), plus `idn-admin-regions` (Indonesian administrative-region master data, [ADR-0046](docs/adr/0046-idn-admin-regions-module-admission.md)) — as a **foundation** for ERP, SaaS, and website/e-commerce development — not just a generic CMS/base, and not a finished ERP either.
 
 ## Table of contents
 
@@ -168,7 +168,7 @@ flowchart LR
 
 - **01–13** planning → contract → execution; **14–18** technical design; **19** glossary; **20** threat model & security architecture; **21** module admission governance.
 - **Important note:** many documents in this package use ERP/retail domain examples as **illustration** — the pattern is reusable, the entities/endpoints/screens are examples that domain modules in `src/modules/` swap or extend for their own domain needs. See [`docs/awcms/README.md`](docs/awcms/README.md) for translation status and other important notes.
-- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (40 ADRs currently).
+- **Architectural decisions** are recorded in [`docs/adr/`](docs/adr/README.md) (`0000`–`0068` currently; `0000` is the template).
 - **Current code state** (not a plan): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## For contributors
@@ -181,7 +181,7 @@ flowchart LR
 
 ## Implementation status
 
-Twenty modules are live in code — the authoritative list is the registry in [`src/modules/index.ts`](src/modules/index.ts), with per-module detail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and each module's own README at `src/modules/*/README.md`. Foundation: `logging` (audit trail), `tenant-admin`, `profile-identity`, `identity-access` (login, sessions, RBAC/ABAC, MFA/OIDC/SSO, business-scope, SoD, admin write CRUD — Issue #166/#171), `module-management` (per-tenant enable/disable, enforced on every request), `domain-event-runtime` (cross-module event publisher), `sync-storage` (HMAC-signed outbox/inbox, conflict resolution, R2 object queue), `workflow-approval`, `email` (dispatch + templates), `reporting` (projections + export). Website/content: `theming`, `media-library`, `blog-content` (absorbed `news-portal` — [ADR-0044](docs/adr/0044-merge-news-portal-into-blog-content.md)), `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`. The admin SSR shell (`/admin/*`) provides read + write (create/edit/soft-delete/restore) screens across all of the above. The rest of awcms-micro's website/e-commerce capabilities are being **absorbed incrementally** — see [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
+Twenty-one modules are live in code — the authoritative list is the registry in [`src/modules/index.ts`](src/modules/index.ts), with per-module detail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and each module's own README at `src/modules/*/README.md`. Foundation: `logging` (audit trail), `tenant-admin`, `profile-identity`, `identity-access` (login, sessions, RBAC/ABAC, MFA/OIDC/SSO, business-scope, SoD, admin write CRUD — Issue #166/#171), `module-management` (per-tenant enable/disable, enforced on every request), `domain-event-runtime` (cross-module event publisher), `sync-storage` (HMAC-signed outbox/inbox, conflict resolution, R2 object queue), `workflow-approval`, `email` (dispatch + templates), `reporting` (projections + export). Website/content: `theming`, `media-library`, `blog-content` (absorbed `news-portal` — [ADR-0044](docs/adr/0044-merge-news-portal-into-blog-content.md)), `tenant-domain`, `visitor-analytics`, `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`, `comments`. System: `idn-admin-regions` (versioned Indonesian administrative-region master data — [ADR-0046](docs/adr/0046-idn-admin-regions-module-admission.md)). The admin SSR shell (`/admin/*`) provides read + write (create/edit/soft-delete/restore) screens across all of the above. The rest of awcms-micro's website/e-commerce capabilities are being **absorbed incrementally** — see [`docs/awcms/absorb-awcms-micro-roadmap.md`](docs/awcms/absorb-awcms-micro-roadmap.md).
 
 Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR status is on [GitHub Issues](https://github.com/ahliweb/awcms/issues) (work is tracked directly as GitHub issues, not a static backlog).
 
@@ -204,7 +204,7 @@ Full change history is in [`CHANGELOG.md`](CHANGELOG.md); current issue/PR statu
 
 ## Versioning
 
-**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `6.1.0`.
+**Semantic Versioning** + **[Changesets](.changeset/README.md)**; full history in [`CHANGELOG.md`](CHANGELOG.md). Every PR that changes behavior must include a changeset (enforced by `bun run changesets:policy:check` in CI). Current release version is `6.4.0`.
 
 **Version numbering policy (important, read before comparing versions):**
 

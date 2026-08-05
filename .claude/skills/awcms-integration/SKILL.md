@@ -25,7 +25,7 @@ Sumber kebenaran: **`docs/awcms/16_backend_data_access_integration.md`** (transa
 - [ ] **Versioning & kompatibilitas** — perubahan breaking di path/skema butuh versi baru atau additive; jangan patahkan klien lama (pola cookie additive di `/auth/login`).
 - [ ] **Observability** — correlation ID otomatis di `meta.correlationId` untuk endpoint `/api/*` sejak Issue #447 (tidak perlu wiring manual, lihat `awcms-observability`); log terstruktur JSON (hormati `LOG_LEVEL`); aksi high-risk masuk audit; redaksi secret/PII sebelum log; extension point `setLogSink`/`setAuditExportHook` tersedia bagi deployment/consumer eksternal yang butuh forward ke SIEM eksternal (`awcms-observability`).
 - [ ] **Degradasi anggun** — bila provider/flag off, endpoint operasional tetap jalan (POS tak berhenti); pesan/objek tetap terantre.
-- [ ] **Rate limiting / anti-abuse** — batasi endpoint publik/mahal. `src/lib/security/rate-limit.ts` (Issue #437) sudah menyediakan fixed-window counter generik (`checkRateLimit`, keyed sumber+konteks) — dipakai login, **reuse untuk endpoint publik/mahal lain**, jangan bikin limiter terpisah. In-memory per-proses (tidak dibagi antar instance) — cukup untuk topologi single-instance, deployment multi-instance perlu rate limiting di edge/proxy.
+- [ ] **Rate limiting / anti-abuse** — batasi endpoint publik/mahal. `src/lib/security/rate-limit.ts` (Issue #437) menyediakan fixed-window counter generik keyed sumber+konteks, kini **dua tingkat** (ADR-0066): `checkSharedRateLimit` berbagi lewat **Redis lintas-instans** — dipakai permukaan auth (18 berkas rute), wajib untuk apa pun yang butuh konsistensi lintas-replika; `checkRateLimit` in-process per-instans untuk sisanya. **Reuse, jangan bikin limiter terpisah.**
 
 ## Verifikasi
 

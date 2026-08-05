@@ -25,10 +25,12 @@ error:
 | `resolveBusinessScopeFacts` (ADR-0060)     | cakupan bisnis tak ikut memutuskan                       |
 | `isHighRiskAction` + SoD (#181)            | konflik segregation-of-duties tak diperiksa              |
 
-Aturan kepemilikan domain (mis. `evaluatePostUpdateAccess`) adalah lapisan
-**TAMBAHAN di atas** chokepoint, bukan pengganti. Pola benarnya ada di
-`src/pages/api/v1/blog/posts/[id].ts`: `authorizeInTransaction` dulu, aturan
-kepemilikan sesudah.
+Aturan kepemilikan domain (mis. `evaluatePostUpdateAccess`) TIDAK berjalan di
+luar chokepoint: ia dievaluasi **lebih dulu**, lalu hasilnya DISERAHKAN ke dalam
+`authorizeInTransaction` sebagai `ownershipGrant` yang **MELEBARKAN** himpunan
+permission (ADR-0063) — lihat §`ownershipGrant` di bawah. Jangan menulis pola
+"chokepoint dulu, aturan kepemilikan sesudah di luar chokepoint" — itu versi
+lama yang sudah dicabut.
 
 > **Ini bukan aturan hipotetis.** Asesmen 4 Agustus 2026
 > ([`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md) §2)

@@ -44,6 +44,10 @@ bersih. Tetap **verifikasi respons**, bukan hanya konfigurasi: `curl -I` pada
 login produksi harus menunjukkan `Set-Cookie … Secure`. Validator memeriksa apa
 yang dikonfigurasi; hanya respons yang membuktikan apa yang dikirim.
 
+Kompresi respons dan tier cache di ATAS aplikasi (Cloudflare di depan
+Traefik/Varnish) tidak diperiksa preflight mana pun — lihat skill `awcms-deploy`
+(temuan C3/C14 di dokumen standar performa & keamanan).
+
 Sejak Issue #684 (epic #679), `bun run production:preflight` (Issue 12.2)
 adalah SATU perintah **read-only** yang menjalankan urutan lengkap sendiri
 — `config:validate` → `security:readiness` → `database:capacity` (Issue

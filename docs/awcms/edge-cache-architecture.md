@@ -133,6 +133,23 @@ bukan kabel. Sekarang dijaga `tests/edge-cache-purge-client.test.ts`
 `tests/migration-tenant-guc-consistency.test.ts`, dan dua assertion tingkat-berkas
 atas `default.vcl`.
 
+## Batas jangkauan purge
+
+Antrean purge menjangkau **Varnish, dan hanya Varnish** —
+`EDGE_CACHE_PURGE_ENDPOINT` menunjuk listener Varnish, dan BAN yang dikirim
+worker berhenti di sana. Pada topologi ter-deploy nyata, tier yang menyajikan
+pembaca justru **Cloudflare**: kedua host proxied
+(`Cloudflare (proxied) → Traefik :443 → varnish:80 → app`, lihat
+[`environments.md`](environments.md)), dibuktikan probe staging 4 Agustus 2026
+(`cf-cache-status: HIT` plus header `age:`). Konsekuensinya, purge yang
+melaporkan `done` dan `MISS` di Varnish **tidak** berarti pembaca melihat konten
+segar. Kebasian yang pembaca lihat berbatas `s-maxage` yang diiklankan, di-clamp
+`EDGE_CACHE_MAX_TTL_SECONDS` (**≤300 detik** pada konfigurasi staging) — jadi
+batasnya waktu, bukan invalidasi. Uji penerimaan yang hanya membaca `X-Cache`
+Varnish mengukur tier yang bukan penjawab; baca `cf-cache-status`/`age` juga.
+Celah ini tercatat sebagai **C14** di
+[`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9.
+
 ## Yang belum tersambung (jangan klaim ada)
 
 - ~~Emisi purge dari event konten.~~ **SUDAH** untuk kedua modul yang memiliki

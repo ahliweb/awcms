@@ -9,7 +9,9 @@ description: Tulis test AWCMS sesuai strategi berlapis (unit, integration, API c
 > `"include": ["src/**/*"]`. `astro build` juga tidak memeriksa tipe, dan
 > `@astrojs/check` tidak terpasang. Akibatnya **42 berkas / 22.328 baris**
 > (seluruh 31 layar admin + login + halaman publik) hanya dijaga oleh test yang
-> kamu tulis sendiri.
+> kamu tulis sendiri. Sejak ADR-0068 §C keadaan "nol typecheck `.astro`" ini
+> tercatat sebagai divergence keluarga ber-`reviewDate` (TERBLOKIR:
+> `@astrojs/check` menuntut TypeScript 6.x, repo di 7.0.2).
 >
 > Konsekuensi untuk cara menulis test:
 >
@@ -70,7 +72,7 @@ Konvensi nyata repo ini (bukan sub-folder per domain): file **flat** langsung di
 
 ### Menjalankan suite DB-gated di lokal (sejak 2026-07-26)
 
-Dev sudah setara produksi (migrasi 70, `awcms_app`, RLS FORCE) — lihat
+Dev sudah setara produksi (migrasi penuh — 90 per 2026-08-05, `awcms_app`, RLS FORCE) — lihat
 `docs/awcms/environments.md` §Development lokal. Tiga hal yang WAJIB diketahui
 sebelum menjalankan:
 
