@@ -33,7 +33,8 @@
   },
   "scripts": {
     "dev": "bun --bun astro dev",
-    "build": "bun --bun astro build",
+    "build": "bun --bun astro build && bun run build:asset-budget:check",
+    "build:asset-budget:check": "bun scripts/client-asset-budget.ts",
     "preview": "bun --bun astro preview",
     "start": "bun ./dist/server/entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
