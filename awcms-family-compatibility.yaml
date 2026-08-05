@@ -174,6 +174,23 @@ intentionalDivergences:
     reviewDate: "2027-02-04"
     adr: 0068-family-standards-posture-editions-and-recorded-divergences.md
     since: "2026-08-04"
+
+  - id: coop-corp-cross-origin-isolation
+    summary: This repo sends `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy` (`same-origin`, unconditional); awcms-astro sends neither.
+    reason: >-
+      Deliberate on both sides, for opposite surfaces. This repo gained both headers when gap C2 closed
+      (commit 769292d7): it serves an admin session worth fencing, so cross-origin isolation costs nothing
+      and closes a recommended-header gap. awcms-astro is a TEMPLATE serving public navigation pages with no
+      session to fence; CORP there is explicitly REJECTED ("blocking other sites from embedding this site's
+      images is not a template's decision to make" — its ADR-0028 rejected-controls list), and COOP has no
+      surface to protect. A derived site that wants either adds it by ADR in its own repo. Recorded here
+      because the difference now points the OPPOSITE way from every earlier one (this repo ahead, the
+      template behind by choice) — precisely the shape that gets "fixed" toward parity by someone without
+      the context (gap C15).
+    owner: "@ahliweb"
+    reviewDate: "2027-02-04"
+    adr: 0069-cross-origin-isolation-divergence-with-awcms-astro.md
+    since: "2026-08-05"
 # EMPTIED by ADR-0055, not lost. The ten entries that lived here recorded how
 # this repo deliberately differed from the awcms-mini standard, each with an
 # owner and a `reviewDate` that turned CI red on expiry.
