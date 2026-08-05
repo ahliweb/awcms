@@ -41,6 +41,23 @@ import { parseWilayahDump } from "../domain/wilayah-dump-parser";
  */
 const INSERT_BATCH_SIZE = 5000;
 
+/**
+ * `tx.array(values, "text")` CANNOT carry a SQL NULL: Bun serialises a JS `null`
+ * element into the four-character string `"null"`, and the untyped form does not
+ * produce a NULL either (probed against PostgreSQL 18.4 on Bun 1.3.14 —
+ * `x IS NULL` came back false for both). Importing straight from those arrays
+ * therefore wrote `'null'` into every nullable column: provinces got a
+ * `parent_code` of `'null'`, and all 7,285 districts got a `local_term` of
+ * `'null'`, which a lookup screen renders verbatim.
+ *
+ * So nulls travel as this sentinel and are restored by `NULLIF(t.col, '')` in
+ * the SELECT. Empty string is safe as the wire value because no region code,
+ * name, or local term is ever legitimately empty — the parser rejects blank
+ * codes before a plan is built. The restore stays correct if Bun ever learns to
+ * send real NULLs: `NULLIF(NULL, '')` is still NULL.
+ */
+const NULL_SENTINEL = "";
+
 export type DatasetImportPlan = {
   datasetCode: string;
   sourceFile: string;
@@ -269,11 +286,14 @@ export async function commitDatasetImport(
          local_term, official_name, normalized_name, full_path_code,
          full_path_name, province_code, regency_code, district_code,
          village_code, source_row_hash, metadata)
-      SELECT ${datasetId}, t.code, t.code_compact, t.parent_code, t.level,
-             t.region_type, t.local_term, t.official_name, t.normalized_name,
-             t.full_path_code, t.full_path_name, t.province_code, t.regency_code,
-             t.district_code, t.village_code, t.source_row_hash,
-             t.metadata::jsonb
+      SELECT ${datasetId}, t.code, t.code_compact,
+             NULLIF(t.parent_code, ''), t.level,
+             t.region_type, NULLIF(t.local_term, ''),
+             t.official_name, t.normalized_name,
+             NULLIF(t.full_path_code, ''), NULLIF(t.full_path_name, ''),
+             NULLIF(t.province_code, ''), NULLIF(t.regency_code, ''),
+             NULLIF(t.district_code, ''), NULLIF(t.village_code, ''),
+             t.source_row_hash, t.metadata::jsonb
       FROM unnest(
         ${tx.array(
           chunk.map((region) => region.code),
@@ -284,7 +304,7 @@ export async function commitDatasetImport(
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.parentCode),
+          chunk.map((region) => region.parentCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
@@ -296,7 +316,7 @@ export async function commitDatasetImport(
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.localTerm),
+          chunk.map((region) => region.localTerm ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
@@ -308,27 +328,27 @@ export async function commitDatasetImport(
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.fullPathCode),
+          chunk.map((region) => region.fullPathCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.fullPathName),
+          chunk.map((region) => region.fullPathName ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.provinceCode),
+          chunk.map((region) => region.provinceCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.regencyCode),
+          chunk.map((region) => region.regencyCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.districtCode),
+          chunk.map((region) => region.districtCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
-          chunk.map((region) => region.villageCode),
+          chunk.map((region) => region.villageCode ?? NULL_SENTINEL),
           "text"
         )},
         ${tx.array(
