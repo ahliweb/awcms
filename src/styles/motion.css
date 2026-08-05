@@ -225,8 +225,8 @@
 
 /* Generic "animate my declared properties" opt-in for interactive elements. */
 .transition-base {
-  transition-property: color, background-color, border-color, box-shadow,
-    transform, opacity;
+  transition-property:
+    color, background-color, border-color, box-shadow, transform, opacity;
   transition-duration: var(--motion-fast, 140ms);
   transition-timing-function: var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
 }

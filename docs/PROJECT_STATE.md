@@ -81,16 +81,24 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 ## 2. Inventori ringkas
 
-| Aspek           | Nilai (per commit ini)                                                                                                             | Sumber kebenaran                                                                                              |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Versi           | **6.4.0** (2026-07-26); **101 changeset menunggu** atas **113 commit** — salah satunya `major`, jadi rilis berikutnya **`v7.0.0`** | `package.json`, `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`, `git rev-list --count v6.4.0..HEAD` |
-| Modul base      | **21** (lihat daftar di ARCHITECTURE.md)                                                                                           | `src/modules/index.ts`                                                                                        |
-| Migrasi         | **90** (`sql/001`–`090`)                                                                                                           | `ls sql/`                                                                                                     |
-| ADR             | **0000**–**0068** (`0000` = template; `0067` masih `Proposed`)                                                                     | `ls docs/adr/`                                                                                                |
-| Layar admin     | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21 modul** tanpa layar — nol pengecualian, tak ada yang disengaja           | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts`                       |
-| Berkas `.astro` | **42** (22.328 baris) — **tak satu pun diperiksa tipe**, lihat §6                                                                  | `find src -name '*.astro'`                                                                                    |
-| Gerbang         | **33** di rantai `bun run check`; **1** di antaranya memeriksa performa                                                            | `scripts.check` di `package.json`, dipisah pada `&&`                                                          |
-| Kontrak         | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**                                                          | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                                         |
+<!-- project-state-inventory:mulai -->
+
+<!-- Dihasilkan `bun run project-state:inventory:generate`. JANGAN diedit tangan; gerbangnya `bun run project-state:inventory:check`. -->
+
+| Aspek                              | Nilai (ter-generate)                                                                  | Sumber kebenaran                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Versi                              | **6.4.0**                                                                             | `package.json`                                                                          |
+| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v6.4.0..HEAD`                                                     |
+| Modul base                         | **21** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
+| Migrasi                            | **90** (`sql/001`–`090`)                                                              | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0069** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| Layar admin                        | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **42** (22.328 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **34** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+
+<!-- project-state-inventory:selesai -->
 
 > **Angka tabel ini pernah basi tanpa ada yang merah.** Sebelum PR #339 barisnya
 > berbunyi "20 berkas / 7 dari 21 modul" sementara `main` sudah memuat 22 berkas dan
@@ -118,6 +126,18 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 > (5 Agustus 2026) menemukan episode **keempat** pada baris yang sama —
 > changeset 100→101, commit 108→113 — plus baris ADR yang berhenti di `0067`
 > padahal `0068` sudah `Accepted`; instruksi di atas berlaku tanpa pengecualian.
+>
+> **Penutup (5 Agustus 2026): episode keempat menjadi yang terakhir.** Kebasian
+> keempat itu (changeset 100→101, commit 108→113, baris ADR) adalah alasan tabel
+> ini akhirnya **di-generate**: `bun run project-state:inventory:generate`
+> menulis blok di antara marker, dan `bun run project-state:inventory:check` di
+> rantai `check` memerahkan CI bila ia basi. Baris CEPAT — jumlah changeset per
+> tipe bump dan jumlah commit sejak rilis — **dihapus angkanya**, bukan
+> di-generate: angka yang bergerak tiap commit di dokumen ter-versioning akan
+> selalu basi, dan menggerbanginya berarti memaksa tiap PR meregenerasi dokumen
+> ini. Sel nilainya kini menyuruh menjalankan perintah di kolom kanan, yang
+> dipertahankan (ini cabang "dihapus dari tabel" dari usulan blockquote di
+> atas). Ketiga blockquote sejarah di atas sengaja dipertahankan apa adanya.
 
 > **Rilis:** `v6.0.0` (2026-07-21) adalah **rilis nyata pertama** yang menjalankan
 > `.github/workflows/release.yml` end-to-end (validate → build+SBOM×2 → sign/attest/publish,
@@ -145,9 +165,11 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 > Catatan: [`awcms/repo-inventory.md`](awcms/repo-inventory.md) kini
 > **ter-generate** (`bun run repo:inventory:generate`, gerbang `:check` di rantai
 > `check`) — angka modul/migrasi/tabel-RLS/test/route di sana diturunkan dari
-> repo, jadi ia boleh dipakai sebagai sumber angka. Tabel §2 di atas tidak
-> digerbangi apa pun dan tetap harus diverifikasi dengan perintah di kolom
-> "Sumber kebenaran".
+> repo, jadi ia boleh dipakai sebagai sumber angka. Tabel §2 di atas kini
+> mengikuti pola yang sama (`bun run project-state:inventory:generate`, gerbang
+> `project-state:inventory:check` di rantai `check`): baris di antara marker
+> diturunkan dari repo, dan dua baris cepat sengaja tanpa angka — jalankan
+> perintah di kolom "Sumber kebenaran".
 
 ## 3. Yang sudah selesai (jangan dibangun ulang)
 
@@ -417,7 +439,8 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     mitigasi lain), tapi ASVS menuntut anti-automation di seluruh permukaan auth.
 
   Catatan asesmen yang masih berlaku, dan sekarang dengan angka yang lebih
-  tepat: dari **33** gerbang rantai `check`, **satu** memeriksa performa
+  tepat: dari **34** gerbang rantai `check` (per tabel §2 yang kini
+  ter-generate), **satu** memeriksa performa
   (`db:fk-index:check`). Anggaran query (#385) hidup sebagai **test integrasi
   DB-gated**, bukan gerbang rantai — pada mesin tanpa PostgreSQL ia di-`skip`
   dan `bun run check` tetap hijau. Cakupannya pun hanya jalur baca publik blog:
