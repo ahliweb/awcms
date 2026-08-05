@@ -29,9 +29,17 @@ describe("family conformance — CI/check parity", () => {
     expect(pkg.scripts.check).toContain("bun run family:conformance:check");
   });
 
-  test("ci.yml quality job runs family:conformance:check as an explicit step", () => {
+  test("ci.yml quality job runs the FULL `bun run check` chain (no manual mirror)", () => {
+    // PR #770's failure mode was a manually-listed step mirror drifting from
+    // package.json's `check`. The durable fix is structural: the quality job
+    // runs `bun run check` itself, so every gate added to the chain runs in CI
+    // by construction. This assertion guards against re-growing a partial
+    // manual mirror (which once silently dropped 16 of 34 gates).
     const ci = read(".github/workflows/ci.yml");
-    expect(ci).toContain("bun run family:conformance:check");
+    expect(ci).toContain("run: bun run check");
+    // The step must neutralise DATABASE_URL so `check`'s bare `bun test`
+    // skips DB-gated suites cleanly (they run in `integration-tests`).
+    expect(ci).toMatch(/run: bun run check\s+env:\s+DATABASE_URL: ""/);
   });
 
   test("ci.yml integration-tests lists the DB-gated conformance test", () => {
