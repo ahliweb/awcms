@@ -146,3 +146,36 @@ tujuannya sudah tertulis dan pembalikannya harus terlihat.
 
 Estimasi: satu migrasi, satu endpoint, satu skrip klien, satu bagian layar —
 sebanding dengan modul kecil, bukan dengan tambalan.
+
+## Adendum 2026-08-05 — Opsi D diambil dan mendarat
+
+**Opsi D diimplementasikan**, persis sebagaimana §Rekomendasi menyatakannya
+("Opsi D sekarang, tidak menunggu keputusan atas B"). Status ADR ini **tetap
+`Proposed`**: yang menunggu keputusan pemilik produk adalah bagian RUM
+(Opsi A/B/C), dan adendum ini tidak menyentuhnya.
+
+Bentuknya — nol data pengunjung, nol permukaan baru:
+
+- **Berkas:** `tests/e2e/cwv-lab.e2e.ts` — spec Playwright di harness E2E yang
+  sudah ada (bukan harness kedua), mengukur **LCP** dan **CLS** halaman
+  `/login` (permukaan publik yang E2E smoke sudah sentuh) via
+  `PerformanceObserver` ber-`buffered: true`, dengan CLS dihitung per definisi
+  session-window CWV.
+- **Gerbang:** env `E2E_CWV_LAB=1`, dinyalakan job CI `e2e-smoke`
+  (`.github/workflows/ci.yml`) pada langkah yang sama dengan
+  `bun run test:e2e`. Ambang kelulusan = ambang "baik" CWV: LCP ≤ 2500 ms,
+  CLS ≤ 0,1.
+- **Script:** `bun run perf:cwv:lab` menjalankan spec-nya sendirian terhadap
+  server yang disediakan pemanggil (konvensi suite E2E).
+
+Batas yang §Opsi D wajibkan, dan cara adendum ini memenuhinya:
+
+1. **Gerbang yang tidak berjalan menyatakannya.** Tanpa `E2E_CWV_LAB` spec
+   mencetak baris `[cwv-lab] SKIP: …` eksplisit dan menandai test skipped —
+   tidak pernah lolos senyap. Saat berjalan, LCP yang tidak terekam (observer
+   tanpa entry, atau browser tanpa dukungan entry type) adalah **kegagalan**,
+   bukan kelulusan.
+2. **Angka lab tidak ditulis seolah p75 lapangan.** Konstanta ambangnya
+   ber-komentar "angka LAB satu mesin — detektor regresi, bukan p75 lapangan",
+   dan log per-run mencetak kalimat yang sama. **INP tidak diukur dan tidak
+   diklaim** — tanpa interaksi pengguna nyata ia tidak bermakna di lab.
