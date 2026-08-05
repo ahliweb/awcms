@@ -1,6 +1,7 @@
 # ADR-0021 — Admission of `reference_data` as an Official Optional Business Foundation module
 
-- **Status:** Accepted
+- **Status:** Accepted (belum diimplementasikan)
+- **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/reference-data/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
 - **Tanggal:** 2026-07-14
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** Issue #750 (epic #738 `platform-evolution`, Wave 3), Issue #739 / ADR-0013 (extension layers, data-ownership matrix), ADR-0016 (`organization_structure` admission — sama pola template), Issue #742 / `domain_event_runtime` (outbox event runtime dipakai modul ini sebagai REAL producer), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
