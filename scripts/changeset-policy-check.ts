@@ -56,7 +56,24 @@ const EXEMPT_PATH_PATTERNS: RegExp[] = [
   // Narrowed to only the `.md` files this exemption was actually meant for.
   /^\.claude\/.*\.md$/,
   /^\.changeset\//,
-  /\.md$/
+  /\.md$/,
+  // graphify knowledge-graph output. These are GENERATED artefacts describing
+  // the repo, in the same category as `docs/`: nothing imports them, nothing
+  // ships them, and refreshing them cannot change application behaviour, the
+  // API, the schema, or a permission. Before this entry every graph rebuild
+  // (PR #399) had to invent a `patch` changeset, so a pure artefact refresh
+  // bumped the released version and wrote a changelog line no consumer of the
+  // package could act on.
+  //
+  // Enumerated, not `/^graphify-out\//`, for the same reason PR #715's
+  // security-auditor finding narrowed the `.claude/` entry: a whole-directory
+  // exemption also covers whatever a future run drops in there. The tracked
+  // set is exactly these three plus `GRAPH_REPORT.md` (already exempt via
+  // `/\.md$/`); `.gitignore` keeps everything else in `graphify-out/` out of
+  // the repo, and adding a fourth tracked artefact should have to pass through
+  // here deliberately rather than inherit an exemption it was never reviewed
+  // for.
+  /^graphify-out\/(graph\.json|manifest\.json|cost\.json)$/
 ];
 
 /**
