@@ -32,6 +32,44 @@ describe("evaluateChangesetPolicy", () => {
     expect(result.requiresChangeset).toBe(false);
   });
 
+  test("graphify graph rebuild alone is exempt (the three tracked artefacts)", () => {
+    const result = evaluateChangesetPolicy([
+      "graphify-out/graph.json",
+      "graphify-out/manifest.json",
+      "graphify-out/cost.json",
+      "graphify-out/GRAPH_REPORT.md"
+    ]);
+
+    expect(result.requiresChangeset).toBe(false);
+    expect(result.violation).toBeNull();
+  });
+
+  test("the graphify exemption is enumerated, not a whole-directory pass", () => {
+    // Deleting the three filenames from the pattern (leaving `/^graphify-out\//`)
+    // would still pass the test above; only this one fails. Mirrors the PR #715
+    // narrowing of the `.claude/` entry.
+    const result = evaluateChangesetPolicy([
+      "graphify-out/some-future-artefact.json"
+    ]);
+
+    expect(result.requiresChangeset).toBe(true);
+    expect(result.violation).toContain(
+      "graphify-out/some-future-artefact.json"
+    );
+  });
+
+  test("graphify artefacts alongside a source change still require a changeset", () => {
+    const result = evaluateChangesetPolicy([
+      "graphify-out/graph.json",
+      "src/modules/blog-content/application/blog-post-directory.ts"
+    ]);
+
+    expect(result.requiresChangeset).toBe(true);
+    expect(result.nonExemptFiles).toEqual([
+      "src/modules/blog-content/application/blog-post-directory.ts"
+    ]);
+  });
+
   test("workflow-only change requires a changeset when none is added", () => {
     const result = evaluateChangesetPolicy([".github/workflows/ci.yml"]);
 

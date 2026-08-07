@@ -81,3 +81,29 @@ graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 # Raise the limit above the current node count (see GRAPH_REPORT.md §Summary)
 # or the file is skipped without failing.
 graphify-out/graph.html
+
+# The rest of graphify's render/export surface, ignored for exactly the reasons
+# spelled out for graph.html above — regenerable in one command, and heavy. The
+# four below came to 49 MB against graph.json's 15 MB on the 9,574-node build of
+# PR #399; tracking them would more than quadruple what every graph refresh adds
+# to history forever, and each rots the same way graph.html does the moment
+# graph.json moves ahead of it.
+#
+#   graphify export svg            -> graph.svg        (~33 MB; see note below)
+#   graphify export graphml        -> graph.graphml    (~15 MB; Gephi / yEd)
+#   graphify tree                  -> GRAPH_TREE.html  (collapsible hierarchy)
+#   graphify export callflow-html  -> <dir>-callflow.html (Mermaid call flow)
+#
+# `*-callflow.html` is a glob, not the literal `awcms-callflow.html`, because
+# graphify names that file after the directory it ran in — a rename would slip
+# a new copy past a literal rule.
+#
+# On graph.svg specifically: at this corpus size it renders as an unreadable
+# hairball (valid, ~334k elements, ~11 s to open) and needs BOTH matplotlib and
+# scipy — `uv tool install "graphifyy[sql,svg]" --with scipy`. Use graph.html
+# instead; it auto-aggregates to the community view past 5,000 nodes, which is
+# why it stays legible. SVG earns its keep on a single module, not the repo.
+graphify-out/graph.svg
+graphify-out/graph.graphml
+graphify-out/GRAPH_TREE.html
+graphify-out/*-callflow.html
