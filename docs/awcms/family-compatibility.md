@@ -1,12 +1,14 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](family-compatibility.id.md)
 
-<!-- i18n-source-hash: sha256:96ec8db9cc72a8149a8d25201c3ae1ae100ffa33134435d7627bfcd179bcc60f -->
+<!-- i18n-source-hash: sha256:a4277f1c5ec7fcc10bfe2a5cdd6f893e75690a8e89afa9a58069e6c5310abef2 -->
 
-# AWCMS family compatibility with the AWCMS-Mini standard
+# AWCMS family contract manifest
 
-> **Status:** operational working contract (Issue #183, epic #177, [ADR-0032](../adr/0032-family-compatibility-manifest-and-ci-conformance.md)). Complements [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md) (mature it in mini first, then port) and [ADR-0015](../adr/0015-derived-application-compatibility-manifest.md) (the downstream compatibility manifest toward derived applications).
+> **Status:** operational working contract (Issue #183, epic #177, [ADR-0032](../adr/0032-family-compatibility-manifest-and-ci-conformance.md), re-anchored by [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)).
+>
+> **This document used to be titled "…with the AWCMS-Mini standard".** ADR-0055 retired that anchor: there is no external family standard, `awcms` defines its own contracts, and `awcms-mini`/`awcms-micro` are **archives**. [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md) (mature it in mini first, then port) is kept as a historical note and is **PERMANENTLY REVOKED** as a workflow. [ADR-0015](../adr/0015-derived-application-compatibility-manifest.md) (the downstream manifest toward derived applications) is likewise no longer a live pathway.
 
-AWCMS is a **foundation rebuild** on top of the [AWCMS-Mini](https://github.com/ahliweb/awcms-mini) modular-monolith standard ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)). This document describes how this base declares its **conformance** to that family standard in a machine-readable, CI-enforced way — so differences from the standard are explicit, testable, and never depend on comparing file copies by hand.
+AWCMS **was** rebuilt on top of the [AWCMS-Mini](https://github.com/ahliweb/awcms-mini) modular-monolith standard ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — provenance that stays true forever. As of [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md), this document describes how this repo declares the contracts it **OWNS** in a machine-readable, CI-enforced way — the ones [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) binds against, and the place every **deliberate difference from that repo** is recorded with an owner and a review date.
 
 ## 1. Artifacts
 
@@ -60,19 +62,17 @@ Minimum-supported is **actually run**, not merely declared: the `minimum-support
 
 ## 5. Intentional-divergence registry
 
-Deliberate differences from the mini standard are listed explicitly under `intentionalDivergences`. They are **not** a backlog of unfinished ports — each entry requires a `reason`, `owner`, `reviewDate` (the gate fails once it is in the past), and `adr` (the file must exist).
+Deliberate differences from a contract this repo must bind against — today that means [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro)'s, and only its — are listed explicitly under `intentionalDivergences`. They are **not** a backlog of unfinished ports; each entry requires a `reason`, `owner`, `reviewDate` (the gate fails once it is in the past), and `adr` (the file must exist).
 
-| id                                        | Summary                                                     | ADR      |
-| ----------------------------------------- | ----------------------------------------------------------- | -------- |
-| `no-content-website-modules`              | The mini CMS/content modules are not ported to the base     | ADR-0022 |
-| `module-type-without-derived`             | `ModuleType` omits "derived" (uses "domain")                | ADR-0025 |
-| `openapi-one-file-per-module`             | OpenAPI one-file-per-module, not per-tag                    | ADR-0026 |
-| `oidc-ssrf-blocks-private-ip`             | SSRF guard blocks private IPs (reversing the mini decision) | ADR-0028 |
-| `mfa-session-assurance-built-new`         | Session assurance/step-up built new                         | ADR-0027 |
-| `business-scope-base-resolver-noop`       | Base hierarchy resolver is a fail-closed NO-OP              | ADR-0030 |
-| `sod-rules-illustrative-in-fixture`       | Base ships 0 SoD rules; illustrative rules only in fixture  | ADR-0031 |
-| `turnstile-keeps-deployment-profile-gate` | Turnstile keeps the profile gate (LAN/offline exempt)       | ADR-0029 |
-| `semver-continues-legacy-major-line`      | Release version continues the legacy major line (5.x)       | ADR-0024 |
+**The table below is what the manifest holds TODAY.** The nine mini-era entries that used to occupy it were emptied by ADR-0055 and moved verbatim to [§Historical divergences](#historical-divergences-archived-by-adr-0055) — do not mix the two.
+
+| id                                  | Summary                                                                                                                                                                                            | ADR      | reviewDate |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------- |
+| `hsts-include-subdomains`           | This repo sends HSTS with `includeSubDomains`; `awcms-astro` without — both correct for their own surface                                                                                          | ADR-0068 | 2027-02-04 |
+| `astro-files-not-type-checked`      | `astro check` cannot run here (TypeScript 7 vs the 6.x programmatic API)                                                                                                                           | ADR-0068 | 2027-02-04 |
+| `owasp-edition-pin-owned-here`      | The OWASP/ASVS edition pin is owned here; `awcms-astro` follows it                                                                                                                                 | ADR-0068 | 2027-02-04 |
+| `coop-corp-cross-origin-isolation`  | This repo sends COOP/CORP; `awcms-astro` sends neither — CORP is explicitly REJECTED there                                                                                                         | ADR-0069 | 2027-02-04 |
+| `admin-user-surface-in-awcms-astro` | ADR-0051 **as written** says every admin screen is built here; ADR-0070 narrows it to SYSTEM screens — a **USER** admin surface (never `owner`) may live in `awcms-astro` when a site declares one | ADR-0070 | 2027-02-04 |
 
 ## 6. Gate, contract tests, and evidence report
 

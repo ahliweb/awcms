@@ -1,17 +1,27 @@
 # Roadmap Penyerapan awcms-micro → awcms
 
-> **Sumber keputusan:** [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
+> **Dibaca lewat kacamata [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) (2 Agustus 2026):**
+> `awcms-mini`/`awcms-micro` kini **arsip**, jadi dokumen ini adalah daftar
+> **kebutuhan kapabilitas**, bukan antrean port. Tiap butir masuk lewat **ADR
+> admission-nya sendiri dan dibangun di repo ini**; kode arsip boleh dibaca
+> sebagai spesifikasi/referensi, bukan sumber yang di-port. Tabel status di §5
+> karena itu **tidak lagi dirawat sebagai antrean pekerjaan** — ia potret
+> sejarah program penyerapan sampai jalurnya ditutup.
+
+> **Sumber keputusan asli:** [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
 > (menyempurnakan positioning [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).
 > `awcms` diposisikan **online-first hybrid, siap ERP + SaaS terintegrasi, dan superset
-> keluarga** yang **menyerap** klaster website/e-commerce, UI/UX, dan pengerasan auth
+> keluarga** yang menyerap klaster website/e-commerce, UI/UX, dan pengerasan auth
 > `awcms-micro` **langsung ke `src/modules/`** (bukan repo turunan; ADR-0034 §2/§3 tetap
-> berlaku). Dokumen ini adalah **peta eksekusi bertahap** program itu. Sumber kebenaran
-> state tetap kode + `sql/` + `bun run check`; perbarui tabel status di §5 saat sebuah
-> modul selesai di-port.
+> berlaku). Sumber kebenaran state tetap kode + `sql/` + `bun run check`.
 
-Repo sumber port: `awcms-micro` (`/home/data/dev_react/awcms-micro`). Pola port sama seperti
-alur mini-first ([`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md)) — kini
-dengan awcms-micro sebagai sumber kedua.
+> **Pendamping** [`absorb-awcms-mini-backbone-roadmap.md`](absorb-awcms-mini-backbone-roadmap.md),
+> yang membawa banner yang sama untuk klaster fondasi bisnis + SaaS control plane.
+
+Kode `awcms-micro` boleh dibaca sebagai spesifikasi. Ia bukan "repo sumber port":
+alur mini-first ([`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md))
+sudah **DICABUT PERMANEN** oleh ADR-0055, dan tidak ada jalur port kedua yang
+menggantikannya.
 
 ## 1. Prinsip penyerapan (wajib per modul)
 
@@ -114,7 +124,7 @@ ADR baru + perencanaan tersendiri sebelum implementasi.
 non-trivial tambahkan E2E `bun run test:e2e`. Uji RLS di bawah `awcms_app` LOGIN. Snapshot
 OpenAPI beku (add-only). Changeset wajib.
 
-## 5. Status penyerapan (perbarui saat selesai)
+## 5. Status penyerapan (potret sejarah, tidak dirawat)
 
 | Gelombang | Item                                                                                                                                                                                                  | Status                                                                                                                                                                                                                          | PR                  |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |

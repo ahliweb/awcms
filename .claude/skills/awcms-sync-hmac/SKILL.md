@@ -55,9 +55,14 @@ signature = HMAC-SHA256(secret, "<timestamp>.<body>")
 
 ### Koordinasi lintas-repo
 
-v2 kanonik di **awcms** (base ini). **awcms-mini** dan skill/spec node harus
-di-update agar node & spec mencerminkan material v2 yang persis sama sebelum
-`SYNC_HMAC_ALLOW_LEGACY=false` diaktifkan di deployment mana pun. Idealnya
+v2 kanonik di **awcms** (base ini), dan sejak ADR-0055 tidak ada repo keluarga
+lain yang memikul implementasi node. Syaratnya karena itu dinyatakan ulang
+terhadap deployment NYATA, bukan terhadap repo arsip: **setiap node sync yang
+benar-benar berjalan** wajib memakai material v2 yang persis sama sebelum
+`SYNC_HMAC_ALLOW_LEGACY=false` diaktifkan. (Kalimat sebelumnya menggantungkan
+saklar ini pada pembaruan **awcms-mini** — repo arsip yang tidak akan pernah
+diperbarui, sehingga syaratnya tidak akan pernah terpenuhi dan celah v1 tidak
+akan pernah bisa dinyatakan tertutup.) Idealnya
 lanjutkan ke **secret per-node** (saran advisory ke-3) — di luar scope patch ini.
 
 ## Registrasi node — default `inactive` + approve admin

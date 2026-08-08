@@ -32,10 +32,12 @@ Skill Claude Code tingkat-proyek untuk AWCMS. Setiap skill meng-encode standar d
 > repo ini** dengan ADR admission-nya sendiri. `awcms-port-from-mini` dipertahankan
 > sebagai catatan BAGAIMANA port dulu dikerjakan, bukan sebagai perintah kerja.
 
-> **Asal & status (diperbarui 2026-07-25).** Skill-skill ini diadaptasi dari
-> repo acuan [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini) dan
-> kini juga dari [`awcms-micro`](https://github.com/ahliweb/awcms-micro)
-> (program penyerapan ADR-0035). **KOREKSI:** versi sebelumnya menyatakan
+> **Asal & status (diperbarui 2026-08-08).** Skill-skill ini **dahulu** diadaptasi
+> dari repo acuan [`ahliweb/awcms-mini`](https://github.com/ahliweb/awcms-mini)
+> dan [`awcms-micro`](https://github.com/ahliweb/awcms-micro) — provenance, bukan
+> jalur kerja: program penyerapan itu ditutup ADR-0055 (lihat paragraf di atas).
+> Keluarga hari ini dua repo, `awcms` + [`awcms-astro`](https://github.com/ahliweb/awcms-astro)
+> (halaman publik + permukaan admin USER, ADR-0070). **KOREKSI:** versi sebelumnya menyatakan
 > implementasi ini "baru fondasi Sprint 1–2" dengan empat modul — itu **sudah
 > lama tidak benar**. Repo ini punya **21 modul aktif** dan `sql/001`–`sql/090`;
 > lihat [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) untuk daftar nyata.

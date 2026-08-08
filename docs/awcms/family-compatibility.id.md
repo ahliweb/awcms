@@ -1,10 +1,12 @@
 🇮🇩 Bahasa Indonesia (sumber) · 🇬🇧 [English (default)](family-compatibility.md)
 
-# Kompatibilitas keluarga AWCMS terhadap standar AWCMS-Mini
+# Manifes kontrak keluarga AWCMS
 
-> **Status:** kontrak kerja operasional (Issue #183, epic #177, [ADR-0032](../adr/0032-family-compatibility-manifest-and-ci-conformance.md)). Melengkapi [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md) (uji di mini dulu, lalu port) dan [ADR-0015](../adr/0015-derived-application-compatibility-manifest.md) (manifest kompatibilitas ke arah aplikasi turunan).
+> **Status:** kontrak kerja operasional (Issue #183, epic #177, [ADR-0032](../adr/0032-family-compatibility-manifest-and-ci-conformance.md), di-anchor ulang oleh [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md)).
+>
+> **Judul dokumen ini dahulu berbunyi "terhadap standar AWCMS-Mini".** Poros itu dicabut ADR-0055: tidak ada standar keluarga eksternal, `awcms` mendefinisikan kontraknya sendiri, dan `awcms-mini`/`awcms-micro` adalah **arsip**. Dokumen [`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md) (uji di mini dulu, lalu port) dipertahankan sebagai catatan sejarah dan **DICABUT PERMANEN** sebagai alur kerja. [ADR-0015](../adr/0015-derived-application-compatibility-manifest.md) (manifest ke arah aplikasi turunan) juga sudah tidak berlaku sebagai jalur.
 
-AWCMS adalah **fondasi rebuild** di atas standar modular-monolith [AWCMS-Mini](https://github.com/ahliweb/awcms-mini) ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)). Dokumen ini menjelaskan bagaimana base ini menyatakan **conformance** terhadap standar keluarga itu secara machine-readable dan ditegakkan CI — supaya perbedaan terhadap standar bersifat eksplisit, dapat diuji, dan tidak bergantung perbandingan copy file secara manual.
+AWCMS **dahulu** dibangun ulang di atas standar modular-monolith [AWCMS-Mini](https://github.com/ahliweb/awcms-mini) ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — provenance yang benar selamanya. Sejak [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md), dokumen ini menjelaskan bagaimana repo ini menyatakan **kontrak yang ia MILIKI** secara machine-readable dan ditegakkan CI — kontrak yang [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) ikat, dan yang menjadi tempat setiap **selisih sengaja dengan repo itu** dicatat beserta pemilik dan tanggal tinjaunya.
 
 ## 1. Artefak
 
@@ -58,19 +60,17 @@ Minimum-supported **dijalankan nyata**, bukan sekadar dideklarasikan: job `minim
 
 ## 5. Registry intentional divergence
 
-Perbedaan sengaja dari standar mini didaftar eksplisit di `intentionalDivergences`. **Bukan** backlog port yang belum selesai — tiap entri wajib `reason`, `owner`, `reviewDate` (gate gagal saat kedaluwarsa), dan `adr` (file harus ada).
+Selisih sengaja dari kontrak yang repo ini ikat — hari ini berarti kontrak [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro), dan hanya itu — didaftar eksplisit di `intentionalDivergences`. **Bukan** backlog port yang belum selesai; tiap entri wajib `reason`, `owner`, `reviewDate` (gate gagal saat kedaluwarsa), dan `adr` (berkasnya harus ada).
 
-| id                                        | Ringkasan                                              | ADR      |
-| ----------------------------------------- | ------------------------------------------------------ | -------- |
-| `no-content-website-modules`              | Modul CMS/konten mini tidak diport ke base             | ADR-0022 |
-| `module-type-without-derived`             | `ModuleType` tanpa "derived" (pakai "domain")          | ADR-0025 |
-| `openapi-one-file-per-module`             | OpenAPI satu-file-per-modul, bukan per-tag             | ADR-0026 |
-| `oidc-ssrf-blocks-private-ip`             | SSRF guard blokir IP privat (membalik keputusan mini)  | ADR-0028 |
-| `mfa-session-assurance-built-new`         | Session assurance/step-up dibangun baru                | ADR-0027 |
-| `business-scope-base-resolver-noop`       | Resolver hierarki base = NO-OP fail-closed             | ADR-0030 |
-| `sod-rules-illustrative-in-fixture`       | Base ship 0 SoD rule; rule ilustratif hanya di fixture | ADR-0031 |
-| `turnstile-keeps-deployment-profile-gate` | Turnstile pertahankan gate profil (LAN/offline exempt) | ADR-0029 |
-| `semver-continues-legacy-major-line`      | Versi rilis lanjut lini major legacy (5.x)             | ADR-0024 |
+**Daftar di bawah adalah isi manifes HARI INI.** Sembilan entri era-mini yang dulu menempati tabel ini dikosongkan ADR-0055 dan dipindah utuh ke [§Divergensi historis](#divergensi-historis-diarsipkan-oleh-adr-0055) — jangan mencampur keduanya.
+
+| id                                  | Ringkasan                                                                                                                                                                                                          | ADR      | reviewDate |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ---------- |
+| `hsts-include-subdomains`           | Repo ini kirim HSTS ber-`includeSubDomains`; `awcms-astro` tanpa itu — keduanya benar untuk permukaannya                                                                                                           | ADR-0068 | 2027-02-04 |
+| `astro-files-not-type-checked`      | `astro check` tidak bisa jalan di sini (TypeScript 7 vs API programatik 6.x)                                                                                                                                       | ADR-0068 | 2027-02-04 |
+| `owasp-edition-pin-owned-here`      | Pin edisi OWASP/ASVS dimiliki repo ini; `awcms-astro` mengikutinya                                                                                                                                                 | ADR-0068 | 2027-02-04 |
+| `coop-corp-cross-origin-isolation`  | Repo ini kirim COOP/CORP; `awcms-astro` tidak — CORP DITOLAK eksplisit di sana                                                                                                                                     | ADR-0069 | 2027-02-04 |
+| `admin-user-surface-in-awcms-astro` | ADR-0051 **sebagaimana ditulis** berbunyi seluruh layar admin di sini; ADR-0070 mempersempitnya ke layar SISTEM — permukaan admin **USER** (tak pernah `owner`) boleh di `awcms-astro` bila situsnya menyatakannya | ADR-0070 | 2027-02-04 |
 
 ## 6. Gate, contract test, dan evidence report
 

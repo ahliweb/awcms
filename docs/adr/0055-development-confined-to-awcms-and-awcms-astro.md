@@ -7,6 +7,16 @@
 - **Menyempurnakan:** [ADR-0001](0001-rebuild-on-awcms-foundation-erp-scope.md) (awcms dibangun di atas standar awcms-mini) dan [ADR-0032](0032-family-compatibility-manifest-and-ci-conformance.md) (manifest kompatibilitas keluarga) — keduanya berporos pada `awcms-mini` sebagai STANDAR; poros itu dicabut.
 - **Terkait:** [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md), [ADR-0051](0051-admin-screens-consolidated-in-awcms.md)
 
+> **Kolom `awcms-astro` di tabel §Keputusan disempurnakan
+> [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
+> (8 Agustus 2026).** Repo itu memikul **halaman publik sebagai fungsi utama**
+> dan **permukaan admin USER bila situsnya menyatakannya** — bukan hanya "situs
+> publik dan proksi sesi". Sejalan dengan itu, "seluruh layar admin (ADR-0051)"
+> di baris `awcms` dibaca "seluruh layar admin **SISTEM**". Butir 1–5
+> §Keputusan di bawah — termasuk status ARSIP `awcms-mini`/`awcms-micro` —
+> **tidak berubah**, dan kalimatnya sengaja tidak ditulis ulang (Aturan 2
+> indeks ADR).
+
 ## Konteks
 
 ADR-0047 membekukan `awcms-mini` dan `awcms-micro` sebagai **referensi**: tidak menerima perubahan, tetapi masih boleh dibaca dan **di-port keluar**. Empat bulan berjalan, posisi setengah itu punya biaya yang nyata:

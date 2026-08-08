@@ -21,8 +21,10 @@ description: BACAAN SAJA / HISTORIS (ADR-0034) — kontrak kesiapan ekstensi ERP
 > - `src/modules/application-registry.ts` dan command `bun run extension:check`
 >   (dihapus bersama jalur turunan)
 >
-> **Arahan baru.** ERP tidak lagi dibangun di repo turunan. Keluarga AWCMS =
-> TIGA template SEJAJAR dipakai LANGSUNG ("template dipakai-langsung"). Sebuah
+> **Arahan baru.** ERP tidak lagi dibangun di repo turunan. Template ini dipakai
+> LANGSUNG ("template dipakai-langsung"); keluarga yang dikembangkan kini DUA
+> repo — `awcms` + `awcms-astro` (ADR-0055, ADR-0070), dengan
+> `awcms-mini`/`awcms-micro` sebagai ARSIP. Sebuah
 > modul ERP kini dibangun sebagai modul `type: "domain"` LANGSUNG di
 > `src/modules/` repo ini — pola yang sama dengan modul base lain (contoh nyata
 > modul website pertama yang di-port langsung: `theming`, skill `awcms-theming`).

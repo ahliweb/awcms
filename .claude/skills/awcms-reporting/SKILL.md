@@ -200,7 +200,7 @@ ini (verifikasi: `grep -n "^export" src/lib/ui/admin-form-client.ts`); pakai
 Materialized view/caching untuk lima view live (lihat di atas — sengaja
 tidak dibangun). Pagination/filter tanggal kustom untuk `access-audit`. Test
 adversarial "bounded pass → simulated crash → resumed continuation → total
-benar" dari awcms-mini — **belum di-port**. Suite `tests/integration/` **kini
+benar" dari awcms-mini — **belum ada di sini** (kandidat BANGUN, bukan port; ADR-0055 §1). Suite `tests/integration/` **kini
 ADA** (harness dua-world, Issue #154), termasuk
 `reporting-projections.integration.test.ts` dan
 `db-role-separation.integration.test.ts` yang meng-cover least-privilege role

@@ -1,6 +1,6 @@
 # ADR-0047 — `awcms-mini` and `awcms-micro` are frozen as reference; foundation features are built directly here
 
-- Status: Accepted
+- **Status:** Superseded by [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
 - Date: 2026-07-31
 - Related: [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
   (direct-use templates, no mandatory derived repos), [ADR-0035](0035-awcms-online-first-erp-saas-superset-repositioning.md)
@@ -8,6 +8,16 @@
   (`awcms` is the system of record, `awcms-astro` is the experience layer).
   Amends the **mini-first** rule stated in [`AGENTS.md`](../../AGENTS.md)
   §"Relasi dengan awcms-mini" and [`docs/awcms/alur-pengembangan-mini-first.md`](../awcms/alur-pengembangan-mini-first.md).
+
+> **Read as history.** This ADR froze `awcms-mini`/`awcms-micro` as a reference
+> that could **still be ported OUT of**. [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
+> (2 August 2026) closed that path too: both are **ARCHIVES**, and a capability
+> that is wanted is **built here** under its own admission ADR. §Decision item 1
+> below ("Reading and porting _out_ stay encouraged") therefore **no longer
+> applies** — its wording is deliberately not rewritten, per Rule 2 of the ADR
+> index (a replaced ADR is **marked**, not deleted and not rewritten). See also
+> [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
+> for the roles the two surviving repos carry today.
 
 > **Numbering note.** `0046` is deliberately skipped: it is reserved by
 > in-flight work (`feat/idn-admin-regions-module`) that had not landed on `main`

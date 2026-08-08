@@ -9,15 +9,17 @@
 > **Pendamping** [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), bukan
 > penggantinya. Roadmap micro menyerap klaster **website/e-commerce**; dokumen ini
 > menyerap klaster **fondasi bisnis + SaaS control plane** dari `awcms-mini`.
-> Keduanya berbagi satu antrean penomoran migrasi — kerjakan berurut, satu PR atomic
-> per modul.
+> Keduanya berbagi satu antrean penomoran migrasi; itu tetap benar untuk migrasi
+> apa pun yang ditulis di sini, tetapi bukan lagi urutan pekerjaan yang dijadwalkan.
 >
 > **Sumber keputusan:** [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
 > (`awcms` = online-first hybrid, **siap ERP + SaaS terintegrasi**) dan
 > [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
 > (modul domain hidup **langsung** di `src/modules/`, tanpa repo turunan).
 >
-> Repo sumber: `awcms-mini` (`/home/data/dev_react/awcms-mini`).
+> `awcms-mini` (`/home/data/dev_react/awcms-mini`) boleh dibaca sebagai referensi
+> sejarah. Ia **bukan** "repo sumber port": kapabilitas yang diinginkan dibangun di
+> sini lewat ADR admission-nya sendiri (ADR-0055 §1).
 
 ## 1. Temuan yang melahirkan dokumen ini
 
@@ -156,17 +158,17 @@ langkah provisioning terhadap seam yang belum terbukti.
 > menyertakan Host — sudah ditegakkan di `vcl_hash`. Tanpa itu setiap tenant
 > berbagi satu entri cache untuk path yang sama.
 
-## 5. Status penyerapan (perbarui saat selesai)
+## 5. Status penyerapan (potret sejarah, tidak dirawat)
 
-| Gel. | Item                                     | Status                                                              | PR  |
-| ---- | ---------------------------------------- | ------------------------------------------------------------------- | --- |
-| A    | `reference_data` (ADR-0021)              | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —   |
-| A    | `organization_structure` (ADR-0016)      | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —   |
-| A    | `document_infrastructure` (ADR-0017)     | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —   |
-| A    | `data_exchange` (ADR-0018)               | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —   |
-| A    | `integration_hub` (ADR-0019)             | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —   |
-| B    | **ADR admission SaaS control plane**     | ⏳ belum — **memblokir seluruh Gelombang B**                        | —   |
-| B    | 7 modul control plane                    | ⏳ belum                                                            | —   |
-| C    | Implementasi kontrak ERP (ADR-0020)      | ⏳ belum — ADR + docs ada, kode `_shared` belum                     | —   |
-| D    | `idn_admin_regions`                      | ⏳ belum (opsional)                                                 | —   |
-| —    | Wiring Cloudflare DNS + rute host publik | ⏳ belum — adapter ada, tak dipanggil; `middleware.ts` tak disentuh | —   |
+| Gel. | Item                                     | Status                                                              | PR   |
+| ---- | ---------------------------------------- | ------------------------------------------------------------------- | ---- |
+| A    | `reference_data` (ADR-0021)              | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
+| A    | `organization_structure` (ADR-0016)      | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
+| A    | `document_infrastructure` (ADR-0017)     | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
+| A    | `data_exchange` (ADR-0018)               | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
+| A    | `integration_hub` (ADR-0019)             | ⏳ belum — ADR sudah `Accepted`, kode belum ada                     | —    |
+| B    | **ADR admission SaaS control plane**     | ⏳ belum — **memblokir seluruh Gelombang B**                        | —    |
+| B    | 7 modul control plane                    | ⏳ belum                                                            | —    |
+| C    | Implementasi kontrak ERP (ADR-0020)      | ⏳ belum — ADR + docs ada, kode `_shared` belum                     | —    |
+| D    | `idn_admin_regions`                      | ✅ live — dirintis di sini (ADR-0046, `sql/080`–`081`)              | #312 |
+| —    | Wiring Cloudflare DNS + rute host publik | ⏳ belum — adapter ada, tak dipanggil; `middleware.ts` tak disentuh | —    |

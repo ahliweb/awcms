@@ -99,10 +99,12 @@ tetap harus lolos pohon keputusan admission doc 21 §3 sebelum ditambahkan.
 **ADR-0034 menghapus jalur aplikasi-turunan.** Tidak ada lagi repo turunan,
 `src/modules/application-registry.ts`, command `extension:check`,
 `extension.manifest.json`, maupun namespace migrasi terpisah `900+` — semuanya
-sudah dihapus (ADR-0034 men-supersede ADR-0014/0015/0025). Keluarga AWCMS
-(awcms-mini / awcms / awcms-micro) kini adalah TIGA template SEJAJAR yang
-dipakai LANGSUNG ("template dipakai-langsung"), bukan basis untuk repo
-derivatif. Konsekuensinya untuk modul domain/website baru: modul itu hidup
+sudah dihapus (ADR-0034 men-supersede ADR-0014/0015/0025). Keluarga AWCMS yang
+dikembangkan kini adalah DUA repo: `awcms` (repo ini, system of record + seluruh
+layar admin SISTEM) dan `awcms-astro` (halaman publik + permukaan admin USER
+bila situsnya menyatakannya) — ADR-0055 dan ADR-0070. Template ini dipakai
+LANGSUNG ("template dipakai-langsung"), bukan basis untuk repo derivatif;
+`awcms-mini`/`awcms-micro` ARSIP. Konsekuensinya untuk modul domain/website baru: modul itu hidup
 LANGSUNG di `src/modules/` repo ini dan didaftar di `src/modules/index.ts`
 (langkah 1 di atas), persis seperti modul base lain — `type: "domain"`,
 struktur `module.ts` + `domain/application/infrastructure` yang sama, dan
