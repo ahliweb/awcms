@@ -233,7 +233,16 @@ jobs:
             sbom-image.cdx.json
             source.tar.gz
             CHECKSUMS.txt
-          retention-days: 1
+          # Must outlive the `release` environment approval gate below, which has
+          # no time limit of its own. At `retention-days: 1` the v7.0.0 run died
+          # exactly this way: build finished 2026-08-05 08:43 UTC, the artifacts
+          # expired 24 h later, and the approval that arrived on 2026-08-08 hit
+          # `Artifact not found for name: release-artifacts` — a run that can
+          # never publish, with nothing in the failure text naming the cause.
+          # 30 days matches GitHub's own ceiling for how long a run may sit
+          # waiting for approval, so any gate that can still be approved now has
+          # artifacts to approve.
+          retention-days: 30
 
   sign-attest-publish:
     name: Sign, attest, publish
