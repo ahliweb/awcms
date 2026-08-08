@@ -1,5 +1,92 @@
 # awcms
 
+## 7.0.1
+
+### Patch Changes
+
+- b2b6ce6: CI job `quality` kini menjalankan `bun run check` PENUH alih-alih cermin manual per-step yang sempat kehilangan 16 dari 34 gerbang di PR (di antaranya `access:permissions:enforcement:check` dan `access:chokepoint:check` — keduanya tidak pernah jalan di CI PR sejak mendarat). Bentuk cermin manual mengulang persis pelajaran PR #770; guard paritasnya (`tests/family-conformance-ci-parity.test.ts`) kini mengikat bentuk struktural anti-drift: step `run: bun run check` ber-`DATABASE_URL: ""` (pola job Validate release.yml), bukan kehadiran satu gerbang bernama.
+- 5a085df: Dua celah standar ditutup dengan pemeriksanya: kompresi yang diwarisi kini
+  dinyatakan, dan CodeQL berhenti mengklaim `.astro`.
+
+  **C3 — kompresi diwarisi dari lapisan yang repo ini tak miliki.**
+  `security:readiness` memuat `checkResponseCompressionOwnership`: ia memindai
+  lima lapisan yang repo ini KIRIM (`src/middleware.ts`, `astro.config.mjs`,
+  `infra/varnish/default.vcl`, `infra/varnish/docker-compose.varnish.yml`,
+  `Dockerfile.production`) dan, karena tak satu pun mengompresi, menuntut blok
+  bertanda `kompresi-tepi` di `docs/awcms/environments.md` menyebut tier
+  pengompresi (Cloudflare) beserta akibatnya: deployment di luar CDN pengompresi
+  menyajikan seluruh teks tanpa kompresi. Cabang pertama resep C3 (memindahkan
+  kompresi ke sini) sudah **dicabut** asesmen §9.3 — kompresor kedua adalah dua
+  tempat yang memutuskan hal yang sama. Yang ditutup adalah ketidakterlihatannya;
+  repo ini tetap tidak mengompresi apa pun, dan tidak ada gerbang yang melihat
+  lapisan luarnya. Dua arah dibuktikan `tests/security-readiness-compression.test.ts`:
+  blok dihapus/dikosongkan/penanda separuh → MERAH; kompresi menyala di lapisan
+  yang dikirim → pemeriksa menyebut `berkas:baris` dan menuntut blok ditulis
+  ulang; komentar `do_gzip` dan `Vary: Accept-Encoding` tidak dihitung sebagai
+  kompresi.
+
+  **C16 — `codeql.yml` mengklaim memindai "TypeScript/Astro source".** CodeQL
+  tidak punya ekstraktor Astro, jadi 42 berkas `.astro` (22.328 baris — permukaan
+  yang sama yang C4 sebut) berada di luar setiap pemindaian sementara komentar
+  repo menyatakan sebaliknya. Langkah `State coverage` kini menulis ke ringkasan
+  run berapa berkas dianalisis dan berapa `.astro` TIDAK, dihitung `git ls-files`
+  saat run; komentar matriksnya berhenti mengklaim Astro. Dijaga
+  `tests/codeql-coverage-statement.test.ts`: langkah hilang, angka ditulis
+  tangan, atau klaim Astro kembali → MERAH. Postur keluarga kini satu kalimat —
+  `.astro` tidak teranalisis statik di repo mana pun, dan kedua repo
+  mengatakannya sendiri.
+
+  Tidak ada perubahan perilaku runtime: `security:readiness` bertambah satu
+  pemeriksa `warning` (tidak pernah memblokir go-live), dan `codeql.yml`
+  bertambah satu langkah ringkasan.
+
+- 2812720: Bangun ulang graf pengetahuan graphify: `graph.json` kini membawa nama komunitas, dan cakupan `.sql` dipulihkan
+
+  Artefak di `graphify-out/` — bukan kode runtime. Tidak ada perubahan perilaku aplikasi, API, skema, atau permission; tingkat `patch` dipakai karena gerbang `changesets:policy:check` menuntut satu tingkat bump eksplisit dan tidak menerima changeset kosong.
+
+  Graf terakhir dibangun 29 Juli, 88 commit yang lalu. Rebuild inkremental atas 409 file berubah dan 35 terhapus membawanya dari 8.247 ke 9.574 node, 24.098 ke 26.456 edge, 495 ke 570 komunitas.
+
+  Tiga cacat senyap ikut tertutup:
+
+  - **`graph.json` tidak membawa `community_name` sama sekali.** Ia dibangun sebelum langkah pelabelan menulis label kembali ke sana, jadi `graphify query`, server MCP, dan konsumen GraphRAG mencetak `community=27` alih-alih nama komunitas — sementara label kurasinya hanya hidup di `.graphify_labels.json`, yang tidak ter-track. Sekarang 570 dari 570 node bernama di dalam artefak yang ter-track, sehingga label bertahan di clone baru.
+  - **Sidecar `.graphify_labels.json.sig` sudah basi dua hari terhadap labelnya** dan hanya cocok untuk 6 dari 495 komunitas. Satu jalannya `cluster-only` akan menamai ulang 489 komunitas memakai nama file hub dan menghapus nama kurasi tanpa peringatan apa pun. Sekarang cocok 570 dari 570.
+  - **`tree_sitter_sql` hilang setelah pemutakhiran graphify 0.9.27 → 0.9.35,** sehingga setiap berkas `.sql` menyumbang nol node sementara ekstraksi tetap melapor sukses. Di repositori yang tulang punggungnya `sql/NNN`, itu lubang cakupan, bukan kekurangan kosmetik.
+
+  Label lama juga mengandung cacat yang persis dilarang aturan penamaan komunitas: dua pasang duplikat dan 43 dari 495 berbentuk nama berkas — sisa penamaan hub otomatis. Seluruh 570 label ditulis ulang dan diverifikasi nol hilang, nol duplikat, nol berbentuk nama berkas. Pemeriksaan integritas graf bersih, dan `--update` sesudahnya melaporkan nol berkas berubah.
+
+- b5d6be2: Artefak graphify berhenti menuntut changeset, dan permukaan render-nya berhenti mengintai untuk ikut ter-commit
+
+  Tiga pembenahan kebersihan repositori di sekitar `graphify-out/`, tidak satu pun menyentuh perilaku aplikasi.
+
+  **Gerbang changeset mengecualikan tiga artefak graf yang ter-track.** Sebelum ini setiap pembangunan ulang graf harus mengarang changeset `patch`, sehingga penyegaran artefak murni menaikkan versi rilis dan menulis baris changelog yang tak bisa ditindaklanjuti pengguna paket mana pun. `graph.json`, `manifest.json`, dan `cost.json` kini dikecualikan — `GRAPH_REPORT.md` sudah lebih dulu lewat pola `.md`.
+
+  Pengecualiannya **dienumerasi, bukan `/^graphify-out\//`**, dengan alasan yang sama membuat temuan security-auditor di PR #715 mempersempit entri `.claude/`: pengecualian se-direktori juga menutupi apa pun yang dijatuhkan proses lain ke sana kelak. Berkas artefak keempat harus melewati daftar ini secara sengaja, bukan mewarisi pengecualian yang tak pernah ditinjau untuknya. Sebuah test membuktikan kesempitan itu: melebarkan pola menjadi se-direktori membuat test merah, dan hanya test itu.
+
+  **Empat artefak render graphify masuk `.gitignore`.** `graph.svg`, `graph.graphml`, `GRAPH_TREE.html`, dan `*-callflow.html` berjumlah 49 MB pada graf 9.574 node, melawan 15 MB milik `graph.json`. Melacaknya akan melipatempatkan lebih dari apa yang ditambahkan setiap penyegaran graf ke riwayat selamanya, dan tiap berkas membusuk dengan cara yang sama seperti `graph.html` — yang sudah lebih dulu diabaikan dengan alasan tertulis yang sama. Semuanya satu perintah dari regenerasi.
+
+  **`graphify-out/.graphify_labels.json.sig` tidak lagi dilacak.** Aturan `.gitignore` `graphify-out/.*` bermaksud mengeluarkannya sejak awal, tetapi aturan tidak bisa membatalkan pelacakan berkas yang sudah terlanjur ter-commit. Salinan yang ter-track hanya bisa basi: ia adalah tanda tangan keanggotaan komunitas yang berpasangan dengan `.graphify_labels.json`, yang memang tak pernah dilacak — jadi sebuah clone menerima tanda tangan tanpa label yang ia jelaskan. Nama komunitas tetap aman di `graph.json`, yang membawanya per-node.
+
+- ce99272: Impor dataset wilayah menulis SQL NULL, bukan string `"null"`. `tx.array(values, "text")` tidak bisa membawa NULL — Bun menyerialkan elemen `null` menjadi teks empat karakter `"null"` (diprobe terhadap PostgreSQL 18.4 di Bun 1.3.14; varian tanpa tipe pun bukan NULL). Akibatnya impor nyata mengisi setiap kolom nullable dengan `'null'`: 38 provinsi ber-`parent_code` `'null'` dan 7.285 kecamatan ber-`local_term` `'null'`, yang dirender apa adanya oleh layar lookup dan membuat filter `IS NULL` mengembalikan nol baris. Nilai null kini melintas sebagai sentinel dan dipulihkan `NULLIF(t.col, '')` di SELECT — benar juga bila Bun kelak mengirim NULL sungguhan. Digerbangi test integrasi yang hanya bisa merah di database nyata.
+- ebd4b1b: Artefak rilis bertahan lebih lama dari gerbang persetujuan yang menunggunya
+
+  `release.yml` mengunggah SBOM, tarball sumber, dan checksum dengan `retention-days: 1`, lalu menggantung job penerbitan di balik gerbang environment `release` yang **tidak punya batas waktu sama sekali**. Setiap persetujuan yang datang lebih dari 24 jam setelah build karena itu menerbitkan apa-apa: artefaknya sudah hilang.
+
+  Itu bukan skenario teoretis. Run v7.0.0 mati persis begitu — build selesai 5 Agustus 08:43 UTC, artefaknya kedaluwarsa 24 jam kemudian, dan persetujuan yang tiba 8 Agustus langsung menabrak `Artifact not found for name: release-artifacts`. Yang membuatnya mahal: tidak ada satu pun kalimat di teks kegagalan yang menyebut retensi, jadi kegagalannya terbaca seperti masalah unggah, bukan seperti run yang sudah tidak mungkin diterbitkan sejak dua hari sebelumnya. Rilis itu menggantung 63 jam sebelum ada yang menyentuhnya, dan pada jam ke-24 ia sebenarnya sudah mati.
+
+  Retensi dinaikkan ke 30 hari — sama dengan batas GitHub sendiri untuk berapa lama sebuah run boleh menunggu persetujuan. Dengan begitu setiap gerbang yang masih bisa disetujui punya artefak untuk disetujui, dan kedua batas itu berhenti saling bertentangan.
+
+  `ci.yml` memakai `retention-days: 5` dan tidak diubah: tidak ada job di sana yang menunggu di balik gerbang, jadi retensinya tidak pernah berlomba dengan keputusan manusia.
+
+- bcd5422: Catatan rilis dipotong ke batas body GitHub alih-alih menjatuhkan penerbitan
+
+  `release.yml` menyalin satu seksi `CHANGELOG.md` mentah-mentah menjadi body GitHub Release. GitHub menolak body di atas 125.000 karakter dengan `HTTP 422: body is too long` — dan penolakan itu datang **setelah** penandatanganan, attestation, dan push image semuanya berhasil. Hasilnya run yang mati dengan image tertandatangani dan ter-attest di registry, tetapi tanpa rilis yang menunjuk kepadanya.
+
+  v7.0.0 gagal persis di sini: seksinya 186.449 karakter, 49% di atas batas. Ini juga bukan kejutan mendadak — v6.0.0 sudah 103.262 karakter, jadi langit-langitnya sudah didekati beberapa rilis tanpa ada apa pun yang melaporkan jaraknya.
+
+  Sekarang langkah ekstraksi mengukur hasilnya dan memotong bila perlu, menyisipkan pemisah plus tautan ke `CHANGELOG.md` pada tag itu supaya teks utuhnya selalu satu klik jauhnya. Anggarannya dihitung dalam **byte** melawan langit-langit **karakter**: untuk UTF-8 byte selalu lebih besar atau sama dengan karakter, jadi anggaran byte hanya bisa terlalu berhati-hati, tidak pernah melampaui. Pemotongan mundur ke batas baris terakhir supaya body tak pernah berakhir di tengah karakter atau di tengah markdown.
+
+  Diuji terhadap seksi v7.0.0 yang sesungguhnya: 186.449 byte turun menjadi 117.351 karakter, UTF-8 utuh, berakhir rapi. Seksi berukuran normal (v6.4.0, v6.3.0, v6.0.0) melewatinya tanpa disentuh.
+
 ## 7.0.0
 
 ### Major Changes
