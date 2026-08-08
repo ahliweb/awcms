@@ -288,7 +288,7 @@ jobs:
         #
         # The list is EXPLICIT, so it drifts silently — and it did. It was born
         # with 10 entries and five more DB-gated files landed after it
-        # (#188/#189/#190/#191) without touching it, so 46 tests skipped in
+        # (#188/#189/#190/#191) without touching it, so 36 tests skipped in
         # every pipeline while looking like coverage: MFA lockout/replay
         # atomicity, cross-tenant denial on the four OIDC tables, Turnstile
         # enforcement on the real login handler, and the office

@@ -14,13 +14,21 @@
  * It was born with ten entries. Five DB-gated files landed afterwards
  * (`mfa-integration`, `mfa-login-e2e`, `oidc-integration`,
  * `openapi-office-response-schema-postgres`, `turnstile-login-e2e`) and none of
- * their PRs touched it. Result: **46 tests that skipped in every pipeline**
+ * their PRs touched it. Result: **36 tests that skipped in every pipeline**
  * while reading, on every green run, as coverage — MFA lockout/replay
  * atomicity, cross-tenant denial on the OIDC tables, Turnstile enforcement on
  * the real login handler, and the office response-vs-schema contract. Each of
  * those five files' own header says it "runs in the dedicated legacy
  * `bun test <files>` step". They were written for a step that never called
  * them.
+ *
+ * COUNTING NOTE, because the first draft of this file got it wrong: running
+ * those five with `DATABASE_URL` unset reports **46 skip**, and 46 is not the
+ * number of tests. Bun counts skipped HOOKS in that total, and each of the five
+ * has exactly `beforeAll` + `afterAll` — 36 tests + 10 hooks. The declaration
+ * count (`grep -cE '^\s*(test|it)\(' `) is the honest one, and it is what the
+ * pipeline now executes: 14 + 3 + 9 + 1 + 9. Verified against the run that
+ * restored them, per file, not inferred.
  *
  * Nothing could have caught it. `bun run check` runs with `DATABASE_URL` unset
  * by design, so these files skip there and are SUPPOSED to; skipping is not a

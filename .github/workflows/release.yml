@@ -137,7 +137,7 @@ jobs:
         # rather than intended: `tests/db-gated-suite-ci-parity.test.ts` reads
         # BOTH workflows and both directions. The five MFA/OIDC/Turnstile/office
         # entries below were missing from here for months — a release could go
-        # out with 46 DB-gated tests never executed anywhere.
+        # out with 36 DB-gated tests never executed anywhere.
         run: >-
           bun test
           tests/audit-log-purge.test.ts

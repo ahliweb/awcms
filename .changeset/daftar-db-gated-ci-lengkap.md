@@ -2,7 +2,7 @@
 "awcms": patch
 ---
 
-fix(ci): 46 test DB-gated berhenti hijau-palsu — lima berkas yang tak pernah dijalankan pipeline mana pun
+fix(ci): 36 test DB-gated berhenti hijau-palsu — lima berkas yang tak pernah dijalankan pipeline mana pun
 
 Suite DB-gated di akar `tests/` tak bisa berjalan satu proses dengan
 `tests/integration/` (empiris: 26 tabrakan), jadi kedua pipeline menjalankannya
@@ -26,7 +26,7 @@ Ia lahir dengan **10** entri (#176). Lima berkas DB-gated mendarat sesudahnya
 - `tests/openapi-office-response-schema-postgres.test.ts` — konformansi payload
   respons terhadap schema `Office` di bundel OpenAPI.
 
-Hasilnya **46 test yang skip di setiap pipeline** sambil terbaca sebagai
+Hasilnya **36 test yang skip di setiap pipeline** sambil terbaca sebagai
 cakupan pada setiap run hijau. Dan bukan salah tafsir: header keempat berkas
 itu **menuliskan sendiri** bahwa mereka "runs in the dedicated legacy
 `bun test <files>` step" — step yang daftarnya tak pernah memanggil mereka.
@@ -55,6 +55,16 @@ komentar "These 9 files" yang sudah salah sejak lama dibetulkan jadi 15, dan
 **Mutation-proven tiga kali:** mengembalikan cacat aslinya (buang lima entri)
 → MERAH; entri menunjuk berkas tak-ada → MERAH; berkas berhenti DB-gated tapi
 tetap terdaftar → MERAH.
+
+**Catatan menghitung, karena draf pertama perubahan ini salah menghitungnya.**
+Menjalankan kelima berkas dengan `DATABASE_URL` kosong melaporkan **46 skip**,
+dan 46 **bukan** jumlah test: bun ikut menghitung **hook** yang di-skip, dan
+kelimanya punya persis `beforeAll` + `afterAll` — 36 test + 10 hook. Yang jujur
+adalah jumlah deklarasi (`grep -cE '^\s*(test|it)\('`), dan itulah yang kini
+benar-benar dieksekusi pipeline: 14 + 3 + 9 + 1 + 9, diverifikasi per berkas
+dari log run yang memulihkannya, bukan disimpulkan. Nol di antaranya merah —
+90 migrasi berlalu sejak berkas-berkas itu ditulis, dan ternyata tak ada yang
+membusuk.
 
 Dan gerbangnya menangkap satu cacat pada dirinya sendiri sebelum di-commit:
 draf pertama mencocokkan seluruh dokumen YAML, sehingga **komentar** yang
