@@ -359,7 +359,7 @@ export const blogContentModule = defineModule({
     // ADR-0059: `/news` is the HOST-RESOLVED public content family (index,
     // detail, category, tag) — this module's surface too, resolved from the
     // request rather than from a `{tenantCode}` path segment.
-    routes: ["/api/v1/blog", "/blog", "/news", "/api/v1/news-portal"]
+    routes: ["/api/v1/blog", "/blog", "/api/v1/news-portal"]
   },
   // Public search-source contribution to `site_search` (ADR-0040 §3, ported
   // from awcms-micro Issue #270). Pure DATA — no executable extractor, no SQL:
@@ -438,14 +438,14 @@ export const blogContentModule = defineModule({
   // /api/v1/tenant/modules/blog_content/settings), not a bespoke settings
   // mechanism.
   //
-  // PORT-TIME DROP: awcms-mini's equivalent field also carried
-  // `publicRouteMode`/`publicBasePath`/`publicLabel` — three knobs that only
-  // ever govern the host-resolved `/news/**` route family. That family is
-  // not ported (see this module's own `description` field above), so those
-  // three keys are dropped here rather than kept as dead configuration for a
-  // route family that does not exist in this base. `legacyTenantRouteEnabled`
-  // is kept because it independently gates the `/blog/{tenantCode}` family,
-  // which IS ported.
+  // `publicBasePath`/`publicLabel` — two further keys awcms-mini carries —
+  // are not adopted: they change only the self-referential links a page emits
+  // and cannot move the file-based route that actually serves. `publicRouteMode`
+  // was adopted by ADR-0059 and REMOVED by ADR-0071 §4 along with the
+  // `/news/**` family it governed; `/news/**` is `ahliweb/awcms-astro`'s
+  // vocabulary now, and a switch for a route family this repo does not serve is
+  // dead configuration. `legacyTenantRouteEnabled` survives both: it gates
+  // `/blog/{tenantCode}`, which is this repo's permanent public vocabulary.
   //
   // DELIBERATELY DOES NOT INCLUDE `rssEnabled`/`sitemapEnabled` — those two
   // flags live in, and stay in, `awcms_blog_settings`
@@ -463,17 +463,12 @@ export const blogContentModule = defineModule({
       // routes (index/detail/category/tag/search/feed/sitemap) with the
       // same generic 404 shape as an unknown tenant code — a
       // tenant-chosen opt-out, not a removal of the route family itself.
-      legacyTenantRouteEnabled: true,
-      // ADR-0059: the same kind of switch for the OTHER family, the
-      // host-resolved `/news/**` one. `domain_default` = it serves per
-      // `PUBLIC_TENANT_RESOLUTION_MODE`; `disabled` = all four routes 404 with
-      // the same generic shape. Two independent switches rather than one,
-      // because the families resolve their tenant differently and serve
-      // different deployments — see `application/public-route-settings.ts`.
-      // Setting BOTH off leaves the tenant with no public content URL, and
-      // `resolvePublicContentBasePath` then emits no sitemap/feed links at all
-      // rather than links that are certain to 404.
-      publicRouteMode: "domain_default"
+      // Setting it false leaves the tenant with no public content URL at all,
+      // and `resolvePublicContentBasePath` then emits no sitemap/feed links
+      // rather than links that are certain to 404. The retirement 301 for the
+      // removed `/news/**` family honors the same rule: it skips a tenant whose
+      // switch is off, because a 301 to `/blog/{tenantCode}` would be a 301 to
+      // a guaranteed 404 (ADR-0071 §4).
     }
   },
   events: {

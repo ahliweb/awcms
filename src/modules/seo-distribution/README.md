@@ -76,12 +76,13 @@ SAME `seo_facts` contract:
 | `/atom.xml`        | Atom 1.0      | Same item set; Atom `<id>`/`<published>`/`<updated>`.                                                                                |
 | `/feed.json`       | JSON Feed 1.1 | Same item set; `content_text` only (never tenant HTML).                                                                              |
 
-- **`<loc>` / feed links are resolvable, and the base path is CHOSEN**
-  (ADR-0059 §C). `resolveEnabledSeoProviders` asks `blog_content` which of its
-  two public route families actually serves this tenant: `/news/{slug}` while
-  the host-resolved family is live, `/blog/{tenantCode}/{slug}` when the tenant
-  switched it off but kept the legacy one, and **no provider at all** when both
-  are off — an empty sitemap rather than one full of certain 404s.
+- **`<loc>` / feed links are resolvable.** `resolveEnabledSeoProviders` asks
+  `blog_content` whether its public route family serves this tenant:
+  `/blog/{tenantCode}/{slug}` when it does, and **no provider at all** when the
+  tenant switched it off — an empty sitemap rather than one full of certain
+  404s. ADR-0059 §C had three rows here because there were two families to
+  choose between; ADR-0071 §4 removed the host-resolved `/news/**` one, so it is
+  down to two rows and the invariant is the whole of it.
 - **Tenant-wide `noindex` suppresses ALL discovery surfaces**, not just
   `robots.txt`: with `default_robots_noindex` on, `/sitemap.xml`,
   `/sitemap-{n}.xml`, and the three feeds all return 404 (no machine-readable URL
@@ -167,29 +168,41 @@ The redirect-governance scope completes the module (migrations `sql/060` schema 
 **awcms adaptations (ADR-0039):** tenant resolution is host-based-only first cut
 (path-tenant deferred); `locale` is always null (no i18n seam).
 
-**The legacy `/blog/{tenantCode}` → `/news` rewrite is no longer INERT.** ADR-0039
-called it inert because this base shipped no `/news` route family; **ADR-0059 landed
-that family**, so every destination the rewrite can produce now resolves (see
-§Documented follow-ups below, where the same closure is recorded). The policy column
-`legacy_blog_redirect_enabled` is still `DEFAULT false` — nothing changes for an
-operator who leaves it alone — but enabling it now **permanently 301s** live
-`/blog/{tenantCode}` traffic to the tenant's canonical host. A 301 is cached by
-browsers and intermediaries and is not undone by setting the column back to false, so
-enabling it is a content-URL migration, not a preference. The `sql/060` comment still
-carries the old ADR-0039 wording; applied migrations are checksummed and immutable
-(`scripts/db-migrate.ts`), so this README and
-`domain/legacy-blog-redirect.ts` are where the correction lives.
+**The `/blog` ↔ `/news` rewrite now runs the OTHER way.** ADR-0039 shipped
+`/blog/{tenantCode}` → `/news`, inert because no `/news` family existed; ADR-0059
+gave it a real destination; [ADR-0071](../../../docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+§4 removed that destination again — `/news/**` is `ahliweb/awcms-astro`'s
+vocabulary now. So strategy 1 is **inverted**: `domain/retired-news-redirect.ts`
+301s `/news/**` to `/blog/{tenantCode}/**`, and `domain/legacy-blog-redirect.ts`
+is gone.
+
+Two differences from what it replaced, both deliberate:
+
+- **Not policy-gated.** The old direction was an optional rewrite a tenant
+  switched on. This one is a URL migration nobody chose: the routes are gone for
+  everyone, so there is nothing to opt into. It is also NOT gated on
+  `seo_distribution` being enabled — gating it there would mean the tenants who
+  disabled the module are exactly the ones whose published URLs break.
+- **One condition survives.** A tenant with `legacyTenantRouteEnabled: false` has
+  no `/blog/**` either, so it gets no redirect — a 301 to a guaranteed 404 is the
+  failure ADR-0059 §C existed to prevent, restated in ADR-0071 §3.
+
+The policy column `legacy_blog_redirect_enabled` (`sql/060`) is **retired but not
+dropped**: applied migrations are checksummed and immutable
+(`scripts/db-migrate.ts`), and its API surface has shipped. Nothing reads it. The
+`sql/060` comment still carries the ADR-0039 wording for the same reason, so this
+README and `domain/redirect-settings.ts` are where the correction lives.
 
 ## Documented follow-ups (out of discovery scope)
 
-- ~~**Host-based public content route.**~~ **CLOSED by
-  [ADR-0059](../../../docs/adr/0059-host-resolved-public-content-routes.md)** —
-  `blog_content` now ships the host-resolved family `/news/**`, and this
-  module's composition root picks the base path from whichever family serves
-  (above). Worth keeping the correction that came with it: this entry used to
-  be read as "sitemap URLs 404 for host-resolved tenants", which was never
-  true — the composition root has scoped the adapter to `/blog/{tenantCode}`
-  since #223.
+- ~~**Host-based public content route.**~~ **CLOSED by ADR-0059, then
+  REVERSED by [ADR-0071](../../../docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md).**
+  `blog_content` shipped the host-resolved family `/news/**` for five days;
+  ADR-0071 split the family's URL vocabulary and moved that shape to
+  `ahliweb/awcms-astro`. This repo serves `/blog/{tenantCode}` and the
+  composition root has scoped the adapter to it since #223 — which is also why
+  the original reading of this entry, "sitemap URLs 404 for host-resolved
+  tenants", was never true.
 - **Resource-type coverage.** The `blog_content` adapter maps the `blog_post`
   resource type only. A generic `blog_page`, homepage/website identity, and
   `BreadcrumbList` facts are not yet produced by a provider — the contract is

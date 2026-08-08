@@ -3,12 +3,15 @@
  * single service the middleware calls, BEFORE public content route resolution, to
  * decide whether an incoming request is redirected. Two ordered strategies:
  *
- *  1. **Legacy `/blog/{tenantCode}` → canonical `/news`** (policy-gated, off by
- *     default). Resolves the tenant by the PATH code, and — only if that tenant
- *     enabled `legacy_blog_redirect_enabled` AND has a verified primary host —
- *     301-redirects to the canonical `/news...` equivalent. ADR-0039 shipped this
- *     inert because no `/news` route family existed; ADR-0059 landed it, so every
- *     destination now resolves and this strategy fires for real.
+ *  1. **Retired `/news/**` → `/blog/{tenantCode}/**`** (ADR-0071 §4, NOT
+ *     policy-gated). Resolves the tenant by the server-derived HOST and
+ *     301-redirects the retired family to this repo's permanent vocabulary. This
+ *     is the INVERSE of the strategy that stood here through ADR-0039/0059,
+ *     which pointed `/blog/{tenantCode}` at `/news`: ADR-0071 makes `/news/**`
+ *     `awcms-astro`'s vocabulary, so the old direction now targets a family this
+ *     repo does not serve. Skipped for a tenant whose `legacyTenantRouteEnabled`
+ *     is `false` — it has no `/blog/**` either, so redirecting would hand a
+ *     reader a 301 to a guaranteed 404.
  *  2. **Tenant-authored exact-path rules**: resolves the tenant by the server-
  *     derived HOST, then walks a bounded, non-recursive chain of exact-path rules.
  *     This is the FIRST-CUT tenant-resolution strategy for awcms (host-based-only,
@@ -20,8 +23,8 @@
  * ## Safety invariants
  *  - The caller has ALREADY excluded admin/API/auth/static/system paths
  *    (`isRedirectEligiblePath`) — this service is only ever asked about content paths.
- *  - The host + tenant are server-derived (`resolvePublicTenantFromRequest` /
- *    `resolvePublicTenantByCode`), never a trusted raw `Host` for URL generation.
+ *  - The host + tenant are server-derived (`resolvePublicTenantFromRequest`),
+ *    never a trusted raw `Host` for URL generation.
  *  - EVERY emitted target is re-validated at resolve time through the FROZEN
  *    `assertSafeRedirectTarget` guard against the tenant's CURRENT verified hosts —
  *    so a `verified_external` target to a domain the tenant has since removed fails
@@ -43,12 +46,12 @@ import {
   normalizePublicHost,
   resolvePublicTenantFromRequest
 } from "../../../lib/tenant/public-host-tenant-resolver";
-import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { fetchTenantModuleEntry } from "../../module-management/application/tenant-module-lifecycle";
+import { fetchEffectivePublicRouteSettings } from "../../blog-content/application/public-route-settings";
 import {
-  buildCanonicalNewsPath,
-  parseLegacyBlogPath
-} from "../domain/legacy-blog-redirect";
+  buildLegacyBlogPath,
+  parseRetiredNewsPath
+} from "../domain/retired-news-redirect";
 import {
   resolveRedirectChain,
   type RedirectChainOutcome
@@ -62,7 +65,6 @@ import {
   findActiveRedirectByPath,
   incrementRedirectHit
 } from "./redirect-directory";
-import { fetchRedirectSettings } from "./redirect-settings-directory";
 import { resolveTenantAllowedHosts } from "./tenant-allowed-hosts";
 import { resolveTenantPrimaryHost } from "./resolve-canonical-host";
 
@@ -96,49 +98,59 @@ async function isSeoDistributionEnabled(
 }
 
 /**
- * Strategy 1 — the legacy `/blog/{tenantCode}` → `/news` auto-redirect. Policy off
- * by default, but LIVE when enabled (ADR-0059 landed `/news/**`). Returns a redirect
- * resolution or `null` (not a legacy path / policy off / no canonical host — fall
- * through to normal serving).
+ * Strategy 1 — the retired `/news/**` family redirects to `/blog/{tenantCode}/**`
+ * (ADR-0071 §4). Returns a redirect resolution or `null` (not a retired path /
+ * no tenant / that tenant has no `/blog/**` either — fall through to normal
+ * serving, which for `/news/**` is now a 404).
  *
- * `_request`/`_env` are unused ON PURPOSE and keep the underscore rather than
- * being dropped: both strategies are called through the same
- * `(sql, request, options, env)` shape by `resolvePublicRedirect` below, and
- * strategy 1 identifies its tenant from the PATH (`/blog/{tenantCode}`) while
- * strategy 2 identifies it from the request HOST. Trimming the parameters here
- * would make the two call sites diverge and force the dispatcher to remember
- * which strategy takes what. The underscore is what tells `noUnusedParameters`
- * — and the next reader — that this is a shared signature, not an oversight.
+ * NOT gated on `seo_distribution` being enabled, and that is deliberate. The
+ * strategy this replaces was OPTIONAL governance a tenant switched on; this one
+ * is a URL migration the tenant did not choose and cannot undo — the routes are
+ * gone for everyone. Gating it on a module a tenant can disable would mean the
+ * tenants who disabled it are exactly the ones whose published URLs break.
+ *
+ * `_env` keeps its underscore for the reason the old strategy's `_request` did:
+ * both strategies are called through the same `(sql, request, options, env)`
+ * shape by `resolvePublicRedirect`, and a trimmed signature would force the
+ * dispatcher to remember which strategy takes what. Unlike the old one, this
+ * strategy DOES use `request` — it resolves its tenant from the host, not from
+ * a path segment, because the retired family never carried a tenant code.
  */
-async function resolveLegacyBlogRedirect(
+async function resolveRetiredNewsRedirect(
   sql: Bun.SQL,
-  _request: Request,
+  request: Request,
   options: ResolveRedirectOptions,
   _env: NodeJS.ProcessEnv
 ): Promise<RedirectResolution | null> {
-  const parsed = parseLegacyBlogPath(options.pathname);
-  if (!parsed) return null;
+  const rest = parseRetiredNewsPath(options.pathname);
+  if (rest === null) return null;
 
-  const tenant = await resolvePublicTenantByCode(sql, parsed.tenantCode);
+  const config = buildPublicHostResolverConfigFromEnv(process.env);
+  const tenant = await resolvePublicTenantFromRequest(sql, request, config);
   if (!tenant) return null;
 
   return withTenantOrThrow(sql, tenant.tenantId, async (tx) => {
-    if (!(await isSeoDistributionEnabled(tx, tenant.tenantId))) return null;
+    const routeSettings = await fetchEffectivePublicRouteSettings(
+      tx,
+      tenant.tenantId
+    );
 
-    const settings = await fetchRedirectSettings(tx, tenant.tenantId);
-    if (!settings.legacyBlogRedirectEnabled) return null;
+    // The tenant turned its public content surface off entirely. It has no
+    // `/blog/**` to send anyone to, so a 301 here would be a redirect to a
+    // certain 404 — the failure ADR-0059 §C existed to prevent and ADR-0071 §3
+    // restates. Let the 404 it already chose stand.
+    if (!routeSettings.legacyTenantRouteEnabled) return null;
 
     const primaryHost = await resolveTenantPrimaryHost(tx, tenant.tenantId);
     if (!primaryHost) return null; // no canonical host — cannot safely redirect
 
     const allowedHosts = await resolveTenantAllowedHosts(tx, tenant.tenantId);
-    const canonicalPath = buildCanonicalNewsPath(parsed.rest);
-    const target = `https://${primaryHost}${canonicalPath}${options.search}`;
+    const target = `https://${primaryHost}${buildLegacyBlogPath(tenant.tenantCode, rest)}${options.search}`;
 
     try {
       assertSafeRedirectTarget(target, allowedHosts);
     } catch {
-      return null; // fail closed — never emit an unsafe legacy redirect
+      return null; // fail closed — never emit an unsafe redirect
     }
 
     return {
@@ -254,8 +266,8 @@ async function resolveHostBasedRedirect(
 }
 
 /**
- * Resolve a public redirect for an eligible request. Tries the legacy-blog
- * auto-redirect first, then tenant-authored host-based rules. Never throws:
+ * Resolve a public redirect for an eligible request. Tries the retired-`/news`
+ * redirect first, then tenant-authored host-based rules. Never throws:
  * any error degrades to `{ kind: "skip" }` so a redirect-subsystem fault can never
  * break public content serving.
  */
@@ -266,8 +278,13 @@ export async function resolvePublicRedirect(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<RedirectResolution> {
   try {
-    const legacy = await resolveLegacyBlogRedirect(sql, request, options, env);
-    if (legacy && legacy.kind === "redirect") return legacy;
+    const retired = await resolveRetiredNewsRedirect(
+      sql,
+      request,
+      options,
+      env
+    );
+    if (retired && retired.kind === "redirect") return retired;
 
     return await resolveHostBasedRedirect(sql, request, options, env);
   } catch (error) {
