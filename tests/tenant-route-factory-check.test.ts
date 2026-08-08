@@ -16,7 +16,11 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { evaluateTenantRouteMigration } from "../scripts/tenant-route-factory-check";
+import {
+  SCAN_ROOTS,
+  evaluateTenantRouteMigration,
+  remediationFor
+} from "../scripts/tenant-route-factory-check";
 
 const DIRECT = `
 import { withTenant } from "../../../../lib/database/tenant-context";
@@ -110,5 +114,75 @@ export const GET = async () => withTenant<Response>(sql, tenantId, async (tx) =>
         []
       ).unlisted
     ).toEqual(["src/pages/api/v1/thing.ts"]);
+  });
+});
+
+/**
+ * Issue #424 — the second root.
+ *
+ * The 32 admin screens were invisible to BOTH `access:chokepoint:check` (root
+ * `src/pages/api/v1`) and this gate (root `src/pages/api`), which is what made
+ * PROJECT_STATE §4 R3 able to grow unobserved. These assert the extension, not
+ * just the ledger contents, because a ledger of 32 correct paths is worthless
+ * if the walker never produces a `.astro` file to match them against.
+ */
+describe("admin screens are a scanned root, not just ledger lines", () => {
+  const ADMIN_SCREEN = `---
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+const rows = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => load(tx));
+---
+<h1>Users</h1>
+`;
+
+  test("a `.astro` screen opening its own transaction is detected", () => {
+    expect(
+      evaluateTenantRouteMigration(
+        [{ path: "src/pages/admin/thing.astro", content: ADMIN_SCREEN }],
+        []
+      ).unlisted
+    ).toEqual(["src/pages/admin/thing.astro"]);
+  });
+
+  test("a listed screen is the debt, and delisting it is what fails", () => {
+    const listed = evaluateTenantRouteMigration(
+      [{ path: "src/pages/admin/thing.astro", content: ADMIN_SCREEN }],
+      ["src/pages/admin/thing.astro"]
+    );
+
+    expect(listed).toEqual({ unlisted: [], stale: [] });
+  });
+
+  test("`src/pages/admin` is actually walked, with `.astro` among its extensions", () => {
+    // Guards the two mutations a ledger test cannot see: pointing the root at a
+    // directory that does not exist, or keeping the root while dropping the
+    // extension. Either leaves 32 ledger entries intact and scans nothing.
+    const admin = SCAN_ROOTS.find((scan) => scan.root === "src/pages/admin");
+
+    expect(admin).toBeDefined();
+    expect(admin?.extensions).toContain(".astro");
+  });
+});
+
+describe("remediation is chosen by root, because the answer differs", () => {
+  test("an API route is told to use defineTenantRoute", () => {
+    expect(remediationFor("src/pages/api/v1/thing/index.ts")).toContain(
+      "defineTenantRoute"
+    );
+  });
+
+  test("an admin screen is NOT told to use defineTenantRoute — it has no factory yet", () => {
+    const advice = remediationFor("src/pages/admin/thing.astro");
+
+    expect(advice).toContain("defineAdminScreen");
+    expect(advice).not.toContain("defineTenantRoute(");
+  });
+
+  test("the nested admin directory resolves to the admin root, not the API one", () => {
+    // `src/pages/admin/tenant/domains.astro` is the one screen not matched by a
+    // top-level `src/pages/admin/*.astro` glob — the same blind spot that made
+    // Issue #424 say 31 when the real count is 32.
+    expect(remediationFor("src/pages/admin/tenant/domains.astro")).toContain(
+      "defineAdminScreen"
+    );
   });
 });

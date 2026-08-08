@@ -40,11 +40,58 @@
  * The pattern deliberately matches `withTenant<T>(` as well as `withTenant(`:
  * `_shared/tenant-route.ts` itself writes the generic form, and a pattern that
  * missed it would let a copy of the factory's own body through.
+ *
+ * ## Why `src/pages/admin` is scanned too (Issue #424)
+ *
+ * All 32 admin screens open their own `withTenantOrThrow` and decide access
+ * with `ssr.permissions.has()` alone — PROJECT_STATE §4 **R3**. They are
+ * invisible to `access:chokepoint:check` (its root is `src/pages/api/v1`) and
+ * they WERE invisible here, because this root stopped at `src/pages/api`.
+ *
+ * That is the whole change: this gate already matched `withTenantOrThrow(`. It
+ * was simply never pointed at the directory where 32 of them live.
+ *
+ * The ledger cannot be migrated away yet — `defineAdminScreen` does not exist
+ * (it is Gelombang 1 of #423). Seeding the 32 here is therefore a **ratchet,
+ * not a migration**: from this commit a NEW admin screen cannot add to R3's
+ * debt, months before the debt itself is paid down. A gate that only stops the
+ * bleeding still stops the bleeding.
  */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-const ROUTES_ROOT = "src/pages/api";
+/**
+ * Each root carries its own extension set and its own remediation sentence,
+ * because the answer differs: an API route must use `defineTenantRoute`, while
+ * an admin screen has no factory to use yet.
+ */
+type ScanRoot = {
+  root: string;
+  extensions: readonly string[];
+  /** Printed when an UNLISTED file under this root opens its own transaction. */
+  remediation: string;
+};
+
+export const SCAN_ROOTS: readonly ScanRoot[] = [
+  {
+    root: "src/pages/api",
+    extensions: [".ts"],
+    remediation:
+      "Rute baru WAJIB memakai defineTenantRoute (src/modules/_shared/tenant-route.ts), " +
+      "yang membawa gerbang tenant/token, rantai guard penuh, dan work class yang WAJIB " +
+      "ditulis. Jangan tambahkan berkas ini ke NOT_YET_MIGRATED."
+  },
+  {
+    root: "src/pages/admin",
+    extensions: [".astro"],
+    remediation:
+      "Layar admin baru TIDAK BOLEH membuka transaksi tenant sendiri: ia memutuskan akses " +
+      "dengan ssr.permissions.has() saja, melewati evaluateAccess, resolveModuleEnabled, dan " +
+      "recordDecisionLog (PROJECT_STATE §4 R3). Helper defineAdminScreen belum ada — ia " +
+      "Gelombang 1 dari #423. Sampai ia mendarat, layar yang butuh data tenant harus menunggu " +
+      "helper itu, BUKAN menambah barisnya di NOT_YET_MIGRATED."
+  }
+];
 
 /** Matches `withTenant(`, `withTenant<T>(` AND `withTenantOrThrow(` — a route
  * that opens its own tenant transaction bypasses the factory under either
@@ -53,12 +100,50 @@ const WITH_TENANT_CALL_PATTERN =
   /\bwithTenant(?:OrThrow)?\s*(?:<[^()]*>)?\s*\(/;
 
 /**
- * Routes that still open their own transaction, measured at `b9931594`.
+ * Files that still open their own transaction. API routes measured at
+ * `b9931594`; the 32 admin screens added by Issue #424 at the head of
+ * Gelombang 0.
+ *
  * ONLY REMOVE LINES FROM THIS LIST. Never add one: a new entry means a new
- * route skipped `defineTenantRoute`, which is what this gate exists to
- * prevent.
+ * route skipped `defineTenantRoute`, or a new admin screen added to R3's debt
+ * — which is what this gate exists to prevent.
  */
 const NOT_YET_MIGRATED: readonly string[] = [
+  // --- Layar admin (R3) — menunggu `defineAdminScreen`, Gelombang 1 dari #423.
+  "src/pages/admin/abac-policies.astro",
+  "src/pages/admin/analytics.astro",
+  "src/pages/admin/approvals.astro",
+  "src/pages/admin/audit-trail.astro",
+  "src/pages/admin/blog-pages.astro",
+  "src/pages/admin/blog-presentation.astro",
+  "src/pages/admin/blog-settings.astro",
+  "src/pages/admin/blog-taxonomy.astro",
+  "src/pages/admin/blog.astro",
+  "src/pages/admin/comments.astro",
+  "src/pages/admin/data-lifecycle.astro",
+  "src/pages/admin/domain-events.astro",
+  "src/pages/admin/email-templates.astro",
+  "src/pages/admin/form-drafts.astro",
+  "src/pages/admin/idn-regions.astro",
+  "src/pages/admin/index.astro",
+  "src/pages/admin/media.astro",
+  "src/pages/admin/modules.astro",
+  "src/pages/admin/offices.astro",
+  "src/pages/admin/profiles.astro",
+  "src/pages/admin/registrations.astro",
+  "src/pages/admin/reporting.astro",
+  "src/pages/admin/roles.astro",
+  "src/pages/admin/security.astro",
+  "src/pages/admin/seo.astro",
+  "src/pages/admin/sidebar-menu.astro",
+  "src/pages/admin/site-search.astro",
+  "src/pages/admin/sync.astro",
+  "src/pages/admin/tenant/domains.astro",
+  "src/pages/admin/tenants.astro",
+  "src/pages/admin/theming.astro",
+  "src/pages/admin/users.astro",
+
+  // --- Rute API.
   "src/pages/api/v1/abac/policies/[id].ts",
   "src/pages/api/v1/abac/policies/index.ts",
   "src/pages/api/v1/access/assignments.ts",
@@ -265,13 +350,16 @@ const NOT_YET_MIGRATED: readonly string[] = [
   "src/pages/api/v1/workflows/tasks/index.ts"
 ];
 
-async function* walk(directory: string): AsyncGenerator<string> {
+async function* walk(
+  directory: string,
+  extensions: readonly string[]
+): AsyncGenerator<string> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
 
     if (entry.isDirectory()) {
-      yield* walk(full);
-    } else if (entry.name.endsWith(".ts")) {
+      yield* walk(full, extensions);
+    } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
       yield full;
     }
   }
@@ -329,25 +417,42 @@ export function evaluateTenantRouteMigration(
   };
 }
 
+/** Remediation sentence for the root that owns `file`, matched by longest prefix. */
+export function remediationFor(file: string): string {
+  const owner = SCAN_ROOTS.filter((scan) =>
+    file.startsWith(`${scan.root}/`)
+  ).sort((a, b) => b.root.length - a.root.length)[0];
+
+  return owner?.remediation ?? SCAN_ROOTS[0]!.remediation;
+}
+
 async function main(): Promise<void> {
   const files: { path: string; content: string }[] = [];
 
-  for await (const file of walk(ROUTES_ROOT)) {
-    files.push({
-      path: file.split(path.sep).join("/"),
-      content: await Bun.file(file).text()
-    });
-  }
+  // Each root is counted SEPARATELY. A combined total would let one healthy
+  // root mask a second that walked nothing — which is the exact "cheerful,
+  // meaningless OK" this guard was written for, one directory later.
+  for (const scan of SCAN_ROOTS) {
+    let scanned = 0;
 
-  // `ROUTES_ROOT` is repo-relative, so a run from the wrong working directory
-  // would walk nothing and report a cheerful, meaningless OK. This repo has
-  // already shipped gates that passed while scanning zero files.
-  if (files.length === 0) {
-    console.error(
-      `api:tenant-route:check GAGAL — scanned 0 files under ${ROUTES_ROOT}. ` +
-        "Run this from the repository root."
-    );
-    process.exit(1);
+    for await (const file of walk(scan.root, scan.extensions)) {
+      files.push({
+        path: file.split(path.sep).join("/"),
+        content: await Bun.file(file).text()
+      });
+      scanned += 1;
+    }
+
+    // Roots are repo-relative, so a run from the wrong working directory would
+    // walk nothing and report success. This repo has already shipped gates that
+    // passed while scanning zero files.
+    if (scanned === 0) {
+      console.error(
+        `api:tenant-route:check GAGAL — scanned 0 files under ${scan.root} ` +
+          `(${scan.extensions.join(", ")}). Run this from the repository root.`
+      );
+      process.exit(1);
+    }
   }
 
   const { unlisted, stale } = evaluateTenantRouteMigration(
@@ -357,31 +462,29 @@ async function main(): Promise<void> {
 
   if (unlisted.length === 0 && stale.length === 0) {
     console.log(
-      `api:tenant-route:check OK — ${files.length} rute di ${ROUTES_ROOT}: memakai ` +
-        `defineTenantRoute, atau salah satu dari ${NOT_YET_MIGRATED.length} rute yang masih ` +
-        "antre migrasi (Issue #255)."
+      `api:tenant-route:check OK — ${files.length} berkas di ` +
+        `${SCAN_ROOTS.map((scan) => scan.root).join(" + ")}: memakai defineTenantRoute, ` +
+        `atau salah satu dari ${NOT_YET_MIGRATED.length} berkas yang masih antre migrasi ` +
+        "(rute API: Issue #255; layar admin: R3 / Issue #424)."
     );
     process.exit(0);
   }
 
   for (const file of unlisted) {
     console.error(
-      `${file} — memanggil withTenant() langsung. Rute baru WAJIB memakai defineTenantRoute ` +
-        "(src/modules/_shared/tenant-route.ts), yang membawa gerbang tenant/token, rantai " +
-        "guard penuh, dan work class yang WAJIB ditulis. Jangan tambahkan berkas ini ke " +
-        "NOT_YET_MIGRATED."
+      `${file} — membuka transaksi tenant sendiri. ${remediationFor(file)}`
     );
   }
 
   for (const file of stale) {
     console.error(
-      `${file} — terdaftar di NOT_YET_MIGRATED tapi sudah tidak memanggil withTenant() ` +
-        "langsung (ter-migrasi atau terhapus). Hapus barisnya: daftar ini hanya boleh menyusut."
+      `${file} — terdaftar di NOT_YET_MIGRATED tapi sudah tidak membuka transaksi tenant ` +
+        "sendiri (ter-migrasi atau terhapus). Hapus barisnya: daftar ini hanya boleh menyusut."
     );
   }
 
   console.error(
-    `\napi:tenant-route:check GAGAL — ${unlisted.length} rute belum lewat factory, ` +
+    `\napi:tenant-route:check GAGAL — ${unlisted.length} berkas membuka transaksinya sendiri tanpa terdaftar, ` +
       `${stale.length} entri allowlist basi.`
   );
 
