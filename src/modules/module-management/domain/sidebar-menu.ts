@@ -115,11 +115,14 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   sync_storage: "operations",
   data_lifecycle: "operations",
   domain_event_runtime: "operations",
-  // Master reference data. Placed even though this module declares no
-  // navigation in THIS repo (its operator screen lives in awcms-astro,
-  // ADR-0047): the placement map must cover every registered module, and the
-  // day a tenant-facing region screen does land here, it lands in the right
-  // section rather than silently in "general".
+  // Master reference data. This module DOES declare navigation now
+  // (`/admin/idn-regions`, landed with ADR-0053/PR #332). The comment that used
+  // to sit here said its operator screen lived in awcms-astro per ADR-0047 —
+  // wrong ADR (that split was ADR-0048) and a decision since revoked (ADR-0051
+  // consolidated every SYSTEM admin screen here; ADR-0047 itself is superseded
+  // by ADR-0055). The placement still earns its line: the map must cover every
+  // registered module, so the screen lands in `operations` rather than silently
+  // in "general".
   idn_admin_regions: "operations",
   // Identity.
   identity_access: "identity",

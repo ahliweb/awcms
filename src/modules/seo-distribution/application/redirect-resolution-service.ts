@@ -3,11 +3,12 @@
  * single service the middleware calls, BEFORE public content route resolution, to
  * decide whether an incoming request is redirected. Two ordered strategies:
  *
- *  1. **Legacy `/blog/{tenantCode}` → canonical `/news`** (INERT in awcms — no
- *     `/news` route family; policy-gated off by default). Resolves the tenant by the
- *     PATH code, and — only if that tenant enabled `legacy_blog_redirect_enabled`
- *     AND has a verified primary host — would 301-redirect to the canonical
- *     `/news...` equivalent. Retained for parity; never fires in this base.
+ *  1. **Legacy `/blog/{tenantCode}` → canonical `/news`** (policy-gated, off by
+ *     default). Resolves the tenant by the PATH code, and — only if that tenant
+ *     enabled `legacy_blog_redirect_enabled` AND has a verified primary host —
+ *     301-redirects to the canonical `/news...` equivalent. ADR-0039 shipped this
+ *     inert because no `/news` route family existed; ADR-0059 landed it, so every
+ *     destination now resolves and this strategy fires for real.
  *  2. **Tenant-authored exact-path rules**: resolves the tenant by the server-
  *     derived HOST, then walks a bounded, non-recursive chain of exact-path rules.
  *     This is the FIRST-CUT tenant-resolution strategy for awcms (host-based-only,
@@ -95,8 +96,8 @@ async function isSeoDistributionEnabled(
 }
 
 /**
- * Strategy 1 — the legacy `/blog/{tenantCode}` → `/news` auto-redirect. INERT in
- * awcms (no `/news` route family, policy off by default). Returns a redirect
+ * Strategy 1 — the legacy `/blog/{tenantCode}` → `/news` auto-redirect. Policy off
+ * by default, but LIVE when enabled (ADR-0059 landed `/news/**`). Returns a redirect
  * resolution or `null` (not a legacy path / policy off / no canonical host — fall
  * through to normal serving).
  *

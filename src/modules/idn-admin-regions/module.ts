@@ -83,16 +83,14 @@ export const idnAdminRegionsModule = defineModule({
     basePath: "/api/v1/idn-regions",
     routes: ["/api/v1/idn-regions"]
   },
-  // No `navigation`, and after ADR-0052 the reason is simpler than it was.
+  // This module DOES declare `navigation` (below). It did not always: ADR-0052
+  // turned dataset activation/rollback into operator jobs and removed their HTTP
+  // surface, which left nothing to build a screen around. ADR-0053 restored the
+  // endpoints behind a platform-scoped gate and the `/admin/idn-regions` screen
+  // landed with them (PR #332), in the `operations` section its
+  // `DEFAULT_MODULE_TYPE` placement had already reserved.
   //
-  // There is no longer an admin ACTION here to build a screen around: choosing
-  // which dataset version is served is an operator job run from a shell, not a
-  // request. What remains over HTTP is read-only (`region.read`,
-  // `dataset.read`), and a tenant-facing region BROWSER would be a reasonable
-  // future screen — it would land in this repo per ADR-0051, in the
-  // `operations` section its `DEFAULT_MODULE_TYPE` placement already reserves.
-  //
-  // Until such a page exists, declaring a nav entry would point the sidebar at
+  // Before that screen existed, declaring a nav entry would have pointed the sidebar at
   // a page this repo does not have — the exact drift
   // `tests/admin-navigation-registry.test.ts` exists to catch.
   jobs: [
