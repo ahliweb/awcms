@@ -18,7 +18,7 @@ Issue #542: presentation/monetization extensions — template, menu hierarkis, w
 
 Issue #543 (final hardening): admin UI penuh di bawah `/admin/blog` (dashboard, posts, pages, categories, tags, settings, dan optional advanced screens templates/widgets/menus/ads — semuanya menggunakan `AdminLayout`/design token yang sudah ada, Astro + vanilla JS saja, tanpa framework baru), endpoint `blog_content.settings.*` (`/api/v1/blog/settings`, akhirnya mengaktifkan `awcms_blog_settings` yang sejak migration 026 sudah ada tapi belum punya route), `module.ts`'s `permissions`/`navigation` array (sebelumnya kosong meski 36 permission-nya sudah ada di DB sejak migration 027/030), dan dokumentasi/testing/hardening akhir. Lihat §Admin UI dan §Settings API.
 
-ADR-0059: keluarga rute publik KEDUA, host-resolved — `/news`, `/news/{slug}`, `/news/category/{slug}`, `/news/tag/{slug}` — tanpa segmen `tenantCode`, resolusi tenant lewat `resolvePublicTenantFromRequest` (`withHostResolvedBlogTenant`). Dua `settings.defaults` di descriptor: `publicRouteMode` (saklar keluarga host-resolved) dan `legacyTenantRouteEnabled` (saklar keluarga `/blog/{tenantCode}`) — **bukan** `rssEnabled`/`sitemapEnabled`, yang tetap di `awcms_blog_settings`. `publicBasePath`/`publicLabel` sengaja TIDAK diadopsi. Lihat §Public routes `/news` dan §Public route settings.
+ADR-0071 (men-supersede ADR-0059): keluarga rute publik host-resolved `/news/**` **DIHAPUS** dari repo ini — `/blog/**` kosakata publik permanen di sini, `/news/**` milik `ahliweb/awcms-astro`. Yang ikut hilang: keempat berkas rute, gerbang `withHostResolvedBlogTenant`, dan setting `publicRouteMode`. Yang tersisa di `settings.defaults` descriptor tinggal `legacyTenantRouteEnabled` (saklar keluarga `/blog/{tenantCode}`) — **bukan** `rssEnabled`/`sitemapEnabled`, yang tetap di `awcms_blog_settings`. `publicBasePath`/`publicLabel` sengaja TIDAK diadopsi. Lihat §Keluarga `/news` yang dipensiunkan dan §Public route settings.
 
 ## Tabel (migration `026_awcms_blog_content_schema.sql`)
 
@@ -239,182 +239,83 @@ Index dan arsip kategori/tag pakai `?page=` (1-indexed) + `LIMIT`/`OFFSET` seder
 
 `?page=` di-normalisasi lewat `parsePageParam`/`boundedPageNumber` (`src/modules/_shared/offset-pagination.ts`, Issue #819) — **bukan** `Number(param)` langsung. Route ini publik tanpa auth, jadi `page` wajib terklamp di kedua ujung: `?page=1e8` dulu jadi `OFFSET 1e9` (Postgres tetap memindai lalu membuang satu miliar baris sambil menahan satu koneksi pool — DoS satu-request), dan `?page=abc` jadi `OFFSET NaN` → 500. Sekarang nilai non-numerik/`NaN`/`±Infinity`/negatif jatuh ke halaman 1, pecahan di-truncate, dan batas atas `MAX_PAGE_NUMBER` = 10.000. Junk dinormalisasi ke halaman 1, bukan 400: ini route arsip HTML — `?page=` rusak harus merender halaman pertama, bukan error yang ikut terindeks crawler. Nilai terklamp itu juga yang dipakai untuk merender nav pagination, supaya `?page=abc` tidak pernah menghasilkan link `NaN`. Daftar admin (`listBlogPostsForAdmin`/`listBlogPagesForAdmin`) memakai helper yang sama.
 
-## Public routes `/news` — the host-resolved family (ADR-0059)
+## Keluarga `/news` yang dipensiunkan (ADR-0071 men-supersede ADR-0059)
 
-`src/pages/news/` — the tenant-code-free counterpart of `/blog/{tenantCode}`
-above. It resolves its tenant from the REQUEST rather than from a path
-segment, which is the whole point: a tenant serving its own domain
-(`tenant_domain`, #219) gets content URLs that carry no tenant identifier.
+`src/pages/news/` **tidak ada lagi.** ADR-0059 pernah menambahkan keluarga rute
+publik KEDUA yang host-resolved — `/news`, `/news/{slug}`,
+`/news/category/{slug}`, `/news/tag/{slug}` — beserta gerbang
+`withHostResolvedBlogTenant` dan saklar `publicRouteMode`.
+[ADR-0071](../../../docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+membelah kosakata URL keluarga AWCMS: `/blog/**` permanen di repo ini,
+`/news/**` milik `ahliweb/awcms-astro`. Keempat rute, gerbangnya, dan saklarnya
+dihapus di PR pelaksanaan §4.
 
-```txt
-GET /news                         -> index (paginated, same predicate as /blog/{tenantCode})
-GET /news/{slug}                  -> post detail
-GET /news/category/{slug}         -> category archive
-GET /news/tag/{slug}              -> tag archive
-```
+**Yang dipensiunkan tidak dimatikan begitu saja.** Keempat rute itu MENYALA
+secara bawaan (`publicRouteMode` = `domain_default`), jadi URL-nya nyata,
+terindeks, dan sudah diiklankan sitemap serta feed yang repo ini terbitkan.
+`seo_distribution` karena itu memasang **301 dari `/news/**` ke
+`/blog/{tenantCode}/**`** (`seo-distribution/domain/retired-news-redirect.ts`),
+bukan 404 — lihat §Retirement redirect di README modul itu. Redirect ini **tidak**
+digerbangi kebijakan: rutenya hilang untuk semua orang, jadi tidak ada yang bisa
+memilih untuk tetap menyajikannya. Satu-satunya kondisi yang berlaku adalah
+tenant ber-`legacyTenantRouteEnabled` `false` — ia tidak punya `/blog/**` juga,
+sehingga mengarahkannya berarti memberi pembaca 301 menuju 404 yang pasti.
 
-**Four routes, not seven, and the three absentees are a decision** (ADR-0059
-§A). `/news/feed.xml`, `/news/sitemap-news.xml` and `/news/search` are NOT
-built here because the root host already serves all three host-resolved:
-`seo_distribution` owns `/feed.xml`, `/atom.xml`, `/feed.json`,
-`/sitemap.xml`, `/sitemap-{n}.xml` (ADR-0038) and `site_search` owns
-`/search` (ADR-0040). A second copy under `/news` would give one host two
-sitemaps and two places to enforce `rssEnabled` — a divergence generator, not
-a feature.
+Yang **tidak** ikut hilang: seluruh layanan application/domain yang dipakai
+bersama tetap di tempatnya dan tetap melayani `/blog/{tenantCode}` —
+`public-blog-directory.ts`, `public-page-rendering.ts`, `seo-rendering.ts`,
+`content-block-rendering.ts`, `internal-tag-link-rendering.ts`,
+`news-article-seo-metadata.ts`, `social-share-links.ts`. Tidak ada satu pun
+fungsi yang diduplikasi saat keluarga ini dicabut; yang terjadi adalah satu
+pemanggil hilang, bukan satu implementasi bercabang.
 
-**Why `/news` and not `/blog/{slug}`.** They cannot coexist: Astro sees
-`src/pages/blog/[slug].ts` and `src/pages/blog/[tenantCode]/index.ts` as the
-same `/blog/[param]` pattern. Probed directly in this repo — the build still
-SUCCEEDS and warns "A dynamic SSR route cannot be defined more than once …
-A collision will result in a hard error in following versions of Astro", i.e.
-one route silently shadows the other today. ADR-0059 §3 carries the full
-reasoning, including why resolving the ambiguity at runtime is worse
-(whoever can write a post slug could shadow another tenant's listing URL, and
-a new tenant code could kill an indexed post URL).
+### Helper rendering tetap generik, dan itu disengaja
 
-Everything else is shared, unchanged: `public-blog-directory.ts` (both
-visibility predicates, §Dua predikat visibilitas publik above),
-`public-page-rendering.ts`, `seo-rendering.ts`, `content-block-rendering.ts`,
-`internal-tag-link-rendering.ts`, `news-article-seo-metadata.ts`,
-`social-share-links.ts`, `src/lib/html/error-responses.ts`. **Posts only** —
-pages still have no public route in either family.
+`public-page-rendering.ts`'s `renderPostSummaryListHtmlAtBasePath(basePath, ...)`
+tetap ada dalam bentuk umumnya, dengan `renderPostSummaryListHtml(tenantCode, ...)`
+sebagai pembungkus `/blog/{tenantCode}`. Bentuk umum itu dulu lahir untuk
+melayani dua base path; sekarang pemanggilnya tinggal satu. **Ia sengaja tidak
+di-inline kembali**: menggabungkannya berarti menulis ulang perilaku yang sudah
+terbukti byte-for-byte identik demi menghemat satu tingkat pemanggilan, dan
+`awcms-astro` melayani base path lain dari kontrak yang sama.
 
-### `withHostResolvedBlogTenant` — resolution + module-disabled + route-mode gate
+### Base path yang diiklankan — dua baris, bukan empat
 
-`application/public-host-route-tenant-resolution.ts`'s
-`withHostResolvedBlogTenant(sql, request, handler, env?)` is what all four
-routes call before touching a post row. It is deliberately the same shape as
-`site_search`'s `withSiteSearchTenant` and `comments`' `withCommentsTenant`
-(themselves modelled on `seo_distribution`'s `withSeoPublicTenant`) — a
-fourth independently-written version of this rule would be a fourth place for
-it to drift.
+`resolvePublicContentBasePath` (`application/public-route-settings.ts`) menyusut
+sesuai ADR-0071 §3:
 
-1. `buildPublicHostResolverConfigFromEnv` (`PUBLIC_TENANT_RESOLUTION_MODE`/
-   `PUBLIC_TRUST_PROXY`) → `resolvePublicTenantFromRequest`
-   (`src/lib/tenant/public-host-tenant-resolver.ts`, ADR-0010): host/domain
-   mapping first, then the env/setup-state fallback chain. `tenant_code_legacy`
-   never resolves, by construction.
-2. `checkHostRouteGate` inside ONE `withTenantOrThrow`: `fetchTenantModuleEntry`
-   confirms `blog_content` is enabled for the tenant (fail-closed), and
-   `fetchEffectivePublicRouteSettings` confirms `publicRouteMode !== "disabled"`.
+| `legacyTenantRouteEnabled` | Base path yang diiklankan      |
+| -------------------------- | ------------------------------ |
+| `true`                     | `/blog/{tenantCode}`           |
+| `false`                    | tidak ada provider sama sekali |
 
-Every failure — unknown host, module disabled, family switched off, and a
-handler that returns `null` for "no such post/term" — collapses to the SAME
-`null`, which each route maps to one generic 404. Callers never learn which.
+Baris kedua adalah intinya, dan ia **dinyatakan ulang** oleh ADR-0071 §3 supaya
+tidak ikut gugur saat ADR-0059 di-supersede: tenant yang mematikan permukaan
+publiknya mendapat sitemap/feed KOSONG, bukan yang penuh tautan yang pasti 404.
+Invarian "jangan pernah mengiklankan URL yang tidak kita layani" tidak berubah.
 
-**Timing parity is part of the gate, not an afterthought.** Without it, an
-unresolved host costs zero round trips while a resolved one costs a
-transaction plus two queries, so latency alone answers "does this hostname
-map to a live tenant?" — the exact probe `awcms_tenant_domains` makes
-worthwhile. `padUnresolvedHostRouteLatency` pays the same round-trip shape
-against the all-zero fail-closed sentinel tenant (migration 013), which
-matches zero rows by construction. The gate's two queries live in ONE
-function precisely so a later edit cannot add a query to the serving path
-only.
+Test: `tests/blog-content-public-content-base-path.test.ts` (aturannya, plus
+"setiap base path yang diiklankan punya berkas rute").
 
-**Known gap, unchanged by ADR-0059**: `/blog/{tenantCode}` (Issue #540) still
-has **no** module-disabled check — a tenant that disables `blog_content` can
-still be browsed through the legacy family. Retrofitting it is a behavior
-change to a shipped public surface and belongs to its own change.
+### Tombol share publik + metadata OG/Twitter — Issue #642
 
-### Rendering helper extended, not duplicated
+Post detail (`/blog/{tenantCode}/{slug}`) merender widget share publik (Web Share
+API native, copy-link, WhatsApp, Telegram, Facebook, LinkedIn, X, email) dan
+metadata Open Graph/Twitter Card yang diperluas. Modul murninya:
+`domain/social-share-links.ts` (`buildSocialShareLinks` — allowlist tetap enam
+platform, tiap URL di-`encodeURIComponent`; `renderSocialShareButtonsHtml`) dan
+`domain/social-share-config.ts` (flag env `NEWS_SHARE_*_ENABLED` per platform,
+semuanya default `true`). Instagram tidak pernah dapat tombol khusus karena tak
+punya URL web-share yang didukung; URL kanonik — bukan querystring mentah
+request — adalah satu-satunya yang pernah dibagikan; skrip klien native-share/
+copy-link adalah berkas statis same-origin (`public/js/news-share.js`), tidak
+pernah inline, sehingga menambah nol permukaan CSP.
 
-`public-page-rendering.ts`'s `renderPostSummaryListHtml(tenantCode, ...)`
-delegates to the more general `renderPostSummaryListHtmlAtBasePath(basePath, ...)`
-(`basePath = /blog/{tenantCode}` for the old wrapper, `/news` for this
-family) — byte-for-byte identical output for every existing
-`/blog/{tenantCode}` call site. `renderPaginationNavHtml` was already generic.
-
-### Canonical URL / feed / sitemap base path — chosen, never assumed
-
-The physical root is the constant `HOST_RESOLVED_PUBLIC_BASE_PATH` (`/news`),
-NOT a setting: an Astro file route cannot be repointed per tenant at runtime,
-so a configurable value would change only the links a page emits while the
-route that serves stays put — which is a per-tenant generator of URLs that 404. That is why the archived `publicBasePath`/`publicLabel` keys are not
-adopted (ADR-0059 §4).
-
-What IS chosen per tenant is which family's base path `seo_distribution`
-advertises, in `resolvePublicContentBasePath` (ADR-0059 §C):
-
-| `publicRouteMode` | `legacyTenantRouteEnabled` | Advertised base path      |
-| ----------------- | -------------------------- | ------------------------- |
-| `domain_default`  | anything                   | `/news`                   |
-| `disabled`        | `true`                     | `/blog/{tenantCode}`      |
-| `disabled`        | `false`                    | none — no provider at all |
-
-The third row is the point: a tenant that switched both families off has no
-public content URL, so its sitemap/feed is EMPTY rather than full of links
-certain to 404. `seo-rendering.ts`'s `resolveCanonicalUrl` is untouched — only
-the `selfUrl` each route passes in differs.
-
-Tests: `tests/blog-content-public-content-base-path.test.ts` (the rule, plus
-"every advertised base path has a route file") and
-`tests/integration/blog-content-public-host-routes.integration.test.ts`
-(host resolution, cross-tenant isolation, both kill switches, and the
-advertised-URL-is-the-served-URL invariant against a real database).
-
-### Public social share buttons + expanded OG/Twitter metadata — Issue #642 (epic `news_portal`)
-
-Both post detail routes (`/news/{slug}`, `/blog/{tenantCode}/{slug}`) now
-render a public share widget (native Web Share API, copy-link, WhatsApp,
-Telegram, Facebook, LinkedIn, X, email) and expanded Open Graph/Twitter
-Card metadata. New pure modules:
-`domain/social-share-links.ts` (`buildSocialShareLinks` — six-platform
-fixed allowlist, every URL `encodeURIComponent`-encoded;
-`renderSocialShareButtonsHtml` — full widget markup) and
-`src/modules/blog-content/domain/news-share-config.ts`
-(`resolveNewsShareConfig` — per-platform `NEWS_SHARE_*_ENABLED` env
-flags, all defaulting `true`; see that file's header comment for why this
-deviates from this repo's usual "opt-in, default off" feature-flag
-convention). See `.claude/skills/awcms-news-portal/SKILL.md` §642 for
-the full design rationale (Instagram has no supported web-share URL so
-never gets a dedicated button; the canonical URL — never the request's
-raw querystring — is the only URL ever shared; the native-share/copy-link
-client script is a same-origin static file, `public/js/news-share.js`,
-never inline, so it adds zero Content-Security-Policy surface).
-
-`public-page-rendering.ts`'s `renderPublicPageShell` now also emits
-`og:title`/`og:description`/`og:url`/`og:site_name` (derived from the same
-`title`/`description`/`canonicalUrl` fields it already renders as
-`<title>`/`<meta name="description">`/`<link rel="canonical">` — one
-source of truth, `siteName` new and optional from
-`PublicTenantResolution.tenantName`) and `twitter:title`/
-`twitter:description`/`twitter:card` (now always present — `summary`
-without an image, `summary_large_image` with one). `og:image`/
-`twitter:image`/`og:image:alt` are unchanged from Issue #636 (still gated
-on a verified R2 media object).
-
-Test: `tests/unit/social-share-links.test.ts`, `tests/unit/news-share-config.test.ts`,
-`tests/unit/news-share-client-script.test.ts`,
-`tests/integration/news-portal-share-buttons.integration.test.ts` (real
-`/news/{slug}`/`/blog/{tenantCode}/{slug}` routes — default-enabled
-widget, master-switch/per-platform disable, draft never renders it,
-canonical URL used even when the request URL carries tracking
-querystring parameters).
-
-## `/news` (host-resolved) vs `/blog/{tenantCode}` (legacy) — ADR-0059
-
-Two public route families exist side by side, and neither is going away.
-Pick per-deployment via `PUBLIC_TENANT_RESOLUTION_MODE`
-(`docs/awcms/18_configuration_env_reference.md` §Public routing,
-`docs/adr/0010-public-host-tenant-routing.md`) — this is a **config
-choice**, not a code choice; both route families always exist in every
-build.
-
-| Route                | Status                                             | Tenant resolution                                                                                                                     | Use when                                                                                                                                                     |
-| -------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/news`              | **Default for online/public** (ADR-0059)           | Request `Host`/domain mapping (mode `host_default`), with env/setup-state fallback — see §Resolver in the tenant-domain-routing skill | Online/public/SaaS deployment with a real domain: clean, SEO-friendly, tenant-implicit URLs (no tenant code in the path)                                     |
-| `/blog/{tenantCode}` | **Legacy, explicit-tenant, still fully supported** | `tenantCode` path segment (ADR-0009), resolved directly, independent of `PUBLIC_TENANT_RESOLUTION_MODE`                               | Offline/LAN-first deployment (doc 18) with no public domain/DNS/TLS at all, or any deployment that wants an explicit, unambiguous tenant selector in the URL |
-
-Both route families reuse the exact same application/domain services
-(`public-blog-directory.ts`, `public-page-rendering.ts`, `seo-rendering.ts`,
-`content-block-rendering.ts`, `blog-search.ts`'s `searchPublicBlogContent`)
-— see §Public routes `/news` above. Neither family redirects to the other and there is no plan to
-retire `/blog/{tenantCode}` — see `docs/adr/0010-public-host-tenant-routing.md`
-§Konsekuensi and the `awcms-tenant-domain-routing` skill's "aturan
-lintas-issue" #3. `/news` examples in this README never include a
-`tenantCode` segment — that is the whole point of the route (tenant is
-resolved from the request, not the path).
+`renderPublicPageShell` juga memancarkan
+`og:title`/`og:description`/`og:url`/`og:site_name` dan
+`twitter:title`/`twitter:description`/`twitter:card`. `og:image`/`twitter:image`/
+`og:image:alt` tidak berubah sejak Issue #636 (tetap digerbangi objek media R2
+terverifikasi).
 
 ## Public route settings
 
@@ -424,8 +325,7 @@ computes one merged, read-only DTO for both route families, sourced from
 
 | Field                      | Store                                                                                                                              | Write path                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `publicRouteMode`          | `blog_content` module descriptor `settings.defaults` + `awcms_module_settings` tenant override (generic tenant-settings framework) | `PATCH /api/v1/tenant/modules/blog_content/settings` |
-| `legacyTenantRouteEnabled` | same as above                                                                                                                      | same as above                                        |
+| `legacyTenantRouteEnabled` | `blog_content` module descriptor `settings.defaults` + `awcms_module_settings` tenant override (generic tenant-settings framework) | `PATCH /api/v1/tenant/modules/blog_content/settings` |
 | `rssEnabled`               | `awcms_blog_settings` (Issue #537, wired up Issue #543) — **unchanged**                                                            | `PATCH /api/v1/blog/settings`                        |
 | `sitemapEnabled`           | `awcms_blog_settings` — **unchanged**                                                                                              | `PATCH /api/v1/blog/settings`                        |
 
@@ -454,22 +354,6 @@ those exact key names into the new module-settings store has NO effect on
 into the wrong store and confirms the feed stays enabled, then flips it
 through the correct store and confirms it actually disables.
 
-### `publicRouteMode` — `/news` only, `domain_default` = serving
-
-`"domain_default"` (the default) means the host-resolved family serves per
-`PUBLIC_TENANT_RESOLUTION_MODE` (doc 18). `"disabled"` collapses all four
-`/news` routes to the same generic `null`/404 an unresolved host or a disabled
-module already produce. Scoped to `/news` only — it does **not** gate
-`/blog/{tenantCode}`, which has its own independent switch
-(`legacyTenantRouteEnabled`, below), because the two families resolve tenants
-through entirely different mechanisms and serve different deployments.
-
-**Timing parity is preserved by construction**: the module-enabled read and
-this settings read live in one private `checkHostRouteGate`, and both the
-serving path and `padUnresolvedHostRouteLatency` call that same function —
-they cannot drift into different query counts, which is what would reopen the
-"does this hostname map to a live tenant" latency leak.
-
 ### `publicBasePath` — NOT adopted, and that is the point
 
 awcms-micro exposes `publicBasePath` as a per-tenant setting that changes
@@ -490,8 +374,8 @@ paths that both exist.
 
 `PATCH /api/v1/tenant/modules/blog_content/settings` still runs through
 the same `validateModuleSettingsPatch` (`module-management/domain/module-settings.ts`)
-every other module's settings PATCH does — neither key name
-(`publicRouteMode`, `legacyTenantRouteEnabled`) nor their values match any entry in `redaction.ts`'s
+every other module's settings PATCH does — neither the key name
+(`legacyTenantRouteEnabled`) nor its value matches any entry in `redaction.ts`'s
 `REDACTION_KEYS` list, confirmed by
 `tests/integration/blog-content-settings.integration.test.ts`'s existing
 secret-shaped-key test (unchanged assertion, now targeting `blog_content`
@@ -887,7 +771,5 @@ kodenya berarti menyerap batasannya.
 - `robots.txt` dan referensi sitemap dari `robots.txt` — hanya sitemap XML-nya sendiri yang ada, belum ada yang mereferensikannya secara otomatis.
 - Rich block editor visual untuk `content_json` — admin UI (Issue #543) memakai textarea JSON berlabel untuk `contentJson`/menu items/ad placements, bukan editor visual/drag-drop; membangun itu tetap backlog terbuka kalau suatu saat dianggap perlu.
 - Layar admin murni untuk media/gallery — tidak ada (dan tidak akan ada tanpa base media library nyata); galeri dikelola lewat block `content_json` di editor post/page yang ada.
-- Base path fisik per-tenant untuk keluarga host-resolved (catch-all dynamic route) — TIDAK dibangun, dan `publicBasePath` versi arsip juga tidak diadopsi karena ia hanya mengubah URL yang DIHASILKAN tanpa memindahkan rute yang melayani (ADR-0059 §4, §Public route settings §`publicBasePath`).
-- `/news/feed.xml`, `/news/sitemap-news.xml`, `/news/search` — sengaja tidak dibangun; root host sudah melayani ketiganya host-resolved lewat `seo_distribution`/`site_search` (ADR-0059 §A).
-- Visual settings editor khusus untuk `publicRouteMode`/`legacyTenantRouteEnabled` — sengaja tidak dibangun; layar generik `/admin/modules/blog_content` (Module Management, sudah ada) cukup untuk mengedit keduanya lewat JSON textarea yang sudah ada.
-- Cache tepi untuk `/news/**` — belum dideklarasikan sebagai surface (ADR-0059 §E): permukaannya host-resolved, jadi kuncinya harus memuat host dulu.
+- Base path fisik per-tenant — TIDAK dibangun, dan `publicBasePath` versi arsip juga tidak diadopsi karena ia hanya mengubah URL yang DIHASILKAN tanpa memindahkan rute yang melayani (§Public route settings §`publicBasePath`).
+- Visual settings editor khusus untuk `legacyTenantRouteEnabled` — sengaja tidak dibangun; layar generik `/admin/modules/blog_content` (Module Management, sudah ada) cukup untuk mengeditnya lewat JSON textarea yang sudah ada.
