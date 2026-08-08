@@ -241,12 +241,16 @@ privileged shortcut, no SQL in the page. Five of them send a fresh
 per-click `Idempotency-Key`; `reconcile` sends none, because that
 endpoint mutates no business state and requires none.
 
+<!-- historis:mulai -->
+
 > This section previously described `/admin/reporting/projections` and a
 > `submitJson` helper. Neither existed in this repo — the text came over
 > with the port and was never true here. Nothing rendered any of this
 > until the page above landed; the module simply had no `navigation`
 > entry, so the registry gate that would have caught a dangling path had
 > nothing to check. Docs are not gated the way descriptors are.
+
+<!-- historis:selesai -->
 
 ## Belum tersedia
 

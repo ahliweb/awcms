@@ -124,5 +124,8 @@ menggagalkan seluruh run, tercatat di tabel diagnostics.
   katalog i18n.
 - **Sumber selain `blog_content.post`.** Blog PAGES tidak diindeks (tidak punya
   rute publik di basis ini — hasilnya akan 404); metadata media follow-up.
-- **Admin UI** (`/admin/search`) — API-nya ada, layarnya belum.
+- ~~**Admin UI**~~ — **SUDAH ADA**: `/admin/site-search`
+  (`src/pages/admin/site-search.astro`, entri `navigation` di `module.ts`).
+  Entri ini pernah berbunyi <!-- historis:mulai -->"(`/admin/search`) — API-nya ada, layarnya belum"<!-- historis:selesai -->,
+  yang salah dua kali: layarnya sudah mendarat, dan alamatnya bukan itu.
 - **Event `domain_event_runtime`** — lifecycle indeks masih log line.

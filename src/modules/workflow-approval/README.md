@@ -90,7 +90,11 @@ Cancel lives on the instance panel rather than the task row on purpose: cancelli
 
 Deliberately NOT built here: a definition/graph editor. `POST/PUT /workflows/definitions/**` are exercised by tests and usable directly, but authoring a node/transition graph needs a real editor — a raw-JSON textarea that accepts a malformed graph until the publish call rejects it is a worse affordance than none. The six `definition.*` permissions are therefore claimed by no screen yet, and the contract test asserts they stay off this one so the split remains a decision rather than a gap.
 
+<!-- historis:mulai -->
+
 > This section previously described `/admin/workflows` and `src/pages/admin/workflows/index.astro`. Neither existed in this repo — the text came over with the port. Because the module declared no `navigation`, the registry gate that catches a dangling path had nothing to check; docs are not gated the way descriptors are.
+
+<!-- historis:selesai -->
 
 ## Deferred (explicitly out of scope for Issue #747, not silently dropped)
 

@@ -31,7 +31,7 @@
  *    `rssEnabled`/`sitemapEnabled` — NOT duplicated into store (1): two
  *    independent, writable stores for the identical concept would be a real
  *    single-source-of-truth bug — an admin could flip "RSS enabled" off in
- *    the generic `/admin/modules/blog_content` settings panel while
+ *    the generic module settings store while
  *    `/blog/{tenantCode}/feed.xml.ts` keeps reading the OLD
  *    `awcms_blog_settings` value and stays enabled.
  *
