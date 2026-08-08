@@ -109,6 +109,21 @@ const ADR_ARTIFACT_MAP: readonly {
   {
     adrFile: "0021-reference-data-module-admission.md",
     artifacts: [["src/modules/reference-data", "src/modules/reference_data"]]
+  },
+  {
+    // ADR-0067 Opsi B — accepted 8 August 2026, not built. The promised
+    // artifact is the aggregate itself: Opsi B's whole point is that a raw
+    // per-visit row is never stored, so the domain file that does the
+    // aggregation IS the decision made executable. Pointing this entry at the
+    // endpoint or the migration instead would let a raw-row implementation
+    // satisfy the gate.
+    adrFile: "0067-core-web-vitals-collection.md",
+    artifacts: [
+      [
+        "src/modules/visitor-analytics/domain/web-vitals-aggregate.ts",
+        "src/modules/visitor-analytics/domain/web_vitals_aggregate.ts"
+      ]
+    ]
   }
 ];
 

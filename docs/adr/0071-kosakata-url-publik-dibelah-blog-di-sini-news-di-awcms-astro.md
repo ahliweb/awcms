@@ -117,41 +117,49 @@ Yang **tidak** bertahan: keluarga rutenya sendiri (§A), gerbang
 `withHostResolvedBlogTenant` yang hanya melayaninya (§B), saklar
 `publicRouteMode`, dan deklarasi `"/news"` pada `blog_content.api.routes` (§D).
 
-### 4. Rute `/news/**` di repo ini dihapus — dan itu BELUM dilakukan
+### 4. Rute `/news/**` di repo ini dihapus
 
-- **Status pelaksanaan §4:** BELUM DILAKSANAKAN
+- **Status pelaksanaan §4:** SUDAH DILAKSANAKAN
 
-Empat rute masih ada di `src/pages/news/` saat ADR ini
-mendarat, dan `publicRouteMode` masih `domain_default` sebagai nilai bawaan
-modul — artinya `/news/**` **menyala** untuk setiap tenant yang tidak
-mematikannya. Aturan di atas berlaku sejak hari ini; kodenya menyusul di PR-nya
-sendiri.
+Saat ADR ini mendarat, empat rute masih ada di `src/pages/news/` dan
+`publicRouteMode` masih `domain_default` sebagai nilai bawaan modul — artinya
+`/news/**` **menyala** untuk setiap tenant yang tidak mematikannya. Aturan di
+atas berlaku sejak hari itu; kodenya menyusul di PR tersendiri, dan urutan itu
+dipilih: menghapus keluarga rute yang menyala secara bawaan adalah migrasi URL,
+dan migrasi URL yang digabungkan dengan keputusan yang melahirkannya menghasilkan
+satu PR yang tidak bisa di-review sebagai keduanya.
 
-Itu bukan kelalaian melainkan urutan yang dipilih: menghapus keluarga rute yang
-menyala secara bawaan adalah migrasi URL, dan migrasi URL yang digabungkan dengan
-keputusan yang melahirkannya menghasilkan satu PR yang tidak bisa di-review
-sebagai keduanya.
+Jendela itu kini tertutup. Yang mendarat:
 
-PR implementasinya wajib membawa, sekaligus:
+1. Empat berkas rute dihapus. `src/pages/news/` tidak ada lagi.
+2. **301 dari `/news/**` ke `/blog/{tenantCode}/**`**, bukan 404 — URL yang sudah
+   diiklankan sitemap dan feed repo ini tidak mati tanpa penerus. Ia hidup di
+   `seo_distribution` sebagai **strategi 1 yang dibalik**: berkas yang dulu
+   memetakan `/blog/{tenantCode}` → `/news` (`domain/legacy-blog-redirect.ts`)
+   diganti `domain/retired-news-redirect.ts` yang memetakan arah sebaliknya.
+   Redirect ini **tidak** ber-policy: keluarga rutenya hilang untuk semua orang,
+   jadi tidak ada yang bisa memilih untuk tetap dilayani. Ia juga sengaja tidak
+   digerbangi `seo_distribution` yang aktif — menggerbanginya berarti tenant yang
+   mematikan modul itu justru yang URL terbitnya mati.
+3. **Satu syarat tetap berlaku, dan ia menjaga invarian §3**: tenant dengan
+   `legacyTenantRouteEnabled: false` tidak mendapat redirect. Ia sudah mematikan
+   seluruh permukaan konten publiknya, jadi 301 ke `/blog/{tenantCode}` akan
+   menyerahkan 404 yang pasti. "Jangan pernah mengiklankan URL yang tidak kita
+   layani" berlaku untuk tujuan redirect, bukan hanya untuk entri sitemap.
+4. **Auto-redirect legacy `/blog/{tenantCode}` → `/news` dimatikan** bersama
+   berkasnya. Kolom `legacy_blog_redirect_enabled` (`sql/060`) **tidak** dihapus —
+   migrasi terapan immutable, dan permukaan API-nya sudah terbit — tetapi tidak
+   ada lagi yang membacanya. Ia kini benar-benar inert, dan untuk alasan yang
+   diputuskan alih-alih kebetulan.
+5. Tabel §C menciut menjadi dua baris; `publicRouteMode`,
+   `withHostResolvedBlogTenant`, dan `padUnresolvedHostRouteLatency` dicabut;
+   `"/news"` keluar dari `blog_content.api.routes`.
 
-1. Hapus `src/pages/news/{index,[slug]}.ts` dan `src/pages/news/{category,tag}/[slug].ts`.
-2. **301 dari `/news/**` ke `/blog/{tenantCode}/**`** untuk tenant yang punya
-   `tenantCode` — bukan 404. URL yang sudah diiklankan sitemap dan feed repo ini
-   tidak boleh mati tanpa penerus.
-3. **Matikan auto-redirect legacy `/blog/{tenantCode}` → `/news`.** Arahnya
-   terbalik di bawah aturan ini: ia akan mengirim lalu lintas ke keluarga yang
-   repo ini tidak lagi layani. Kolom `legacy_blog_redirect_enabled` (`sql/060`)
-   tidak dihapus — migrasi terapan immutable — tetapi resolusinya berhenti
-   memakainya, dan komentarnya menyatakan kenapa.
-4. Ciutkan tabel §C menjadi dua baris; hapus `publicRouteMode` dan
-   `withHostResolvedBlogTenant`; cabut `"/news"` dari `blog_content.api.routes`.
-5. Balik baris **Status pelaksanaan §4** di atas menjadi `SUDAH DILAKSANAKAN`.
-
-Butir 5 bukan formalitas: `tests/url-vocabulary-split.test.ts` mengikat penanda
-itu pada keberadaan `src/pages/news/` **dua arah**. Selama rutenya ada, ADR ini
-wajib berkata BELUM; begitu rutenya hilang, ADR ini wajib berkata SUDAH, pada PR
-yang sama. Aturan tanpa pemeriksa adalah aturan yang dilupakan, dan aturan yang
-menjadwalkan pekerjaan untuk "nanti" adalah yang paling sering dilupakan.
+Penanda di atas bukan formalitas: `tests/url-vocabulary-split.test.ts` mengikatnya
+pada keberadaan `src/pages/news/` **dua arah**, dan ia memang memerah di antara
+penghapusan rute dan pembalikan penanda ini. Aturan tanpa pemeriksa adalah aturan
+yang dilupakan, dan aturan yang menjadwalkan pekerjaan untuk "nanti" adalah yang
+paling sering dilupakan.
 
 ## Konsekuensi
 

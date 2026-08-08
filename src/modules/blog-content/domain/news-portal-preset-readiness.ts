@@ -25,18 +25,14 @@
  * ## Naming reconciliation #2 — no new `BLOG_PUBLIC_ROUTE_MODE` var
  *
  * Issue #632's body also lists `BLOG_PUBLIC_ROUTE_MODE=domain_default`.
- * That string is not a new concept — it is the EXISTING
- * `blog_content` module setting `publicRouteMode`
- * (`blog-content/application/public-route-settings.ts`,
- * `PUBLIC_ROUTE_MODES = ["domain_default", "disabled"]`, Issue #564),
- * already defaulting to `"domain_default"` today for every tenant. It is a
- * per-tenant `awcms_module_settings` value (written via
- * `PATCH /api/v1/tenant/modules/blog_content/settings`), not an env var —
- * introducing an env var of the same name would create two competing
- * sources of truth for one concept. This preset recommends (documents,
- * does not enforce via a new mechanism) that a tenant activating
- * `news_portal_full_online_r2` leaves `blog_content`'s `publicRouteMode`
- * at its default `"domain_default"` and sets the relevant
+ * That string named the `blog_content` module setting `publicRouteMode`,
+ * which governed the host-resolved `/news/**` family — and BOTH were removed
+ * by ADR-0071 §4, which made `/news/**` `ahliweb/awcms-astro`'s vocabulary.
+ * There is nothing left for that line of the issue to configure: this repo
+ * serves `/blog/{tenantCode}` and nothing else, gated by
+ * `legacyTenantRouteEnabled`. What remains recommended (documented, not
+ * enforced via a new mechanism) is that a tenant activating
+ * `news_portal_full_online_r2` sets the relevant
  * `awcms_tenant_domains` row's existing `route_mode` column
  * (`tenant-domain/domain/tenant-domain-validation.ts`,
  * `canonical` | `legacy_blog`, Issue #557) to `"canonical"` via the

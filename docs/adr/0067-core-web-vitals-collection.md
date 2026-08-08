@@ -1,16 +1,19 @@
 # ADR-0067 — Pengumpulan Core Web Vitals: keputusan, bukan cacat
 
-- **Status:** Proposed — **menunggu keputusan pemilik produk**
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb (belum diambil)
+- **Status:** Accepted (belum diimplementasikan)
+- **Keputusan:** Opsi D (mendarat 5 Agustus 2026) + **Opsi B** (diputuskan 8 Agustus 2026, belum dibangun — §Adendum 2026-08-08)
+- **Tanggal:** 2026-08-04 (keputusan RUM: 2026-08-08)
+- **Pengambil keputusan:** @ahliweb
 - **Terkait:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §5 (rekomendasi #7), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (cache tepi), [ADR-0064](0064-foreign-key-columns-must-be-index-reachable.md) (gerbang performa pertama)
 
-> **Kenapa ADR ini `Proposed` dan bukan `Accepted`.** Enam rekomendasi lain dari
+> **Kenapa ADR ini `Proposed` selama empat hari.** Enam rekomendasi lain dari
 > asesmen 4 Agustus 2026 sudah mendarat. Yang ini **tidak**, dengan sengaja: ia
 > satu-satunya yang bukan memperbaiki cacat, melainkan **menambah pengumpulan
 > data tentang pengunjung nyata** — dan itu bertabrakan dengan postur yang modul
 > tujuannya sudah nyatakan. Keputusannya milik pemilik produk, bukan milik orang
 > yang menulis asesmennya.
+>
+> **Keputusan itu diambil pada 8 Agustus 2026 — lihat §Adendum 2026-08-08.**
 
 ## Konteks
 
@@ -179,3 +182,56 @@ Batas yang §Opsi D wajibkan, dan cara adendum ini memenuhinya:
    ber-komentar "angka LAB satu mesin — detektor regresi, bukan p75 lapangan",
    dan log per-run mencetak kalimat yang sama. **INP tidak diukur dan tidak
    diklaim** — tanpa interaksi pengguna nyata ia tidak bermakna di lab.
+
+## Adendum 2026-08-08 — Opsi B diambil; bagian RUM berhenti menggantung
+
+**Pemilik produk mengambil Opsi B.** Bagian RUM yang sengaja ditinggalkan pada
+4 Agustus kini punya jawaban, dan ADR ini pindah dari `Proposed` ke
+`Accepted (belum diimplementasikan)`.
+
+Yang diambil persis Opsi B sebagaimana tertulis, tanpa pelonggaran:
+
+- **Agregasi di titik masuk.** Server tidak pernah menyimpan sampel per-kunjungan;
+  ia meng-`UPSERT` ke bucket per-(tenant, pola rute, hari, metrik). Tidak ada
+  tabel baris mentah, tidak ada URL penuh, tidak ada identitas, tidak ada join ke
+  sesi.
+- **Opsi C tetap DITOLAK.** Kalau drill-down per-kunjungan suatu saat dibutuhkan,
+  ia ADR-nya sendiri dengan kebutuhannya tertulis — bukan perluasan diam-diam
+  atas keputusan ini.
+- **Postur privasi `visitor_analytics` tidak dibalik.** Justru sebaliknya: karena
+  tak ada detail pengunjung mentah yang tersimpan, `purge` tidak punya apa pun
+  untuk dihapus dan janji modulnya berdiri apa adanya.
+
+### Kenapa statusnya berkualifikasi, dan apa yang menegakkannya
+
+`Accepted (belum diimplementasikan)`, bukan `Accepted` polos, karena tak satu
+baris pun dari §"Bila Opsi B diambil, bentuknya" sudah dibangun. Kualifikasi itu
+**digerbangi**: ADR ini kini punya entri di peta
+`tests/adr-implementation-status.test.ts`, yang menegakkannya dua arah — selama
+artefaknya belum ada, kualifikasi wajib; begitu artefaknya mendarat, kualifikasi
+wajib dicabut pada PR yang sama.
+
+Artefak yang dipetakan adalah
+`visitor-analytics/domain/web-vitals-aggregate.ts` — **agregatnya**, bukan
+endpoint-nya dan bukan migrasinya. Itu disengaja: inti Opsi B adalah bahwa baris
+mentah tidak pernah disimpan, jadi berkas yang melakukan agregasi adalah
+keputusan ini dalam bentuk yang bisa dieksekusi. Memetakannya ke endpoint akan
+membiarkan implementasi baris-mentah memuaskan gerbangnya.
+
+### Yang harus dibawa PR implementasinya, di luar §"Bila Opsi B diambil, bentuknya"
+
+`POST /api/v1/analytics/vitals` adalah **permukaan tulis publik tanpa
+autentikasi** — kelas permukaan yang paling sedikit dimiliki repo ini. Ia karena
+itu wajib membawa, dan di-review sebagai, hal-hal yang permukaan publik lain di
+sini sudah bawa:
+
+1. `checkSharedRateLimit` ([ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md))
+   dan batas badan permintaan, keduanya sebelum satu baris pun ditulis.
+2. Normalisasi rute ke **POLA** sebelum penyimpanan, dengan daftar pola yang
+   diturunkan dari rute yang benar-benar ada — sebuah `route_pattern` yang
+   diterima apa adanya dari klien adalah kolom yang diisi penyerang.
+3. Nilai metrik yang divalidasi rentangnya. Sampel tak terbatas dari klien tak
+   tepercaya adalah cara paling langsung membuat p75 sebuah tenant tak berarti.
+4. `VISITOR_ANALYTICS_ENABLED` tetap menjadi saklarnya. Instalasi baru tetap
+   tidak mengumpulkan apa pun sampai operator memilihnya — Opsi B menambah apa
+   yang dikumpulkan saat saklar itu menyala, bukan mengubah bawaannya.

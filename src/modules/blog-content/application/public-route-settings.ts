@@ -1,19 +1,23 @@
 /**
- * Effective "public route" settings for `blog_content`'s TWO public route
- * families — host-resolved `/news/**` (ADR-0059) and legacy
+ * Effective "public route" settings for `blog_content`'s public route family
  * `/blog/{tenantCode}` (Issue #540, ADR-0009).
  *
- * Each family has its own independent on/off switch, and that separation is
- * deliberate: they resolve their tenant differently (request host vs path
- * segment) and serve different deployments, so one switch governing both would
- * make an offline/LAN operator's choice depend on an online routing concept.
+ * There used to be two families. The host-resolved `/news/**` family (ADR-0059)
+ * and its `publicRouteMode` switch were removed by
+ * [ADR-0071](../../../../docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+ * §4, which split the family's URL vocabulary: `/blog/**` is this repo's
+ * permanent vocabulary and `/news/**` belongs to `ahliweb/awcms-astro`. A
+ * retirement 301 for the old family lives in `seo_distribution`
+ * (`domain/retired-news-redirect.ts`), and it reads
+ * `legacyTenantRouteEnabled` below for the one condition that survived: a
+ * tenant with no `/blog/**` must not be redirected to it.
  *
  * `publicBasePath`/`publicLabel` — the two further keys the archived
- * awcms-micro carries — are NOT adopted (ADR-0059 §4): they change only the
+ * awcms-micro carries — were NOT adopted (ADR-0059 §4), and that reasoning
+ * outlives the family it was written for: they change only the
  * self-referential links a page emits and cannot move the file-based route that
  * actually serves, so setting either to anything but the physical path
- * manufactures per-tenant URLs that 404. The physical root is a constant,
- * `HOST_RESOLVED_PUBLIC_BASE_PATH`.
+ * manufactures per-tenant URLs that 404.
  *
  * Deliberately reads from TWO existing, already-authoritative stores
  * instead of inventing a third:
@@ -43,39 +47,13 @@ import { fetchModuleSettingsView } from "../../module-management/application/mod
 
 const BLOG_CONTENT_MODULE_KEY = "blog_content";
 
-/**
- * The physical route root of the host-resolved family (ADR-0059 §A). A
- * CONSTANT, not a setting: an Astro file route cannot be repointed per tenant
- * at runtime, so a configurable value here would only change the links a page
- * emits — see this file's header.
- */
-export const HOST_RESOLVED_PUBLIC_BASE_PATH = "/news";
-
-/**
- * `domain_default` = the host-resolved `/news/**` family serves per
- * `PUBLIC_TENANT_RESOLUTION_MODE` (ADR-0010). `disabled` collapses every route
- * in that family to the same generic 404 an unresolved host already produces.
- * Scoped to `/news/**` only — `/blog/{tenantCode}` has `legacyTenantRouteEnabled`.
- */
-export const PUBLIC_ROUTE_MODES = ["domain_default", "disabled"] as const;
-export type PublicRouteMode = (typeof PUBLIC_ROUTE_MODES)[number];
-
 export type EffectivePublicRouteSettings = {
-  publicRouteMode: PublicRouteMode;
   legacyTenantRouteEnabled: boolean;
   rssEnabled: boolean;
   sitemapEnabled: boolean;
 };
 
-const DEFAULT_PUBLIC_ROUTE_MODE: PublicRouteMode = "domain_default";
 const DEFAULT_LEGACY_TENANT_ROUTE_ENABLED = true;
-
-function isPublicRouteMode(value: unknown): value is PublicRouteMode {
-  return (
-    typeof value === "string" &&
-    (PUBLIC_ROUTE_MODES as readonly string[]).includes(value)
-  );
-}
 
 /**
  * Reads both stores and returns one merged, defensively-normalized view.
@@ -100,9 +78,6 @@ export async function fetchEffectivePublicRouteSettings(
   const effective = moduleSettingsView?.effective ?? {};
 
   return {
-    publicRouteMode: isPublicRouteMode(effective.publicRouteMode)
-      ? effective.publicRouteMode
-      : DEFAULT_PUBLIC_ROUTE_MODE,
     legacyTenantRouteEnabled:
       typeof effective.legacyTenantRouteEnabled === "boolean"
         ? effective.legacyTenantRouteEnabled
@@ -113,25 +88,24 @@ export async function fetchEffectivePublicRouteSettings(
 }
 
 /**
- * The canonical/`<loc>`/feed base path for a tenant — ADR-0059 §C, and the one
- * rule that keeps `seo_distribution` from advertising a URL nothing serves.
+ * The canonical/`<loc>`/feed base path for a tenant — the one rule that keeps
+ * `seo_distribution` from advertising a URL nothing serves.
  *
- * `null` means BOTH families are switched off: the tenant has no public content
- * URL at all, so the correct sitemap is an empty one, not one full of links
- * that are certain to 404. Pure (no DB) so the rule itself is directly
- * testable; the caller supplies the tenant code the legacy family needs.
+ * ADR-0059 §C gave this three rows, because there were two families to choose
+ * between. ADR-0071 §4 removed one of them, so it is down to two: the tenant
+ * either serves `/blog/{tenantCode}` or it serves no public content at all.
+ * `null` is that second case, and it is the row that carries the rule — the
+ * correct sitemap for a tenant with its public surface off is an EMPTY one, not
+ * one full of links that are certain to 404. That invariant is restated in
+ * ADR-0071 §3 precisely so it did not lapse when ADR-0059 was superseded.
+ *
+ * Pure (no DB) so the rule itself is directly testable; the caller supplies the
+ * tenant code.
  */
 export function resolvePublicContentBasePath(
-  settings: Pick<
-    EffectivePublicRouteSettings,
-    "publicRouteMode" | "legacyTenantRouteEnabled"
-  >,
+  settings: Pick<EffectivePublicRouteSettings, "legacyTenantRouteEnabled">,
   tenantCode: string
 ): string | null {
-  if (settings.publicRouteMode !== "disabled") {
-    return HOST_RESOLVED_PUBLIC_BASE_PATH;
-  }
-
   return settings.legacyTenantRouteEnabled ? `/blog/${tenantCode}` : null;
 }
 

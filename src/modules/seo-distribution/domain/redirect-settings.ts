@@ -13,12 +13,22 @@ export const URL_CHANGE_AUTO_POLICIES: readonly UrlChangeAutoPolicy[] = [
 
 export type RedirectSettings = {
   /**
-   * When true AND the tenant has a verified primary host, `/blog/{tenantCode}...`
-   * 301-redirects to the canonical `/news...` equivalent. ADR-0039 called this INERT
-   * because this base shipped no `/news` route family; **ADR-0059 landed that
-   * family**, so it fires for real now. Default false still means today's behavior
-   * is unchanged, but flipping it on is a content-URL migration — a 301 is cached by
-   * browsers and intermediaries and is not undone by setting this back to false.
+   * RETIRED — nothing reads this any more, and that is a decision rather than an
+   * oversight.
+   *
+   * It used to mean: 301 `/blog/{tenantCode}...` to the canonical `/news...`
+   * equivalent. ADR-0039 shipped it inert (no `/news` family existed), ADR-0059
+   * gave it a real destination, and ADR-0071 §4 removed that destination again —
+   * `/news/**` is `ahliweb/awcms-astro`'s vocabulary now, so this direction
+   * points at a family this repo does not serve. The redirect that survives runs
+   * the OTHER way (`application/redirect-resolution-service.ts` strategy 1,
+   * `domain/retired-news-redirect.ts`) and is NOT policy-gated.
+   *
+   * The field stays because its column (`sql/060`) is an applied migration —
+   * immutable, checksummed by `scripts/db-migrate.ts` — and because its API
+   * surface (`GET`/`PATCH /api/v1/seo/redirects/settings`) has already shipped.
+   * Removing either would be a breaking change bought for nothing; a value that
+   * is read by no one costs a row and a line of documentation.
    */
   legacyBlogRedirectEnabled: boolean;
   /** Default action when a URL change is captured. Default 'propose' (never auto-activate live traffic silently). */

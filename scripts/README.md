@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-75 target menjalankan berkas di `scripts/`; 30 di antaranya
+76 target menjalankan berkas di `scripts/`; 31 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -58,6 +58,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `db:tenant-context:check`                | `tenant-context-usage-check.ts`                | ✅   |
 | `db:work-class:check`                    | `work-class-registry-check.ts`                 | ✅   |
 | `db:work-class:generate`                 | `work-class-registry-generate.ts`              | —    |
+| `deps:audit:check`                       | `dependency-audit-check.ts`                    | ✅   |
 | `domain-events:dispatch`                 | `domain-events-dispatch.ts`                    | —    |
 | `edge-cache:purge`                       | `edge-cache-purge.ts`                          | —    |
 | `edge-cache:surfaces:check`              | `edge-cache-surfaces-check.ts`                 | ✅   |
