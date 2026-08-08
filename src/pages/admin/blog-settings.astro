@@ -1,0 +1,321 @@
+---
+/**
+ * Blog settings console — tenant blog identity, listing, and discovery flags.
+ *
+ * Fifth sibling of `/admin/blog` (posts), `/admin/blog-pages` (pages),
+ * `/admin/blog-taxonomy` (terms), and `/admin/blog-presentation`.
+ *
+ * ## Why this screen had to exist
+ *
+ * `GET`/`PATCH /api/v1/blog/settings` shipped complete with Issue #543 —
+ * guarded inside `withTenant`, audited, validated — and had **zero UI
+ * consumers**. `rssEnabled`/`sitemapEnabled` decide whether a tenant's feed and
+ * sitemap are served at all, and until now the only way to change either was
+ * `curl`. A capability an operator cannot reach is a capability the deployment
+ * does not really have.
+ *
+ * ## This is NOT the module-settings screen, and the difference is load-bearing
+ *
+ * `/admin/modules/blog_content` (Module Management, generic) writes
+ * `awcms_module_settings` — the per-tenant override of the module descriptor's
+ * `settings.defaults`, which today is `legacyTenantRouteEnabled` alone. THIS
+ * screen writes `awcms_blog_settings`, a different table with a different
+ * permission (`blog_content.settings.*`) and a different endpoint.
+ *
+ * The module README records that two-store split as a deliberate decision
+ * ("**two** existing, already-authoritative stores — deliberately not a third
+ * one"), so the risk here is not a missing store but a duplicated CONTROL: two
+ * screens offering what looks like "blog settings" while writing different
+ * rows. This screen therefore renders **nothing** from the module-settings
+ * store and links to the generic screen for it, rather than mirroring the
+ * field. A mirrored field is the one that goes stale silently, because whichever
+ * screen is edited second wins and neither says so.
+ *
+ * ## Fields deliberately NOT on this screen
+ *
+ * The endpoint accepts more than this form sends, and the absences are choices:
+ *
+ * - `contentQualityChecklistPolicy` — a nested override map of per-rule
+ *   severities. Rendering it as a JSON textarea (the pattern
+ *   `/admin/blog-presentation` uses for its complex sub-arrays) would put a
+ *   publish-blocking policy behind a free-text field with no per-rule
+ *   validation feedback. It deserves its own control, not a corner of this one.
+ * - `socialPreviewFallbackImageMediaId` — a media object id. Typing a UUID is
+ *   not a media picker, and `/admin/media` already owns choosing an object.
+ *   Offering a raw id field here would invite pasting an id from another
+ *   tenant, which the endpoint correctly rejects — as a validation error the
+ *   operator cannot act on.
+ *
+ * Both remain reachable through the API, and both are named here so their
+ * absence reads as a decision rather than an oversight.
+ *
+ * ## Writes go through the endpoint, never the database
+ *
+ * Same rule as every sibling console: SSR reads through the application layer,
+ * every mutation is a client `fetch()` to the guarded/audited endpoint. The
+ * page's own permission checks are defence in depth — enforcement stays in
+ * `authorizeInTransaction` inside the route.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { getDatabaseClient } from "../../lib/database/client";
+import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import {
+  fetchBlogSettings,
+  type BlogSettingsView
+} from "../../modules/blog-content/application/blog-settings-directory";
+
+const ssr = Astro.locals.ssrContext!;
+
+const canRead = ssr.permissions.has(
+  permissionKey("blog_content", "settings", "read")
+);
+
+// One permission gates every field on this form. `sql/036` seeds no
+// per-field write permission, so inventing one in the UI would imply an
+// authority no `authorizeInTransaction` call would honour.
+const canConfigure = ssr.permissions.has(
+  permissionKey("blog_content", "settings", "configure")
+);
+
+let settings: BlogSettingsView | null = null;
+let loadError: string | null = null;
+
+if (canRead) {
+  try {
+    const sql = getDatabaseClient();
+
+    settings = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
+      fetchBlogSettings(tx, ssr.tenantId)
+    );
+  } catch (error) {
+    logAdminPageError("admin.blog_settings.load_failed", error, {
+      moduleKey: "blog_content"
+    });
+    loadError = "Gagal memuat pengaturan blog.";
+  }
+}
+
+const VISIBILITY_OPTIONS = ["public", "private"] as const;
+---
+
+<AdminLayout title="Blog settings">
+  <h1>Blog settings</h1>
+
+  {
+    !canRead && (
+      <p class="admin-empty">
+        Anda tidak punya permission <code>blog_content.settings.read</code>.
+      </p>
+    )
+  }
+
+  {loadError && <p class="admin-error">{loadError}</p>}
+
+  {
+    canRead && settings && (
+      <>
+        {!canConfigure && (
+          <p class="admin-note">
+            Hanya baca — mengubah butuh{" "}
+            <code>blog_content.settings.configure</code>.
+          </p>
+        )}
+
+        <p class="admin-error" id="settings-error" hidden />
+        <p class="admin-note" id="settings-ok" hidden>
+          Tersimpan.
+        </p>
+
+        <form id="blog-settings-form" class="admin-form">
+          <fieldset disabled={!canConfigure}>
+            <legend>Identitas</legend>
+
+            <label>
+              Judul blog
+              <input
+                type="text"
+                name="blogTitle"
+                maxlength="200"
+                required
+                value={settings.blogTitle}
+              />
+            </label>
+
+            <label>
+              Deskripsi
+              <textarea name="blogDescription" maxlength="500" rows="3">
+                {settings.blogDescription ?? ""}
+              </textarea>
+            </label>
+
+            <legend>Daftar</legend>
+
+            <label>
+              Post per halaman
+              <input
+                type="number"
+                name="postsPerPage"
+                min="1"
+                max="100"
+                required
+                value={String(settings.postsPerPage)}
+              />
+            </label>
+
+            <label>
+              Locale bawaan
+              <input
+                type="text"
+                name="defaultLocale"
+                required
+                value={settings.defaultLocale}
+              />
+            </label>
+
+            <label>
+              Visibilitas bawaan
+              <select name="defaultVisibility">
+                {VISIBILITY_OPTIONS.map((option) => (
+                  <option
+                    value={option}
+                    selected={settings!.defaultVisibility === option}
+                  >
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <legend>Discovery</legend>
+
+            {/*
+              These two decide whether `seo_distribution` serves this tenant's
+              feed and sitemap at all. They are the reason the screen exists.
+            */}
+            <label class="admin-checkbox">
+              <input
+                type="checkbox"
+                name="rssEnabled"
+                checked={settings.rssEnabled}
+              />
+              RSS aktif
+            </label>
+
+            <label class="admin-checkbox">
+              <input
+                type="checkbox"
+                name="sitemapEnabled"
+                checked={settings.sitemapEnabled}
+              />
+              Sitemap aktif
+            </label>
+
+            <legend>SEO bawaan</legend>
+
+            <label>
+              Judul SEO bawaan
+              <input
+                type="text"
+                name="seoDefaultTitle"
+                maxlength="200"
+                value={settings.seoDefaultTitle ?? ""}
+              />
+            </label>
+
+            <label>
+              Deskripsi SEO bawaan
+              <textarea name="seoDefaultDescription" maxlength="300" rows="2">
+                {settings.seoDefaultDescription ?? ""}
+              </textarea>
+            </label>
+
+            <button type="submit" id="blog-settings-save">
+              Simpan
+            </button>
+          </fieldset>
+        </form>
+
+        <p class="admin-note">
+          Saklar rute publik <code>legacyTenantRouteEnabled</code> BUKAN di sini
+          — ia setting modul, disimpan di <code>awcms_module_settings</code> dan
+          diedit lewat{" "}
+          <a href="/admin/modules/blog_content">/admin/modules/blog_content</a>.
+          Dicantumkan sebagai tautan, bukan disalin ke form ini: field yang
+          dicerminkan dua layar adalah field yang basi diam-diam.
+        </p>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
+  // `<script>` with no imports, and this app's CSP is `default-src 'self'`
+  // with no `'unsafe-inline'` — an inlined script is blocked and the page's
+  // behaviour dies silently. Importing forces an external `/_astro/*.js`.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const form = document.getElementById(
+    "blog-settings-form"
+  ) as HTMLFormElement | null;
+  const errorBox = document.getElementById("settings-error");
+  const okBox = document.getElementById("settings-ok");
+
+  function show(element: HTMLElement | null, message?: string): void {
+    if (!element) return;
+    if (message !== undefined) element.textContent = message;
+    element.hidden = false;
+  }
+
+  function hide(element: HTMLElement | null): void {
+    if (element) element.hidden = true;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    hide(errorBox);
+    hide(okBox);
+
+    const data = new FormData(form);
+    const text = (name: string): string => String(data.get(name) ?? "").trim();
+
+    // Empty optional text fields are sent as `null`, not `""`. The endpoint
+    // treats `null` as "clear it" and `""` as a validation error on the
+    // non-empty fields — sending `""` would surface as a rejection the
+    // operator cannot interpret from a blank box they never typed in.
+    const optional = (name: string): string | null => text(name) || null;
+
+    const body = {
+      blogTitle: text("blogTitle"),
+      blogDescription: optional("blogDescription"),
+      postsPerPage: Number(text("postsPerPage")),
+      defaultLocale: text("defaultLocale"),
+      defaultVisibility: text("defaultVisibility"),
+      rssEnabled: data.get("rssEnabled") !== null,
+      sitemapEnabled: data.get("sitemapEnabled") !== null,
+      seoDefaultTitle: optional("seoDefaultTitle"),
+      seoDefaultDescription: optional("seoDefaultDescription")
+    };
+
+    const button = document.getElementById(
+      "blog-settings-save"
+    ) as HTMLButtonElement | null;
+    const unlock = lockElement(button);
+
+    try {
+      const result = await sendJson("PATCH", "/api/v1/blog/settings", body);
+
+      if (!result.ok) {
+        show(errorBox, result.message ?? "Gagal menyimpan pengaturan.");
+        return;
+      }
+
+      show(okBox);
+    } finally {
+      unlock();
+    }
+  });
+</script>
