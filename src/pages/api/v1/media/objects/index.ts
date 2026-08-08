@@ -1,9 +1,6 @@
 import { fail, ok } from "../../../../../modules/_shared/api-response";
 import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
-import {
-  MEDIA_PERMISSION_ACTIVITY_CODE,
-  MEDIA_PERMISSIONS
-} from "../../../../../modules/media-library/domain/media-permissions";
+import { MEDIA_PERMISSION_ACTIVITY_CODE } from "../../../../../modules/media-library/domain/media-permissions";
 import { mediaLibraryPortAdapter } from "../../../../../modules/media-library/application/media-library-port-adapter";
 
 /**
