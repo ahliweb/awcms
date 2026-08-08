@@ -84,10 +84,11 @@ export const blogContentModule = defineModule({
    * `tests/admin-navigation-registry.test.ts` now fails on any entry whose
    * path has no page, in both directions.
    *
-   * Two entries for fifteen activity codes: the post lifecycle and the page
-   * lifecycle. Taxonomy, presentation, settings and homepage composition are
-   * still sibling screens, and each brings its own entry when its page lands —
-   * not before.
+   * FIVE entries for fifteen activity codes: the post lifecycle, the page
+   * lifecycle, taxonomy, presentation, and settings. Homepage composition is
+   * the one sibling screen still to come, and it brings its own entry when its
+   * page lands — not before. `tests/admin-blog-page-contract.test.ts` pins the
+   * count, so each arrival is a line someone edits deliberately.
    *
    * The pages entry is gated on `pages.read` rather than `posts.read`: they
    * are separate permissions, and an operator granted one and not the other

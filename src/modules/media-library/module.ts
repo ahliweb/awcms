@@ -36,11 +36,12 @@ import {
  *
  * PORT NOTES vs awcms-micro: this base ports the ownership inversion + the
  * enforcement-enable switch (micro step 5a). The media lifecycle/browser surface
- * (`/api/v1/media/objects/*`, `/admin/media` — micro step 5d), the responsive
- * `srcset` render path (step 5b), and the PDF media type (step 5c) are NOT ported
- * here, so this module declares no `navigation` yet (the `/admin/media` page it
- * would point at does not exist in this base) and its allowed MIME set stays the
- * four raster types.
+ * (`/api/v1/media/objects/*`, `/admin/media`) SINCE LANDED here — ADR-0056 built
+ * `/admin/media`, and `GET /api/v1/media/objects` resolves media references over
+ * HTTP — so this module DOES declare `navigation` (see the entry ~40 lines
+ * below, which contradicted this paragraph until 8 August 2026). Still absent:
+ * the responsive `srcset` render path and the PDF media type, so the allowed
+ * MIME set stays the four raster types.
  */
 export const mediaLibraryModule = defineModule({
   key: "media_library",
@@ -48,7 +49,7 @@ export const mediaLibraryModule = defineModule({
   version: "0.1.0",
   status: "active",
   description:
-    "Tenant-scoped media object registry and upload flow, reusable by every website module (ADR-0036, System Foundation). Owns `awcms_news_media_objects` (migrations 041/042/045) — a generic registry keyed by `module_key` with `owner_resource_type`/`owner_resource_id` references, direct-to-R2 presigned upload with real magic-byte MIME sniffing and server-side SHA-256 checksum verification, orphan lifecycle, and R2 reconciliation (the `news-media:reconcile` job). The table keeps its `news_media` name deliberately (ADR-0036 §3): it is referenced by three migrations and a hard composite FK from `awcms_news_portal_ad_placements`, so renaming would trade a cosmetic annoyance for real risk. Provides the `media_library` capability (`_shared/ports/media-library-port.ts`), whose sole consumer since ADR-0044 is `blog_content` — required, because the ad placements it absorbed from the retired `news_portal` module hold a real FK to a media object, while its post/page media handling no-ops for any tenant that has not switched enforcement on: media reference safety, resolution, and whether managed-media enforcement is active for a tenant (this module's own readiness plus its own per-tenant flag, migration 053) — so a brochure site gets managed media without a news portal. Turning that flag ON is a dedicated, readiness-gated, one-way switch (`POST /api/v1/media/enforcement`, migration 054). This module never transcodes bytes inside a DB transaction (ADR-0006), and is deliberately not a CDN, image proxy, or DAM. PORT DROPS vs awcms-micro: the media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media`), responsive `srcset` render, and PDF media type are not ported to this base.",
+    "Tenant-scoped media object registry and upload flow, reusable by every website module (ADR-0036, System Foundation). Owns `awcms_news_media_objects` (migrations 041/042/045) — a generic registry keyed by `module_key` with `owner_resource_type`/`owner_resource_id` references, direct-to-R2 presigned upload with real magic-byte MIME sniffing and server-side SHA-256 checksum verification, orphan lifecycle, and R2 reconciliation (the `news-media:reconcile` job). The table keeps its `news_media` name deliberately (ADR-0036 §3): it is referenced by three migrations and a hard composite FK from `awcms_news_portal_ad_placements`, so renaming would trade a cosmetic annoyance for real risk. Provides the `media_library` capability (`_shared/ports/media-library-port.ts`), whose sole consumer since ADR-0044 is `blog_content` — required, because the ad placements it absorbed from the retired `news_portal` module hold a real FK to a media object, while its post/page media handling no-ops for any tenant that has not switched enforcement on: media reference safety, resolution, and whether managed-media enforcement is active for a tenant (this module's own readiness plus its own per-tenant flag, migration 053) — so a brochure site gets managed media without a news portal. Turning that flag ON is a dedicated, readiness-gated, one-way switch (`POST /api/v1/media/enforcement`, migration 054). This module never transcodes bytes inside a DB transaction (ADR-0006), and is deliberately not a CDN, image proxy, or DAM. STILL ABSENT vs awcms-micro: responsive `srcset` render and the PDF media type. The media lifecycle/browser surface (`/api/v1/media/objects/*`, `/admin/media`) is NO LONGER absent — ADR-0056 built the admin screen and the object endpoints resolve media references over HTTP.",
   dependencies: ["tenant_admin", "identity_access"],
   type: "system",
   isCore: false,

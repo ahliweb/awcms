@@ -48,7 +48,7 @@ Setiap penyerapan = **satu PR atomic**, **adaptasi bukan salin**:
 `MODULE_CONTRACT_VERSION` **naik satu MINOR aditif per seam kontribusi baru** yang
 penyerapan ini butuhkan — perkiraan awal "tidak ada kenaikan kontrak" ternyata keliru.
 Dari `2.0.0` (ADR-0034): `2.1.0` `dataLifecycle` (#222), `2.2.0` `searchSources` (#231),
-`2.3.0` `commentableResources` (in-flight). `newsletterContentSources` akan jadi `2.4.0`.
+`2.3.0` `commentableResources`. `2.4.0` `api.routes` (#267) dan `2.5.0` `ModulePermissionDescriptor.scope` (ADR-0053) SUDAH memakai slot berikutnya, jadi `newsletterContentSources` akan jadi `2.6.0` — bukan `2.4.0` seperti tertulis sebelumnya.
 Tiap kenaikan **wajib** disertai pembaruan pin `contracts.moduleDescriptorContractVersion`
 di `awcms-family-compatibility.yaml`, atau `bun run family:conformance:check` merah.
 

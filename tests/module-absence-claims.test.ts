@@ -48,7 +48,16 @@ import { listModules } from "../src/modules";
  * after a module key so an unrelated "belum ada" later in a long paragraph is
  * not attributed to it.
  */
-const ABSENCE = "(belum di-?port|belum ada|tidak ada di base)";
+const ABSENCE =
+  "(belum di-?port|belum ada|tidak ada di base|" +
+  // English phrasings, added 8 August 2026. The corpus grew to include
+  // `src/modules/**` (see targetFiles()), and module headers/READMEs are
+  // written in English — so the Indonesian-only list would have scanned the
+  // new files while matching nothing in them, which is the same
+  // silently-covers-nothing failure the `dot: true` note below records.
+  // Every phrasing here is one this repo actually used to deny a module that
+  // exists, not a hypothetical.
+  "not ported|unported|does not exist in this base|no longer exists)";
 
 /**
  * Files whose absence claims are legitimately frozen in time. Detected by
@@ -89,7 +98,19 @@ const EXONERATING = /SUDAH|kini |komponen|pustaka|Versi sebelumnya|no longer/i;
 async function targetFiles(): Promise<string[]> {
   const files: string[] = [];
 
-  for (const pattern of [".claude/skills/*/SKILL.md", "docs/awcms/*.md"]) {
+  for (const pattern of [
+    ".claude/skills/*/SKILL.md",
+    "docs/awcms/*.md",
+    // Added 8 August 2026. `data-lifecycle/README.md` carried the SAME
+    // sentence this gate was built to catch — "`form_drafts`/`newsletter`/
+    // `comments` (unported in this base) are not registered as adopters" —
+    // while both are real `dataLifecycle` adopters in `listModules()`. It sat
+    // one directory outside the corpus. A module's own README and descriptor
+    // header are the MOST load-bearing place for this claim, because they are
+    // what a reader consults before touching that module.
+    "src/modules/*/README.md",
+    "src/modules/*/module.ts"
+  ]) {
     for await (const file of new Bun.Glob(pattern).scan({
       cwd: process.cwd(),
       dot: true
@@ -117,6 +138,11 @@ describe("docs and skills do not deny registered modules", () => {
     expect(files.filter((f) => f.startsWith("docs/")).length).toBeGreaterThan(
       20
     );
+    // Third corpus asserted separately for the same reason as the first two:
+    // a glob that resolves to zero passes every check below vacuously.
+    expect(
+      files.filter((f) => f.startsWith("src/modules/")).length
+    ).toBeGreaterThan(20);
 
     for (const file of files) {
       const body = await readFile(file, "utf8");
