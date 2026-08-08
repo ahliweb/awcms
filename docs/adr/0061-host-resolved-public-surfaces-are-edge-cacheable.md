@@ -5,6 +5,15 @@
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (cache tepi Varnish, allow-list surface, §8 kunci surrogate), [ADR-0009](0009-public-tenant-scoped-routes.md) (rute publik path-based `/blog/{tenantCode}`), [ADR-0010](0010-public-host-tenant-routing.md) (resolusi tenant dari host), [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md) (rute discovery di root host), [ADR-0059](0059-host-resolved-public-content-routes.md) (keluarga konten `/news/**`)
 
+> **Satu premis §A gugur, sisanya tidak.** [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+> (8 Agustus 2026) menjadikan `/blog/{tenantCode}` kosakata **permanen** repo
+> ini, bukan bentuk warisan. Kesimpulan §A bahwa "cache tepi mempercepat bentuk
+> warisan dan tidak menyentuh bentuk maju sama sekali" karena itu tidak lagi
+> berlaku untuk keluarga konten: bentuk yang di-cache justru bentuk yang
+> dipertahankan, dan ia path-scoped sehingga sudah bisa di-cache hari ini.
+> Analisis selebihnya — rute discovery root, yang tetap host-resolved dan tetap
+> tak punya kunci per-host — **tidak berubah**, dan ADR ini tidak di-supersede.
+
 ## Konteks
 
 ### 1. Sumber tenant nomor satu tidak pernah punya penulis

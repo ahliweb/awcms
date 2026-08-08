@@ -1,9 +1,23 @@
 # ADR-0059 — Rute konten publik host-resolved: keluarga `/news/**`, bukan `/blog/{slug}`
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
 - **Tanggal:** 2026-08-03
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** [ADR-0009](0009-public-tenant-scoped-routes.md) (rute publik path-based `/blog/{tenantCode}`), [ADR-0010](0010-public-host-tenant-routing.md) (resolusi tenant dari host + `PUBLIC_TENANT_RESOLUTION_MODE`), [ADR-0038](0038-seo-distribution-module-admission-discovery-scope.md) (rute discovery + seam `seo_facts`), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (surface cache tepi), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (preseden: kepemilikan pindah, nama permukaan tidak), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (kemampuan dibangun di sini, bukan di-port)
+
+> **Dibaca sebagai sejarah.** [ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+> (8 Agustus 2026) membelah kosakata URL publik keluarga: `/blog/**` milik repo
+> ini, `/news/**` milik `awcms-astro`. Keluarga rute yang ADR ini daratkan karena
+> itu **tidak dibangun di sini** — yang dicabut alamatnya, bukan kemampuannya.
+> Dua keputusan di bawah **tetap berlaku** dan dinyatakan ulang di ADR-0071 §3
+> supaya tidak ikut gugur: invarian §C ("jangan pernah mengiklankan URL yang
+> tidak kita layani") dan penolakan §E mendeklarasikan surface cache tepi
+> host-resolved sebelum kunci per-host diverifikasi. Kalimat ADR ini sengaja
+> tidak ditulis ulang (Aturan 2 indeks ADR).
+>
+> Rutenya masih ada di `src/pages/news/` saat banner ini ditulis; ADR-0071 §4
+> menjadwalkan penghapusannya dan `tests/url-vocabulary-split.test.ts`
+> menegakkan jadwal itu dua arah.
 
 ## Konteks
 
