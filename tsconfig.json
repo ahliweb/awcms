@@ -9,7 +9,9 @@
     "types": ["bun"],
     "checkJs": true,
     "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [".astro/types.d.ts", "scripts/**/*", "src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]

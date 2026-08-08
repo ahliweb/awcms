@@ -297,11 +297,23 @@ export async function runJob(
   }
 
   const controller = new AbortController();
-  let timedOut = false;
+  // `terminatedBy` is the ONLY abort-cause variable, deliberately. There used
+  // to be a `timedOut` flag beside it, written by the timer below and never
+  // read once — the classification at the `race === "aborted"` branch derives
+  // "timeout" by elimination instead. Two writers where only one is read is
+  // how a status flag rots into a lie, so the unread one is gone rather than
+  // kept "for symmetry".
+  //
+  // The invariant that makes elimination sound, stated here because it is what
+  // a third abort source would silently break: `controller` is created in this
+  // function and never escapes it except as the read-only `signal` handed to
+  // `definition.handler`, so the ONLY two `abort()` callers are the timer
+  // immediately below and the signal handlers immediately after. Anything
+  // adding a third MUST make the classification positive again — otherwise its
+  // aborts are reported to the job log as timeouts that never happened.
   let terminatedBy: NodeJS.Signals | null = null;
 
   const timer = setTimeout(() => {
-    timedOut = true;
     controller.abort();
   }, timeoutMs);
   // Never let this timer alone keep the process alive.

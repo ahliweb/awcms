@@ -99,12 +99,21 @@ async function isSeoDistributionEnabled(
  * awcms (no `/news` route family, policy off by default). Returns a redirect
  * resolution or `null` (not a legacy path / policy off / no canonical host — fall
  * through to normal serving).
+ *
+ * `_request`/`_env` are unused ON PURPOSE and keep the underscore rather than
+ * being dropped: both strategies are called through the same
+ * `(sql, request, options, env)` shape by `resolvePublicRedirect` below, and
+ * strategy 1 identifies its tenant from the PATH (`/blog/{tenantCode}`) while
+ * strategy 2 identifies it from the request HOST. Trimming the parameters here
+ * would make the two call sites diverge and force the dispatcher to remember
+ * which strategy takes what. The underscore is what tells `noUnusedParameters`
+ * — and the next reader — that this is a shared signature, not an oversight.
  */
 async function resolveLegacyBlogRedirect(
   sql: Bun.SQL,
-  request: Request,
+  _request: Request,
   options: ResolveRedirectOptions,
-  env: NodeJS.ProcessEnv
+  _env: NodeJS.ProcessEnv
 ): Promise<RedirectResolution | null> {
   const parsed = parseLegacyBlogPath(options.pathname);
   if (!parsed) return null;
