@@ -13,14 +13,19 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  adminPageExists,
+  checkCitedAdminPaths,
   checkCitedAdrs,
   checkCitedPaths,
   checkCitedRunTargets,
   extractCitedAdrNumbers,
   extractCitedRunTargets,
+  extractCitedAdminPaths,
   extractCitedSourcePaths,
   isKnownRunTarget,
+  moduleReadmePaths,
   stripAspirationalBlocks,
+  stripHistoricalBlocks,
   subjectModuleKey
 } from "../scripts/skills-check";
 
@@ -302,6 +307,104 @@ describe("§9.6 — the aspirational exemption is scoped to a block", () => {
     const unterminated = "<!-- aspirational:mulai -->\ncites `src/x.ts`";
 
     expect(stripAspirationalBlocks(unterminated)).toBe(unterminated);
+  });
+});
+
+describe("rule 5 — cited `/admin/…` screens exist", () => {
+  const pages = exists([
+    "src/pages/admin/site-search.astro",
+    "src/pages/admin/blog-presentation.astro",
+    "src/pages/admin/tenant/domains.astro"
+  ]);
+
+  test("the ORIGINAL defect: a screen declared missing that had shipped", () => {
+    // `awcms-site-search` listed `/admin/search` under "Yang BELUM ada (jangan
+    // klaim ada)" while `src/pages/admin/site-search.astro` was in the repo —
+    // wrong about existence AND about the URL, so a reader is sent to build
+    // what exists, at an address that does not.
+    const problems = checkCitedAdminPaths(
+      "awcms-site-search",
+      ["/admin/search"],
+      pages
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("/admin/search");
+  });
+
+  test("the screen that actually ships passes", () => {
+    expect(
+      checkCitedAdminPaths("awcms-site-search", ["/admin/site-search"], pages)
+    ).toEqual([]);
+  });
+
+  test("a nested page resolves through its directory index too", () => {
+    expect(adminPageExists("/admin/tenant/domains", pages)).toBe(true);
+    expect(
+      adminPageExists(
+        "/admin/tenant",
+        exists(["src/pages/admin/tenant/index.astro"])
+      )
+    ).toBe(true);
+  });
+
+  test("a query string is not part of the address", () => {
+    // `/admin/blog-presentation?section=widgets` is where widgets really live;
+    // the skill that claimed `/admin/blog/widgets` was wrong about the page,
+    // not about the section.
+    expect(
+      extractCitedAdminPaths(
+        "widgets: `/admin/blog-presentation?section=widgets`"
+      )
+    ).toEqual(["/admin/blog-presentation"]);
+  });
+
+  test.each([
+    ["a wildcard", "`/admin/blog/*`"],
+    ["an ellipsis", "`/admin/master-data/idn-regions/...`"],
+    ["a route param", "`/admin/modules/[moduleKey]`"]
+  ])("%s is a pattern, not an address, and is skipped", (_label, source) => {
+    expect(extractCitedAdminPaths(source)).toEqual([]);
+  });
+
+  test("line-initial paths are claims too — that is where route MAPS live", () => {
+    // The worst instance was a fenced block listing fourteen `/admin/blog/*`
+    // addresses, none of them backticked; matching only backticked citations
+    // would have read that block and found nothing to check.
+    expect(
+      extractCitedAdminPaths(
+        "```txt\n/admin/blog/posts    -> daftar post\n/admin/blog/tags     -> manajer tag\n```"
+      )
+    ).toEqual(["/admin/blog/posts", "/admin/blog/tags"]);
+  });
+
+  test("a fenced historical passage may name a screen that never existed", () => {
+    // `workflow-approval`'s README says `/admin/workflows` "never existed in
+    // this repo" — a sentence that has to be able to name it.
+    const source =
+      "<!-- historis:mulai -->\nDulu tertulis `/admin/workflows`.\n<!-- historis:selesai -->";
+
+    expect(extractCitedAdminPaths(stripHistoricalBlocks(source))).toEqual([]);
+  });
+
+  test("an UNCLOSED historical fence does not exempt the rest of the file", () => {
+    // Otherwise one stray marker silently disables the rule from that point on.
+    const source =
+      "<!-- historis:mulai -->\nDulu `/admin/a`.\nSekarang `/admin/b`.";
+
+    expect(extractCitedAdminPaths(stripHistoricalBlocks(source))).toEqual([
+      "/admin/a",
+      "/admin/b"
+    ]);
+  });
+
+  test("the module-README corpus is not empty", async () => {
+    // A glob resolving to nothing would make rule 5's wider — and more
+    // authoritative — half pass vacuously.
+    const readmes = await moduleReadmePaths();
+
+    expect(readmes.length).toBeGreaterThanOrEqual(15);
+    expect(readmes).toContain("src/modules/blog-content/README.md");
   });
 });
 

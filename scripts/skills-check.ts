@@ -277,6 +277,140 @@ export function extractCitedSourcePaths(source: string): string[] {
   ];
 }
 
+/**
+ * Rule 5 — every backticked `/admin/...` URL must resolve to a page that exists.
+ *
+ * Rules 1 and 3 govern SOURCE paths, and that left the claim readers act on most
+ * ungoverned: a skill does not usually say "`src/pages/admin/site-search.astro`
+ * exists", it says "the screen is `/admin/search`". Four such claims shipped,
+ * and each fails in a direction that costs work:
+ *
+ * - `awcms-site-search` listed `/admin/search` under "Yang BELUM ada (jangan
+ *   klaim ada)" while `src/pages/admin/site-search.astro` had shipped — wrong
+ *   about existence AND about the URL, so a reader is sent to build a screen
+ *   that is there, at an address that is not.
+ * - `awcms-blog-content` claimed `/admin/blog/widgets` and `/admin/blog/ads`
+ *   "sudah ada sejak #543". `src/pages/admin/blog/` has never existed; widgets
+ *   live at `/admin/blog-presentation?section=widgets`, and ads have no screen
+ *   at all.
+ * - `blog_content`'s README carried a 14-line map of `/admin/blog/*` URLs of
+ *   which exactly one resolves.
+ *
+ * ## The corpus includes module READMEs, and that is the point
+ *
+ * `src/modules/<name>/README.md` is MORE authoritative than a skill for anyone
+ * touching the module, and it is not gated the way descriptors are — the same
+ * asymmetry `tests/module-absence-claims.test.ts` had to close for absence
+ * claims. Restricting this rule to `.claude/skills` would gate the derivative
+ * and leave the source.
+ *
+ * ## What it does not do
+ *
+ * Paths carrying `...`, `*`, or a `{param}`/`[param]` segment are skipped: those
+ * are patterns, not addresses. Query strings and fragments are trimmed —
+ * `/admin/blog-presentation?section=widgets` is a real address whose page is
+ * `blog-presentation.astro`. Text inside `<!-- historis:mulai -->` fences is
+ * exempt, the same convention `tests/url-vocabulary-split.test.ts` uses, because
+ * a paragraph explaining that `/admin/workflows` never existed has to be able to
+ * name it.
+ */
+export function extractCitedAdminPaths(source: string): string[] {
+  const joined = source.replace(
+    /`(\/admin\/[^`]*?)`/g,
+    (_match, cited: string) => `\`${cited.replace(/\s+/g, "")}\``
+  );
+
+  return [
+    ...new Set(
+      [
+        ...joined.matchAll(/`(\/admin[A-Za-z0-9_./?=&#-]*)`/g),
+        // Line-initial too, because that is where route MAPS live — and the
+        // worst instance of this defect was one: `blog_content`'s README opened
+        // a fenced block titled as its admin routes and listed fourteen
+        // `/admin/blog/*` addresses, of which exactly one resolved. Backticked
+        // citations alone would have read that block and found nothing to
+        // check.
+        ...joined.matchAll(/^\s*(\/admin[A-Za-z0-9_./?=&#-]*)/gm)
+      ]
+        .map((match) => match[1]!.split(/[?#]/)[0]!)
+        .map((cited) => cited.replace(/\/+$/, ""))
+        .filter(
+          (cited) =>
+            cited.length > 0 &&
+            !cited.includes("...") &&
+            !cited.includes("*") &&
+            !/[{}[\]<>]/.test(cited)
+        )
+    )
+  ];
+}
+
+/** Does a cited `/admin/...` URL have a page behind it? */
+export function adminPageExists(
+  cited: string,
+  fileExists: (candidate: string) => boolean
+): boolean {
+  const base = `src/pages${cited}`;
+
+  return fileExists(`${base}.astro`) || fileExists(`${base}/index.astro`);
+}
+
+export function checkCitedAdminPaths(
+  skill: string,
+  citedPaths: readonly string[],
+  fileExists: (candidate: string) => boolean
+): SkillProblem[] {
+  const missing = citedPaths.filter(
+    (cited) => !adminPageExists(cited, fileExists)
+  );
+
+  if (missing.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      skill,
+      message:
+        `names admin screens that do not exist: ${missing.join(", ")}. ` +
+        "Point at the page that ships (check `src/pages/admin/`), or — if the " +
+        "text is deliberately recording a screen that never existed — fence it " +
+        "with `<!-- historis:mulai -->` … `<!-- historis:selesai -->`."
+    }
+  ];
+}
+
+const HISTORICAL_OPEN = "<!-- historis:mulai -->";
+const HISTORICAL_CLOSE = "<!-- historis:selesai -->";
+
+/** Blank out fenced historical passages, preserving line count. */
+export function stripHistoricalBlocks(source: string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+
+  for (;;) {
+    const open = source.indexOf(HISTORICAL_OPEN, cursor);
+    if (open === -1) {
+      parts.push(source.slice(cursor));
+      break;
+    }
+
+    parts.push(source.slice(cursor, open));
+    const close = source.indexOf(HISTORICAL_CLOSE, open);
+
+    if (close === -1) {
+      // An unclosed fence must not exempt the rest of the file.
+      parts.push(source.slice(open + HISTORICAL_OPEN.length));
+      break;
+    }
+
+    parts.push(source.slice(open, close).replace(/[^\n]/g, ""));
+    cursor = close + HISTORICAL_CLOSE.length;
+  }
+
+  return parts.join("");
+}
+
 /** Extract every `ADR-NNNN` reference. */
 export function extractCitedAdrNumbers(source: string): string[] {
   return [
@@ -335,6 +469,24 @@ export function checkCitedAdrs(
     }));
 }
 
+/**
+ * Every `src/modules/<name>/README.md` that exists. Asserted non-empty by the
+ * caller: a glob that resolves to nothing would make rule 5's wider half pass
+ * vacuously, which is the failure mode `tests/module-absence-claims.test.ts`
+ * records from its own first draft.
+ */
+export async function moduleReadmePaths(): Promise<string[]> {
+  const files: string[] = [];
+
+  for await (const file of new Bun.Glob("src/modules/*/README.md").scan({
+    cwd: process.cwd()
+  })) {
+    files.push(file);
+  }
+
+  return files.sort();
+}
+
 async function main(): Promise<void> {
   const liveModuleKeys = new Set(listModules().map((module) => module.key));
   const packageScripts = new Set(
@@ -390,6 +542,52 @@ async function main(): Promise<void> {
         skill in ASPIRATIONAL_SKILLS
       )
     );
+
+    // Rule 5. Aspirational skills are exempt for the same reason rule 1 exempts
+    // them: their subject does not exist, so neither do its screens.
+    if (!(skill in ASPIRATIONAL_SKILLS)) {
+      problems.push(
+        ...checkCitedAdminPaths(
+          skill,
+          extractCitedAdminPaths(stripHistoricalBlocks(gated)),
+          existsSync
+        )
+      );
+    }
+  }
+
+  // Rule 5 over module READMEs. Same rule, wider corpus — and the wider half is
+  // the authoritative one: a README is what a person reads before touching the
+  // module, while a skill is what an agent follows.
+  const moduleReadmes = await moduleReadmePaths();
+
+  // A corpus that resolved to nothing would make rule 5’s wider half pass
+  // vacuously — the failure mode this repo has already shipped once.
+  if (moduleReadmes.length === 0) {
+    problems.push({
+      skill: "src/modules",
+      message:
+        "no module README matched the rule 5 corpus glob — the check would pass vacuously."
+    });
+  }
+
+  for (const moduleReadme of moduleReadmes) {
+    // Both fences apply, and they mean different things: `aspirational` marks a
+    // TARGET spec (a design for screens that would be built), `historis` marks a
+    // record of what was once believed. `blog_content`'s README carries the
+    // first — a labelled `(spesifikasi mini)` route tree — and the labels were
+    // prose until now, readable by people and invisible to this gate.
+    const source = stripHistoricalBlocks(
+      stripAspirationalBlocks(await readFile(moduleReadme, "utf8"))
+    );
+
+    problems.push(
+      ...checkCitedAdminPaths(
+        moduleReadme,
+        extractCitedAdminPaths(source),
+        existsSync
+      )
+    );
   }
 
   // A listed exception that no longer needs one is itself a stale claim — the
@@ -431,7 +629,8 @@ async function main(): Promise<void> {
   console.log(
     `skills:check OK — ${skillDirs.length} skills, ` +
       `${Object.keys(ASPIRATIONAL_SKILLS).length} declared aspirational/historical, ` +
-      `every cited src path, ADR and \`bun run\` target resolves.`
+      `${moduleReadmes.length} module READMEs, ` +
+      `every cited src path, ADR, \`bun run\` target and \`/admin/…\` screen resolves.`
   );
 }
 
