@@ -6,7 +6,7 @@ export type SyncConflictEvaluation =
 /**
  * Optimistic-concurrency conflict check for a pushed event against an
  * aggregate's known version. Generic (no domain knowledge of what the
- * aggregate represents) — applies to any derived app's aggregates.
+ * aggregate represents) — applies to any domain module's aggregates.
  */
 export function evaluatePushEventConflict(
   currentVersion: number,

@@ -9,7 +9,7 @@
  * explicitly, e.g. via `bun run email:templates:seed-defaults`).
  *
  * `derived.transactional` has no default here — it's an extension pattern
- * for derived apps to define their own copy, not a base default.
+ * for a domain module to define its own copy, not a base default.
  */
 import type { LocalizedTemplateTextInput } from "./email-template-validation";
 

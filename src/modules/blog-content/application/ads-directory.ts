@@ -235,7 +235,7 @@ type ActiveAdRow = {
  * an unset bound means "no restriction on that side"). Not wired to any
  * route in this issue (same "tested public-safe helper, wiring is a later
  * issue's job" precedent `searchPublicBlogContent` set in #539) — a
- * derived app or #543's admin/public UI work calls this directly.
+ * domain module or #543's admin/public UI work calls this directly.
  */
 export async function listActiveAdsForPlacement(
   tx: Bun.SQL,

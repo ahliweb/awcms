@@ -37,7 +37,7 @@ import {
  * `sql/029_awcms_blog_content_presentation_schema.sql`'s header
  * comment), and `video_news` (Issue #639 — a safe, provider-allowlisted
  * video embed; never a raw stored `<iframe>`, see
- * `_shared/rendering/video-news-block-renderer.ts`'s header). A derived app
+ * `_shared/rendering/video-news-block-renderer.ts`'s header). A domain module
  * or later issue needing richer blocks (embed, table, ...) extends the
  * `switch` below, not a general raw-HTML escape hatch.
  */

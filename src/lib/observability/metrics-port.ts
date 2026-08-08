@@ -15,7 +15,7 @@
  * offline/LAN deployment that never calls `setMetricsPort` pays no runtime
  * cost and needs no external collector — satisfying the issue's "Offline/LAN
  * operation works with no external collector" guardrail by construction. A
- * derived application registers its own adapter (Prometheus text exposition,
+ * deployment registers its own adapter (Prometheus text exposition,
  * OpenTelemetry, anything else) via `setMetricsPort`; see
  * `./adapters/prometheus-text-adapter.ts` for a worked, dependency-free
  * example.

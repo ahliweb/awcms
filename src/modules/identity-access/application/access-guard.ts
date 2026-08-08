@@ -122,8 +122,9 @@ export type OwnershipGrant = {
  * coverage. If the guard opts in but NO port is supplied, `evaluateAccess`
  * default-denies (empty fact set) — fail-closed. Every existing 5-argument
  * call site (none of which sets a required scope) is completely unaffected.
- * The base ships only a no-op hierarchy adapter; a derived application passes
- * its own real resolver here.
+ * The base ships only a no-op hierarchy adapter; a domain module in
+ * `src/modules/` passes its own real resolver here (ADR-0034 removed the
+ * derived-application pathway that this sentence used to name).
  *
  * `options.sodRules` (Issue #181) is OPTIONAL — segregation-of-duties conflict
  * enforcement for HIGH-RISK actions runs at this chokepoint (deny-overrides-

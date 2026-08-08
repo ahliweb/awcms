@@ -17,7 +17,8 @@
  * `awcms_sod_conflict_evaluations` regardless of outcome, and denies
  * (`sod_conflict`) an un-excepted conflict. The base registry declares no SoD
  * rules, so `deps.sodRules` is empty in a pure base and this is a no-op there;
- * a derived application (or the fixture) contributes the rules. This is the
+ * a domain module in `src/modules/` (or the fixture) contributes the rules —
+ * ADR-0034 removed the derived-application pathway. This is the
  * assignment-time complement to `high-risk-sod-guard.ts`'s action-time
  * enforcement.
  */

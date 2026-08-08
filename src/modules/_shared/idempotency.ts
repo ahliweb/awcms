@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
  * generic `awcms_idempotency_keys` table (migration 009 — awcms-mini numbers
  * it 012, which this comment used to cite by mistake), first
  * consumed by the workflow decision endpoint (Issue 11.1) — any future
- * high-risk mutation endpoint in a derived app can reuse the same table with
+ * high-risk mutation endpoint in a domain module can reuse the same table with
  * its own `requestScope` string.
  *
  * Flow: same key + same request hash -> replay the stored response; same key

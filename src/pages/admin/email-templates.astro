@@ -10,7 +10,7 @@
  * ABAC guard + `validateCreateEmailTemplateInput` (restricted `templateKey`
  * category, localized-text shape, unsafe-HTML rejection) are the real
  * authority; the form gate is UX-only. `templateKey` is a fixed select of the
- * base categories (a derived app registers its own `derived.*` in code, not
+ * base categories (a domain module registers its own `derived.*` in code, not
  * from this form); subject/body are captured for the `en` locale — the endpoint
  * accepts the full `{ locale: text }` map, this UI seeds one locale.
  */

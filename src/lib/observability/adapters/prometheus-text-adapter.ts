@@ -4,7 +4,8 @@
  * WITHOUT coupling the core runtime to Prometheus, a SaaS, or a new
  * dependency (Bun-only, AGENTS.md rule 14 — this is plain TypeScript, no
  * `prom-client`/Node package). NOT registered anywhere by default; a
- * derived application wires it up itself:
+ * deployment wires it up itself (ADR-0034 removed the derived-application
+ * pathway; the wiring now happens at a composition root in this repo):
  *
  * ```ts
  * import { setMetricsPort } from "src/lib/observability/metrics-port";

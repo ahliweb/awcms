@@ -30,7 +30,7 @@
  * version every pinned conformance fixture/snapshot is anchored to.
  *
  * - MAJOR — a reusable control's SEMANTIC contract is weakened or removed in a
- *   way that breaks a derived application written against the previous family
+ *   way that breaks a CONSUMER written against the previous family
  *   contract (default-deny/RLS/redaction/audit/idempotency/envelope/migration-
  *   immutability semantics change). Treat every such change as breaking.
  * - MINOR — a new contract is added to the family, or an existing one is

@@ -306,7 +306,7 @@ type ActiveAdPlacementRow = {
  * public-safe helper, wiring is a later issue's job" precedent
  * `listActiveAdsForPlacement` (#542) set, and `homepage-section-composer.ts`
  * (#637) explicitly deferred `ad_slot` integration to this issue's R2-only
- * ad system existing first. A derived app or a later issue's homepage/
+ * ad system existing first. A domain module or a later issue's homepage/
  * article template work calls `selectAndRenderActiveAdsForPlacement`
  * directly.
  */

@@ -11,7 +11,8 @@ export type ModuleUsageEntry = {
  * Module usage summary (Issue 9.1, `GET /reports/module-usage`). Reports one
  * simple "has data" row-count signal per module registered in
  * `src/modules/index.ts` — deliberately generic, no domain-specific metrics
- * (derived applications add those in their own modules).
+ * (a domain module in `src/modules/` adds those in its own module — ADR-0034
+ * removed the derived-application pathway).
  *
  * `awcms_permissions` (the `reporting` module's own metric) is a
  * global, non-tenant-scoped catalog table (migration 005) — its count is

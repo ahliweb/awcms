@@ -162,7 +162,7 @@ export async function resolveBoundedAnnouncementTargets(
   return { recipients, truncated };
 }
 
-/** Unchanged signature kept for existing callers (and derived apps) that only need the list. */
+/** Unchanged signature kept for existing callers (and domain modules) that only need the list. */
 export async function resolveAnnouncementTargets(
   tx: Bun.SQL,
   tenantId: string,

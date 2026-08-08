@@ -337,8 +337,9 @@ export async function fetchModuleHealthReport(
 /**
  * Placeholder for a live, bounded, network-calling provider health check. No
  * module in this base declares an external provider yet, so this signal is
- * always `not_applicable` — but the seam is kept so a derived application (or
- * a future provider-backed base module) can add a real, timeout-bounded,
+ * always `not_applicable` — but the seam is kept so a domain module in
+ * `src/modules/` (or a future provider-backed base module) can add a real,
+ * timeout-bounded,
  * error-truncating check here. When one is added it must stay
  * `POST .../health/check`-only (never the passive `GET`), and its `detail`
  * must always be a fixed, generic string — never a raw provider error.
