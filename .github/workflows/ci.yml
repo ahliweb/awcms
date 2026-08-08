@@ -277,7 +277,7 @@ jobs:
         run: bun test tests/integration/ --timeout 60000
 
       - name: Run DB-gated integration tests (legacy ad-hoc suite)
-        # These 9 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
+        # These 15 files each open their own ad-hoc `Bun.SQL(DATABASE_URL)`
         # connection to the SAME database this job's harness step just used,
         # and were designed to run together (that is release.yml's original,
         # pre-`tests/integration/` DB-gated suite) — but NOT concurrently with
@@ -285,17 +285,34 @@ jobs:
         # step above's comment). Listed explicitly rather than relying on a
         # bare `bun test` so this suite can't silently regrow the collision
         # by pulling in `tests/integration/` again.
+        #
+        # The list is EXPLICIT, so it drifts silently — and it did. It was born
+        # with 10 entries and five more DB-gated files landed after it
+        # (#188/#189/#190/#191) without touching it, so 36 tests skipped in
+        # every pipeline while looking like coverage: MFA lockout/replay
+        # atomicity, cross-tenant denial on the four OIDC tables, Turnstile
+        # enforcement on the real login handler, and the office
+        # response-vs-schema contract. Each of those five files even documents
+        # that it "runs in the dedicated legacy `bun test <files>` step" — the
+        # step right here. `tests/db-gated-suite-ci-parity.test.ts` now holds
+        # this list to the filesystem in BOTH directions, so the next one
+        # cannot land quietly.
         run: >-
           bun test
           tests/audit-log-purge.test.ts
           tests/family-conformance-db.test.ts
           tests/keyset-pagination-precision-postgres.test.ts
+          tests/mfa-integration.test.ts
+          tests/mfa-login-e2e.test.ts
           tests/office-directory-postgres.test.ts
+          tests/oidc-integration.test.ts
+          tests/openapi-office-response-schema-postgres.test.ts
           tests/reporting-projection-rebuild-lock.test.ts
           tests/security-readiness-failclosed.test.ts
           tests/security-readiness-rls.test.ts
           tests/security-readiness-worker-setup-grants.test.ts
           tests/sync-hmac-versioned.test.ts
+          tests/turnstile-login-e2e.test.ts
           tests/workflow-approval-concurrency.test.ts
 
   minimum-supported:
