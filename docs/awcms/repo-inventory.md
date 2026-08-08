@@ -13,7 +13,7 @@
 | Tabel dengan `FORCE` RLS           | 115   |
 | Tabel RLS-free (global, by design) | 11    |
 | Berkas test                        | 313   |
-| Berkas route                       | 308   |
+| Berkas route                       | 309   |
 | ADR                                | 72    |
 
 ### Modul
@@ -282,7 +282,7 @@
 | Permukaan       | Berkas |
 | --------------- | ------ |
 | `/api/v1/**`    | 255    |
-| `/admin/**`     | 31     |
+| `/admin/**`     | 32     |
 | publik / anonim | 22     |
 
 <!-- END GENERATED: repo-inventory -->

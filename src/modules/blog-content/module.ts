@@ -117,6 +117,16 @@ export const blogContentModule = defineModule({
       path: "/admin/blog-presentation",
       order: 39,
       requiredPermission: "blog_content.templates.read"
+    },
+    {
+      // Gated on `settings.read`, not on any of the four above: an operator
+      // may hold blog authoring without holding the tenant's discovery
+      // switches, and `rssEnabled`/`sitemapEnabled` decide whether the feed
+      // and sitemap are served at all.
+      labelKey: "admin.layout.nav_blog_settings",
+      path: "/admin/blog-settings",
+      order: 40,
+      requiredPermission: "blog_content.settings.read"
     }
   ],
   permissions: [

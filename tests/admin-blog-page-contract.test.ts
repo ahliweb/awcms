@@ -365,21 +365,23 @@ describe("/admin/blog permission gates", () => {
     expect(nav!.requiredPermission).toBe("blog_content.posts.read");
     expect(declaredTriples().has(nav!.requiredPermission as Triple)).toBe(true);
 
-    // FOUR entries for fourteen activity codes: the post lifecycle, the page
-    // lifecycle (ADR-0057), taxonomy, and presentation (templates/menus/
-    // widgets/theme). Settings and homepage composition still bring their own
-    // entries when their pages land — the count is pinned so each arrival is a
-    // line someone edits deliberately. An entry appearing here without a page
-    // is what `admin-navigation-registry.test.ts` catches.
+    // FIVE entries: the post lifecycle, the page lifecycle (ADR-0057),
+    // taxonomy, presentation (templates/menus/widgets/theme), and — arriving
+    // 8 August 2026 — settings. Homepage composition still brings its own
+    // entry when its page lands; the count stays pinned so each arrival is a
+    // line someone edits deliberately, which is exactly what this assertion
+    // forced when `/admin/blog-settings` landed. An entry appearing here
+    // without a page is what `admin-navigation-registry.test.ts` catches.
     const navigation = listModules().find(
       (module) => module.key === "blog_content"
     )?.navigation;
 
-    expect(navigation).toHaveLength(4);
+    expect(navigation).toHaveLength(5);
     expect(navigation?.map((entry) => entry.path).sort()).toEqual([
       "/admin/blog",
       "/admin/blog-pages",
       "/admin/blog-presentation",
+      "/admin/blog-settings",
       "/admin/blog-taxonomy"
     ]);
 
