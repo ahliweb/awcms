@@ -309,6 +309,35 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-notes.md
 
+          # GitHub rejects a release body over 125,000 characters with a bare
+          # `HTTP 422: body is too long`, AFTER signing, attestation, and the
+          # image push have already succeeded — so the run dies with a published,
+          # signed, attested image and no release to point at it. v7.0.0's
+          # section was 186,449 characters and failed exactly here; v6.0.0's was
+          # 103,262, so the ceiling had been approaching for several releases
+          # without anything reporting the distance to it.
+          #
+          # Budget in BYTES against a 125,000-CHARACTER ceiling: for UTF-8 bytes
+          # are always >= characters, so a byte budget can only ever undercount,
+          # never overshoot. The margin also covers the footer appended below.
+          LIMIT=118000
+          SIZE=$(wc -c < release-notes.md)
+          echo "release notes: ${SIZE} bytes (ceiling 125000 chars)"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::warning::Release notes ${SIZE} B exceed ${LIMIT} B; truncating. Full text stays in CHANGELOG.md."
+            # head -c can split a UTF-8 sequence; cut back to the last complete
+            # line so the body never ends mid-character or mid-markdown.
+            head -c "$LIMIT" release-notes.md | head -n -1 > release-notes.trunc.md
+            {
+              printf '\n\n---\n\n'
+              printf '**Catatan rilis dipotong.** Isi lengkapnya %s karakter, di atas batas %s karakter milik GitHub.\n\n' "$SIZE" "125000"
+              printf 'Teks utuh: [CHANGELOG.md pada %s](https://github.com/%s/blob/%s/CHANGELOG.md)\n' \
+                "${GITHUB_REF_NAME}" "${GITHUB_REPOSITORY}" "${GITHUB_REF_NAME}"
+            } >> release-notes.trunc.md
+            mv release-notes.trunc.md release-notes.md
+            echo "truncated to $(wc -c < release-notes.md) bytes"
+          fi
+
       - name: Publish GitHub Release (real release only)
         if: github.event_name == 'push'
         env:
