@@ -71,6 +71,27 @@ mempersempit kata "seluruh" di ADR-0051 — bukan men-supersede-nya):
   USER wajib juga bisa dikelola dari `/admin/*` di sini — jadi urutan kerjanya
   **`awcms` dulu, selalu**.
 
+### Kosakata URL publik dibelah ([ADR-0071](docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md))
+
+Satu keluarga rute per repo, **dan tidak pernah keduanya di satu repo**:
+
+| Kosakata   | Repo          | Bentuknya                                                                   |
+| ---------- | ------------- | --------------------------------------------------------------------------- |
+| `/blog/**` | `awcms` (ini) | `/blog/{tenantCode}/**` — path-scoped, ADR-0009                             |
+| `/news/**` | `awcms-astro` | sebuah tab bernama `news` ber-`urutanSeksi: "terbaru"` (ADR-0033 repo sana) |
+
+Yang dibelah adalah **URL, bukan kepemilikan konten**: keduanya dilayani modul
+`blog_content` yang sama di sini, dan repo sebelah membacanya lewat
+`GET /api/v1/blog/posts` (beku, ADR-0065). **Jangan menambah rute publik
+`/news/**` di repo ini** — ADR-0071 men-supersede ADR-0059 yang dulu
+membolehkannya.
+
+> **Jendela yang masih terbuka.** Empat rute `/news/**` ADR-0059 MASIH ADA di
+> `src/pages/news/` dan `publicRouteMode` masih `domain_default` (menyala secara
+> bawaan). ADR-0071 §4 menjadwalkan penghapusannya beserta 301-nya ke
+> `/blog/{tenantCode}/**`; `tests/url-vocabulary-split.test.ts` menegakkan jadwal
+> itu dua arah, jadi jendelanya tidak bisa terlupakan.
+
 Tiga hal yang mudah keliru:
 
 - **Repo bukan gerbang keamanan.** ADR-0048 memindahkan _layar_ aktivasi dataset
