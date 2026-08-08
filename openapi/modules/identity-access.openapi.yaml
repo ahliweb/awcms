@@ -1527,7 +1527,10 @@ paths:
         `reject`. The account is created with an UNUSABLE password and the
         applicant is emailed a password-reset link; `delivery` reports whether
         that link could actually be queued. `roleIds` is optional and defaults
-        to none — an approval never grants a role by default.
+        to none — an approval never grants a role by default, and a SYSTEM role
+        (`owner`) is refused with 409 `ROLE_SYSTEM_PROTECTED`: admitting a
+        person to a tenant is not the authority to hand out the tenant's whole
+        permission catalogue.
       parameters:
         - name: id
           in: path
@@ -1584,7 +1587,10 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: An account with that login identifier already exists.
+          description: >-
+            `IDENTIFIER_TAKEN` — an account with that login identifier already
+            exists; or `ROLE_SYSTEM_PROTECTED` — one of `roleIds` names a system
+            role, which no approval may grant.
           content:
             application/json:
               schema:

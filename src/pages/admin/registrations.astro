@@ -59,10 +59,17 @@ if (canRead) {
       loadError = true;
     } else {
       requests = result.requests;
-      roles = result.roles.map((role) => ({
-        id: role.id,
-        roleCode: role.roleCode
-      }));
+      // System roles are dropped here because the endpoint refuses them (409
+      // `ROLE_SYSTEM_PROTECTED`). Rendering `owner` in this picker offered a
+      // control that either escalated privilege or — once the service started
+      // refusing it — failed in the reviewer's face for no reason they could
+      // read. This is presentation only; the refusal is the endpoint's.
+      roles = result.roles
+        .filter((role) => !role.isSystem)
+        .map((role) => ({
+          id: role.id,
+          roleCode: role.roleCode
+        }));
     }
   } catch {
     loadError = true;
