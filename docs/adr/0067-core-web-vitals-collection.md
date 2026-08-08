@@ -19,7 +19,11 @@
 
 ### 1. Yang benar-benar hilang
 
-Repo ini melayani HTML nyata: `/news/**` (ADR-0059), `/blog/{tenantCode}/**`
+Repo ini melayani HTML nyata: `/news/**` (ADR-0059 — **sudah tidak berlaku**,
+[ADR-0071](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+menghapus keluarga rute itu dari repo ini pada 8 Agustus 2026; kalimat aslinya
+dipertahankan karena ia benar saat ADR ini ditulis dan ruang lingkup keputusan
+di bawah menyusut karenanya), `/blog/{tenantCode}/**`
 (ADR-0009), dan 31 layar admin. **LCP / INP / CLS tidak pernah diukur di mana
 pun**, dan tidak ada anggaran ukuran aset.
 

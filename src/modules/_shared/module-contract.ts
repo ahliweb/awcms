@@ -760,6 +760,15 @@ export type HighVolumeTableDescriptor = {
  * every base `module.ts` that omits `commentableResources` stays valid
  * unchanged.
  *
+ * `2.4.0` (Issue #256, PR #267) — added `ModuleApiContract.routes`, making
+ * route ownership DERIVABLE instead of inferred from a single `basePath`.
+ * `tenant_admin` had declared `basePath: "/api/v1"` — a prefix of every route
+ * in the application — so longest-prefix resolution handed it 36 routes it does
+ * not own. MINOR: purely additive, `basePath` keeps its display/docs meaning.
+ * This entry was MISSING from this changelog until 8 August 2026, which is how
+ * `absorb-awcms-micro-roadmap.md` came to reserve `2.4.0` for a seam that had
+ * not landed while the slot was already taken.
+ *
  * `2.5.0` (ADR-0053) — added the optional `ModulePermissionDescriptor.scope`
  * field plus the `ModulePermissionScope` exported type — MINOR: purely
  * additive, and omitting it means `"tenant"`, which is exactly what every

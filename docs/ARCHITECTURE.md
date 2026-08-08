@@ -68,11 +68,16 @@ src/modules/<module>/
 
 - **`idn-admin-regions`** (`type: "system"`) — dirintis langsung di sini ([ADR-0046](adr/0046-idn-admin-regions-module-admission.md), #312, `sql/080` skema + `sql/081` permission): master data wilayah administratif Indonesia (provinsi/kabupaten-kota/kecamatan/desa-kelurahan) **ber-versi & ter-provenance**, disumber dari dataset komunitas `cahyadsn/wilayah` (MIT) yang di-**vendor** di `data/idn-admin-regions/`. Dua tabelnya (`awcms_idn_region_datasets`, `awcms_idn_admin_regions`) **GLOBAL** — tanpa `tenant_id`, tanpa RLS, seperti `awcms_permissions`/`awcms_modules` — karena provinsi "Aceh" adalah baris yang sama untuk setiap tenant; keduanya terdaftar di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` (`scripts/security-readiness.ts`) sehingga privilese per-role wajib dideklarasikan eksplisit, bukan diwarisi DML massal. Yang global adalah **barisnya**, bukan izinnya: setiap endpoint tetap melewati sesi + konteks tenant + ABAC default-deny. Impor 91.599 baris adalah **job deployment** (`bun run idn-regions:import`, dry-run secara default, berjalan sebagai `awcms_worker`) — bukan panggilan HTTP; **aktivasi/rollback** versi dataset kini juga **job operator** (`bun run idn-regions:activate`/`:rollback`, [ADR-0052](adr/0052-idn-region-dataset-lifecycle-is-an-operator-job.md) — endpoint HTTP-nya dihapus dan permission-nya dicabut dari katalog, `sql/084`). Lookup baca-saja di `/api/v1/idn-regions/*`. Kini **punya `navigation`** dan layar admin `/admin/idn-regions` (PR #332): ADR-0048 di-supersede [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md), seluruh layar admin **SISTEM** dibangun di repo ini (dipersempit [ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md); `idn_admin_regions` adalah contoh murninya — dataset yang dilayani ke banyak tenant tidak akan pernah menjadi pekerjaan USER).
 
-Modul lain di ekosistem keluarga (mis. `newsletter`,
-`social-publishing`, `document-infrastructure`, `integration-hub`)
-**belum di-port** ke repo ini — lihat
-skill masing-masing (ditandai "BACAAN SAJA") + [`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
-untuk spesifikasi target & urutan porting.
+Kapabilitas lain di ekosistem keluarga (mis. `newsletter`,
+`social-publishing`, `document-infrastructure`, `integration-hub`) **belum ada**
+di repo ini. Sejak [ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)
+kata "**port**" tidak lagi berlaku untuk apa pun di daftar ini: `awcms-mini` dan
+`awcms-micro` adalah **ARSIP**, boleh dibaca sebagai spesifikasi tetapi bukan
+sumber port, dan kapabilitas baru **DIBANGUN di sini** lewat ADR admission-nya
+sendiri. Skill masing-masing (ditandai "BACAAN SAJA") dan
+[`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)
+karena itu dibaca sebagai **daftar kebutuhan + spesifikasi target**, bukan
+antrean porting.
 
 ### Komposisi & validasi registry modul (ADR-0034)
 

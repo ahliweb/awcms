@@ -282,6 +282,11 @@ var (e.g. `AUDIT_LOG_RETENTION_DAYS`) — never re-declared here.
   holding both a `critical` conflict. Real archive/purge remains job-only — the
   screen has no control for it because there is no HTTP surface to call.
 - **Partitioning is guidance only**: no automation.
-- **Deferred consumers**: `form_drafts`/`newsletter`/`comments` (unported in this
-  base) are not registered as adopters here; re-add their descriptors + guard
-  wiring when those modules land.
+- **Adopters**: `form_drafts` and `comments` ARE registered here — both declare
+  real `dataLifecycle` descriptors (`form-drafts/module.ts`,
+  `comments/module.ts`). This bullet used to read "unported in this base … not
+  registered as adopters", the same sentence
+  `tests/module-absence-claims.test.ts` was built to catch in skills; it sat one
+  directory outside that gate's corpus until the corpus was widened to
+  `src/modules/**`. `newsletter` is the only one still absent, and under
+  ADR-0055 it is BUILT here with its own admission ADR, not ported.
