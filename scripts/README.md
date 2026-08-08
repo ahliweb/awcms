@@ -30,6 +30,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | Target                                   | Skrip                                          | Gate |
 | ---------------------------------------- | ---------------------------------------------- | ---- |
 | `access:chokepoint:check`                | `access-chokepoint-check.ts`                   | ✅   |
+| `access:decision-log:coverage:check`     | `access-decision-log-coverage-check.ts`        | ✅   |
 | `access:permissions:enforcement:check`   | `permission-enforcement-check.ts`              | ✅   |
 | `admin:screen-coverage:check`            | `admin-screen-coverage-check.ts`               | ✅   |
 | `analytics:purge`                        | `visitor-analytics-purge.ts`                   | —    |
