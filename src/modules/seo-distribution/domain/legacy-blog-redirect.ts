@@ -5,16 +5,28 @@
  * primary host server-side, builds the absolute URL, and validates it through the
  * frozen open-redirect guard.
  *
- * ## INERT in awcms (ADR-0039)
+ * ## LIVE since ADR-0059 — it was INERT when ADR-0039 wrote this
  *
- * awcms ships NO `/news` route family, so even though this mapping and the
- * `legacy_blog_redirect_enabled` policy column (DEFAULT false) are ported for
- * schema/behavioral parity with awcms-micro, the legacy-blog auto-redirect NEVER
- * fires in this base: the policy is off by default, and were an operator to enable
- * it, the computed `/news...` destination has no content route to serve. It is kept
- * so a future `/news` port (or a derived app that ships `/news`) inherits a
- * ready, already-guarded mechanism rather than re-deriving it. Not a tenant-authored
- * rule and not a pattern engine — one fixed, bounded structural rewrite.
+ * ADR-0039 kept this mapping for schema/behavioral parity with awcms-micro while
+ * awcms shipped NO `/news` route family: the computed destination had nothing to
+ * serve, so enabling the policy was a no-op. **That is no longer true.**
+ * [ADR-0059](../../../../docs/adr/0059-host-resolved-public-content-routes.md)
+ * landed the host-resolved `/news/**` family — `/news`, `/news/{slug}`,
+ * `/news/category/{slug}`, `/news/tag/{slug}` — and every path this mapping can
+ * produce now resolves to one of them.
+ *
+ * So the toggle has teeth. `legacy_blog_redirect_enabled` is still `DEFAULT false`
+ * and nothing changes for an operator who leaves it alone, but turning it on now
+ * **permanently 301s** live `/blog/{tenantCode}...` traffic to the tenant's
+ * canonical host. A 301 is cached by browsers and intermediaries; it is not a
+ * setting that can be undone by flipping the column back. Treat enabling it as a
+ * content-URL migration, not as a preference.
+ *
+ * What has NOT changed: the destination is still built by the resolution service
+ * (which resolves the tenant by code, derives the primary host server-side, and
+ * validates the absolute URL through the frozen open-redirect guard), and this is
+ * still not a tenant-authored rule and not a pattern engine — one fixed, bounded
+ * structural rewrite.
  */
 
 /** A tenant-code is a bounded slug (mirrors `resolvePublicTenantByCode`'s own input expectations). */

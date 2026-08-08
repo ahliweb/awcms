@@ -165,8 +165,20 @@ The redirect-governance scope completes the module (migrations `sql/060` schema 
   API body-ceiling are untouched.
 
 **awcms adaptations (ADR-0039):** tenant resolution is host-based-only first cut
-(path-tenant deferred); the legacy `/blog/{tenantCode}` → `/news` rewrite is INERT (no
-`/news` route family, policy off by default); `locale` is always null (no i18n seam).
+(path-tenant deferred); `locale` is always null (no i18n seam).
+
+**The legacy `/blog/{tenantCode}` → `/news` rewrite is no longer INERT.** ADR-0039
+called it inert because this base shipped no `/news` route family; **ADR-0059 landed
+that family**, so every destination the rewrite can produce now resolves (see
+§Documented follow-ups below, where the same closure is recorded). The policy column
+`legacy_blog_redirect_enabled` is still `DEFAULT false` — nothing changes for an
+operator who leaves it alone — but enabling it now **permanently 301s** live
+`/blog/{tenantCode}` traffic to the tenant's canonical host. A 301 is cached by
+browsers and intermediaries and is not undone by setting the column back to false, so
+enabling it is a content-URL migration, not a preference. The `sql/060` comment still
+carries the old ADR-0039 wording; applied migrations are checksummed and immutable
+(`scripts/db-migrate.ts`), so this README and
+`domain/legacy-blog-redirect.ts` are where the correction lives.
 
 ## Documented follow-ups (out of discovery scope)
 

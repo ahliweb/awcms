@@ -14,11 +14,11 @@ export const URL_CHANGE_AUTO_POLICIES: readonly UrlChangeAutoPolicy[] = [
 export type RedirectSettings = {
   /**
    * When true AND the tenant has a verified primary host, `/blog/{tenantCode}...`
-   * 301-redirects to the canonical `/news...` equivalent. **INERT in awcms**: this
-   * base ships no `/news` route family (ADR-0039), so even when enabled the legacy
-   * rewrite has no destination content — the flag is retained for schema/behavioral
-   * parity with awcms-micro and a future `/news` port, but never fires today.
-   * Default false = today's behavior unchanged.
+   * 301-redirects to the canonical `/news...` equivalent. ADR-0039 called this INERT
+   * because this base shipped no `/news` route family; **ADR-0059 landed that
+   * family**, so it fires for real now. Default false still means today's behavior
+   * is unchanged, but flipping it on is a content-URL migration — a 301 is cached by
+   * browsers and intermediaries and is not undone by setting this back to false.
    */
   legacyBlogRedirectEnabled: boolean;
   /** Default action when a URL change is captured. Default 'propose' (never auto-activate live traffic silently). */
