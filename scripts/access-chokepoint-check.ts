@@ -203,6 +203,32 @@ async function main(): Promise<void> {
 
   const deciding = handlers.filter((handler) => handler.decidesPermissions);
 
+  // Issue #425 — the self-test.
+  //
+  // Every classification above keys on the literal `fetchGrantedPermissionKeys(`
+  // (`sliceHandlers`). That name is about to change shape: the grant redesign
+  // (#423) alters its RETURN TYPE, which is exactly the moment someone is
+  // tempted to rename it. A rename makes every `decidesPermissions` false, so
+  // `findChokepointBypasses` returns nothing, and this gate prints a cheerful
+  // OK while checking nothing at all — the class of failure PROJECT_STATE §4 R9
+  // records for five other gates.
+  //
+  // A gate that has only ever been observed passing has not been observed at
+  // all. There are handlers that genuinely decide permissions; if we can no
+  // longer find any, the detector is broken, not the tree.
+  if (deciding.length === 0) {
+    console.error(
+      "access:chokepoint:check FAILED — 0 handlers were classified as deciding a " +
+        "permission. That is not a clean tree, it is a blind detector: the signal " +
+        "`fetchGrantedPermissionKeys(` no longer matches anything under " +
+        `${ROUTES_ROOT}. If that function was renamed, update the signal in ` +
+        "`sliceHandlers` in the same commit."
+    );
+
+    process.exitCode = 1;
+    return;
+  }
+
   console.log(
     `access:chokepoint:check OK — ${handlers.length} handlers, ` +
       `${deciding.length} decide permissions, ` +
