@@ -454,13 +454,21 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     `sso/{providerKey}/callback`) — kelengkapan, bukan lubang (masing-masing punya
     mitigasi lain), tapi ASVS menuntut anti-automation di seluruh permukaan auth.
 
-  Catatan asesmen yang masih berlaku, dan sekarang dengan angka yang lebih
-  tepat: dari **34** gerbang rantai `check` (per tabel §2 yang kini
-  ter-generate), **satu** memeriksa performa
-  (`db:fk-index:check`). Anggaran query (#385) hidup sebagai **test integrasi
-  DB-gated**, bukan gerbang rantai — pada mesin tanpa PostgreSQL ia di-`skip`
-  dan `bun run check` tetap hijau. Cakupannya pun hanya jalur baca publik blog:
-  31 layar admin dan pembangun sitemap belum beranggaran.
+  Catatan asesmen ini sudah **TIDAK BERLAKU** dan angkanya jangan dipakai. Teks
+  asli dipertahankan di bawah sebagai konteks. Status performa yang berlaku ada
+  di [`awcms/standar-performa-dan-keamanan.md`](awcms/standar-performa-dan-keamanan.md)
+  §8 "Gerbang performa: dari satu menjadi empat permukaan" — **satu-satunya**
+  tempat hitungan itu dipelihara. Menduplikasinya di sini adalah yang membuatnya
+  basi: paragraf ini membantah §4 di berkas yang sama, yang sudah mencatat
+  anggaran query mendarat, dan `query-budget-admin.integration.test.ts` sudah
+  mencakup pembangun sitemap yang di bawah disebut belum beranggaran.
+
+  > Teks asli: "dari **34** gerbang rantai `check` (per tabel §2 yang kini
+  > ter-generate), **satu** memeriksa performa (`db:fk-index:check`). Anggaran
+  > query (#385) hidup sebagai **test integrasi DB-gated**, bukan gerbang
+  > rantai — pada mesin tanpa PostgreSQL ia di-`skip` dan `bun run check` tetap
+  > hijau. Cakupannya pun hanya jalur baca publik blog: 31 layar admin dan
+  > pembangun sitemap belum beranggaran."
 
 - **Layar admin yang masih kosong (lanjutan langsung ADR-0051).** Gelombang kedua
   (PR #335–#338, 2 Agustus 2026) menutup EMPAT dari tujuh — verifikasi ulang dengan
@@ -478,12 +486,15 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   - ~~`domain-event-runtime`~~ **SELESAI (#337)** — `/admin/domain-events`.
   - ~~`sync-storage`~~ **SELESAI (#338)** — `/admin/sync`.
   - ~~`blog-content`~~ **SELESAI (#340)** — `/admin/blog`, konsol siklus hidup post
-    (sebelas permission dari 43). Sisanya menunggu layar saudaranya (pages,
-    taxonomy, presentation, settings, homepage) — **`pages` ternyata butuh
-    permukaannya lebih dulu**, lihat entri ADR-0057 di bawah. Dua absen yang digerbangi contract
-    test karena BEDA KELAS: `posts.export` dideklarasikan + di-seed `sql/036` dan
-    **tak ada endpoint mana pun yang menegakkannya**; `search.read` punya rute tapi
-    daftar admin sudah punya pencarian sendiri yang mentoleransi query kosong.
+    (sebelas permission dari **41** — bukan 43: `sql/089` MENCABUT
+    `blog_content.seo.configure` dan `.posts.export` saat ADR-0058 mengosongkan
+    daftar pengecualian gerbang permission). Sisanya menunggu layar saudaranya
+    (pages, taxonomy, presentation, settings, homepage) — **`pages` ternyata
+    butuh permukaannya lebih dulu**, lihat entri ADR-0057 di bawah. Satu absen
+    yang digerbangi contract test: `search.read` punya rute tapi daftar admin
+    sudah punya pencarian sendiri yang mentoleransi query kosong. (`posts.export`
+    dulu absen kedua di sini; ia tidak lagi ada untuk diabsenkan — dicabut
+    `sql/089` justru karena tak ada endpoint yang menegakkannya.)
   - ~~`media-library`~~ **SELESAI (#345)** — `/admin/media`. Dan ini bukan sekadar
     layar ([ADR-0056](adr/0056-media-library-admin-surface.md)): lima dari sebelas
     permission-nya tidak digerbangi apa pun (`attach`/`detach`/`delete`/`restore`/
@@ -1120,10 +1131,27 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   network namespace dengan container Postgres (`docker run --network container:<pg> oven/bun …`).
   Catatan: image bun tanpa git → 2 test `check-docs-integration` gagal palsu di container
   (verifikasi di host/CI).
-- **CI**: GitGuardian & CodeQL adalah required check; CodeQL run kadang orphan di antrean →
-  picu ulang dengan empty commit; flake Postgres CI → `gh run rerun --failed`.
-- **Subagent di working tree bersama** bisa memindahkan HEAD → verifikasi
-  `git branch --show-current` sebelum commit.
+- **CI**: sepuluh required check sejak 8 Agustus 2026 (ruleset `main only`, id 11653326) — tiga di antaranya baru ditambahkan: `Integration tests (RLS + DB
+role separation)`, `E2E smoke (Playwright)`, `Minimum-supported versions`.
+  Sebelumnya ketiganya berjalan tanpa memblokir merge, dan karena job `quality`
+  sengaja berjalan dengan `DATABASE_URL: ""`, required check yang ada **buta
+  secara struktural** terhadap isolasi RLS, pemisahan role DB, dan anggaran
+  query. Biaya yang diterima dan dinyatakan: job integrasi menarik image Postgres
+  dari Docker Hub, jadi outage registry kini **memblokir merge** (terjadi sekali
+  pada 8 Agustus, run 31234082007 — tiga retry, semuanya timeout).
+  CodeQL run kadang orphan di antrean → picu ulang dengan empty commit; flake
+  Postgres CI → `gh run rerun --failed`.
+- **Subagent/sesi lain di working tree bersama** bisa memindahkan HEAD →
+  **`git branch --show-current` TIDAK CUKUP.** Ia melaporkan nama branch yang
+  baru saja kamu buat, yang selalu terlihat benar. Yang harus diverifikasi
+  adalah **commit INDUKNYA**: `git rev-parse --short HEAD` sebelum `checkout -b`,
+  dan `git merge-base HEAD origin/main` sesudahnya. Ini benar-benar terjadi pada
+  8 Agustus 2026 — PR #409 dibuat saat HEAD sedang di branch sesi lain, sehingga
+  ia membawa **32 berkas** bukan 10, dan merge-nya mendaratkan seluruh isi PR
+  #408 (termasuk pembalikan status ADR-0067) ke `main` tanpa PR itu pernah
+  di-review. Gejala yang terlewat: pesan squash memuat pesan commit PR LAIN
+  sebagai butir. Sebelum merge, `gh pr diff <n> --name-only` dan
+  `gh pr view <n> --json commits -q '.commits|length'`.
 - **`.astro` adalah titik buta SETIAP gerbang berbasis tipe.** `bun run typecheck`
   adalah `tsc --noEmit`, dan `tsc` tidak bisa mengurai `.astro` — ia melewatinya
   **diam-diam**, meskipun `tsconfig.json` menulis `"include": ["src/**/*"]`.
