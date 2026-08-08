@@ -30,11 +30,21 @@ familyContractVersion: "1.0.0"
 family:
   # Self-anchored since ADR-0055. There is no external standard to conform to:
   # this repo IS the standard, and the only other repo in scope is
-  # `ahliweb/awcms-astro` (experience layer + BFF, ADR-0045) which binds to the
-  # contracts declared below.
+  # `ahliweb/awcms-astro` (public pages + USER admin surface, ADR-0045 as
+  # narrowed by ADR-0070) which binds to the contracts declared below.
+  #
+  # `awcms-mini` and `awcms-micro` are ARCHIVES (ADR-0055 §1) — not a standard,
+  # not a port source, not family templates. The pair above is the multi-purpose
+  # replacement for all three of the old templates; neither repo is that on its
+  # own. Their names still appear throughout this repo as PROVENANCE, which is a
+  # permanent fact and deliberately not scrubbed.
   standard: awcms
   standardRepository: https://github.com/ahliweb/awcms
-  role: system of record — online-first hybrid ERP + integrated-SaaS modular monolith owning every authorization surface, API, and admin screen (ADR-0034, ADR-0035, ADR-0051); paired with ahliweb/awcms-astro as experience layer + BFF (ADR-0045). Development is confined to these two repositories (ADR-0055)
+  # `role` is prose and NO test asserts its content (the validator only demands a
+  # non-empty string) — which is exactly how it rotted into claiming ownership of
+  # "every admin screen" months after that stopped being true. ADR-0070 is what
+  # binds it now; if the two disagree, the ADR wins and this line is the bug.
+  role: system of record — online-first hybrid ERP + integrated-SaaS modular monolith owning every authorization surface, every API, and every SYSTEM admin screen (modules, roles, tenants, audit trail, anything cross-tenant) (ADR-0034, ADR-0035, ADR-0051 as narrowed by ADR-0070); paired with ahliweb/awcms-astro, whose primary function is PUBLIC pages and which may additionally carry a USER admin surface when a site declares one (`owner` refused by a gate there) while never being a source of truth (ADR-0045, ADR-0070). Development is confined to these two repositories (ADR-0055)
 
 # Pinned contract versions. Where a real source constant exists it is the
 # authority (the gate reads it and fails on mismatch). Where the contract is
@@ -116,15 +126,22 @@ stack:
     declared: "18.4"
     source: .github/workflows/ci.yml services.postgres image
 
-# Intentional divergences from the awcms-mini standard. NOT a backlog of
-# unfinished ports — each entry is a decision AWCMS deliberately made and must
-# keep justified: reason + accountable owner + review date + backing ADR. The
-# gate fails once a reviewDate is in the past (an unreviewed divergence cannot
-# live forever) or its ADR file is missing.
-# REFILLED by ADR-0068 — and by the contract the comment above predicted:
-# `awcms-astro`'s. All three are deliberate, all three were previously recorded
-# nowhere on this side, and each carries the reviewDate that brings it back to
-# the table without anyone having to remember.
+# Intentional divergences from a contract this repo must bind against — today
+# that means `ahliweb/awcms-astro`'s, and only its. (The heading said "from the
+# awcms-mini standard" until ADR-0070; that anchor was retired by ADR-0055 and
+# no entry below has referred to it since ADR-0068 refilled the list.)
+#
+# NOT a backlog of unfinished ports — each entry is a decision AWCMS
+# deliberately made and must keep justified: reason + accountable owner + review
+# date + backing ADR. The gate fails once a reviewDate is in the past (an
+# unreviewed divergence cannot live forever) or its ADR file is missing.
+#
+# REFILLED by ADR-0068, extended by ADR-0069, and extended again by ADR-0070 —
+# the last one at the WRITTEN REQUEST of the other repo, whose ADR-0034 §Hubungan
+# states the difference and then says plainly that it cannot record it from
+# there. Every entry was previously recorded nowhere on this side, and each
+# carries the reviewDate that brings it back to the table without anyone having
+# to remember.
 intentionalDivergences:
   - id: hsts-include-subdomains
     summary: This repo sends `Strict-Transport-Security` with `includeSubDomains`; awcms-astro sends it without.
@@ -191,16 +208,42 @@ intentionalDivergences:
     reviewDate: "2027-02-04"
     adr: 0069-cross-origin-isolation-divergence-with-awcms-astro.md
     since: "2026-08-05"
-# EMPTIED by ADR-0055, not lost. The ten entries that lived here recorded how
-# this repo deliberately differed from the awcms-mini standard, each with an
-# owner and a `reviewDate` that turned CI red on expiry.
+
+  - id: admin-user-surface-in-awcms-astro
+    summary: ADR-0051 AS WRITTEN said every admin screen is built here; ADR-0070 narrows it to SYSTEM screens — awcms-astro may carry a USER admin surface (never `owner`) when a site declares one.
+    reason: >-
+      Recorded at the other repo's written request — awcms-astro ADR-0034 §Hubungan states the difference
+      and then says plainly "Repo ini tidak bisa menulisnya sendiri". ADR-0070 narrows ADR-0051 rather than
+      superseding it: the axis moves from AUDIENCE (tenant vs owner/internal/platform) to WHAT IS MANAGED.
+      SYSTEM admin — modules, roles, tenants, audit trail, anything cross-tenant — stays here under one
+      `/admin/*` shell, and all three of ADR-0051's replacement gates are unchanged. USER admin — a signed-in
+      person doing their own work on ONE site (write a post, submit it for review, manage their own profile)
+      — may live in awcms-astro, and only when that site declares it via `permukaanAdmin`; `owner` is
+      refused by a gate THERE, and nothing may exist only there (every such capability must also be
+      manageable from `/admin/*` here). What makes this safe is ADR-0051's own sentence: what holds a
+      cross-tenant action is the authorization gate, not the address of the repo the button is drawn in.
+      The reviewDate is not asking whether USER admin belongs there — that is decided — but whether the
+      BOUNDARY is still where it was put. A surface that grows one screen a quarter is the most ordinary way
+      a "USER admin" becomes a system admin with nobody deciding it.
+    owner: "@ahliweb"
+    reviewDate: "2027-02-04"
+    adr: 0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md
+    since: "2026-08-08"
+# A NOTE ON WHAT USED TO BE HERE, kept because it explains the shape above.
 #
-# With awcms-mini archived, that review is work whose answer cannot change: it
-# asks whether a difference from a repo nobody develops is still justified. The
-# entries are preserved verbatim as a historical record in
+# This list was EMPTIED by ADR-0055, not lost. The NINE entries that lived here
+# recorded how this repo deliberately differed from the awcms-mini standard,
+# each with an owner and a `reviewDate` that turned CI red on expiry.
+#
+# With awcms-mini archived, that review became work whose answer cannot change:
+# it asks whether a difference from a repo nobody develops is still justified.
+# The entries are preserved verbatim as a historical record in
 # `docs/awcms/family-compatibility.md` §Historical divergences, where their ADR
 # links are still verified to exist — by `check:docs`, which fails on a link to
-# a missing file.
+# a missing file. (That section states the same count; if the two ever disagree,
+# the document is the one holding the entries and wins.)
 #
-# The key stays (the schema requires it) and an empty list is valid. A future
-# contract this repo must diverge from — awcms-astro's, say — would refill it.
+# The prediction that closed this comment — "a future contract this repo must
+# diverge from — awcms-astro's, say — would refill it" — CAME TRUE, three times:
+# ADR-0068 (three entries), ADR-0069, and ADR-0070. An empty list is still valid
+# per the schema; it is simply no longer the state.

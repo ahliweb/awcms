@@ -573,11 +573,11 @@ Kode error dari `POST .../enable` atau `.../disable` (semua `409` kecuali disebu
 
 ## SOP Modul Blog Content (epic #536, Issue #537-#543)
 
-> **BACAAN SAJA — modul `blog_content` BELUM di-port ke repo ini** (ada di
-> awcms-mini; `ls src/modules` tidak memuat `blog-content`, tidak ada
-> schema blog di `sql/`). SOP di bawah adalah spesifikasi target untuk
-> saat modul ini di-port (lihat skill `awcms-blog-content`), tracked for
-> future port — bukan SOP operasional yang bisa dijalankan hari ini.
+> **LIVE di repo ini.** `src/modules/blog-content/`, `sql/035`–`sql/040`,
+> layar `/admin/blog`, `/admin/blog-pages`, `/admin/blog-presentation`,
+> `/admin/blog-taxonomy`. Modul ini juga menyerap bekas `news_portal`
+> ([ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). SOP di bawah
+> adalah SOP operasional, bukan spesifikasi target.
 
 Modul domain pertama yang didaftarkan langsung di repo base ini, bukan aplikasi turunan (ADR-0009, `src/modules/blog-content/README.md`). Admin UI penuh di `/admin/blog` (Issue #543), API admin di `/api/v1/blog/*` (Issue #538-#542), rute publik anonim di `/blog/{tenantCode}/*` (Issue #540).
 
@@ -612,12 +612,9 @@ Modul domain pertama yang didaftarkan langsung di repo base ini, bukan aplikasi 
 
 ## SOP Modul Data Lifecycle (epic platform-evolution #738, Issue #745)
 
-> **BACAAN SAJA — modul `data_lifecycle` BELUM di-port ke repo ini** (ada
-> di awcms-mini; `ls src/modules` tidak memuat `data-lifecycle`, tidak
-> ada `HighVolumeTableDescriptor`/registry di sini). SOP di bawah adalah
-> spesifikasi target untuk saat modul ini di-port (lihat skill
-> `awcms-data-lifecycle`), tracked for future port — bukan SOP
-> operasional yang bisa dijalankan hari ini.
+> **LIVE di repo ini.** `src/modules/data-lifecycle/`, `sql/055`–`sql/056`,
+> layar `/admin/data-lifecycle`. SOP di bawah adalah SOP operasional, bukan
+> spesifikasi target.
 
 Registry lintas-modul untuk tabel bervolume tinggi (retention/partition/archive/legal-hold/purge descriptors dideklarasikan oleh modul pemilik) plus mesin lifecycle yang menegakkannya. Belum ada layar admin UI khusus — operasional murni lewat API `/api/v1/data-lifecycle/*`.
 
@@ -633,15 +630,12 @@ Mekanisme read-model projection berbasis kontribusi modul (incremental cursor-ba
 
 ## SOP Modul Identity Access — Business Scope & SoD (epic platform-evolution #738 Wave 2, Issue #746; hierarchy-aware matching Issue #794/#802/#804)
 
-> **BACAAN SAJA — fitur Business Scope & SoD BELUM di-port ke repo ini.**
-> Modul `identity-access` sendiri ada di repo ini, tapi tabel/kode
-> business-scope assignment dan SoD conflict exception (job
-> `business-scope:expiry`, layar `/admin/business-scope`/`/admin/security`)
-> belum ada di sini — tidak ada `business_scope`/`business-scope` di
-> `sql/` maupun di `src/modules/identity-access/`. SOP di bawah adalah
-> spesifikasi target untuk saat fitur ini di-port dari awcms-mini,
-> tracked for future port — bukan SOP operasional yang bisa dijalankan
-> hari ini.
+> **LIVE di repo ini, dengan satu layar yang belum ada.** Tabel dan kodenya
+> sudah di sini: `sql/027`–`sql/030`, `src/modules/identity-access/domain/business-scope-assignment.ts`,
+> `application/business-scope-expiry-job.ts`, dan layar `/admin/security`.
+> Yang **belum** ada adalah layar `/admin/business-scope` — assignment hari ini
+> dikelola lewat API dan job, bukan UI. Bagian SOP yang menyebut layar itu
+> dibaca sebagai target; sisanya operasional.
 
 Business-scope assignment (legal entity/organization unit) dan Segregation-of-Duties (SoD) conflict exception, dibangun di atas `identity_access`. Admin UI: `/admin/business-scope` (assignment) dan `/admin/security` (SoD/access governance).
 
@@ -650,11 +644,12 @@ Business-scope assignment (legal entity/organization unit) dan Segregation-of-Du
 
 ## SOP Modul Reference Data (epic platform-evolution #738 Wave 3, Issue #750, ADR-0021)
 
-> **BACAAN SAJA — modul `reference_data` BELUM di-port ke repo ini** (ada
+> **BACAAN SAJA — modul `reference_data` BELUM ada di repo ini** (ada
 > di awcms-mini; `ls src/modules` tidak memuat `reference-data`, tidak
 > ada `awcms_reference_value_sets`/`awcms_reference_codes` di `sql/`). SOP
-> di bawah adalah spesifikasi target untuk saat modul ini di-port, tracked
-> for future port — bukan SOP operasional yang bisa dijalankan hari ini.
+> di bawah adalah spesifikasi target untuk saat modul ini **dibangun
+> di sini lewat ADR admission-nya sendiri** (ADR-0055 §1) — bukan SOP
+> operasional yang bisa dijalankan hari ini.
 
 Fondasi data referensi opsional, provider-neutral: value set dan code global (`awcms_reference_value_sets`/`awcms_reference_codes`) dengan provenance/deprecation, plus lapisan override/extension tenant-scoped yang tidak pernah memutasi baseline global. Admin UI: `/admin/reference-data/value-sets`, `/admin/reference-data/codes`, `/admin/reference-data/tenant-codes`.
 
@@ -677,11 +672,12 @@ Engine workflow bergraf (quorum/any/all, delegasi, eskalasi/timeout) yang mengev
 
 ## SOP Modul Organization Structure (epic platform-evolution #738 Wave 2, Issue #749, ADR-0016)
 
-> **BACAAN SAJA — modul `organization_structure` BELUM di-port ke repo
+> **BACAAN SAJA — modul `organization_structure` BELUM ada di repo
 > ini** (ada di awcms-mini; `ls src/modules` tidak memuat
 > `organization-structure`, tidak ada migration-nya di `sql/`). SOP di
-> bawah adalah spesifikasi target untuk saat modul ini di-port, tracked
-> for future port — bukan SOP operasional yang bisa dijalankan hari ini.
+> bawah adalah spesifikasi target untuk saat modul ini **dibangun
+> di sini lewat ADR admission-nya sendiri** (ADR-0055 §1) — bukan SOP
+> operasional yang bisa dijalankan hari ini.
 
 Fondasi struktur organisasi tenant-scoped opsional: legal entity, tipe unit organisasi, unit organisasi, hierarki parent-child versioned/effective-dated (SCD Type 2 — reparent tidak pernah memutasi in-place), lokasi operasional, relasi lokasi-unit, dan assignment party/unit. Admin UI: `/admin/organization-structure/{legal-entities,unit-types,units,hierarchy,locations,assignments}`.
 
@@ -690,12 +686,11 @@ Fondasi struktur organisasi tenant-scoped opsional: legal entity, tipe unit orga
 
 ## SOP Modul Integration Hub (epic platform-evolution #738 Wave 3, Issue #754, ADR-0019)
 
-> **BACAAN SAJA — modul `integration_hub` BELUM di-port ke repo ini**
+> **BACAAN SAJA — modul `integration_hub` BELUM ada di repo ini**
 > (ada di awcms-mini; `ls src/modules` tidak memuat `integration-hub`,
 > tidak ada migration-nya di `sql/`). SOP di bawah adalah spesifikasi
-> target untuk saat modul ini di-port (lihat skill
-> `awcms-integration-hub`), tracked for future port — bukan SOP
-> operasional yang bisa dijalankan hari ini.
+> target untuk saat modul ini **dibangun di sini lewat ADR admission-nya
+> sendiri** (ADR-0055 §1) — bukan SOP operasional yang bisa dijalankan hari ini.
 
 Boundary integrasi generic, provider-neutral: endpoint webhook inbound bertanda tangan (HMAC per-endpoint, rotasi kunci dengan overlap), proteksi replay ditegakkan di database, normalisasi pesan inbound terverifikasi ke bentuk domain-event lewat `domain_event_runtime`, dan subscription outbound dengan delivery yang dijaga SSRF. Admin UI: `/admin/integration-hub/{endpoints,subscriptions,deliveries}`.
 
@@ -704,10 +699,11 @@ Boundary integrasi generic, provider-neutral: endpoint webhook inbound bertanda 
 
 ## SOP Modul Data Exchange (epic platform-evolution #738 Wave 3, Issue #752, ADR-0018)
 
-> **BACAAN SAJA — modul `data_exchange` BELUM di-port ke repo ini** (ada
+> **BACAAN SAJA — modul `data_exchange` BELUM ada di repo ini** (ada
 > di awcms-mini; `ls src/modules` tidak memuat `data-exchange`, tidak ada
 > migration-nya di `sql/`). SOP di bawah adalah spesifikasi target untuk
-> saat modul ini di-port, tracked for future port — bukan SOP operasional
+> saat modul ini **dibangun di sini lewat ADR admission-nya sendiri**
+> (ADR-0055 §1) — bukan SOP operasional
 > yang bisa dijalankan hari ini.
 
 Framework import/export CSV/JSON staged, provider-neutral, dikontribusikan tiap modul pemilik lewat descriptor+adapter-nya sendiri (modul ini tidak pernah menulis langsung ke tabel modul lain). Admin UI: `/admin/data-exchange/{imports,exports}`.

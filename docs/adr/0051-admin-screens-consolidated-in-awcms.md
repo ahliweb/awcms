@@ -1,10 +1,19 @@
 # ADR-0051 — Seluruh layar admin (tenant maupun owner/internal) dibangun di `awcms`
 
-- **Status:** Accepted
+- **Status:** Accepted (dipersempit oleh [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md))
 - **Tanggal:** 2026-08-01
 - **Pengambil keputusan:** @ahliweb
 - **Men-supersede:** [ADR-0048](0048-frontend-role-split-awcms-astro-internal-admin.md) (pembagian peran frontend `awcms-astro` = admin owner/internal)
 - **Terkait:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + BFF), [ADR-0046](0046-idn-admin-regions-module-admission.md) (modul `idn_admin_regions`), [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) (pembekuan mini/micro), [ADR-0049](0049-machine-credentials-and-session-introspection.md) & [ADR-0050](0050-bff-session-handoff-code.md) (kontrak yang dulu memblokir layar internal)
+
+> **Dipersempit oleh [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md) (8 Agustus 2026).**
+> Kata "seluruh layar admin" di §Keputusan dibaca **"seluruh layar admin
+> SISTEM"**: permukaan admin **USER** — layar yang dipakai seseorang untuk
+> mengerjakan bagiannya sendiri di satu situs — boleh hidup di `awcms-astro`
+> bila situs itu menyatakannya, dengan peran `owner` **ditolak gerbang** di
+> sana. Keputusan intinya dan **ketiga gerbang pengganti di §Keputusan tidak
+> dilonggarkan sedikit pun**. Kalimatnya sengaja tidak ditulis ulang, per Aturan
+> 2 indeks ADR (ADR ditandai, bukan ditulis ulang).
 
 ## Konteks
 

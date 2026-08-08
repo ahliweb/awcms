@@ -25,8 +25,8 @@ Konsekuensinya, jangan: (1) memanggil/mengimpor `domain/merge.ts`,
 (2) `SELECT` dari tabel merge/relationship/duplicate-candidate;
 (3) mengklaim ke user bahwa merge workflow "sudah ada". `README.md` modul
 ini menyebut mereka di §"Belum tersedia" — itulah yang akurat. Bagian
-sisa skill ini berguna sebagai **spesifikasi target port** (invariant apa
-yang WAJIB ikut saat lapis #748 di-port dari mini) — bukan peta kode.
+sisa skill ini berguna sebagai **spesifikasi target** (invariant apa yang WAJIB
+ikut saat lapis #748 DIBANGUN di sini, ADR-0055 §1) — bukan peta kode.
 
 ## Kapan pakai skill ini vs skill generik
 
@@ -139,8 +139,8 @@ operator, bukan mekanisme otomatis. **Jangan janjikan/bangun tombol
 ## [#748 — mini] CRITICAL — cross-tenant guard, DUA lapis, keduanya wajib
 
 Cross-tenant matching/merge DILARANG KERAS. Ditegakkan di mini lewat dua
-lapis independen — **kontrak WAJIB yang harus ikut saat lapis #748 di-port
-ke sini**, bukan kode yang sudah berjalan di repo ini:
+lapis independen — **kontrak WAJIB yang harus ikut saat lapis #748 dibangun
+di sini**, bukan kode yang sudah berjalan di repo ini:
 
 1. **RLS** (`FORCE ROW LEVEL SECURITY`) — koneksi role aplikasi biasa
    tidak akan pernah melihat baris tenant lain sama sekali.

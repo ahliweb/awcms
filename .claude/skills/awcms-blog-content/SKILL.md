@@ -66,7 +66,7 @@ description: Modul blog_content SUDAH di-port ke repo ini (PR #214) dan sejak **
 >   yang di-inject di setiap composition root — bukan no-op. Kunci lama
 >   `news_media` sengaja TIDAK dipakai ulang supaya konsumen yang masih
 >   memintanya gagal keras, bukan diam-diam terikat ke port yang berbeda.
->   Hook `social_publishing` **masih no-op** (modulnya belum di-port).
+>   Hook `social_publishing` **masih no-op** (modulnya belum ada di sini — kandidat BANGUN lewat ADR admission, ADR-0055 §1).
 > - **Admin UI blog SUDAH ADA** (ADR-0051 konsolidasi layar admin). Empat layar:
 >   `src/pages/admin/blog.astro` (siklus hidup post), `blog-pages.astro`
 >   (ADR-0057, kedelapan permission `pages.*`), `blog-taxonomy.astro`, dan

@@ -3,11 +3,14 @@
  * manifest dan CI conformance AWCMS terhadap standar AWCMS-Mini").
  *
  * AWCMS is a foundation/base REBUILD of the awcms-mini modular-monolith
- * STANDARD (ADR-0001). This file is the canonical, dependency-free source of
- * truth for the machine-readable statement of HOW this base declares its
- * conformance to that family standard: the family-contract version, the schema
- * of `awcms-family-compatibility.yaml`, and the structural/semantic validation
- * of a manifest instance.
+ * standard (ADR-0001) — provenance, not an anchor. Since ADR-0055 there is no
+ * external standard to conform to: `awcms` defines its own contract, and the
+ * manifest states the contract between `awcms` and `ahliweb/awcms-astro`. This
+ * file is the canonical, dependency-free source of truth for the
+ * machine-readable statement of the contracts this repo OWNS and that its
+ * consumer binds against: the family-contract version, the schema of
+ * `awcms-family-compatibility.yaml`, and the structural/semantic validation of
+ * a manifest instance.
  *
  * Deliberately ZERO-IMPORT — same rule as `module-contract.ts`. The
  * conformance GATE (`scripts/family-conformance-check.ts`) is what
@@ -80,7 +83,7 @@ export type ManifestStackEntry = {
 export type IntentionalDivergence = {
   /** Stable kebab-case identifier, unique across the allow-list. */
   id: string;
-  /** One-line statement of how AWCMS deliberately differs from the awcms-mini standard. */
+  /** One-line statement of a deliberate difference from the contract this repo binds against (today: `ahliweb/awcms-astro`). */
   summary: string;
   /** Why the divergence is correct/necessary (never "we didn't get to it" — that is drift, not an intentional divergence). */
   reason: string;

@@ -362,8 +362,10 @@ konsisten diisi — lihat doc 21 §8).
 > Accepted (0016/0017/0018/0019/0021) tetapi tidak ada `src/modules/<x>/`.
 > `organization_structure` hanya muncul sebagai string `providedBy` pada
 > capability opsional di `identity-access/module.ts` — itu metadata seam, bukan
-> bukti modulnya ada. Rencana pengadaannya: Gelombang B
-> `docs/awcms/absorb-awcms-mini-backbone-roadmap.md`.
+> bukti modulnya ada. Kebutuhannya tercatat di
+> `docs/awcms/absorb-awcms-mini-backbone-roadmap.md` — dokumen itu **daftar
+> kebutuhan**, bukan antrean port; pengadaannya lewat ADR admission sendiri
+> (ADR-0055 §1).
 
 Baca dokumen
 itu sebelum mengusulkan modul baru atau mengubah kategori/status lifecycle

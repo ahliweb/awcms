@@ -14,18 +14,30 @@
 
 ## 1. Model tata kelola saat ini (WAJIB dipahami)
 
-Sejak [ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
-(men-supersede ADR-0013/0014/0015/0022/0025): **`awcms-mini`, `awcms`, `awcms-micro` =
-tiga template keluarga AWCMS yang dipakai LANGSUNG**, bukan hierarki base-dan-turunan.
-`awcms` = template lini **ERP/back-office**.
+**Keluarga AWCMS yang dikembangkan hari ini adalah DUA repo, dan hanya dua**
+([ADR-0055](adr/0055-development-confined-to-awcms-and-awcms-astro.md)): `ahliweb/awcms`
+(repo ini) sebagai **system of record** — seluruh permukaan otorisasi, API, dan layar
+admin **SISTEM** — dan [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro)
+yang memikul **halaman publik sebagai fungsi utama** serta **permukaan admin USER bila
+sebuah situs menyatakannya** ([ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)).
+Pasangan keduanya adalah **pengganti multiguna** dari ketiga template lama.
+
+**`awcms-mini` dan `awcms-micro` ARSIP** — tidak dilanjutkan, bukan standar, bukan sumber
+port (ADR-0055 §1, men-supersede [ADR-0047](adr/0047-mini-micro-frozen-foundation-built-here.md)).
+Posisi "tiga template sejajar" yang ditetapkan
+[ADR-0034](adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+(men-supersede ADR-0013/0014/0015/0022/0025) karena itu **sudah tidak berlaku**; yang tetap
+berlaku darinya adalah pencabutan jalur repo turunan. `awcms` = template lini
+**ERP/back-office**.
 
 Disempurnakan oleh [ADR-0035](adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
 (positioning `awcms`): mode operasi `awcms` = **hybrid online + offline dengan prioritas
 online-first** (online jalur utama; offline/LAN mode ketahanan), **siap ERP + SaaS
-terintegrasi**, dan `awcms` menjadi **superset** keluarga yang **menyerap** klaster
-website/e-commerce, UI/UX, dan pengerasan auth `awcms-micro` (peta di
-[`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md)). `awcms-mini`
-tetap hybrid offline-first (siap SaaS); `awcms-micro` tetap website full-online ramping.
+terintegrasi**, dan `awcms` menjadi **superset** keluarga: klaster website/e-commerce, UI/UX, dan
+pengerasan auth `awcms-micro` **sudah diserap sejauh yang mendarat**, dan sisanya dibangun
+di sini lewat ADR admission-nya sendiri (ADR-0055 §1). Peta di
+[`awcms/absorb-awcms-micro-roadmap.md`](awcms/absorb-awcms-micro-roadmap.md) karena itu dibaca
+sebagai **daftar kebutuhan**, bukan antrean port — sejalan dengan status ARSIP di atas.
 Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak berubah**.
 
 - Modul domain — **ERP, website/e-commerce, dan konten** — **ditambahkan langsung di
@@ -58,11 +70,15 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
   pada 1 Agustus 2026**, lihat butir berikutnya. Peran `awcms-astro` sebagai experience
   layer + BFF (ADR-0045) tidak ikut berubah.
 
-**Perubahan 1 Agustus 2026 — seluruh layar admin dibangun di sini:**
+**Perubahan 1 Agustus 2026 — seluruh layar admin SISTEM dibangun di sini:**
 
 - [ADR-0051](adr/0051-admin-screens-consolidated-in-awcms.md): **setiap layar admin —
   tenant maupun owner/internal/platform — dibangun di repo ini**, di bawah satu shell
-  `/admin/*`. Alasan yang mengubah substansinya: **memindahkan layar tidak pernah menjadi
+  `/admin/*`. Sejak [ADR-0070](adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
+  kata "setiap" dipersempit menjadi **setiap layar admin SISTEM**: batasnya APA YANG
+  DIKELOLA, bukan siapa yang memakainya, sehingga permukaan admin **USER** boleh hidup di
+  `awcms-astro` bila situsnya menyatakannya (`owner` ditolak gerbang di sana). Ketiga
+  gerbang pengganti ADR-0051 TIDAK dilonggarkan. Alasan yang mengubah substansinya: **memindahkan layar tidak pernah menjadi
   kontrol keamanan.** `sql/081` men-seed `idn_admin_regions.dataset.configure`/`.restore`
   ke katalog ABAC global dan `POST /api/v1/setup/initialize` memberikan seluruh katalog ke
   role `owner` tiap tenant baru — jadi owner tenant biasa SUDAH memegang wewenang mengganti
@@ -92,7 +108,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v7.0.1..HEAD`                                                     |
 | Modul base                         | **21** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **90** (`sql/001`–`090`)                                                              | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0069** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0070** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **31** berkas `.astro` di `src/pages/admin/`; **0 dari 21** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **42** (22.328 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **34** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
