@@ -300,13 +300,14 @@ describe("the shipped VCL agrees with the origin", () => {
   });
 
   test("vcl_hash keys on Host AND still reaches the builtin's req.url hashing", async () => {
-    // This is the prerequisite for declaring the host-resolved `/news/**`
-    // surfaces (ADR-0061 §2), and it is TWO properties, not one:
+    // This is the prerequisite for declaring ANY host-resolved surface
+    // (ADR-0061 §2) — today the root discovery routes — and it is TWO
+    // properties, not one:
     //
-    // 1. `Host` is hashed. `/news/hello-world` is the same path for every
-    //    tenant, so a cache keyed on path alone serves one tenant's article to
-    //    another's visitors. That is not a staleness bug; it is the disclosure
-    //    the whole subsystem exists to prevent.
+    // 1. `Host` is hashed. `/sitemap.xml` is the same path for every tenant, so
+    //    a cache keyed on path alone serves one tenant's entire URL inventory
+    //    to another's visitors. That is not a staleness bug; it is the
+    //    disclosure the whole subsystem exists to prevent.
     // 2. The custom `vcl_hash` does NOT `return (lookup)`. In Varnish a custom
     //    subroutine that returns terminates the chain, so `builtin.vcl`'s
     //    `vcl_hash` — the one that hashes `req.url` — never runs, and every path
@@ -331,14 +332,9 @@ describe("surface registry", () => {
     ["/blog/acme/feed.xml", "blog-discovery"],
     ["/blog/acme/sitemap-blog.xml", "blog-discovery"],
     ["/theming/acme/tokens.css", "theming-tokens"],
-    // The host-resolved family (ADR-0061) — no tenant segment, so the patterns
-    // are one segment shorter than their `/blog/{tenantCode}` counterparts.
-    ["/news", "news-index"],
-    ["/news/", "news-index"],
-    ["/news/hello-world", "news-post"],
-    ["/news/category/announcements", "news-taxonomy"],
-    ["/news/tag/bun", "news-taxonomy"],
-    // Root discovery (ADR-0061 §B).
+    // Root discovery (ADR-0061 §B) — the ONE host-resolved family left. The
+    // `/news/**` entries that used to sit here went out with the routes
+    // (ADR-0071); `/news/hello-world` is asserted as UNDECLARED below.
     ["/robots.txt", "seo-robots"],
     ["/sitemap.xml", "seo-sitemap"],
     ["/sitemap-1.xml", "seo-sitemap"],
@@ -361,9 +357,19 @@ describe("surface registry", () => {
     ["/theming/preview-tokens/tok.css"],
     ["/blog/../admin"],
     ["/blog/%2E%2E/admin"],
-    // `/news/..` — not `/news/../admin` — is the shape that satisfies
-    // `news-post` on its face, because the host-resolved patterns carry no
-    // tenant segment. The traversal guard is the only thing that stops it.
+    // The whole `/news/**` family is undeclared since ADR-0071 removed its
+    // routes from this repo. These entries stay — as UNCACHEABLE — for two
+    // reasons: `/news/**` is still a live vocabulary in `awcms-astro`, so the
+    // path shape will keep occurring to readers; and re-declaring a surface for
+    // a route this repo does not serve should turn this list red rather than
+    // pass unnoticed.
+    ["/news"],
+    ["/news/hello-world"],
+    ["/news/category/announcements"],
+    // `/news/..` — not `/news/../admin` — was the shape that satisfied
+    // `news-post` on its face, because the host-resolved patterns carried no
+    // tenant segment. The traversal guard was the only thing that stopped it;
+    // now the absent surface stops it first, and both must keep holding.
     ["/news/.."],
     ["/news/%2E%2E"],
     ["/news/category/.."],
@@ -390,19 +396,11 @@ describe("surface registry", () => {
     );
   });
 
-  test("the news taxonomy pattern beats the generic news post pattern", () => {
-    // `/news/category/x` satisfies neither `news-post` (three segments) nor a
-    // careless reading of the ordering rule — but `/news/category` DOES satisfy
-    // `news-post`, and a future two-segment taxonomy shape would collide. Pin
-    // the resolution that matters today so a reordering is loud.
-    expect(matchPublicCacheSurface("/news/category/x")?.key).toBe(
-      "news-taxonomy"
-    );
-    expect(matchPublicCacheSurface("/news/category/x")?.ttlSeconds).toBe(120);
-    // Two segments: Astro routes this to `[slug].ts`, which 404s for the slug
-    // "category". Cached as a post 404, which is correct and purgeable.
-    expect(matchPublicCacheSurface("/news/category")?.key).toBe("news-post");
-  });
+  // A `news-taxonomy` vs `news-post` ordering test stood here. It went out with
+  // the surfaces (ADR-0071), not because ordering stopped mattering: the rule
+  // it pinned — specific-first by pattern length — is still asserted by its
+  // `blog-discovery` vs `blog-post` counterpart above, on a family this repo
+  // actually serves.
 
   test("a feed caches with ?locale= but not with anything else", () => {
     const surface = matchPublicCacheSurface("/feed.xml")!;

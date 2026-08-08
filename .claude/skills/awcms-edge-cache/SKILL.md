@@ -71,8 +71,8 @@ ketiga yang senyap.
   resource-hilang ber-`Surrogate-Control` sementara 404 host-tak-dikenal
   ber-`private, no-store` — menjawab "apakah hostname ini tenant hidup?" dari
   SATU permintaan. Publikasikan HANYA pada jalur yang menyajikan; dijaga
-  `tests/news-routes-edge-cache-contract.test.ts` +
-  `tests/discovery-routes-edge-cache-contract.test.ts`.
+  `tests/discovery-routes-edge-cache-contract.test.ts`. (Pasangan `/news/**`-nya
+  dihapus bersama rutenya oleh ADR-0071 — aturannya tidak.)
 
 - **Bun TIDAK mengirim method HTTP non-standar.** `fetch`/`node:http` dengan
   `method: "BAN"` tiba di Varnish sebagai **`GET`** (diverifikasi Bun 1.3.14 lewat

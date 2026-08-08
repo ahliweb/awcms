@@ -1,7 +1,7 @@
 /**
  * ADR-0061 §B — the contract between the root discovery routes and the edge
  * cache, asserted over source text for the same reason its `/news/**`
- * counterpart is (`news-routes-edge-cache-contract.test.ts`): both orderings
+ * counterpart did (that file went out with the routes ADR-0071 removed): both orderings
  * compile, both serve identical bytes, and the difference appears only in a
  * response header on a request that 404s.
  *
