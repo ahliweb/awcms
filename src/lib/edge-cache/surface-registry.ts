@@ -37,21 +37,30 @@
  *
  * ## Host-resolved surfaces (ADR-0061)
  *
- * Two families here resolve their tenant from the request rather than from a
- * path segment — the `/news/**` content routes (ADR-0059) and the root
- * discovery routes (ADR-0038) — so middleware cannot derive it from the URL and
- * source (2) in `tenant-key.ts` does not apply. Their routes publish
+ * The root discovery routes (ADR-0038) resolve their tenant from the request
+ * rather than from a path segment, so middleware cannot derive it from the URL
+ * and source (2) in `tenant-key.ts` does not apply. They publish
  * `locals.edgeCacheTenantId` instead, via `publishEdgeCacheTenant`, and only on
  * the path that actually serves the resource; see that file for why the timing
  * of the publish is a disclosure question rather than a style question.
  *
+ * ADR-0061 declared a SECOND host-resolved family here — the `/news/**` content
+ * routes ADR-0059 built. [ADR-0071](../../../docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+ * then removed those routes from this repo entirely (`/news/**` is
+ * `awcms-astro`'s vocabulary), and the three `news-*` entries outlived them by
+ * several days. They were INERT rather than dangerous — nothing served those
+ * paths, and `requiresTenant` made an unpublished tenant fail closed — but an
+ * inert entry is worse than no entry: it is a declaration that a shared cache
+ * MAY store something, kept alive with a rationale explaining why it is safe,
+ * for a route nobody can read. `edge-cache:surfaces:check` now refuses a
+ * surface whose owning module declares no route that could serve it.
+ *
  * Two properties had to hold before these entries were safe, and both are
  * asserted rather than assumed:
  *
- * - **The edge keys on `Host`.** `/news/hello-world` and `/sitemap.xml` are the
- *   same path for every tenant, so a cache that keys on path alone would serve
- *   one tenant's article — or one tenant's entire URL inventory — to another's
- *   visitors. `infra/varnish/default.vcl`'s `vcl_hash` hashes `req.http.host`
+ * - **The edge keys on `Host`.** `/sitemap.xml` is the same path for every
+ *   tenant, so a cache that keys on path alone would serve one tenant's entire
+ *   URL inventory to another's visitors. `infra/varnish/default.vcl`'s `vcl_hash` hashes `req.http.host`
  *   explicitly (and does not `return (lookup)`, so builtin `req.url` hashing
  *   still runs). `tests/edge-cache.test.ts` asserts both halves.
  * - **An unpublished tenant fails closed.** `requiresTenant` is true for every
@@ -161,36 +170,6 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     allowedQueryParams: [],
     rationale:
       "Per-tenant blog feed and sitemap; content-derived, anonymous, identical for every reader."
-  },
-  {
-    key: "news-index",
-    moduleKey: "blog_content",
-    pattern: /^\/news\/?$/,
-    ttlSeconds: 120,
-    requiresTenant: true,
-    allowedQueryParams: ["page"],
-    rationale:
-      "Host-resolved published-post listing (ADR-0059). Same body, same reasoning and the same TTL as `blog-index`; the ONE difference is that its tenant arrives from the request rather than from a path segment."
-  },
-  {
-    key: "news-taxonomy",
-    moduleKey: "blog_content",
-    pattern: /^\/news\/(category|tag)\/[^/]+$/,
-    ttlSeconds: 120,
-    requiresTenant: true,
-    allowedQueryParams: ["page"],
-    rationale:
-      "Host-resolved listing filtered by a taxonomy term; the `blog-taxonomy` counterpart. Declared before `news-post` matters only to a reader — `matchPublicCacheSurface` orders specific-first by pattern length, and a test pins that."
-  },
-  {
-    key: "news-post",
-    moduleKey: "blog_content",
-    pattern: /^\/news\/[^/]+$/,
-    ttlSeconds: 300,
-    requiresTenant: true,
-    allowedQueryParams: [],
-    rationale:
-      "A single published post at its host-resolved URL — the page every canonical, `<loc>` and feed link points at once the family is live. Purged by the same `blog_content` module purge that already covers `blog-post`."
   },
   {
     key: "seo-robots",

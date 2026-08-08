@@ -24,6 +24,8 @@ import {
   collectPurgedModuleKeys,
   findCacheableForbiddenPaths,
   findOwnersWithoutPurges,
+  findSurfacesWithoutServingRoutes,
+  literalPathPrefixes,
   validateSurfaces,
   type SurfaceLike
 } from "../scripts/edge-cache-surfaces-check";
@@ -189,7 +191,103 @@ describe("findOwnersWithoutPurges", () => {
   });
 });
 
+describe("literalPathPrefixes", () => {
+  test.each([
+    [String.raw`^\/news\/?$`, ["/news/"]],
+    [String.raw`^\/blog\/[^/]+\/?$`, ["/blog/"]],
+    [String.raw`^\/robots\.txt$`, ["/robots.txt"]],
+    // A non-literal optional group ends the prefix rather than being guessed at.
+    [String.raw`^\/sitemap(-\d+)?\.xml$`, ["/sitemap"]],
+    // One level of PURELY literal alternation expands, because the alternative
+    // is a prefix of "/" — which would match every route ever declared and make
+    // the coverage rule vacuous for exactly this family.
+    [
+      String.raw`^\/(feed\.xml|atom\.xml|feed\.json)$`,
+      ["/feed.xml", "/atom.xml", "/feed.json"]
+    ]
+  ])("%s -> %p", (source, expected) => {
+    expect(literalPathPrefixes(source)).toEqual(expected as string[]);
+  });
+
+  test("does not expand an alternation that is followed by more pattern", () => {
+    // Expanding here would drop the `\/x` and widen what counts as covered.
+    expect(literalPathPrefixes(String.raw`^\/(a|b)\/x$`)).toEqual(["/"]);
+  });
+});
+
+describe("findSurfacesWithoutServingRoutes", () => {
+  const routes = new Map([["blog_content", ["/api/v1/blog", "/blog"]]]);
+
+  test("a surface its owner can serve passes", () => {
+    expect(findSurfacesWithoutServingRoutes([SAFE], routes)).toEqual([]);
+  });
+
+  test("the ORIGINAL defect: a surface whose routes were deleted", () => {
+    // Exactly the state ADR-0071 left behind — `/news/**` surfaces owned by
+    // `blog_content`, which declares `/blog` and no `/news`.
+    const failures = findSurfacesWithoutServingRoutes(
+      [{ ...SAFE, key: "news-index", pattern: /^\/news\/?$/ }],
+      routes
+    );
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("news-index");
+    expect(failures[0]).toContain("inert permission to cache");
+  });
+
+  test("coverage works in BOTH directions", () => {
+    // Route narrower than the surface prefix: `seo-sitemap`'s prefix is
+    // `/sitemap` while the declared route is the concrete `/sitemap.xml`.
+    expect(
+      findSurfacesWithoutServingRoutes(
+        [
+          {
+            ...SAFE,
+            key: "seo-sitemap",
+            moduleKey: "seo_distribution",
+            pattern: /^\/sitemap(-\d+)?\.xml$/
+          }
+        ],
+        new Map([["seo_distribution", ["/sitemap.xml", "/sitemap-"]]])
+      )
+    ).toEqual([]);
+  });
+
+  test("a module that declares no routes at all cannot serve anything", () => {
+    expect(findSurfacesWithoutServingRoutes([SAFE], new Map())).toHaveLength(1);
+  });
+
+  test("EVERY branch of an alternation must be servable, not just one", () => {
+    // The failure this guards: a module declaring only `/feed.xml` would look
+    // covered if the rule stopped at the first satisfied branch, leaving
+    // `/atom.xml` and `/feed.json` cacheable with nothing serving them.
+    expect(
+      findSurfacesWithoutServingRoutes(
+        [
+          {
+            ...SAFE,
+            key: "seo-feed",
+            moduleKey: "seo_distribution",
+            pattern: /^\/(feed\.xml|atom\.xml|feed\.json)$/
+          }
+        ],
+        new Map([["seo_distribution", ["/feed.xml"]]])
+      )
+    ).toHaveLength(1);
+  });
+});
+
 describe("the real registry", () => {
+  test("declares no surface its owner cannot serve", () => {
+    const routesByModule = new Map(
+      listModules().map((module) => [module.key, module.api?.routes ?? []])
+    );
+
+    expect(
+      findSurfacesWithoutServingRoutes(PUBLIC_CACHE_SURFACES, routesByModule)
+    ).toEqual([]);
+  });
+
   test("passes every per-entry rule", () => {
     expect(validateSurfaces(PUBLIC_CACHE_SURFACES, MODULE_KEYS)).toEqual([]);
   });

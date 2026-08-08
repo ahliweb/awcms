@@ -320,14 +320,122 @@ export function findOwnersWithoutPurges(
     );
 }
 
+/**
+ * The literal path prefix a pattern can only ever match, as a list.
+ *
+ * Walks the source until the first construct that stops being a literal. One
+ * level of alternation IS expanded when every branch is literal, and that is not
+ * a flourish: `seo-feed` is `^\/(feed\.xml|atom\.xml|feed\.json)$`, whose plain
+ * prefix is `/` — a prefix that matches every route ever declared and would make
+ * the rule below vacuous for exactly the surface family that most needs it.
+ */
+export function literalPathPrefixes(source: string): string[] {
+  const body = source.replace(/^\^/, "").replace(/\$$/, "");
+  let prefix = "";
+  let index = 0;
+
+  for (; index < body.length; index += 1) {
+    const char = body[index]!;
+
+    if (char === "\\") {
+      const next = body[index + 1];
+      // Only escapes that stand for themselves in a path. `\d` and friends are
+      // classes, not literals, so the prefix ends here.
+      if (next === undefined || !"/.-".includes(next)) break;
+      prefix += next;
+      index += 1;
+      continue;
+    }
+
+    if ("[](){}|?*+^$".includes(char)) break;
+    prefix += char;
+  }
+
+  if (body[index] !== "(") return [prefix];
+
+  const close = body.indexOf(")", index);
+  if (close === -1) return [prefix];
+
+  const branches = body.slice(index + 1, close).split("|");
+  const literalBranches = branches.map((branch) =>
+    branch.replace(/\\([/.-])/g, "$1")
+  );
+
+  // Expand only when the whole group is literal AND it ends the pattern —
+  // otherwise the text after it belongs in the prefix too and dropping it
+  // silently would widen what counts as "covered".
+  if (
+    close !== body.length - 1 ||
+    literalBranches.some((branch) => /[[\](){}|?*+^$\\]/.test(branch))
+  ) {
+    return [prefix];
+  }
+
+  return literalBranches.map((branch) => `${prefix}${branch}`);
+}
+
+/**
+ * Every declared surface must be a path its OWNING module could actually serve.
+ *
+ * The defect this exists for: ADR-0071 deleted the `/news/**` route family, and
+ * its three `news-*` surfaces stayed declared for days afterwards. They were
+ * inert — nothing served those paths, and `requiresTenant` fails an unresolved
+ * tenant closed — so no check had anything to notice. But an inert entry is
+ * worse than a missing one. It is a standing statement that a SHARED cache may
+ * store a path, carrying a rationale that argues it is safe, for a route that
+ * does not exist; the next reader takes it as evidence the family is alive, and
+ * `edge-cache:surfaces:check` reporting OK on 11 surfaces reads as coverage of
+ * 11 things rather than of 8.
+ *
+ * `api.routes` is the right authority because the registry already treats it as
+ * the module's claim on URL space (`modules:routes:check` holds the filesystem
+ * to it). Coverage is prefix-compatible IN EITHER DIRECTION: a route may be
+ * broader than the surface (`/blog` vs `/blog/`) or narrower (`/sitemap.xml` vs
+ * the `/sitemap` prefix of `^\/sitemap(-\d+)?\.xml$`).
+ */
+export function findSurfacesWithoutServingRoutes(
+  surfaces: readonly SurfaceLike[],
+  routesByModule: ReadonlyMap<string, readonly string[]>
+): string[] {
+  const failures: string[] = [];
+
+  for (const surface of surfaces) {
+    if (!surface.moduleKey) continue;
+
+    const routes = routesByModule.get(surface.moduleKey) ?? [];
+    const prefixes = literalPathPrefixes(surface.pattern.source);
+    const covered = prefixes.every((prefix) =>
+      routes.some(
+        (route) => prefix.startsWith(route) || route.startsWith(prefix)
+      )
+    );
+
+    if (!covered) {
+      failures.push(
+        `Surface "${surface.key}" matches ${prefixes.join(", ")}, but module ` +
+          `"${surface.moduleKey}" declares no api.routes entry that could serve it ` +
+          `(declared: ${routes.length > 0 ? routes.join(", ") : "none"}). ` +
+          "A surface for a route nobody serves is an inert permission to cache."
+      );
+    }
+  }
+
+  return failures;
+}
+
 async function main(): Promise<void> {
-  const moduleKeys = new Set(listModules().map((module) => module.key));
+  const modules = listModules();
+  const moduleKeys = new Set(modules.map((module) => module.key));
+  const routesByModule = new Map(
+    modules.map((module) => [module.key, module.api?.routes ?? []] as const)
+  );
   const purgedKeys = await collectPurgedModuleKeys();
 
   const failures = [
     ...validateSurfaces(PUBLIC_CACHE_SURFACES, moduleKeys),
     ...findCacheableForbiddenPaths(MUST_NEVER_MATCH, matchPublicCacheSurface),
-    ...findOwnersWithoutPurges(PUBLIC_CACHE_SURFACES, purgedKeys)
+    ...findOwnersWithoutPurges(PUBLIC_CACHE_SURFACES, purgedKeys),
+    ...findSurfacesWithoutServingRoutes(PUBLIC_CACHE_SURFACES, routesByModule)
   ];
 
   if (failures.length > 0) {

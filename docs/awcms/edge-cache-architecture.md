@@ -188,12 +188,27 @@ Celah ini tercatat sebagai **C14** di
   `seo_distribution`), dan dibatasi ke pemilik surface (ban untuk key yang tak
   menandai apa pun = upacara yang terlihat seperti cakupan).
 
-- ~~**Keluarga konten host-resolved `/news/**`**~~ **SUDAH** (ADR-0061 §A).
-  Tiga entri — `news-index`/`news-taxonomy`/`news-post` — mencerminkan TTL dan
-  alasan pasangan `blog-*`-nya, dimiliki `blog_content` yang purge modulnya sudah
-  terpasang.
+- ~~**Keluarga konten host-resolved `/news/**`**~~ — **DICABUT**
+  ([ADR-0071](../adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)).
+  ADR-0061 §A menambahkan tiga entri (`news-index`/`news-taxonomy`/`news-post`);
+  ADR-0071 kemudian menghapus keluarga rutenya dari repo ini, dan ketiga entri
+  itu **bertahan beberapa hari lebih lama dari rutenya**.
 
-  Dua hal yang perlu dibawa saat menyentuhnya lagi:
+  Mereka **inert**, bukan berbahaya — tak ada yang menyajikan path itu, dan
+  `requiresTenant` membuat tenant yang tak ter-resolve gagal-tertutup. Tetapi
+  entri inert lebih buruk daripada tak ada entri: ia pernyataan berdiri bahwa
+  cache BERSAMA boleh menyimpan sebuah path, lengkap dengan `rationale` yang
+  berargumen bahwa itu aman, untuk rute yang tak bisa dibaca siapa pun — dan
+  `edge-cache:surfaces:check` yang melapor OK atas 11 surface terbaca sebagai
+  cakupan 11 hal, bukan 8.
+
+  Sejak itu **`edge-cache:surfaces:check` menolak surface yang modul pemiliknya
+  tak mendeklarasikan rute penyaji** (`findSurfacesWithoutServingRoutes`, dibaca
+  dari `api.routes` di registry — otoritas yang sama yang `modules:routes:check`
+  ikat ke filesystem). Kesebelas entri kemarin: 8 lolos, tepat 3 gagal.
+
+  Dua hal yang tetap berlaku untuk surface host-resolved BERIKUTNYA — hari ini
+  keenam rute discovery root adalah satu-satunya keluarga semacam itu:
 
   - **Prasyarat host-hash itu DUA properti, bukan satu.** `vcl_hash` memang
     memanggil `hash_data(req.http.host)` — tetapi sub itu juga harus TIDAK
@@ -207,7 +222,10 @@ Celah ini tercatat sebagai **C14** di
     ber-`private, no-store` — menjawab "apakah hostname ini tenant hidup?" dari
     SATU permintaan, lewat kanal yang `padUnresolvedHostRouteLatency` dibangun
     untuk menutup. Aturannya: publikasikan hanya pada jalur yang menyajikan,
-    dijaga `tests/news-routes-edge-cache-contract.test.ts` (mutation-proven).
+    dijaga `tests/discovery-routes-edge-cache-contract.test.ts` (mutation-proven).
+    Pasangannya untuk `/news/**` ikut dihapus bersama rutenya (ADR-0071); aturan
+    disclosure-nya TIDAK ikut dicabut — ia berlaku untuk tiap surface
+    host-resolved berikutnya.
 
 - **Daftar publik komentar** (`GET /api/v1/comments`) — kandidat sah, ditunda.
 - **Purge dari UI admin.** Hanya lewat antrean dan worker.

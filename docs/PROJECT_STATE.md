@@ -894,7 +894,14 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   permukaan host-resolved.
 
   **SELESAI SELURUHNYA.** §A — keluarga `/news/**` (3 entri, dimiliki
-  `blog_content`). §B — enam rute discovery root (`seo-robots`/`seo-sitemap`/
+  `blog_content`) — **entri itu kemudian DICABUT**: ADR-0071 menghapus rutenya,
+  dan ketiga surface bertahan beberapa hari lebih lama daripada rute yang
+  mereka layani. Inert, bukan berbahaya (`requiresTenant` gagal-tertutup) —
+  tetapi entri inert adalah izin berdiri bagi cache BERSAMA untuk menyimpan
+  path yang tak seorang pun sajikan, dan gerbang yang melapor OK atas 11
+  surface terbaca sebagai cakupan 11 hal, bukan 8. `edge-cache:surfaces:check`
+  kini menolak surface yang modul pemiliknya tak mendeklarasikan rute penyaji.
+  §B — enam rute discovery root (`seo-robots`/`seo-sitemap`/
   `seo-feed`); `serveDiscovery` menerima `locals` dan mempublikasikan setelah
   `build(ctx)` memberi payload, sehingga `/sitemap-99999.xml` cocok pola tapi tak
   pernah menerbitkan tenant — menyusuri nomor halaman tak bisa mengisi cache.
