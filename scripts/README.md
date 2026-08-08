@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-76 target menjalankan berkas di `scripts/`; 31 di antaranya
+77 target menjalankan berkas di `scripts/`; 32 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -31,6 +31,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | ---------------------------------------- | ---------------------------------------------- | ---- |
 | `access:chokepoint:check`                | `access-chokepoint-check.ts`                   | ✅   |
 | `access:permissions:enforcement:check`   | `permission-enforcement-check.ts`              | ✅   |
+| `admin:screen-coverage:check`            | `admin-screen-coverage-check.ts`               | ✅   |
 | `analytics:purge`                        | `visitor-analytics-purge.ts`                   | —    |
 | `analytics:rollup`                       | `visitor-analytics-rollup.ts`                  | —    |
 | `api:consumer-contract:check`            | `api-consumer-contract.ts`                     | ✅   |
