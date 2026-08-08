@@ -356,6 +356,67 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN REKOMENDASI 8 Agustus 2026 — R1–R10, enam mendarat, empat tersisa.**
+  Audit enam sumbu (dokumen-vs-kode, permukaan-tanpa-UI, gerbang buta,
+  backlog-vs-kode, keamanan/otorisasi, interop `awcms-astro`), tiap temuan lewat
+  verifikator skeptis: **24 bertahan → 10 entri kerja**.
+
+  **Kenapa daftarnya ada DI SINI dan bukan di catatan sesi.** Putaran ini dimulai
+  dengan menurunkan ulang daftar rekomendasi putaran sebelumnya — karena daftar
+  itu tidak pernah ditulis ke repo, dan lima PR yang mendarat darinya (#411–#415)
+  hanya bisa dibaca ulang dari pesan commit. Menuliskannya di sini adalah harga
+  satu paragraf; menurunkannya ulang adalah harga satu audit.
+
+  **Mendarat (hijau penuh, tiap PR ber-`bun run check` PENUH):**
+  - **R1** (#416) — `registration_requests.approve` bisa memberikan `owner`.
+    Prinsipal yang hanya memegang `{read,approve}` bisa mencetak akun ber-katalog
+    penuh, dan `owner` tampil di dropdown `/admin/registrations`. Ditutup +
+    gerbang kelasnya (`tests/access-assignment-writers.test.ts`: tiap penulis
+    `awcms_access_assignments` wajib membaca `is_system`).
+  - **R2** (#417) — lima berkas DB-gated (**36 test**) tak pernah dieksekusi
+    pipeline mana pun: MFA lockout/replay, lintas-tenant OIDC, Turnstile di
+    handler login, konformansi respons office. Daftar eksplisit di kedua workflow
+    drift sejak #188–#191. Gerbang paritas dua arah + kedua workflow diperbaiki.
+    Suite legacy 10→15 berkas, 64→100 test.
+  - **R4** (#418 + #419) — `/news/**` masih "hidup" di AGENTS.md (berkas pertama
+    yang dibaca tiap agen, **menjadwalkan pekerjaan yang sudah selesai**),
+    ARCHITECTURE, dokumen ini, standar-performa, dan frontmatter skill; tiga
+    surface cache tepi inert; dan gerbangnya sendiri mengikat empat NAMA BERKAS
+    sehingga sebuah `index.astro` menghidupkannya kembali tanpa satu asersi pun
+    bergerak (diverifikasi: 9 pass/0 fail).
+  - **R5** (#420) — aturan 5 `skills:check`: tiap URL `/admin/…` berbacktick
+    wajib resolve, korpusnya termasuk `src/modules/<nama>/README.md`.
+  - **R6** (#421) — `bun run admin:screen-coverage:check`: **32 layar mengklaim
+    133 dari 203 permission**; 16 keputusan ber-alasan, **54 di ledger satu-arah**
+    (`scripts/admin-screen-coverage-ledger.ts`) yang hanya boleh mengecil.
+
+  **Tersisa, urut menurut akibat.** Rinciannya (bukti, perbaikan, gerbang yang
+  harus ikut mendarat) ada di badan PR yang menyebut nomornya:
+  - **R3 — 32 layar admin memutuskan dengan `ssr.permissions.has()` saja**, jadi
+    saat MEMBACA mereka melewati `evaluateAccess` (policy `deny` tenant),
+    `resolveModuleEnabled` (403 `MODULE_DISABLED`), dan `recordDecisionLog`.
+    `access:chokepoint:check` buta karena `ROUTES_ROOT = "src/pages/api/v1"`.
+    Batasnya: RBAC dasar tetap ditegakkan, dan tak ada kebocoran lintas-tenant.
+    **HARUS DIPECAH** — 1 PR helper+gerbang+ledger, lalu ~6–8 PR migrasi.
+  - **R7 — kredensial mesin, suppression email, komposer homepage tanpa layar.**
+    Kini otomatis terlihat di ledger R6, jadi ia bisa mendarat bertahap.
+  - **R8 — permission platform bisa diberikan lewat editor role**
+    (`listPermissionCatalog` tanpa predikat `scope`; ADR-0053 tetap menolak di
+    `access-guard.ts`, jadi yang hilang adalah redundansinya).
+  - **R9 — lima gerbang menjanjikan cakupan yang tak mereka periksa**, mis.
+    `logging:lint:check` yang `SCAN_ROOTS`-nya melewatkan `src/middleware.ts`
+    dan seluruh `src/pages` (probe identik: `src/lib/` → EXIT 1,
+    `src/middleware.ts` → EXIT 0).
+  - **R10 — C7/RUM tercatat "menunggu keputusan pemilik produk"** padahal
+    ADR-0067 sudah `Accepted` sejak 8 Agustus 2026.
+
+  **Ditolak, dan alasannya bagian dari hasilnya:** menuntut layar untuk keenam
+  `workflow.definition.*` (absennya sudah keputusan ber-pemeriksa), menulis ulang
+  §C ADR-0066 (ADR adalah catatan pada satu titik waktu — perubahan kebijakan =
+  ADR baru), menaruh perintah shell di `awcms-family-compatibility.yaml`
+  (eksekusi arbitrer dari berkas data ke dalam gerbang), dan melebarkan gerbang
+  teks ke seluruh `docs/awcms/` (§10 sudah menolaknya).
+
 - **ASESMEN MENYELURUH 4 Agustus 2026 — [`awcms/repo-assessment-2026-08-04.md`](awcms/repo-assessment-2026-08-04.md).**
   Repo dinilai terhadap empat sumbu (standar AWCMS, hubungan `awcms-astro`, performa
   internasional, keamanan internasional). Tujuh rekomendasi berperingkat.
