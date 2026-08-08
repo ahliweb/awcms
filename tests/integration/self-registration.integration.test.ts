@@ -121,6 +121,35 @@ function approve(
   );
 }
 
+/**
+ * A role row, seeded through the ADMIN channel so `is_system` can be set
+ * directly — `role-admin.ts#createRole` hardcodes `false`, which is precisely
+ * why the only system role a tenant ever has is the one
+ * `platform-bootstrap.ts` seeds.
+ */
+async function seedRole(
+  tenantId: string,
+  roleCode: string,
+  isSystem: boolean
+): Promise<string> {
+  const rows = (await getAdminSql()`
+    INSERT INTO awcms_roles (tenant_id, role_code, role_name, is_system)
+    VALUES (${tenantId}, ${roleCode}, ${roleCode}, ${isSystem})
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows[0]!.id;
+}
+
+async function assignmentCount(tenantId: string): Promise<number> {
+  const rows = (await getAdminSql()`
+    SELECT count(*)::int AS n FROM awcms_access_assignments
+    WHERE tenant_id = ${tenantId}
+  `) as { n: number }[];
+
+  return rows[0]!.n;
+}
+
 async function rowCount(tenantId: string): Promise<number> {
   const rows = (await getAdminSql()`
     SELECT count(*)::int AS n FROM awcms_registration_requests WHERE tenant_id = ${tenantId}
@@ -285,6 +314,64 @@ suite("self-registration integration (Wave 2 delta auth)", () => {
     `) as { n: number }[];
     expect(identities[0]!.n).toBe(0);
     expect(sent).toEqual([]);
+  });
+
+  test("a system role is refused, and the approval writes nothing at all", async () => {
+    // The original defect: `approveRegistrationRequest` validated `roleIds`
+    // with `deleted_at IS NULL` alone, so a principal holding only
+    // `registration_requests.{read,approve}` could approve with
+    // `roleIds: [<owner>]` and mint an account carrying the tenant's ENTIRE
+    // permission catalogue — the one thing that permission was separated from
+    // `access_control.assign` in order not to do. Drop `is_system` from the
+    // filter in `self-registration.ts` and this test fails on the first
+    // assertion, with an `awcms_access_assignments` row to prove it.
+    const sent: Sent = [];
+    const roleId = await seedRole(TENANT_A, "owner", true);
+    const request = await submit(TENANT_A);
+
+    const result = await approve(TENANT_A, request.requestId!, sent, [roleId]);
+
+    expect(result.outcome).toBe("system_role");
+    expect(result.outcome === "system_role" && result.roleCodes).toEqual([
+      "owner"
+    ]);
+
+    // Refused BEFORE any write — this function returns from inside the tenant
+    // transaction, and a returned 4xx COMMITs, so "no rows" is the assertion
+    // that matters rather than "rolled back".
+    expect(await assignmentCount(TENANT_A)).toBe(0);
+
+    const identities = (await getAdminSql()`
+      SELECT count(*)::int AS n FROM awcms_identities
+      WHERE tenant_id = ${TENANT_A} AND login_identifier = ${APPLICANT}
+    `) as { n: number }[];
+    expect(identities[0]!.n).toBe(0);
+    expect(sent).toEqual([]);
+
+    // Still claimable: a refused approval must leave the request reviewable.
+    const rows = (await getAdminSql()`
+      SELECT status FROM awcms_registration_requests
+      WHERE tenant_id = ${TENANT_A} AND id = ${request.requestId!}
+    `) as { status: string }[];
+    expect(rows[0]!.status).toBe("pending");
+  });
+
+  test("an ordinary role is still granted, and the result names it", async () => {
+    // The other half of the same rule: refusing system roles must not turn
+    // into refusing roles. Without this, `AND is_system = false` could be
+    // written as a filter that drops every row and the suite above would still
+    // be green.
+    const sent: Sent = [];
+    const roleId = await seedRole(TENANT_A, "editor", false);
+    const request = await submit(TENANT_A);
+
+    const result = await approve(TENANT_A, request.requestId!, sent, [roleId]);
+
+    expect(result.outcome).toBe("approved");
+    expect(result.outcome === "approved" && result.grantedRoleCodes).toEqual([
+      "editor"
+    ]);
+    expect(await assignmentCount(TENANT_A)).toBe(1);
   });
 
   test("rejection creates nothing and closes the queue entry", async () => {

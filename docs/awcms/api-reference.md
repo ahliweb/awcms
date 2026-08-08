@@ -1735,7 +1735,7 @@ Oldest first, bounded. Login identifiers are MASKED — a reviewer decides on a 
 - **operationId**: `approveRegistrationRequest`
 - **Security**: bearerAuth + tenantHeader
 
-The only path that materializes profile + identity + tenant_user, hence its own permission (`registration_requests.approve`), separate from `reject`. The account is created with an UNUSABLE password and the applicant is emailed a password-reset link; `delivery` reports whether that link could actually be queued. `roleIds` is optional and defaults to none — an approval never grants a role by default.
+The only path that materializes profile + identity + tenant_user, hence its own permission (`registration_requests.approve`), separate from `reject`. The account is created with an UNUSABLE password and the applicant is emailed a password-reset link; `delivery` reports whether that link could actually be queued. `roleIds` is optional and defaults to none — an approval never grants a role by default, and a SYSTEM role (`owner`) is refused with 409 `ROLE_SYSTEM_PROTECTED`: admitting a person to a tenant is not the authority to hand out the tenant's whole permission catalogue.
 
 **Parameters**
 
@@ -1747,14 +1747,14 @@ The only path that materializes profile + identity + tenant_user, hence its own 
 
 **Responses**
 
-| Status | Description                                           | Schema                                 |
-| ------ | ----------------------------------------------------- | -------------------------------------- |
-| 200    | Account created.                                      | object                                 |
-| 400    | Validation error.                                     | [`ApiError`](#standard-error-envelope) |
-| 401    | Missing or invalid session.                           | [`ApiError`](#standard-error-envelope) |
-| 403    | Access denied by RBAC/ABAC.                           | [`ApiError`](#standard-error-envelope) |
-| 404    | Resource not found.                                   | [`ApiError`](#standard-error-envelope) |
-| 409    | An account with that login identifier already exists. | [`ApiError`](#standard-error-envelope) |
+| Status | Description                                                                                                                                                                | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Account created.                                                                                                                                                           | object                                 |
+| 400    | Validation error.                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | `IDENTIFIER_TAKEN` — an account with that login identifier already exists; or `ROLE_SYSTEM_PROTECTED` — one of `roleIds` names a system role, which no approval may grant. | [`ApiError`](#standard-error-envelope) |
 
 ### `POST /api/v1/registration-requests/{id}/reject` — Reject a request. Creates nothing and notifies nobody.
 

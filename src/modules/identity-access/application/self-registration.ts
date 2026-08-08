@@ -14,6 +14,16 @@
  *   Approval is the ONLY path that materializes profile + identity +
  *   tenant_user, and therefore the single point at which a self-registered
  *   applicant becomes able to sign in.
+ * - Approval REFUSES system roles. It is the second writer of
+ *   `awcms_access_assignments` in this repo, and it sits behind a different
+ *   permission than the first one (`access_control.assign`, whose service
+ *   `user-admin.ts#assignRole` throws `SystemRoleAssignmentError`). Two writers
+ *   with two rule sets is how `owner` — a system role holding the entire tenant
+ *   catalogue — became reachable from a permission whose stated purpose is that
+ *   it does NOT edit roles. What it still does NOT do is demand
+ *   `access_control.assign` for granting an ordinary role at approval time:
+ *   that is the deliberate design recorded in the route's docblock, and
+ *   narrowing it is an authority change that belongs in an ADR, not here.
  *
  * ## Approval issues a credential the applicant must claim
  *
@@ -171,10 +181,20 @@ export type ApproveRegistrationResult =
       tenantUserId: string;
       /** Whether the applicant's password-reset link was actually queued. */
       delivery: "queued" | "unavailable";
+      /** Role codes actually granted, sorted — empty on the default (no role) path. */
+      grantedRoleCodes: string[];
     }
   | { outcome: "not_found" }
   | { outcome: "identifier_taken" }
-  | { outcome: "unknown_role" };
+  | { outcome: "unknown_role" }
+  /**
+   * At least one requested role is a SYSTEM role (`owner`). Distinct from
+   * `unknown_role` on purpose: the role exists and the reviewer's own screen
+   * just rendered it, so answering "does not exist" would be a lie about a row
+   * they can see. It leaks nothing they do not already hold — listing this
+   * tenant's roles is what `registration_requests.read` already showed them.
+   */
+  | { outcome: "system_role"; roleCodes: string[] };
 
 export type ApproveRegistrationOptions = {
   roleIds: string[];
@@ -227,19 +247,45 @@ export async function approveRegistrationRequest(
     return { outcome: "identifier_taken" };
   }
 
+  // Carried into the audit row: `roleCount` alone cannot answer "which role did
+  // this approval hand out?", and that is the only question an auditor has
+  // about an approval that granted one.
+  let grantedRoleCodes: string[] = [];
+
   if (options.roleIds.length > 0) {
     const found = (await tx`
-      SELECT id FROM awcms_roles
+      SELECT id, role_code, is_system FROM awcms_roles
       WHERE tenant_id = ${tenantId}
         AND id = ANY(${tx.array(options.roleIds, "uuid")})
         AND deleted_at IS NULL
-    `) as { id: string }[];
+    `) as { id: string; role_code: string; is_system: boolean }[];
 
     // All-or-nothing: a partially-valid role list must not silently grant the
     // subset that happened to resolve.
     if (found.length !== options.roleIds.length) {
       return { outcome: "unknown_role" };
     }
+
+    // A system role is `owner`, and `owner` holds the WHOLE tenant catalogue
+    // (`tenant-admin/application/platform-bootstrap.ts` seeds it that way). The
+    // ordinary assignment path already refuses this — `user-admin.ts#assignRole`
+    // throws `SystemRoleAssignmentError` and its route is gated on
+    // `access_control.assign`. Approval writes the same table
+    // (`awcms_access_assignments`) behind a DIFFERENT permission, so without
+    // this check a principal holding only `registration_requests.{read,approve}`
+    // — a role whose whole point is that it does NOT edit the RBAC catalogue —
+    // could mint an `owner`. Refused BEFORE any write: this function returns
+    // from inside the tenant transaction and a returned 4xx COMMITs.
+    const systemRoles = found.filter((role) => role.is_system);
+
+    if (systemRoles.length > 0) {
+      return {
+        outcome: "system_role",
+        roleCodes: systemRoles.map((role) => role.role_code)
+      };
+    }
+
+    grantedRoleCodes = found.map((role) => role.role_code).sort();
   }
 
   // Not `emailVerified`: an approving reviewer confirmed the person should have
@@ -314,7 +360,8 @@ export async function approveRegistrationRequest(
     outcome: "approved",
     identityId,
     tenantUserId,
-    delivery: reset.outcome === "enqueued" ? "queued" : "unavailable"
+    delivery: reset.outcome === "enqueued" ? "queued" : "unavailable",
+    grantedRoleCodes
   };
 }
 

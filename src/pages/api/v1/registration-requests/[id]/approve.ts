@@ -24,6 +24,13 @@ type ApproveBody = {
  * that silently granted a default role would make "approve" mean more than the
  * reviewer read it as.
  *
+ * SYSTEM roles are refused (409 `ROLE_SYSTEM_PROTECTED`). The sentence above
+ * about admission not being role-editing is exactly why: `owner` is a system
+ * role holding the whole tenant catalogue, so letting this permission hand it
+ * out would make `registration_requests.approve` a superset of the permission
+ * it was separated from. The refusal lives in the service, before any write —
+ * see `application/self-registration.ts`.
+ *
  * The applicant receives a password-reset link, not a password: the account is
  * created with an unusable credential (see
  * `application/self-registration.ts`). `delivery` is reported back so the admin
@@ -108,6 +115,17 @@ export const POST = defineTenantRoute({
         );
       }
 
+      if (result.outcome === "system_role") {
+        // Same code the ordinary assignment path returns for the same refusal
+        // (`POST /api/v1/access/assignments` → 409 ROLE_SYSTEM_PROTECTED), so a
+        // reviewer who meets it in either place reads one answer, not two.
+        return fail(
+          409,
+          "ROLE_SYSTEM_PROTECTED",
+          "A system role cannot be granted through an approval."
+        );
+      }
+
       return fail(400, "UNKNOWN_ROLE", "One or more roles do not exist.");
     }
 
@@ -125,6 +143,10 @@ export const POST = defineTenantRoute({
         identityId: result.identityId,
         tenantUserId: result.tenantUserId,
         roleCount: prepared.roleIds.length,
+        // WHICH role, not just how many. An approval that granted a role is a
+        // privilege grant, and `roleCount: 1` cannot tell an auditor whether
+        // the account got `viewer` or something far larger.
+        roleCodes: result.grantedRoleCodes,
         delivery: result.delivery
       },
       correlationId: locals.correlationId

@@ -135,6 +135,44 @@ describe("the admin routes", () => {
     expect(approve).not.toMatch(/action:\s*"reject"/);
   });
 
+  test("approval refuses system roles, with the code the other path already uses", async () => {
+    const route = await readFile(
+      "src/pages/api/v1/registration-requests/[id]/approve.ts",
+      "utf8"
+    );
+
+    // 409 `ROLE_SYSTEM_PROTECTED` is what `POST /api/v1/access/assignments`
+    // answers for the same refusal. Two codes for one rule would make the
+    // screen have to explain which path the reviewer happened to take.
+    expect(route).toContain('"system_role"');
+    expect(route).toContain('"ROLE_SYSTEM_PROTECTED"');
+    expect(route).toMatch(/system_role[\s\S]{0,400}409/);
+  });
+
+  test("the approval audit row names the role, not just how many", async () => {
+    const route = await readFile(
+      "src/pages/api/v1/registration-requests/[id]/approve.ts",
+      "utf8"
+    );
+
+    // An approval that granted a role is a privilege grant. `roleCount: 1`
+    // cannot answer the only question an auditor asks about one.
+    expect(route).toMatch(/action:\s*"registration_approved"/);
+    expect(route).toContain("roleCodes: result.grantedRoleCodes");
+  });
+
+  test("the approve screen offers no role the endpoint would refuse", async () => {
+    const screen = await readFile(
+      "src/pages/admin/registrations.astro",
+      "utf8"
+    );
+
+    // UX-only — the endpoint stays the authority. But a picker that lists
+    // `owner` is either an escalation or a button that always fails, and both
+    // read to the operator as a broken screen.
+    expect(screen).toMatch(/filter\(\s*\(role\)\s*=>\s*!role\.isSystem\s*\)/);
+  });
+
   test("rejection notifies nobody", async () => {
     const reject = await readFile(
       "src/pages/api/v1/registration-requests/[id]/reject.ts",
