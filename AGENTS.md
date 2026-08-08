@@ -86,11 +86,25 @@ Yang dibelah adalah **URL, bukan kepemilikan konten**: keduanya dilayani modul
 `/news/**` di repo ini** — ADR-0071 men-supersede ADR-0059 yang dulu
 membolehkannya.
 
-> **Jendela yang masih terbuka.** Empat rute `/news/**` ADR-0059 MASIH ADA di
-> `src/pages/news/` dan `publicRouteMode` masih `domain_default` (menyala secara
-> bawaan). ADR-0071 §4 menjadwalkan penghapusannya beserta 301-nya ke
-> `/blog/{tenantCode}/**`; `tests/url-vocabulary-split.test.ts` menegakkan jadwal
-> itu dua arah, jadi jendelanya tidak bisa terlupakan.
+> **Jendelanya sudah TERTUTUP** (ADR-0071 §4 `SUDAH DILAKSANAKAN`). Keempat
+> rute, gerbang `withHostResolvedBlogTenant`, dan saklar `publicRouteMode`
+> **tidak ada lagi** — `src/pages/news/` tidak ada, dan kedua nama itu hanya
+> tersisa sebagai komentar sejarah. Yang berjalan sekarang hanyalah 301
+> `seo_distribution` dari keluarga pensiun itu ke `/blog/{tenantCode}/**`, untuk
+> tenant yang URL-nya pernah kita iklankan di sitemap dan feed.
+> `tests/url-vocabulary-split.test.ts` menegakkannya dua arah dan kini juga
+> melarang ketiga token itu muncul kembali di dokumen current-state.
+>
+> <!-- historis:mulai -->
+>
+> Teks sebelumnya di sini berbunyi "Empat rute `/news/**` ADR-0059 **MASIH ADA**
+> … ADR-0071 §4 menjadwalkan penghapusannya", dan bertahan setelah
+> penghapusannya benar-benar mendarat. Ia dipertahankan di paragraf ini karena
+> berkas ini adalah yang **pertama dibaca setiap agen**: sebuah jadwal untuk
+> pekerjaan yang sudah selesai membuat pembaca berikutnya mencari berkas yang
+> tidak ada, lalu menyimpulkan repo-nya rusak — atau membangunnya ulang, persis
+> yang dilarang tiga paragraf di atas.
+> <!-- historis:selesai -->
 
 Tiga hal yang mudah keliru:
 

@@ -944,14 +944,30 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
     pemilik — konsumen wajib lewat port `media_library`, jangan buat tabel media baru).
     (`blog-content` SUDAH di-port — PR #214; `news-portal` dilebur ke dalamnya, ADR-0044.)
 
-- **Rute publik host-resolved — SELESAI ([ADR-0059](adr/0059-host-resolved-public-content-routes.md)).**
-  Keluarga `/news/**` (indeks, detail post, kategori, tag) kini ada:
-  tanpa segmen `tenantCode`, tenant diresolusi dari request lewat
-  `withHostResolvedBlogTenant` (sebentuk `site_search`/`comments`, ber-padding
-  latensi), digerbangi saklar per-tenant `publicRouteMode` yang simetris dengan
-  `legacyTenantRouteEnabled`. **Nol migrasi, nol permission, nol perubahan
-  OpenAPI.** `/news/feed.xml`/`sitemap-news.xml`/`search` sengaja TIDAK dibangun
-  — root host sudah melayani ketiganya host-resolved.
+- **~~Rute publik host-resolved~~ — DICABUT ([ADR-0071](adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+  men-supersede ADR-0059; §4 `SUDAH DILAKSANAKAN`).** Kosakata URL publik
+  dibelah per repo: **`/blog/**` permanen di sini, `/news/**` milik
+  `ahliweb/awcms-astro`** — satu keluarga per repo, tidak pernah keduanya di
+  satu repo. Keempat berkas rute, gerbang `withHostResolvedBlogTenant`, dan
+  saklar `publicRouteMode` **dihapus**; yang berjalan sekarang hanyalah 301
+  `seo_distribution` ke `/blog/{tenantCode}/**`, karena URL keluarga itu pernah
+  hidup dan kita iklankan sendiri di sitemap dan feed.
+  `legacyTenantRouteEnabled` bertahan sebagai satu-satunya saklar keluarga
+  `/blog/{tenantCode}`. Konteks aslinya dipertahankan di bawah — pelajaran di
+  bawahnya tetap berlaku dan tidak bergantung pada rutenya:
+
+  <!-- historis:mulai -->
+
+  > Teks asli: "**Rute publik host-resolved — SELESAI (ADR-0059).** Keluarga
+  > `/news/**` (indeks, detail post, kategori, tag) kini ada: tanpa segmen
+  > `tenantCode`, tenant diresolusi dari request lewat
+  > `withHostResolvedBlogTenant` (sebentuk `site_search`/`comments`, ber-padding
+  > latensi), digerbangi saklar per-tenant `publicRouteMode` yang simetris
+  > dengan `legacyTenantRouteEnabled`. **Nol migrasi, nol permission, nol
+  > perubahan OpenAPI.** `/news/feed.xml`/`sitemap-news.xml`/`search` sengaja
+  > TIDAK dibangun — root host sudah melayani ketiganya host-resolved."
+
+  <!-- historis:selesai -->
 
   Yang paling penting untuk dibawa ke pekerjaan berikutnya, dan itu bukan
   fiturnya:
