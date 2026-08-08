@@ -6,8 +6,8 @@
  *
  * Base categories are fixed here. `derived.*` is an **extension
  * namespace** (per the issue: "derived.transactional as an extension
- * category pattern for derived apps") — a derived application registers
- * its own `derived.<name>` categories via
+ * category pattern for derived apps") — a domain module in `src/modules/`
+ * registers its own `derived.<name>` categories via
  * `registerDerivedEmailTemplateCategory` before using them; an
  * unregistered `derived.*` category is rejected (fail-closed), not
  * implicitly allowed with an empty/unlimited allowlist.
@@ -57,7 +57,7 @@ const BASE_CATEGORY_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = {
 const derivedCategoryAllowlists = new Map<string, readonly string[]>();
 
 /**
- * Derived apps call this once at startup to register their own
+ * A domain module calls this once at startup to register its own
  * `derived.<name>` category (e.g. `derived.order_confirmation`) with its
  * allowed variable names, before any template using that category is
  * created or rendered. Throws if `category` is not `derived.`-prefixed —

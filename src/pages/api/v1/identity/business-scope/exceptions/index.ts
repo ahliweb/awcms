@@ -26,8 +26,8 @@ import { listModules } from "../../../../../../modules";
 
 const IDEMPOTENCY_SCOPE = "identity_access_sod_conflict_exception_create";
 
-// The composed registry's SoD rules (base + any derived application registry).
-// The base declares none; a derived application (or the fixture) contributes
+// The composed registry's SoD rules (base + any domain module that contributes
+// rules). The base declares none; a domain module (or the fixture) contributes
 // them. An exception can only be created against a KNOWN rule that ALLOWS
 // exceptions.
 const SOD_RULES = collectSoDRuleDescriptors(listModules());

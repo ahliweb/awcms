@@ -28,7 +28,7 @@ import { listModules } from "../../../../../../modules";
 const IDEMPOTENCY_SCOPE = "identity_access_business_scope_assignment_create";
 
 // SoD rule set for assignment-time conflict evaluation (Issue #181). Composed
-// from the registry (base + any derived application registry); the base
+// from the registry (base + any domain module that contributes rules); the base
 // declares no SoD rules, so this is empty in a pure base and conflict
 // detection is a no-op there.
 const SOD_RULES = collectSoDRuleDescriptors(listModules());

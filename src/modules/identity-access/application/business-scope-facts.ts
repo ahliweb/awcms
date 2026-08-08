@@ -90,8 +90,9 @@ function resolveHierarchyGuardConfig(): HierarchyGuardConfig {
  *   purely-SYNCHRONOUS CPU infinite loop inside the adapter cannot be
  *   interrupted from JavaScript — the event loop never regains control, so the
  *   timer never fires, and the `resolveScope()` call itself blocks before this
- *   race is even set up. That case remains the derived app's own
- *   responsibility.
+ *   race is even set up. That case remains the contributing domain module's
+ *   own responsibility (`src/modules/`; ADR-0034 removed the derived-app
+ *   pathway).
  * - COMBINED-LENGTH CAP (`AUTH_BUSINESS_SCOPE_HIERARCHY_MAX_RELATED_SCOPES`,
  *   default 5000): if `ancestorScopes.length + descendantScopes.length`
  *   exceeds the bound, the scope is treated as `resolved: false` — a runaway

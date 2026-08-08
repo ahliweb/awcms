@@ -47,8 +47,8 @@ export type LogEntry = {
  * not building a new one). `stdout`/`console.log` stays the source of truth
  * for every log line unconditionally (doc 20 §Batasan — capture/rotation is
  * a deployment-layer job: docker logging driver/systemd journal, not
- * application code) — this hook is purely *additive*: a derived application
- * (e.g. AWPOS) can register a consumer to forward already-redacted log
+ * application code) — this hook is purely *additive*: a domain module in
+ * `src/modules/` can register a consumer to forward already-redacted log
  * entries to its own alerting/export pipeline (ISO 27001 A.8.16) without
  * touching this file. Default is `null` (no-op) — zero behavior change for
  * every deployment that never calls `setLogSink`.
@@ -104,7 +104,7 @@ export function log(
     try {
       registeredSink(entry);
     } catch (error) {
-      // A derived app's sink is never allowed to break core logging. Issue
+      // A registered sink is never allowed to break core logging. Issue
       // #687 follow-up (PR #712 security review): this used to print
       // `error.message` raw — a broken sink could easily be one built
       // around a secret-bearing config (a webhook URL with an embedded

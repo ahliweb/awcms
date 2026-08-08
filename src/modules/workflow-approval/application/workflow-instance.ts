@@ -2,8 +2,10 @@
  * Instance start (Issue #747, evolves Issue 11.1's linear
  * `startWorkflowInstance`). Internal-only application function — no
  * public HTTP route accepts arbitrary `graph`/`facts` input here; a
- * derived app's real business action (or a test fixture) calls this
+ * domain module's real business action (or a test fixture) calls this
  * directly, matching the existing module's own precedent (see README).
+ * ("Derived app" until ADR-0034 removed that pathway; a domain module now
+ * lives directly in `src/modules/`.)
  *
  * VERSION PINNING (Issue #747 acceptance criterion): resolves the
  * CURRENTLY `active` definition row for `workflowKey` at the moment this

@@ -14,8 +14,9 @@
  * "foundation issue ships zero real business integrations" precedent
  * (#643 shipped zero real provider adapters; #742 shipped one
  * self-contained `sample.recorded` event + two reference consumers). A
- * derived application or a future base module adds its OWN entries here
- * when it has a real bounded predicate/side-effect to contribute.
+ * domain module added directly to `src/modules/` (ADR-0034 removed the
+ * derived-application pathway) adds its OWN entries here when it has a real
+ * bounded predicate/side-effect to contribute.
  */
 import type {
   WorkflowActionHandler,
