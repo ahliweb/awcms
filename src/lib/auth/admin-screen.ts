@@ -78,6 +78,20 @@ export type AdminScreenLoadContext = {
   tx: Bun.TransactionSQL;
   auth: AuthorizedScreenAccess;
   /**
+   * One boolean per entry request, in the order `authorize` declared them.
+   *
+   * Only interesting for the any-of form: eight consoles show several
+   * independently-readable panels and refuse the page only when EVERY panel is
+   * refused, so each panel needs its own answer as well as the page-level one.
+   *
+   * Every entry request is evaluated — the array is not short-circuited at the
+   * first allow — precisely so a screen can read its panel answers from here
+   * instead of asking `can()` for something already decided. Re-asking would
+   * write a second `awcms_abac_decision_logs` row for the identical decision in
+   * the same render, which is noise in an audit trail, not evidence.
+   */
+  entry: readonly boolean[];
+  /**
    * A SECOND decision, for the affordances a screen shows or hides (a create
    * form, a delete button) once the entry decision has allowed the page.
    *
@@ -110,8 +124,21 @@ export type AdminScreenConfig<TData> = {
    */
   workClass: WorkClass;
   queueTimeoutMs?: number;
-  /** The screen's ENTRY permission: what it takes to see the page at all. */
-  authorize: AccessRequest;
+  /**
+   * The screen's ENTRY permission: what it takes to see the page at all.
+   *
+   * An ARRAY means any-of — allowed when at least one is allowed. That is not a
+   * convenience: eight consoles (`sync`, `domain-events`, `reporting`, …) show
+   * panels that are independently readable and have always refused the page
+   * only when EVERY panel is refused. Forcing a single entry on them would deny
+   * an operator who legitimately holds one panel's read and not another's — a
+   * real narrowing of access dressed up as a refactor.
+   *
+   * An EMPTY array denies. "No request authorizes this page" must never read as
+   * "any request does"; the same fail-closed reasoning as an unresolvable
+   * platform tenant in `access-guard.ts`.
+   */
+  authorize: AccessRequest | readonly AccessRequest[];
   authorizeOptions?: {
     hierarchyPort?: BusinessScopeHierarchyPort;
     sodRules?: readonly SoDRuleDescriptor[];
@@ -130,6 +157,44 @@ export type AdminScreenConfig<TData> = {
   now?: Date;
 };
 
+/**
+ * The any-of rule, as a pure function over already-evaluated results, so every
+ * branch is testable without a database.
+ *
+ * Kept separate from `loadAdminScreen` deliberately: the interesting part is
+ * not "does it call the chokepoint" — the gate proves that — but what it does
+ * with N answers, and that is where an off-by-one reads as an access grant.
+ */
+export function selectEntryOutcome(
+  results: readonly AuthorizeResult[]
+):
+  | { allowed: true; auth: AuthorizedScreenAccess; entry: readonly boolean[] }
+  | { allowed: false; status: number } {
+  // An empty list authorizes nothing. `Array.prototype.some` on `[]` is false
+  // and `every` is TRUE — writing this rule as "not every request denied" would
+  // hand a screen with no entry request to everyone, which is why it is stated
+  // as an explicit early return rather than left to a quantifier.
+  if (results.length === 0) return { allowed: false, status: 403 };
+
+  const auth = results.find(
+    (result): result is AuthorizedScreenAccess => result.allowed
+  );
+
+  if (!auth) {
+    // The FIRST request's status: screens list their primary read first, so the
+    // status describes the refusal an operator is most likely asking about, and
+    // it does not shift with the caller's grant shape.
+    const first = results[0]!;
+
+    return {
+      allowed: false,
+      status: first.allowed ? 403 : first.denied.status
+    };
+  }
+
+  return { allowed: true, auth, entry: results.map((r) => r.allowed) };
+}
+
 export async function loadAdminScreen<TData>(
   config: AdminScreenConfig<TData>
 ): Promise<AdminScreenOutcome<TData>> {
@@ -141,21 +206,38 @@ export async function loadAdminScreen<TData>(
       sql,
       config.ssr.tenantId,
       async (tx): Promise<AdminScreenOutcome<TData>> => {
-        const auth = await authorizeInTransaction(
-          tx,
-          config.ssr.tenantId,
-          config.ssr.tokenHash,
-          now,
-          config.authorize,
-          config.authorizeOptions
-        );
+        const requests = Array.isArray(config.authorize)
+          ? (config.authorize as readonly AccessRequest[])
+          : [config.authorize as AccessRequest];
 
-        if (!auth.allowed) {
-          // The refusal is already recorded — `authorizeInTransaction` writes
+        // Every request, not just up to the first allow — see `entry` on
+        // `AdminScreenLoadContext` for why the extra evaluations are the point
+        // rather than waste. Sequential: `tx` is ONE reserved connection.
+        const results: AuthorizeResult[] = [];
+
+        for (const request of requests) {
+          results.push(
+            await authorizeInTransaction(
+              tx,
+              config.ssr.tenantId,
+              config.ssr.tokenHash,
+              now,
+              request,
+              config.authorizeOptions
+            )
+          );
+        }
+
+        const outcome = selectEntryOutcome(results);
+
+        if (!outcome.allowed) {
+          // The refusals are already recorded — `authorizeInTransaction` writes
           // the decision log itself, which is most of the point of routing
           // screens through it. Nothing is re-derived here.
-          return { state: "denied", status: auth.denied.status };
+          return { state: "denied", status: outcome.status };
         }
+
+        const { auth, entry } = outcome;
 
         const can = async (request: AccessRequest): Promise<boolean> => {
           const secondary = await authorizeInTransaction(
@@ -170,7 +252,7 @@ export async function loadAdminScreen<TData>(
           return secondary.allowed;
         };
 
-        const data = await config.load({ tx, auth, can });
+        const data = await config.load({ tx, auth, can, entry });
 
         return { state: "allowed", data, auth };
       },
