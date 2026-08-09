@@ -411,6 +411,59 @@ Gated by tenant_admin.tenant_provisioning.create, which is scope: platform. Crea
 | 403    | Access denied by RBAC/ABAC.                                                    | [`ApiError`](#standard-error-envelope) |
 | 409    | Idempotency-Key reused with a different request, or tenant_code already taken. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/tenants/{id}/restore` — Lift a tenant suspension and resume service (PLATFORM-scoped).
+
+- **operationId**: `restoreTenant`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0073. Gated by tenant_admin.tenant_lifecycle.restore — a SEPARATE permission from disable, on purpose: during an incident you want someone who can bring a customer back without being able to cut one off, the same split machine_credentials already draws between create and revoke. Restoring an already-active tenant returns 200 with changed=false.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                    | Schema                                 |
+| ------ | ------------------------------ | -------------------------------------- |
+| 200    | The tenant's resulting status. | object                                 |
+| 400    | Validation error.              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/tenants/{id}/suspend` — Suspend a tenant, stopping service (PLATFORM-scoped).
+
+- **operationId**: `suspendTenant`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0073. Gated by tenant_admin.tenant_lifecycle.disable, which is scope: platform — suspending a tenant changes ANOTHER party's state, so no ordinary tenant may hold it however its roles are arranged. No revocation sweep runs and none is needed: the chokepoint checks the TENANT, not the credential, so every live session and every machine credential (which can live up to a year) is refused from its next request onward. Before this existed, suspending a tenant killed its public site instantly and left its admin sessions and machine credentials fully working. Re-suspending an already-suspended tenant returns 200 with changed=false and writes no transition row. Suspending the PLATFORM tenant returns 409: it would be refused every action including the one that lifts the suspension.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                                                                                                          | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's resulting status.                                                                                                                       | object                                 |
+| 400    | Validation error.                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | The PLATFORM tenant cannot be suspended (PLATFORM_TENANT_PROTECTED) — it would be refused every action, including the one that lifts the suspension. | [`ApiError`](#standard-error-envelope) |
+
 ## Tenant Domains
 
 Tenant domain/subdomain mapping for host-based public routing (tenant_domain module, ported from awcms-micro) — tenant-scoped, RLS-protected CRUD over hostname mappings plus verification (dns_txt/dns_cname/file/manual) and primary-host selection. A hostname only serves a tenant once it is verified and active; the optional DNS provider adapter is env-gated and never stores a provider credential in the database. verify and set-primary change which host answers for a tenant, so both are ABAC-gated, idempotency-keyed, and audited.

@@ -2,6 +2,21 @@ import type { TenantContext } from "../domain/access-control";
 import { resolveActiveSession } from "./session-lookup";
 
 /**
+ * A resolved principal PLUS the service state of the tenant it belongs to —
+ * Issue #429, ADR-0073.
+ *
+ * The status comes from a JOIN on the query that already runs, not from a
+ * second round-trip. `awcms_tenants` is the deliberately RLS-free root table
+ * (ADR-0003), so it is readable from inside the tenant transaction without any
+ * policy work — which is what makes carrying the status free here.
+ */
+export type ResolvedTenantPrincipal = {
+  context: TenantContext;
+  /** `awcms_tenants.status` — `active` | `inactive` | `suspended` (sql/002). */
+  tenantStatus: string;
+};
+
+/**
  * Builds the `TenantContext` for a tenant user that has ALREADY been
  * authenticated by something other than a session — today, a machine credential
  * (ADR-0049). Roles come from the same `awcms_access_assignments` join the
@@ -25,14 +40,31 @@ export async function resolveTenantContextForTenantUser(
   tenantId: string,
   tenantUserId: string
 ): Promise<TenantContext | null> {
+  return (
+    (await resolveTenantPrincipalForTenantUser(tx, tenantId, tenantUserId))
+      ?.context ?? null
+  );
+}
+
+/**
+ * As `resolveTenantContextForTenantUser`, but also carrying the tenant's
+ * service state (ADR-0073). The `awcms_tenants` JOIN is free: the table has no
+ * RLS and the query already runs.
+ */
+export async function resolveTenantPrincipalForTenantUser(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string
+): Promise<ResolvedTenantPrincipal | null> {
   const rows = (await tx`
-    SELECT tu.id, tu.identity_id
+    SELECT tu.id, tu.identity_id, t.status AS tenant_status
     FROM awcms_tenant_users tu
     JOIN awcms_identities i
       ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
+    JOIN awcms_tenants t ON t.id = tu.tenant_id
     WHERE tu.tenant_id = ${tenantId} AND tu.id = ${tenantUserId}
       AND tu.status = 'active' AND i.status = 'active'
-  `) as { id: string; identity_id: string }[];
+  `) as { id: string; identity_id: string; tenant_status: string }[];
 
   const tenantUser = rows[0];
   if (!tenantUser) return null;
@@ -45,10 +77,13 @@ export async function resolveTenantContextForTenantUser(
   `) as { role_code: string }[];
 
   return {
-    tenantId,
-    tenantUserId: tenantUser.id,
-    identityId: tenantUser.identity_id,
-    roles: roleRows.map((row) => row.role_code)
+    context: {
+      tenantId,
+      tenantUserId: tenantUser.id,
+      identityId: tenantUser.identity_id,
+      roles: roleRows.map((row) => row.role_code)
+    },
+    tenantStatus: tenantUser.tenant_status
   };
 }
 
@@ -58,14 +93,39 @@ export async function resolveTenantContext(
   tokenHash: string,
   now: Date
 ): Promise<TenantContext | null> {
+  return (
+    (await resolveTenantPrincipal(tx, tenantId, tokenHash, now))?.context ??
+    null
+  );
+}
+
+/**
+ * As `resolveTenantContext`, but also carrying the tenant's service state
+ * (ADR-0073).
+ *
+ * `resolveTenantContext` stays as the narrower view because seven call sites
+ * outside the chokepoint use it — including `src/lib/auth/ssr-session.ts`,
+ * which feeds all 32 admin screens. Widening its return type would be a
+ * seven-file change to give six of them a field they do not read; keeping both
+ * over ONE query keeps the two from drifting.
+ */
+export async function resolveTenantPrincipal(
+  tx: Bun.SQL,
+  tenantId: string,
+  tokenHash: string,
+  now: Date
+): Promise<ResolvedTenantPrincipal | null> {
   const session = await resolveActiveSession(tx, tenantId, tokenHash, now);
   if (!session) return null;
 
   const tenantUserRows = await tx`
-    SELECT id FROM awcms_tenant_users
-    WHERE tenant_id = ${tenantId} AND identity_id = ${session.identity_id}
+    SELECT tu.id, t.status AS tenant_status
+    FROM awcms_tenant_users tu
+    JOIN awcms_tenants t ON t.id = tu.tenant_id
+    WHERE tu.tenant_id = ${tenantId} AND tu.identity_id = ${session.identity_id}
   `;
-  const tenantUser = tenantUserRows[0] as { id: string } | undefined;
+  const tenantUser = tenantUserRows[0] as
+    { id: string; tenant_status: string } | undefined;
   if (!tenantUser) return null;
 
   const roleRows = await tx`
@@ -77,10 +137,13 @@ export async function resolveTenantContext(
   const roles = roleRows.map((row: { role_code: string }) => row.role_code);
 
   return {
-    tenantId,
-    tenantUserId: tenantUser.id,
-    identityId: session.identity_id,
-    roles
+    context: {
+      tenantId,
+      tenantUserId: tenantUser.id,
+      identityId: session.identity_id,
+      roles
+    },
+    tenantStatus: tenantUser.tenant_status
   };
 }
 

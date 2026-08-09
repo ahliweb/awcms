@@ -1062,6 +1062,16 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/tenants/[id]/restore.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/tenants/[id]/suspend.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/tenants/index.ts",
       "workClass": "interactive",
       "source": "factory"

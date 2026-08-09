@@ -318,7 +318,7 @@
       "dependencies": [],
       "capabilitiesProvided": ["business_scope_hierarchy"],
       "capabilitiesConsumed": [],
-      "permissionCount": 8,
+      "permissionCount": 10,
       "navigationCount": 2,
       "jobCount": 0,
       "hasHealthCheck": false,

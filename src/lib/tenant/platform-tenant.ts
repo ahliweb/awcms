@@ -92,6 +92,55 @@ async function fetchActiveTenant(
   return row ? { tenantId: row.id, tenantCode: row.tenant_code } : null;
 }
 
+/**
+ * The platform tenant's id, IGNORING its status — Issue #429, ADR-0073.
+ *
+ * `resolvePlatformTenant` deliberately requires `status = 'active'`, so that
+ * "nobody is the platform" can never read as "everybody is" for
+ * platform-scoped permissions. That is right for AUTHORITY and wrong for the
+ * suspension exemption, and the difference matters:
+ *
+ * If the platform tenant is ever marked non-active — a bad restore, an
+ * operator mistake, or (once entitlements land) a lapsed subscription — then
+ * `resolvePlatformTenant` returns `null`, the exemption evaluates to false, and
+ * the operator is refused at the chokepoint for EVERY action, including the one
+ * that would lift the suspension. There is no in-band recovery from that.
+ *
+ * So the exemption asks a different question — "is this tenant the one holding
+ * platform authority" — and answers it from identity alone. It grants nothing:
+ * platform-scoped permissions still go through `resolvePlatformTenant` and its
+ * active check, unchanged.
+ *
+ * Resolution order mirrors `resolvePlatformTenant` exactly, minus the status
+ * filter, so the two can never name different tenants.
+ */
+export async function resolvePlatformTenantIdIgnoringStatus(
+  sql: Bun.SQL,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string | null> {
+  const pinned = env[PLATFORM_TENANT_ENV_VAR]?.trim();
+
+  if (pinned) {
+    try {
+      assertUuid(pinned);
+    } catch {
+      return null;
+    }
+
+    const rows = (await sql`
+      SELECT id FROM awcms_tenants WHERE id = ${pinned}
+    `) as { id: string }[];
+
+    return rows[0]?.id ?? null;
+  }
+
+  // No explicit pin: fall back to the same chain, which already tolerates a
+  // non-active tenant only in the sense that it will find none. That is the
+  // correct answer here too — an unpinned deployment has not named a platform
+  // tenant that needs protecting from its own suspension.
+  return (await resolvePlatformTenant(sql, env))?.tenantId ?? null;
+}
+
 function fromPublicResolution(
   resolution: PublicTenantResolution | null,
   source: PlatformTenantSource

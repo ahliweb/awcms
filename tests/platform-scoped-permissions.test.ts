@@ -45,7 +45,12 @@ const EXPECTED_PLATFORM_KEYS = [
   "idn_admin_regions.dataset.configure",
   "idn_admin_regions.dataset.restore",
   "tenant_admin.tenant_provisioning.read",
-  "tenant_admin.tenant_provisioning.create"
+  "tenant_admin.tenant_provisioning.create",
+  // ADR-0073 — suspending or restoring a tenant changes ANOTHER party's state,
+  // the same reasoning ADR-0054 §2 used for provisioning. Adding them here is
+  // the deliberate edit this list exists to force.
+  "tenant_admin.tenant_lifecycle.disable",
+  "tenant_admin.tenant_lifecycle.restore"
 ];
 
 describe("platform-scoped permission declaration", () => {

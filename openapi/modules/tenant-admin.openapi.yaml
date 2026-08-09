@@ -505,6 +505,109 @@ paths:
                       lockedAt:
                         type: string
                         format: date-time
+  /api/v1/tenants/{id}/suspend:
+    post:
+      operationId: suspendTenant
+      tags:
+        - Tenant Admin
+      summary: Suspend a tenant, stopping service (PLATFORM-scoped).
+      description: "ADR-0073. Gated by tenant_admin.tenant_lifecycle.disable, which is scope: platform — suspending a tenant changes ANOTHER party's state, so no ordinary tenant may hold it however its roles are arranged. No revocation sweep runs and none is needed: the chokepoint checks the TENANT, not the credential, so every live session and every machine credential (which can live up to a year) is refused from its next request onward. Before this existed, suspending a tenant killed its public site instantly and left its admin sessions and machine credentials fully working. Re-suspending an already-suspended tenant returns 200 with changed=false and writes no transition row. Suspending the PLATFORM tenant returns 409: it would be refused every action including the one that lifts the suspension."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  nullable: true
+                  description: Recorded on the tenant, in its status-transition log, and in its own audit trail — a suspended customer is entitled to see why.
+      responses:
+        "200":
+          description: The tenant's resulting status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantLifecycleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The PLATFORM tenant cannot be suspended (PLATFORM_TENANT_PROTECTED) — it would be refused every action, including the one that lifts the suspension.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/tenants/{id}/restore:
+    post:
+      operationId: restoreTenant
+      tags:
+        - Tenant Admin
+      summary: Lift a tenant suspension and resume service (PLATFORM-scoped).
+      description: "ADR-0073. Gated by tenant_admin.tenant_lifecycle.restore — a SEPARATE permission from disable, on purpose: during an incident you want someone who can bring a customer back without being able to cut one off, the same split machine_credentials already draws between create and revoke. Restoring an already-active tenant returns 200 with changed=false."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  nullable: true
+      responses:
+        "200":
+          description: The tenant's resulting status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/TenantLifecycleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/tenants:
     get:
       operationId: listTenants
@@ -625,6 +728,23 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    TenantLifecycleResult:
+      type: object
+      description: Result of a suspend/restore transition (ADR-0073).
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: The tenant's status after the call.
+        changed:
+          type: boolean
+          description: False when the tenant was already in the requested status — the caller got what they asked for, and no transition row was written.
+      required:
+        - tenantId
+        - status
+        - changed
     TenantDirectoryEntry:
       type: object
       properties:
