@@ -1,5 +1,14 @@
 import { defineModule } from "../_shared/module-contract";
 
+/**
+ * Lifecycle descriptor key (Issue #468). Exported so
+ * `application/delivery-retention-purge.ts` names the same string the registry
+ * does — a legal hold checked against a key nobody registered returns "not
+ * held" forever and reads exactly like "no hold in place".
+ */
+export const DOMAIN_EVENT_DELIVERIES_LIFECYCLE_KEY =
+  "domain_event_runtime.deliveries";
+
 export const domainEventRuntimeModule = defineModule({
   key: "domain_event_runtime",
   name: "Domain Event Runtime",
@@ -68,6 +77,90 @@ export const domainEventRuntimeModule = defineModule({
       environmentNotes:
         "Pure PostgreSQL/in-process operation — no external network egress, no optional broker required. Safe in offline/LAN deployments.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run domain-events:deliveries:purge",
+      purpose:
+        "Delete settled (`delivered`/`skipped`) delivery rows past their retention window, never dead-lettered ones and never a row a replay still references (legal-hold gated, bounded batches).",
+      recommendedSchedule: "Daily, off-peak.",
+      environmentNotes:
+        "Pure PostgreSQL — no network egress. Safe in offline/LAN deployments.",
+      safeInOfflineLan: true
+    }
+  ],
+  /**
+   * Issue #468, ADR-0072. ONE descriptor for a module with six tables on
+   * `TABLES_PREDATING_THE_RULE`, and the five that stay are a scope statement
+   * rather than an oversight.
+   *
+   * `awcms_domain_events` — the parent, holding the payloads — is the larger
+   * half of the disk problem and deliberately out of scope. Deleting deliveries
+   * does not shrink it, and how long an event PAYLOAD is worth keeping is a
+   * different question from how long a delivery RECEIPT is: the first is a
+   * business record other things replay from, the second is transport
+   * bookkeeping. Claiming both in one PR would answer the easy one and bury the
+   * hard one.
+   *
+   * ## `dead_letter` is excluded, and it is the trap
+   *
+   * It LOOKS terminal — the dispatcher will never retry one on its own — and it
+   * is precisely the row an operator opens the console to find and replay. A
+   * window that swept it would delete the work AND its evidence, and the
+   * deletion would be indistinguishable from the queue having drained cleanly.
+   */
+  dataLifecycle: [
+    {
+      key: DOMAIN_EVENT_DELIVERIES_LIFECYCLE_KEY,
+      tableName: "awcms_domain_event_deliveries",
+      ownerModuleKey: "domain_event_runtime",
+      scope: "tenant",
+      cursorColumn: "updated_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 365,
+      // Longer than the email queue's 90: a delivery receipt is what answers
+      // "did consumer X ever see event Y", and that question is asked when a
+      // downstream projection is found to disagree with its source — months
+      // after the delivery.
+      defaultRetentionDays: 120,
+      partition: {
+        eligible: true,
+        granularity: "monthly",
+        rationale:
+          "One row per (event x consumer), so it grows as the product of event volume and consumer count — the fastest-growing table in this module. Monthly range partitions would turn each purge into a DROP PARTITION instead of a batched DELETE. Not automated here: declaring eligibility is a statement about the table, not a promise that partitioning exists."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A settled delivery row records that a consumer was handed an event and said yes. The EVENT it refers to is retained separately and for longer, and the consumer's own effect ledger (awcms_domain_event_consumer_effects) records what it did. Archiving the receipt would preserve a third copy of a fact two other tables already hold."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Only `delivered`/`skipped` rows are eligible. `pending` is work; `dead_letter` is work waiting for an operator, and it is the row a replay is issued FROM. Nothing to anonymize — the row carries no subject identifier, only consumer name and error text."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "updated_at"],
+          purpose:
+            "awcms_domain_event_deliveries_retention_idx (sql/097) — PARTIAL, on `status IN ('delivered','skipped')`. The closest existing index is (tenant_id, status) with no time column, so on a table whose whole problem is accumulated `delivered` rows it would mean reading every one of them to find the old ones. Partial because the dispatcher's hot path is `status = 'pending'`, which has no reason to churn through this index."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. Restoring a backup older than the window revives settled delivery rows — harmless, since the dispatcher only claims `pending` and the unique identity index (tenant_id, event_id, consumer_name) still prevents a second ORIGINAL delivery for the same pair.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run domain-events:deliveries:purge",
+        purgeFunctionRef:
+          "src/modules/domain-event-runtime/application/delivery-retention-purge.ts#purgeSettledDeliveries",
+        description:
+          "Deletes `delivered`/`skipped` rows older than the cutoff in bounded batches, skipping any row a replay record or another delivery still references. Never touches `dead_letter`. Skips the whole step when a legal hold covers domain_event_runtime.deliveries."
+      }
     }
   ]
 });

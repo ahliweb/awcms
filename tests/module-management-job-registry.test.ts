@@ -96,6 +96,7 @@ describe("fetchModuleJobs", () => {
         "bun run comments:retention",
         "bun run config:validate",
         "bun run data-lifecycle:archive-purge",
+        "bun run domain-events:deliveries:purge",
         "bun run domain-events:dispatch",
         "bun run email:dispatch",
         "bun run email:provider:health",
