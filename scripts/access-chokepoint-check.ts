@@ -95,18 +95,13 @@ export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
   "idn-regions.astro",
   "index.astro",
   "media.astro",
-  "offices.astro",
   "reporting.astro",
-  "roles.astro",
   "security.astro",
   "seo.astro",
-  "sidebar-menu.astro",
   "site-search.astro",
   "sync.astro",
-  "tenant/domains.astro",
   "tenants.astro",
-  "theming.astro",
-  "users.astro"
+  "theming.astro"
 ];
 
 /**

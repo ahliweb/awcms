@@ -128,18 +128,13 @@ const NOT_YET_MIGRATED: readonly string[] = [
   "src/pages/admin/idn-regions.astro",
   "src/pages/admin/index.astro",
   "src/pages/admin/media.astro",
-  "src/pages/admin/offices.astro",
   "src/pages/admin/reporting.astro",
-  "src/pages/admin/roles.astro",
   "src/pages/admin/security.astro",
   "src/pages/admin/seo.astro",
-  "src/pages/admin/sidebar-menu.astro",
   "src/pages/admin/site-search.astro",
   "src/pages/admin/sync.astro",
-  "src/pages/admin/tenant/domains.astro",
   "src/pages/admin/tenants.astro",
   "src/pages/admin/theming.astro",
-  "src/pages/admin/users.astro",
 
   // --- Rute API.
   "src/pages/api/v1/abac/policies/[id].ts",

@@ -20,10 +20,8 @@
  * unarrangeable, which reads as data loss to whoever can see it.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   buildSidebarEditorModel,
   fetchSidebarArrangement,
@@ -42,35 +40,43 @@ if (!ssr) {
   );
 }
 
-const canRead = ssr.permissions.has(
-  permissionKey("module_management", "navigation", "read")
-);
-const canConfigure = ssr.permissions.has(
-  permissionKey("module_management", "navigation", "configure")
-);
-
-let model: SidebarEditorModel | null = null;
-let loadFailed = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
-      buildSidebarEditorModel(await fetchSidebarArrangement(tx, ssr.tenantId))
-    );
-
-    // Shape check, not truthiness: `withTenant` RETURNS a 503 `Response` on
-    // circuit-open rather than throwing, and a `Response` is truthy.
-    model =
-      result && typeof result === "object" && "entries" in result
-        ? (result as SidebarEditorModel)
-        : null;
-    loadFailed = model === null;
-  } catch (error) {
-    loadFailed = true;
-    logAdminPageError("/admin/sidebar-menu", error);
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "module_management",
+    activityCode: "navigation",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    model: buildSidebarEditorModel(
+      await fetchSidebarArrangement(tx, ssr.tenantId)
+    ),
+    canConfigure: await can({
+      moduleKey: "module_management",
+      activityCode: "navigation",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError("/admin/sidebar-menu", error, {
+      correlationId: Astro.locals.correlationId
+    });
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// The old shape check existed because `withTenant` RETURNS a 503 `Response` on
+// circuit-open rather than throwing, and a `Response` is truthy. The outcome
+// type now carries that distinction directly, so no shape sniffing is needed.
+const loadFailed = screen.state === "error";
+const model: SidebarEditorModel | null =
+  screen.state === "allowed" ? screen.data.model : null;
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 
 const itemOverrides = new Map(
   (model?.arrangement.items ?? []).map((item) => [item.entryKey, item])
