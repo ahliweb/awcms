@@ -110,7 +110,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **90** (`sql/001`–`090`)                                                              | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0071** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **32** berkas `.astro` di `src/pages/admin/`; **0 dari 21** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **43** (22.656 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **43** (22.664 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **37** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -467,9 +467,11 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
     **HARUS DIPECAH** — 1 PR helper+gerbang+ledger, lalu ~6–8 PR migrasi.
   - **R7 — kredensial mesin, suppression email, komposer homepage tanpa layar.**
     Kini otomatis terlihat di ledger R6, jadi ia bisa mendarat bertahap.
-  - **R8 — permission platform bisa diberikan lewat editor role**
-    (`listPermissionCatalog` tanpa predikat `scope`; ADR-0053 tetap menolak di
-    `access-guard.ts`, jadi yang hilang adalah redundansinya).
+  - ~~**R8 — permission platform bisa diberikan lewat editor role**~~ —
+    **DITUTUP** (#431). `listPermissionCatalog` kini menuntut keputusan `scope`
+    yang eksplisit dan `grantPermissionToRole` memeriksa ulang di server dengan
+    409 `PLATFORM_SCOPE_REQUIRED`. Nol migrasi: batasannya tentang TENANT mana
+    yang boleh memegang permission platform, bukan tentang role.
   - **R9 — lima gerbang menjanjikan cakupan yang tak mereka periksa**, mis.
     `logging:lint:check` yang `SCAN_ROOTS`-nya melewatkan `src/middleware.ts`
     dan seluruh `src/pages` (probe identik: `src/lib/` → EXIT 1,
