@@ -7832,6 +7832,25 @@ Only `queued` and `retry_wait` are cancellable. A row in `sending` has been clai
 | 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
 | 409    | Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" — distinguishing them would hand a narrow grant an existence oracle over the queue. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/push/stream` — Server-sent stream of the push queue summary, re-authorized every tick.
+
+- **operationId**: `streamPushQueueSummary`
+- **Security**: bearerAuth + tenantHeader
+
+`text/event-stream`. The only SSE endpoint in this contract, and the one place where an authorization decision would otherwise become a STANDING permission: an ordinary route returns its connection to the pool before any byte reaches the client, so a thirty-minute stream would keep serving a role revoked at minute two. ADR-0075 decides otherwise — every tick opens its own transaction, runs the full guard chain again, and reads only after it allows.
+
+Three event names. `push-queue-summary` carries a `PushQueueSummary` every 5 s. `authorization-revoked` is terminal and the client must NOT reconnect — whatever it held is gone. `stream-error` is terminal and retryable, and is deliberately a DIFFERENT name: telling a client its access was revoked when the database was merely busy is a lie in the direction that gets investigated as a permissions bug.
+
+A connection ends after 10 minutes regardless; `EventSource` reconnects by itself, so the ceiling costs a reconnect while its absence would cost a connection slot forever. The message and attempt lists are NOT streamed — they are bounded at 50 rows and change shape rather than value. Requires `push_delivery.diagnostics.read`, re-checked per tick.
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The event stream.           | string                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/push/subscriptions` — List the caller's own registered push devices.
 
 - **operationId**: `listOwnPushSubscriptions`

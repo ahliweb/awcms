@@ -13,6 +13,7 @@ import {
   type AuthorizeResult
 } from "../identity-access/application/access-guard";
 import type { AccessRequest } from "../identity-access/domain/access-control";
+import { runSseLoop, type SseTickOutcome } from "./sse-stream";
 
 /**
  * `defineTenantRoute` (Issue #255) — the ONE place the auth/tenant opening that
@@ -328,6 +329,207 @@ export function defineClientCredentialTenantRoute(
         queueTimeoutMs: config.queueTimeoutMs
       }
     );
+  };
+}
+
+/**
+ * SSE variant: a long-lived stream that RE-AUTHORIZES on every tick (ADR-0075,
+ * Issue #467).
+ *
+ * ## Why this is a fourth seam and not a handler that happens to stream
+ *
+ * `defineTenantRoute` returns the connection to the pool and releases the
+ * work-class slot BEFORE any byte reaches the client. For a JSON request that
+ * is correct and thrifty. For a connection that lives thirty minutes it turns a
+ * momentary decision into a STANDING PERMISSION: a role revoked at minute two
+ * does not stop the stream until the client disconnects.
+ *
+ * So this factory opens NO transaction of its own around the stream. Each tick
+ * opens and closes its own, runs `authorizeInTransaction` first and the
+ * snapshot read second, and a deny ends the connection. `tx` never enters the
+ * stream closure — the connection it belongs to has already been handed to
+ * another request.
+ *
+ * ## What it does NOT drop
+ *
+ * `workClass` stays required, the tenant transaction is still opened in one
+ * place, and the route file still contains no `withTenant` call of its own — so
+ * `api:tenant-route:check` stays one-directional instead of growing an
+ * allowlist for streams.
+ *
+ * ## Fan-out is per-connection polling, and that is written down
+ *
+ * Every connection reads the database on its own schedule. Production defaults
+ * to a single instance (`capacity-config.ts`), so this works today, and it does
+ * not silently break when replicas are added — it just does not get cheaper.
+ * The pub/sub shape that would replace it has a trap worth knowing before
+ * anyone starts: a Bun `RedisClient` that has `subscribe`d blocks almost every
+ * other command, so the subscriber must be its OWN connection, never the
+ * singleton the rate limiter uses.
+ */
+export type SseTenantRouteConfig<TSnapshot> = {
+  /** REQUIRED, same reasoning as `defineTenantRoute`. */
+  workClass: WorkClass;
+  queueTimeoutMs?: number;
+  authorize: AccessRequest;
+  authorizeOptions?: {
+    hierarchyPort?: BusinessScopeHierarchyPort;
+    sodRules?: readonly SoDRuleDescriptor[];
+  };
+  /**
+   * How often the stream re-decides AND re-reads. REQUIRED and unbounded by
+   * default on purpose: this is the number that sets the cost of not having a
+   * standing permission (one guard chain per tick per connection) and the
+   * staleness of a revocation, so it must be chosen at every call site rather
+   * than inherited.
+   */
+  tickIntervalMs: number;
+  /**
+   * Hard ceiling on one connection. A stream that never ends is a connection
+   * slot that never returns, and `EventSource` reconnects on its own — so the
+   * cost of ending one is a reconnect, and the cost of not ending it is
+   * unbounded.
+   */
+  maxConnectionMs: number;
+  /** SSE `event:` name for each snapshot frame. */
+  eventName: string;
+  /** Runs INSIDE the tick's transaction, only after that tick's authorize allowed. */
+  read: (context: {
+    tx: Bun.TransactionSQL;
+    auth: Extract<AuthorizeResult, { allowed: true }>;
+    tenantId: string;
+    now: Date;
+  }) => Promise<TSnapshot>;
+};
+
+export function defineSseTenantRoute<TSnapshot>(
+  config: SseTenantRouteConfig<TSnapshot>
+): APIRoute {
+  return async ({ request, cookies }) => {
+    const { tenantId, token } = resolveAuthInputs(request, cookies);
+
+    if (!tenantId) {
+      return fail(400, "TENANT_REQUIRED", "Tenant header is required.");
+    }
+    if (!token) {
+      return fail(401, "AUTH_REQUIRED", "Authentication required.");
+    }
+
+    const sql = sqlClientForRoute();
+    const tokenHash = hashSessionToken(token);
+    const deadline = Date.now() + config.maxConnectionMs;
+
+    /**
+     * One tick: one transaction, decision first, read second.
+     *
+     * The two must share a transaction for the same reason `loadAdminScreen`
+     * documents — deciding against one snapshot and reading against another is
+     * how a scope filter computed for one set of rows gets applied to a
+     * different set.
+     */
+    const authorizeAndRead = async (): Promise<SseTickOutcome<TSnapshot>> => {
+      try {
+        // `withTenant` — not `withTenantOrThrow` — RETURNS a `Response` when
+        // the pool or the circuit breaker refuses, rather than throwing. The
+        // `catch` below therefore covers only a read that threw; the refusal
+        // path is the `instanceof Response` narrowing further down, and missing
+        // it would have made a busy database indistinguishable from a snapshot.
+        const outcome = await withTenant<SseTickOutcome<TSnapshot>>(
+          sql,
+          tenantId,
+          async (tx) => {
+            const now = new Date();
+            const auth = await authorizeInTransaction(
+              tx,
+              tenantId,
+              tokenHash,
+              now,
+              config.authorize,
+              config.authorizeOptions
+            );
+
+            if (!auth.allowed) {
+              return { state: "denied", status: auth.denied.status };
+            }
+
+            return {
+              state: "ok",
+              snapshot: await config.read({ tx, auth, tenantId, now })
+            };
+          },
+          {
+            workClass: config.workClass,
+            queueTimeoutMs: config.queueTimeoutMs
+          }
+        );
+
+        return outcome instanceof Response ? { state: "error" } : outcome;
+      } catch {
+        // A read that threw. Reported as a distinct terminal outcome rather
+        // than folded into `denied`: telling a client its authorization was
+        // revoked when the database was merely busy is a lie in the direction
+        // that gets investigated as a permissions bug.
+        return { state: "error" };
+      }
+    };
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let closed = false;
+
+        const abort = () => {
+          closed = true;
+        };
+
+        request.signal.addEventListener("abort", abort, { once: true });
+
+        try {
+          await runSseLoop<TSnapshot>({
+            authorizeAndRead,
+            write: (chunk) => {
+              if (closed) return;
+              controller.enqueue(encoder.encode(chunk));
+            },
+            waitForNextTick: () =>
+              new Promise<void>((resolve) => {
+                const timer = setTimeout(resolve, config.tickIntervalMs);
+
+                request.signal.addEventListener(
+                  "abort",
+                  () => {
+                    clearTimeout(timer);
+                    resolve();
+                  },
+                  { once: true }
+                );
+              }),
+            isFinished: () =>
+              closed || request.signal.aborted || Date.now() >= deadline,
+            serialize: (snapshot) => JSON.stringify(snapshot),
+            eventName: config.eventName
+          });
+        } finally {
+          request.signal.removeEventListener("abort", abort);
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        // A stream describing one tenant's live state must never be held by any
+        // shared cache, and `no-transform` stops a proxy from buffering it into
+        // uselessness.
+        "cache-control": "private, no-store, no-transform",
+        connection: "keep-alive",
+        // Nginx-family proxies buffer by default and would hold every frame
+        // until the response ended — which, for a stream, is never.
+        "x-accel-buffering": "no"
+      }
+    });
   };
 }
 
