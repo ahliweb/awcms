@@ -34,6 +34,44 @@ export const pushDeliveryModule = defineModule({
   description:
     "Transactional outbox for device push notifications (epic #463, ADR-0074): a `PushProvider` port, a safe `log` adapter, the tenant-scoped schema/RLS (`sql/093`), and a claim/send/finalize dispatcher (`bun run push:dispatch`) with lease-based claiming, backoff, a circuit breaker, and a per-attempt ledger. It is a SECOND outbox on purpose — `domain-event-runtime` calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Generic infrastructure, analogous to `email`: it delivers a notification somebody else decided to send, and owns no notion of what is worth notifying about. Ships INERT — without PUSH_ENABLED=true the dispatcher claims nothing. The real FCM HTTP v1 and Web Push/VAPID adapters, and the HTTP surface for managing subscriptions, land in their own issues (#466).",
   dependencies: ["tenant_admin", "logging"],
+  api: {
+    openApiPath: "openapi/modules/push-delivery.openapi.yaml",
+    basePath: "/api/v1/push",
+    routes: ["/api/v1/push"]
+  },
+  /**
+   * Three permissions, and the absence of three more is the deliberate part.
+   *
+   * Registering, listing and retiring one's OWN device is self-service
+   * (`defineSelfServiceTenantRoute`, ADR-0049 §7): the subject is the caller,
+   * the routes accept no `tenantUserId`, and a permission wall in front of
+   * "turn on notifications for this browser" is a wall in front of the feature.
+   * `sql/094` records the same reasoning where the catalog is seeded.
+   *
+   * What IS here acts on somebody else's data or on the deployment: reading
+   * every device in the tenant, stopping a message somebody else queued, and
+   * making the system emit real network traffic.
+   */
+  permissions: [
+    {
+      activityCode: "diagnostics",
+      action: "read",
+      description:
+        "Read this tenant's push queue state, recent delivery attempts, and every registered device (endpoints masked)"
+    },
+    {
+      activityCode: "diagnostics",
+      action: "check",
+      description:
+        "Send a test push notification to your own registered devices to verify delivery end to end"
+    },
+    {
+      activityCode: "messages",
+      action: "cancel",
+      description:
+        "Cancel a push notification that is still waiting in the queue (refused once it is being sent)"
+    }
+  ],
   jobs: [
     {
       command: "bun run push:dispatch",

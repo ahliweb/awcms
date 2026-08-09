@@ -109,6 +109,14 @@ export async function registerPushSubscription(
     DO UPDATE SET
       tenant_user_id = EXCLUDED.tenant_user_id,
       transport = EXCLUDED.transport,
+      -- A no-op in every ordinary case: the conflict target is the HASH of this
+      -- very column, so EXCLUDED.endpoint is by construction the value already
+      -- stored. It is here for the ONE case where it is not —
+      -- revokeOwnPushSubscription overwrites the raw endpoint with a tombstone,
+      -- and without this line a device that re-subscribed would come back
+      -- active while still pointing at the tombstone: reachable in the console,
+      -- undeliverable in fact, failing with a provider error that names nothing.
+      endpoint = EXCLUDED.endpoint,
       p256dh_key = EXCLUDED.p256dh_key,
       auth_secret = EXCLUDED.auth_secret,
       user_agent_summary = EXCLUDED.user_agent_summary,
@@ -240,6 +248,81 @@ export async function disablePushSubscription(
     subscriptionId,
     reason
   });
+}
+
+/**
+ * The value a revoked row's `endpoint` column is overwritten with.
+ *
+ * The column is `NOT NULL`, so "forget it" has to be spelled as something. This
+ * string is deliberately not a plausible endpoint: it fails `new URL`, so any
+ * code that ever handed it to a provider would fail loudly rather than deliver
+ * somewhere unexpected.
+ */
+export const REVOKED_ENDPOINT_TOMBSTONE = "revoked-by-user";
+
+/** The `disabled_reason` a user-initiated revocation writes. */
+export const REVOKED_BY_USER_REASON = "revoked_by_user";
+
+/**
+ * A user retiring one of their OWN devices (Issue #466).
+ *
+ * ## Why this is not `disablePushSubscription`
+ *
+ * That one records what the PUSH SERVICE said. This one records what the PERSON
+ * said, and the two differ in what may be kept. A subscription disabled because
+ * the endpoint is gone keeps its endpoint: the value is dead, and it is the
+ * evidence for "why did this device stop". A subscription the user revoked is
+ * one where the endpoint may still be perfectly usable — so continuing to store
+ * it means holding a live push credential for a device whose owner asked us to
+ * stop. The row survives (an operator still needs to see that the device was
+ * revoked and when); the credential does not.
+ *
+ * ## Why the RFC 8291 key material is left in place
+ *
+ * The obvious next line — null `p256dh_key` and `auth_secret` too — would
+ * violate `awcms_push_subscriptions_keys_match_transport_check`, which requires
+ * a `web_push` row to carry both. More to the point it would buy nothing: both
+ * values are inputs to encrypting a payload for an endpoint, and the endpoint
+ * is what was just destroyed. They cannot address anything on their own. The
+ * constraint is therefore left alone rather than weakened to permit a delete
+ * that has no effect.
+ *
+ * ## Ownership is in the WHERE clause
+ *
+ * `tenant_user_id` is matched, not checked afterwards, so a caller cannot
+ * revoke somebody else's device by guessing an id — and the caller cannot learn
+ * whether the id exists, because "not yours" and "not there" both return
+ * `{ revoked: false }` and the route answers both with the same 404.
+ */
+export async function revokeOwnPushSubscription(
+  tx: Bun.TransactionSQL,
+  tenantId: string,
+  tenantUserId: string,
+  subscriptionId: string
+): Promise<{ revoked: boolean }> {
+  const rows = (await tx`
+    UPDATE awcms_push_subscriptions
+    SET status = 'disabled',
+        disabled_reason = ${REVOKED_BY_USER_REASON},
+        endpoint = ${REVOKED_ENDPOINT_TOMBSTONE},
+        updated_at = now()
+    WHERE tenant_id = ${tenantId}
+      AND id = ${subscriptionId}
+      AND tenant_user_id = ${tenantUserId}
+      AND status = 'active'
+    RETURNING id
+  `) as { id: string }[];
+
+  if (rows.length === 0) return { revoked: false };
+
+  log("info", "push.subscription.revoked", {
+    tenantId,
+    moduleKey: MODULE_KEY,
+    subscriptionId,
+    tenantUserId
+  });
+
+  return { revoked: true };
 }
 
 export async function markSubscriptionDelivered(

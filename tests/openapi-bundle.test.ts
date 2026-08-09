@@ -311,6 +311,12 @@ describe("openapi bundle — contract equivalence to pre-migration monolith", ()
       "News Media",
       "News Portal Ad Placements",
       "News Portal Homepage Sections",
+      // "Push Delivery" (push_delivery, ADR-0074, Issue #466) — the device
+      // registration/revocation self-service plus the operator's queue
+      // diagnostics, cancel and delivery probe. Genuinely new surface, unlike
+      // the four below it whose operations had been in the bundle for releases
+      // under tags the root catalog never declared.
+      "Push Delivery",
       "SEO & Distribution",
       "Site Search",
       "Tenant Domains",
