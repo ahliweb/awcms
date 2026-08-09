@@ -123,8 +123,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_domain_event_replays",
   "awcms_domain_events",
   "awcms_edge_cache_purges",
-  "awcms_email_delivery_attempts",
-  "awcms_email_messages",
   "awcms_email_suppression_list",
   "awcms_email_templates",
   "awcms_external_identities",

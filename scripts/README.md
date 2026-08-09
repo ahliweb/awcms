@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-83 target menjalankan berkas di `scripts/`; 34 di antaranya
+84 target menjalankan berkas di `scripts/`; 34 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -67,6 +67,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `edge-cache:surfaces:check`              | `edge-cache-surfaces-check.ts`                 | ✅   |
 | `email:dispatch`                         | `email-dispatch.ts`                            | —    |
 | `email:provider:health`                  | `email-provider-health.ts`                     | —    |
+| `email:queue:purge`                      | `email-queue-purge.ts`                         | —    |
 | `email:templates:seed-defaults`          | `email-templates-seed-defaults.ts`             | —    |
 | `family:conformance:check`               | `family-conformance-check.ts`                  | ✅   |
 | `form-drafts:purge`                      | `form-draft-purge.ts`                          | —    |

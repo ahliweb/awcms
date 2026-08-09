@@ -1,5 +1,15 @@
 import { defineModule } from "../_shared/module-contract";
 
+/**
+ * Lifecycle descriptor keys (Issue #468). Exported so
+ * `application/email-queue-purge.ts` names the same strings the registry does,
+ * rather than repeating two literals that could drift apart silently — a legal
+ * hold checked against a key nobody registered would return "not held" forever,
+ * and read exactly like "no hold in place".
+ */
+export const EMAIL_MESSAGES_LIFECYCLE_KEY = "email.messages";
+export const EMAIL_ATTEMPTS_LIFECYCLE_KEY = "email.delivery_attempts";
+
 export const emailModule = defineModule({
   key: "email",
   name: "Email",
@@ -156,6 +166,139 @@ export const emailModule = defineModule({
       environmentNotes:
         "Requires --tenant=<tenantId> --actor=<tenantUserId> arguments.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run email:queue:purge",
+      purpose:
+        "Delete terminal email queue rows and spent delivery attempts past their retention windows (legal-hold gated, bounded batches).",
+      recommendedSchedule: "Daily, off-peak.",
+      environmentNotes:
+        "Runs regardless of EMAIL_ENABLED: a deployment that turned email OFF still holds rows from when it was on, and those are exactly the ones nothing else will ever clean up.",
+      safeInOfflineLan: true
+    }
+  ],
+  /**
+   * Issue #468, ADR-0072. These two tables sat on
+   * `TABLES_PREDATING_THE_RULE` — the debt ledger in
+   * `scripts/data-lifecycle-table-coverage-check.ts` — which was honest about
+   * what it could not do: *"tell you that an EXISTING table on that ledger is
+   * quietly eating the disk"*. Both lines are removed in the same PR as these
+   * descriptors, because the gate treats a ledgered table that HAS a descriptor
+   * as an error rather than a tolerated duplicate.
+   *
+   * ## Both are `delegated`, and that is the whole safety argument
+   *
+   * `HighVolumeTableDescriptor` carries a `cursorColumn` and NO status
+   * predicate, so the generic executor deletes purely by age. Pointed at a
+   * QUEUE that deletes mail that has not been sent yet — a message stuck behind
+   * a provider outage longer than the window would vanish, and the vanishing
+   * would look exactly like successful housekeeping.
+   * `application/email-queue-purge.ts` names the terminal statuses in the
+   * statement itself.
+   */
+  dataLifecycle: [
+    {
+      key: EMAIL_ATTEMPTS_LIFECYCLE_KEY,
+      tableName: "awcms_email_delivery_attempts",
+      ownerModuleKey: "email",
+      scope: "tenant",
+      cursorColumn: "attempted_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 365,
+      defaultRetentionDays: 30,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per ATTEMPT rather than per message, so a message that exhausts EMAIL_SEND_MAX_RETRIES writes up to six — the highest row rate of the pair. The answer to that is the short retention window it now has, not partitioning: the table is drained continuously and keeps no long history to range-scan."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A truncated, pre-redacted provider reply is a debugging aid with a half-life of days. It deliberately never contains the recipient address or the message body, so once the incident it belongs to is closed there is nothing in it worth preserving."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Append-only diagnostic rows with no status to transition to and no identifying column to anonymize — the recipient never appears here, only a message FK."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "attempted_at"],
+          purpose:
+            "awcms_email_delivery_attempts_tenant_idx (sql/014) — declared DESC, which serves this purge's ascending scan without a sort because PostgreSQL reads a btree backwards. An ascending twin was considered and rejected in sql/095's header: write amplification on a per-attempt table to buy nothing."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. The unique (message_id, attempt_no) constraint means a restore cannot produce duplicate attempt records for a message that is re-dispatched afterwards.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run email:queue:purge",
+        purgeFunctionRef:
+          "src/modules/email/application/email-queue-purge.ts#purgeEmailQueue",
+        description:
+          "Deletes attempt rows older than the cutoff in bounded batches, BEFORE the messages step so the foreign key ordering holds. Skips the whole step when a legal hold covers email.delivery_attempts."
+      }
+    },
+    {
+      key: EMAIL_MESSAGES_LIFECYCLE_KEY,
+      tableName: "awcms_email_messages",
+      ownerModuleKey: "email",
+      scope: "tenant",
+      // `updated_at`, not `created_at`: the moment the row stopped moving. A
+      // message that retried for a day would otherwise be measured from before
+      // its last attempt.
+      cursorColumn: "updated_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 365,
+      // Longer than the attempt ledger's window would suggest is needed,
+      // because this is the row an operator names when a recipient says they
+      // never received something: 90 days covers a billing cycle's worth of
+      // "did you send my invoice".
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "Bounded by delivery throughput and drained continuously, so the live set is small and the historical tail is deleted rather than kept. Partitioning pays for tables that retain a long history, which this one specifically does not."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The row carries `to_address` — a recipient address in the clear, which is why the table also stores a hash and a mask. Archiving would copy exactly that column into a second, longer-lived artifact, which is the opposite of what retention is for here. The BUSINESS record of what was communicated belongs to whatever produced the message, not to its transport."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Only terminal rows (`sent`/`failed`/`cancelled`/`suppressed`) are eligible; non-terminal rows are pending work, not history. There is nothing to anonymize short of deleting the recipient column, which would leave a row that answers no question anyone asks of it."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "status", "updated_at"],
+          purpose:
+            "awcms_email_messages_retention_idx (sql/095) — the purge's own path. Added rather than reusing awcms_email_messages_dispatch_idx, which covers the OPPOSITE status set (`queued`/`retry_wait`) and is keyed on next_attempt_at."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. Restoring an old backup revives queue rows that were terminal at backup time — they stay terminal, because status is stored rather than recomputed. A row restored in `sending` is re-claimed by the next dispatcher pass once its lease is past, which is the same path a worker crash takes.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run email:queue:purge",
+        purgeFunctionRef:
+          "src/modules/email/application/email-queue-purge.ts#purgeEmailQueue",
+        description:
+          "Deletes terminal (`sent`/`failed`/`cancelled`/`suppressed`) messages older than the cutoff in bounded batches, skipping any that still have attempt rows so the foreign key holds. Skips the whole step when a legal hold covers email.messages."
+      }
     }
   ]
 });

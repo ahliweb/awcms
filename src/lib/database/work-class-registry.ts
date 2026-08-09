@@ -89,6 +89,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Scheduled retention purge (push:queue:purge, ADR-0074) — same tolerant-of-delay profile as form-draft-purge; purgePushQueue passes workClass: "maintenance" explicitly.'
   },
+  "scripts/email-queue-purge.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled retention purge (email:queue:purge, Issue #468/ADR-0072) — same tolerant-of-delay profile as push:queue:purge and form-draft-purge; purgeEmailQueue passes workClass: "maintenance" explicitly. Its --dry-run path counts outside a tenant transaction and so opens no classified connection of its own.'
+  },
   "scripts/object-sync-dispatch.ts": {
     workClass: "background_sync",
     rationale:
