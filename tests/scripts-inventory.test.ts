@@ -1,5 +1,5 @@
 /**
- * `scripts:inventory:check` — the two ways `scripts/README.md` went wrong.
+ * `scripts:inventory:check` — the three ways `scripts/README.md` went wrong.
  *
  * The table it replaces listed 12 of 52 scripts, and its companion "not yet
  * ported" table named fifteen tools that had already landed — several of them
@@ -12,6 +12,10 @@
  *    exist yet, and it does. This is the dangerous direction: a negative claim
  *    gets more wrong with time and never fails on its own, so a reader
  *    concludes `db:work-class:check` still needs building and builds a second.
+ * 3. **Half-stale generation** (#442) — the table is right and the counts
+ *    sentence above it is not. Nobody typed that; two rebased branches wrote
+ *    the identical sentence from different bases and git merged only the rows.
+ *    The old check compared rows, so it had nothing to say.
  *
  * Every case plants a violation.
  */
@@ -21,6 +25,7 @@ import {
   buildInventory,
   extractInventoryBlock,
   findFalseAbsenceClaims,
+  normalizeInventoryBlock,
   parseInventoryBlock,
   readPackageScripts,
   renderInventory,
@@ -113,6 +118,58 @@ describe("the generated block", () => {
   });
 });
 
+describe("the counts sentence is compared too (#442)", () => {
+  // The rows-only comparison covered exactly what git cannot silently merge
+  // wrong and skipped what it can. Every case here plants the drift that
+  // actually shipped: a table that is right above a sentence that is not.
+  const rendered = renderInventory(buildInventory(SCRIPTS));
+
+  test("a mutation of ONLY the counts sentence is drift", () => {
+    const mutated = rendered.replace(
+      "2 target menjalankan",
+      "1 target menjalankan"
+    );
+
+    expect(mutated).not.toBe(rendered);
+    // The rows are untouched, so the old comparison had nothing to say.
+    expect(parseInventoryBlock(mutated)).toEqual(parseInventoryBlock(rendered));
+    expect(normalizeInventoryBlock(mutated)).not.toBe(
+      normalizeInventoryBlock(rendered)
+    );
+  });
+
+  test("a mutation of ONLY the gated count is drift", () => {
+    const mutated = rendered.replace("; 1 di antaranya", "; 0 di antaranya");
+
+    expect(mutated).not.toBe(rendered);
+    expect(parseInventoryBlock(mutated)).toEqual(parseInventoryBlock(rendered));
+    expect(normalizeInventoryBlock(mutated)).not.toBe(
+      normalizeInventoryBlock(rendered)
+    );
+  });
+
+  test("what prettier rewrites is still not drift", () => {
+    // Padding and the stretched separator dashes must survive normalization,
+    // or the gate fights `bun run lint` forever — the reason it parsed in the
+    // first place.
+    const padded = rendered
+      .replace("| Target | Skrip | Gate |", "| Target      | Skrip | Gate |")
+      .replace("| ------ | ----- | ---- |", "| ----------- | ----- | ---- |")
+      .replace("| `db:migrate` |", "| `db:migrate`  |");
+
+    expect(padded).not.toBe(rendered);
+    expect(normalizeInventoryBlock(padded)).toBe(
+      normalizeInventoryBlock(rendered)
+    );
+  });
+
+  test("a blank line added by an editor is not drift either", () => {
+    expect(normalizeInventoryBlock(`${rendered}\n\n`)).toBe(
+      normalizeInventoryBlock(rendered)
+    );
+  });
+});
+
 describe("findFalseAbsenceClaims", () => {
   test("flags the defect this gate exists for: a shipped tool listed as not-yet-ported", () => {
     const readme = [
@@ -190,6 +247,34 @@ describe("the real repository", () => {
     for (const row of rows) {
       expect(listed.has(row.target)).toBe(true);
     }
+  });
+
+  test("the counts sentence states the truth, not a remembered number", async () => {
+    // Derived here from package.json rather than from renderInventory, so the
+    // assertion survives the generator and the checker being wrong together.
+    const readme = await Bun.file("scripts/README.md").text();
+    const scripts = await readPackageScripts();
+    const targets = Object.entries(scripts).filter(([, command]) =>
+      /scripts\//.test(command)
+    );
+    const chain = (scripts.check ?? "")
+      .split("&&")
+      .map((segment) => segment.trim().replace(/^bun run /, ""));
+    const gated = targets.filter(([target]) => chain.includes(target));
+
+    expect(extractInventoryBlock(readme)).toContain(
+      `${targets.length} target menjalankan berkas di \`scripts/\`; ${gated.length} di antaranya`
+    );
+  });
+
+  test("the whole generated block matches a fresh render, not only its rows", async () => {
+    const readme = await Bun.file("scripts/README.md").text();
+
+    expect(normalizeInventoryBlock(extractInventoryBlock(readme))).toBe(
+      normalizeInventoryBlock(
+        renderInventory(buildInventory(await readPackageScripts()))
+      )
+    );
   });
 
   test("is wired into `bun run check`", async () => {
