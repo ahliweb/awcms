@@ -36,8 +36,7 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { fetchTenantActivityReport } from "../../modules/reporting/application/tenant-activity-report";
 import { fetchAccessAuditReport } from "../../modules/reporting/application/access-audit-report";
@@ -51,8 +50,11 @@ const permissionCount = ssr.permissions.size;
 const roleCount = ssr.roles.length;
 const roleSummary = roleCount > 0 ? ssr.roles.join(", ") : "—";
 
+/**
+ * Rendered in the denied state so the operator can read the exact key to ask
+ * for. Display only — the decision below is the chokepoint's.
+ */
 const DASHBOARD_PERMISSION = permissionKey("reporting", "dashboard", "read");
-const hasDashboardAccess = ssr.permissions.has(DASHBOARD_PERMISSION);
 
 type Dashboard = {
   tenantActivity: Awaited<ReturnType<typeof fetchTenantActivityReport>>;
@@ -61,36 +63,40 @@ type Dashboard = {
   moduleUsage: Awaited<ReturnType<typeof fetchModuleUsageReport>>;
 };
 
-let dashboard: Dashboard | null = null;
-let loadError = false;
-
-if (hasDashboardAccess) {
-  try {
-    const result = await withTenantOrThrow(
-      getDatabaseClient(),
-      ssr.tenantId,
-      async (tx) => ({
-        tenantActivity: await fetchTenantActivityReport(tx, ssr.tenantId),
-        accessAudit: await fetchAccessAuditReport(tx, ssr.tenantId),
-        syncHealth: await fetchSyncHealthReport(tx, ssr.tenantId),
-        moduleUsage: await fetchModuleUsageReport(tx, ssr.tenantId)
-      })
-    );
-
-    // See the header note: a circuit-open `Response` arrives here as an
-    // ordinary value, so presence of a known key is the only honest test.
-    if (result && typeof result === "object" && "tenantActivity" in result) {
-      dashboard = result as Dashboard;
-    } else {
-      loadError = true;
-    }
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`. This is the
+// landing page every operator hits first, so it is also where a tenant's ABAC
+// `deny` on `reporting.dashboard.read` was most visibly inert.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "reporting",
+    activityCode: "dashboard",
+    action: "read"
+  },
+  load: async ({ tx }): Promise<Dashboard> => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    tenantActivity: await fetchTenantActivityReport(tx, ssr.tenantId),
+    accessAudit: await fetchAccessAuditReport(tx, ssr.tenantId),
+    syncHealth: await fetchSyncHealthReport(tx, ssr.tenantId),
+    moduleUsage: await fetchModuleUsageReport(tx, ssr.tenantId)
+  }),
+  onError: (error) => {
     logAdminPageError("admin/index.astro: failed to load dashboard", error, {
       correlationId: Astro.locals.correlationId
     });
-    loadError = true;
   }
-}
+});
+
+const hasDashboardAccess = screen.state !== "denied";
+// The old "presence of a known key" test existed because a circuit-open
+// `Response` arrived here as an ordinary value. `AdminScreenOutcome` separates
+// the three cases directly, so the sniffing is gone.
+const loadError = screen.state === "error";
+const dashboard: Dashboard | null =
+  screen.state === "allowed" ? screen.data : null;
 
 /**
  * Three states, not two — see `classifySyncHealthDisplay` for why `0/0` must

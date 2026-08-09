@@ -82,9 +82,18 @@ function expectCode(source: string, anchor: string): string {
   return stripped;
 }
 
-/** `permissionKey("a", "b", "c")` call sites in a screen. */
+/**
+ * Permission triples a screen gates on, in BOTH spellings.
+ *
+ * Issue #450 is why the second exists: a screen routed through
+ * `loadAdminScreen` states its guards as `AccessRequest` object literals — the
+ * same shape the routes use — instead of `permissionKey(...)`. Reading only the
+ * old spelling would have made this test demand the screen keep deciding access
+ * from the raw grant set, which is the defect. A contract test must pin the
+ * PROPERTY (this screen gates exactly these two), never the syntax.
+ */
 function pageKeys(source: string): Set<string> {
-  const found = new Set<string>();
+  const found = guardKeys(source);
   for (const match of source.matchAll(
     /permissionKey\(\s*"([a-z_]+)"\s*,\s*"([a-z_]+)"\s*,\s*"([a-z_]+)"/g
   )) {

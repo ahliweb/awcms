@@ -56,10 +56,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
 import {
@@ -71,19 +69,6 @@ import {
 } from "../../modules/media-library/application/media-object-directory";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("media_library", "media", "read")
-);
-const canDelete = ssr.permissions.has(
-  permissionKey("media_library", "media", "delete")
-);
-const canRestore = ssr.permissions.has(
-  permissionKey("media_library", "media", "restore")
-);
-const canPurge = ssr.permissions.has(
-  permissionKey("media_library", "media", "purge")
-);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -125,38 +110,65 @@ const cursorParam = readParam("cursor");
 // the same input, which is correct there: a machine caller should be told.
 const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
 
-let objects: NewsMediaObjectView[] = [];
-let nextCursor: string | null = null;
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      const page = await listMediaObjects(
-        tx,
-        ssr.tenantId,
-        {
-          status: statusFilter,
-          mimeType: mimeTypeFilter,
-          deletion: deletionFilter
-        },
-        cursor ?? undefined
-      );
-      objects = page.items;
-      nextCursor = page.nextCursor;
-    });
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "media_library",
+    activityCode: "media",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    page: await listMediaObjects(
+      tx,
+      ssr.tenantId,
+      {
+        status: statusFilter,
+        mimeType: mimeTypeFilter,
+        deletion: deletionFilter
+      },
+      cursor ?? undefined
+    ),
+    canDelete: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "delete"
+    }),
+    canRestore: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "restore"
+    }),
+    canPurge: await can({
+      moduleKey: "media_library",
+      activityCode: "media",
+      action: "purge"
+    })
+  }),
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has no media".
-    loadError = true;
     logAdminPageError(
       "admin/media.astro: failed to load the media library",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const objects: NewsMediaObjectView[] =
+  screen.state === "allowed" ? screen.data.page.items : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.page.nextCursor : null;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
+const canPurge = screen.state === "allowed" && screen.data.canPurge;
 
 /**
  * `verified`/`attached` are the two statuses safe to reference publicly

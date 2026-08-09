@@ -66,10 +66,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listBlogTerms,
   type BlogTermView
@@ -80,14 +78,6 @@ import {
 } from "../../modules/blog-content/domain/taxonomy-policy";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("blog_content", "taxonomies", "read")
-);
-/** One permission, three writes — see the header. */
-const canConfigure = ssr.permissions.has(
-  permissionKey("blog_content", "taxonomies", "configure")
-);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -103,21 +93,29 @@ const typeFilter: TaxonomyType | undefined = isTaxonomyType(typeRaw)
 /** `?edit=<id>` opens the edit form for one term, below the table. */
 const editingTermId = readParam("edit");
 
-let terms: BlogTermView[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      terms = await listBlogTerms(tx, ssr.tenantId, {
-        taxonomyType: typeFilter
-      });
-    });
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "taxonomies",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    terms: await listBlogTerms(tx, ssr.tenantId, { taxonomyType: typeFilter }),
+    canConfigure: await can({
+      moduleKey: "blog_content",
+      activityCode: "taxonomies",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has no terms".
-    loadError = true;
     logAdminPageError(
       "admin/blog-taxonomy.astro: failed to load terms",
       error,
@@ -126,7 +124,13 @@ if (canRead) {
       }
     );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const terms: BlogTermView[] =
+  screen.state === "allowed" ? screen.data.terms : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 
 function formatTimestamp(value: Date | null): string {
   return value ? value.toISOString() : "—";

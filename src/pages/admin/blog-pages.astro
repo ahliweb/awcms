@@ -66,10 +66,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listBlogPagesForAdmin,
   type ListBlogPagesForAdminResult
@@ -90,31 +88,6 @@ import {
 } from "../../modules/blog-content/domain/content-validation";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "read")
-);
-const canCreate = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "create")
-);
-const canUpdate = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "update")
-);
-const canPublish = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "publish")
-);
-const canArchive = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "archive")
-);
-const canDelete = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "delete")
-);
-const canRestore = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "restore")
-);
-const canPurge = ssr.permissions.has(
-  permissionKey("blog_content", "pages", "purge")
-);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -142,30 +115,88 @@ const showsBin = readParam("view") === "deleted";
 /** `?edit=<id>` opens the structure form for one page, below the table. */
 const editingPageId = readParam("edit");
 
-let listing: ListBlogPagesForAdminResult | null = null;
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      listing = await listBlogPagesForAdmin(tx, ssr.tenantId, {
-        search: searchFilter || undefined,
-        status: statusFilter,
-        pageType: pageTypeFilter,
-        deletedOnly: showsBin || undefined,
-        page: pageNumber
-      });
-    });
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`.
+//
+// The seven write affordances are spelled out one by one rather than looped
+// over an action array. A loop reads better and would make them INVISIBLE to
+// `admin:screen-coverage:check`, whose matcher only sees literal triples — the
+// screen would keep gating them correctly while the gate reported seven
+// permissions as having no screen at all.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "pages",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    listing: await listBlogPagesForAdmin(tx, ssr.tenantId, {
+      search: searchFilter || undefined,
+      status: statusFilter,
+      pageType: pageTypeFilter,
+      deletedOnly: showsBin || undefined,
+      page: pageNumber
+    }),
+    canCreate: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "create"
+    }),
+    canUpdate: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "update"
+    }),
+    canPublish: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "publish"
+    }),
+    canArchive: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "archive"
+    }),
+    canDelete: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "delete"
+    }),
+    canRestore: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "restore"
+    }),
+    canPurge: await can({
+      moduleKey: "blog_content",
+      activityCode: "pages",
+      action: "purge"
+    })
+  }),
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has no pages".
-    loadError = true;
     logAdminPageError("admin/blog-pages.astro: failed to load pages", error, {
       correlationId: Astro.locals.correlationId
     });
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const listing: ListBlogPagesForAdminResult | null =
+  screen.state === "allowed" ? screen.data.listing : null;
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canPublish = screen.state === "allowed" && screen.data.canPublish;
+const canArchive = screen.state === "allowed" && screen.data.canArchive;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
+const canPurge = screen.state === "allowed" && screen.data.canPurge;
 
 const STATUS_VARIANT: Record<string, string> = {
   draft: "neutral",
