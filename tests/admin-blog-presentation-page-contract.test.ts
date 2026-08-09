@@ -71,13 +71,31 @@ function expectCode(source: string, anchor: string): string {
   return stripped;
 }
 
+/**
+ * Permission triples the screen gates on.
+ *
+ * This screen used to bind a file-local `can(activity, action)` helper over
+ * `ssr.permissions.has`, and this matcher read those two-argument calls. Issue
+ * #450 removed the helper: the guards are now `AccessRequest` object literals,
+ * the same shape the routes use. Both forms are read so the assertion states
+ * the PROPERTY — this screen gates exactly these eight — rather than whichever
+ * syntax expressed it.
+ */
 function pageKeys(source: string): Set<string> {
   const found = new Set<string>();
+
   for (const match of source.matchAll(
     /can\(\s*"([a-z_]+)"\s*,\s*"([a-z_]+)"\s*\)/g
   )) {
     found.add(`blog_content.${match[1]}.${match[2]}`);
   }
+
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*"([a-z_]+)",\s*action:\s*"([a-z_]+)"/g
+  )) {
+    found.add(`${match[1]}.${match[2]}.${match[3]}`);
+  }
+
   return found;
 }
 

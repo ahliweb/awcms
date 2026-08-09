@@ -372,9 +372,20 @@ const screen = await loadAdminScreen({
     expect(slice.usesChokepoint).toBe(true);
   });
 
-  test("a screen that still reads the grant set for an affordance is covered by the helper", () => {
-    // Not a loophole being blessed: the file-wide rule is the same one
-    // `defineTenantRoute` gets, and the entry decision is what R3 is about.
+  test("a screen that reads the grant set for an affordance is a finding, even when routed", () => {
+    // This asserted the OPPOSITE while the migration ledger had entries, on the
+    // reasoning that the file-wide rule is the one `defineTenantRoute` gets and
+    // the entry decision is what R3 is about. That was right for a half-migrated
+    // screen and wrong the moment the last one landed: it let a routed screen
+    // decide an AFFORDANCE from raw RBAC with the gate green.
+    //
+    // It was found by mutation, not by reading — planting exactly this hybrid
+    // into `users.astro` left `access:chokepoint:check` at exit 0 while its own
+    // summary line said "1 still decide outside the chokepoint".
+    //
+    // Routes keep the file-wide allowance; screens do not. `.astro` is one
+    // render path per file, so there is no sibling handler for the coverage to
+    // legitimately extend to.
     const slice = sliceScreen(
       "hybrid.astro",
       `${MIGRATED_SCREEN}\nconst extra = ssr.permissions.has("x");`
@@ -382,7 +393,20 @@ const screen = await loadAdminScreen({
 
     expect(slice.decidesPermissions).toBe(true);
     expect(slice.usesChokepoint).toBe(true);
-    expect(findChokepointBypasses([slice], {}, [])).toEqual([]);
+    expect(findChokepointBypasses([slice], {}, [])).toHaveLength(1);
+  });
+
+  test("a ROUTE that decides in one handler is still covered file-wide by the factory", () => {
+    // The other half of the asymmetry above, pinned so the screen tightening
+    // cannot be generalised to routes by someone tidying the filter.
+    // `defineTenantRoute` wraps at module level and calls the chokepoint itself.
+    const route = {
+      id: "thing/index.ts#GET",
+      decidesPermissions: true,
+      usesChokepoint: true
+    };
+
+    expect(findChokepointBypasses([route], {}, [])).toEqual([]);
   });
 
   test("the signal is not matched inside a comment", () => {
@@ -459,5 +483,40 @@ ${MIGRATED_SCREEN.slice(4)}`
     expect(bypassing).toEqual([...ADMIN_SCREEN_CHOKEPOINT_MIGRATION].sort());
     // At least one screen went through: the mechanism is proven, not provided.
     expect(slices.some((slice) => slice.usesChokepoint)).toBe(true);
+  });
+
+  test("the ledger is EMPTY — R3 is closed, and closed is a thing to assert", () => {
+    // While the ledger had entries, "may only shrink" was enforced by the
+    // staleness check: an entry whose screen no longer bypassed was a finding.
+    // At zero that alarm has nothing to fire on, so growth back from zero would
+    // be silent. This asserts the end state directly.
+    //
+    // Adding a line here is not a merge conflict to resolve — it means a new
+    // admin screen decides access outside `authorizeInTransaction`, which is
+    // the entire defect #450 existed to remove.
+    expect([...ADMIN_SCREEN_CHOKEPOINT_MIGRATION]).toEqual([]);
+  });
+
+  test("every admin screen is routed, not merely absent from the ledger", () => {
+    // The pair that makes the assertion above mean something. An empty
+    // `bypassing` set is also what a BROKEN detector produces — `sliceScreen`
+    // returning `decidesPermissions: false` for everything reads identically to
+    // total success. The detector's own behaviour is pinned by the
+    // `LEGACY_SCREEN` cases at the top of this block; this one pins the corpus:
+    // all 32 screens actually call the helper.
+    return Array.fromAsync(
+      new Bun.Glob("**/*.astro").scan({ cwd: "src/pages/admin" })
+    ).then(async (files) => {
+      expect(files.length).toBeGreaterThan(0);
+
+      const unrouted: string[] = [];
+
+      for (const file of files) {
+        const source = await Bun.file(`src/pages/admin/${file}`).text();
+        if (!sliceScreen(file, source).usesChokepoint) unrouted.push(file);
+      }
+
+      expect(unrouted).toEqual([]);
+    });
   });
 });

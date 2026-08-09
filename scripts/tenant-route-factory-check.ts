@@ -115,13 +115,10 @@ const WITH_TENANT_CALL_PATTERN =
  * — which is what this gate exists to prevent.
  */
 const NOT_YET_MIGRATED: readonly string[] = [
-  // --- Layar admin (R3) — sedang dimigrasikan ke `loadAdminScreen`, Gelombang 1
-  //     dari #423 (issue #450). Daftar ini menyusut tiap PR migrasi.
-  "src/pages/admin/blog-presentation.astro",
-  "src/pages/admin/data-lifecycle.astro",
-  "src/pages/admin/security.astro",
-  "src/pages/admin/seo.astro",
-  "src/pages/admin/site-search.astro",
+  // --- Layar admin (R3): KOSONG. Ke-32 layar sudah lewat `loadAdminScreen`
+  //     (issue #450, Gelombang 1 dari #423), jadi tidak ada satu pun yang
+  //     membuka transaksinya sendiri. Jangan menambahkan baris `src/pages/admin`
+  //     di sini — pakai `loadAdminScreen`.
 
   // --- Rute API.
   "src/pages/api/v1/abac/policies/[id].ts",

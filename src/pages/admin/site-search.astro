@@ -24,10 +24,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   fetchIndexFailures,
   fetchIndexStatus,
@@ -55,57 +53,55 @@ if (!ssr) {
   );
 }
 
-const canReadIndex = ssr.permissions.has(
-  permissionKey("site_search", "index", "read")
-);
-const canReconcile = ssr.permissions.has(
-  permissionKey("site_search", "index", "reconcile")
-);
-const canRebuild = ssr.permissions.has(
-  permissionKey("site_search", "index", "rebuild")
-);
-const canReadSettings = ssr.permissions.has(
-  permissionKey("site_search", "settings", "read")
-);
-const canUpdateSettings = ssr.permissions.has(
-  permissionKey("site_search", "settings", "update")
-);
-const canReadDiagnostics = ssr.permissions.has(
-  permissionKey("site_search", "diagnostics", "read")
-);
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: three independently readable panels, refused only when all three are.
+// Each fetch is awaited SEQUENTIALLY: concurrent queries on a single
+// transaction connection leak it (idle in transaction) — the same note the API
+// routes carry.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "site_search", activityCode: "index", action: "read" },
+    { moduleKey: "site_search", activityCode: "settings", action: "read" },
+    { moduleKey: "site_search", activityCode: "diagnostics", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readIndex = false, readSettings = false, readDiagnostics = false] =
+      entry;
 
-let status: IndexStatus | null = null;
-let recentRuns: IndexRunSummary[] = [];
-let failures: IndexFailureItem[] = [];
-let settings: SiteSearchSettings | null = null;
-let loadError = false;
-
-// One transaction for every panel this viewer is allowed to see. Each fetch is
-// awaited SEQUENTIALLY: concurrent queries on a single transaction connection
-// leak it (idle in transaction) — the same note the API routes carry.
-if (canReadIndex || canReadSettings || canReadDiagnostics) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      const indexStatus = canReadIndex
-        ? await fetchIndexStatus(tx, ssr.tenantId)
-        : null;
-      const runs = canReadIndex
-        ? await fetchRecentRuns(tx, ssr.tenantId, 10)
-        : [];
-      const failed = canReadDiagnostics
+    return {
+      readIndex,
+      readSettings,
+      readDiagnostics,
+      indexStatus: readIndex ? await fetchIndexStatus(tx, ssr.tenantId) : null,
+      runs: readIndex ? await fetchRecentRuns(tx, ssr.tenantId, 10) : [],
+      failed: readDiagnostics
         ? await fetchIndexFailures(tx, ssr.tenantId, 100)
-        : [];
-      const config = canReadSettings
+        : [],
+      config: readSettings
         ? await fetchSiteSearchSettings(tx, ssr.tenantId)
-        : null;
-      return { indexStatus, runs, failed, config };
-    });
-    status = result.indexStatus;
-    recentRuns = result.runs;
-    failures = result.failed;
-    settings = result.config;
-  } catch (error) {
+        : null,
+      canReconcile: await can({
+        moduleKey: "site_search",
+        activityCode: "index",
+        action: "reconcile"
+      }),
+      canRebuild: await can({
+        moduleKey: "site_search",
+        activityCode: "index",
+        action: "rebuild"
+      }),
+      canUpdateSettings: await can({
+        moduleKey: "site_search",
+        activityCode: "settings",
+        action: "update"
+      })
+    };
+  },
+  onError: (error) => {
     logAdminPageError(
       "admin/site-search.astro: failed to load console",
       error,
@@ -113,9 +109,26 @@ if (canReadIndex || canReadSettings || canReadDiagnostics) {
         correlationId: Astro.locals.correlationId
       }
     );
-    loadError = true;
   }
-}
+});
+
+const loadError = screen.state === "error";
+const canReadIndex = screen.state === "allowed" && screen.data.readIndex;
+const canReadSettings = screen.state === "allowed" && screen.data.readSettings;
+const canReadDiagnostics =
+  screen.state === "allowed" && screen.data.readDiagnostics;
+const status: IndexStatus | null =
+  screen.state === "allowed" ? screen.data.indexStatus : null;
+const recentRuns: IndexRunSummary[] =
+  screen.state === "allowed" ? screen.data.runs : [];
+const failures: IndexFailureItem[] =
+  screen.state === "allowed" ? screen.data.failed : [];
+const settings: SiteSearchSettings | null =
+  screen.state === "allowed" ? screen.data.config : null;
+const canReconcile = screen.state === "allowed" && screen.data.canReconcile;
+const canRebuild = screen.state === "allowed" && screen.data.canRebuild;
+const canUpdateSettings =
+  screen.state === "allowed" && screen.data.canUpdateSettings;
 
 /** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18` (UTC, no locale dependency). */
 function formatTimestamp(value: string | null): string {

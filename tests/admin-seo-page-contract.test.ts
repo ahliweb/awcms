@@ -110,12 +110,27 @@ function guardTriplesFrom(
 }
 
 /** `permissionKey("seo_distribution", "redirect", "read")` → `seo_distribution.redirect.read`. */
+/**
+ * Both spellings, and issue #450 is why the second exists: a screen routed
+ * through `loadAdminScreen` states its guards as `AccessRequest` object
+ * literals — the SAME shape the routes use — instead of `permissionKey(...)`.
+ *
+ * Reading only the old spelling would have made this test demand the screen
+ * keep deciding access from the raw grant set, which is the defect. A contract
+ * test pins the PROPERTY, never the syntax that happened to express it.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
-  const pattern =
-    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 
-  for (const match of source.matchAll(pattern)) {
+  for (const match of source.matchAll(
+    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g
+  )) {
+    found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
+  }
+
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*"([a-z_]+)",\s*action:\s*"([a-z_]+)"/g
+  )) {
     found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
   }
 
@@ -299,7 +314,13 @@ describe("/admin/seo writes only through the guarded endpoints", () => {
     // rule is asserted textually: a bare `withTenant(` here would open a
     // transaction whose 503 `Response` leaks into the render path.
     expect(page).not.toMatch(/[^r]\bwithTenant\(/);
-    expect(page).toContain("withTenantOrThrow(sql, ssr.tenantId");
+    // Issue #450: the screen no longer opens its own transaction at all — the
+    // entry decision and the reads share the ONE that `loadAdminScreen` opens.
+    // The old assertion demanded the literal `withTenantOrThrow(sql, ...)`,
+    // which after the migration is a demand to keep the transaction OUTSIDE the
+    // chokepoint. Both halves are pinned so it cannot drift back.
+    expect(page).toMatch(/loadAdminScreen\(/);
+    expect(page).not.toMatch(/\bwithTenantOrThrow\(/);
   });
 
   test("high-risk writes carry a fresh Idempotency-Key and the dry run does not", async () => {
