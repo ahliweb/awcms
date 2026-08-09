@@ -57,13 +57,33 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const startedAtMs = performance.now();
 
   /**
-   * Single exit point for every branch below (ADR-0042 §7). Routing ALL
-   * responses — `/admin` and `/api` included — through the edge-cache
-   * annotator is what guarantees no response ever reaches Varnish unlabelled:
-   * an undeclared path resolves to `surface_not_declared` and is stamped
-   * `Cache-Control: private, no-store`. Varnish's built-in VCL would otherwise
-   * cache an unlabelled `200` for its `default_ttl`, which on an admin page is
-   * a cross-tenant disclosure. Annotation never throws and never blocks.
+   * Single exit point for every branch below (ADR-0042 §7). Routing every
+   * RENDERED response — `/admin` and `/api` included — through the edge-cache
+   * annotator is what guarantees no rendered response reaches Varnish
+   * unlabelled: an undeclared path resolves to `surface_not_declared` and is
+   * stamped `Cache-Control: private, no-store`. Varnish's built-in VCL would
+   * otherwise cache an unlabelled `200` for its `default_ttl`, which on an
+   * admin page is a cross-tenant disclosure. Annotation never throws and never
+   * blocks.
+   *
+   * WHAT "RENDERED" EXCLUDES, AND WHY THAT IS SAFE (Issue #464)
+   * ----------------------------------------------------------
+   * This middleware does not run for a request the adapter's static handler
+   * answers from `dist/client/` — it runs FIRST and only falls through to the
+   * app when no file matches. So `public/**` and `_astro/**` are outside this
+   * annotator, and this comment used to claim otherwise.
+   *
+   * That is tolerable for CACHING specifically, and only because of what those
+   * files are: `_astro/**` is content-hashed output the adapter itself stamps
+   * `public, max-age=31536000, immutable`, and `public/**` is unauthenticated
+   * static content whose worst case at the edge is being cached for
+   * `default_ttl` — no tenant is derivable from it. It would NOT be tolerable
+   * for a path that varies by tenant or session, so a static file must never
+   * become one.
+   *
+   * Security headers are a different matter and are NOT tolerable to skip:
+   * `src/lib/server/standalone-entry.ts` applies the same
+   * `buildSecurityHeaders()` to static responses before the adapter sees them.
    */
   const finalize = async (response: Response): Promise<Response> =>
     applyResponseHeaders(

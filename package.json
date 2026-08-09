@@ -33,10 +33,11 @@
   },
   "scripts": {
     "dev": "bun --bun astro dev",
-    "build": "bun --bun astro build && bun run build:asset-budget:check",
+    "build": "bun --bun astro build && bun run build:server-entry && bun run build:asset-budget:check",
+    "build:server-entry": "bun build src/lib/server/standalone-entry.ts --target=bun --outfile=dist/standalone-entry.mjs",
     "build:asset-budget:check": "bun scripts/client-asset-budget.ts",
     "preview": "bun --bun astro preview",
-    "start": "bun ./dist/server/entry.mjs",
+    "start": "bun ./dist/standalone-entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
     "domain-events:dispatch": "bun scripts/domain-events-dispatch.ts",
     "sync:objects:dispatch": "bun scripts/object-sync-dispatch.ts",

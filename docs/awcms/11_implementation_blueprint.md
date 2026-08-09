@@ -74,7 +74,7 @@ awcms/
     "dev": "bun --bun astro dev",
     "build": "bun --bun astro build",
     "preview": "bun --bun astro preview",
-    "start": "bun ./dist/server/entry.mjs",
+    "start": "bun ./dist/standalone-entry.mjs",
     "db:migrate": "bun scripts/db-migrate.ts",
     "api:spec:check": "bun scripts/api-spec-check.ts",
     "api:contract:test": "bun scripts/api-contract-test.ts",
@@ -86,7 +86,7 @@ awcms/
 }
 ```
 
-Semua script di atas wajib dijalankan dengan Bun. Bin Astro/Vite dipanggil lewat **`bun --bun`** agar Bun yang mengeksekusi, bukan binary `node` yang kebetulan terpasang (shebang bin-nya `#!/usr/bin/env node`). Server SSR hasil build dijalankan `bun ./dist/server/entry.mjs` (lihat doc 10 §Standar platform backend). Jangan menambahkan `node`, `npm`, `npx`, `pnpm`, atau `yarn` sebagai jalur eksekusi.
+Semua script di atas wajib dijalankan dengan Bun. Bin Astro/Vite dipanggil lewat **`bun --bun`** agar Bun yang mengeksekusi, bukan binary `node` yang kebetulan terpasang (shebang bin-nya `#!/usr/bin/env node`). Server SSR hasil build dijalankan `bun ./dist/standalone-entry.mjs` (lihat doc 10 §Standar platform backend). Jangan menambahkan `node`, `npm`, `npx`, `pnpm`, atau `yarn` sebagai jalur eksekusi.
 
 **Catatan:** blok JSON di atas adalah **contoh minimal ilustratif** untuk Sprint 1 — belum ada `package.json` nyata di repo ini hari ini. Skrip di atas (`db:migrate`, `api:spec:check`, dst.) **belum diimplementasikan**; ini target Sprint 1, bukan kondisi saat ini.
 

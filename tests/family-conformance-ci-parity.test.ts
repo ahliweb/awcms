@@ -65,12 +65,20 @@ describe("family conformance — CI/check parity", () => {
   test("ci.yml keeps the e2e-smoke SSR-start-on-Bun proof (Astro SSR contract)", () => {
     // The "Astro SSR production build/start on Bun" family contract is exercised
     // by `bun run build` (in `check`) PLUS the e2e-smoke job, which actually
-    // STARTS the built server on Bun (`bun ./dist/server/entry.mjs`) and drives
-    // login/SSR render. There is no standalone in-suite SSR test (a duplicate
-    // build+start+probe would just re-run e2e-smoke); this parity assertion is
-    // the guard — deleting e2e-smoke turns conformance RED.
+    // STARTS the built server on Bun and drives login/SSR render. There is no
+    // standalone in-suite SSR test (a duplicate build+start+probe would just
+    // re-run e2e-smoke); this parity assertion is the guard — deleting
+    // e2e-smoke turns conformance RED.
+    //
+    // The entrypoint is `dist/standalone-entry.mjs`, NOT the adapter's own
+    // `dist/server/entry.mjs` (Issue #464): the adapter answers static files
+    // before `src/middleware.ts` ever runs, so starting its entry directly
+    // serves every file under `dist/client/` with zero security headers. CI
+    // must exercise the entrypoint production actually uses, which is why this
+    // asserts the wrapper AND that the raw adapter entry is not started.
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain("e2e-smoke:");
-    expect(ci).toContain("bun ./dist/server/entry.mjs");
+    expect(ci).toContain("bun ./dist/standalone-entry.mjs");
+    expect(ci).not.toContain("bun ./dist/server/entry.mjs");
   });
 });

@@ -167,7 +167,7 @@ jobs:
           # Tanpa env ini spec-nya mencetak pernyataan skip, tidak diam.
           E2E_CWV_LAB: "1"
         run: |
-          bun ./dist/server/entry.mjs &
+          bun ./dist/standalone-entry.mjs &
           APP_PID=$!
           cleanup() { kill "$APP_PID" 2>/dev/null || true; }
           trap cleanup EXIT

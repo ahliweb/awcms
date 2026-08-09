@@ -2232,7 +2232,8 @@ const REQUIRED_SECURITY_HEADERS = [
 
 /**
  * Calls the real `buildSecurityHeaders` (which `src/middleware.ts` applies to
- * every response) rather than `fetch`ing a running server the way mini's
+ * every rendered response, and `src/lib/server/standalone-entry.ts` to every
+ * static one — Issue #464) rather than `fetch`ing a running server the way mini's
  * equivalent does. This repo is API-only — it has no `/login` page to GET,
  * and a readiness gate that silently downgrades to "not checked — no server
  * reachable" whenever it is run without a live server (mini's behavior) is a

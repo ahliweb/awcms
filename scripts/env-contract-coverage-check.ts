@@ -70,6 +70,11 @@ export const TOOLING_ONLY: readonly { name: string; reason: string }[] = [
     name: "NODE_ENV",
     reason:
       "Set by the runtime/toolchain. This codebase's own environment switch is APP_ENV, which IS in .env.example."
+  },
+  {
+    name: "ASTRO_NODE_AUTOSTART",
+    reason:
+      "Read by @astrojs/node's own built entry, and set to `disabled` by src/lib/server/standalone-entry.ts immediately before importing it (Issue #464) so the adapter does not bind the port with its un-wrapped handler. An internal handshake between two files in this repo — an operator setting it in a deployment could only break the server, never configure it."
   }
 ];
 
