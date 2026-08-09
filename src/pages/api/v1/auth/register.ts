@@ -6,10 +6,8 @@ import {
   hashClientIp,
   summarizeUserAgent
 } from "../../../../lib/security/client-fingerprint";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../lib/security/auth-rate-limit";
 import {
   bodyTooLargeResponse,
   readJsonBody
@@ -71,13 +69,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   // Cheapest rejection first, before any database work — this is a public,
   // unauthenticated endpoint whose accepted calls write a row.
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `${clientIp}:${tenantId}:register`,
-    {
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "register",
+    config: {
       maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
       windowMs: RATE_LIMIT_WINDOW_SEC * 1000
     }
-  );
+  });
 
   if (!rateLimit.allowed) {
     return fail(

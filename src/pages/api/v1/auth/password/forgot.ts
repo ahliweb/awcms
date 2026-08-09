@@ -6,10 +6,8 @@ import {
   hashClientIp,
   summarizeUserAgent
 } from "../../../../../lib/security/client-fingerprint";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../../lib/security/auth-rate-limit";
 import {
   bodyTooLargeResponse,
   readJsonBody
@@ -71,13 +69,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   // ordering as `login.ts`. This endpoint is public, unauthenticated, and each
   // accepted call costs a DB write plus an email enqueue.
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `${clientIp}:${tenantId}:password-forgot`,
-    {
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "password-forgot",
+    config: {
       maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
       windowMs: RATE_LIMIT_WINDOW_SEC * 1000
     }
-  );
+  });
 
   if (!rateLimit.allowed) {
     return fail(

@@ -5,10 +5,8 @@ import {
   hashClientIp,
   summarizeUserAgent
 } from "../../../../../lib/security/client-fingerprint";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../../lib/security/auth-rate-limit";
 import {
   bodyTooLargeResponse,
   readJsonBody
@@ -60,13 +58,15 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   // Rate limit before touching the database: this endpoint lets a caller guess
   // at a token, so it is bounded like login's credential-guessing surface.
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `${clientIp}:${tenantId}:password-reset`,
-    {
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "password-reset",
+    config: {
       maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
       windowMs: RATE_LIMIT_WINDOW_SEC * 1000
     }
-  );
+  });
 
   if (!rateLimit.allowed) {
     return fail(

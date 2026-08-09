@@ -5,10 +5,8 @@ import { getDatabaseClient } from "../../../../../lib/database/client";
 import { withTenant } from "../../../../../lib/database/tenant-context";
 import { hashSessionToken } from "../../../../../lib/auth/session-token";
 import { resolveAuthInputs } from "../../../../../modules/identity-access/application/access-guard";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../../lib/security/auth-rate-limit";
 import {
   hashClientIp,
   summarizeUserAgent
@@ -48,13 +46,15 @@ export const POST: APIRoute = async ({
   if (!token) return fail(401, "AUTH_REQUIRED", "Authentication required.");
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `${clientIp}:${tenantId}:mfa-stepup`,
-    {
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "mfa-stepup",
+    config: {
       maxAttempts: resolveMfaRateLimitMax(),
       windowMs: resolveMfaRateLimitWindowSec() * 1000
     }
-  );
+  });
 
   if (!rateLimit.allowed) {
     return fail(

@@ -66,6 +66,13 @@ const RULES: readonly Rule[] = [
     type: "int",
     min: 1
   },
+  { name: "AUTH_SOURCE_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
+  {
+    name: "AUTH_SOURCE_RATE_LIMIT_WINDOW_SEC",
+    required: false,
+    type: "int",
+    min: 1
+  },
   { name: "SETUP_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
   { name: "SETUP_RATE_LIMIT_WINDOW_SEC", required: false, type: "int", min: 1 },
   { name: "TRUSTED_PROXY_ENABLED", required: false, type: "bool" },
@@ -652,6 +659,29 @@ export function validateEnv(env: EnvBag): string[] {
   if (isProduction && (env.TRUSTED_PROXY_ENABLED ?? "").trim() === "") {
     problems.push(
       "TRUSTED_PROXY_ENABLED wajib diset eksplisit di produksi: `true` bila ada proxy tepercaya di depan (mis. profil nginx), `false` bila app terekspos langsung."
+    );
+  }
+
+  // Plafon per-SUMBER wajib >= plafon login per-tenant (#447). Kalau lebih
+  // rendah, ia mengikat lebih dulu bahkan pada deployment SATU tenant — dan
+  // sifat "terbukti inert pada satu tenant", yang jadi alasan perubahan itu
+  // bisa mendarat tanpa flag, berhenti berlaku diam-diam.
+  const sourceMax = Number.parseInt(
+    (env.AUTH_SOURCE_RATE_LIMIT_MAX ?? "").trim(),
+    10
+  );
+  const loginMax = Number.parseInt(
+    (env.AUTH_LOGIN_RATE_LIMIT_MAX ?? "").trim(),
+    10
+  );
+
+  if (
+    Number.isInteger(sourceMax) &&
+    Number.isInteger(loginMax) &&
+    sourceMax < loginMax
+  ) {
+    problems.push(
+      `AUTH_SOURCE_RATE_LIMIT_MAX (${sourceMax}) lebih kecil dari AUTH_LOGIN_RATE_LIMIT_MAX (${loginMax}): plafon per-sumber akan mengikat lebih dulu bahkan pada satu tenant, sehingga login sah tertolak sebelum plafon per-tenant tercapai.`
     );
   }
 
