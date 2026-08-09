@@ -28,9 +28,8 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   resolvePlatformTenant,
   resolveTenancyMode,
@@ -45,13 +44,6 @@ if (!ssr) {
   );
 }
 
-const holdsRead = ssr.permissions.has(
-  permissionKey("tenant_admin", "tenant_provisioning", "read")
-);
-const holdsCreate = ssr.permissions.has(
-  permissionKey("tenant_admin", "tenant_provisioning", "create")
-);
-
 type DirectoryEntry = {
   id: string;
   tenantCode: string;
@@ -60,61 +52,102 @@ type DirectoryEntry = {
   createdAt: Date;
 };
 
-let tenants: DirectoryEntry[] = [];
+/**
+ * Resolved OUTSIDE any tenant transaction: both read RLS-free root tables and
+ * neither needs — or should imply — a tenant context.
+ *
+ * DISPLAY only, since #450. `tenant_provisioning.read` is itself PLATFORM-scoped
+ * (ADR-0053), so the chokepoint below already refuses a non-platform tenant; the
+ * value of resolving it here is that the screen can name the platform tenant in
+ * its explanation rather than rendering a bare refusal.
+ */
 let tenancyMode: TenancyMode = "single";
 let isPlatformTenant = false;
 let platformTenantCode: string | null = null;
-let loadError = false;
+let platformResolutionFailed = false;
 
-if (holdsRead || holdsCreate) {
-  try {
-    const sql = getDatabaseClient();
+try {
+  const sql = getDatabaseClient();
+  const platformTenant = await resolvePlatformTenant(sql);
 
-    // Resolved OUTSIDE any tenant transaction: both read RLS-free root tables
-    // and neither needs — or should imply — a tenant context.
-    const platformTenant = await resolvePlatformTenant(sql);
-    isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
-    platformTenantCode = platformTenant?.tenantCode ?? null;
-    tenancyMode = await resolveTenancyMode(sql);
+  isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
+  platformTenantCode = platformTenant?.tenantCode ?? null;
+  tenancyMode = await resolveTenancyMode(sql);
+} catch (error) {
+  logAdminPageError(
+    "admin/tenants.astro: failed to resolve platform tenant",
+    error,
+    { correlationId: Astro.locals.correlationId }
+  );
+  platformResolutionFailed = true;
+}
 
-    if (holdsRead && isPlatformTenant) {
-      const rows = await withTenantOrThrow(
-        sql,
-        ssr.tenantId,
-        async (tx) =>
-          (await tx`
-            SELECT id, tenant_code, tenant_name, status, created_at
-            FROM awcms_tenants
-            ORDER BY created_at DESC
-            LIMIT 500
-          `) as {
-            id: string;
-            tenant_code: string;
-            tenant_name: string;
-            status: string;
-            created_at: Date;
-          }[]
-      );
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. It applies ADR-0053's platform gate BEFORE
+// permissions are looked up, which is the same rule this screen used to compute
+// by hand as `holdsRead && isPlatformTenant` — one rule now, not two.
+//
+// The directory query stays inside the transaction unchanged. `awcms_tenants`
+// is the deliberately RLS-free root table, so the tenant context does not
+// filter it; what makes the read safe is the platform gate above it, and that
+// is precisely the gate that was being re-implemented here.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "tenant_admin",
+    activityCode: "tenant_provisioning",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    rows: (await tx`
+      SELECT id, tenant_code, tenant_name, status, created_at
+      FROM awcms_tenants
+      ORDER BY created_at DESC
+      LIMIT 500
+    `) as {
+      id: string;
+      tenant_code: string;
+      tenant_name: string;
+      status: string;
+      created_at: Date;
+    }[],
+    canCreate: await can({
+      moduleKey: "tenant_admin",
+      activityCode: "tenant_provisioning",
+      action: "create"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError("admin/tenants.astro: failed to load directory", error, {
+      correlationId: Astro.locals.correlationId
+    });
+  }
+});
 
-      tenants = rows.map((row) => ({
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error" || platformResolutionFailed;
+const tenants: DirectoryEntry[] =
+  screen.state === "allowed"
+    ? screen.data.rows.map((row) => ({
         id: row.id,
         tenantCode: row.tenant_code,
         tenantName: row.tenant_name,
         status: row.status,
         createdAt: row.created_at
-      }));
-    }
-  } catch (error) {
-    logAdminPageError("admin/tenants.astro: failed to load directory", error, {
-      correlationId: Astro.locals.correlationId
-    });
-    loadError = true;
-  }
-}
+      }))
+    : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
 
-const canRead = holdsRead && isPlatformTenant;
-const canCreate = holdsCreate && isPlatformTenant;
-const withheldByPlatformScope = (holdsRead || holdsCreate) && !isPlatformTenant;
+/**
+ * Refused, and the reason is the platform gate rather than a missing grant.
+ * Worth explaining: "you are not the platform tenant" and "you were never
+ * granted this" are different problems with different fixes, and a screen that
+ * renders both as the same blank page sends the operator to the wrong one.
+ */
+const withheldByPlatformScope = !canRead && !isPlatformTenant;
 
 function formatTimestamp(value: Date | null): string {
   if (!value) return "—";
@@ -141,7 +174,7 @@ function statusVariant(status: string): string {
   </header>
 
   {
-    !holdsRead && !holdsCreate && (
+    !canRead && isPlatformTenant && (
       <p class="state-notice fade-in-up" id="tenants-denied">
         You do not have permission to view the tenant directory.
       </p>
@@ -158,8 +191,8 @@ function statusVariant(status: string): string {
             (<span class="cell-code">{platformTenantCode}</span>)
           </>
         )}
-        , not to this one. Your role carries the permission; the action is
-        refused because of where it is being made, not who is making it.
+        , not to this one. The refusal is about WHERE the action is being made,
+        not who is making it — no grant on this tenant can unlock it.
       </p>
     )
   }
