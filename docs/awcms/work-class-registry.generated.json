@@ -1263,6 +1263,12 @@
       "rationale": "Outbox dispatcher (email:dispatch), recommended every 1-2 minutes — matches sync/object dispatch's own background_sync classification."
     },
     {
+      "path": "scripts/email-queue-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (email:queue:purge, Issue #468/ADR-0072) — same tolerant-of-delay profile as push:queue:purge and form-draft-purge; purgeEmailQueue passes workClass: \"maintenance\" explicitly. Its --dry-run path counts outside a tenant transaction and so opens no classified connection of its own."
+    },
+    {
       "path": "scripts/form-draft-purge.ts",
       "workClass": "maintenance",
       "source": "registry",

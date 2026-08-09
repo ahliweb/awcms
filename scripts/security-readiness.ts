@@ -1009,8 +1009,12 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_tenants: ["SELECT"],
   awcms_audit_events: ["SELECT", "INSERT", "DELETE"],
   awcms_object_sync_queue: ["SELECT", "UPDATE"],
-  awcms_email_messages: ["SELECT", "UPDATE"],
-  awcms_email_delivery_attempts: ["INSERT"],
+  // DELETE added by `sql/095` (Issue #468) for `bun run email:queue:purge`.
+  // `sql/022` gave the worker exactly what the DISPATCHER needs and nothing
+  // more, which was right; the purge is a second worker entrypoint with a
+  // different job, so it needs the verb the first one was deliberately denied.
+  awcms_email_messages: ["SELECT", "UPDATE", "DELETE"],
+  awcms_email_delivery_attempts: ["INSERT", "DELETE"],
   awcms_email_templates: ["SELECT"],
   awcms_email_suppression_list: ["SELECT"],
   awcms_workflow_tasks: ["SELECT", "UPDATE"],
