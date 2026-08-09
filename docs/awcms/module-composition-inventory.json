@@ -1,5 +1,5 @@
 {
-  "moduleCount": 21,
+  "moduleCount": 22,
   "valid": true,
   "issueCount": 0,
   "modules": [
@@ -224,6 +224,22 @@
       "permissionCount": 5,
       "navigationCount": 1,
       "jobCount": 0,
+      "hasHealthCheck": false,
+      "hasReadinessCheck": false,
+      "deploymentProfiles": null
+    },
+    {
+      "key": "push_delivery",
+      "name": "Push Delivery",
+      "version": "0.1.0",
+      "status": "experimental",
+      "type": null,
+      "dependencies": ["tenant_admin", "logging"],
+      "capabilitiesProvided": [],
+      "capabilitiesConsumed": [],
+      "permissionCount": 0,
+      "navigationCount": 0,
+      "jobCount": 2,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,
       "deploymentProfiles": null

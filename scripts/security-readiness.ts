@@ -1032,6 +1032,13 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // which runs as `awcms_worker`, can actually delete. Without it the purge ran,
   // reported success, and removed nothing.
   awcms_abac_decision_logs: ["DELETE", "SELECT"],
+  // ADR-0074 (sql/093) — `push:dispatch` claims/updates queue rows and disables
+  // dead subscriptions; `push:queue:purge` deletes terminal rows. The DELETE is
+  // the one to notice: sql/091 records what its absence looks like — a purge
+  // that runs, reports success, and removes nothing.
+  awcms_push_subscriptions: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  awcms_push_messages: ["DELETE", "INSERT", "SELECT", "UPDATE"],
+  awcms_push_delivery_attempts: ["DELETE", "INSERT", "SELECT"],
   awcms_identities: ["SELECT"],
   awcms_sync_nodes: ["SELECT"],
   // Issue #180 — identity-access:business-scope:expiry (sql/027): SELECT the

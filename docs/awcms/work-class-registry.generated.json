@@ -1290,6 +1290,18 @@
       "rationale": "Outbox dispatcher (sync:objects:dispatch) — the module's own module.ts already documents this as background/low-priority traffic."
     },
     {
+      "path": "scripts/push-dispatch.ts",
+      "workClass": "background_sync",
+      "source": "registry",
+      "rationale": "Outbox dispatcher (push:dispatch, ADR-0074), recommended every 1-2 minutes — the same profile as email/object dispatch, and every withTenantOrThrow call inside push-dispatch.ts already passes workClass: \"background_sync\" explicitly."
+    },
+    {
+      "path": "scripts/push-queue-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (push:queue:purge, ADR-0074) — same tolerant-of-delay profile as form-draft-purge; purgePushQueue passes workClass: \"maintenance\" explicitly."
+    },
+    {
       "path": "scripts/reporting-exports-dispatch.ts",
       "workClass": "maintenance",
       "source": "registry",

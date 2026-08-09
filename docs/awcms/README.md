@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:7d7f605b1d67c508b15b582f04365c240365a7ad071c432fd8bc15b93d13549f -->
+<!-- i18n-source-hash: sha256:bad467bfbf8e365b9c6f71b1beb45e73c5aa3a0af841ef85f8c691af91badcd5 -->
 
 # AWCMS Technical Document Package
 
@@ -10,7 +10,7 @@ This folder holds AWCMS's standard technical document package — the **AWCMS-fa
 
 ## Status
 
-This repo is past the rebuild-foundation stage (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **21** foundation + website/content modules are already live (including `theming` and `blog-content`, which since [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) also owns everything the retired `news-portal` used to; advanced auth MFA/OIDC/SSO/business-scope/SoD; see [`../ARCHITECTURE.md`](../ARCHITECTURE.md) as the source of truth for code state). Some documents in this folder are still **plan/target** for capabilities that do not exist here yet (see [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), which reads as a list of needs), not all the current state of the code. Claims of "already live/available/verified" from the awcms-mini/awcms-micro source documents should be read as **reference specifications**, not as binding targets: a capability that does not exist yet is **built here** under its own admission ADR ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1), not ported from an archive repo.
+This repo is past the rebuild-foundation stage (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — **22** foundation + website/content modules are registered (including `theming` and `blog-content`, which since [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) also owns everything the retired `news-portal` used to; advanced auth MFA/OIDC/SSO/business-scope/SoD; see [`../ARCHITECTURE.md`](../ARCHITECTURE.md) as the source of truth for code state). Some documents in this folder are still **plan/target** for capabilities that do not exist here yet (see [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md), which reads as a list of needs), not all the current state of the code. Claims of "already live/available/verified" from the awcms-mini/awcms-micro source documents should be read as **reference specifications**, not as binding targets: a capability that does not exist yet is **built here** under its own admission ADR ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) §1), not ported from an archive repo.
 
 This package now adapts **the entire** technical document set from the awcms-mini reference repo so AWCMS is ready to be developed with the same agent tooling (see also [`.claude/skills/`](../../.claude/skills/README.md)). Documents from the website/e-commerce cluster (news portal, social publishing, visitor analytics, comments, newsletter, SEO, etc.) now read as **reference specifications** for the matching capabilities ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md), map in [`absorb-awcms-micro-roadmap.md`](absorb-awcms-micro-roadmap.md)) — what already landed lives in this template's `src/modules/`, and what has not is built here under its own admission ADR (ADR-0055 §1).
 

@@ -79,6 +79,16 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       "Outbox dispatcher (email:dispatch), recommended every 1-2 minutes — matches sync/object dispatch's own background_sync classification."
   },
+  "scripts/push-dispatch.ts": {
+    workClass: "background_sync",
+    rationale:
+      'Outbox dispatcher (push:dispatch, ADR-0074), recommended every 1-2 minutes — the same profile as email/object dispatch, and every withTenantOrThrow call inside push-dispatch.ts already passes workClass: "background_sync" explicitly.'
+  },
+  "scripts/push-queue-purge.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled retention purge (push:queue:purge, ADR-0074) — same tolerant-of-delay profile as form-draft-purge; purgePushQueue passes workClass: "maintenance" explicitly.'
+  },
   "scripts/object-sync-dispatch.ts": {
     workClass: "background_sync",
     rationale:

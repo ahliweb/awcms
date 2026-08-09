@@ -254,6 +254,15 @@ const RULES: readonly Rule[] = [
   { name: "EMAIL_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "EMAIL_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
 
+  // push_delivery (ADR-0074, epic #463). Off by default; off means the
+  // dispatcher claims nothing at all. `PUSH_PROVIDER` is an enum listing only
+  // the adapters that EXIST — `fcm`/`web_push` join it in Issue #466, and
+  // listing them early would let a deployment pass validation here and then
+  // fail at resolve time, which is the worst place to learn it.
+  { name: "PUSH_ENABLED", required: false, type: "bool" },
+  { name: "PUSH_PROVIDER", required: false, type: "enum", values: ["log"] },
+  { name: "PUSH_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
+
   // visitor_analytics (ported from awcms-micro epic #617-#624). All optional,
   // privacy-first off-by-default; see
   // src/modules/visitor-analytics/domain/visitor-analytics-config.ts. The
@@ -562,6 +571,21 @@ export function validateEnv(env: EnvBag): string[] {
     } else if (salt.length < VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH) {
       problems.push(
         `VISITOR_ANALYTICS_HASH_SALT harus minimal ${VISITOR_ANALYTICS_HASH_SALT_MIN_LENGTH} karakter saat VISITOR_ANALYTICS_ENABLED=true (salt terlalu pendek mudah ditebak/brute-force).`
+      );
+    }
+  }
+
+  // push_delivery (ADR-0074): enabling push REQUIRES naming an adapter. Without
+  // one the resolver degrades to a provider that fails every send
+  // non-retryably, so every queued notification would go terminal with an error
+  // an operator only sees in the delivery-attempt ledger. Caught at config time
+  // instead.
+  if (env.PUSH_ENABLED === "true") {
+    const provider = env.PUSH_PROVIDER?.trim() ?? "";
+
+    if (provider === "") {
+      problems.push(
+        "PUSH_PROVIDER wajib diisi saat PUSH_ENABLED=true (tanpa adapter, setiap notifikasi yang diantre langsung menjadi `failed`)."
       );
     }
   }

@@ -18,7 +18,7 @@ description: Modul blog_content SUDAH di-port ke repo ini (PR #214) dan sejak **
 > **PENYERAPAN `news_portal` (ADR-0044, PR #300) — BACA SEBELUM MENYENTUH IKLAN ATAU HOMEPAGE:**
 >
 > - Modul `news_portal` **dilebur ke sini**. `src/modules/news-portal/` dihapus dan
->   registry turun ke **21 modul**. Skill `awcms-news-portal` kini historis.
+>   registry menyusut satu modul (angka absolutnya sengaja tidak ditulis di sini — ia menua tiap kali modul baru mendarat; `listModules()` yang menjawab). Skill `awcms-news-portal` kini historis.
 > - Yang pindah dan **hidup di modul ini**: homepage-section composer + ad
 >   placement ber-`media_object_id` **terverifikasi** (12 slot `placement_key`,
 >   `rotation_mode`, `priority`), plus penargetan `placement_type`

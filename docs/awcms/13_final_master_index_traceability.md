@@ -140,13 +140,13 @@ Sumber: `docs/awcms/repo-inventory.md` §Migrations dan
 diproduksi `bun run repo:inventory:generate` (`scripts/repo-inventory.ts`) dari
 registry modul, `sql/`, `tests/`, `src/pages/`, dan `docs/adr/`, dan
 `bun run repo:inventory:check` ada di rantai `bun run check`. **79 file migration nyata** di
-`sql/` (`001`..`081`), dipetakan ke **21 modul terdaftar** (urutan
+`sql/` (`001`..`081`), dipetakan ke **22 modul terdaftar** (urutan
 `src/modules/index.ts`: `logging`, `tenant-admin`, `profile-identity`,
 `identity-access`, `module-management`, `domain-event-runtime`,
 `sync-storage`, `workflow-approval`, `email`, `reporting`, `theming`,
 `media-library`, `blog-content`, `tenant-domain`, `visitor-analytics`,
 `data-lifecycle`, `seo-distribution`, `form-drafts`, `site-search`,
-`comments` — **21 modul**; `news-portal` dilebur ke `blog-content` oleh
+`comments` — **22 modul**; `news-portal` dilebur ke `blog-content` oleh
 [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md)). Tabel ini
 menggantikan versi sebelumnya yang mengutip nama file fiktif (mis.
 `003_awcms_catalog_inventory_schema.sql`,
