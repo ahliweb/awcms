@@ -87,9 +87,9 @@ export const SCAN_ROOTS: readonly ScanRoot[] = [
     remediation:
       "Layar admin baru TIDAK BOLEH membuka transaksi tenant sendiri: ia memutuskan akses " +
       "dengan ssr.permissions.has() saja, melewati evaluateAccess, resolveModuleEnabled, dan " +
-      "recordDecisionLog (PROJECT_STATE §4 R3). Helper defineAdminScreen belum ada — ia " +
-      "Gelombang 1 dari #423. Sampai ia mendarat, layar yang butuh data tenant harus menunggu " +
-      "helper itu, BUKAN menambah barisnya di NOT_YET_MIGRATED."
+      "recordDecisionLog (PROJECT_STATE §4 R3). Pakai loadAdminScreen dari " +
+      "src/lib/auth/admin-screen.ts — ia membuka SATU transaksi dan menjalankan " +
+      "authorizeInTransaction serta load() di dalamnya. JANGAN menambah baris di NOT_YET_MIGRATED."
   }
 ];
 
@@ -102,31 +102,33 @@ const WITH_TENANT_CALL_PATTERN =
 /**
  * Files that still open their own transaction. API routes measured at
  * `b9931594`; the 32 admin screens added by Issue #424 at the head of
- * Gelombang 0.
+ * Gelombang 0, shrinking as issue #450 migrates them to `loadAdminScreen`.
+ *
+ * The screen half is counted a SECOND time, from a different angle, by
+ * `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` in `access-chokepoint-check.ts`: this
+ * gate asks "who opens their own transaction", that one asks "who decides a
+ * permission outside the chokepoint". A migration PR must shrink BOTH, and
+ * neither list may grow.
  *
  * ONLY REMOVE LINES FROM THIS LIST. Never add one: a new entry means a new
  * route skipped `defineTenantRoute`, or a new admin screen added to R3's debt
  * — which is what this gate exists to prevent.
  */
 const NOT_YET_MIGRATED: readonly string[] = [
-  // --- Layar admin (R3) — menunggu `defineAdminScreen`, Gelombang 1 dari #423.
-  "src/pages/admin/abac-policies.astro",
+  // --- Layar admin (R3) — sedang dimigrasikan ke `loadAdminScreen`, Gelombang 1
+  //     dari #423 (issue #450). Daftar ini menyusut tiap PR migrasi.
   "src/pages/admin/analytics.astro",
   "src/pages/admin/approvals.astro",
   "src/pages/admin/blog-pages.astro",
   "src/pages/admin/blog-presentation.astro",
-  "src/pages/admin/blog-settings.astro",
   "src/pages/admin/blog-taxonomy.astro",
   "src/pages/admin/blog.astro",
-  "src/pages/admin/comments.astro",
   "src/pages/admin/data-lifecycle.astro",
   "src/pages/admin/domain-events.astro",
   "src/pages/admin/idn-regions.astro",
   "src/pages/admin/index.astro",
   "src/pages/admin/media.astro",
-  "src/pages/admin/modules.astro",
   "src/pages/admin/offices.astro",
-  "src/pages/admin/registrations.astro",
   "src/pages/admin/reporting.astro",
   "src/pages/admin/roles.astro",
   "src/pages/admin/security.astro",

@@ -84,23 +84,18 @@ const CHOKEPOINT_EXEMPTIONS: Readonly<Record<string, string>> = {
  * each a sentence would dress 31 open defects as 31 decisions.
  */
 export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
-  "abac-policies.astro",
   "analytics.astro",
   "approvals.astro",
   "blog-pages.astro",
   "blog-presentation.astro",
-  "blog-settings.astro",
   "blog-taxonomy.astro",
   "blog.astro",
-  "comments.astro",
   "data-lifecycle.astro",
   "domain-events.astro",
   "idn-regions.astro",
   "index.astro",
   "media.astro",
-  "modules.astro",
   "offices.astro",
-  "registrations.astro",
   "reporting.astro",
   "roles.astro",
   "security.astro",

@@ -30,30 +30,13 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { listModerationQueue } from "../../modules/comments/application/comment-moderation";
 import type { ModerationQueueItem } from "../../modules/comments/application/comment-moderation";
 import type { CommentStatus } from "../../modules/comments/domain/comment-status";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("comments", "moderation", "read")
-);
-const canApprove = ssr.permissions.has(
-  permissionKey("comments", "moderation", "approve")
-);
-const canReject = ssr.permissions.has(
-  permissionKey("comments", "moderation", "reject")
-);
-const canArchive = ssr.permissions.has(
-  permissionKey("comments", "moderation", "archive")
-);
-const canRestore = ssr.permissions.has(
-  permissionKey("comments", "moderation", "restore")
-);
 
 const STATUS_TABS: readonly { value: CommentStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -70,26 +53,70 @@ const activeStatus: CommentStatus = STATUS_TABS.some(
   ? (requestedStatus as CommentStatus)
   : "pending";
 
-let items: ModerationQueueItem[] = [];
-let loadFailed = false;
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. The four moderation verbs are decided the same
+// way, so a tenant's ABAC `deny` hides the button instead of only refusing the
+// POST behind it; the endpoints remain the authority either way.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "comments",
+    activityCode: "moderation",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const queue = await listModerationQueue(tx, ssr.tenantId, {
+      status: activeStatus,
+      limit: 50
+    });
 
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, (tx) =>
-      listModerationQueue(tx, ssr.tenantId, {
-        status: activeStatus,
-        limit: 50
+    return {
+      items: queue.items,
+      canApprove: await can({
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: "approve"
+      }),
+      canReject: await can({
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: "reject"
+      }),
+      canArchive: await can({
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: "archive"
+      }),
+      canRestore: await can({
+        moduleKey: "comments",
+        activityCode: "moderation",
+        action: "restore"
       })
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/comments.astro: failed to list the moderation queue",
+      error,
+      { correlationId: Astro.locals.correlationId }
     );
-    items = result.items;
-  } catch {
-    // A read failure renders an explicit notice rather than an empty queue —
-    // "nothing to moderate" and "we could not load the queue" must never look
-    // the same to a moderator.
-    loadFailed = true;
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A read failure renders an explicit notice rather than an empty queue —
+// "nothing to moderate" and "we could not load the queue" must never look the
+// same to a moderator, and neither may be confused with a denial.
+const loadFailed = screen.state === "error";
+const items: ModerationQueueItem[] =
+  screen.state === "allowed" ? screen.data.items : [];
+const canApprove = screen.state === "allowed" && screen.data.canApprove;
+const canReject = screen.state === "allowed" && screen.data.canReject;
+const canArchive = screen.state === "allowed" && screen.data.canArchive;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
 
 function formatTimestamp(value: string): string {
   const parsed = new Date(value);

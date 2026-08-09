@@ -18,10 +18,9 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { isSelfRegistrationEnabled } from "../../lib/auth/self-registration-config";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listRoles } from "../../modules/identity-access/application/access-directory";
 import {
   listPendingRegistrations,
@@ -30,51 +29,67 @@ import {
 
 const ssr = Astro.locals.ssrContext!;
 
-const canRead = ssr.permissions.has(
-  permissionKey("identity_access", "registration_requests", "read")
-);
-const canApprove = ssr.permissions.has(
-  permissionKey("identity_access", "registration_requests", "approve")
-);
-const canReject = ssr.permissions.has(
-  permissionKey("identity_access", "registration_requests", "reject")
-);
-
 const selfRegistrationEnabled = isSelfRegistrationEnabled();
 
-let requests: PendingRegistrationView[] = [];
-let roles: { id: string; roleCode: string }[] = [];
-let loadError = false;
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. `approve`/`reject` are decided the same way, so
+// a tenant's ABAC `deny` hides the control instead of only failing when it is
+// pressed. The endpoints remain the authority either way.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "registration_requests",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const requests = await listPendingRegistrations(tx, ssr.tenantId);
+    const canApprove = await can({
+      moduleKey: "identity_access",
+      activityCode: "registration_requests",
+      action: "approve"
+    });
+    const canReject = await can({
+      moduleKey: "identity_access",
+      activityCode: "registration_requests",
+      action: "reject"
+    });
+    // Only needed to render the optional role picker on the approve control.
+    //
+    // System roles are dropped because the endpoint refuses them (409
+    // `ROLE_SYSTEM_PROTECTED`). Rendering `owner` in this picker offered a
+    // control that either escalated privilege or — once the service started
+    // refusing it — failed in the reviewer's face for no reason they could
+    // read. This is presentation only; the refusal is the endpoint's.
+    const roles = canApprove
+      ? (await listRoles(tx, ssr.tenantId))
+          .filter((role) => !role.isSystem)
+          .map((role) => ({ id: role.id, roleCode: role.roleCode }))
+      : [];
 
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => ({
-      requests: await listPendingRegistrations(tx, ssr.tenantId),
-      // Only needed to render the optional role picker on the approve control.
-      roles: canApprove ? await listRoles(tx, ssr.tenantId) : []
-    }));
-
-    if (result instanceof Response) {
-      loadError = true;
-    } else {
-      requests = result.requests;
-      // System roles are dropped here because the endpoint refuses them (409
-      // `ROLE_SYSTEM_PROTECTED`). Rendering `owner` in this picker offered a
-      // control that either escalated privilege or — once the service started
-      // refusing it — failed in the reviewer's face for no reason they could
-      // read. This is presentation only; the refusal is the endpoint's.
-      roles = result.roles
-        .filter((role) => !role.isSystem)
-        .map((role) => ({
-          id: role.id,
-          roleCode: role.roleCode
-        }));
-    }
-  } catch {
-    loadError = true;
+    return { requests, roles, canApprove, canReject };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/registrations.astro: failed to list pending registrations",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "the queue is empty" and NOT a denial.
+const loadError = screen.state === "error";
+const requests: PendingRegistrationView[] =
+  screen.state === "allowed" ? screen.data.requests : [];
+const roles: { id: string; roleCode: string }[] =
+  screen.state === "allowed" ? screen.data.roles : [];
+const canApprove = screen.state === "allowed" && screen.data.canApprove;
+const canReject = screen.state === "allowed" && screen.data.canReject;
 
 const columnCount = canApprove || canReject ? 4 : 3;
 ---
