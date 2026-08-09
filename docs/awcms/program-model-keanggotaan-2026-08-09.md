@@ -617,11 +617,35 @@ nama, sambil melaporkan "0 handler memutuskan permission". PR 0.2 menambahkan
 asersi `deciding.length > 0` justru untuk itu.
 
 **Enam gerbang baru:** `access:decision-log:coverage:check` (0.3),
-`data-lifecycle:high-volume-coverage:check` (0.4), `access:grant-readers:check`
-(3.1 — hanya dua berkas resolver boleh membaca tabel grant; hari ini **enam**
-berkas merakit join sendiri, dan itulah cara mereka menyimpang),
-`access:sod-fact-parity:check` (3.5), `access:entitlement:deny-only:check` (5.1),
-`identity:principal-access:check` (7.1).
+`data-lifecycle:table-coverage:check` (0.4 — **mendarat dengan nama dan bentuk
+yang berbeda dari yang direncanakan di sini**; lihat catatan di bawah),
+`access:grant-readers:check` (3.1 — hanya dua berkas resolver boleh membaca
+tabel grant; hari ini **enam** berkas merakit join sendiri, dan itulah cara
+mereka menyimpang), `access:sod-fact-parity:check` (3.5),
+`access:entitlement:deny-only:check` (5.1), `identity:principal-access:check`
+(7.1).
+
+**Koreksi terhadap rencana ini, ditulis di tempat rencananya (#437).** Gerbang
+0.4 direncanakan sebagai `data-lifecycle:high-volume-coverage:check` — sebuah
+gerbang atas tabel VOLUME-TINGGI. Tiga cara menurunkan "volume tinggi" dari
+artefak repo dibangun dan diukur, dan ketiganya gagal terhadap skema ini:
+_append-only di sumber_ (46 tabel; `INSERT … ON CONFLICT DO UPDATE` terbaca
+sebagai append), _tanpa jalur hapus_ (94 tabel; repo ini memakai
+`ON DELETE CASCADE` di **satu** migrasi saja, jadi "tanpa cascade" tidak
+membedakan apa pun), dan _tak-terbatas menurut skema_ (121 dari 128; tabel
+terbatas yang nyata ber-kunci pada teks terkurasi seperti `module_key`, yang
+tidak bisa dibedakan dari nilai bebas dengan membaca DDL). Gerbang yang daftar
+pengecualiannya 90% skema adalah daftar tulis-tangan yang menyamar.
+
+Jadi pertanyaannya diganti: alih-alih menurunkan tabel MANA yang volume-tinggi
+— yang menuntut tahu bagaimana produknya dipakai — turunkan saja bahwa sebuah
+tabel ADA, lalu buat kewajibannya mustahil dilewati. Tabel baru wajib membawa
+deskriptor `dataLifecycle` atau pengecualian beralasan; 114 tabel yang sudah ada
+duduk di ledger warisan yang hanya boleh menyusut. Yang **tidak** bisa
+dilakukannya, dan tidak diklaimnya: memberi tahu bahwa tabel LAMA di ledger itu
+sedang memakan disk. Itu pertanyaan tentang lalu lintas, dan tempat jujurnya
+`security:readiness` terhadap basis data nyata — bukan gerbang murni di rantai
+`check`.
 
 ## 8. Yang **tidak** dikerjakan program ini
 
