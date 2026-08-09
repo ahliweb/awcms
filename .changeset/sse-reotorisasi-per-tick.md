@@ -76,3 +76,17 @@ koneksi mem-poll sendiri, yang bekerja pada default satu instance dan tidak akan
 pecah saat replika dinaikkan, hanya tidak menjadi lebih murah. Jebakan penerusnya
 ikut dicatat: `RedisClient` Bun yang sudah `subscribe` memblokir hampir semua
 perintah lain, jadi subscriber wajib koneksi terpisah.
+
+## Dan satu gerbang yang buta terhadap dokumen baru
+
+`check:docs` membaca `git ls-files`, yaitu **index**, bukan working tree. Berkas
+`.md` yang baru dibuat dan belum di-stage karena itu tak terlihat olehnya —
+padahal dokumen baru justru yang paling mungkin membawa tautan salah.
+
+Ditemukan dengan cara paling mahal: ADR-0075 lolos `check:docs` **lokal** dengan
+tautan rusak ke berkas ADR yang tidak ada, lalu memerahkan CI setelah di-commit.
+Hijau lokal lalu merah di CI adalah kegagalan gerbang, bukan sekadar
+ketidaknyamanan — ia melatih orang untuk tidak mempercayai run lokalnya.
+
+Diperbaiki dengan `--others --exclude-standard`, dan dibuktikan: berkas
+tak-ter-track dengan tautan rusak kini **merah** di mesin lokal.

@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Tanggal:** 2026-08-10
 - **Pengambil keputusan:** @ahliweb
-- **Terkait:** Issue #467 (epic #463), [ADR-0063](0063-authorization-chokepoint-per-handler.md) (chokepoint per-handler), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (seam rute selain `defineTenantRoute`), [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (retensi decision log, yang membuat volume per-tick terbatas), [ADR-0074](0074-push-delivery-is-a-second-outbox.md) (konsol yang menjadi pemakai pertamanya)
+- **Terkait:** Issue #467 (epic #463), [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (chokepoint per-handler), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (seam rute selain `defineTenantRoute`), [ADR-0072](0072-decision-log-retention-and-projection-authority.md) (retensi decision log, yang membuat volume per-tick terbatas), [ADR-0074](0074-push-delivery-is-a-second-outbox.md) (konsol yang menjadi pemakai pertamanya)
 
 ## Konteks
 
@@ -25,7 +25,7 @@ Yang **ditolak** sebagai alternatif: TTL koneksi pendek dengan reconnect. Ia mem
 
 ### Empat konsekuensi yang mengikat implementasinya
 
-**1. Byte pertama ditulis segera, dan komentarnya menjelaskan kenapa.** `writeResponse` Astro memanggil `writeHead()` tanpa `flushHeaders()` (`node_modules/astro/dist/core/app/node.js`), dan Bun menahan header sampai `write()` pertama. Terukur dengan `Bun.serve` nyata: header tiba di **+3013 ms** ketika byte pertama ditunda, **+1 ms** ketika langsung ditulis. Artinya `EventSource.onopen` tidak pernah menyala dan klien menganggap koneksinya menggantung. Perbaikannya sepele — tulis komentar SSE (`: ok`) segera — dan justru karena sepele ia akan "dirapikan" orang berikutnya kalau alasannya tidak ditulis di sebelahnya.
+**1. Byte pertama ditulis segera, dan komentarnya menjelaskan kenapa.** `writeResponse` Astro memanggil `writeHead()` tanpa `flushHeaders()` (`node_modules/astro/dist/core/app/node.js`), dan Bun menahan header sampai `write()` pertama. Terukur dua kali secara independen dengan `node:http` nyata di bawah Bun: header tiba di **+3013 ms / +3010 ms** ketika byte pertama ditunda, dan **+1 ms / +0 ms** ketika langsung ditulis (pengukuran #467, lalu direproduksi saat ADR ini ditulis — angka orang lain tidak dipakai sebagai fakta tanpa diulang). Artinya `EventSource.onopen` tidak pernah menyala dan klien menganggap koneksinya menggantung. Perbaikannya sepele — tulis komentar SSE (`: ok`) segera — dan justru karena sepele ia akan "dirapikan" orang berikutnya kalau alasannya tidak ditulis di sebelahnya.
 
 **2. `tx` tidak boleh masuk closure stream.** Koneksinya sudah dikembalikan ke pool saat stream dimulai; memegangnya berarti memakai koneksi yang sudah diberikan ke request lain. Setiap tick membuka dan menutup transaksinya sendiri, dan `tx` tidak pernah hidup lebih lama dari satu tick.
 
