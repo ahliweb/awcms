@@ -30,6 +30,7 @@ import {
 } from "../src/modules/push-delivery/domain/push-retry";
 import { validatePushTargetPath } from "../src/modules/push-delivery/domain/push-target-path";
 import {
+  PUSH_CIRCUIT_BREAKER_KEY,
   isKnownPushProvider,
   isPushEnabled,
   resolvePushSendMaxRetries
@@ -177,6 +178,23 @@ describe("provider resolution degrades instead of throwing", () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.retryable).toBe(false);
+  });
+
+  test("the dispatcher reads the SHARED breaker key, not its own literal", () => {
+    // A mismatch between the reader and the (future) recorder is silent in the
+    // worst way: the dispatcher would consult a breaker nothing ever trips, so
+    // it would report `breakerOpen: false` forever while the provider was down.
+    // `email` carries the same coupling as two matching literals.
+    const source = readFileSync(
+      "src/modules/push-delivery/application/push-dispatch.ts",
+      "utf8"
+    );
+
+    expect(source).toContain(
+      "getProviderCircuitBreaker(PUSH_CIRCUIT_BREAKER_KEY)"
+    );
+    expect(source).not.toContain('getProviderCircuitBreaker("');
+    expect(PUSH_CIRCUIT_BREAKER_KEY).toBe("push-delivery");
   });
 
   test("the log adapter claims BOTH transports", async () => {

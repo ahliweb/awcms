@@ -47,6 +47,26 @@ export function isKnownPushProvider(
 export const DEFAULT_PUSH_SEND_MAX_RETRIES = 3;
 
 /**
+ * The circuit-breaker key BOTH sides must use: the dispatcher, which only
+ * READS it (`canAttempt`), and the network adapters, which are the only things
+ * that may FEED it (`recordSuccess`/`recordFailure`) — the split
+ * `email/infrastructure/mailketing-provider.ts` established.
+ *
+ * Exported as one constant rather than repeated as a literal in each file,
+ * because a mismatch between them is silent in the worst possible way: the
+ * dispatcher would consult a breaker nothing ever trips, so it would report
+ * `breakerOpen: false` forever and keep hammering a provider that is down.
+ * `email` carries the same coupling as two matching literals; they agree today,
+ * and nothing would say so if they stopped.
+ *
+ * There is no recorder yet — the only adapter is `log`, which makes no network
+ * call and must NOT record, or a healthy local dev run would be reporting
+ * provider health it never observed. The FCM and Web Push adapters (#466) are
+ * what make this live, and they import this constant.
+ */
+export const PUSH_CIRCUIT_BREAKER_KEY = "push-delivery";
+
+/**
  * There is deliberately no `PUSH_SEND_TIMEOUT_MS` resolver yet. A send timeout
  * is meaningful only to an adapter that makes a network call, and the only
  * adapter today is `log`. Shipping the knob now would put a variable in

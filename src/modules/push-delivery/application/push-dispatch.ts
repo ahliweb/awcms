@@ -38,6 +38,7 @@ import { getProviderCircuitBreaker } from "../../../lib/database/circuit-breaker
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { log } from "../../../lib/logging/logger";
 import {
+  PUSH_CIRCUIT_BREAKER_KEY,
   isPushEnabled,
   resolvePushSendMaxRetries
 } from "../domain/push-config";
@@ -51,7 +52,6 @@ import {
 } from "./subscription-directory";
 
 const MODULE_KEY = "push_delivery";
-const CIRCUIT_BREAKER_KEY = "push-delivery";
 
 export const PUSH_DISPATCH_DEFAULT_LIMIT = 50;
 export const PUSH_DISPATCH_LEASE_MINUTES = 2;
@@ -261,7 +261,7 @@ export async function dispatchPushQueue(
   const limit = options.limit ?? PUSH_DISPATCH_DEFAULT_LIMIT;
   const correlationId = options.correlationId ?? crypto.randomUUID();
   const maxRetries = resolvePushSendMaxRetries(env);
-  const breaker = getProviderCircuitBreaker(CIRCUIT_BREAKER_KEY);
+  const breaker = getProviderCircuitBreaker(PUSH_CIRCUIT_BREAKER_KEY);
   const breakerOpen = !breaker.canAttempt(now);
 
   const result: DispatchPushQueueResult = {
