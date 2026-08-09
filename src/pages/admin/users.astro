@@ -18,9 +18,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import {
   listRoles,
   listTenantUsers,
@@ -29,36 +28,53 @@ import {
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("identity_access", "access_control", "read")
-);
-const canConfigure = ssr.permissions.has(
-  permissionKey("identity_access", "access_control", "configure")
-);
-const canAssign = ssr.permissions.has(
-  permissionKey("identity_access", "access_control", "assign")
-);
 
-let users: TenantUserView[] = [];
-let roles: RoleView[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => ({
-      users: await listTenantUsers(tx, ssr.tenantId),
-      roles: await listRoles(tx, ssr.tenantId)
-    }));
-    if (result instanceof Response) loadError = true;
-    else {
-      users = result.users;
-      roles = result.roles;
-    }
-  } catch {
-    loadError = true;
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. This screen lists who holds what in the tenant,
+// so a `deny` a tenant wrote about `access_control` now applies to READING the
+// roster, not only to changing it.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "access_control",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    users: await listTenantUsers(tx, ssr.tenantId),
+    roles: await listRoles(tx, ssr.tenantId),
+    canConfigure: await can({
+      moduleKey: "identity_access",
+      activityCode: "access_control",
+      action: "configure"
+    }),
+    canAssign: await can({
+      moduleKey: "identity_access",
+      activityCode: "access_control",
+      action: "assign"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/users.astro: failed to load the tenant user directory",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "this tenant has no users" and NOT a
+// denial — an empty roster would be a lie about who holds access.
+const loadError = screen.state === "error";
+const users: TenantUserView[] =
+  screen.state === "allowed" ? screen.data.users : [];
+const roles: RoleView[] = screen.state === "allowed" ? screen.data.roles : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+const canAssign = screen.state === "allowed" && screen.data.canAssign;
 
 // role code -> role id, so a user's assigned role codes can be turned into
 // removable controls carrying the id the unassign endpoint expects.

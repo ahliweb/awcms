@@ -17,9 +17,8 @@
  */
 import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../../lib/database/client";
-import { withTenantOrThrow } from "../../../lib/database/tenant-context";
-import { permissionKey } from "../../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
 import {
   listTenantDomains,
   type TenantDomainView
@@ -31,46 +30,69 @@ import {
 } from "../../../modules/tenant-domain/domain/tenant-domain-validation";
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "read")
-);
-const canCreate = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "create")
-);
-const canUpdate = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "update")
-);
-const canDelete = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "delete")
-);
-const canVerify = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "verify")
-);
-const canSetPrimary = ssr.permissions.has(
-  permissionKey("tenant_domain", "domains", "set_primary")
-);
+
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. Five write affordances are decided the same
+// way; `normalizePublicHost()` via the API remains the enforcement point.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "tenant_domain",
+    activityCode: "domains",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    domains: (await listTenantDomains(tx, ssr.tenantId)).domains,
+    canCreate: await can({
+      moduleKey: "tenant_domain",
+      activityCode: "domains",
+      action: "create"
+    }),
+    canUpdate: await can({
+      moduleKey: "tenant_domain",
+      activityCode: "domains",
+      action: "update"
+    }),
+    canDelete: await can({
+      moduleKey: "tenant_domain",
+      activityCode: "domains",
+      action: "delete"
+    }),
+    canVerify: await can({
+      moduleKey: "tenant_domain",
+      activityCode: "domains",
+      action: "verify"
+    }),
+    canSetPrimary: await can({
+      moduleKey: "tenant_domain",
+      activityCode: "domains",
+      action: "set_primary"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/tenant/domains.astro: failed to list tenant domains",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "no domains" and NOT a denial.
+const loadError = screen.state === "error";
+const domains: TenantDomainView[] =
+  screen.state === "allowed" ? screen.data.domains : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+const canVerify = screen.state === "allowed" && screen.data.canVerify;
+const canSetPrimary = screen.state === "allowed" && screen.data.canSetPrimary;
 
 const showActions = canUpdate || canDelete || canVerify || canSetPrimary;
-
-let domains: TenantDomainView[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      const page = await listTenantDomains(tx, ssr.tenantId);
-      return page.domains;
-    });
-    if (result instanceof Response) {
-      loadError = true;
-    } else {
-      domains = result;
-    }
-  } catch {
-    loadError = true;
-  }
-}
 
 function statusVariant(status: string): string {
   if (status === "active") return "success";
