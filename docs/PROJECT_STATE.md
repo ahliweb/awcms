@@ -538,18 +538,26 @@ email)`, yang tidak bisa dibuat global tanpa `awcms_principals`. Ditambal
 
   **Tersisa, urut menurut akibat.** Rinciannya (bukti, perbaikan, gerbang yang
   harus ikut mendarat) ada di badan PR yang menyebut nomornya:
-  - **R3 — layar admin memutuskan dengan `ssr.permissions.has()` saja**, jadi
-    saat MEMBACA mereka melewati `evaluateAccess` (policy `deny` tenant),
-    `resolveModuleEnabled` (403 `MODULE_DISABLED`), dan `recordDecisionLog`.
-    Batasnya: RBAC dasar tetap ditegakkan, dan tak ada kebocoran lintas-tenant.
-    **SEDANG BERJALAN — issue #450, Gelombang 1.** Fondasinya mendarat (#451):
-    `access:chokepoint:check` kini punya root kedua `src/pages/admin`, helper
-    `loadAdminScreen` memutuskan dan membaca dalam SATU transaksi, dan ledger
-    `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` hanya boleh menyusut. **Sisa 28 dari 32**
-    (#451 memigrasikan `form-drafts`; #452 memigrasikan `audit-trail`,
-    `profiles`, `email-templates`). Angka sisanya tidak perlu dijaga tangan:
-    gerbangnya menuntut ledger menyusut di PR yang sama, dan sebuah test
-    menegakkan identitas "ledger = tepat himpunan layar yang masih bypass".
+  - ~~**R3 — layar admin memutuskan dengan `ssr.permissions.has()` saja**~~ —
+    **DITUTUP** (issue #450, Gelombang 1, sembilan PR: #451, #452, #454–#461).
+    Ke-32 layar kini memutuskan di `authorizeInTransaction`, jadi saat MEMBACA
+    mereka tidak lagi melewati `evaluateAccess` (policy `deny` tenant),
+    `resolveModuleAvailability`, fakta business-scope, SoD, dan
+    `recordDecisionLog`. Kedua ledger — `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` dan
+    bagian layar `NOT_YET_MIGRATED` — **kosong**.
+
+    Yang perlu diingat kalau menyentuh area ini lagi:
+    - `loadAdminScreen` (`src/lib/auth/admin-screen.ts`) memutuskan dan membaca
+      dalam SATU transaksi. `authorize` menerima **array = any-of** untuk delapan
+      konsol yang menolak hanya bila SEMUA panel ditolak; array kosong menolak.
+    - Kelonggaran se-berkas **ditutup untuk layar** dan **dipertahankan untuk
+      rute**. Ditemukan lewat mutasi: layar yang terute tapi tetap membaca
+      `ssr.permissions.has()` untuk satu afordans membuat gerbangnya keluar 0
+      sambil melaporkan "1 still decide outside the chokepoint".
+    - Dua alarm menjadi inert saat ledger mencapai nol dan diganti: self-test
+      detektor kini **probe sintetis**, dan gerbang menuntut tiap layar
+      benar-benar TERUTE (bukan sekadar diam).
+
   - **R7 — kredensial mesin, suppression email, komposer homepage tanpa layar.**
     Kini otomatis terlihat di ledger R6, jadi ia bisa mendarat bertahap.
   - ~~**R8 — permission platform bisa diberikan lewat editor role**~~ —
