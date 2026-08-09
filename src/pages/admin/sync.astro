@@ -45,10 +45,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import {
   fetchObjectQueueEntries,
@@ -60,29 +58,6 @@ import {
 } from "../../modules/sync-storage/application/sync-directory";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canReadNodes = ssr.permissions.has(
-  permissionKey("sync_storage", "node_management", "read")
-);
-const canUpdateNodes = ssr.permissions.has(
-  permissionKey("sync_storage", "node_management", "update")
-);
-const canReadConflicts = ssr.permissions.has(
-  permissionKey("sync_storage", "conflict_resolution", "read")
-);
-// Resolving is `approve`, not a `resolve`/`update` that reads better and is
-// seeded nowhere.
-const canResolveConflicts = ssr.permissions.has(
-  permissionKey("sync_storage", "conflict_resolution", "approve")
-);
-const canReadQueue = ssr.permissions.has(
-  permissionKey("sync_storage", "object_queue", "read")
-);
-const canRetryQueue = ssr.permissions.has(
-  permissionKey("sync_storage", "object_queue", "retry")
-);
-
-const canSeeAnything = canReadNodes || canReadConflicts || canReadQueue;
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -110,50 +85,104 @@ const cursorParam = readParam("cursor");
 // string must not turn this screen into an error page.
 const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
 
-let nodes: SyncNodeSummary[] = [];
-let conflicts: SyncConflictSummary[] = [];
-let queue: ObjectQueueEntry[] = [];
-let queueNextCursor: string | null = null;
-let loadError = false;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF, because that is what this screen has always done: three panels that
+// are independently readable, and a refusal only when all three are refused.
+// Naming one of them the entry would deny an operator who holds the queue read
+// and not the node read. `entry` carries each panel's own answer back, so no
+// panel is re-asked and no second decision-log row is written for it.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    {
+      moduleKey: "sync_storage",
+      activityCode: "node_management",
+      action: "read"
+    },
+    {
+      moduleKey: "sync_storage",
+      activityCode: "conflict_resolution",
+      action: "read"
+    },
+    { moduleKey: "sync_storage", activityCode: "object_queue", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readNodes = false, readConflicts = false, readQueue = false] = entry;
 
-if (canSeeAnything) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      if (canReadNodes) {
-        nodes = await fetchSyncNodes(tx, ssr.tenantId);
-      }
-
-      if (canReadConflicts) {
-        conflicts = await fetchSyncConflicts(
-          tx,
-          ssr.tenantId,
-          conflictStatusFilter
-        );
-      }
-
-      if (canReadQueue) {
-        const page = await fetchObjectQueueEntries(
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const nodes = readNodes ? await fetchSyncNodes(tx, ssr.tenantId) : [];
+    const conflicts = readConflicts
+      ? await fetchSyncConflicts(tx, ssr.tenantId, conflictStatusFilter)
+      : [];
+    const page = readQueue
+      ? await fetchObjectQueueEntries(
           tx,
           ssr.tenantId,
           queueStatusFilter,
           cursor ?? undefined
-        );
-        queue = page.objects;
-        queueNextCursor = page.nextCursor;
-      }
-    });
-  } catch (error) {
+        )
+      : null;
+
+    return {
+      readNodes,
+      readConflicts,
+      readQueue,
+      nodes,
+      conflicts,
+      queue: page?.objects ?? [],
+      queueNextCursor: page?.nextCursor ?? null,
+      canUpdateNodes: await can({
+        moduleKey: "sync_storage",
+        activityCode: "node_management",
+        action: "update"
+      }),
+      // Resolving is `approve`, not a `resolve`/`update` that reads better and
+      // is seeded nowhere.
+      canResolveConflicts: await can({
+        moduleKey: "sync_storage",
+        activityCode: "conflict_resolution",
+        action: "approve"
+      }),
+      canRetryQueue: await can({
+        moduleKey: "sync_storage",
+        activityCode: "object_queue",
+        action: "retry"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "there are no conflicts".
-    loadError = true;
     logAdminPageError(
       "admin/sync.astro: failed to load the sync console",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canReadNodes = screen.state === "allowed" && screen.data.readNodes;
+const canReadConflicts =
+  screen.state === "allowed" && screen.data.readConflicts;
+const canReadQueue = screen.state === "allowed" && screen.data.readQueue;
+const nodes: SyncNodeSummary[] =
+  screen.state === "allowed" ? screen.data.nodes : [];
+const conflicts: SyncConflictSummary[] =
+  screen.state === "allowed" ? screen.data.conflicts : [];
+const queue: ObjectQueueEntry[] =
+  screen.state === "allowed" ? screen.data.queue : [];
+const queueNextCursor: string | null =
+  screen.state === "allowed" ? screen.data.queueNextCursor : null;
+const canUpdateNodes = screen.state === "allowed" && screen.data.canUpdateNodes;
+const canResolveConflicts =
+  screen.state === "allowed" && screen.data.canResolveConflicts;
+const canRetryQueue = screen.state === "allowed" && screen.data.canRetryQueue;
 
 /** Mirrors `VALID_RESOLUTIONS` in `sync-storage/domain/sync-validation.ts`. */
 const RESOLUTION_OPTIONS = [

@@ -39,10 +39,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listConsumerStates,
   type DomainEventConsumerView
@@ -59,26 +57,6 @@ import {
 } from "../../modules/domain-event-runtime/domain/reason-bounds";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canReadEvents = ssr.permissions.has(
-  permissionKey("domain_event_runtime", "events", "read")
-);
-const canReadDeliveries = ssr.permissions.has(
-  permissionKey("domain_event_runtime", "deliveries", "read")
-);
-const canReplay = ssr.permissions.has(
-  permissionKey("domain_event_runtime", "deliveries", "replay")
-);
-const canReadConsumers = ssr.permissions.has(
-  permissionKey("domain_event_runtime", "consumers", "read")
-);
-// One permission covers pause AND resume. `consumers.pause`/`consumers.resume`
-// read better and are seeded nowhere.
-const canManageConsumers = ssr.permissions.has(
-  permissionKey("domain_event_runtime", "consumers", "manage")
-);
-
-const canSeeAnything = canReadEvents || canReadDeliveries || canReadConsumers;
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -103,45 +81,99 @@ const consumerFilter = readParam("consumer");
 const eventTypeFilter = readParam("eventType");
 const aggregateTypeFilter = readParam("aggregateType");
 
-let consumers: DomainEventConsumerView[] = [];
-let deliveries: DomainEventDeliveryView[] = [];
-let events: DomainEventView[] = [];
-let loadError = false;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: three independently readable panels, refused only when all three are.
+// `entry` carries each panel's own answer back, so no panel is re-asked and no
+// second decision-log row is written for the identical decision.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    {
+      moduleKey: "domain_event_runtime",
+      activityCode: "events",
+      action: "read"
+    },
+    {
+      moduleKey: "domain_event_runtime",
+      activityCode: "deliveries",
+      action: "read"
+    },
+    {
+      moduleKey: "domain_event_runtime",
+      activityCode: "consumers",
+      action: "read"
+    }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readEvents = false, readDeliveries = false, readConsumers = false] =
+      entry;
 
-if (canSeeAnything) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      if (canReadConsumers) {
-        consumers = await listConsumerStates(tx, ssr.tenantId);
-      }
-
-      if (canReadDeliveries) {
-        deliveries = await listDomainEventDeliveries(tx, ssr.tenantId, {
-          status: deliveryStatusFilter || undefined,
-          consumerName: consumerFilter || undefined,
-          eventType: eventTypeFilter || undefined
-        });
-      }
-
-      if (canReadEvents) {
-        events = await listDomainEvents(tx, ssr.tenantId, {
-          eventType: eventTypeFilter || undefined,
-          aggregateType: aggregateTypeFilter || undefined
-        });
-      }
-    });
-  } catch (error) {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    return {
+      readEvents,
+      readDeliveries,
+      readConsumers,
+      consumers: readConsumers
+        ? await listConsumerStates(tx, ssr.tenantId)
+        : [],
+      deliveries: readDeliveries
+        ? await listDomainEventDeliveries(tx, ssr.tenantId, {
+            status: deliveryStatusFilter || undefined,
+            consumerName: consumerFilter || undefined,
+            eventType: eventTypeFilter || undefined
+          })
+        : [],
+      events: readEvents
+        ? await listDomainEvents(tx, ssr.tenantId, {
+            eventType: eventTypeFilter || undefined,
+            aggregateType: aggregateTypeFilter || undefined
+          })
+        : [],
+      canReplay: await can({
+        moduleKey: "domain_event_runtime",
+        activityCode: "deliveries",
+        action: "replay"
+      }),
+      // One permission covers pause AND resume. `consumers.pause`/
+      // `consumers.resume` read better and are seeded nowhere.
+      canManageConsumers: await can({
+        moduleKey: "domain_event_runtime",
+        activityCode: "consumers",
+        action: "manage"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "there are no stuck deliveries".
-    loadError = true;
     logAdminPageError(
       "admin/domain-events.astro: failed to load the event runtime console",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canReadEvents = screen.state === "allowed" && screen.data.readEvents;
+const canReadDeliveries =
+  screen.state === "allowed" && screen.data.readDeliveries;
+const canReadConsumers =
+  screen.state === "allowed" && screen.data.readConsumers;
+const consumers: DomainEventConsumerView[] =
+  screen.state === "allowed" ? screen.data.consumers : [];
+const deliveries: DomainEventDeliveryView[] =
+  screen.state === "allowed" ? screen.data.deliveries : [];
+const events: DomainEventView[] =
+  screen.state === "allowed" ? screen.data.events : [];
+const canReplay = screen.state === "allowed" && screen.data.canReplay;
+const canManageConsumers =
+  screen.state === "allowed" && screen.data.canManageConsumers;
 
 const DELIVERY_VARIANT: Record<string, string> = {
   pending: "info",
