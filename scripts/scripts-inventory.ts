@@ -23,13 +23,32 @@
  * A `.generated` artefact WITHOUT that pair is a false claim that reads more
  * authoritative than prose.
  *
- * ## Why the check parses instead of comparing bytes
+ * ## Why the check normalizes instead of comparing bytes
  *
  * Prettier owns markdown formatting here and pads table columns to align them.
  * A byte-for-byte comparison would therefore fail immediately after every
- * `bun run lint`, and the two would fight forever. So the check parses the
- * block back into rows and compares CONTENT — which is the property worth
- * asserting anyway. Padding is not drift.
+ * `bun run lint`, and the two would fight forever. So the check NORMALIZES the
+ * block — dropping exactly what prettier rewrites, which is column padding and
+ * the dashes in the separator row — and compares the rest. Padding is not
+ * drift.
+ *
+ * ## Why it normalizes the WHOLE block and not just the rows
+ *
+ * It used to compare only the rows, and that let the block go half-stale in a
+ * way nobody could see: the counts sentence above the table was generated and
+ * never checked. Issue #442 is how it actually happened, and git wrote it, not
+ * a human. Two PRs branched from the same base, each adding one target; both
+ * regenerated, so both turned `77 … 31` into the IDENTICAL text `78 … 32`.
+ * Rebasing the second onto the first found no conflict on a line where the two
+ * sides agreed, merged the differing table rows into 79, and produced a block
+ * whose table was right and whose sentence was wrong.
+ *
+ * That is the direction worth noticing: the old comparison covered exactly the
+ * part git CANNOT silently merge wrong (differing rows either conflict or union
+ * correctly) and skipped the part it can (identical lines whose meaning
+ * changed). So the unit of comparison is the block, and anything the generator
+ * writes is covered by construction — including whatever it is taught to write
+ * next.
  */
 const README_PATH = "scripts/README.md";
 const BEGIN = "<!-- BEGIN GENERATED: script-inventory -->";
@@ -130,6 +149,31 @@ export function parseInventoryBlock(block: string): InventoryRow[] {
     });
 }
 
+/**
+ * The block reduced to what the generator DECIDED, with what prettier decides
+ * removed: blank lines, column padding, and the separator row whose dashes are
+ * stretched to match the widest cell.
+ *
+ * Everything else survives — so the counts sentence, and any future prose the
+ * generator emits, is compared without anyone having to remember to add it.
+ */
+export function normalizeInventoryBlock(block: string): string {
+  return block
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^\|[\s|:-]+\|$/.test(line))
+    .map((line) =>
+      line.startsWith("|")
+        ? line
+            .split("|")
+            .map((cell) => cell.trim())
+            .join("|")
+        : line
+    )
+    .join("\n");
+}
+
 export function extractInventoryBlock(readme: string): string {
   const begin = readme.indexOf(BEGIN);
   const end = readme.indexOf(END);
@@ -191,13 +235,27 @@ async function main(): Promise<void> {
 
   const failures: string[] = [];
 
-  const present = parseInventoryBlock(extractInventoryBlock(readme));
+  const block = extractInventoryBlock(readme);
+  const present = parseInventoryBlock(block);
   const expected = buildInventory(packageScripts);
 
+  // Baris dulu, karena pesannya bisa menyebut angka yang berguna.
   if (JSON.stringify(present) !== JSON.stringify(expected)) {
     failures.push(
       `${README_PATH} tidak cocok dengan regenerasi segar dari package.json ` +
         `(${present.length} baris tercatat vs ${expected.length} target nyata). ` +
+        "Jalankan `bun run scripts:inventory:generate` dan commit hasilnya."
+    );
+  } else if (
+    normalizeInventoryBlock(block) !== normalizeInventoryBlock(rendered)
+  ) {
+    // Barisnya cocok, bloknya tidak: yang basi ada di LUAR tabel — hari ini
+    // kalimat hitungannya (#442). Pesannya menyebut itu, karena "regenerasi
+    // saja" tanpa menyebut apa yang berbeda adalah cara temuan ini terlewat
+    // pertama kali.
+    failures.push(
+      `${README_PATH}: barisnya cocok tetapi blok ter-generate TIDAK — ` +
+        "yang basi ada di luar tabel (kalimat hitungan di atasnya). " +
         "Jalankan `bun run scripts:inventory:generate` dan commit hasilnya."
     );
   }
