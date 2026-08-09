@@ -55,10 +55,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import {
   listWorkflowInboxTasks,
@@ -76,31 +74,6 @@ import {
 } from "../../modules/workflow-approval/domain/reason-bounds";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("workflow", "approval", "read")
-);
-const canDecide = ssr.permissions.has(
-  permissionKey("workflow", "approval", "approve")
-);
-const canReassign = ssr.permissions.has(
-  permissionKey("workflow", "recovery", "reassign")
-);
-const canCancel = ssr.permissions.has(
-  permissionKey("workflow", "recovery", "cancel")
-);
-const canForceDecide = ssr.permissions.has(
-  permissionKey("workflow", "recovery", "force_decide")
-);
-const canReadDelegations = ssr.permissions.has(
-  permissionKey("workflow", "delegation", "read")
-);
-const canCreateDelegation = ssr.permissions.has(
-  permissionKey("workflow", "delegation", "create")
-);
-const canRevokeDelegation = ssr.permissions.has(
-  permissionKey("workflow", "delegation", "revoke")
-);
 
 /** Mirrors `VALID_STATUSES` in `src/pages/api/v1/workflows/tasks/index.ts`. */
 const STATUS_OPTIONS = [
@@ -141,21 +114,29 @@ const cursorParam = readParam("cursor");
 // A malformed cursor is dropped rather than forwarded, for the same reason.
 const cursor = cursorParam ? decodeKeysetCursor(cursorParam) : null;
 
-let tasks: WorkflowTaskListItem[] = [];
-let nextCursor: string | null = null;
-let history: WorkflowInstanceHistoryEntry[] = [];
-let delegations: WorkflowDelegationRow[] = [];
-let loadError = false;
+const now = new Date();
 
-const canSeeAnything = canRead || canReadDelegations;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: the inbox and the delegation register are independently readable, and
+// this screen has always refused only when both are refused. `entry` carries
+// each panel's own answer back, so neither is re-asked.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  now,
+  authorize: [
+    { moduleKey: "workflow", activityCode: "approval", action: "read" },
+    { moduleKey: "workflow", activityCode: "delegation", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readInbox = false, readDelegations = false] = entry;
 
-if (canSeeAnything) {
-  try {
-    const sql = getDatabaseClient();
-    const now = new Date();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      if (canRead) {
-        const result = await listWorkflowInboxTasks(
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const inbox = readInbox
+      ? await listWorkflowInboxTasks(
           tx,
           ssr.tenantId,
           {
@@ -167,37 +148,92 @@ if (canSeeAnything) {
           },
           now,
           cursor
-        );
-        tasks = result.tasks;
-        nextCursor = result.nextCursor;
+        )
+      : null;
 
-        if (selectedInstanceId) {
-          // `listWorkflowInstanceHistory` asserts the id is a UUID and throws
-          // otherwise, which the surrounding catch turns into the load-error
-          // notice — a hand-edited `?instance=` must not 500 the page.
-          history = await listWorkflowInstanceHistory(
-            tx,
-            ssr.tenantId,
-            selectedInstanceId
-          );
-        }
-      }
-
-      if (canReadDelegations) {
-        delegations = await listWorkflowDelegations(tx, ssr.tenantId);
-      }
-    });
-  } catch (error) {
+    return {
+      readInbox,
+      readDelegations,
+      tasks: inbox?.tasks ?? [],
+      nextCursor: inbox?.nextCursor ?? null,
+      // `listWorkflowInstanceHistory` asserts the id is a UUID and throws
+      // otherwise, which `onError` turns into the load-error notice — a
+      // hand-edited `?instance=` must not 500 the page.
+      history:
+        readInbox && selectedInstanceId
+          ? await listWorkflowInstanceHistory(
+              tx,
+              ssr.tenantId,
+              selectedInstanceId
+            )
+          : [],
+      delegations: readDelegations
+        ? await listWorkflowDelegations(tx, ssr.tenantId)
+        : [],
+      canDecide: await can({
+        moduleKey: "workflow",
+        activityCode: "approval",
+        action: "approve"
+      }),
+      canReassign: await can({
+        moduleKey: "workflow",
+        activityCode: "recovery",
+        action: "reassign"
+      }),
+      canCancel: await can({
+        moduleKey: "workflow",
+        activityCode: "recovery",
+        action: "cancel"
+      }),
+      canForceDecide: await can({
+        moduleKey: "workflow",
+        activityCode: "recovery",
+        action: "force_decide"
+      }),
+      canCreateDelegation: await can({
+        moduleKey: "workflow",
+        activityCode: "delegation",
+        action: "create"
+      }),
+      canRevokeDelegation: await can({
+        moduleKey: "workflow",
+        activityCode: "delegation",
+        action: "revoke"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "there is nothing to approve".
-    loadError = true;
     logAdminPageError(
       "admin/approvals.astro: failed to load the approval inbox",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canRead = screen.state === "allowed" && screen.data.readInbox;
+const canReadDelegations =
+  screen.state === "allowed" && screen.data.readDelegations;
+const tasks: WorkflowTaskListItem[] =
+  screen.state === "allowed" ? screen.data.tasks : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.nextCursor : null;
+const history: WorkflowInstanceHistoryEntry[] =
+  screen.state === "allowed" ? screen.data.history : [];
+const delegations: WorkflowDelegationRow[] =
+  screen.state === "allowed" ? screen.data.delegations : [];
+const canDecide = screen.state === "allowed" && screen.data.canDecide;
+const canReassign = screen.state === "allowed" && screen.data.canReassign;
+const canCancel = screen.state === "allowed" && screen.data.canCancel;
+const canForceDecide = screen.state === "allowed" && screen.data.canForceDecide;
+const canCreateDelegation =
+  screen.state === "allowed" && screen.data.canCreateDelegation;
+const canRevokeDelegation =
+  screen.state === "allowed" && screen.data.canRevokeDelegation;
 
 function formatTimestamp(value: Date | string | null): string {
   if (value === null) return "—";

@@ -60,10 +60,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   fetchEmailHealthReport,
   type EmailHealthReport
@@ -97,81 +95,124 @@ import {
 
 const ssr = Astro.locals.ssrContext!;
 
-const canReadDashboard = ssr.permissions.has(
-  permissionKey("reporting", "dashboard", "read")
-);
-const canReadProjections = ssr.permissions.has(
-  permissionKey("reporting", "projections", "read")
-);
-const canRebuild = ssr.permissions.has(
-  permissionKey("reporting", "projections", "rebuild")
-);
-const canReconcile = ssr.permissions.has(
-  permissionKey("reporting", "projections", "analyze")
-);
-const canReadExports = ssr.permissions.has(
-  permissionKey("reporting", "exports", "read")
-);
-const canConfigureExports = ssr.permissions.has(
-  permissionKey("reporting", "exports", "configure")
-);
-const canTriggerExport = ssr.permissions.has(
-  permissionKey("reporting", "exports", "export")
-);
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: three independently readable panels, refused only when all three are.
+// `entry` carries each panel's own answer back, so no panel is re-asked.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "reporting", activityCode: "dashboard", action: "read" },
+    { moduleKey: "reporting", activityCode: "projections", action: "read" },
+    { moduleKey: "reporting", activityCode: "exports", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [
+      readDashboard = false,
+      readProjections = false,
+      readExports = false
+    ] = entry;
 
-const canSeeAnything = canReadDashboard || canReadProjections || canReadExports;
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const emailHealth = readDashboard
+      ? await fetchEmailHealthReport(tx, ssr.tenantId)
+      : null;
 
-let emailHealth: EmailHealthReport | null = null;
-let projections: ProjectionSummaryView[] = [];
-let reconciliationsByKey = new Map<string, ReconciliationRunRow[]>();
-let rebuildRuns: RebuildRunRow[] = [];
-let exportConfigs: ScheduledExportRow[] = [];
-let exportRuns: ExportRunRow[] = [];
-let loadError = false;
-
-if (canSeeAnything) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      if (canReadDashboard) {
-        emailHealth = await fetchEmailHealthReport(tx, ssr.tenantId);
-      }
-
-      if (canReadProjections) {
-        projections = await listProjectionSummariesForTenant(
+    const projections = readProjections
+      ? await listProjectionSummariesForTenant(
           tx,
           ssr.tenantId,
           ssr.permissions
+        )
+      : [];
+
+    const reconciliationsByKey = new Map<string, ReconciliationRunRow[]>();
+    if (readProjections) {
+      for (const projection of projections) {
+        reconciliationsByKey.set(
+          projection.key,
+          await listReconciliationRuns(tx, ssr.tenantId, projection.key)
         );
-
-        const byKey = new Map<string, ReconciliationRunRow[]>();
-        for (const projection of projections) {
-          byKey.set(
-            projection.key,
-            await listReconciliationRuns(tx, ssr.tenantId, projection.key)
-          );
-        }
-        reconciliationsByKey = byKey;
-
-        rebuildRuns = await listRebuildRuns(tx, ssr.tenantId);
       }
+    }
 
-      if (canReadExports) {
-        exportConfigs = await listScheduledExports(tx, ssr.tenantId);
-        exportRuns = await listExportRuns(tx, ssr.tenantId);
-      }
-    });
-  } catch (error) {
+    return {
+      readDashboard,
+      readProjections,
+      readExports,
+      emailHealth,
+      projections,
+      reconciliationsByKey,
+      rebuildRuns: readProjections
+        ? await listRebuildRuns(tx, ssr.tenantId)
+        : [],
+      exportConfigs: readExports
+        ? await listScheduledExports(tx, ssr.tenantId)
+        : [],
+      exportRuns: readExports ? await listExportRuns(tx, ssr.tenantId) : [],
+      canRebuild: await can({
+        moduleKey: "reporting",
+        activityCode: "projections",
+        action: "rebuild"
+      }),
+      canReconcile: await can({
+        moduleKey: "reporting",
+        activityCode: "projections",
+        action: "analyze"
+      }),
+      canConfigureExports: await can({
+        moduleKey: "reporting",
+        activityCode: "exports",
+        action: "configure"
+      }),
+      canTriggerExport: await can({
+        moduleKey: "reporting",
+        activityCode: "exports",
+        action: "export"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "there are no projections".
-    loadError = true;
     logAdminPageError(
       "admin/reporting.astro: failed to load the reporting console",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canReadDashboard =
+  screen.state === "allowed" && screen.data.readDashboard;
+const canReadProjections =
+  screen.state === "allowed" && screen.data.readProjections;
+const canReadExports = screen.state === "allowed" && screen.data.readExports;
+const emailHealth: EmailHealthReport | null =
+  screen.state === "allowed" ? screen.data.emailHealth : null;
+const projections: ProjectionSummaryView[] =
+  screen.state === "allowed" ? screen.data.projections : [];
+const reconciliationsByKey =
+  screen.state === "allowed"
+    ? screen.data.reconciliationsByKey
+    : new Map<string, ReconciliationRunRow[]>();
+const rebuildRuns: RebuildRunRow[] =
+  screen.state === "allowed" ? screen.data.rebuildRuns : [];
+const exportConfigs: ScheduledExportRow[] =
+  screen.state === "allowed" ? screen.data.exportConfigs : [];
+const exportRuns: ExportRunRow[] =
+  screen.state === "allowed" ? screen.data.exportRuns : [];
+const canRebuild = screen.state === "allowed" && screen.data.canRebuild;
+const canReconcile = screen.state === "allowed" && screen.data.canReconcile;
+const canConfigureExports =
+  screen.state === "allowed" && screen.data.canConfigureExports;
+const canTriggerExport =
+  screen.state === "allowed" && screen.data.canTriggerExport;
 
 /** Freshness status -> `status-badge` variant. `rebuilding` is progress, not a fault. */
 const FRESHNESS_VARIANT: Record<string, string> = {
