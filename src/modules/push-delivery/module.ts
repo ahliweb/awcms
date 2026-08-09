@@ -16,23 +16,19 @@ export const pushDeliveryModule = defineModule({
   name: "Push Delivery",
   version: "0.1.0",
   /**
-   * `experimental`, not `active`, and the difference is enforced rather than
-   * cosmetic: `tests/admin-media-page-contract.test.ts` requires every ACTIVE
-   * module to declare an admin screen, with ZERO exceptions (ADR-0021 criterion
-   * 1), and its own comment records what happened the last time somebody wrote
-   * a carve-out instead — the excuse went stale and would have let a module
-   * LOSE its screen unnoticed.
+   * `active` as of Issue #466, and the promotion is what
+   * `tests/admin-media-page-contract.test.ts` measures: every ACTIVE module
+   * must declare an admin screen, with ZERO exceptions (ADR-0021 criterion 1).
    *
-   * So this module does not take the exception; it takes the honest status. It
-   * ships a working queue and two workers, and it has no operator-facing
-   * surface at all: an admin cannot see the queue without reading the database.
-   * That is a real gap, not a formality, and it closes together with the real
-   * adapters in #466 — at which point this becomes `active` and the assertion
-   * above starts holding it to a screen.
+   * It shipped `experimental` for three PRs while it had a queue, two workers
+   * and real adapters but no operator surface — an honest status rather than a
+   * carve-out, because that test's own comment records what the last carve-out
+   * cost: the excuse went stale and would have let a module LOSE its screen
+   * unnoticed. `/admin/push-notifications` is what closes it.
    */
-  status: "experimental",
+  status: "active",
   description:
-    "Transactional outbox for device push notifications (epic #463, ADR-0074): a `PushProvider` port, a safe `log` adapter, the tenant-scoped schema/RLS (`sql/093`), and a claim/send/finalize dispatcher (`bun run push:dispatch`) with lease-based claiming, backoff, a circuit breaker, and a per-attempt ledger. It is a SECOND outbox on purpose — `domain-event-runtime` calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Generic infrastructure, analogous to `email`: it delivers a notification somebody else decided to send, and owns no notion of what is worth notifying about. Ships INERT — without PUSH_ENABLED=true the dispatcher claims nothing. The real FCM HTTP v1 and Web Push/VAPID adapters, and the HTTP surface for managing subscriptions, land in their own issues (#466).",
+    "Transactional outbox for device push notifications (epic #463, ADR-0074): a `PushProvider` port, the FCM HTTP v1 and Web Push/VAPID adapters, a safe `log` adapter, the tenant-scoped schema/RLS (`sql/093`), a claim/send/finalize dispatcher (`bun run push:dispatch`) with lease-based claiming, backoff, a circuit breaker and a per-attempt ledger, and the HTTP surface plus `/admin/push-notifications` console. It is a SECOND outbox on purpose — `domain-event-runtime` calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Generic infrastructure, analogous to `email`: it delivers a notification somebody else decided to send, and owns no notion of what is worth notifying about. Managing one's OWN device is self-service (no permission — the subject is the caller); the three permissions cover what touches other people's rows or makes the deployment emit traffic. Ships INERT — without PUSH_ENABLED=true the dispatcher claims nothing.",
   dependencies: ["tenant_admin", "logging"],
   api: {
     openApiPath: "openapi/modules/push-delivery.openapi.yaml",
@@ -70,6 +66,26 @@ export const pushDeliveryModule = defineModule({
       action: "cancel",
       description:
         "Cancel a push notification that is still waiting in the queue (refused once it is being sent)"
+    }
+  ],
+  /**
+   * One entry, gated on the diagnostics read.
+   *
+   * NOT gated on the self-service half of the screen — that half needs no
+   * permission at all, and a sidebar entry visible to every user in the tenant
+   * would advertise a console most of them cannot open. The device panel is
+   * still reachable by anyone who lands on the page; what the entry advertises
+   * is the queue.
+   *
+   * `order: 80` puts it after `domain-events` (78) in the operations group:
+   * both are outboxes, and this is the newer, narrower one.
+   */
+  navigation: [
+    {
+      labelKey: "admin.layout.nav_push_notifications",
+      path: "/admin/push-notifications",
+      order: 80,
+      requiredPermission: "push_delivery.diagnostics.read"
     }
   ],
   jobs: [

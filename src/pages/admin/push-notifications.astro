@@ -1,0 +1,710 @@
+---
+/**
+ * Push notifications console — the operator surface of the push outbox
+ * (Issue #466, ADR-0074).
+ *
+ * The module shipped a queue, two workers and five endpoints with no screen, so
+ * the only way to see why a notification never arrived was to read the
+ * database. Under ADR-0051 that screen belongs here, and under ADR-0021
+ * criterion 1 the module cannot be `active` without it.
+ *
+ * All three of this module's permissions are driven from this page: the
+ * diagnostics read, the queued-message cancel, and the delivery probe.
+ *
+ * ## Two audiences on one page, on purpose
+ *
+ * The top half is SELF-SERVICE — "notifications on this device" — and needs no
+ * permission at all: the subject is the person looking at it. The bottom half
+ * is the tenant's queue and needs `diagnostics.read`.
+ *
+ * They share a page because they answer one question together. "I enabled
+ * notifications and nothing arrives" is answered by the device panel (is this
+ * browser subscribed?) and the queue panel (did anything get queued, and what
+ * did the push service say?) — and an operator who has to correlate two screens
+ * to answer it will correlate two moments in time instead.
+ *
+ * ## Why the entry decision is the DIAGNOSTICS read
+ *
+ * A page that entered on nothing would be visible to everyone, and the sidebar
+ * entry would appear for every user in the tenant. The self-service panel is
+ * reachable by anybody, but it is not worth a navigation entry of its own; the
+ * console is. The device panel is rendered by client script from the endpoint,
+ * so it works for whoever can see the page.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import {
+  listRecentPushAttempts,
+  listRecentPushMessages,
+  summarizePushQueue,
+  PUSH_MESSAGE_STATUSES,
+  type PushAttemptView,
+  type PushMessageStatus,
+  type PushMessageView,
+  type PushQueueSummary
+} from "../../modules/push-delivery/application/push-diagnostics";
+import {
+  listPushSubscriptions,
+  type PushSubscriptionSummary
+} from "../../modules/push-delivery/application/subscription-directory";
+import { isPushEnabled } from "../../modules/push-delivery/domain/push-config";
+import { parseVapidConfig } from "../../modules/push-delivery/domain/vapid-config";
+
+const ssr = Astro.locals.ssrContext!;
+
+const statusRaw = (Astro.url.searchParams.get("status") ?? "").trim();
+// An unknown status is dropped rather than forwarded: a hand-edited query
+// string must not turn this screen into the endpoint's 422.
+const statusFilter = (PUSH_MESSAGE_STATUSES as readonly string[]).includes(
+  statusRaw
+)
+  ? (statusRaw as PushMessageStatus)
+  : "";
+
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "push_delivery",
+    activityCode: "diagnostics",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    return {
+      summary: await summarizePushQueue(tx, ssr.tenantId),
+      messages: await listRecentPushMessages(tx, ssr.tenantId, {
+        ...(statusFilter ? { status: statusFilter } : {}),
+        limit: 50
+      }),
+      attempts: await listRecentPushAttempts(tx, ssr.tenantId, { limit: 25 }),
+      subscriptions: await listPushSubscriptions(tx, ssr.tenantId),
+      canCancel: await can({
+        moduleKey: "push_delivery",
+        activityCode: "messages",
+        action: "cancel"
+      }),
+      canSendTest: await can({
+        moduleKey: "push_delivery",
+        activityCode: "diagnostics",
+        action: "check"
+      })
+    };
+  },
+  onError: (error) => {
+    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
+    // must never render as "the queue is empty".
+    logAdminPageError(
+      "admin/push-notifications.astro: failed to load the push console",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canSeeAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const summary: PushQueueSummary | null =
+  screen.state === "allowed" ? screen.data.summary : null;
+const messages: PushMessageView[] =
+  screen.state === "allowed" ? screen.data.messages : [];
+const attempts: PushAttemptView[] =
+  screen.state === "allowed" ? screen.data.attempts : [];
+const subscriptions: PushSubscriptionSummary[] =
+  screen.state === "allowed" ? screen.data.subscriptions : [];
+const canCancel = screen.state === "allowed" && screen.data.canCancel;
+const canSendTest = screen.state === "allowed" && screen.data.canSendTest;
+
+/**
+ * Deployment facts, read here rather than fetched: they are the difference
+ * between a queue that is stuck and a deployment where push is simply off, and
+ * a console that cannot tell an operator which one they are looking at is worse
+ * than no console.
+ */
+const vapid = parseVapidConfig(process.env);
+const pushEnabled = isPushEnabled();
+const applicationServerKey = vapid.ok ? vapid.config.publicKey : "";
+const webPushReady = pushEnabled && vapid.ok;
+
+const STATUS_VARIANT: Record<string, string> = {
+  queued: "info",
+  retry_wait: "warning",
+  sending: "info",
+  sent: "success",
+  failed: "danger",
+  cancelled: "muted"
+};
+
+function formatTimestamp(value: Date | string | null): string {
+  if (value === null) return "—";
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+const messageColumns = canCancel ? 8 : 7;
+---
+
+<AdminLayout title="Push notifications">
+  <header class="page-header fade-in-up">
+    <h1 id="push-notifications-heading">Push notifications</h1>
+    <p class="page-description">
+      The device push outbox. A notification is queued in the same transaction
+      as the thing that caused it; delivery happens afterwards, on the <code
+        >push:dispatch</code
+      > schedule. A subscription the push service reports as gone is disabled rather
+      than deleted, so it can still answer &quot;why did this user stop getting notifications&quot;.
+    </p>
+  </header>
+
+  {
+    !canSeeAnything && (
+      <p class="state-notice fade-in-up" id="push-notifications-denied">
+        You do not have permission to view the push notification console.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && loadError && (
+      <p class="state-notice fade-in-up" id="push-notifications-error">
+        The push console could not be loaded right now. This is a problem
+        reading it, not an idle queue — please try again later.
+      </p>
+    )
+  }
+
+  {
+    canSeeAnything && !loadError && (
+      <>
+        <p
+          id="push-notifications-action-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="push-device-title"
+          id="push-notifications-device"
+          data-application-server-key={applicationServerKey}
+          data-web-push-ready={webPushReady ? "true" : "false"}
+        >
+          <h2 class="admin-section-title" id="push-device-title">
+            Notifications on this device
+          </h2>
+
+          {!pushEnabled && (
+            <p class="state-notice" id="push-notifications-disabled">
+              Push delivery is switched off on this deployment (
+              <code>PUSH_ENABLED</code> is not <code>true</code>), so the
+              dispatcher claims nothing and no notification will be sent. This
+              is the expected state on an offline/LAN deployment.
+            </p>
+          )}
+
+          {pushEnabled && !vapid.ok && (
+            <p class="state-notice" id="push-notifications-unconfigured">
+              Push is enabled but no valid VAPID key pair is configured, so a
+              browser cannot subscribe. Generate one with
+              <code>bun run push:vapid:generate</code> and set the three
+              <code>PUSH_VAPID_*</code> variables.
+            </p>
+          )}
+
+          <p class="page-description" id="push-device-state">
+            Checking this browser…
+          </p>
+
+          <div class="admin-actions">
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="push-enable-button"
+              hidden
+            >
+              Enable on this device
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              id="push-disable-button"
+              data-subscription-id=""
+              hidden
+            >
+              Turn off on this device
+            </button>
+            {canSendTest && (
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="push-test-button"
+              >
+                Send a test notification
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="push-queue-title"
+          id="push-notifications-queue"
+        >
+          <h2 class="admin-section-title" id="push-queue-title">
+            Queue
+          </h2>
+
+          <div class="stat-grid stagger-children">
+            {PUSH_MESSAGE_STATUSES.map((status) => (
+              <div class="stat-card">
+                <span class="stat-label">{status.replace("_", " ")}</span>
+                <span class="stat-value">
+                  {summary?.countsByStatus[status] ?? 0}
+                </span>
+              </div>
+            ))}
+            <div class="stat-card">
+              <span class="stat-label">Active devices</span>
+              <span class="stat-value">
+                {summary?.activeSubscriptions ?? 0}
+              </span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Disabled devices</span>
+              <span class="stat-value">
+                {summary?.disabledSubscriptions ?? 0}
+              </span>
+            </div>
+          </div>
+
+          <p class="page-description">
+            Oldest still waiting:{" "}
+            <strong>{formatTimestamp(summary?.oldestPendingAt ?? null)}</strong>
+            · next retry due:{" "}
+            <strong>{formatTimestamp(summary?.nextAttemptAt ?? null)}</strong>
+          </p>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="push-messages-title"
+          id="push-notifications-messages"
+        >
+          <h2 class="admin-section-title" id="push-messages-title">
+            Recent messages
+            <span class="count-pill">{messages.length}</span>
+          </h2>
+
+          <form method="get" class="admin-filter-form">
+            <label class="admin-field">
+              <span>Status</span>
+              <select name="status">
+                <option value="">All</option>
+                {PUSH_MESSAGE_STATUSES.map((status) => (
+                  <option value={status} selected={statusFilter === status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="btn btn-secondary">
+              Filter
+            </button>
+          </form>
+
+          <div class="table-scroll">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Category</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Device</th>
+                  <th scope="col">Retries</th>
+                  <th scope="col">Last error</th>
+                  <th scope="col">Queued</th>
+                  {canCancel && <th scope="col">Action</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {messages.length === 0 && (
+                  <tr>
+                    <td colspan={messageColumns} class="table-empty">
+                      No push messages recorded.
+                    </td>
+                  </tr>
+                )}
+                {messages.map((message) => (
+                  <tr>
+                    <td>
+                      <code>{message.category}</code>
+                    </td>
+                    <td>
+                      <span
+                        class={`status-pill status-${STATUS_VARIANT[message.status] ?? "muted"}`}
+                      >
+                        {message.status}
+                      </span>
+                    </td>
+                    <td>{message.title}</td>
+                    <td>
+                      <code>{message.endpointMasked}</code>
+                    </td>
+                    <td>{message.retryCount}</td>
+                    <td>{message.lastError ?? "—"}</td>
+                    <td>{formatTimestamp(message.createdAt)}</td>
+                    {canCancel && (
+                      <td>
+                        {(message.status === "queued" ||
+                          message.status === "retry_wait") && (
+                          <button
+                            type="button"
+                            class="btn btn-secondary push-cancel"
+                            data-message-id={message.id}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="push-attempts-title"
+          id="push-notifications-attempts"
+        >
+          <h2 class="admin-section-title" id="push-attempts-title">
+            Recent delivery attempts
+            <span class="count-pill">{attempts.length}</span>
+          </h2>
+
+          <p class="page-description">
+            Successes as well as failures. A provider that started answering
+            slowly, or one that changed which endpoints it accepts, is a pattern
+            across both — a failures-only list answers &quot;what broke&quot;
+            and never &quot;since when&quot;.
+          </p>
+
+          <div class="table-scroll">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Attempt</th>
+                  <th scope="col">Outcome</th>
+                  <th scope="col">Provider</th>
+                  <th scope="col">Reply</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attempts.length === 0 && (
+                  <tr>
+                    <td colspan={5} class="table-empty">
+                      No delivery attempts recorded.
+                    </td>
+                  </tr>
+                )}
+                {attempts.map((attempt) => (
+                  <tr>
+                    <td>{formatTimestamp(attempt.createdAt)}</td>
+                    <td>{attempt.attemptNo}</td>
+                    <td>
+                      <span
+                        class={`status-pill status-${attempt.outcome === "success" ? "success" : "danger"}`}
+                      >
+                        {attempt.outcome}
+                      </span>
+                    </td>
+                    <td>{attempt.providerName}</td>
+                    <td>
+                      {attempt.errorMessage ??
+                        attempt.providerResponseSnippet ??
+                        "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          class="admin-section fade-in-up"
+          aria-labelledby="push-devices-title"
+          id="push-notifications-devices"
+        >
+          <h2 class="admin-section-title" id="push-devices-title">
+            Registered devices
+            <span class="count-pill">{subscriptions.length}</span>
+          </h2>
+
+          <div class="table-scroll">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Endpoint</th>
+                  <th scope="col">Transport</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Why disabled</th>
+                  <th scope="col">Last delivered</th>
+                  <th scope="col">Registered</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subscriptions.length === 0 && (
+                  <tr>
+                    <td colspan={6} class="table-empty">
+                      No devices registered in this tenant.
+                    </td>
+                  </tr>
+                )}
+                {subscriptions.map((subscription) => (
+                  <tr>
+                    <td>
+                      <code>{subscription.endpointMasked}</code>
+                    </td>
+                    <td>{subscription.transport}</td>
+                    <td>
+                      <span
+                        class={`status-pill status-${subscription.status === "active" ? "success" : "muted"}`}
+                      >
+                        {subscription.status}
+                      </span>
+                    </td>
+                    <td>{subscription.disabledReason ?? "—"}</td>
+                    <td>{formatTimestamp(subscription.lastSuccessAt)}</td>
+                    <td>{formatTimestamp(subscription.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // cannot be runtime-conditional). Harmless on a denied render: every element
+  // it looks for is inside the allowed branch, so `getElementById` returns null
+  // and nothing binds. The import forces Astro to bundle this EXTERNAL — an
+  // import-free script would be inlined, and inline scripts are blocked by this
+  // app's CSP.
+  import { sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    disablePushOnThisDevice,
+    enablePushOnThisDevice,
+    isPushSupported,
+    PUSH_SERVICE_WORKER_PATH
+  } from "../../lib/ui/push-subscription-client";
+
+  const errorBox = document.getElementById("push-notifications-action-error");
+  const devicePanel = document.getElementById("push-notifications-device");
+  const stateLine = document.getElementById("push-device-state");
+  const enableButton = document.getElementById(
+    "push-enable-button"
+  ) as HTMLButtonElement | null;
+  const disableButton = document.getElementById(
+    "push-disable-button"
+  ) as HTMLButtonElement | null;
+  const testButton = document.getElementById(
+    "push-test-button"
+  ) as HTMLButtonElement | null;
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function setState(message: string): void {
+    if (stateLine) stateLine.textContent = message;
+  }
+
+  /**
+   * Which of THIS browser's subscriptions the server knows about.
+   *
+   * Asked of the server rather than inferred from the browser, because the two
+   * can disagree in both directions — a row revoked from another tab, or a
+   * browser subscription discarded when site data was cleared — and the button
+   * has to reflect what will actually receive a notification.
+   */
+  async function refreshDeviceState(): Promise<void> {
+    if (!devicePanel || !stateLine) return;
+
+    if (!isPushSupported()) {
+      setState(
+        "This browser does not support push notifications, so nothing can be enabled here."
+      );
+      return;
+    }
+
+    if (devicePanel.dataset.webPushReady !== "true") {
+      setState(
+        "Push is not configured on this deployment, so this browser cannot subscribe."
+      );
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.getRegistration(
+      PUSH_SERVICE_WORKER_PATH
+    );
+    const local = await registration?.pushManager.getSubscription();
+
+    const response = await fetch("/api/v1/push/subscriptions", {
+      credentials: "same-origin"
+    });
+    const payload = response.ok ? await response.json() : null;
+    const known: { id: string; endpointMasked: string; status: string }[] =
+      payload?.data?.subscriptions ?? [];
+    const active = known.filter((row) => row.status === "active");
+
+    if (!local || active.length === 0) {
+      setState(
+        active.length === 0 && local
+          ? "This browser is subscribed, but the server has no active record of it. Enable again to repair."
+          : "Notifications are off on this device."
+      );
+      if (enableButton) enableButton.hidden = false;
+      if (disableButton) disableButton.hidden = true;
+      return;
+    }
+
+    // The masked endpoint is the only comparable value the server returns —
+    // the raw one never leaves it. Matching on the origin plus tail is enough
+    // to identify which row is this browser among a handful of devices.
+    const mine =
+      active.find((row) =>
+        local.endpoint.endsWith(row.endpointMasked.slice(-6))
+      ) ?? active[0]!;
+
+    setState(`Notifications are on for this device (${mine.endpointMasked}).`);
+    if (enableButton) enableButton.hidden = true;
+    if (disableButton) {
+      disableButton.hidden = false;
+      disableButton.dataset.subscriptionId = mine.id;
+    }
+  }
+
+  enableButton?.addEventListener("click", async () => {
+    if (!devicePanel) return;
+    if (errorBox) errorBox.hidden = true;
+
+    const key = devicePanel.dataset.applicationServerKey ?? "";
+
+    if (key === "") {
+      showError("No VAPID public key is configured on this deployment.");
+      return;
+    }
+
+    enableButton.disabled = true;
+    setState("Asking this browser for permission…");
+
+    try {
+      const outcome = await enablePushOnThisDevice(key);
+
+      if (!outcome.ok) {
+        showError(outcome.reason);
+        setState("Notifications are off on this device.");
+        return;
+      }
+
+      await refreshDeviceState();
+    } finally {
+      enableButton.disabled = false;
+    }
+  });
+
+  disableButton?.addEventListener("click", async () => {
+    const subscriptionId = disableButton.dataset.subscriptionId ?? "";
+
+    if (subscriptionId === "") return;
+    if (errorBox) errorBox.hidden = true;
+
+    disableButton.disabled = true;
+
+    try {
+      const outcome = await disablePushOnThisDevice(subscriptionId);
+
+      if (!outcome.ok) {
+        showError(outcome.reason ?? "The device could not be revoked.");
+        return;
+      }
+
+      await refreshDeviceState();
+    } finally {
+      disableButton.disabled = false;
+    }
+  });
+
+  testButton?.addEventListener("click", async () => {
+    if (errorBox) errorBox.hidden = true;
+    testButton.disabled = true;
+
+    try {
+      const result = await sendJson("POST", "/api/v1/push/test");
+
+      if (!result.ok) {
+        showError(
+          result.errorCode === "NO_ACTIVE_SUBSCRIPTION"
+            ? "You have no active device. Enable notifications above first."
+            : result.errorCode === "PUSH_DISABLED"
+              ? "Push delivery is switched off on this deployment."
+              : "The test notification could not be queued."
+        );
+        return;
+      }
+
+      setState(
+        "Test notification queued. It arrives on the next push:dispatch pass."
+      );
+    } finally {
+      testButton.disabled = false;
+    }
+  });
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "button.push-cancel"
+  )) {
+    button.addEventListener("click", async () => {
+      const messageId = button.dataset.messageId;
+
+      if (!messageId) return;
+      if (errorBox) errorBox.hidden = true;
+
+      button.disabled = true;
+
+      const result = await sendJson(
+        "POST",
+        `/api/v1/push/messages/${encodeURIComponent(messageId)}/cancel`
+      );
+
+      if (!result.ok) {
+        button.disabled = false;
+        showError(
+          result.errorCode === "PUSH_MESSAGE_NOT_CANCELLABLE"
+            ? "That message is no longer waiting in the queue — it was already sent, failed, or is being sent right now."
+            : "The message could not be cancelled."
+        );
+        return;
+      }
+
+      window.location.reload();
+    });
+  }
+
+  void refreshDeviceState();
+</script>
