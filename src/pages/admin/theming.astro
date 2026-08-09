@@ -48,10 +48,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   fetchDraftVersion,
   fetchThemeTenantState,
@@ -73,52 +71,70 @@ if (!ssr) {
   );
 }
 
-const canRead = ssr.permissions.has(permissionKey("theming", "config", "read"));
-const canUpdate = ssr.permissions.has(
-  permissionKey("theming", "config", "update")
-);
-const canPublish = ssr.permissions.has(
-  permissionKey("theming", "version", "publish")
-);
-const canRollback = ssr.permissions.has(
-  permissionKey("theming", "version", "restore")
-);
-const canRetire = ssr.permissions.has(
-  permissionKey("theming", "version", "archive")
-);
-const canPreview = ssr.permissions.has(
-  permissionKey("theming", "preview", "create")
-);
-
 // Build-time, reviewed source — no I/O, so it is resolved before (and outside)
 // the tenant transaction.
 const themes = listThemeDescriptors();
 
-let state: ThemeTenantState | null = null;
-let draft: ThemeConfigVersion | null = null;
-let versions: ThemeConfigVersion[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      // Sequential on purpose: one transaction connection, one query at a time.
-      const tenantState = await fetchThemeTenantState(tx, ssr.tenantId);
-      const draftVersion = await fetchDraftVersion(tx, ssr.tenantId);
-      const published = await listPublishedVersions(tx, ssr.tenantId, 50);
-      return { tenantState, draftVersion, published };
-    });
-    state = result.tenantState;
-    draft = result.draftVersion;
-    versions = result.published;
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. `config.read` is the entry: this screen's
+// denied state has always been `!canRead` alone, so routing it through the
+// chokepoint changes who is refused only by ADDING the gates a bare grant check
+// never applied.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: { moduleKey: "theming", activityCode: "config", action: "read" },
+  load: async ({ tx, can }) => ({
+    // Sequential on purpose: one transaction connection, one query at a time.
+    tenantState: await fetchThemeTenantState(tx, ssr.tenantId),
+    draftVersion: await fetchDraftVersion(tx, ssr.tenantId),
+    published: await listPublishedVersions(tx, ssr.tenantId, 50),
+    canUpdate: await can({
+      moduleKey: "theming",
+      activityCode: "config",
+      action: "update"
+    }),
+    canPublish: await can({
+      moduleKey: "theming",
+      activityCode: "version",
+      action: "publish"
+    }),
+    canRollback: await can({
+      moduleKey: "theming",
+      activityCode: "version",
+      action: "restore"
+    }),
+    canRetire: await can({
+      moduleKey: "theming",
+      activityCode: "version",
+      action: "archive"
+    }),
+    canPreview: await can({
+      moduleKey: "theming",
+      activityCode: "preview",
+      action: "create"
+    })
+  }),
+  onError: (error) => {
     logAdminPageError("admin/theming.astro: failed to load console", error, {
       correlationId: Astro.locals.correlationId
     });
-    loadError = true;
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const state: ThemeTenantState | null =
+  screen.state === "allowed" ? screen.data.tenantState : null;
+const draft: ThemeConfigVersion | null =
+  screen.state === "allowed" ? screen.data.draftVersion : null;
+const versions: ThemeConfigVersion[] =
+  screen.state === "allowed" ? screen.data.published : [];
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canPublish = screen.state === "allowed" && screen.data.canPublish;
+const canRollback = screen.state === "allowed" && screen.data.canRollback;
+const canRetire = screen.state === "allowed" && screen.data.canRetire;
+const canPreview = screen.state === "allowed" && screen.data.canPreview;
 
 /**
  * Which descriptor the editor renders. An explicit `?theme=` wins (that is how

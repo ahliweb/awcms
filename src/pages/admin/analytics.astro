@@ -20,9 +20,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { evaluateFieldAccessInTransaction } from "../../modules/identity-access/application/access-guard";
 import { resolveVisitorAnalyticsConfig } from "../../modules/visitor-analytics/domain/visitor-analytics-config";
 import {
@@ -56,15 +55,6 @@ import {
 } from "../../modules/visitor-analytics/domain/dashboard-view";
 
 const ssr = Astro.locals.ssrContext!;
-const canView = ssr.permissions.has(
-  permissionKey("visitor_analytics", "dashboard", "read")
-);
-const canRealtime = ssr.permissions.has(
-  permissionKey("visitor_analytics", "realtime", "read")
-);
-const canSessions = ssr.permissions.has(
-  permissionKey("visitor_analytics", "sessions", "read")
-);
 
 // Raw-detail (IP/user-agent/login snapshot) visibility is resolved through the
 // ABAC evaluator inside `withTenant` below (see `rawDetailAllowed`), NOT a bare
@@ -83,8 +73,6 @@ const subjectContext = {
   identityId: ssr.identityId,
   roles: ssr.roles
 };
-let canRawDetail = false;
-
 const config = resolveVisitorAnalyticsConfig();
 const geoActive = config.geoEnabled && config.trustCloudflare;
 
@@ -94,87 +82,103 @@ const range: AnalyticsRange = isKnownAnalyticsRange(rangeParam)
   : DEFAULT_ANALYTICS_RANGE;
 const RANGE_OPTIONS: AnalyticsRange[] = ["24h", "7d", "30d", "12m"];
 
-let realtime: RealtimeStats | null = null;
-let summary: AnalyticsSummary | null = null;
-let pages: NamedCount[] = [];
-let browsers: NamedCount[] = [];
-let devices: NamedCount[] = [];
-let countries: NamedCount[] = [];
-let security: SecurityView | null = null;
-let sessions: VisitorSessionDto[] = [];
-let loadError = false;
+const now = new Date();
+const start = resolveRangeStart(range, now);
 
-if (canView) {
-  try {
-    const sql = getDatabaseClient();
-    const now = new Date();
-    const start = resolveRangeStart(range, now);
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. `dashboard.read` is the entry: this screen's
+// denied state has always been `!canView` alone.
+//
+// `rawDetailAllowed` deliberately keeps using `evaluateFieldAccessInTransaction`
+// rather than `can(...)`. It is a FIELD-level decision about which columns of a
+// row to shape, not a decision about reaching the page, and it was already
+// resolved through the ABAC evaluator — this migration has no reason to rewrite
+// the one gate on this screen that was never part of the defect.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "visitor_analytics",
+    activityCode: "dashboard",
+    action: "read"
+  },
+  now,
+  load: async ({ tx, can }) => {
+    // Sequential (one tx connection): concurrent queries would leak it.
+    const canRealtime = await can({
+      moduleKey: "visitor_analytics",
+      activityCode: "realtime",
+      action: "read"
+    });
+    const canSessions = await can({
+      moduleKey: "visitor_analytics",
+      activityCode: "sessions",
+      action: "read"
+    });
 
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      // Resolve raw-detail visibility through ABAC (deny-overrides-allow),
-      // reusing the SSR-resolved subject/permissions — only when sessions are
-      // shown at all (the sole place raw detail renders). Fail-closed otherwise.
-      const rawDetailAllowed = canSessions
-        ? await evaluateFieldAccessInTransaction(
-            tx,
-            ssr.tenantId,
-            subjectContext,
-            ssr.permissions,
-            RAW_DETAIL_GUARD,
-            now
-          )
-        : false;
+    // Reusing the SSR-resolved subject/permissions — only when sessions are
+    // shown at all (the sole place raw detail renders). Fail-closed otherwise.
+    const rawDetailAllowed = canSessions
+      ? await evaluateFieldAccessInTransaction(
+          tx,
+          ssr.tenantId,
+          subjectContext,
+          ssr.permissions,
+          RAW_DETAIL_GUARD,
+          now
+        )
+      : false;
 
-      // Sequential (one tx connection): concurrent queries would leak it.
-      const rt = canRealtime
+    return {
+      canRealtime,
+      canSessions,
+      rawDetailAllowed,
+      rt: canRealtime
         ? await fetchRealtimeStats(tx, ssr.tenantId, config.onlineWindowSeconds)
-        : null;
-      const sum = await fetchAnalyticsSummary(tx, ssr.tenantId, range, start);
-      const topPaths = await fetchTopPaths(tx, ssr.tenantId, start);
-      const topBrowsers = await fetchTopBrowsers(tx, ssr.tenantId, start);
-      const topDevices = await fetchTopDevices(tx, ssr.tenantId, start);
-      const topCountries = geoActive
+        : null,
+      sum: await fetchAnalyticsSummary(tx, ssr.tenantId, range, start),
+      topPaths: await fetchTopPaths(tx, ssr.tenantId, start),
+      topBrowsers: await fetchTopBrowsers(tx, ssr.tenantId, start),
+      topDevices: await fetchTopDevices(tx, ssr.tenantId, start),
+      topCountries: geoActive
         ? await fetchTopCountries(tx, ssr.tenantId, start)
-        : [];
-      const sec = await fetchSecurityView(tx, ssr.tenantId, range, start);
-      const sess = canSessions
+        : [],
+      sec: await fetchSecurityView(tx, ssr.tenantId, range, start),
+      sess: canSessions
         ? (await listVisitorSessions(tx, ssr.tenantId)).rows.map((row) =>
             shapeVisitorSession(row, rawDetailAllowed)
           )
-        : [];
-
-      return {
-        rt,
-        sum,
-        topPaths,
-        topBrowsers,
-        topDevices,
-        topCountries,
-        sec,
-        sess,
-        rawDetailAllowed
-      };
+        : []
+    };
+  },
+  onError: (error) => {
+    logAdminPageError("admin/analytics.astro: failed to load console", error, {
+      correlationId: Astro.locals.correlationId
     });
-
-    // `withTenant` returns a 503 `Response` when the DB circuit breaker is open
-    // / a work-class queue is saturated — degrade to an error notice.
-    if (result instanceof Response) {
-      loadError = true;
-    } else {
-      realtime = result.rt;
-      summary = result.sum;
-      pages = result.topPaths;
-      browsers = result.topBrowsers;
-      devices = result.topDevices;
-      countries = result.topCountries;
-      security = result.sec;
-      sessions = result.sess;
-      canRawDetail = result.rawDetailAllowed;
-    }
-  } catch {
-    loadError = true;
   }
-}
+});
+
+const canView = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canRealtime = screen.state === "allowed" && screen.data.canRealtime;
+const canSessions = screen.state === "allowed" && screen.data.canSessions;
+const canRawDetail = screen.state === "allowed" && screen.data.rawDetailAllowed;
+const realtime: RealtimeStats | null =
+  screen.state === "allowed" ? screen.data.rt : null;
+const summary: AnalyticsSummary | null =
+  screen.state === "allowed" ? screen.data.sum : null;
+const pages: NamedCount[] =
+  screen.state === "allowed" ? screen.data.topPaths : [];
+const browsers: NamedCount[] =
+  screen.state === "allowed" ? screen.data.topBrowsers : [];
+const devices: NamedCount[] =
+  screen.state === "allowed" ? screen.data.topDevices : [];
+const countries: NamedCount[] =
+  screen.state === "allowed" ? screen.data.topCountries : [];
+const security: SecurityView | null =
+  screen.state === "allowed" ? screen.data.sec : null;
+const sessions: VisitorSessionDto[] =
+  screen.state === "allowed" ? screen.data.sess : [];
 
 const sessionCells = sessions.map((s) =>
   buildSessionRowCells(s, {

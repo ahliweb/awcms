@@ -82,10 +82,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listBlogPostsForAdmin,
   type ListBlogPostsForAdminResult
@@ -106,41 +104,6 @@ import {
 } from "../../modules/blog-content/domain/content-validation";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canRead = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "read")
-);
-const canCreate = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "create")
-);
-// Also the gate on "submit for review" — there is no `posts.submit`.
-const canUpdate = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "update")
-);
-const canPublish = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "publish")
-);
-const canSchedule = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "schedule")
-);
-const canArchive = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "archive")
-);
-const canDelete = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "delete")
-);
-const canRestore = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "restore")
-);
-const canPurge = ssr.permissions.has(
-  permissionKey("blog_content", "posts", "purge")
-);
-const canReadRevisions = ssr.permissions.has(
-  permissionKey("blog_content", "revisions", "read")
-);
-const canRestoreRevisions = ssr.permissions.has(
-  permissionKey("blog_content", "revisions", "restore")
-);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -180,42 +143,122 @@ const showsBin = readParam("view") === "deleted";
 /** `?post=<id>` opens the revision panel for one post, rather than N queries for a list nobody expanded. */
 const selectedPostId = readParam("post");
 
-let listing: ListBlogPostsForAdminResult | null = null;
-let revisions: BlogRevisionSummary[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      listing = await listBlogPostsForAdmin(tx, ssr.tenantId, {
-        search: searchFilter || undefined,
-        status: statusFilter,
-        deletedOnly: showsBin || undefined,
-        page: pageNumber
-      });
-
-      if (selectedPostId && canReadRevisions) {
-        // `listBlogRevisions` asserts the id is a UUID and throws otherwise,
-        // which the surrounding catch turns into the load-error notice — a
-        // hand-edited `?post=` must not 500 the page.
-        revisions = await listBlogRevisions(
-          tx,
-          ssr.tenantId,
-          "post",
-          selectedPostId
-        );
-      }
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. `posts.read` is the entry: this screen's denied
+// state has always been `!canRead` alone.
+//
+// The nine affordances are spelled out one by one rather than looped over an
+// action array: a loop would make them INVISIBLE to
+// `admin:screen-coverage:check`, whose matcher only sees literal triples.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "posts",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    const listing = await listBlogPostsForAdmin(tx, ssr.tenantId, {
+      search: searchFilter || undefined,
+      status: statusFilter,
+      deletedOnly: showsBin || undefined,
+      page: pageNumber
     });
-  } catch (error) {
+
+    const canReadRevisions = await can({
+      moduleKey: "blog_content",
+      activityCode: "revisions",
+      action: "read"
+    });
+
+    return {
+      listing,
+      canReadRevisions,
+      // `listBlogRevisions` asserts the id is a UUID and throws otherwise,
+      // which `onError` turns into the load-error notice — a hand-edited
+      // `?post=` must not 500 the page.
+      revisions:
+        selectedPostId && canReadRevisions
+          ? await listBlogRevisions(tx, ssr.tenantId, "post", selectedPostId)
+          : [],
+      canRestoreRevisions: await can({
+        moduleKey: "blog_content",
+        activityCode: "revisions",
+        action: "restore"
+      }),
+      canCreate: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "create"
+      }),
+      // Also the gate on "submit for review" — there is no `posts.submit`.
+      canUpdate: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "update"
+      }),
+      canPublish: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "publish"
+      }),
+      canSchedule: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "schedule"
+      }),
+      canArchive: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "archive"
+      }),
+      canDelete: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "delete"
+      }),
+      canRestore: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "restore"
+      }),
+      canPurge: await can({
+        moduleKey: "blog_content",
+        activityCode: "posts",
+        action: "purge"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has no posts".
-    loadError = true;
     logAdminPageError("admin/blog.astro: failed to load posts", error, {
       correlationId: Astro.locals.correlationId
     });
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const listing: ListBlogPostsForAdminResult | null =
+  screen.state === "allowed" ? screen.data.listing : null;
+const revisions: BlogRevisionSummary[] =
+  screen.state === "allowed" ? screen.data.revisions : [];
+const canReadRevisions =
+  screen.state === "allowed" && screen.data.canReadRevisions;
+const canRestoreRevisions =
+  screen.state === "allowed" && screen.data.canRestoreRevisions;
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canPublish = screen.state === "allowed" && screen.data.canPublish;
+const canSchedule = screen.state === "allowed" && screen.data.canSchedule;
+const canArchive = screen.state === "allowed" && screen.data.canArchive;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+const canRestore = screen.state === "allowed" && screen.data.canRestore;
+const canPurge = screen.state === "allowed" && screen.data.canPurge;
 
 const STATUS_VARIANT: Record<string, string> = {
   draft: "neutral",
