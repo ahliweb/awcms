@@ -238,27 +238,84 @@ export const POST: APIRoute = async () => {
   });
 });
 
+const GUARD_SOURCE_PATH =
+  "src/modules/identity-access/application/access-guard.ts";
+
+/**
+ * The body of one top-level `export`ed function, so assertions about "inside
+ * `authorizeInTransaction`" cannot be satisfied by code in a sibling function
+ * or by the `AuthorizeResult` type declaration above it (which legitimately
+ * writes `allowed: true;`).
+ */
+function exportedFunctionBody(source: string, name: string): string {
+  const start = source.indexOf(`export async function ${name}(`);
+
+  // Not a soft failure: a rename here would make every assertion below range
+  // over an empty string and pass vacuously — the exact defect Issue #425 is
+  // about, reproduced inside its own fix.
+  expect(start).toBeGreaterThan(-1);
+
+  const rest = source.slice(start + 1);
+  const nextExport = rest.search(
+    /\nexport (?:async function|function|type|const)\s/
+  );
+
+  return nextExport === -1 ? rest : rest.slice(0, nextExport);
+}
+
 describe("the guard widens, it never short-circuits", () => {
-  test("`ownershipApplied` only builds the key set — it never returns an allow", async () => {
+  /**
+   * Issue #425 — this was asserted with two `not.toMatch` regexes keyed on the
+   * literals `ownershipGrant` and `ownershipApplied`. A rename to anything else
+   * makes a `not.toMatch` over a pattern that can no longer occur **pass
+   * vacuously**, and the invariant ADR-0063 was written to protect would be
+   * unguarded with a green suite.
+   *
+   * Replaced by a structural claim that names neither variable, plus a separate
+   * identifier-existence test so a rename fails LOUDLY instead of silently
+   * voiding the guard. ADR-0063 lines 137-143 already record that an
+   * ordering-based safety claim survived a mutation with every test green; this
+   * is the same lesson applied one level up, to the assertion itself.
+   */
+  test("exactly one allow exists in the guard, and it is after the evaluator", async () => {
     // The wrong implementation is one line and passes every behavioural test of
     // `evaluateAccess`, because it never reaches it:
     //     if (options?.ownershipGrant?.granted) return { allowed: true, ... }
     // That would skip ABAC, the platform-scope gate, business scope and SoD —
-    // the exact four things ADR-0063 exists to preserve. Only the guard's own
-    // source can rule it out.
-    const source = await Bun.file(
-      "src/modules/identity-access/application/access-guard.ts"
-    ).text();
+    // the exact four things ADR-0063 exists to preserve.
+    const source = await Bun.file(GUARD_SOURCE_PATH).text();
+    const body = exportedFunctionBody(source, "authorizeInTransaction");
 
-    const applied = source.indexOf("const ownershipApplied");
-    const evaluate = source.indexOf("evaluateAccess(");
+    const allows = [...body.matchAll(/allowed:\s*true/g)];
+    const evaluate = body.indexOf("evaluateAccess(");
 
-    expect(applied).toBeGreaterThan(-1);
-    // The grant is computed BEFORE the evaluator, and the evaluator still runs.
-    expect(evaluate).toBeGreaterThan(applied);
-    // No early allow keyed on the grant, in any spelling.
-    expect(source).not.toMatch(/ownershipGrant[^\n]*\n[^\n]*allowed:\s*true/);
-    expect(source).not.toMatch(/ownershipApplied[\s\S]{0,120}?allowed:\s*true/);
+    // Without this the index comparison below reads `> -1` and passes for ANY
+    // placement — a vacuous assertion wearing the shape of a real one.
+    expect(evaluate).toBeGreaterThan(-1);
+
+    // One allow, not two: any early allow is a second match, whatever it is
+    // keyed on and whatever the variable is called.
+    expect(allows).toHaveLength(1);
+    expect(allows[0]!.index).toBeGreaterThan(evaluate);
+  });
+
+  test("the widening is a set union computed before the evaluator", async () => {
+    const source = await Bun.file(GUARD_SOURCE_PATH).text();
+    const body = exportedFunctionBody(source, "authorizeInTransaction");
+
+    // Identifier-existence, paired with the structural test above: if ADR-0063's
+    // mechanism is ever renamed, THIS fails with a clear message rather than
+    // leaving the structural test guarding a mechanism that no longer exists
+    // under that name.
+    expect(body).toContain("ownershipGrant");
+    expect(body).toContain("ownershipApplied");
+
+    // Machine credentials are excluded from the widening (ADR-0049 §3), and the
+    // grant is folded into the key set BEFORE `evaluateAccess` runs.
+    expect(body).toMatch(/ownershipApplied[\s\S]{0,200}?new Set\(/);
+    expect(body.indexOf("ownershipApplied")).toBeLessThan(
+      body.indexOf("evaluateAccess(")
+    );
   });
 });
 
