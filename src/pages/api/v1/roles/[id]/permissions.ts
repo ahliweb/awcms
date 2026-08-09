@@ -92,6 +92,17 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
           "System roles have an immutable permission set."
         );
       }
+      // PROJECT_STATE §4 R8. Not an escalation that got through — the runtime
+      // gate (ADR-0053) always refused these. What was missing is that the
+      // grant APPEARED to have been made, which makes the role's permission
+      // list a wrong answer to "who can do what".
+      if (result.outcome === "platform_scope_blocked") {
+        return fail(
+          409,
+          "PLATFORM_SCOPE_REQUIRED",
+          "This permission is platform-scoped and may only be held by the platform tenant."
+        );
+      }
       return ok({ roleId, permissionId: validation.value.permissionId });
     } catch (error) {
       // Caught INSIDE `withTenant`. `DuplicateRolePermissionError` follows the

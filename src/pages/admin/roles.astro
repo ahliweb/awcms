@@ -26,6 +26,7 @@ import {
   listRoles,
   type RoleView
 } from "../../modules/identity-access/application/access-directory";
+import { resolvePlatformTenant } from "../../lib/tenant/platform-tenant";
 import {
   listDeletedRoles,
   listPermissionCatalog,
@@ -69,7 +70,14 @@ if (canRead) {
           deletedRoles: [] as DeletedRoleView[]
         };
       }
-      const catalog = await listPermissionCatalog(tx);
+      // R8 — the picker offers only what this tenant may actually hold. Platform
+      // permissions (ADR-0053) are refused at runtime for everyone else, so
+      // listing them here invites a grant that can never take effect.
+      const platformTenant = await resolvePlatformTenant(tx);
+      const catalog = await listPermissionCatalog(tx, {
+        includePlatformScoped:
+          platformTenant !== null && platformTenant.tenantId === ssr.tenantId
+      });
       const perms: RolePermRow[] = [];
       for (const role of liveRoles) {
         const granted = await listRolePermissions(tx, ssr.tenantId, role.id);

@@ -20,6 +20,7 @@
  * `deleted_at IS NULL`.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
+import { resolvePlatformTenant } from "../../../lib/tenant/platform-tenant";
 
 const AUDIT_MODULE_KEY = "identity_access";
 const AUDIT_RESOURCE_TYPE_ROLE = "role";
@@ -160,18 +161,56 @@ type PermissionRow = {
 };
 
 /**
- * The whole global permission catalog (`awcms_permissions` has no `tenant_id`;
- * it is platform-wide reference data). Bounded and low-cardinality, so no
- * cursor. Used to render the "add permission" picker.
+ * The global permission catalog (`awcms_permissions` has no `tenant_id`; it is
+ * platform-wide reference data), filtered to what the ACTING tenant may
+ * actually hold. Bounded and low-cardinality, so no cursor.
+ *
+ * ## Why the filter exists — PROJECT_STATE §4 R8
+ *
+ * This used to return every row, so the role editor offered `scope: "platform"`
+ * permissions (ADR-0053) to ordinary tenants, and `grantPermissionToRole`
+ * accepted them.
+ *
+ * That was never privilege escalation: the chokepoint's platform gate still
+ * refuses them at runtime, and it decides from a CODE-side declaration, so a
+ * database row cannot lift it. What was missing is redundancy — and honesty. An
+ * administrator could grant one, see it listed on the role, and conclude it
+ * applies. It does not. A grant that appears given but can never take effect is
+ * a wrong answer to "who can do what", which is exactly the answer the next
+ * access review has to trust. ADR-0058 spent a whole document on that class.
+ *
+ * ## Why the question is about the TENANT, not the role
+ *
+ * A first design gave each role a `permission_scope` column. That is a finer
+ * separation — it would let the platform tenant keep some roles that may hold
+ * platform permissions and some that may not — but it is not R8, and it needs a
+ * migration, a new column, and its own enforcement.
+ *
+ * The constraint R8 describes is simpler and already decided: a platform
+ * permission may only ever be EXERCISED by the platform tenant. So the honest
+ * filter is "is the acting tenant the platform tenant", which needs no schema
+ * change at all and is exactly the predicate the runtime gate already applies.
+ * The per-role column stays available for the day least privilege INSIDE the
+ * platform tenant is the question being asked.
  */
 export async function listPermissionCatalog(
-  tx: Bun.SQL
+  tx: Bun.SQL,
+  options: { includePlatformScoped: boolean }
 ): Promise<PermissionCatalogEntry[]> {
-  const rows = (await tx`
-    SELECT id, module_key, activity_code, action, description
-    FROM awcms_permissions
-    ORDER BY module_key, activity_code, action
-  `) as PermissionRow[];
+  const rows = (
+    options.includePlatformScoped
+      ? await tx`
+          SELECT id, module_key, activity_code, action, description
+          FROM awcms_permissions
+          ORDER BY module_key, activity_code, action
+        `
+      : await tx`
+          SELECT id, module_key, activity_code, action, description
+          FROM awcms_permissions
+          WHERE scope = 'tenant'
+          ORDER BY module_key, activity_code, action
+        `
+  ) as PermissionRow[];
 
   return rows.map((row) => ({
     id: row.id,
@@ -398,7 +437,36 @@ export async function restoreRole(
 export type GrantResult =
   | { outcome: "granted" }
   | { outcome: "role_not_found" }
-  | { outcome: "system_blocked" };
+  | { outcome: "system_blocked" }
+  /** The permission is `scope: "platform"` and this is not the platform tenant. */
+  | { outcome: "platform_scope_blocked" };
+
+/**
+ * Whether `tenantId` may hold `permissionId` at all.
+ *
+ * `scope: "tenant"` permissions: always. `scope: "platform"` permissions: only
+ * the platform tenant, which is the same predicate the chokepoint applies at
+ * runtime (ADR-0053). An unknown permission id answers TRUE and falls through
+ * to the INSERT, whose foreign key raises `PermissionNotFoundError` — one place
+ * decides "does this exist", and it is not this function.
+ */
+async function mayTenantHoldPermission(
+  tx: Bun.SQL,
+  tenantId: string,
+  permissionId: string
+): Promise<boolean> {
+  const rows = (await tx`
+    SELECT scope FROM awcms_permissions WHERE id = ${permissionId}
+  `) as { scope: string }[];
+
+  const scope = rows[0]?.scope;
+
+  if (scope !== "platform") return true;
+
+  const platformTenant = await resolvePlatformTenant(tx);
+
+  return platformTenant !== null && platformTenant.tenantId === tenantId;
+}
 
 /**
  * Grants a catalogued permission to a live role.
@@ -423,6 +491,14 @@ export async function grantPermissionToRole(
   const role = await fetchLiveRoleById(tx, tenantId, roleId);
   if (!role) return { outcome: "role_not_found" };
   if (role.isSystem) return { outcome: "system_blocked" };
+
+  // R8, server side. The picker above is a UI; THIS is the control. Filtering a
+  // dropdown stops an accident, not a hand-written request — and the whole point
+  // of the finding is that a grant which can never take effect is a lie in the
+  // access review, however it was made.
+  if (!(await mayTenantHoldPermission(tx, tenantId, permissionId))) {
+    return { outcome: "platform_scope_blocked" };
+  }
 
   try {
     await tx`
