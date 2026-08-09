@@ -80,9 +80,19 @@ describe("endpoints are handled as credentials", () => {
   test("the mask keeps the push SERVICE visible and the token material hidden", () => {
     const masked = maskPushEndpoint(WEB_PUSH_ENDPOINT);
 
-    // The head identifies which push service failed — the single most useful
-    // thing when reading an error — and carries no secret.
-    expect(masked.startsWith("https://fcm.googleapis.com")).toBe(true);
+    // Asserted as EXACT equality rather than `startsWith("https://fcm.googleapis.com")`.
+    // Two reasons, and the second is why the first was not enough:
+    //   - equality pins the whole shape (origin + separator + tail length), so
+    //     it cannot be satisfied by a mask that happens to begin correctly and
+    //     then leaks the rest;
+    //   - a `startsWith` against a host prefix is the shape CodeQL flags as
+    //     `js/incomplete-url-substring-sanitization`, because in PRODUCTION code
+    //     `https://fcm.googleapis.com` may be followed by an arbitrary host
+    //     (`…com.evil.test`). It was harmless here — a masked string, not a
+    //     sanitizer — but writing the check a way that is only safe because of
+    //     where it sits teaches the pattern, and the exact assertion is better
+    //     anyway.
+    expect(masked).toBe("https://fcm.googleapis.com/…L-x9f2");
     // The part that authenticates never appears.
     expect(masked).not.toContain("APA91bHqRs");
     expect(masked.length).toBeLessThan(WEB_PUSH_ENDPOINT.length);
