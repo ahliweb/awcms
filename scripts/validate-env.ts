@@ -69,6 +69,7 @@ const RULES: readonly Rule[] = [
   { name: "SETUP_RATE_LIMIT_MAX", required: false, type: "int", min: 1 },
   { name: "SETUP_RATE_LIMIT_WINDOW_SEC", required: false, type: "int", min: 1 },
   { name: "TRUSTED_PROXY_ENABLED", required: false, type: "bool" },
+  { name: "TRUSTED_PROXY_HOP_COUNT", required: false, type: "int", min: 1 },
   {
     name: "AUTH_IP_HASH_SECRET",
     required: false,
@@ -650,7 +651,20 @@ export function validateEnv(env: EnvBag): string[] {
   // bisa dilucuti dengan merotasi header X-Forwarded-For.
   if (isProduction && (env.TRUSTED_PROXY_ENABLED ?? "").trim() === "") {
     problems.push(
-      "TRUSTED_PROXY_ENABLED wajib diset eksplisit di produksi: `true` bila ada proxy tepercaya yang MENIMPA X-Forwarded-For (mis. profil nginx), `false` bila app terekspos langsung."
+      "TRUSTED_PROXY_ENABLED wajib diset eksplisit di produksi: `true` bila ada proxy tepercaya di depan (mis. profil nginx), `false` bila app terekspos langsung."
+    );
+  }
+
+  // `TRUSTED_PROXY_HOP_COUNT` hanya berarti bila headernya dipercaya sama
+  // sekali. Menyetelnya sambil `TRUSTED_PROXY_ENABLED=false` adalah operator
+  // yang mengira sudah menyetel sesuatu — persis kelas kesalahan yang
+  // ditemukan #438, cuma satu tingkat lebih awal.
+  if (
+    (env.TRUSTED_PROXY_HOP_COUNT ?? "").trim() !== "" &&
+    (env.TRUSTED_PROXY_ENABLED ?? "").trim() !== "true"
+  ) {
+    problems.push(
+      "TRUSTED_PROXY_HOP_COUNT diset tetapi TRUSTED_PROXY_ENABLED bukan `true` — X-Forwarded-For tidak dibaca sama sekali, jadi nilainya tidak berpengaruh."
     );
   }
 

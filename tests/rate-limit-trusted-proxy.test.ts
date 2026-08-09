@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   checkRateLimit,
-  resolveClientIp
+  resolveClientIp,
+  selectForwardedEntry
 } from "../src/lib/security/rate-limit";
 
 const originalTrustedProxy = process.env.TRUSTED_PROXY_ENABLED;
+const originalHopCount = process.env.TRUSTED_PROXY_HOP_COUNT;
 
 beforeEach(() => {
   delete process.env.TRUSTED_PROXY_ENABLED;
+  delete process.env.TRUSTED_PROXY_HOP_COUNT;
 });
 
 afterEach(() => {
@@ -16,6 +19,12 @@ afterEach(() => {
     delete process.env.TRUSTED_PROXY_ENABLED;
   } else {
     process.env.TRUSTED_PROXY_ENABLED = originalTrustedProxy;
+  }
+
+  if (originalHopCount === undefined) {
+    delete process.env.TRUSTED_PROXY_HOP_COUNT;
+  } else {
+    process.env.TRUSTED_PROXY_HOP_COUNT = originalHopCount;
   }
 });
 
@@ -47,7 +56,11 @@ describe("resolveClientIp (Issue #147 §3)", () => {
     }
   });
 
-  test("honors the first X-Forwarded-For entry once a trusted proxy is declared", () => {
+  test("reads the entry ONE hop from the right, not the leftmost (#438)", () => {
+    // This assertion used to read `203.0.113.7` — the leftmost entry. That is
+    // the position an attacker writes when the proxy APPENDS, which is what
+    // nginx's `$proxy_add_x_forwarded_for` does. The rightmost entry is the one
+    // your own edge wrote.
     process.env.TRUSTED_PROXY_ENABLED = "true";
 
     expect(
@@ -55,7 +68,96 @@ describe("resolveClientIp (Issue #147 §3)", () => {
         requestWithForwardedFor("203.0.113.7, 70.41.3.18"),
         "198.51.100.9"
       )
+    ).toBe("70.41.3.18");
+  });
+
+  test("an overwriting proxy is unaffected — one entry is both leftmost and rightmost", () => {
+    // The only topology the old rule was ever sound for, byte-identical after
+    // the change. That is what makes this fix safe to land without a flag.
+    process.env.TRUSTED_PROXY_ENABLED = "true";
+
+    expect(
+      resolveClientIp(requestWithForwardedFor("203.0.113.7"), "198.51.100.9")
     ).toBe("203.0.113.7");
+  });
+
+  test("a prepended spoof cannot be read at any hop count it does not reach", () => {
+    process.env.TRUSTED_PROXY_ENABLED = "true";
+
+    // The attacker sends `X-Forwarded-For: 9.9.9.9`; the edge appends the real
+    // peer. Under the old rule the bucket key was 9.9.9.9 — attacker-chosen,
+    // and different on every request.
+    expect(
+      resolveClientIp(
+        requestWithForwardedFor("9.9.9.9, 203.0.113.7"),
+        "198.51.100.9"
+      )
+    ).toBe("203.0.113.7");
+
+    // Two real hops, declared: still never the attacker's entry.
+    process.env.TRUSTED_PROXY_HOP_COUNT = "2";
+    expect(
+      resolveClientIp(
+        requestWithForwardedFor("9.9.9.9, 203.0.113.7, 70.41.3.18"),
+        "198.51.100.9"
+      )
+    ).toBe("203.0.113.7");
+  });
+
+  test("a header shorter than the declared chain falls back to clientAddress", () => {
+    // Fewer entries than trusted hops means the request did not traverse the
+    // declared chain. Degrading to the proxy's own address over-limits;
+    // reading a shorter chain's leftmost value would under-limit, which is the
+    // failure being closed.
+    process.env.TRUSTED_PROXY_ENABLED = "true";
+    process.env.TRUSTED_PROXY_HOP_COUNT = "3";
+
+    expect(
+      resolveClientIp(
+        requestWithForwardedFor("9.9.9.9, 203.0.113.7"),
+        "198.51.100.9"
+      )
+    ).toBe("198.51.100.9");
+  });
+
+  test("a malformed hop count falls back to 1, never to zero", () => {
+    // Zero would index past the right edge and return null for every header —
+    // silently disabling header trust on a deployment that believes it
+    // configured it.
+    process.env.TRUSTED_PROXY_ENABLED = "true";
+
+    for (const value of ["0", "-1", "abc", "1.5", " "]) {
+      process.env.TRUSTED_PROXY_HOP_COUNT = value;
+
+      expect(
+        resolveClientIp(
+          requestWithForwardedFor("9.9.9.9, 203.0.113.7"),
+          "198.51.100.9"
+        )
+      ).toBe("203.0.113.7");
+    }
+  });
+});
+
+describe("selectForwardedEntry — the arithmetic on its own", () => {
+  test("counts from the right", () => {
+    expect(selectForwardedEntry("a, b, c", 1)).toBe("c");
+    expect(selectForwardedEntry("a, b, c", 2)).toBe("b");
+    expect(selectForwardedEntry("a, b, c", 3)).toBe("a");
+  });
+
+  test("returns null rather than wrapping when the chain is shorter", () => {
+    expect(selectForwardedEntry("a, b", 3)).toBeNull();
+    expect(selectForwardedEntry("a", 2)).toBeNull();
+  });
+
+  test("blank and padded entries do not shift the count", () => {
+    // `"a, , b"` must be a two-entry chain, or an attacker adds commas to push
+    // the real client out of the counted position.
+    expect(selectForwardedEntry("a, , b", 1)).toBe("b");
+    expect(selectForwardedEntry("a, , b", 2)).toBe("a");
+    expect(selectForwardedEntry("  a  ,  b  ", 1)).toBe("b");
+    expect(selectForwardedEntry(" , , ", 1)).toBeNull();
   });
 
   test("falls back to clientAddress when a trusted proxy sends no X-Forwarded-For", () => {
