@@ -196,6 +196,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_reporting": "Reporting operations",
   "admin.layout.nav_approvals": "Approvals",
   "admin.layout.nav_domain_events": "Domain events",
+  "admin.layout.nav_push_notifications": "Push notifications",
   "admin.layout.nav_sync": "Sync & storage",
   "admin.layout.nav_profiles": "Profiles",
   "admin.layout.nav_users": "Users",

@@ -62,7 +62,9 @@ Ketiganya dihapus dalam urutan FK — attempts, messages, subscriptions — kare
 
 ## Adapter Web Push (VAPID)
 
-`PUSH_PROVIDER=web_push` — RFC 8030 + 8291 + 8292, untuk **browser**. Inilah yang ADR-0074 pilih sebagai ganti SDK FCM Web, dan alasannya terukur: SDK itu 45.041 B melawan plafon 21.000 B per berkas, **dan** menuntut tiga origin pihak ketiga di CSP yang sama sekali tidak punya. `PushManager.subscribe()` adalah API browser, bukan `fetch` dari skrip halaman, jadi jalur ini berharga **nol byte klien dan nol origin CSP**. Semua yang ada di sini berjalan di sisi server.
+`PUSH_PROVIDER=web_push` — RFC 8030 + 8291 + 8292, untuk **browser**. Inilah yang ADR-0074 pilih sebagai ganti SDK FCM Web, dan alasannya terukur: SDK itu 45.041 B melawan plafon 21.000 B per berkas, **dan** menuntut tiga origin pihak ketiga di CSP yang sama sekali tidak punya. Adapter-nya sendiri berjalan seluruhnya di sisi server: `PushManager.subscribe()` adalah API browser, bukan `fetch` dari skrip halaman, jadi **nol byte SDK dan nol origin CSP**.
+
+Sisi klien tidak gratis, dan angkanya disebut supaya perbandingan itu tetap jujur: service worker (5.515 B) plus skrip pendaftaran halaman (4.659 B) = **10.174 B**, melawan **91.333 B** milik SDK yang ditolak. Service worker-nya tidak diminifikasi karena ia berkas `public/` — dan ia harus di sana, karena registrasi dikunci pada URL skrip dan nama ber-hash-konten akan berganti tiap build lalu meninggalkan setiap langganan build sebelumnya.
 
 **Enkripsinya diverifikasi terhadap vektor RFC, bukan round-trip.** Ini bagian paling berisiko di seluruh program push, dan alasannya perlu disebut: push service **tidak memvalidasi payload**. Ia meneruskan ciphertext ke browser, dan browser yang tak bisa mendekripsinya membuang notifikasi itu **diam-diam**. Key schedule yang salah karena itu menghasilkan sistem yang menerima setiap pesan, mencatat setiap kirim sebagai sukses, dan tidak mengantarkan apa pun — tanpa satu error pun di mana pun.
 
@@ -98,7 +100,27 @@ Pencabutan oleh pengguna juga **menghancurkan endpoint tersimpan**, tidak sepert
 
 Alasan probe-nya perlu ada sama sekali: push gagal di tempat yang tak bisa dilihat apa pun di sistem ini — pasangan kunci VAPID yang tak cocok dengan yang dipakai browser saat berlangganan, service worker yang terdaftar di scope salah, sistem operasi yang diam-diam menahan izin. Ketiganya menghasilkan antrean yang terkuras bersih dan perangkat yang tak menampilkan apa-apa.
 
+## Service worker dan konsol
+
+`public/push-sw.js` disajikan same-origin dari path **tetap**, jadi scope-nya `/` tanpa perlu header `Service-Worker-Allowed`, dan `worker-src` jatuh ke `default-src 'self'` — tak ada direktif CSP yang berubah.
+
+Ia tidak dibundel Astro karena tiga alasan, dan yang ketiga hanya terlihat dengan benar-benar mengambilnya dari server terbangun:
+
+1. registrasi dikunci pada URL skrip, jadi nama ber-hash-konten berganti tiap build dan meninggalkan setiap langganan build sebelumnya;
+2. path-nya harus stabil supaya `PUSH_SERVICE_WORKER_PATH` bisa menamainya;
+3. `dist/client/_astro/**` disajikan `Cache-Control: public, max-age=31536000, immutable`, sementara berkas ini disajikan `public, max-age=0`. Service worker ber-`immutable` adalah service worker yang boleh disimpan browser **setahun tanpa revalidasi** — perbaikan bug di sini tidak akan sampai ke siapa pun, dan satu-satunya gejalanya adalah perilaku lama.
+
+Ongkosnya: ia tak pernah diminifikasi, karena `public/` disalin apa adanya.
+
+Dua perilakunya perlu disebut karena keduanya terlihat opsional dan tidak:
+
+- **Push tanpa payload tetap menampilkan notifikasi.** Beberapa push service mengirim "tickle" tanpa isi, dan payload yang gagal didekripsi tak terpakai. Diam bukan default yang aman: browser **mewajibkan** notifikasi terlihat untuk setiap push, dan menjawab yang senyap dengan "situs ini diperbarui di latar belakang" miliknya sendiri — lalu, bila berulang, dengan mencabut izinnya.
+- **Target klik di-resolve terhadap origin ini lalu dibandingkan.** `push-target-path.ts` sudah memvalidasi sebelum baris ditulis, jadi ini tembok kedua — tapi inilah kode yang benar-benar menavigasi, dan notifikasi yang membawa nama serta ikon situs ini adalah kendaraan open-redirect paling meyakinkan yang ada. `new URL(path, origin)` yang membuatnya bisa diputuskan: `//evil.example/x` protocol-relative me-resolve ke origin lain dan tertangkap, sementara uji string "diawali `/`" akan meloloskannya.
+
+Ikon **tidak** diambil dari payload — ia akan di-fetch saat ditampilkan, menyerahkan alamat IP penerima dan fakta bahwa ia sedang online kepada siapa pun yang memilih URL-nya.
+
+`/admin/push-notifications` menggabungkan dua audiens dalam satu halaman dengan sengaja: separuh atas self-service ("notifikasi di perangkat ini", tanpa permission), separuh bawah antrean tenant (`diagnostics.read`). Keduanya menjawab satu pertanyaan bersama — "saya sudah mengaktifkan notifikasi dan tak ada yang datang" dijawab oleh panel perangkat (browser ini berlangganan?) dan panel antrean (ada yang masuk antrean? apa kata push service?) — dan operator yang harus mengorelasikan dua layar akan mengorelasikan dua momen waktu.
+
 ## Yang BELUM ada
 
-- **Service worker dan layar admin.** Endpoint-nya sudah ada; konsol yang menggerakkannya belum, dan karena itu modul ini tetap `experimental` — ADR-0021 kriteria 1 menolak modul `active` tanpa layar admin, tanpa pengecualian. Tiga permission-nya sementara tercatat di ledger `NOT_YET_SCREENED`.
 - **FCM Web (SDK browser).** Ditolak, dengan angkanya, di ADR-0074 §Yang DITOLAK.

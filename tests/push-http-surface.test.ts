@@ -25,7 +25,6 @@ import {
 import { isPushRecordId } from "../src/modules/push-delivery/domain/push-record-id";
 import { PUSH_MESSAGE_STATUSES } from "../src/modules/push-delivery/application/push-diagnostics";
 import { pushDeliveryModule } from "../src/modules/push-delivery/module";
-import { NOT_YET_SCREENED } from "../scripts/admin-screen-coverage-ledger";
 import { stripComments } from "../scripts/access-chokepoint-check";
 
 /** 65 bytes, base64url — an uncompressed P-256 point's size, not a real key. */
@@ -372,13 +371,9 @@ describe("the permission set matches what is actually guarded", () => {
     }
   });
 
-  test("all three are ledgered as screenless, and the ledger names the module", () => {
-    // A one-way ledger: giving these a screen and leaving the lines here turns
-    // `admin:screen-coverage:check` RED, which is what keeps the count honest.
-    for (const permission of pushDeliveryModule.permissions ?? []) {
-      expect(NOT_YET_SCREENED).toContain(
-        `push_delivery.${permission.activityCode}.${permission.action}`
-      );
-    }
-  });
+  // The ledger claim that used to live here — "all three are recorded as
+  // screenless" — moved to `admin-push-notifications-page-contract.test.ts`
+  // and inverted when the console landed. Left as a note rather than deleted
+  // silently: the ledger may only SHRINK, and it is worth being able to see
+  // that these three lines went in and came out on purpose.
 });

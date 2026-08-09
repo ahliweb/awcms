@@ -12,36 +12,36 @@
 | Tabel `awcms_*`                    | 130   |
 | Tabel dengan `FORCE` RLS           | 119   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 329   |
-| Berkas route                       | 316   |
+| Berkas test                        | 330   |
+| Berkas route                       | 317   |
 | ADR                                | 75    |
 
 ### Modul
 
-| Key                    | Version | Status       | Type   | Core  | Dependencies                                                                                       |
-| ---------------------- | ------- | ------------ | ------ | ----- | -------------------------------------------------------------------------------------------------- |
-| `logging`              | 1.0.0   | active       | —      | tidak | `tenant_admin`                                                                                     |
-| `tenant_admin`         | 1.0.0   | active       | —      | tidak | —                                                                                                  |
-| `profile_identity`     | 1.0.0   | active       | —      | tidak | `tenant_admin`                                                                                     |
-| `identity_access`      | 1.0.0   | active       | —      | tidak | `tenant_admin`, `profile_identity`                                                                 |
-| `module_management`    | 0.1.0   | active       | system | ya    | `tenant_admin`, `identity_access`                                                                  |
-| `domain_event_runtime` | 0.1.0   | active       | system | tidak | `tenant_admin`, `identity_access`, `logging`                                                       |
-| `sync_storage`         | 1.0.0   | active       | system | tidak | `tenant_admin`                                                                                     |
-| `workflow`             | 2.0.0   | active       | system | tidak | `tenant_admin`, `identity_access`, `domain_event_runtime`                                          |
-| `email`                | 0.5.0   | active       | —      | tidak | `tenant_admin`, `profile_identity`, `identity_access`                                              |
-| `reporting`            | 1.2.0   | active       | —      | tidak | `tenant_admin`, `identity_access`, `sync_storage`, `email`, `domain_event_runtime`                 |
-| `theming`              | 1.0.0   | active       | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
-| `media_library`        | 0.1.0   | active       | system | tidak | `tenant_admin`, `identity_access`                                                                  |
-| `blog_content`         | 0.12.0  | active       | domain | tidak | `tenant_admin`, `identity_access`, `module_management`, `logging`                                  |
-| `tenant_domain`        | 0.1.0   | active       | domain | tidak | `tenant_admin`, `identity_access`                                                                  |
-| `visitor_analytics`    | 0.1.0   | active       | system | tidak | `tenant_admin`, `identity_access`, `logging`, `data_lifecycle`, `module_management`                |
-| `data_lifecycle`       | 0.1.0   | active       | system | tidak | `tenant_admin`, `identity_access`, `logging`                                                       |
-| `seo_distribution`     | 0.2.0   | active       | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
-| `form_drafts`          | 0.1.0   | active       | system | tidak | `identity_access`                                                                                  |
-| `site_search`          | 0.1.0   | active       | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
-| `comments`             | 0.1.0   | active       | domain | tidak | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime` |
-| `idn_admin_regions`    | 0.1.0   | active       | system | tidak | `tenant_admin`, `identity_access`                                                                  |
-| `push_delivery`        | 0.1.0   | experimental | —      | tidak | `tenant_admin`, `logging`                                                                          |
+| Key                    | Version | Status | Type   | Core  | Dependencies                                                                                       |
+| ---------------------- | ------- | ------ | ------ | ----- | -------------------------------------------------------------------------------------------------- |
+| `logging`              | 1.0.0   | active | —      | tidak | `tenant_admin`                                                                                     |
+| `tenant_admin`         | 1.0.0   | active | —      | tidak | —                                                                                                  |
+| `profile_identity`     | 1.0.0   | active | —      | tidak | `tenant_admin`                                                                                     |
+| `identity_access`      | 1.0.0   | active | —      | tidak | `tenant_admin`, `profile_identity`                                                                 |
+| `module_management`    | 0.1.0   | active | system | ya    | `tenant_admin`, `identity_access`                                                                  |
+| `domain_event_runtime` | 0.1.0   | active | system | tidak | `tenant_admin`, `identity_access`, `logging`                                                       |
+| `sync_storage`         | 1.0.0   | active | system | tidak | `tenant_admin`                                                                                     |
+| `workflow`             | 2.0.0   | active | system | tidak | `tenant_admin`, `identity_access`, `domain_event_runtime`                                          |
+| `email`                | 0.5.0   | active | —      | tidak | `tenant_admin`, `profile_identity`, `identity_access`                                              |
+| `reporting`            | 1.2.0   | active | —      | tidak | `tenant_admin`, `identity_access`, `sync_storage`, `email`, `domain_event_runtime`                 |
+| `theming`              | 1.0.0   | active | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
+| `media_library`        | 0.1.0   | active | system | tidak | `tenant_admin`, `identity_access`                                                                  |
+| `blog_content`         | 0.12.0  | active | domain | tidak | `tenant_admin`, `identity_access`, `module_management`, `logging`                                  |
+| `tenant_domain`        | 0.1.0   | active | domain | tidak | `tenant_admin`, `identity_access`                                                                  |
+| `visitor_analytics`    | 0.1.0   | active | system | tidak | `tenant_admin`, `identity_access`, `logging`, `data_lifecycle`, `module_management`                |
+| `data_lifecycle`       | 0.1.0   | active | system | tidak | `tenant_admin`, `identity_access`, `logging`                                                       |
+| `seo_distribution`     | 0.2.0   | active | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
+| `form_drafts`          | 0.1.0   | active | system | tidak | `identity_access`                                                                                  |
+| `site_search`          | 0.1.0   | active | domain | tidak | `tenant_admin`, `identity_access`, `module_management`                                             |
+| `comments`             | 0.1.0   | active | domain | tidak | `tenant_admin`, `identity_access`, `module_management`, `profile_identity`, `domain_event_runtime` |
+| `idn_admin_regions`    | 0.1.0   | active | system | tidak | `tenant_admin`, `identity_access`                                                                  |
+| `push_delivery`        | 0.1.0   | active | —      | tidak | `tenant_admin`, `logging`                                                                          |
 
 ### Migrasi
 
@@ -281,7 +281,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 281        |
+| `(root)`      | 282        |
 | `e2e`         | 12         |
 | `integration` | 35         |
 | `unit`        | 1          |
@@ -291,7 +291,7 @@
 | Permukaan       | Berkas |
 | --------------- | ------ |
 | `/api/v1/**`    | 262    |
-| `/admin/**`     | 32     |
+| `/admin/**`     | 33     |
 | publik / anonim | 22     |
 
 <!-- END GENERATED: repo-inventory -->

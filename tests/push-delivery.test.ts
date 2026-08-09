@@ -304,17 +304,20 @@ describe("retention cannot silently delete undelivered work", () => {
   });
 });
 
-describe("the module has a surface but not yet a screen", () => {
-  test("API and permissions are declared; navigation still is not", () => {
-    // The predecessor of this test asserted all three were absent, which was
-    // the honest starting point when the module shipped a queue and no way to
-    // reach it. Two of the three have now landed (#466); `navigation` has not,
-    // and that is what keeps the module `experimental` — ADR-0021 criterion 1
-    // refuses an `active` module with no admin screen, with zero exceptions.
+describe("the module reached a complete surface in three steps", () => {
+  test("API, permissions and navigation are all declared, and it is active", () => {
+    // This assertion has been rewritten twice, and the sequence is the record
+    // of how the module was allowed to ship incomplete without pretending
+    // otherwise: it first asserted all three were ABSENT (a queue with no way
+    // to reach it), then that navigation alone was missing (endpoints, no
+    // console). ADR-0021 criterion 1 is what forced each step to be honest —
+    // an `active` module with no admin screen is refused with zero exceptions,
+    // so `experimental` was the only truthful status until the screen existed.
+    // `tests/admin-push-notifications-page-contract.test.ts` owns the details.
     expect(pushDeliveryModule.api?.basePath).toBe("/api/v1/push");
     expect(pushDeliveryModule.permissions).toBeDefined();
-    expect(pushDeliveryModule.navigation).toBeUndefined();
-    expect(pushDeliveryModule.status).toBe("experimental");
+    expect(pushDeliveryModule.navigation).toHaveLength(1);
+    expect(pushDeliveryModule.status).toBe("active");
   });
 
   test("both jobs are declared and both are safe on an offline/LAN deployment", () => {
