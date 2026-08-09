@@ -34,11 +34,12 @@
  * Android/iOS clients. It costs nothing in the client asset budget and adds no
  * CSP origin, which is why ADR-0074 keeps it while rejecting the FCM Web SDK.
  *
- * `"web_push"` (VAPID, for browsers) is still absent, and deliberately: naming
- * an adapter before it exists lets a deployment pass `config:validate` and then
- * fail at resolve time, which is the worst place to learn it.
+ * `"web_push"` is the VAPID adapter for BROWSERS (Issue #466) — RFC 8030/8291/
+ * 8292. It is what ADR-0074 chose instead of the FCM Web SDK: zero client
+ * bytes, zero CSP origins, because `PushManager.subscribe()` is a browser API
+ * rather than a `fetch` from page script.
  */
-export const KNOWN_PUSH_PROVIDERS = ["log", "fcm"] as const;
+export const KNOWN_PUSH_PROVIDERS = ["log", "fcm", "web_push"] as const;
 
 export type PushProviderKind = (typeof KNOWN_PUSH_PROVIDERS)[number];
 

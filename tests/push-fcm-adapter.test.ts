@@ -168,7 +168,9 @@ describe("the service-account assertion is a real, verifiable RS256 JWT", () => 
     // First call is the token mint, at the credential's OWN token_uri.
     expect(calls[0]!.url).toBe(TOKEN_URI);
 
-    const form = new URLSearchParams(calls[0]!.request.body);
+    // The token request is form-encoded, so the body is a string here — the
+    // union exists because a Web Push body is raw `aes128gcm` ciphertext.
+    const form = new URLSearchParams(calls[0]!.request.body as string);
     expect(form.get("grant_type")).toBe(
       "urn:ietf:params:oauth:grant-type:jwt-bearer"
     );

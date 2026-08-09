@@ -60,8 +60,24 @@ Ketiganya dihapus dalam urutan FK — attempts, messages, subscriptions — kare
 
 `healthCheck` membuktikan **kredensialnya**, bukan jalur kirim — mengirim notifikasi nyata butuh token perangkat nyata, dan mengarang satu akan dijawab `UNREGISTERED`, yaitu FCM sehat yang melapor gagal.
 
+## Adapter Web Push (VAPID)
+
+`PUSH_PROVIDER=web_push` — RFC 8030 + 8291 + 8292, untuk **browser**. Inilah yang ADR-0074 pilih sebagai ganti SDK FCM Web, dan alasannya terukur: SDK itu 45.041 B melawan plafon 21.000 B per berkas, **dan** menuntut tiga origin pihak ketiga di CSP yang sama sekali tidak punya. `PushManager.subscribe()` adalah API browser, bukan `fetch` dari skrip halaman, jadi jalur ini berharga **nol byte klien dan nol origin CSP**. Semua yang ada di sini berjalan di sisi server.
+
+**Enkripsinya diverifikasi terhadap vektor RFC, bukan round-trip.** Ini bagian paling berisiko di seluruh program push, dan alasannya perlu disebut: push service **tidak memvalidasi payload**. Ia meneruskan ciphertext ke browser, dan browser yang tak bisa mendekripsinya membuang notifikasi itu **diam-diam**. Key schedule yang salah karena itu menghasilkan sistem yang menerima setiap pesan, mencatat setiap kirim sebagai sukses, dan tidak mengantarkan apa pun — tanpa satu error pun di mana pun.
+
+Test round-trip tak bisa menangkap itu: ia membuktikan encryptor dan decryptor sepakat, bukan bahwa keduanya cocok dengan spesifikasi. Jadi `tests/push-web-push-adapter.test.ts` mereproduksi contoh kerja RFC 8291 sendiri — **setiap nilai antara yang diterbitkan** (`ecdh_secret`, `PRK_key`, `IKM`, `PRK`, `CEK`, `NONCE`) **dan body akhirnya, byte per byte**. Angka-angka itu datang dari pihak ketiga; mereproduksinya adalah bukti interoperabilitas.
+
+HKDF ditulis di atas HMAC `crypto.subtle` alih-alih memakai `deriveBits({name:"HKDF"})`, justru supaya nilai-nilai antara itu **bisa diamati** — `deriveBits` melakukan extract-then-expand sebagai satu operasi buram.
+
+**Detail yang halus:** pasangan kunci ECDH server **ephemeral per pesan** (desain RFC, bukan optimasi yang belum dikerjakan — satu pasangan yang dipakai ulang membuat setiap notifikasi ke satu pelanggan berbagi key schedule); `aud` VAPID adalah **origin** endpoint, bukan endpoint-nya (menandatangani endpoint penuh adalah kesalahan klasik yang gejalanya 401 dan terbaca seperti masalah kunci); tanda tangan ES256 adalah **r||s mentah** 64 byte, bukan DER.
+
+Token VAPID di-cache per **origin**, jadi satu batch 500 pelanggan Firefox berharga satu tanda tangan, bukan 500.
+
+`bun run push:vapid:generate` mencetak satu pasangan kunci dalam bentuk persis yang `.env` inginkan — beserta peringatan bahwa **merotasinya tidak me-re-key langganan yang ada**, melainkan membuat semuanya permanen tak-terkirimi sampai penggunanya berlangganan ulang.
+
 ## Yang BELUM ada
 
-- **Adapter Web Push/VAPID untuk browser.** `PUSH_PROVIDER` sengaja belum menerima `web_push`: menamainya sekarang akan membuat deployment lolos validasi lalu gagal saat resolve.
+- **Permukaan HTTP dan service worker.** Mendaftarkan langganan lewat API, service worker yang menerima `push`, dan layar admin belum ada. Sampai itu, `enqueuePushToRecipients` belum punya pemanggil produksi dan modul ini tetap berstatus `experimental`.
 - **Permukaan HTTP.** Mendaftarkan dan mencabut langganan lewat API, plus layar admin, mendarat bersama adapter-nya. Sampai itu `enqueuePushToRecipients` belum punya pemanggil produksi — kesenjangan yang dicatat di ADR-0074 §Konsekuensi alih-alih dibiarkan ditemukan.
 - **FCM Web (SDK browser).** Ditolak, dengan angkanya, di ADR-0074 §Yang DITOLAK.

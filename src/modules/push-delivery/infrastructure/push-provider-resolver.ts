@@ -19,8 +19,10 @@ import {
   type PushProviderKind
 } from "../domain/push-config";
 import type { PushProvider } from "../domain/push-provider-contract";
+import { parseVapidConfig } from "../domain/vapid-config";
 import { createFcmPushProvider } from "./fcm-provider";
 import { createLogPushProvider } from "./log-push-provider";
+import { createWebPushProvider } from "./web-push-provider";
 
 function createMisconfiguredProvider(reason: string): PushProvider {
   return {
@@ -79,6 +81,21 @@ export function resolvePushProvider(
 
       return createFcmPushProvider({
         credential: parsed.credential,
+        timeoutMs: resolvePushSendTimeoutMs(env)
+      });
+    }
+
+    case "web_push": {
+      const vapid = parseVapidConfig(env);
+
+      if (!vapid.ok) {
+        return createMisconfiguredProvider(
+          `VAPID configuration is invalid: ${vapid.reason}.`
+        );
+      }
+
+      return createWebPushProvider({
+        vapid: vapid.config,
         timeoutMs: resolvePushSendTimeoutMs(env)
       });
     }

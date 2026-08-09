@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-82 target menjalankan berkas di `scripts/`; 34 di antaranya
+83 target menjalankan berkas di `scripts/`; 34 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -95,6 +95,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `project-state:inventory:generate`       | `project-state-inventory.ts`                   | —    |
 | `push:dispatch`                          | `push-dispatch.ts`                             | —    |
 | `push:queue:purge`                       | `push-queue-purge.ts`                          | —    |
+| `push:vapid:generate`                    | `push-vapid-generate.ts`                       | —    |
 | `redis:health`                           | `redis-health.ts`                              | —    |
 | `release:verify`                         | `release-verify.ts`                            | —    |
 | `repo:inventory:check`                   | `repo-inventory.ts`                            | ✅   |
