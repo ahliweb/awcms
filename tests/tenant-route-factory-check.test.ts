@@ -15,6 +15,7 @@
  * `scripts/`, which the script's own `main()` covers.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   SCAN_ROOTS,
@@ -170,11 +171,27 @@ describe("remediation is chosen by root, because the answer differs", () => {
     );
   });
 
-  test("an admin screen is NOT told to use defineTenantRoute — it has no factory yet", () => {
+  test("an admin screen is told to use loadAdminScreen, not defineTenantRoute", () => {
+    // Named, not merely "not the route factory": until #450 batch 2 this
+    // asserted `defineAdminScreen` — the name the program PLAN used for a
+    // helper that shipped as `loadAdminScreen`. So the gate's advice named
+    // something that does not exist while the test agreed with it, and the
+    // prose beside it still said "no factory yet" months after one existed.
+    // A remediation string is read by whoever just turned the gate red; one
+    // that names a missing helper tells them to stop and wait.
     const advice = remediationFor("src/pages/admin/thing.astro");
 
-    expect(advice).toContain("defineAdminScreen");
+    expect(advice).toContain("loadAdminScreen");
     expect(advice).not.toContain("defineTenantRoute(");
+  });
+
+  test("the advice names a helper that actually exists", () => {
+    // The assertion above can only prove the string is stable, not that it is
+    // TRUE — which is exactly how it went stale. This one fails if the helper
+    // is ever renamed or removed without the advice following it.
+    const helper = readFileSync("src/lib/auth/admin-screen.ts", "utf8");
+
+    expect(helper).toMatch(/export async function loadAdminScreen\b/);
   });
 
   test("the nested admin directory resolves to the admin root, not the API one", () => {
@@ -182,7 +199,7 @@ describe("remediation is chosen by root, because the answer differs", () => {
     // top-level `src/pages/admin/*.astro` glob — the same blind spot that made
     // Issue #424 say 31 when the real count is 32.
     expect(remediationFor("src/pages/admin/tenant/domains.astro")).toContain(
-      "defineAdminScreen"
+      "loadAdminScreen"
     );
   });
 });

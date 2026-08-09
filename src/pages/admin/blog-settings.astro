@@ -58,10 +58,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   fetchBlogSettings,
   type BlogSettingsView
@@ -69,34 +67,46 @@ import {
 
 const ssr = Astro.locals.ssrContext!;
 
-const canRead = ssr.permissions.has(
-  permissionKey("blog_content", "settings", "read")
-);
-
-// One permission gates every field on this form. `sql/036` seeds no
-// per-field write permission, so inventing one in the UI would imply an
-// authority no `authorizeInTransaction` call would honour.
-const canConfigure = ssr.permissions.has(
-  permissionKey("blog_content", "settings", "configure")
-);
-
-let settings: BlogSettingsView | null = null;
-let loadError: string | null = null;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-
-    settings = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
-      fetchBlogSettings(tx, ssr.tenantId)
-    );
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's rather than `ssr.permissions.has()`, so a tenant
+// that disabled `blog_content` no longer sees its settings form full of data.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "blog_content",
+    activityCode: "settings",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    settings: await fetchBlogSettings(tx, ssr.tenantId),
+    // One permission gates every field on this form. `sql/036` seeds no
+    // per-field write permission, so inventing one in the UI would imply an
+    // authority no `authorizeInTransaction` call would honour.
+    canConfigure: await can({
+      moduleKey: "blog_content",
+      activityCode: "settings",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
     logAdminPageError("admin.blog_settings.load_failed", error, {
-      moduleKey: "blog_content"
+      moduleKey: "blog_content",
+      correlationId: Astro.locals.correlationId
     });
-    loadError = "Gagal memuat pengaturan blog.";
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const settings: BlogSettingsView | null =
+  screen.state === "allowed" ? screen.data.settings : null;
+// A pool/circuit-breaker refusal is NOT a denial, and this screen already said
+// so with a message rather than a bare empty form.
+const loadError =
+  screen.state === "error" ? "Gagal memuat pengaturan blog." : null;
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 
 const VISIBILITY_OPTIONS = ["public", "private"] as const;
 ---

@@ -22,9 +22,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { fetchTenantModuleEntries } from "../../modules/module-management/application/tenant-module-lifecycle";
 
 type ModuleRow = {
@@ -36,32 +35,51 @@ type ModuleRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("module_management", "tenant_modules", "read")
-);
-const canEnable = ssr.permissions.has(
-  permissionKey("module_management", "tenant_modules", "enable")
-);
-const canDisable = ssr.permissions.has(
-  permissionKey("module_management", "tenant_modules", "disable")
-);
-const canToggle = canEnable || canDisable;
 
-let modules: ModuleRow[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      return (await fetchTenantModuleEntries(tx, ssr.tenantId)) as ModuleRow[];
-    });
-    if (result instanceof Response) loadError = true;
-    else modules = result;
-  } catch {
-    loadError = true;
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. The toggle's two permissions are decided the
+// same way, so a tenant's ABAC `deny` hides the button rather than only
+// refusing the POST behind it.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "module_management",
+    activityCode: "tenant_modules",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    modules: (await fetchTenantModuleEntries(tx, ssr.tenantId)) as ModuleRow[],
+    canEnable: await can({
+      moduleKey: "module_management",
+      activityCode: "tenant_modules",
+      action: "enable"
+    }),
+    canDisable: await can({
+      moduleKey: "module_management",
+      activityCode: "tenant_modules",
+      action: "disable"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/modules.astro: failed to list tenant modules",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "no modules" and NOT a denial.
+const loadError = screen.state === "error";
+const modules: ModuleRow[] =
+  screen.state === "allowed" ? screen.data.modules : [];
+const canEnable = screen.state === "allowed" && screen.data.canEnable;
+const canDisable = screen.state === "allowed" && screen.data.canDisable;
+const canToggle = canEnable || canDisable;
 ---
 
 <AdminLayout title="Modules">

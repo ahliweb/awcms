@@ -21,41 +21,59 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import {
   listAbacPolicies,
   type AbacPolicyView
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("identity_access", "access_control", "read")
-);
-// Both write surfaces gate on `configure` — the only seeded write action for
-// this activity (no `create`/`update` exist in the catalog).
-const canConfigure = ssr.permissions.has(
-  permissionKey("identity_access", "access_control", "configure")
-);
+
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's. Note what that closes HERE in particular: this
+// is the screen a tenant authors its ABAC policies on, and until now the
+// policies it writes were enforced on `/api/v1/abac/policies` and inert on the
+// page listing them.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "access_control",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    policies: await listAbacPolicies(tx, ssr.tenantId),
+    // Both write surfaces gate on `configure` — the only seeded write action
+    // for this activity (no `create`/`update` exist in the catalog).
+    canConfigure: await can({
+      moduleKey: "identity_access",
+      activityCode: "access_control",
+      action: "configure"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/abac-policies.astro: failed to list ABAC policies",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "no policies" and NOT a denial — and on
+// this screen the difference matters most: an empty table is the documented
+// default posture, so an unreported load failure would read as normal.
+const loadError = screen.state === "error";
+const policies: AbacPolicyView[] =
+  screen.state === "allowed" ? screen.data.policies : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 const canCreate = canConfigure;
 const canUpdate = canConfigure;
-
-let policies: AbacPolicyView[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, (tx) =>
-      listAbacPolicies(tx, ssr.tenantId)
-    );
-    if (result instanceof Response) loadError = true;
-    else policies = result;
-  } catch {
-    loadError = true;
-  }
-}
 ---
 
 <AdminLayout title="ABAC policies">
