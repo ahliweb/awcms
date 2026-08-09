@@ -2,7 +2,14 @@
  * access-chokepoint-check.ts — `bun run access:chokepoint:check`.
  *
  * Every handler that decides a tenant permission must decide it at the
- * chokepoint. Pure: no database, no network.
+ * chokepoint — across TWO roots since #450: `src/pages/api/v1` (route modules)
+ * and `src/pages/admin` (SSR screens). Pure: no database, no network.
+ *
+ * One script, not two, and that is the load-bearing choice: two scripts means
+ * two exemption lists that drift, and the second one always ends up the lenient
+ * one. The roots differ in exactly two places — how a file is sliced, and what
+ * counts as deciding — and both are written down at `sliceHandlers` and
+ * `sliceScreen` respectively.
  *
  * ## The defect this exists for
  *
@@ -46,6 +53,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const ROUTES_ROOT = "src/pages/api/v1";
+const SCREENS_ROOT = "src/pages/admin";
 
 /**
  * Handlers allowed to decide access without the chokepoint, with the reason.
@@ -59,6 +67,79 @@ const CHOKEPOINT_EXEMPTIONS: Readonly<Record<string, string>> = {
   "access/evaluate.ts#POST":
     "self-introspection: reflects what `evaluateAccess` would decide for the CALLER'S OWN request and calls that same evaluator directly, so ABAC is applied rather than skipped. It requires a session but deliberately no specific permission."
 };
+
+/**
+ * Admin screens that still decide from `ssr.permissions.has(...)` — R3, issue
+ * #450. **May only shrink.**
+ *
+ * Seeded with the 31 screens that were unmigrated when the second root landed
+ * (32 minus `form-drafts.astro`, migrated in the same PR so the mechanism is
+ * proven rather than merely provided). An entry whose screen no longer
+ * bypasses is an error, not a tolerated leftover, so the list cannot rot into
+ * an off-switch.
+ *
+ * Unlike `CHOKEPOINT_EXEMPTIONS` these carry no per-entry reason, and the
+ * difference is deliberate: an exemption is a decision that this handler is
+ * RIGHT to bypass, while these are debt that is WRONG and scheduled. Giving
+ * each a sentence would dress 31 open defects as 31 decisions.
+ */
+const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
+  "abac-policies.astro",
+  "analytics.astro",
+  "approvals.astro",
+  "audit-trail.astro",
+  "blog-pages.astro",
+  "blog-presentation.astro",
+  "blog-settings.astro",
+  "blog-taxonomy.astro",
+  "blog.astro",
+  "comments.astro",
+  "data-lifecycle.astro",
+  "domain-events.astro",
+  "email-templates.astro",
+  "idn-regions.astro",
+  "index.astro",
+  "media.astro",
+  "modules.astro",
+  "offices.astro",
+  "profiles.astro",
+  "registrations.astro",
+  "reporting.astro",
+  "roles.astro",
+  "security.astro",
+  "seo.astro",
+  "sidebar-menu.astro",
+  "site-search.astro",
+  "sync.astro",
+  "tenant/domains.astro",
+  "tenants.astro",
+  "theming.astro",
+  "users.astro"
+];
+
+/**
+ * Drops block comments and whole-line `//` comments before matching.
+ *
+ * Not hygiene — a correctness fix caught on this gate's first run against the
+ * screen root. `form-drafts.astro` was migrated and then explained itself with
+ * "the decision is the chokepoint's, not `ssr.permissions.has()`", so the
+ * signal matched the sentence saying the code no longer does it. This repo has
+ * hit the same shape three times (`table-write-ownership-check` reporting
+ * itself, and PR #404's mutation probe matching its own comment), and it is
+ * always the FIX that plants the false positive, because a fix explains what it
+ * removed.
+ *
+ * Trailing `// ...` after code is left alone on purpose: stripping it would
+ * truncate any line containing `https://`, trading a false positive for a false
+ * negative.
+ */
+export function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !/^\s*(?:\/\/|\*)/.test(line))
+    .join("\n");
+}
 
 export type ChokepointProblem = { handler: string; message: string };
 
@@ -76,16 +157,17 @@ export function sliceHandlers(
 ): HandlerSlice[] {
   // `defineTenantRoute` wraps at module scope and calls the chokepoint itself,
   // so it covers every handler the file exports.
-  const fileWideChokepoint = /defineTenantRoute\(/.test(source);
+  const code = stripComments(source);
+  const fileWideChokepoint = /defineTenantRoute\(/.test(code);
 
   const marks = [
-    ...source.matchAll(/^export const (GET|POST|PATCH|PUT|DELETE)\b/gm)
+    ...code.matchAll(/^export const (GET|POST|PATCH|PUT|DELETE)\b/gm)
   ].map((match) => ({ method: match[1]!, index: match.index! }));
 
   return marks.map((mark, position) => {
     const end =
-      position + 1 < marks.length ? marks[position + 1]!.index : source.length;
-    const body = source.slice(mark.index, end);
+      position + 1 < marks.length ? marks[position + 1]!.index : code.length;
+    const body = code.slice(mark.index, end);
 
     return {
       id: `${relativeFile}#${mark.method}`,
@@ -96,26 +178,75 @@ export function sliceHandlers(
   });
 }
 
+/**
+ * An admin screen, classified — one slice per FILE, and that is not a shortcut.
+ *
+ * A route module exports several handlers that are separately reachable, which
+ * is why routes are split on `export const <METHOD>` (ADR-0063 §3, and the
+ * defect that prompted it: one file where `GET` and `DELETE` used the
+ * chokepoint and `PATCH` did not). An `.astro` page has ONE render path — the
+ * frontmatter runs top to bottom for every request — so the file IS the unit.
+ * Slicing it further would invent boundaries the runtime does not have.
+ *
+ * The signal differs from the routes' for the same reason the defect differs.
+ * A route decides by calling `fetchGrantedPermissionKeys`; a screen decides by
+ * reading the set that call already produced, handed to it as
+ * `Astro.locals.ssrContext`. So `.permissions.has(` is the screen-side
+ * equivalent, and it is just as narrow: it is the act of consulting raw RBAC,
+ * not an attempt to read intent from prose.
+ */
+export function sliceScreen(
+  relativeFile: string,
+  source: string
+): HandlerSlice {
+  const code = stripComments(source);
+
+  return {
+    // No prefix: a route id always contains `#<METHOD>` and a screen id always
+    // ends `.astro`, so the two namespaces cannot collide and the ledger below
+    // needs no second spelling of the same path.
+    id: relativeFile,
+    decidesPermissions: /\.permissions\.has\(/.test(code),
+    // `loadAdminScreen` opens the transaction and calls the chokepoint itself,
+    // so its presence covers the file — the same reasoning `defineTenantRoute`
+    // gets above. A screen that calls `authorizeInTransaction` by hand is
+    // covered too; it did the work, just without the helper.
+    usesChokepoint:
+      /loadAdminScreen\(/.test(code) || /authorizeInTransaction\(/.test(code)
+  };
+}
+
 /** The rule, over already-classified handlers. */
 export function findChokepointBypasses(
   handlers: readonly HandlerSlice[],
-  exemptions: Readonly<Record<string, string>> = CHOKEPOINT_EXEMPTIONS
+  exemptions: Readonly<Record<string, string>> = CHOKEPOINT_EXEMPTIONS,
+  ledger: readonly string[] = ADMIN_SCREEN_CHOKEPOINT_MIGRATION
 ): ChokepointProblem[] {
+  const scheduled = new Set(ledger);
+
   return handlers
     .filter(
       (handler) =>
         handler.decidesPermissions &&
         !handler.usesChokepoint &&
-        !(handler.id in exemptions)
+        !(handler.id in exemptions) &&
+        !scheduled.has(handler.id)
     )
     .map((handler) => ({
       handler: handler.id,
-      message:
-        "decides a permission (`fetchGrantedPermissionKeys`) without going through " +
-        "`authorizeInTransaction`/`defineTenantRoute`, so ABAC policy, the platform-scope " +
-        "gate, business-scope facts and SoD are all skipped for it. If the access rule is " +
-        "an ownership axis the catalogue cannot express, pass it as `ownershipGrant` " +
-        "(ADR-0063) instead of deciding outside the chokepoint."
+      // The two roots lose the same four things, but a reader fixing one is not
+      // reading about the other: naming a route mechanism in a screen finding
+      // sends them looking for an `export const GET` that is not there.
+      message: handler.id.endsWith(".astro")
+        ? "decides a permission from `ssr.permissions.has(...)` — raw RBAC — so ABAC " +
+          "policy, module availability, business-scope facts, SoD and the decision log " +
+          "are all skipped for it (R3, #450). Route it through `loadAdminScreen`, which " +
+          "decides and reads in one transaction."
+        : "decides a permission (`fetchGrantedPermissionKeys`) without going through " +
+          "`authorizeInTransaction`/`defineTenantRoute`, so ABAC policy, the platform-scope " +
+          "gate, business-scope facts and SoD are all skipped for it. If the access rule is " +
+          "an ownership axis the catalogue cannot express, pass it as `ownershipGrant` " +
+          "(ADR-0063) instead of deciding outside the chokepoint."
     }));
 }
 
@@ -153,6 +284,76 @@ export function findStaleExemptions(
   });
 }
 
+/**
+ * A ledger entry that no longer bypasses — or no longer exists — is reported,
+ * so the list can only ever shrink.
+ *
+ * This is the half that stops a one-way list becoming a one-way ratchet in the
+ * wrong direction: without it, a screen could be migrated and its line left
+ * behind, and the next screen to regress would land on a line that already
+ * excused it.
+ */
+export function findStaleLedgerEntries(
+  handlers: readonly HandlerSlice[],
+  ledger: readonly string[] = ADMIN_SCREEN_CHOKEPOINT_MIGRATION
+): ChokepointProblem[] {
+  const byId = new Map(handlers.map((handler) => [handler.id, handler]));
+
+  return ledger.flatMap((id) => {
+    const handler = byId.get(id);
+
+    if (!handler) {
+      return [
+        {
+          handler: id,
+          message:
+            "is on ADMIN_SCREEN_CHOKEPOINT_MIGRATION but no longer exists — remove the line."
+        }
+      ];
+    }
+
+    if (!handler.decidesPermissions || handler.usesChokepoint) {
+      return [
+        {
+          handler: id,
+          message:
+            "is on ADMIN_SCREEN_CHOKEPOINT_MIGRATION but no longer bypasses the chokepoint. Delete the line in the same PR: the ledger only ever shrinks, and that is the only thing that makes its length mean something."
+        }
+      ];
+    }
+
+    return [];
+  });
+}
+
+async function collectScreens(): Promise<HandlerSlice[]> {
+  const screens: HandlerSlice[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+
+      if (!entry.name.endsWith(".astro")) continue;
+
+      screens.push(
+        sliceScreen(
+          path.relative(SCREENS_ROOT, full),
+          await readFile(full, "utf8")
+        )
+      );
+    }
+  }
+
+  await walk(SCREENS_ROOT);
+
+  return screens;
+}
+
 async function collectHandlers(): Promise<HandlerSlice[]> {
   const handlers: HandlerSlice[] = [];
 
@@ -184,10 +385,13 @@ async function collectHandlers(): Promise<HandlerSlice[]> {
 }
 
 async function main(): Promise<void> {
-  const handlers = await collectHandlers();
+  const routes = await collectHandlers();
+  const screens = await collectScreens();
+  const handlers = [...routes, ...screens];
   const problems = [
     ...findChokepointBypasses(handlers),
-    ...findStaleExemptions(handlers)
+    ...findStaleExemptions(routes),
+    ...findStaleLedgerEntries(screens)
   ];
 
   if (problems.length > 0) {
@@ -201,7 +405,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const deciding = handlers.filter((handler) => handler.decidesPermissions);
+  const deciding = routes.filter((handler) => handler.decidesPermissions);
+  const decidingScreens = screens.filter((screen) => screen.decidesPermissions);
 
   // Issue #425 — the self-test.
   //
@@ -229,10 +434,32 @@ async function main(): Promise<void> {
     return;
   }
 
+  // The same self-test for the screen root, and it is not symmetry for its own
+  // sake: `.permissions.has(` is a shape, not an identifier, so it cannot be
+  // caught by a rename — it disappears when the LAST screen is migrated, and at
+  // that moment the ledger is empty too. Until then, zero deciding screens with
+  // a non-empty ledger means the detector broke.
+  if (
+    decidingScreens.length === 0 &&
+    ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length > 0
+  ) {
+    console.error(
+      "access:chokepoint:check FAILED — 0 admin screens were classified as deciding a " +
+        `permission while ${ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length} are still on the ` +
+        "migration ledger. The signal `.permissions.has(` stopped matching under " +
+        `${SCREENS_ROOT}; fix \`sliceScreen\` rather than the ledger.`
+    );
+
+    process.exitCode = 1;
+    return;
+  }
+
   console.log(
-    `access:chokepoint:check OK — ${handlers.length} handlers, ` +
+    `access:chokepoint:check OK — ${routes.length} route handlers, ` +
       `${deciding.length} decide permissions, ` +
-      `${Object.keys(CHOKEPOINT_EXEMPTIONS).length} reasoned exemption(s).`
+      `${Object.keys(CHOKEPOINT_EXEMPTIONS).length} reasoned exemption(s); ` +
+      `${screens.length} admin screens, ${decidingScreens.length} still decide ` +
+      `outside the chokepoint (ledger: ${ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length}, may only shrink).`
   );
 }
 

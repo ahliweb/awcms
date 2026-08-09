@@ -138,6 +138,20 @@ export function extractScreenClaims(source: string): Set<string> {
     claims.add(`${match[1]}.${match[2]}.${match[3]}`);
   }
 
+  // Issue #450 — a screen routed through `loadAdminScreen` states its guard as
+  // an `AccessRequest` object literal, the same shape the routes use, in both
+  // `authorize:` and the `can({...})` calls that decide its affordances.
+  //
+  // Without this the migration would collapse 133 permission claims one screen
+  // at a time and turn `admin:screen-coverage:check` red for the wrong reason:
+  // it would report a missing SCREEN for a permission whose screen exists and
+  // now gates on it more strictly than before.
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)"\s*,\s*activityCode:\s*"([a-z_]+)"\s*,\s*(?:\/\/[^\n]*\n\s*)*action:\s*"([a-z_]+)"/g
+  )) {
+    claims.add(`${match[1]}.${match[2]}.${match[3]}`);
+  }
+
   for (const helper of source.matchAll(
     /const\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*([A-Za-z_$][\w$]*)\s*(?::[^,)]+)?,\s*([A-Za-z_$][\w$]*)\s*(?::[^,)]+)?\)[^=]*=>[\s\S]{0,200}?permissionKey\(\s*"([a-z_]+)"\s*,\s*\2\s*,\s*\3\s*\)/g
   )) {

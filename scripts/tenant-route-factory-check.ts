@@ -123,7 +123,6 @@ const NOT_YET_MIGRATED: readonly string[] = [
   "src/pages/admin/data-lifecycle.astro",
   "src/pages/admin/domain-events.astro",
   "src/pages/admin/email-templates.astro",
-  "src/pages/admin/form-drafts.astro",
   "src/pages/admin/idn-regions.astro",
   "src/pages/admin/index.astro",
   "src/pages/admin/media.astro",

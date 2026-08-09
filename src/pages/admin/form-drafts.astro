@@ -39,22 +39,14 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listFormDrafts,
   type FormDraftView
 } from "../../modules/form-drafts/application/form-draft-directory";
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("form_drafts", "draft", "read")
-);
-const canDelete = ssr.permissions.has(
-  permissionKey("form_drafts", "draft", "delete")
-);
 
 /** Mirrors `VALID_STATUSES` in `src/pages/api/v1/form-drafts/index.ts`. */
 const STATUS_OPTIONS = ["draft", "submitted", "abandoned", "expired"] as const;
@@ -83,30 +75,45 @@ const STATUS_VARIANT: Record<DraftStatus, string> = {
   expired: "warning"
 };
 
-let drafts: FormDraftView[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    // One transaction, one awaited query. Concurrent queries on a single
-    // transaction connection leak it, so nothing here runs in parallel.
-    drafts = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
-      listFormDrafts(tx, ssr.tenantId, {
-        moduleKey: moduleKeyFilter || undefined,
-        wizardKey: wizardKeyFilter || undefined,
-        status: statusFilter || undefined
-      })
-    );
-  } catch (error) {
-    // Includes `DatabaseBusyError` (pool/circuit-breaker refusal) — a refusal
-    // must never be rendered as "there are no drafts".
-    loadError = true;
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's, not `ssr.permissions.has()`. `canDelete` is
+// decided the same way rather than from the raw grant set, so a tenant's ABAC
+// `deny` hides the button instead of only failing when it is pressed.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "form_drafts",
+    activityCode: "draft",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    drafts: await listFormDrafts(tx, ssr.tenantId, {
+      moduleKey: moduleKeyFilter || undefined,
+      wizardKey: wizardKeyFilter || undefined,
+      status: statusFilter || undefined
+    }),
+    canDelete: await can({
+      moduleKey: "form_drafts",
+      activityCode: "draft",
+      action: "delete"
+    })
+  }),
+  onError: (error) => {
     logAdminPageError("admin/form-drafts.astro: failed to list drafts", error, {
       correlationId: Astro.locals.correlationId
     });
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "there are no drafts" and NOT a denial.
+const loadError = screen.state === "error";
+const drafts: FormDraftView[] =
+  screen.state === "allowed" ? screen.data.drafts : [];
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
 
 /** Rendered as a short, single-line preview beside the collapsed payload. */
 function payloadSummary(payload: Record<string, unknown>): string {

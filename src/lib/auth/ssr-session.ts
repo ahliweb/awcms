@@ -18,6 +18,16 @@ export type SsrContext = {
   identityId: string;
   roles: string[];
   permissions: Set<string>;
+  /**
+   * The session token's namespaced hash — the SAME value the API routes hand
+   * to `authorizeInTransaction` (ADR-0049 carries the bearer's KIND in the
+   * namespace, so nothing downstream has to be told which table to consult).
+   *
+   * Carried so an admin screen can reach the chokepoint at all (#450). It is
+   * the stored form, never the cookie value, and it never leaves the server:
+   * `Astro.locals` is not serialised into the rendered page.
+   */
+  tokenHash: string;
 };
 
 /**
@@ -74,7 +84,8 @@ export async function resolveSsrContext(
         tenantUserId: context.tenantUserId,
         identityId: context.identityId,
         roles: context.roles,
-        permissions
+        permissions,
+        tokenHash
       };
     });
 
