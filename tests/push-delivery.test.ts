@@ -139,12 +139,17 @@ describe("retry policy", () => {
 });
 
 describe("configuration refuses to promise what does not exist", () => {
-  test("`fcm`/`web_push` are NOT accepted yet", () => {
+  test("`web_push` is NOT accepted yet — an adapter is named only once it exists", () => {
     // Naming an adapter before it exists lets a deployment pass
     // `config:validate` and then fail at resolve time, which is the worst place
-    // to learn it. Issue #466 adds both, and this assertion with them.
+    // to learn it.
+    //
+    // `fcm` moved to `true` in the PR that built it (#466), which is the whole
+    // point of asserting the negative: the list cannot grow ahead of the code
+    // without this test being edited in the same change. `web_push` holds the
+    // line until its adapter lands.
     expect(isKnownPushProvider("log")).toBe(true);
-    expect(isKnownPushProvider("fcm")).toBe(false);
+    expect(isKnownPushProvider("fcm")).toBe(true);
     expect(isKnownPushProvider("web_push")).toBe(false);
   });
 
