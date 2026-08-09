@@ -68,12 +68,29 @@ function guardTriplesFrom(source: string): Set<Triple> {
 }
 
 /** `permissionKey("theming", "version", "restore")` → the same shape. */
+/**
+ * Both spellings, and issue #450 is why the second exists: a screen routed
+ * through `loadAdminScreen` states its guards as `AccessRequest` object
+ * literals instead of `permissionKey(...)`.
+ *
+ * It cannot reuse `guardTriplesFrom` above — that one matches the ROUTES, which
+ * compose their guards from the `THEMING_*_ACTIVITY_CODE` constants, while the
+ * screen writes the activity codes out. Reading only the old spelling would
+ * have made this test demand the screen keep deciding access from the raw grant
+ * set, which is the defect.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
-  const pattern =
-    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 
-  for (const match of source.matchAll(pattern)) {
+  for (const match of source.matchAll(
+    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g
+  )) {
+    found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
+  }
+
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*"([a-z_]+)",\s*action:\s*"([a-z_]+)"/g
+  )) {
     found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
   }
 

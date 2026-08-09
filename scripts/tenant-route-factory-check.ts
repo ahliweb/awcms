@@ -117,10 +117,8 @@ const WITH_TENANT_CALL_PATTERN =
 const NOT_YET_MIGRATED: readonly string[] = [
   // --- Layar admin (R3) — sedang dimigrasikan ke `loadAdminScreen`, Gelombang 1
   //     dari #423 (issue #450). Daftar ini menyusut tiap PR migrasi.
-  "src/pages/admin/analytics.astro",
   "src/pages/admin/approvals.astro",
   "src/pages/admin/blog-presentation.astro",
-  "src/pages/admin/blog.astro",
   "src/pages/admin/data-lifecycle.astro",
   "src/pages/admin/domain-events.astro",
   "src/pages/admin/reporting.astro",
@@ -128,7 +126,6 @@ const NOT_YET_MIGRATED: readonly string[] = [
   "src/pages/admin/seo.astro",
   "src/pages/admin/site-search.astro",
   "src/pages/admin/sync.astro",
-  "src/pages/admin/theming.astro",
 
   // --- Rute API.
   "src/pages/api/v1/abac/policies/[id].ts",
