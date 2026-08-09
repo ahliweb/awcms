@@ -1,0 +1,27 @@
+-- Issue #468, ADR-0072 — retention for the object sync upload queue.
+--
+-- ## One GRANT, no index
+--
+-- `sql/022` gave the worker SELECT/UPDATE — what the DISPATCHER needs, and
+-- nothing more. That was right; a dispatcher that can DELETE is a dispatcher
+-- that can lose a queue to a bug. The purge is a second worker entrypoint with
+-- a different job, so it gets the verb the first one was deliberately denied.
+--
+-- No new index. The purge reads `WHERE tenant_id = ? AND status IN
+-- ('sent','failed') AND created_at < ? ORDER BY created_at ASC`, and
+-- `awcms_object_sync_queue_tenant_status_created_idx` (sql/012) is already
+-- exactly that shape. It is declared DESC, which costs nothing: PostgreSQL
+-- reads a btree backwards, so an ascending scan needs no sort. This is the
+-- opposite of the email queue's case, where the existing index covered the
+-- OPPOSITE status set and a new one had to be added.
+--
+-- ## What this migration deliberately does NOT cover
+--
+-- `awcms_sync_outbox` — the module's other table on
+-- `TABLES_PREDATING_THE_RULE`. It has zero producers repo-wide: nothing
+-- INSERTs into it, in application code, in a trigger, or in any migration. A
+-- retention grant for it would be a privilege for a purge that could never
+-- match a row, on a table that cannot grow. Reported as its own finding rather
+-- than papered over here.
+
+GRANT DELETE ON awcms_object_sync_queue TO awcms_worker;
