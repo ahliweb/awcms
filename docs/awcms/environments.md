@@ -123,6 +123,15 @@ Yang tetap **sengaja** berbeda, dan alasannya:
 | `TRUSTED_PROXY_ENABLED` | `false` | `true` | tidak ada proxy di depan `bun dev`; kalau `true`, siapa pun bisa memalsukan `X-Forwarded-For` dan memilih bucket rate-limit-nya sendiri |
 | `EDGE_CACHE_MODE`       | `off`   | `auto` | tidak ada Varnish lokal; `auto` hanya akan mengantre purge yang tak pernah dikonsumsi                                                   |
 
+`TRUSTED_PROXY_HOP_COUNT` (default `1`) berlaku hanya saat
+`TRUSTED_PROXY_ENABLED=true`, dan `config:validate` menolak kombinasi
+sebaliknya — menyetelnya sendirian adalah operator yang mengira sudah menyetel
+sesuatu. Angkanya menghitung entri `X-Forwarded-For` **dari kanan**: entri di
+kiri hop tepercaya Anda ditulis oleh sesuatu yang tidak Anda kendalikan, jadi
+tidak pernah dibaca (#438). Naikkan hanya sebanyak proxy yang benar-benar Anda
+miliki — angka yang terlalu besar justru melebarkan bagian header yang bisa
+dipalsukan.
+
 ### Role separation di lokal — bukan formalitas
 
 `sql/019`/`022` membuat `awcms_app`/`awcms_worker`/`awcms_setup` sebagai

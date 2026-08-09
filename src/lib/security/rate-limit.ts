@@ -100,11 +100,86 @@ export function checkRateLimit(
  * and the unsafe one must be opted into explicitly. Behind a reverse proxy
  * `clientAddress` is the proxy's own address, which would collapse every
  * client into one bucket — so a deployment that genuinely terminates traffic
- * at a proxy sets `TRUSTED_PROXY_ENABLED=true`, which is only sound if that
- * proxy *overwrites* (not appends to) the client-supplied header.
+ * at a proxy sets `TRUSTED_PROXY_ENABLED=true`.
+ *
+ * ## Why the entry is counted from the RIGHT (issue #438)
+ *
+ * This used to take the LEFTMOST entry, with a precondition written in prose:
+ * sound "only if that proxy *overwrites* (not appends to) the client-supplied
+ * header". A precondition an operator cannot verify from here is not a
+ * control, and the failure it permits is total rather than partial: against an
+ * APPENDING proxy — the RFC-7239 behaviour, and nginx's own
+ * `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` — an attacker
+ * sends `X-Forwarded-For: <random>`, the proxy appends the real peer to the
+ * right, the leftmost entry stays whatever the attacker typed, and every
+ * request lands in a fresh bucket. That is precisely the bypass
+ * `TRUSTED_PROXY_ENABLED` was introduced to close, reopened by the topology it
+ * was introduced to serve.
+ *
+ * The header's trust gradient runs right-to-left: the RIGHTMOST entry was
+ * written by your own edge, each one further left by something less trusted,
+ * and everything left of your own hops is attacker-controlled by
+ * construction. So the client is the entry `TRUSTED_PROXY_HOP_COUNT` positions
+ * from the right, and no position an attacker can reach is ever read.
+ *
+ * Default **1** is the single-proxy topology this base documents, and it is
+ * also byte-identical to the old behaviour for the ONE case that was ever
+ * sound: an overwriting proxy emits a single value, where leftmost and
+ * rightmost are the same entry.
+ *
+ * A header carrying FEWER entries than the configured hops means the request
+ * did not traverse the declared chain. It falls back to `clientAddress`
+ * rather than reading a shorter chain's leftmost value — degrading to
+ * over-limiting (everyone shares the proxy's bucket) instead of to
+ * no-limiting.
+ *
+ * ## Why this does not simply adopt `resolveAnalyticsClientIp`'s rule
+ *
+ * `visitor-analytics` refuses a multi-value header outright and returns
+ * `null`. That is right THERE: a missing analytics IP costs a row's precision.
+ * Here there is no `null` to return — a limiter must name a bucket — and
+ * refusing multi-value would collapse every client behind a legitimate 2-hop
+ * chain into one bucket, locking out a tenant's whole user base on twenty bad
+ * passwords. Same principle (never read an attacker-reachable position),
+ * different fallback, because the two failures are not comparable.
  */
 function isTrustedProxyEnabled(): boolean {
   return process.env.TRUSTED_PROXY_ENABLED === "true";
+}
+
+/** Trusted hops between the client and this process. Validated by `config:validate`. */
+export const DEFAULT_TRUSTED_PROXY_HOP_COUNT = 1;
+
+function trustedProxyHopCount(): number {
+  const raw = process.env.TRUSTED_PROXY_HOP_COUNT?.trim();
+
+  if (!raw) return DEFAULT_TRUSTED_PROXY_HOP_COUNT;
+
+  const parsed = Number.parseInt(raw, 10);
+
+  // A malformed value falls back to the default rather than to zero: zero
+  // would index past the right edge and silently disable header trust on a
+  // deployment that believes it configured it.
+  return Number.isInteger(parsed) && parsed >= 1
+    ? parsed
+    : DEFAULT_TRUSTED_PROXY_HOP_COUNT;
+}
+
+/**
+ * The client entry of an `X-Forwarded-For` header, counted from the right.
+ * Exported for tests: the whole point of #438 is that this is arithmetic, and
+ * arithmetic can be checked.
+ */
+export function selectForwardedEntry(
+  forwardedFor: string,
+  hopCount: number
+): string | null {
+  const parts = forwardedFor
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return parts[parts.length - hopCount] ?? null;
 }
 
 export function resolveClientIp(
@@ -115,11 +190,9 @@ export function resolveClientIp(
     const forwardedFor = request.headers.get("x-forwarded-for");
 
     if (forwardedFor) {
-      // First entry is the original client when a trusted proxy appends its
-      // own hops to the right.
-      const first = forwardedFor.split(",")[0]?.trim();
+      const client = selectForwardedEntry(forwardedFor, trustedProxyHopCount());
 
-      if (first) return first;
+      if (client) return client;
     }
   }
 
