@@ -15,6 +15,7 @@
 import { readFile } from "node:fs/promises";
 
 import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
+import { parseVapidConfig } from "../src/modules/push-delivery/domain/vapid-config";
 
 type EnvBag = Record<string, string | undefined>;
 
@@ -266,11 +267,14 @@ const RULES: readonly Rule[] = [
     name: "PUSH_PROVIDER",
     required: false,
     type: "enum",
-    values: ["log", "fcm"]
+    values: ["log", "fcm", "web_push"]
   },
   { name: "PUSH_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
   { name: "PUSH_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
   { name: "PUSH_FCM_CREDENTIALS_BASE64", required: false, type: "string" },
+  { name: "PUSH_VAPID_PUBLIC_KEY", required: false, type: "string" },
+  { name: "PUSH_VAPID_PRIVATE_KEY", required: false, type: "string" },
+  { name: "PUSH_VAPID_SUBJECT", required: false, type: "string" },
 
   // visitor_analytics (ported from awcms-micro epic #617-#624). All optional,
   // privacy-first off-by-default; see
@@ -619,6 +623,16 @@ export function validateEnv(env: EnvBag): string[] {
             `PUSH_FCM_CREDENTIALS_BASE64 tidak valid: ${parsed.reason}.`
           );
         }
+      }
+    }
+
+    // Sama seperti FCM: parser yang SAMA dengan adapter, bukan cek kedua yang
+    // bebas berbeda pendapat.
+    if (provider === "web_push") {
+      const vapid = parseVapidConfig(env as NodeJS.ProcessEnv);
+
+      if (!vapid.ok) {
+        problems.push(`Konfigurasi VAPID tidak valid: ${vapid.reason}.`);
       }
     }
   }

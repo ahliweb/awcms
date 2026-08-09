@@ -20,7 +20,8 @@ import { ssrfSafeFetch } from "../../../lib/auth/ssrf-guard";
 export type PushHttpRequest = {
   method: "POST";
   headers: Record<string, string>;
-  body: string;
+  /** `Uint8Array` for Web Push: the body is `aes128gcm` ciphertext, and no text encoding survives a round-trip through a string. */
+  body: string | Uint8Array;
   timeoutMs: number;
 };
 

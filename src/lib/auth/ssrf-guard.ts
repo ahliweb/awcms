@@ -61,7 +61,13 @@ export type SsrfFetchOptions = {
   maxRedirects?: number;
   method?: "GET" | "POST";
   headers?: Record<string, string>;
-  body?: string;
+  /**
+   * `Uint8Array` is accepted alongside `string` (Issue #466): a Web Push body
+   * is `aes128gcm` CIPHERTEXT, and there is no text encoding that survives a
+   * round-trip through a string. `fetch` has always accepted both; only this
+   * type was narrower than the thing it forwards to.
+   */
+  body?: string | Uint8Array;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -488,7 +494,10 @@ export async function ssrfSafeFetch(
         response = await fetch(currentUrl, {
           method: currentMethod,
           headers: options.headers,
-          body: currentBody,
+          // `fetch` accepts a `Uint8Array` at runtime; the ambient `BodyInit`
+          // in this TypeScript lib does not list `ArrayBufferView`, so the cast
+          // is a gap in the type, not a widening of what is sent.
+          body: currentBody as BodyInit | undefined,
           redirect: "manual",
           signal: controller.signal
         });
