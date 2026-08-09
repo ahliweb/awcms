@@ -538,12 +538,18 @@ email)`, yang tidak bisa dibuat global tanpa `awcms_principals`. Ditambal
 
   **Tersisa, urut menurut akibat.** Rinciannya (bukti, perbaikan, gerbang yang
   harus ikut mendarat) ada di badan PR yang menyebut nomornya:
-  - **R3 — 32 layar admin memutuskan dengan `ssr.permissions.has()` saja**, jadi
+  - **R3 — layar admin memutuskan dengan `ssr.permissions.has()` saja**, jadi
     saat MEMBACA mereka melewati `evaluateAccess` (policy `deny` tenant),
     `resolveModuleEnabled` (403 `MODULE_DISABLED`), dan `recordDecisionLog`.
-    `access:chokepoint:check` buta karena `ROUTES_ROOT = "src/pages/api/v1"`.
     Batasnya: RBAC dasar tetap ditegakkan, dan tak ada kebocoran lintas-tenant.
-    **HARUS DIPECAH** — 1 PR helper+gerbang+ledger, lalu ~6–8 PR migrasi.
+    **SEDANG BERJALAN — issue #450, Gelombang 1.** Fondasinya mendarat (#451):
+    `access:chokepoint:check` kini punya root kedua `src/pages/admin`, helper
+    `loadAdminScreen` memutuskan dan membaca dalam SATU transaksi, dan ledger
+    `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` hanya boleh menyusut. **Sisa 28 dari 32**
+    (#451 memigrasikan `form-drafts`; #452 memigrasikan `audit-trail`,
+    `profiles`, `email-templates`). Angka sisanya tidak perlu dijaga tangan:
+    gerbangnya menuntut ledger menyusut di PR yang sama, dan sebuah test
+    menegakkan identitas "ledger = tepat himpunan layar yang masih bypass".
   - **R7 — kredensial mesin, suppression email, komposer homepage tanpa layar.**
     Kini otomatis terlihat di ledger R6, jadi ia bisa mendarat bertahap.
   - ~~**R8 — permission platform bisa diberikan lewat editor role**~~ —
