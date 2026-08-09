@@ -119,7 +119,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_domain_event_activity_daily",
   "awcms_domain_event_consumer_effects",
   "awcms_domain_event_consumer_state",
-  "awcms_domain_event_deliveries",
   "awcms_domain_event_replays",
   "awcms_domain_events",
   "awcms_edge_cache_purges",

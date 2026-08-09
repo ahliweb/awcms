@@ -8,11 +8,11 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 96    |
+| Migrasi                            | 97    |
 | Tabel `awcms_*`                    | 130   |
 | Tabel dengan `FORCE` RLS           | 119   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 332   |
+| Berkas test                        | 333   |
 | Berkas route                       | 317   |
 | ADR                                | 75    |
 
@@ -143,6 +143,7 @@
 | 94  | `sql/094_awcms_push_delivery_permissions.sql`                      |
 | 95  | `sql/095_awcms_email_retention.sql`                                |
 | 96  | `sql/096_awcms_object_sync_queue_retention.sql`                    |
+| 97  | `sql/097_awcms_domain_event_deliveries_retention.sql`              |
 
 ### Tabel & Row-Level Security
 
@@ -283,7 +284,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 284        |
+| `(root)`      | 285        |
 | `e2e`         | 12         |
 | `integration` | 35         |
 | `unit`        | 1          |

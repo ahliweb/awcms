@@ -1023,7 +1023,9 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_workflow_definitions: ["SELECT"],
   awcms_workflow_task_assignments: ["INSERT"],
   awcms_domain_events: ["SELECT", "INSERT"],
-  awcms_domain_event_deliveries: ["SELECT", "INSERT", "UPDATE"],
+  // DELETE added by `sql/097` (Issue #468) for
+  // `bun run domain-events:deliveries:purge`.
+  awcms_domain_event_deliveries: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   awcms_domain_event_consumer_state: ["SELECT"],
   awcms_domain_event_consumer_effects: ["SELECT", "INSERT"],
   awcms_domain_event_activity_daily: ["INSERT", "UPDATE"],

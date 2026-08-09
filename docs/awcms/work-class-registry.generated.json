@@ -1245,6 +1245,12 @@
       "rationale": "Scheduled bounded archive/purge (data-lifecycle:archive-purge, Issue #745) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/form-draft-purge; every withTenantOrThrow call inside archive-purge-job.ts already passes workClass: \"maintenance\" explicitly."
     },
     {
+      "path": "scripts/domain-event-deliveries-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (domain-events:deliveries:purge, Issue #468/ADR-0072) — same tolerant-of-delay profile as the three sibling purges; purgeSettledDeliveries passes workClass: \"maintenance\" explicitly. Its --dry-run path counts outside a tenant transaction and so opens no classified connection of its own."
+    },
+    {
       "path": "scripts/domain-events-dispatch.ts",
       "workClass": "background_sync",
       "source": "registry",
