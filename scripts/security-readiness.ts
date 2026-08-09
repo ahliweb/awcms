@@ -1028,7 +1028,10 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_reporting_rebuild_runs: ["SELECT", "UPDATE"],
   awcms_reporting_scheduled_exports: ["SELECT"],
   awcms_reporting_export_runs: ["SELECT", "INSERT"],
-  awcms_abac_decision_logs: ["SELECT"],
+  // ADR-0072 — DELETE added by sql/091 so the generic data_lifecycle purge,
+  // which runs as `awcms_worker`, can actually delete. Without it the purge ran,
+  // reported success, and removed nothing.
+  awcms_abac_decision_logs: ["DELETE", "SELECT"],
   awcms_identities: ["SELECT"],
   awcms_sync_nodes: ["SELECT"],
   // Issue #180 — identity-access:business-scope:expiry (sql/027): SELECT the
