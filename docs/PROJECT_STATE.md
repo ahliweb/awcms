@@ -356,6 +356,75 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 — program notifikasi push (#463) tuntas, retensi
+  outbox 4 dari 6, SSE mendarat dengan ADR-nya.** Dua belas PR, semuanya
+  ter-merge; lima issue ditutup (#464, #465, #466, #467, sebagian #468) dan tiga
+  issue baru difile karena temuannya bukan pekerjaan yang tersisa melainkan
+  keputusan yang belum diambil.
+
+  **Kenapa daftarnya ada DI SINI.** Aturan yang sama dengan dua putaran
+  sebelumnya: daftar yang tidak ditulis ke repo harus diturunkan ulang, dan
+  menurunkan ulang berharga satu audit penuh sementara menuliskannya berharga
+  satu paragraf. Penolakan ikut tertulis, karena penolakan yang tidak tercatat
+  akan diusulkan lagi.
+
+  **Apa yang mendarat.** Modul `push_delivery` lengkap: outbox KEDUA ber-lease
+  (ADR-0074), adapter FCM HTTP v1 dan Web Push/VAPID tanpa satu dependensi baru,
+  lima endpoint, service worker same-origin, dan konsol
+  `/admin/push-notifications` — modul berpindah `experimental` → `active` hanya
+  setelah konsolnya ada, karena ADR-0021 kriteria 1 menolak modul `active` tanpa
+  layar admin tanpa pengecualian. Lalu retensi untuk empat tabel outbox
+  (`email` ×2, `object_sync_queue`, `domain_event_deliveries`), semuanya
+  `delegated`. Lalu SSE dengan ADR-0075.
+
+  **Enam hal yang hanya ketahuan dengan MENJALANKAN, bukan membaca**, dan itulah
+  isi putaran ini yang paling layak diingat:
+  - **`bun run check` hijau penuh dengan migrasi yang tidak bisa apply.**
+    `ADD CONSTRAINT … UNIQUE (tenant_id, id)` ditaruh sesudah tabel anak yang
+    mereferensikannya. Ke-37 gerbang lewat; hanya `db:migrate` terhadap Postgres
+    nyata yang menunjukkannya.
+  - **`isBlockedAddress` gagal-tertutup untuk apa pun yang bukan literal IP.**
+    Dipanggil langsung untuk memvalidasi endpoint push, ia menolak SETIAP push
+    service nyata — pendaftaran akan mustahil, dengan pesan error yang menyebut
+    alamat privat.
+  - **Urutan pemetaan error FCM terbalik terhadap docblock-nya sendiri.**
+    `status === 401` diperiksa sebelum kode error, jadi `THIRD_PARTY_AUTH_ERROR`
+    dilaporkan sebagai token kedaluwarsa.
+  - **`withTenant` MENGEMBALIKAN `Response` saat pool menolak, bukan melempar.**
+    Rancangan pertama loop SSE hanya punya `catch`, yang berarti jalur penolakan
+    utama terlewat.
+  - **`awcms_sync_outbox` punya NOL produsen** (#477) dan
+    **`awcms_edge_cache_purges` dimiliki infrastruktur, bukan modul** (#479).
+    Keduanya terlihat seperti tabel yang BELUM dapat deskriptor retensi; keduanya
+    sebenarnya tabel yang TIDAK BISA — dan perbedaan itu tak terlihat dari ledger.
+  - **`check:docs` buta terhadap dokumen baru.** Ia membaca `git ls-files`, yaitu
+    index, jadi ADR-0075 lolos lokal dengan tautan rusak lalu memerahkan CI.
+    Hijau lokal lalu merah di CI adalah kegagalan gerbang: ia melatih orang untuk
+    tidak mempercayai run lokalnya. Ditutup di PR yang sama.
+
+  **Yang DITOLAK, dengan angkanya, supaya tidak diusulkan ulang:**
+  - **SDK FCM Web** (ADR-0074 §Yang DITOLAK) — 45.041 B halaman + 46.292 B
+    service worker melawan plafon 21.000 B per berkas, dan tiga origin pihak
+    ketiga melawan CSP yang mengunci nol (ADR-0029). Web Push/VAPID memberi hasil
+    sama dengan **10.174 B** total dan **nol** origin baru.
+  - **TTL koneksi pendek + reconnect** sebagai alternatif re-otorisasi per-tick
+    (ADR-0075) — ia memindahkan pertanyaannya alih-alih menjawabnya, dan menukar
+    satu angka yang harus dijaga konsisten dengan dua.
+  - **Permission `push_delivery.subscriptions.*`** — mendaftarkan perangkat
+    sendiri adalah self-service; permission untuknya adalah tembok di depan
+    fiturnya, dan aksi yang tak di-seed menolak semua orang termasuk owner
+    (jebakan latent-authz, ADR-0058 §E).
+  - **Menetapkan `awcms_edge_cache_purges` ke salah satu dari tiga modul yang
+    menulisnya** supaya gerbangnya hijau — deskriptor yang menyebut pemilik yang
+    salah adalah klaim palsu yang terbaca sebagai keputusan.
+  - **Deskriptor retensi untuk `awcms_sync_outbox`** — fiksi dua kali (predikat
+    status yang tak pernah cocok, pada tabel yang tak bisa tumbuh) dan ia akan
+    mengeluarkan tabel itu dari ledger, yaitu dari pandangan siapa pun.
+
+  **Yang tersisa dari putaran ini:** #468 menunggu keputusan #477 dan #479
+  sebelum bisa ditutup; keduanya keputusan produk/arsitektur, bukan pekerjaan
+  yang tinggal dikerjakan.
+
 - **PUTARAN REKOMENDASI 9 Agustus 2026 — program model keanggotaan
   (Cloudflare-shape). Rancangan penuh:
   [`awcms/program-model-keanggotaan-2026-08-09.md`](awcms/program-model-keanggotaan-2026-08-09.md).**
