@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 21    |
-| Migrasi                            | 90    |
+| Migrasi                            | 91    |
 | Tabel `awcms_*`                    | 126   |
 | Tabel dengan `FORCE` RLS           | 115   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 319   |
+| Berkas test                        | 320   |
 | Berkas route                       | 309   |
-| ADR                                | 72    |
+| ADR                                | 73    |
 
 ### Modul
 
@@ -136,6 +136,7 @@
 | 88  | `sql/088_awcms_session_handoff_schema.sql`                         |
 | 89  | `sql/089_awcms_blog_content_revoke_seo_export_permissions.sql`     |
 | 90  | `sql/090_awcms_foreign_key_indexes.sql`                            |
+| 91  | `sql/091_awcms_abac_decision_log_retention.sql`                    |
 
 ### Tabel & Row-Level Security
 
@@ -272,7 +273,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 271        |
+| `(root)`      | 272        |
 | `e2e`         | 12         |
 | `integration` | 35         |
 | `unit`        | 1          |

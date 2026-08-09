@@ -96,12 +96,44 @@ function parseTableGrants(): ParsedGrants {
       .sort();
     const table = match[2]!;
     const role = match[3]! as "awcms_worker" | "awcms_setup";
-    // A table granted twice would be a mistake; assert we never merge silently.
-    expect(result[role][table]).toBeUndefined();
-    result[role][table] = verbs;
+
+    // Grants are CUMULATIVE, so the effective privilege set is the union across
+    // migrations — `GRANT DELETE` after an earlier `GRANT SELECT` leaves the
+    // role holding both.
+    //
+    // This used to assert each (role, table) pair appeared exactly once, which
+    // was true and useful right up until a later migration needed to WIDEN an
+    // existing grant: ADR-0072 / `sql/091` adds DELETE on
+    // `awcms_abac_decision_logs`, which `sql/022` had already granted SELECT.
+    // Editing sql/022 in place is not an option — an applied migration is
+    // immutable, and rewriting it would block `db:migrate` on every running
+    // deployment while staying green on empty CI.
+    //
+    // The union model is only sound while nothing REVOKEs from these two roles.
+    // That is asserted below rather than assumed, so a future REVOKE fails here
+    // and forces this parser to be re-thought instead of quietly lying.
+    result[role][table] = [
+      ...new Set([...(result[role][table] ?? []), ...verbs])
+    ].sort();
   }
 
   return result;
+}
+
+/**
+ * The precondition that makes `parseTableGrants`' union sound.
+ *
+ * `sql/021` revokes DELETE on `awcms_setup_state` from `awcms_app` — a
+ * different role, deliberately outside this pair. If a migration ever revokes
+ * from `awcms_worker`/`awcms_setup`, the union above stops describing the
+ * effective privileges and this test would report MORE than the roles hold.
+ */
+function migrationRevokesFromSplitRoles(): string[] {
+  return [
+    ...allMigrationStatements.matchAll(
+      /REVOKE\s+[A-Z,\s]+?\s+ON\s+(awcms_[a-z0-9_]+)\s+FROM\s+(awcms_worker|awcms_setup)\s*;/g
+    )
+  ].map((match) => `${match[2]} on ${match[1]}`);
 }
 
 function normalize(matrix: Record<string, string[]>): Record<string, string[]> {
@@ -188,6 +220,26 @@ describe("sql/022 — worker/setup role creation", () => {
 
 describe("migration GRANTs match the least-privilege matrix exactly (no drift)", () => {
   const granted = parseTableGrants();
+
+  test("nothing REVOKEs from the split roles, so the cumulative union is sound", () => {
+    // The precondition for reading GRANTs as a union at all. If this ever
+    // fails, `parseTableGrants` is over-reporting privileges and both
+    // assertions below become claims about a matrix nobody holds.
+    expect(migrationRevokesFromSplitRoles()).toEqual([]);
+  });
+
+  test("a later migration may WIDEN an earlier grant on the same table", () => {
+    // ADR-0072 / sql/091: sql/022 granted SELECT on awcms_abac_decision_logs,
+    // sql/091 adds DELETE so the generic data_lifecycle purge — which runs as
+    // `awcms_worker` — can actually delete. Asserted explicitly because this is
+    // the first time any table is granted from two migrations, and because
+    // getting it wrong is silent: the purge runs, reports success, and removes
+    // nothing.
+    expect(granted.awcms_worker["awcms_abac_decision_logs"]).toEqual([
+      "DELETE",
+      "SELECT"
+    ]);
+  });
 
   test("awcms_worker's cumulative migration GRANTs equal WORKER_ROLE_GRANTS", () => {
     expect(granted.awcms_worker).toEqual(normalize(WORKER_ROLE_GRANTS));

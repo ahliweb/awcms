@@ -391,6 +391,64 @@ export const identityAccessModule = defineModule({
       backupRestoreNotes:
         "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). A restored backup can revive already-reviewed rows — harmless: `status` is not `pending`, so they never re-enter the queue.",
       executionMode: "generic"
+    },
+    /**
+     * `awcms_abac_decision_logs` (sql/005) — Issue #427, ADR-0072.
+     *
+     * The largest unbounded table in the repo, and the only one that grows with
+     * TRAFFIC rather than with customer data: one row per authorization
+     * decision, allow and deny, ±8.6M rows/day at 100 req/s. It has had no
+     * retention of any kind since `sql/005`, and it is also the table an
+     * operator queries during an incident — precisely when it is slowest.
+     *
+     * 365 days rather than the 90 first proposed. The window is not chosen for
+     * storage: it is the horizon over which `reporting`'s access-audit
+     * projection can still be REBUILT (see ADR-0072 §Konsekuensi). A shorter
+     * window would silently shrink what a rebuild can reconstruct, which is the
+     * coupling this descriptor's arrival created and which the ADR resolves in
+     * the open rather than by picking a number that hides it.
+     */
+    {
+      key: "identity_access.abac_decision_logs",
+      tableName: "awcms_abac_decision_logs",
+      ownerModuleKey: "identity_access",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "audit_security",
+      retentionMinDays: 90,
+      retentionMaxDays: 2555,
+      defaultRetentionDays: 365,
+      partition: {
+        eligible: true,
+        granularity: "monthly",
+        rationale:
+          "Volume profile is the same shape as awcms_audit_events (append-only, tenant + created_at, purged by a moving cutoff) but roughly two orders of magnitude larger, so monthly range partitions would turn each purge into a DROP PARTITION instead of a batched DELETE. Not automated here — declaring eligibility is a statement about the table, not a promise that partitioning exists."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "A decision row records that a check ran and what it answered; it carries no resource attribute VALUES and no subject identifiers beyond tenant_user_id (decision-log.ts's header states this deliberately). Nothing is recoverable from an archived copy that the audit trail does not already hold in business terms, and keeping a security-decision stream past the window its own retention exists to close is the opposite of the point."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "There is no status to transition to and nothing left to anonymize — the row is already the minimum record of a decision. Soft-deleting would keep every byte while pretending otherwise, on the one table where byte count is the entire problem."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_abac_decision_logs_tenant_idx (sql/005) — (tenant_id, created_at DESC), and DESC is not a problem: PostgreSQL scans a btree backwards, so it already serves the engine's `WHERE tenant_id = ? AND created_at < ? ORDER BY created_at ASC` without a sort. An extra ascending index was considered and rejected in sql/091's header — it would add write amplification to the most-written table in the repo to buy nothing."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). Restoring a backup older than the retention window revives rows already purged — harmless for authorization (nothing reads this table to decide anything), but it will make `reporting`'s access-audit projection rebuildable further back than the live database allows, so the two can legitimately disagree after a restore.",
+      executionMode: "generic"
     }
   ]
 });

@@ -1,0 +1,35 @@
+-- 091_awcms_abac_decision_log_retention.sql — Issue #427 / ADR-0072.
+--
+-- `awcms_abac_decision_logs` menerima satu baris untuk SETIAP keputusan
+-- otorisasi, izin maupun tolak. Pada 100 req/s itu ±8,6 juta baris/hari, dan
+-- sejak `sql/005` tabel ini tidak punya retensi apa pun. Ia tabel tanpa batas
+-- terbesar di repo, dan ia tumbuh sebanding dengan LALU LINTAS, bukan dengan
+-- data pelanggan.
+--
+-- Migrasi ini melakukan SATU hal: memberi `awcms_worker` hak menghapus.
+--
+-- ## Kenapa hanya itu
+--
+-- `sql/022:177` memberi `awcms_worker` hanya `SELECT` atas tabel ini. Deskriptor
+-- `dataLifecycle` yang mendarat bersama migrasi ini (`identity_access`
+-- `module.ts`) memakai `executionMode: "generic"`, dan executor generik berjalan
+-- sebagai `awcms_worker`. Tanpa `GRANT DELETE`, job purge-nya akan berjalan,
+-- melapor sukses, dan menghapus NOL baris — kegagalan yang paling mungkin
+-- terbaca sebagai "tidak ada yang perlu dihapus".
+--
+-- ## Kenapa TIDAK ada index baru di sini
+--
+-- Rancangan awal issue #427 menyebut index `(tenant_id, created_at)` MENAIK,
+-- karena `archive-purge-job.ts` memindai `ORDER BY <cursor> ASC` sementara index
+-- yang ada (`awcms_abac_decision_logs_tenant_idx`, `sql/005:131`) menurun.
+--
+-- Itu keliru, dan diperiksa sebelum ditulis: btree PostgreSQL bisa dipindai
+-- MUNDUR, sehingga index `(tenant_id, created_at DESC)` sudah melayani
+-- `WHERE tenant_id = $1 AND created_at < $2 ORDER BY created_at ASC` tanpa sort
+-- tambahan. Index kedua hanya akan menambah beban tulis pada tabel yang paling
+-- sering ditulis di seluruh repo — persis trade yang salah arah.
+--
+-- `requiredIndexes` di deskriptornya karena itu menunjuk index `sql/005` yang
+-- sudah ada, bukan index baru.
+
+GRANT DELETE ON awcms_abac_decision_logs TO awcms_worker;
