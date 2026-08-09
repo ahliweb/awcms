@@ -1008,7 +1008,8 @@ const SETUP_ROLE = "awcms_setup";
 export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   awcms_tenants: ["SELECT"],
   awcms_audit_events: ["SELECT", "INSERT", "DELETE"],
-  awcms_object_sync_queue: ["SELECT", "UPDATE"],
+  // DELETE added by `sql/096` (Issue #468) for `bun run sync:objects:purge`.
+  awcms_object_sync_queue: ["SELECT", "UPDATE", "DELETE"],
   // DELETE added by `sql/095` (Issue #468) for `bun run email:queue:purge`.
   // `sql/022` gave the worker exactly what the DISPATCHER needs and nothing
   // more, which was right; the purge is a second worker entrypoint with a

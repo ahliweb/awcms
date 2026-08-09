@@ -144,7 +144,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_news_media_objects",
   "awcms_news_portal_ad_placements",
   "awcms_news_portal_homepage_sections",
-  "awcms_object_sync_queue",
   "awcms_offices",
   "awcms_oidc_auth_requests",
   "awcms_permissions",

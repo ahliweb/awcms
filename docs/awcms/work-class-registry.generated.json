@@ -1305,6 +1305,12 @@
       "rationale": "Infrequent reconciliation sweep (news-media:reconcile) — tolerant of delay, run far less often than the dispatchers above."
     },
     {
+      "path": "scripts/object-queue-purge.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled retention purge (sync:objects:purge, Issue #468/ADR-0072) — same tolerant-of-delay profile as email:queue:purge and push:queue:purge; purgeObjectSyncQueue passes workClass: \"maintenance\" explicitly. Its --dry-run path counts outside a tenant transaction and so opens no classified connection of its own."
+    },
+    {
       "path": "scripts/object-sync-dispatch.ts",
       "workClass": "background_sync",
       "source": "registry",

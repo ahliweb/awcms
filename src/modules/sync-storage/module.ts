@@ -1,5 +1,13 @@
 import { defineModule } from "../_shared/module-contract";
 
+/**
+ * Lifecycle descriptor key (Issue #468). Exported so
+ * `application/object-queue-purge.ts` names the same string the registry does —
+ * a legal hold checked against a key nobody registered returns "not held"
+ * forever and reads exactly like "no hold in place".
+ */
+export const OBJECT_SYNC_QUEUE_LIFECYCLE_KEY = "sync_storage.object_sync_queue";
+
 export const syncStorageModule = defineModule({
   key: "sync_storage",
   name: "Sync Storage",
@@ -66,6 +74,95 @@ export const syncStorageModule = defineModule({
       environmentNotes:
         "No-op when R2 is disabled (STORAGE_DRIVER=local) — safe to schedule regardless of deployment profile.",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run sync:objects:purge",
+      purpose:
+        "Delete terminal object sync queue rows past their retention window (legal-hold gated, bounded batches).",
+      recommendedSchedule: "Daily, off-peak.",
+      environmentNotes:
+        "Runs regardless of STORAGE_DRIVER: a deployment that switched back to local storage still holds rows from when R2 was on, and those are exactly the ones nothing else will ever clean up.",
+      safeInOfflineLan: true
+    }
+  ],
+  /**
+   * Issue #468, ADR-0072. ONE descriptor, not two, and the missing one is the
+   * finding rather than an omission.
+   *
+   * `awcms_sync_outbox` is the other table this module has on
+   * `TABLES_PREDATING_THE_RULE`, and it stays there: it has **zero producers
+   * repo-wide**. Nothing INSERTs into it — no application code, no trigger, no
+   * migration — so `POST /api/v1/sync/pull`, its only reader, can only ever
+   * return an empty event list. A retention descriptor for it would be fiction
+   * twice over: a terminal-status predicate that can never match (nothing sets
+   * a status because nothing writes a row), on a table that cannot grow. Worse,
+   * it would take the table OFF the debt ledger and therefore out of anyone's
+   * view. Filed as its own finding instead.
+   *
+   * ## Why `delegated`
+   *
+   * `HighVolumeTableDescriptor` carries a `cursorColumn` and no status
+   * predicate, so the generic executor deletes purely by age. Pointed at this
+   * queue it would delete uploads that have not happened yet — including rows
+   * in `sending`, which are claimed by a dispatcher pass whose lease is the
+   * only thing that recovers them.
+   */
+  dataLifecycle: [
+    {
+      key: OBJECT_SYNC_QUEUE_LIFECYCLE_KEY,
+      tableName: "awcms_object_sync_queue",
+      ownerModuleKey: "sync_storage",
+      scope: "tenant",
+      // `created_at`, unlike the email and push queues' `updated_at`, and the
+      // difference is forced by the schema: this table has no `updated_at`
+      // column. `uploaded_at` exists but is NULL for every `failed` row, so a
+      // cursor on it would make failures immortal — the one class of row an
+      // operator most wants bounded.
+      cursorColumn: "created_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 365,
+      // Longer than the email queue's window is short: a `failed` upload is the
+      // record of a file that never reached object storage, and reconciling
+      // that against the media library is not a same-week activity.
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "Bounded by (uploads attempted), and drained continuously by the dispatcher — the live set is small and the historical tail is deleted rather than kept. The unique (tenant_id, node_id, object_key) upsert key also means a re-attempted upload reuses its row instead of adding one."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The row describes a transfer, not a document: object key, checksum, byte size, and where it was read from. The OBJECT itself lives in R2 under its own lifecycle, and `media_library` holds the registry entry that gives it meaning. Archiving the queue row would preserve a local filesystem path long after the file behind it is gone."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Only terminal rows (`sent`/`failed`) are eligible; `pending` and `sending` are work. Nothing to anonymize — `local_path` is a server-side path, not user data, and it is exactly what stops being meaningful once the row is history."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "status", "created_at"],
+          purpose:
+            "awcms_object_sync_queue_tenant_status_created_idx (sql/012) — declared DESC, which serves this purge's ascending scan without a sort because PostgreSQL reads a btree backwards. No new index is added: the one the admin listing already needed is exactly the purge's path."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists. Restoring an old backup revives rows that were terminal at backup time — they stay terminal, because status is stored rather than recomputed. A row restored in `sending` is re-claimed by the next dispatcher pass once its lease (`next_retry_at`) is past, the same path a worker crash takes.",
+      executionMode: "delegated",
+      existingAdopter: {
+        jobCommand: "bun run sync:objects:purge",
+        purgeFunctionRef:
+          "src/modules/sync-storage/application/object-queue-purge.ts#purgeObjectSyncQueue",
+        description:
+          "Deletes terminal (`sent`/`failed`) queue rows older than the cutoff in bounded batches. Skips the whole step when a legal hold covers sync_storage.object_sync_queue."
+      }
     }
   ]
 });
