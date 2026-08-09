@@ -356,6 +356,73 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN REKOMENDASI 9 Agustus 2026 — program model keanggotaan
+  (Cloudflare-shape). Rancangan penuh:
+  [`awcms/program-model-keanggotaan-2026-08-09.md`](awcms/program-model-keanggotaan-2026-08-09.md).**
+  Pemetaan dua sisi terhadap dokumentasi Cloudflare _Manage members_ + _Tenant
+  API_ memberi jawaban yang tidak diduga: **mesin otorisasi repo ini lebih kuat
+  daripada milik Cloudflare** (ABAC deny-overrides, SoD, FORCE RLS, decision log,
+  36 gerbang — Cloudflare tidak punya satu pun dari keempat yang pertama). Yang
+  hilang adalah **bentuk keanggotaannya** — lapisan yang membuat sebuah sistem
+  bisa dijual sebagai layanan. ±43 PR atomic dalam 9 gelombang.
+
+  **Sembilan temuan terverifikasi yang membentuk rancangan.** Yang paling
+  menentukan, karena masing-masing membatalkan satu pendekatan "jelas":
+  - **184 berkas rute memanggil `authorizeInTransaction` langsung** (255 total;
+    hanya 16 lewat `defineTenantRoute`) — jadi setiap input baru wajib lewat bag
+    `options?`, tidak pernah parameter posisional.
+  - **`scripts/access-chokepoint-check.ts` mengunci literal
+    `fetchGrantedPermissionKeys(`.** Mengganti nama fungsi itu membuat gerbang
+    **hijau sambil buta** — kelas cacat yang sudah dicatat R9 di bawah. Nama
+    dipertahankan; tipe kembaliannya yang berubah.
+  - **`awcms_tenants.status='suspended'` tidak pernah ditegakkan di luar login.**
+    Situs publik tenant langsung mati, tapi sesi admin yang sudah terbit tetap
+    penuh akses sampai kedaluwarsa sendiri, dan machine credential tidak
+    tersentuh. Asimetri ini adalah cacat hidup, dan menutupnya nyaris gratis.
+  - **Lockout login per-`(tenant, email)`** — merotasi header
+    `x-awcms-tenant-id` memberi penyerang N × `AUTH_LOGIN_MAX_ATTEMPTS` terhadap
+    manusia yang sama. Principal global memperbaikinya, bukan membebaninya.
+  - **`awcms_business_scope_assignments` (`sql/027`) sudah memiliki setiap kolom
+    yang dibutuhkan sebuah Policy Cloudflare** — ia tabel Policy yang kebetulan
+    hanya pernah diarahkan ke satu jenis subjek. Dan cakupannya hari ini
+    **permission-agnostic**: ia bertanya "punya scope fact yang mencakup?",
+    tidak pernah "untuk permission INI". Menutupnya adalah perubahan satu klausa
+    yang hanya bisa menolak lebih banyak.
+  - **`awcms_abac_decision_logs` tanpa retensi apa pun** (~8,6 juta baris/hari
+    @100 rps) **dan** menjadi sumber cursor proyeksi `reporting` yang
+    deskripsinya menyebutnya "never deleted". Retensi dan otoritas proyeksi
+    adalah **satu** keputusan. Tambahan: `sql/022` hanya memberi `awcms_worker`
+    SELECT, jadi job purge hari ini tidak akan bisa menghapus apa pun.
+
+  **Empat keputusan yang mengunci cakupan:** (1) target **principal global**,
+  dieksekusi sebagai pengangkatan otoritas yang tidak memindahkan satu foreign
+  key pun; (2) Cloudflare dipakai sebagai **MODEL, bukan target integrasi** —
+  Tenant API partner tidak dibangun; (3) lapisan komersial **penuh** termasuk
+  partner/EaaS; (4) mulai dari **Gelombang 0**.
+
+  **Gelombang 0 — delapan PR yang hanya mengetatkan (epic #423, anak #424–#431):**
+  `api:tenant-route:check` diperluas ke `src/pages/admin` (satu baris, menyegel
+  31 layar); asersi anti-regresi `ownershipGrant` dibuat rename-proof; gerbang
+  cakupan decision log; retensi `awcms_abac_decision_logs`; `resolveClientIp`
+  keluar dari `visitor-analytics`; penegakan `suspended` di chokepoint; sensus
+  tabrakan email pra-principal; dan role menyatakan scope-nya (**menutup R8**).
+
+  **Ditolak, dan penolakannya adalah bagian dari hasil.** Membangun modul
+  provisioning Cloudflare Tenant API (menuntut perjanjian partner yang
+  ditandatangani; kredensialnya bisa menghapus permanen akun pelanggan — blast
+  radius kategori lain, jadi modul kedua, bukan perluasan adaptor DNS yang ada).
+  Menambah nilai `partner` ke `ModulePermissionScope` (`scope` mengatur siapa
+  yang boleh _memegang_ permission; kemitraan mengatur _objek mana_ yang
+  disentuhnya — menyatukannya menghasilkan permission yang dipegang dengan benar
+  dan dijalankan terhadap tenant yang salah, tanpa satu pun policy RLS
+  keberatan). Menambah `subject.groups` dan `subject.entitlements` ke allow-list
+  ABAC (grup dimodelkan sebagai pemberi role sehingga `subject.roles` cukup;
+  entitlement adalah gerbang struktural deny-only, dan mengekspornya memberi dua
+  jawaban untuk satu pertanyaan). Membundel penyambungan `env.ipTrusted`
+  sungguhan ke PR mana pun (ia perubahan otorisasi hidup yang menyamar sebagai
+  pekerjaan infrastruktur). Membuat 43 issue di muka alih-alih per gelombang
+  (backlog yang menua ke arah berbahaya — kelas cacat yang sudah dicatat #289).
+
 - **PUTARAN REKOMENDASI 8 Agustus 2026 — R1–R10, enam mendarat, empat tersisa.**
   Audit enam sumbu (dokumen-vs-kode, permukaan-tanpa-UI, gerbang buta,
   backlog-vs-kode, keamanan/otorisasi, interop `awcms-astro`), tiap temuan lewat
