@@ -362,7 +362,7 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   Pemetaan dua sisi terhadap dokumentasi Cloudflare _Manage members_ + _Tenant
   API_ memberi jawaban yang tidak diduga: **mesin otorisasi repo ini lebih kuat
   daripada milik Cloudflare** (ABAC deny-overrides, SoD, FORCE RLS, decision log,
-  36 gerbang — Cloudflare tidak punya satu pun dari keempat yang pertama). Yang
+  37 gerbang — Cloudflare tidak punya satu pun dari keempat yang pertama). Yang
   hilang adalah **bentuk keanggotaannya** — lapisan yang membuat sebuah sistem
   bisa dijual sebagai layanan. ±43 PR atomic dalam 9 gelombang.
 
@@ -400,12 +400,57 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   Tenant API partner tidak dibangun; (3) lapisan komersial **penuh** termasuk
   partner/EaaS; (4) mulai dari **Gelombang 0**.
 
-  **Gelombang 0 — delapan PR yang hanya mengetatkan (epic #423, anak #424–#431):**
-  `api:tenant-route:check` diperluas ke `src/pages/admin` (satu baris, menyegel
-  31 layar); asersi anti-regresi `ownershipGrant` dibuat rename-proof; gerbang
-  cakupan decision log; retensi `awcms_abac_decision_logs`; `resolveClientIp`
-  keluar dari `visitor-analytics`; penegakan `suspended` di chokepoint; sensus
-  tabrakan email pra-principal; dan role menyatakan scope-nya (**menutup R8**).
+  **Gelombang 0 — SELESAI, sepuluh PR mendarat (epic #423).** Tidak ada yang
+  melebar; semuanya mengetatkan. Tiap PR ber-`bun run check` PENUH hijau:
+
+  - **#433** (#424) — `api:tenant-route:check` mendapat `SCAN_ROOTS`, jadi ia
+    melihat `src/pages/admin/**/*.astro` juga. **32** layar diseed ke ledger,
+    bukan 31: issue-nya salah hitung karena `src/pages/admin/tenant/domains.astro`
+    bersarang satu tingkat dan luput dari `ls src/pages/admin/*.astro`. Penjaga
+    nol-berkas menjadi **per-root** — root yang tak menemukan satu berkas pun
+    adalah gerbang buta, bukan gerbang yang lulus.
+  - **#434** (#425) — asersi `ownershipGrant` menjadi struktural (tepat satu
+    `allowed: true`, indeksnya > indeks `evaluateAccess(`), dan gerbangnya
+    menolak `deciding.length === 0`. Sebelumnya ia bisa melaporkan "0 handler
+    memutuskan permission" lalu keluar 0.
+  - **#435** (#426) — gerbang baru `access:decision-log:coverage:check` (rantai
+    36 → 37 segmen). **Dominansi leksikal, bukan regex urutan**: log yang
+    tekstual lebih awal tetapi duduk di cabang saudara tidak dihitung.
+  - **#436** (#427, **ADR-0072**) — `sql/091` memberi `awcms_worker` hak
+    `DELETE`; deskriptor retensi 365 hari. Sengketa otoritas proyeksi
+    diselesaikan di dokumen yang sama: inkremental otoritatif sepanjang-masa,
+    rebuild otoritatif **sejak horizon retensi**.
+  - **#439** (#429, **ADR-0073**) — `suspended` ditegakkan di chokepoint untuk
+    sesi DAN machine credential, plus satu baris di `resolveSsrContext` yang
+    mencakup ke-32 layar. `sql/092`.
+  - **#440** (#430) — `identity:principals:preflight`. **Sensus, bukan
+    perbaikan**: #430 tetap terbuka sampai Gelombang 7.
+  - **#441** (#431) — R8 **DITUTUP**, dan **tanpa migrasi**: batasannya tentang
+    tenant mana yang boleh memegang permission platform, bukan tentang role.
+  - **#443** (#442) — `scripts:inventory:check` membandingkan blok ter-generate,
+    bukan hanya barisnya. Ditemukan **saat merge gelombang ini**: dua PR
+    menuliskan kalimat hitungan yang identik dari base berbeda, git menggabungkan
+    barisnya dan membiarkan kalimatnya — blok separuh-benar tanpa satu pun
+    konflik. Gerbang lama meliputi tepat bagian yang git tidak bisa salah gabung.
+  - **#444** (#438) — IP klien rate limit dihitung dari **kanan**
+    `X-Forwarded-For` (`TRUSTED_PROXY_HOP_COUNT`, default 1). Di belakang proxy
+    yang MENAMBAH — yaitu profil nginx produksi repo ini — entri paling kiri
+    adalah apa pun yang diketik penyerang.
+
+  **Dua koreksi terhadap rencananya sendiri, dicatat karena keduanya menghemat
+  pekerjaan.** Index `(tenant_id, created_at)` MENAIK untuk purge tidak jadi
+  ditulis (btree PostgreSQL bisa dipindai mundur — index `DESC` `sql/005` sudah
+  melayaninya; index kedua hanya menambah beban tulis pada tabel paling sering
+  ditulis di repo). Kolom `attachable_scope_types`/`permission_scope` per-role
+  untuk R8 juga tidak (ia akan inert — kelas cacat yang sama dengan yang
+  ditutupnya).
+
+  **Dan satu issue yang saya salah tulis:** #428 melaporkan `identity_access`
+  mengimpor `resolveClientIp` dari `visitor-analytics` — pelanggaran ADR-0011.
+  Verifikasi menemukan **nol** pelanggaran: `resolveClientIp` sudah di
+  `src/lib/security/`, dan `resolveAnalyticsClientIp` hanya diimpor rute modulnya
+  sendiri. Temuan itu lahir dari `grep -rl` atas dua nama mirip. Ditutup sebagai
+  premis salah, diganti #438 — yang menemukan hal lebih penting.
 
   **Ditolak, dan penolakannya adalah bagian dari hasil.** Membangun modul
   provisioning Cloudflare Tenant API (menuntut perjanjian partner yang
