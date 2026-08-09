@@ -16,9 +16,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { listEmailTemplates } from "../../modules/email/application/email-template-directory";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../../modules/email/domain/email-template-categories";
 
@@ -31,28 +30,38 @@ type TemplateRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(permissionKey("email", "template", "read"));
-const canCreate = ssr.permissions.has(
-  permissionKey("email", "template", "create")
-);
 
-let templates: TemplateRow[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      return (await listEmailTemplates(tx, ssr.tenantId, {
-        includeInactive: true
-      })) as TemplateRow[];
-    });
-    if (result instanceof Response) loadError = true;
-    else templates = result;
-  } catch {
-    loadError = true;
+// R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
+// same transaction. The previous `result instanceof Response` branch was dead:
+// `withTenantOrThrow` throws on a pool refusal, it never returns one.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: { moduleKey: "email", activityCode: "template", action: "read" },
+  load: async ({ tx, can }) => ({
+    templates: (await listEmailTemplates(tx, ssr.tenantId, {
+      includeInactive: true
+    })) as TemplateRow[],
+    canCreate: await can({
+      moduleKey: "email",
+      activityCode: "template",
+      action: "create"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/email-templates.astro: failed to list templates",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const templates: TemplateRow[] =
+  screen.state === "allowed" ? screen.data.templates : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
 ---
 
 <AdminLayout title="Email templates">

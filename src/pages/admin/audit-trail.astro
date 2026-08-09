@@ -35,10 +35,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listAuditEvents,
   type AuditEventRecord
@@ -51,10 +49,6 @@ if (!ssr) {
     "audit-trail.astro rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
   );
 }
-
-const canRead = ssr.permissions.has(
-  permissionKey("logging", "audit_trail", "read")
-);
 
 /** Mirrors `MAX_LIST_LIMIT` in `logging/application/audit-log.ts`. */
 const MAX_LIMIT = 100;
@@ -76,19 +70,23 @@ const limit =
     ? Math.min(Math.trunc(requestedLimit), MAX_LIMIT)
     : DEFAULT_LIMIT;
 
-let events: AuditEventRecord[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    events = await withTenantOrThrow(sql, ssr.tenantId, async (tx) =>
-      listAuditEvents(tx, ssr.tenantId, {
-        resourceType: resourceTypeFilter || undefined,
-        limit
-      })
-    );
-  } catch (error) {
+// R3 (#450) — decision and read share one transaction, and the decision is the
+// chokepoint's. On the audit trail specifically that also means the READ of the
+// audit log is itself audited: `recordDecisionLog` now runs for this page.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "logging",
+    activityCode: "audit_trail",
+    action: "read"
+  },
+  load: async ({ tx }) =>
+    listAuditEvents(tx, ssr.tenantId, {
+      resourceType: resourceTypeFilter || undefined,
+      limit
+    }),
+  onError: (error) => {
     logAdminPageError(
       "admin/audit-trail.astro: failed to load audit events",
       error,
@@ -96,9 +94,14 @@ if (canRead) {
         correlationId: Astro.locals.correlationId
       }
     );
-    loadError = true;
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is not an empty audit trail and not a denial.
+const loadError = screen.state === "error";
+const events: AuditEventRecord[] =
+  screen.state === "allowed" ? screen.data : [];
 
 /**
  * Resource types present in THIS result set, offered as a `<datalist>`.

@@ -44,8 +44,15 @@ function guardTriplesFrom(source: string): Set<Triple> {
   return found;
 }
 
+/**
+ * Both spellings. `permissionKey("logging", "audit_trail", "read")` is the
+ * pre-#450 form; a page routed through `loadAdminScreen` states its guard as an
+ * `AccessRequest` object literal — the SAME shape `guardTriplesFrom` reads out
+ * of the route, which is the point: after R3 a page states its guard the way a
+ * route does.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
-  const found = new Set<Triple>();
+  const found = new Set<Triple>(guardTriplesFrom(source));
   const pattern =
     /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 

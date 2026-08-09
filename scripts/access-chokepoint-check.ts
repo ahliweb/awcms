@@ -83,11 +83,10 @@ const CHOKEPOINT_EXEMPTIONS: Readonly<Record<string, string>> = {
  * RIGHT to bypass, while these are debt that is WRONG and scheduled. Giving
  * each a sentence would dress 31 open defects as 31 decisions.
  */
-const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
+export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
   "abac-policies.astro",
   "analytics.astro",
   "approvals.astro",
-  "audit-trail.astro",
   "blog-pages.astro",
   "blog-presentation.astro",
   "blog-settings.astro",
@@ -96,13 +95,11 @@ const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
   "comments.astro",
   "data-lifecycle.astro",
   "domain-events.astro",
-  "email-templates.astro",
   "idn-regions.astro",
   "index.astro",
   "media.astro",
   "modules.astro",
   "offices.astro",
-  "profiles.astro",
   "registrations.astro",
   "reporting.astro",
   "roles.astro",
