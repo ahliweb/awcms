@@ -28,7 +28,9 @@ import { describe, expect, test } from "bun:test";
 import {
   findChokepointBypasses,
   findStaleExemptions,
-  sliceHandlers
+  findStaleLedgerEntries,
+  sliceHandlers,
+  sliceScreen
 } from "../scripts/access-chokepoint-check";
 import {
   evaluateAccess,
@@ -324,5 +326,131 @@ describe("the live route tree", () => {
     const result = Bun.spawnSync(["bun", "scripts/access-chokepoint-check.ts"]);
 
     expect(result.exitCode).toBe(0);
+  });
+});
+
+/**
+ * The screen root — issue #450 / PROJECT_STATE §4 R3.
+ *
+ * The two roots share one script on purpose (two scripts means two exemption
+ * lists, and the second one always drifts lenient), so what has to be pinned is
+ * the two places they DIFFER: how a file is sliced, and what counts as
+ * deciding. Both directions of the migration ledger are planted here, because a
+ * one-way list that may rot is not one-way.
+ */
+describe("admin screens go through the chokepoint too (#450)", () => {
+  const LEGACY_SCREEN = `---
+const ssr = Astro.locals.ssrContext!;
+const canRead = ssr.permissions.has(permissionKey("form_drafts", "draft", "read"));
+---
+<p>{canRead}</p>`;
+
+  const MIGRATED_SCREEN = `---
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: { moduleKey: "form_drafts", activityCode: "draft", action: "read" },
+  load: async ({ tx }) => listFormDrafts(tx, ssr.tenantId, {}),
+  onError: () => {}
+});
+---
+<p>ok</p>`;
+
+  test("a screen reading the raw grant set is deciding a permission", () => {
+    const slice = sliceScreen("users.astro", LEGACY_SCREEN);
+
+    expect(slice.id).toBe("users.astro");
+    expect(slice.decidesPermissions).toBe(true);
+    expect(slice.usesChokepoint).toBe(false);
+  });
+
+  test("`loadAdminScreen` covers the file, the way `defineTenantRoute` does", () => {
+    const slice = sliceScreen("form-drafts.astro", MIGRATED_SCREEN);
+
+    expect(slice.decidesPermissions).toBe(false);
+    expect(slice.usesChokepoint).toBe(true);
+  });
+
+  test("a screen that still reads the grant set for an affordance is covered by the helper", () => {
+    // Not a loophole being blessed: the file-wide rule is the same one
+    // `defineTenantRoute` gets, and the entry decision is what R3 is about.
+    const slice = sliceScreen(
+      "hybrid.astro",
+      `${MIGRATED_SCREEN}\nconst extra = ssr.permissions.has("x");`
+    );
+
+    expect(slice.decidesPermissions).toBe(true);
+    expect(slice.usesChokepoint).toBe(true);
+    expect(findChokepointBypasses([slice], {}, [])).toEqual([]);
+  });
+
+  test("the signal is not matched inside a comment", () => {
+    // The exact false positive this gate produced on its first run against the
+    // screen root: a migrated page explaining that it no longer uses
+    // `ssr.permissions.has()` matched the sentence saying so.
+    const slice = sliceScreen(
+      "form-drafts.astro",
+      `---
+// the decision is the chokepoint's, not ssr.permissions.has()
+/* also not ssr.permissions.has() */
+${MIGRATED_SCREEN.slice(4)}`
+    );
+
+    expect(slice.decidesPermissions).toBe(false);
+  });
+
+  test("a screen finding names the SCREEN mechanism, not the route one", () => {
+    const [problem] = findChokepointBypasses(
+      [sliceScreen("users.astro", LEGACY_SCREEN)],
+      {},
+      []
+    );
+
+    expect(problem!.message).toContain("loadAdminScreen");
+    expect(problem!.message).not.toContain("defineTenantRoute");
+  });
+
+  test("a ledger entry excuses a bypass — and only while it bypasses", () => {
+    const slice = sliceScreen("users.astro", LEGACY_SCREEN);
+
+    expect(findChokepointBypasses([slice], {}, ["users.astro"])).toEqual([]);
+    expect(findStaleLedgerEntries([slice], ["users.astro"])).toEqual([]);
+  });
+
+  test("a migrated screen left on the ledger is a finding", () => {
+    const problems = findStaleLedgerEntries(
+      [sliceScreen("form-drafts.astro", MIGRATED_SCREEN)],
+      ["form-drafts.astro"]
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("only ever shrinks");
+  });
+
+  test("a ledger entry for a screen that no longer exists is a finding", () => {
+    const problems = findStaleLedgerEntries([], ["deleted.astro"]);
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("no longer exists");
+  });
+
+  test("the real screen root still has screens to migrate, or the detector broke", async () => {
+    // The screen-side self-test, asserted rather than only printed: if
+    // `.permissions.has(` stopped matching anything while the ledger is still
+    // long, the gate would report a clean tree it never inspected.
+    const files = await Array.fromAsync(
+      new Bun.Glob("**/*.astro").scan({ cwd: "src/pages/admin" })
+    );
+
+    expect(files.length).toBe(32);
+
+    const slices = await Promise.all(
+      files.map(async (file) =>
+        sliceScreen(file, await Bun.file(`src/pages/admin/${file}`).text())
+      )
+    );
+
+    expect(slices.filter((slice) => slice.decidesPermissions).length).toBe(31);
+    expect(slices.filter((slice) => slice.usesChokepoint).length).toBe(1);
   });
 });

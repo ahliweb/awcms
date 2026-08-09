@@ -59,9 +59,18 @@ function guardTriplesFrom(source: string): Set<Triple> {
   return found;
 }
 
-/** `permissionKey("form_drafts", "draft", "read")` → `form_drafts.draft.read`. */
+/**
+ * Both spellings a page may use.
+ *
+ * `permissionKey("form_drafts", "draft", "read")` is the pre-#450 form, still
+ * used by the screens that have not been migrated. A screen routed through
+ * `loadAdminScreen` writes an `AccessRequest` object literal instead — the SAME
+ * shape `guardTriplesFrom` already parses out of the routes, which is the point:
+ * after R3 a page states its guard the way a route does, so one extractor reads
+ * both sides.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
-  const found = new Set<Triple>();
+  const found = new Set<Triple>(guardTriplesFrom(source));
   const pattern =
     /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 
@@ -167,8 +176,15 @@ describe("/admin/form-drafts permission gates", () => {
     // (`db:tenant-context:check`) is asserted here too: the request-path
     // `withTenant` returns `T | Response`, which on an SSR page silently
     // renders a `Response` where rows are expected.
-    expect(page).toContain("withTenantOrThrow(");
+    //
+    // Since #450 the page opens no transaction of its own at all —
+    // `loadAdminScreen` owns it, uses the throwing form, and hands back a
+    // discriminated union in which the busy case is a THIRD state rather than
+    // an empty list. Asserting the old spelling here would have made this test
+    // a reason not to route the page through the chokepoint.
+    expect(page).toContain("loadAdminScreen(");
     expect(page).not.toMatch(/\bwithTenant\(/);
+    expect(page).not.toMatch(/\bwithTenantOrThrow\(/);
   });
 
   test("the sidebar entry points at a page that exists and is gated on read", async () => {

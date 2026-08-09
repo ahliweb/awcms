@@ -103,9 +103,8 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "tenant_admin.tenant_settings.read",
   "tenant_admin.tenant_settings.update",
 
-  // visitor_analytics (5)
+  // visitor_analytics (4)
   "visitor_analytics.events.read",
-  "visitor_analytics.raw_detail.read",
   "visitor_analytics.retention.purge",
   "visitor_analytics.settings.read",
   "visitor_analytics.settings.update"
