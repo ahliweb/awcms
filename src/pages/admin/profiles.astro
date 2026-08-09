@@ -9,9 +9,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { listParties } from "../../modules/profile-identity/application/party-directory";
 
 type PartyRow = {
@@ -23,29 +22,39 @@ type PartyRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const canRead = ssr.permissions.has(
-  permissionKey("profile_identity", "profile_management", "read")
-);
-const canCreate = ssr.permissions.has(
-  permissionKey("profile_identity", "profile_management", "create")
-);
 
-let profiles: PartyRow[] = [];
-let loadError = false;
-
-if (canRead) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      const page = await listParties(tx, ssr.tenantId, {});
-      return page.items as PartyRow[];
+// R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
+// same transaction. `canCreate` is decided the same way, so a tenant's ABAC
+// `deny` hides the form instead of only refusing the POST behind it.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "profile_identity",
+    activityCode: "profile_management",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    profiles: (await listParties(tx, ssr.tenantId, {})).items as PartyRow[],
+    canCreate: await can({
+      moduleKey: "profile_identity",
+      activityCode: "profile_management",
+      action: "create"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError("admin/profiles.astro: failed to list profiles", error, {
+      correlationId: Astro.locals.correlationId
     });
-    if (result instanceof Response) loadError = true;
-    else profiles = result;
-  } catch {
-    loadError = true;
   }
-}
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is not an empty directory and not a denial.
+const loadError = screen.state === "error";
+const profiles: PartyRow[] =
+  screen.state === "allowed" ? screen.data.profiles : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
 ---
 
 <AdminLayout title="Profiles">

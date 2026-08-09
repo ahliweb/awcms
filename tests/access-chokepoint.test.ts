@@ -28,6 +28,7 @@ import { describe, expect, test } from "bun:test";
 import {
   findChokepointBypasses,
   findStaleExemptions,
+  ADMIN_SCREEN_CHOKEPOINT_MIGRATION,
   findStaleLedgerEntries,
   sliceHandlers,
   sliceScreen
@@ -434,23 +435,29 @@ ${MIGRATED_SCREEN.slice(4)}`
     expect(problems[0]!.message).toContain("no longer exists");
   });
 
-  test("the real screen root still has screens to migrate, or the detector broke", async () => {
-    // The screen-side self-test, asserted rather than only printed: if
-    // `.permissions.has(` stopped matching anything while the ledger is still
-    // long, the gate would report a clean tree it never inspected.
+  test("the ledger is exactly the set of screens still bypassing", async () => {
+    // The screen-side self-test, and deliberately NOT a snapshot of two counts:
+    // a number pinned here would have to be edited by every migration PR, which
+    // trains the next author to edit it rather than read it. What is asserted
+    // is the identity that must hold at every point in the migration — the
+    // ledger names all and only the screens that still bypass — plus the
+    // liveness check that the detector still finds anything at all.
     const files = await Array.fromAsync(
       new Bun.Glob("**/*.astro").scan({ cwd: "src/pages/admin" })
     );
-
-    expect(files.length).toBe(32);
-
     const slices = await Promise.all(
       files.map(async (file) =>
         sliceScreen(file, await Bun.file(`src/pages/admin/${file}`).text())
       )
     );
 
-    expect(slices.filter((slice) => slice.decidesPermissions).length).toBe(31);
-    expect(slices.filter((slice) => slice.usesChokepoint).length).toBe(1);
+    const bypassing = slices
+      .filter((slice) => slice.decidesPermissions && !slice.usesChokepoint)
+      .map((slice) => slice.id)
+      .sort();
+
+    expect(bypassing).toEqual([...ADMIN_SCREEN_CHOKEPOINT_MIGRATION].sort());
+    // At least one screen went through: the mechanism is proven, not provided.
+    expect(slices.some((slice) => slice.usesChokepoint)).toBe(true);
   });
 });
