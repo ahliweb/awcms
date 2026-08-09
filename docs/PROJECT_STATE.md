@@ -452,6 +452,40 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   sendiri. Temuan itu lahir dari `grep -rl` atas dua nama mirip. Ditutup sebagai
   premis salah, diganti #438 — yang menemukan hal lebih penting.
 
+  **Dua PR sesudahnya, dan keduanya lahir dari MEMERIKSA issue yang tersisa —
+  bukan dari mengerjakannya.**
+
+  - **#446** (#437) — gerbang `data-lifecycle:table-coverage:check` (rantai
+    37 → 38). Rencananya meminta gerbang atas tabel VOLUME-TINGGI yang daftarnya
+    diturunkan. Tiga turunan dibangun dan diukur, dan **ketiganya gagal**:
+    append-only di sumber (46 tabel — `ON CONFLICT DO UPDATE` terbaca sebagai
+    append), tanpa jalur hapus (94 — repo ini memakai `ON DELETE CASCADE` di
+    satu migrasi saja), tak-terbatas menurut skema (121 dari 128 — tabel
+    terbatas berkunci pada teks terkurasi). Gerbang yang pengecualiannya 90%
+    skema adalah daftar tulis-tangan yang menyamar. Jadi pertanyaannya diganti:
+    turunkan bahwa sebuah tabel **ada**, lalu buat kewajibannya mustahil
+    dilewati. 114 tabel lama duduk di ledger yang hanya boleh menyusut dan
+    panjangnya dipatok test; tabel baru wajib membawa deskriptor atau
+    pengecualian beralasan.
+  - **#448** (#447) — plafon rate limit per-SUMBER untuk tujuh rute auth publik.
+    Ditemukan saat memeriksa #430, dan **lebih tajam dari #430**: kunci bucket
+    adalah header `x-awcms-tenant-id` mentah, jadi ia dipilih penyerang dan
+    limiternya tidak mengikat sama sekali — sementara tiap request yang lolos
+    tetap membayar argon2id `m=64MB`. Terbukti inert pada satu tenant, sehingga
+    mendarat tanpa flag. Rutenya ternyata **tujuh, bukan enam**; test
+    strukturalnya yang menemukan yang ketujuh setelah enam pertama dikonversi
+    tangan.
+
+  **#430 menyusut, dan salah satu premisnya ternyata terlalu lunak.** Ia menulis
+  "N × `AUTH_LOGIN_MAX_ATTEMPTS`"; efek sebenarnya bukan pengali melainkan
+  pencabutan limiter (#447). Dua dari tiga sumbu penggandaan kini tertutup —
+  rotasi `X-Forwarded-For` (#444) dan rotasi header tenant untuk bucket rate
+  limit (#448). Yang tersisa persis satu: penghitung **lockout** per-`(tenant,
+email)`, yang tidak bisa dibuat global tanpa `awcms_principals`. Ditambal
+  dengan penghitung Redis? Sengaja tidak — `checkSharedRateLimit` **fail-open**
+  saat Redis bermasalah, jadi kontrolnya akan mati justru saat dibutuhkan.
+  Gelombang 7 PR 7.2.
+
   **Ditolak, dan penolakannya adalah bagian dari hasil.** Membangun modul
   provisioning Cloudflare Tenant API (menuntut perjanjian partner yang
   ditandatangani; kredensialnya bisa menghapus permanen akun pelanggan — blast
