@@ -46,7 +46,7 @@ yang menjadi baseline platform ERP ini.
   `bun --bun …` agar tidak jatuh ke binary `node`. Jangan sediakan varian
   script `build:node`.
 - **Server**: `Bun.serve` native; jika memakai `@astrojs/node` (standalone)
-  untuk SSR, entry dijalankan `bun ./dist/server/entry.mjs` (runtime tetap
+  untuk SSR, entry dijalankan `bun ./dist/standalone-entry.mjs` (runtime tetap
   Bun).
 - **Database**: `Bun.sql` atau `postgres` (postgres.js).
 - **Deployment**: `deploy/systemd` `ExecStart` memakai path `bun`; image

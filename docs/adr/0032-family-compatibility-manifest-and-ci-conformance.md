@@ -43,7 +43,7 @@ Setiap kontrol reusable kritis dipin ke perilaku, dan tiap test MUTATION-PROVABL
 
 Setiap pelemahan default-deny/RLS/redaction/audit/idempotency dianggap **breaking** (MAJOR family contract) dan membuat conformance gagal.
 
-Kontrak **Astro SSR build/start on Bun** TIDAK punya test standalone di suite conformance (build+start+probe duplikat hanya akan menjalankan ulang job `e2e-smoke`). Ia dieksekusi nyata oleh `bun run build` (di dalam `bun run check`) DAN job `e2e-smoke` yang men-start server hasil-build di Bun (`bun ./dist/server/entry.mjs`) lalu menjalankan login/SSR render. `tests/family-conformance-ci-parity.test.ts` meng-assert job `e2e-smoke` + baris start itu ADA di ci.yml — jadi menghapusnya memerahkan conformance.
+Kontrak **Astro SSR build/start on Bun** TIDAK punya test standalone di suite conformance (build+start+probe duplikat hanya akan menjalankan ulang job `e2e-smoke`). Ia dieksekusi nyata oleh `bun run build` (di dalam `bun run check`) DAN job `e2e-smoke` yang men-start server hasil-build di Bun (`bun ./dist/standalone-entry.mjs`) lalu menjalankan login/SSR render. `tests/family-conformance-ci-parity.test.ts` meng-assert job `e2e-smoke` + baris start itu ADA di ci.yml — jadi menghapusnya memerahkan conformance.
 
 ### 5. Compatibility matrix: current DAN minimum-supported dijalankan nyata
 

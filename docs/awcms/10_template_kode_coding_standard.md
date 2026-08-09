@@ -51,7 +51,9 @@ Dokumen ini menetapkan standar coding AWCMS untuk TypeScript/Bun/Astro/PostgreSQ
 - **Bin dengan shebang `#!/usr/bin/env node`** (mis. `astro`, `vite`): panggil lewat **`bun --bun`** (mis. `bun --bun astro build`, `bun --bun astro dev`) agar Bun yang mengeksekusi, bukan binary `node` yang mungkin terpasang di mesin. Tanpa `--bun`, `bun run` mengikuti shebang dan bisa jatuh ke Node.
 - **SSR Astro**: Astro belum punya adapter Bun first-party. Dua opsi tersanksi:
   1. **Rekomendasi** — pisahkan seam: API/backend di `Bun.serve` (+Hono) native; Astro hanya untuk frontend/SSR.
-  2. Pakai `@astrojs/node` (standalone) **dijalankan di atas Bun** (`bun ./dist/server/entry.mjs`) dan build via `bun --bun astro build`. Ini satu-satunya pemakaian paket ber-nama "node" yang diizinkan (runtime tetap Bun); catat sebagai pengecualian di dokumen audit standar pengembangan bila dipakai.
+  2. Pakai `@astrojs/node` (standalone) **dijalankan di atas Bun** (`bun ./dist/standalone-entry.mjs`) dan build via `bun --bun astro build`. Ini satu-satunya pemakaian paket ber-nama "node" yang diizinkan (runtime tetap Bun); catat sebagai pengecualian di dokumen audit standar pengembangan bila dipakai.
+
+     Entry yang dijalankan adalah **`dist/standalone-entry.mjs`** (dibangun dari `src/lib/server/standalone-entry.ts`), bukan `dist/server/entry.mjs` bawaan adapter — Issue #464. Adapter menyusun handler-nya sebagai `staticHandler(req, res, () => appHandler(req, res))`, sehingga berkas yang ada di `dist/client/` dijawab **sebelum** `src/middleware.ts` pernah jalan dan keluar tanpa satu pun header keamanan. Wrapper itu memasang `buildSecurityHeaders()` yang sama sebagai **lantai** (`setHeader` sebelum delegasi; `writeHead` milik handler tetap menang pada nama yang bentrok) lalu menyerahkan request ke handler adapter apa adanya — penyajian statisnya tidak ditulis ulang.
 
 ## Aliran request antar layer
 

@@ -16,10 +16,13 @@
  * (`src/lib/html/error-responses.ts`) are likewise plain `Response`s
  * returned from endpoints, not rendered pages.
  *
- * `src/middleware.ts` applies these headers to EVERY response, so setting
- * the policy here is what actually covers this app's real surface — the JSON
+ * These headers reach the wire from TWO call sites, and both are needed
+ * (Issue #464): `src/middleware.ts` covers every RENDERED response — the JSON
  * API, the HTML 404 (`src/lib/html/error-responses.ts`), AND the admin
- * `.astro` pages (#166). This builder stays the SINGLE CSP owner.
+ * `.astro` pages (#166) — while `src/lib/server/standalone-entry.ts` covers
+ * STATIC files, which the node adapter answers before middleware ever runs.
+ * Two call sites, still ONE policy: this builder stays the SINGLE CSP owner,
+ * and neither caller invents a header of its own.
  *
  * REAL `.astro` PAGES EXIST NOW (login + admin, #166) — how they stay
  * compatible with this `default-src 'self'` (no `'unsafe-inline'`) policy,
@@ -155,7 +158,9 @@ export function buildSecurityHeaders(
     //     any browser client has today;
     //   - `public/` holds exactly two files (`js/news-share.js`,
     //     `css/public-content.css`) and `_astro/*` is hashed output — all of it
-    //     loaded by this origin's own pages;
+    //     loaded by this origin's own pages, and all of it now actually
+    //     CARRYING these headers: until Issue #464 those responses bypassed
+    //     middleware entirely, so this bullet stated an intent, not a fact;
     //   - article images are served from R2 by `media_library`, a DIFFERENT
     //     origin, so image embedding is not this app's decision to make.
     //

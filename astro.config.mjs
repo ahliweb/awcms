@@ -4,14 +4,20 @@ import node from "@astrojs/node";
 // SSR di atas Bun via adapter @astrojs/node (standalone) — pengecualian
 // Bun-only yang tersanksi (ADR-0002; docs/awcms/10_template_kode_coding_standard.md
 // §Standar platform backend) karena Astro belum punya adapter Bun first-party.
-// Runtime tetap Bun: hasil build dijalankan `bun ./dist/server/entry.mjs`.
+// Runtime tetap Bun: hasil build dijalankan `bun ./dist/standalone-entry.mjs`.
 //
 // TIDAK ADA blok `security.csp` di sini — SENGAJA (Issue #148, dipertahankan
-// #166). CSP di-set SATU sumber saja: `src/lib/security/security-headers.ts`,
-// dipasang `src/middleware.ts` ke SETIAP response (JSON API, HTML 404, dan
-// halaman admin). Mengaktifkan `security.csp` Astro akan membuat DUA sumber
-// CSP yang saling menimpa (baca header security-headers.ts) — jadi tidak
-// dilakukan.
+// #166). CSP di-set SATU sumber saja: `src/lib/security/security-headers.ts`.
+// Mengaktifkan `security.csp` Astro akan membuat DUA sumber CSP yang saling
+// menimpa (baca header security-headers.ts) — jadi tidak dilakukan.
+//
+// Sumber tunggal itu dipasang di DUA titik, dan keduanya perlu (Issue #464):
+// `src/middleware.ts` untuk setiap response yang DI-RENDER (JSON API, HTML
+// 404, halaman admin), dan `src/lib/server/standalone-entry.ts` untuk berkas
+// STATIS. Adapter node menjalankan handler statisnya SEBELUM middleware, jadi
+// middleware sendirian tidak pernah menyentuh `public/**` maupun `_astro/**`.
+// Karena itu produksi start dari `dist/standalone-entry.mjs`, bukan dari
+// `dist/server/entry.mjs` bawaan adapter.
 //
 // Konsekuensi untuk halaman `.astro` (login/admin, #166): CSP itu
 // `default-src 'self'` TANPA `'unsafe-inline'`, jadi `<script>`/`<style>`
