@@ -37,10 +37,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { listModules } from "../../modules";
 import { collectHighVolumeTableDescriptors } from "../../modules/data-lifecycle/domain/lifecycle-registry";
 import {
@@ -64,25 +62,6 @@ if (!ssr) {
   );
 }
 
-const canReadRegistry = ssr.permissions.has(
-  permissionKey("data_lifecycle", "registry", "read")
-);
-const canReadHolds = ssr.permissions.has(
-  permissionKey("data_lifecycle", "legal_hold", "read")
-);
-const canCreateHold = ssr.permissions.has(
-  permissionKey("data_lifecycle", "legal_hold", "create")
-);
-const canReleaseHold = ssr.permissions.has(
-  permissionKey("data_lifecycle", "legal_hold", "release")
-);
-const canPlan = ssr.permissions.has(
-  permissionKey("data_lifecycle", "plan", "analyze")
-);
-const canReadRuns = ssr.permissions.has(
-  permissionKey("data_lifecycle", "runs", "read")
-);
-
 // Code-declared metadata, identical for every tenant — the same values
 // `GET /api/v1/data-lifecycle/registry` returns. Computed unconditionally
 // because it touches nothing but the module registry; it is only RENDERED, and
@@ -92,33 +71,76 @@ const tenantDescriptors = descriptors.filter(
   (descriptor) => descriptor.scope === "tenant"
 );
 
-let holds: LegalHoldRow[] = [];
-let runs: LifecycleRunRow[] = [];
-let loadError = false;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF over FIVE requests, and note that two of them are WRITES
+// (`legal_hold.create`, `plan.analyze`). That is what `showAnything` has always
+// been: this console admits anyone who can do anything here, including someone
+// who may place a hold without being able to list existing ones. Trimming the
+// list to the three reads would have quietly locked those operators out, so it
+// is ported exactly.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "data_lifecycle", activityCode: "registry", action: "read" },
+    { moduleKey: "data_lifecycle", activityCode: "legal_hold", action: "read" },
+    {
+      moduleKey: "data_lifecycle",
+      activityCode: "legal_hold",
+      action: "create"
+    },
+    { moduleKey: "data_lifecycle", activityCode: "plan", action: "analyze" },
+    { moduleKey: "data_lifecycle", activityCode: "runs", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [
+      readRegistry = false,
+      readHolds = false,
+      createHold = false,
+      plan = false,
+      readRuns = false
+    ] = entry;
 
-if (canReadHolds || canReadRuns) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      const heldRows = canReadHolds
-        ? await listLegalHolds(tx, ssr.tenantId)
-        : [];
-      const runRows = canReadRuns
-        ? await listLifecycleRuns(tx, ssr.tenantId)
-        : [];
-      return { heldRows, runRows };
-    });
-    holds = result.heldRows;
-    runs = result.runRows;
-  } catch (error) {
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    return {
+      readRegistry,
+      readHolds,
+      createHold,
+      plan,
+      readRuns,
+      holds: readHolds ? await listLegalHolds(tx, ssr.tenantId) : [],
+      runs: readRuns ? await listLifecycleRuns(tx, ssr.tenantId) : [],
+      canReleaseHold: await can({
+        moduleKey: "data_lifecycle",
+        activityCode: "legal_hold",
+        action: "release"
+      })
+    };
+  },
+  onError: (error) => {
     logAdminPageError(
       "admin/data-lifecycle.astro: failed to load console",
       error,
       { correlationId: Astro.locals.correlationId }
     );
-    loadError = true;
   }
-}
+});
+
+const showAnything = screen.state !== "denied";
+const loadError = screen.state === "error";
+const canReadRegistry = screen.state === "allowed" && screen.data.readRegistry;
+const canReadHolds = screen.state === "allowed" && screen.data.readHolds;
+const canCreateHold = screen.state === "allowed" && screen.data.createHold;
+const canPlan = screen.state === "allowed" && screen.data.plan;
+const canReadRuns = screen.state === "allowed" && screen.data.readRuns;
+const canReleaseHold = screen.state === "allowed" && screen.data.canReleaseHold;
+const holds: LegalHoldRow[] =
+  screen.state === "allowed" ? screen.data.holds : [];
+const runs: LifecycleRunRow[] =
+  screen.state === "allowed" ? screen.data.runs : [];
 
 /** `2026-08-01T03:18:38.929Z` -> `2026-08-01 03:18` (UTC, no locale dependency). */
 function formatTimestamp(value: Date | string | null): string {
@@ -144,9 +166,6 @@ const activeHoldCount = holds.filter((hold) => hold.status === "active").length;
 const hasTenantWideHold = holds.some(
   (hold) => hold.status === "active" && hold.descriptorKey === null
 );
-
-const showAnything =
-  canReadRegistry || canReadHolds || canCreateHold || canPlan || canReadRuns;
 ---
 
 <AdminLayout title="Data lifecycle">

@@ -54,10 +54,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listTemplates,
   type BlogTemplateView
@@ -82,39 +80,13 @@ import { BLOG_THEME_MODES } from "../../modules/blog-content/domain/theme-policy
 
 const ssr = Astro.locals.ssrContext!;
 
-const can = (activity: string, action: string): boolean =>
-  ssr.permissions.has(permissionKey("blog_content", activity, action));
-
-const canReadTemplates = can("templates", "read");
-const canConfigureTemplates = can("templates", "configure");
-const canReadMenus = can("menus", "read");
-const canConfigureMenus = can("menus", "configure");
-const canReadWidgets = can("widgets", "read");
-const canConfigureWidgets = can("widgets", "configure");
-const canReadTheme = can("theme", "read");
-const canConfigureTheme = can("theme", "configure");
-
 type Section = "templates" | "menus" | "widgets" | "theme";
-
-/** Only sections the operator can READ — see the header. */
-const availableSections: Section[] = [
-  ...(canReadTemplates ? (["templates"] as const) : []),
-  ...(canReadMenus ? (["menus"] as const) : []),
-  ...(canReadWidgets ? (["widgets"] as const) : []),
-  ...(canReadTheme ? (["theme"] as const) : [])
-];
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
 }
 
 const sectionRaw = readParam("section");
-// An unreadable or unknown section falls back to the first the operator CAN
-// read, rather than rendering a denial for a link the screen itself drew.
-const section: Section | null =
-  availableSections.find((entry) => entry === sectionRaw) ??
-  availableSections[0] ??
-  null;
 
 const positionRaw = readParam("position");
 const positionFilter = isWidgetPosition(positionRaw) ? positionRaw : undefined;
@@ -122,41 +94,130 @@ const positionFilter = isWidgetPosition(positionRaw) ? positionRaw : undefined;
 /** `?edit=<id>` opens the edit form for one row of the active section. */
 const editingId = readParam("edit");
 
-let templates: BlogTemplateView[] = [];
-let menus: BlogMenuView[] = [];
-let widgets: BlogWidgetView[] = [];
-let theme: BlogThemeSettings | null = null;
-let loadError = false;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// This screen used a file-local `can(activity, action)` helper over
+// `ssr.permissions.has`, which is why `admin:screen-coverage:check` grew its
+// helper-resolving matcher (see that script's header). The helper is gone: the
+// guards are now stated as `AccessRequest` literals, the same shape the routes
+// use, so the special-case resolution is no longer what keeps these eight
+// permissions visible to that gate.
+//
+// ANY-OF over the four section reads. Section SELECTION moves inside `load`,
+// because which sections are available is now a chokepoint answer rather than a
+// grant-set lookup, and the fallback must be computed from the same answers.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "blog_content", activityCode: "templates", action: "read" },
+    { moduleKey: "blog_content", activityCode: "menus", action: "read" },
+    { moduleKey: "blog_content", activityCode: "widgets", action: "read" },
+    { moduleKey: "blog_content", activityCode: "theme", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [
+      readTemplates = false,
+      readMenus = false,
+      readWidgets = false,
+      readTheme = false
+    ] = entry;
 
-if (section !== null) {
-  try {
-    const sql = getDatabaseClient();
-    await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      // Sequential by section: only the visible one is read, and a single
-      // transaction connection cannot serve concurrent queries anyway.
-      if (section === "templates") {
-        templates = await listTemplates(tx, ssr.tenantId);
-      } else if (section === "menus") {
-        menus = await listMenus(tx, ssr.tenantId);
-      } else if (section === "widgets") {
-        widgets = await listWidgets(tx, ssr.tenantId, {
-          position: positionFilter
-        });
-      } else {
-        theme = await fetchBlogThemeSettings(tx, ssr.tenantId);
-      }
-    });
-  } catch (error) {
+    /** Only sections the operator can READ — see the header. */
+    const availableSections: Section[] = [
+      ...(readTemplates ? (["templates"] as const) : []),
+      ...(readMenus ? (["menus"] as const) : []),
+      ...(readWidgets ? (["widgets"] as const) : []),
+      ...(readTheme ? (["theme"] as const) : [])
+    ];
+
+    // An unreadable or unknown section falls back to the first the operator CAN
+    // read, rather than rendering a denial for a link the screen itself drew.
+    const active: Section | null =
+      availableSections.find((entry_) => entry_ === sectionRaw) ??
+      availableSections[0] ??
+      null;
+
+    // Sequential by section: only the visible one is read, and a single
+    // transaction connection cannot serve concurrent queries anyway.
+    return {
+      readTemplates,
+      readMenus,
+      readWidgets,
+      readTheme,
+      availableSections,
+      section: active,
+      templates:
+        active === "templates" ? await listTemplates(tx, ssr.tenantId) : [],
+      menus: active === "menus" ? await listMenus(tx, ssr.tenantId) : [],
+      widgets:
+        active === "widgets"
+          ? await listWidgets(tx, ssr.tenantId, { position: positionFilter })
+          : [],
+      theme:
+        active === "theme"
+          ? await fetchBlogThemeSettings(tx, ssr.tenantId)
+          : null,
+      canConfigureTemplates: await can({
+        moduleKey: "blog_content",
+        activityCode: "templates",
+        action: "configure"
+      }),
+      canConfigureMenus: await can({
+        moduleKey: "blog_content",
+        activityCode: "menus",
+        action: "configure"
+      }),
+      canConfigureWidgets: await can({
+        moduleKey: "blog_content",
+        activityCode: "widgets",
+        action: "configure"
+      }),
+      canConfigureTheme: await can({
+        moduleKey: "blog_content",
+        activityCode: "theme",
+        action: "configure"
+      })
+    };
+  },
+  onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has nothing configured".
-    loadError = true;
     logAdminPageError(
       "admin/blog-presentation.astro: failed to load presentation settings",
       error,
       { correlationId: Astro.locals.correlationId }
     );
   }
-}
+});
+
+const loadError = screen.state === "error";
+const canReadTemplates =
+  screen.state === "allowed" && screen.data.readTemplates;
+const canReadMenus = screen.state === "allowed" && screen.data.readMenus;
+const canReadWidgets = screen.state === "allowed" && screen.data.readWidgets;
+const canReadTheme = screen.state === "allowed" && screen.data.readTheme;
+const availableSections: Section[] =
+  screen.state === "allowed" ? screen.data.availableSections : [];
+const section: Section | null =
+  screen.state === "allowed" ? screen.data.section : null;
+const templates: BlogTemplateView[] =
+  screen.state === "allowed" ? screen.data.templates : [];
+const menus: BlogMenuView[] =
+  screen.state === "allowed" ? screen.data.menus : [];
+const widgets: BlogWidgetView[] =
+  screen.state === "allowed" ? screen.data.widgets : [];
+const theme: BlogThemeSettings | null =
+  screen.state === "allowed" ? screen.data.theme : null;
+const canConfigureTemplates =
+  screen.state === "allowed" && screen.data.canConfigureTemplates;
+const canConfigureMenus =
+  screen.state === "allowed" && screen.data.canConfigureMenus;
+const canConfigureWidgets =
+  screen.state === "allowed" && screen.data.canConfigureWidgets;
+const canConfigureTheme =
+  screen.state === "allowed" && screen.data.canConfigureTheme;
 
 function formatTimestamp(value: Date | null): string {
   return value ? value.toISOString() : "—";

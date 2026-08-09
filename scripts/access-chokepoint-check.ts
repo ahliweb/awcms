@@ -70,26 +70,27 @@ const CHOKEPOINT_EXEMPTIONS: Readonly<Record<string, string>> = {
 
 /**
  * Admin screens that still decide from `ssr.permissions.has(...)` — R3, issue
- * #450. **May only shrink.**
+ * #450. **EMPTY, and that is the finished state.**
  *
- * Seeded with the 31 screens that were unmigrated when the second root landed
- * (32 minus `form-drafts.astro`, migrated in the same PR so the mechanism is
- * proven rather than merely provided). An entry whose screen no longer
- * bypasses is an error, not a tolerated leftover, so the list cannot rot into
- * an off-switch.
+ * It was seeded with the 31 screens unmigrated when the second root landed (32
+ * minus `form-drafts.astro`, migrated in the same PR so the mechanism was
+ * proven rather than merely provided) and drained to zero over eight PRs. All
+ * 32 screens now decide at `authorizeInTransaction`.
  *
- * Unlike `CHOKEPOINT_EXEMPTIONS` these carry no per-entry reason, and the
- * difference is deliberate: an exemption is a decision that this handler is
- * RIGHT to bypass, while these are debt that is WRONG and scheduled. Giving
- * each a sentence would dress 31 open defects as 31 decisions.
+ * **Do not add a line here.** While the list had entries, "may only shrink" was
+ * enforced by `findStaleLedgerEntries`: an entry whose screen no longer
+ * bypassed was a finding. At zero that alarm has nothing to fire on, so
+ * `tests/access-chokepoint.test.ts` asserts the emptiness directly instead. A
+ * new entry means a new screen decides access outside the chokepoint — silently
+ * losing ABAC policy evaluation, module availability, business-scope facts, SoD
+ * and the decision log — which is the entire defect this drained.
+ *
+ * Unlike `CHOKEPOINT_EXEMPTIONS` these carried no per-entry reason, and the
+ * difference was deliberate: an exemption is a decision that this handler is
+ * RIGHT to bypass, while these were debt that was WRONG and scheduled. Giving
+ * each a sentence would have dressed 31 open defects as 31 decisions.
  */
-export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [
-  "blog-presentation.astro",
-  "data-lifecycle.astro",
-  "security.astro",
-  "seo.astro",
-  "site-search.astro"
-];
+export const ADMIN_SCREEN_CHOKEPOINT_MIGRATION: readonly string[] = [];
 
 /**
  * Drops block comments and whole-line `//` comments before matching.
@@ -199,13 +200,28 @@ export function findChokepointBypasses(
   const scheduled = new Set(ledger);
 
   return handlers
-    .filter(
-      (handler) =>
-        handler.decidesPermissions &&
-        !handler.usesChokepoint &&
-        !(handler.id in exemptions) &&
-        !scheduled.has(handler.id)
-    )
+    .filter((handler) => {
+      if (!handler.decidesPermissions) return false;
+      if (handler.id in exemptions || scheduled.has(handler.id)) return false;
+
+      // Routes keep the FILE-WIDE allowance: `defineTenantRoute` wraps at module
+      // level and calls the chokepoint itself, so its presence covers every
+      // handler in the file.
+      //
+      // Screens no longer do, and the change is the point of this line. While
+      // the migration ledger had entries the allowance was correct — a
+      // half-migrated screen must not be reported twice — but it also meant a
+      // screen could call `loadAdminScreen` for its entry and still decide an
+      // AFFORDANCE from `ssr.permissions.has(...)`, with the gate green.
+      //
+      // That was found by mutation, not by reading: planting exactly that
+      // hybrid into `users.astro` left the gate at exit 0 while its own summary
+      // line said "1 still decide outside the chokepoint". With the ledger now
+      // empty and no screen reading the grant set at all, the allowance has
+      // nothing left to protect and only leaves a way back in one button at a
+      // time.
+      return !(handler.usesChokepoint && !handler.id.endsWith(".astro"));
+    })
     .map((handler) => ({
       handler: handler.id,
       // The two roots lose the same four things, but a reader fixing one is not
@@ -380,7 +396,6 @@ async function main(): Promise<void> {
   }
 
   const deciding = routes.filter((handler) => handler.decidesPermissions);
-  const decidingScreens = screens.filter((screen) => screen.decidesPermissions);
 
   // Issue #425 — the self-test.
   //
@@ -408,21 +423,56 @@ async function main(): Promise<void> {
     return;
   }
 
-  // The same self-test for the screen root, and it is not symmetry for its own
-  // sake: `.permissions.has(` is a shape, not an identifier, so it cannot be
-  // caught by a rename — it disappears when the LAST screen is migrated, and at
-  // that moment the ledger is empty too. Until then, zero deciding screens with
-  // a non-empty ledger means the detector broke.
+  // The screen-root self-test, and it had to change shape when R3 closed.
+  //
+  // It used to be "zero deciding screens while the ledger is non-empty means
+  // the detector broke" — which is exactly the check that goes inert the moment
+  // the last screen is migrated, because from then on zero deciding screens is
+  // the CORRECT answer and an identically zero answer from a broken detector is
+  // indistinguishable from it.
+  //
+  // So the probe is now synthetic: `sliceScreen` is asked about a screen that
+  // definitely bypasses, and about one that definitely does not. Both answers
+  // have to be right, at any ledger size.
+  const legacyProbe = sliceScreen(
+    "__probe__.astro",
+    "---\nconst canRead = ssr.permissions.has(permissionKey('m', 'a', 'read'));\n---"
+  );
+  const routedProbe = sliceScreen(
+    "__probe__.astro",
+    "---\nconst screen = await loadAdminScreen({ ssr });\n---"
+  );
+
   if (
-    decidingScreens.length === 0 &&
-    ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length > 0
+    !legacyProbe.decidesPermissions ||
+    legacyProbe.usesChokepoint ||
+    routedProbe.decidesPermissions ||
+    !routedProbe.usesChokepoint
   ) {
     console.error(
-      "access:chokepoint:check FAILED — 0 admin screens were classified as deciding a " +
-        `permission while ${ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length} are still on the ` +
-        "migration ledger. The signal `.permissions.has(` stopped matching under " +
-        `${SCREENS_ROOT}; fix \`sliceScreen\` rather than the ledger.`
+      "access:chokepoint:check FAILED — `sliceScreen` misread its own probes " +
+        `(legacy: decides=${legacyProbe.decidesPermissions} chokepoint=${legacyProbe.usesChokepoint}; ` +
+        `routed: decides=${routedProbe.decidesPermissions} chokepoint=${routedProbe.usesChokepoint}). ` +
+        `The signals stopped matching under ${SCREENS_ROOT}, so every screen would ` +
+        "pass vacuously. Fix `sliceScreen`."
     );
+
+    process.exitCode = 1;
+    return;
+  }
+
+  // And the corpus itself: every screen must be ROUTED, not merely silent. A
+  // screen that reads no permissions at all and opens no chokepoint would slip
+  // through the bypass filter above without being covered by anything.
+  const unrouted = screens.filter((screen) => !screen.usesChokepoint);
+
+  if (unrouted.length > 0) {
+    console.error(
+      "access:chokepoint:check FAILED — admin screens that do not call " +
+        "`loadAdminScreen` at all:"
+    );
+
+    for (const screen of unrouted) console.error(`  - ${screen.id}`);
 
     process.exitCode = 1;
     return;
@@ -432,8 +482,8 @@ async function main(): Promise<void> {
     `access:chokepoint:check OK — ${routes.length} route handlers, ` +
       `${deciding.length} decide permissions, ` +
       `${Object.keys(CHOKEPOINT_EXEMPTIONS).length} reasoned exemption(s); ` +
-      `${screens.length} admin screens, ${decidingScreens.length} still decide ` +
-      `outside the chokepoint (ledger: ${ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length}, may only shrink).`
+      `${screens.length} admin screens, all routed through loadAdminScreen ` +
+      `(R3 closed; ledger: ${ADMIN_SCREEN_CHOKEPOINT_MIGRATION.length}).`
   );
 }
 

@@ -33,8 +33,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
 import { isMfaFeatureEnabled } from "../../lib/auth/mfa-config";
 import { isSsoEnabled } from "../../lib/auth/sso-config";
 import {
@@ -45,7 +45,6 @@ import {
   isTurnstileEnabled,
   isTurnstileRequired
 } from "../../lib/security/turnstile";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   listAuthProviders,
   type AuthProviderView
@@ -63,24 +62,6 @@ import {
 
 const ssr = Astro.locals.ssrContext!;
 
-const canReadPolicy = ssr.permissions.has(
-  permissionKey("identity_access", "sso_policy", "read")
-);
-const canUpdatePolicy = ssr.permissions.has(
-  permissionKey("identity_access", "sso_policy", "update")
-);
-// `reset` IS the read gate for `GET /api/v1/auth/mfa/policy`. See the header.
-const canReadMfa = ssr.permissions.has(
-  permissionKey("identity_access", "mfa_admin", "reset")
-);
-const canConfigureMfa = ssr.permissions.has(
-  permissionKey("identity_access", "mfa_admin", "configure")
-);
-const canReadProviders = ssr.permissions.has(
-  permissionKey("identity_access", "sso_providers", "read")
-);
-const canReadAnything = canReadPolicy || canReadMfa || canReadProviders;
-
 const deployment = {
   onlineSecurityActive: isFullOnlineSecurityActive(),
   onlineSecurityProfile: resolveOnlineSecurityProfile(),
@@ -90,44 +71,92 @@ const deployment = {
   ssoEnabled: isSsoEnabled()
 };
 
-let policy: TenantAuthPolicyView | null = null;
-let mfaPolicy: TenantMfaPolicyView | null = null;
-let breakGlassCandidates: BreakGlassCandidateView[] = [];
-let providers: AuthProviderView[] = [];
-let loadError = false;
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: three independently readable panels, refused only when all three are.
+// Note the middle one is `mfa_admin.reset`, not a `.read` — this module seeds
+// no MFA read action, and the reset permission is what has always gated the
+// panel. Ported verbatim rather than "corrected" to a permission that does not
+// exist.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    {
+      moduleKey: "identity_access",
+      activityCode: "sso_policy",
+      action: "read"
+    },
+    {
+      moduleKey: "identity_access",
+      activityCode: "mfa_admin",
+      action: "reset"
+    },
+    {
+      moduleKey: "identity_access",
+      activityCode: "sso_providers",
+      action: "read"
+    }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readPolicy = false, readMfa = false, readProviders = false] = entry;
 
-if (canReadAnything) {
-  try {
-    const sql = getDatabaseClient();
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => ({
-      // Each read is gated on its OWN permission, so a caller holding only one
-      // of the three does not silently pull the other two into memory.
-      policy: canReadPolicy
-        ? await getTenantAuthPolicy(tx, ssr.tenantId)
-        : null,
+    // Each read is gated on its OWN permission, so a caller holding only one of
+    // the three does not silently pull the other two into memory. One
+    // transaction, one awaited query at a time.
+    const canUpdatePolicy = await can({
+      moduleKey: "identity_access",
+      activityCode: "sso_policy",
+      action: "update"
+    });
+
+    return {
+      readPolicy,
+      readMfa,
+      readProviders,
+      canUpdatePolicy,
+      policy: readPolicy ? await getTenantAuthPolicy(tx, ssr.tenantId) : null,
       candidates: canUpdatePolicy
         ? await listBreakGlassCandidates(tx, ssr.tenantId)
         : [],
-      mfaPolicy: canReadMfa ? await getTenantMfaPolicy(tx, ssr.tenantId) : null,
-      providers: canReadProviders
-        ? await listAuthProviders(tx, ssr.tenantId)
-        : []
-    }));
-
-    // `withTenant` returns a 503 `Response` when the circuit breaker is open or
-    // a work-class queue is saturated — degrade to the error notice.
-    if (result instanceof Response) {
-      loadError = true;
-    } else {
-      policy = result.policy;
-      breakGlassCandidates = result.candidates;
-      mfaPolicy = result.mfaPolicy;
-      providers = result.providers;
-    }
-  } catch {
-    loadError = true;
+      mfaPolicy: readMfa ? await getTenantMfaPolicy(tx, ssr.tenantId) : null,
+      providers: readProviders ? await listAuthProviders(tx, ssr.tenantId) : [],
+      canConfigureMfa: await can({
+        moduleKey: "identity_access",
+        activityCode: "mfa_admin",
+        action: "configure"
+      })
+    };
+  },
+  onError: (error) => {
+    logAdminPageError("admin/security.astro: failed to load console", error, {
+      correlationId: Astro.locals.correlationId
+    });
   }
-}
+});
+
+const canReadAnything = screen.state !== "denied";
+// The old shape check existed because `withTenant` RETURNS a 503 `Response` on
+// circuit-open rather than throwing. `AdminScreenOutcome` separates the three
+// cases directly.
+const loadError = screen.state === "error";
+const canReadPolicy = screen.state === "allowed" && screen.data.readPolicy;
+const canReadMfa = screen.state === "allowed" && screen.data.readMfa;
+const canReadProviders =
+  screen.state === "allowed" && screen.data.readProviders;
+const canUpdatePolicy =
+  screen.state === "allowed" && screen.data.canUpdatePolicy;
+const canConfigureMfa =
+  screen.state === "allowed" && screen.data.canConfigureMfa;
+const policy: TenantAuthPolicyView | null =
+  screen.state === "allowed" ? screen.data.policy : null;
+const mfaPolicy: TenantMfaPolicyView | null =
+  screen.state === "allowed" ? screen.data.mfaPolicy : null;
+const breakGlassCandidates: BreakGlassCandidateView[] =
+  screen.state === "allowed" ? screen.data.candidates : [];
+const providers: AuthProviderView[] =
+  screen.state === "allowed" ? screen.data.providers : [];
 
 const MFA_LEVELS = [
   {

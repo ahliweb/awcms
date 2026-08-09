@@ -59,10 +59,8 @@
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
-import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { fetchSeoTenantSettings } from "../../modules/seo-distribution/application/seo-config-directory";
 import {
@@ -90,31 +88,6 @@ import {
 } from "../../modules/seo-distribution/domain/redirect-rule";
 
 const ssr = Astro.locals.ssrContext!;
-
-const canReadConfig = ssr.permissions.has(
-  permissionKey("seo_distribution", "config", "read")
-);
-const canUpdateConfig = ssr.permissions.has(
-  permissionKey("seo_distribution", "config", "update")
-);
-const canReadRedirect = ssr.permissions.has(
-  permissionKey("seo_distribution", "redirect", "read")
-);
-const canCreateRedirect = ssr.permissions.has(
-  permissionKey("seo_distribution", "redirect", "create")
-);
-const canUpdateRedirect = ssr.permissions.has(
-  permissionKey("seo_distribution", "redirect", "update")
-);
-const canDeleteRedirect = ssr.permissions.has(
-  permissionKey("seo_distribution", "redirect", "delete")
-);
-const canReadNotFound = ssr.permissions.has(
-  permissionKey("seo_distribution", "not_found", "read")
-);
-const canUpdateNotFound = ssr.permissions.has(
-  permissionKey("seo_distribution", "not_found", "update")
-);
 
 const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
 const showNotFoundActions = canUpdateNotFound;
@@ -162,53 +135,106 @@ const UUID_PATTERN =
 const recoverParam = params.get("recover") ?? "";
 const recoverId = UUID_PATTERN.test(recoverParam) ? recoverParam : "";
 
-let seoConfig: SeoTenantSettings = EMPTY_SEO_TENANT_SETTINGS;
-let redirectSettings: RedirectSettings = EMPTY_REDIRECT_SETTINGS;
-let redirects: RedirectRecord[] = [];
-let nextCursor: string | null = null;
-let observations: NotFoundObservation[] = [];
-let loadError = false;
+const filters: RedirectListFilters = {};
+if (stateFilter) filters.state = stateFilter;
+if (targetTypeFilter) filters.targetType = targetTypeFilter;
+if (qFilter.trim()) filters.q = qFilter.trim();
 
-if (canReadConfig || canReadRedirect || canReadNotFound) {
-  try {
-    const sql = getDatabaseClient();
-    const filters: RedirectListFilters = {};
-    if (stateFilter) filters.state = stateFilter;
-    if (targetTypeFilter) filters.targetType = targetTypeFilter;
-    if (qFilter.trim()) filters.q = qFilter.trim();
+// Issue #450 — the entry decision and the reads share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// ANY-OF: three independently readable sections, refused only when all three
+// are. This screen renders a per-SECTION denial rather than one page-level
+// notice, so `entry` is what those notices read.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: [
+    { moduleKey: "seo_distribution", activityCode: "config", action: "read" },
+    { moduleKey: "seo_distribution", activityCode: "redirect", action: "read" },
+    { moduleKey: "seo_distribution", activityCode: "not_found", action: "read" }
+  ],
+  load: async ({ tx, can, entry }) => {
+    const [readConfig = false, readRedirect = false, readNotFound = false] =
+      entry;
 
-    const result = await withTenantOrThrow(sql, ssr.tenantId, async (tx) => {
-      // Sequential on purpose: one transaction owns one pooled connection, and
-      // firing these concurrently leaks it (idle in transaction). Each read is
-      // skipped entirely when the viewer cannot see that panel.
-      const config = canReadConfig
+    // Sequential on purpose: one transaction owns one pooled connection, and
+    // firing these concurrently leaks it (idle in transaction). Each read is
+    // skipped entirely when the viewer cannot see that panel.
+    return {
+      readConfig,
+      readRedirect,
+      readNotFound,
+      config: readConfig
         ? await fetchSeoTenantSettings(tx, ssr.tenantId)
-        : EMPTY_SEO_TENANT_SETTINGS;
-      const settings = canReadRedirect
+        : EMPTY_SEO_TENANT_SETTINGS,
+      settings: readRedirect
         ? await fetchRedirectSettings(tx, ssr.tenantId)
-        : EMPTY_REDIRECT_SETTINGS;
-      const rules = canReadRedirect
+        : EMPTY_REDIRECT_SETTINGS,
+      rules: readRedirect
         ? await listRedirects(tx, ssr.tenantId, filters, cursor ?? undefined)
-        : { redirects: [], nextCursor: null };
-      const notFound = canReadNotFound
+        : { redirects: [], nextCursor: null },
+      notFound: readNotFound
         ? await listNotFoundObservations(tx, ssr.tenantId, { unresolvedOnly })
-        : [];
-
-      return { config, settings, rules, notFound };
-    });
-
-    seoConfig = result.config;
-    redirectSettings = result.settings;
-    redirects = result.rules.redirects;
-    nextCursor = result.rules.nextCursor;
-    observations = result.notFound;
-  } catch (error) {
-    loadError = true;
+        : [],
+      canUpdateConfig: await can({
+        moduleKey: "seo_distribution",
+        activityCode: "config",
+        action: "update"
+      }),
+      canCreateRedirect: await can({
+        moduleKey: "seo_distribution",
+        activityCode: "redirect",
+        action: "create"
+      }),
+      canUpdateRedirect: await can({
+        moduleKey: "seo_distribution",
+        activityCode: "redirect",
+        action: "update"
+      }),
+      canDeleteRedirect: await can({
+        moduleKey: "seo_distribution",
+        activityCode: "redirect",
+        action: "delete"
+      }),
+      canUpdateNotFound: await can({
+        moduleKey: "seo_distribution",
+        activityCode: "not_found",
+        action: "update"
+      })
+    };
+  },
+  onError: (error) => {
     logAdminPageError("admin/seo.astro: failed to load the SEO screen", error, {
       correlationId: Astro.locals.correlationId
     });
   }
-}
+});
+
+const loadError = screen.state === "error";
+const canReadConfig = screen.state === "allowed" && screen.data.readConfig;
+const canReadRedirect = screen.state === "allowed" && screen.data.readRedirect;
+const canReadNotFound = screen.state === "allowed" && screen.data.readNotFound;
+const canUpdateConfig =
+  screen.state === "allowed" && screen.data.canUpdateConfig;
+const canCreateRedirect =
+  screen.state === "allowed" && screen.data.canCreateRedirect;
+const canUpdateRedirect =
+  screen.state === "allowed" && screen.data.canUpdateRedirect;
+const canDeleteRedirect =
+  screen.state === "allowed" && screen.data.canDeleteRedirect;
+const canUpdateNotFound =
+  screen.state === "allowed" && screen.data.canUpdateNotFound;
+const seoConfig: SeoTenantSettings =
+  screen.state === "allowed" ? screen.data.config : EMPTY_SEO_TENANT_SETTINGS;
+const redirectSettings: RedirectSettings =
+  screen.state === "allowed" ? screen.data.settings : EMPTY_REDIRECT_SETTINGS;
+const redirects: RedirectRecord[] =
+  screen.state === "allowed" ? screen.data.rules.redirects : [];
+const nextCursor: string | null =
+  screen.state === "allowed" ? screen.data.rules.nextCursor : null;
+const observations: NotFoundObservation[] =
+  screen.state === "allowed" ? screen.data.notFound : [];
 
 /** Next-page href: current filters preserved, cursor advanced. */
 function nextPageHref(token: string): string {
