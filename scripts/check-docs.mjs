@@ -116,10 +116,23 @@ function listAuthoritativeSources() {
 
 /** @returns {string[]} */
 function listMarkdown() {
-  const out = execFileSync("git", ["ls-files", "*.md"], {
-    cwd: ROOT,
-    encoding: "utf8"
-  });
+  // `--others --exclude-standard` menambahkan berkas yang BELUM di-stage tapi
+  // tidak di-gitignore. Tanpa itu gerbang ini buta terhadap dokumen yang baru
+  // dibuat — dan dokumen baru justru yang paling mungkin membawa tautan salah.
+  //
+  // Ditemukan dengan cara paling mahal: ADR-0075 lolos `check:docs` lokal
+  // dengan tautan rusak ke berkas ADR yang tak ada, lalu memerahkan CI setelah
+  // di-commit. Hijau lokal lalu merah di CI adalah kegagalan gerbang, bukan
+  // sekadar ketidaknyamanan: ia melatih orang untuk tidak mempercayai run
+  // lokalnya.
+  const out = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "*.md"],
+    {
+      cwd: ROOT,
+      encoding: "utf8"
+    }
+  );
   // `git ls-files` mencerminkan index, bukan working tree — berkas yang
   // dihapus tapi belum di-stage masih muncul di sini. Saring agar hanya
   // berkas yang benar-benar ada di disk.

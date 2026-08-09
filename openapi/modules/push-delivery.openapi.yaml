@@ -301,6 +301,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/push/stream:
+    get:
+      operationId: streamPushQueueSummary
+      tags:
+        - Push Delivery
+      summary: Server-sent stream of the push queue summary, re-authorized every tick.
+      description: >-
+        `text/event-stream`. The only SSE endpoint in this contract, and the one
+        place where an authorization decision would otherwise become a STANDING
+        permission: an ordinary route returns its connection to the pool before
+        any byte reaches the client, so a thirty-minute stream would keep serving
+        a role revoked at minute two. ADR-0075 decides otherwise — every tick
+        opens its own transaction, runs the full guard chain again, and reads
+        only after it allows.
+
+
+        Three event names. `push-queue-summary` carries a `PushQueueSummary`
+        every 5 s. `authorization-revoked` is terminal and the client must NOT
+        reconnect — whatever it held is gone. `stream-error` is terminal and
+        retryable, and is deliberately a DIFFERENT name: telling a client its
+        access was revoked when the database was merely busy is a lie in the
+        direction that gets investigated as a permissions bug.
+
+
+        A connection ends after 10 minutes regardless; `EventSource` reconnects
+        by itself, so the ceiling costs a reconnect while its absence would cost
+        a connection slot forever. The message and attempt lists are NOT
+        streamed — they are bounded at 50 rows and change shape rather than
+        value. Requires `push_delivery.diagnostics.read`, re-checked per tick.
+      responses:
+        "200":
+          description: The event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/v1/push/test:
     post:
       operationId: sendPushTestNotification

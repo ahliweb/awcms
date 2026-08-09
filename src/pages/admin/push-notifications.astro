@@ -257,26 +257,33 @@ const messageColumns = canCancel ? 8 : 7;
         >
           <h2 class="admin-section-title" id="push-queue-title">
             Queue
+            <span class="count-pill" id="push-queue-live" hidden>
+              live
+            </span>
           </h2>
 
           <div class="stat-grid stagger-children">
             {PUSH_MESSAGE_STATUSES.map((status) => (
               <div class="stat-card">
                 <span class="stat-label">{status.replace("_", " ")}</span>
-                <span class="stat-value">
+                {/* `data-push-count` is what the SSE stream updates in place —
+                    the server render stays the source of the FIRST value, so
+                    the panel is correct before any script runs and correct
+                    again if the stream never connects. */}
+                <span class="stat-value" data-push-count={status}>
                   {summary?.countsByStatus[status] ?? 0}
                 </span>
               </div>
             ))}
             <div class="stat-card">
               <span class="stat-label">Active devices</span>
-              <span class="stat-value">
+              <span class="stat-value" data-push-count="activeSubscriptions">
                 {summary?.activeSubscriptions ?? 0}
               </span>
             </div>
             <div class="stat-card">
               <span class="stat-label">Disabled devices</span>
-              <span class="stat-value">
+              <span class="stat-value" data-push-count="disabledSubscriptions">
                 {summary?.disabledSubscriptions ?? 0}
               </span>
             </div>
@@ -284,9 +291,13 @@ const messageColumns = canCancel ? 8 : 7;
 
           <p class="page-description">
             Oldest still waiting:{" "}
-            <strong>{formatTimestamp(summary?.oldestPendingAt ?? null)}</strong>
+            <strong data-push-time="oldestPendingAt">
+              {formatTimestamp(summary?.oldestPendingAt ?? null)}
+            </strong>
             · next retry due:{" "}
-            <strong>{formatTimestamp(summary?.nextAttemptAt ?? null)}</strong>
+            <strong data-push-time="nextAttemptAt">
+              {formatTimestamp(summary?.nextAttemptAt ?? null)}
+            </strong>
           </p>
         </section>
 
@@ -707,4 +718,78 @@ const messageColumns = canCancel ? 8 : 7;
   }
 
   void refreshDeviceState();
+
+  /**
+   * Live queue counters over SSE (ADR-0075).
+   *
+   * The server render already produced correct numbers, so this only ever
+   * updates them in place — a stream that never connects leaves the panel
+   * exactly as it was, which is why there is no loading state and no fallback
+   * poll to write.
+   *
+   * `EventSource` is a browser API and carries same-origin cookies by itself,
+   * so this costs no library and sends no header by hand.
+   */
+  const liveBadge = document.getElementById("push-queue-live");
+  const queuePanel = document.getElementById("push-notifications-queue");
+
+  if (queuePanel && "EventSource" in window) {
+    const source = new EventSource("/api/v1/push/stream");
+
+    source.addEventListener("open", () => {
+      if (liveBadge) liveBadge.hidden = false;
+    });
+
+    source.addEventListener("push-queue-summary", (event) => {
+      const summary = JSON.parse((event as MessageEvent<string>).data) as {
+        countsByStatus: Record<string, number>;
+        activeSubscriptions: number;
+        disabledSubscriptions: number;
+        oldestPendingAt: string | null;
+        nextAttemptAt: string | null;
+      };
+      const counts: Record<string, number> = {
+        ...summary.countsByStatus,
+        activeSubscriptions: summary.activeSubscriptions,
+        disabledSubscriptions: summary.disabledSubscriptions
+      };
+
+      for (const cell of document.querySelectorAll<HTMLElement>(
+        "[data-push-count]"
+      )) {
+        const key = cell.dataset.pushCount ?? "";
+
+        if (key in counts) cell.textContent = String(counts[key]);
+      }
+
+      for (const cell of document.querySelectorAll<HTMLElement>(
+        "[data-push-time]"
+      )) {
+        const key = cell.dataset.pushTime ?? "";
+        const value =
+          key === "oldestPendingAt"
+            ? summary.oldestPendingAt
+            : summary.nextAttemptAt;
+
+        cell.textContent = value ?? "—";
+      }
+    });
+
+    // Two terminal events, and the difference matters: the server closes the
+    // stream deliberately in both cases, but `EventSource` would reconnect on
+    // its own forever. Closing it here is what stops a revoked session from
+    // hammering an endpoint that will refuse it every five seconds.
+    source.addEventListener("authorization-revoked", () => {
+      source.close();
+      if (liveBadge) liveBadge.hidden = true;
+      showError(
+        "Your access to the push console was revoked. Reload the page to see what you can still view."
+      );
+    });
+
+    source.addEventListener("stream-error", () => {
+      source.close();
+      if (liveBadge) liveBadge.hidden = true;
+    });
+  }
 </script>

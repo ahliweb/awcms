@@ -108,9 +108,9 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v7.0.1..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **97** (`sql/001`–`097`)                                                              | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0074** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0075** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **33** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **44** (24.031 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **44** (24.116 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **38** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
