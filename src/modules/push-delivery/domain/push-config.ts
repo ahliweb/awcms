@@ -30,11 +30,15 @@
  * rule `email` already follows: provider off means the provider is never
  * touched).
  *
- * `"fcm"` and `"web_push"` are the real adapters and land in Issue #466.
- * Naming them here now would let `PUSH_PROVIDER=fcm` pass validation and then
- * fail at resolve time, so they are deliberately absent until they exist.
+ * `"fcm"` is the FCM HTTP v1 adapter (Issue #466) — server → Google, for native
+ * Android/iOS clients. It costs nothing in the client asset budget and adds no
+ * CSP origin, which is why ADR-0074 keeps it while rejecting the FCM Web SDK.
+ *
+ * `"web_push"` (VAPID, for browsers) is still absent, and deliberately: naming
+ * an adapter before it exists lets a deployment pass `config:validate` and then
+ * fail at resolve time, which is the worst place to learn it.
  */
-export const KNOWN_PUSH_PROVIDERS = ["log"] as const;
+export const KNOWN_PUSH_PROVIDERS = ["log", "fcm"] as const;
 
 export type PushProviderKind = (typeof KNOWN_PUSH_PROVIDERS)[number];
 
@@ -66,16 +70,34 @@ export const DEFAULT_PUSH_SEND_MAX_RETRIES = 3;
  */
 export const PUSH_CIRCUIT_BREAKER_KEY = "push-delivery";
 
-/**
- * There is deliberately no `PUSH_SEND_TIMEOUT_MS` resolver yet. A send timeout
- * is meaningful only to an adapter that makes a network call, and the only
- * adapter today is `log`. Shipping the knob now would put a variable in
- * `.env.example` that an operator can set and that changes nothing — the kind
- * of configuration that teaches people their settings are decorative. It lands
- * with the first real adapter (#466).
- */
+export const DEFAULT_PUSH_SEND_TIMEOUT_MS = 10_000;
+
 export function isPushEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.PUSH_ENABLED === "true";
+}
+
+/**
+ * Now that a network adapter exists (#466), this knob does something. It was
+ * deliberately absent while `log` was the only adapter — a variable an operator
+ * can set that changes nothing teaches people their settings are decorative.
+ *
+ * The budget is TOTAL wall-clock for the outbound call, including the body
+ * read, because that is what `ssrfSafeFetch` enforces. A send can spend it
+ * twice in one attempt (token mint, then the FCM call), which is intended: they
+ * are two hops that can each hang independently.
+ */
+export function resolvePushSendTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env
+): number {
+  const configured = env.PUSH_SEND_TIMEOUT_MS?.trim();
+
+  if (!configured) {
+    return DEFAULT_PUSH_SEND_TIMEOUT_MS;
+  }
+
+  const raw = Number(configured);
+
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PUSH_SEND_TIMEOUT_MS;
 }
 
 /**

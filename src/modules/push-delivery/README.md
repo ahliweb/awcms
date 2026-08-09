@@ -44,8 +44,24 @@ Tanpa `PUSH_ENABLED=true`, `dispatchPushQueue` **tidak mengklaim satu baris pun*
 
 Ketiganya dihapus dalam urutan FK — attempts, messages, subscriptions — karena masing-masing anak dari berikutnya.
 
+## Adapter FCM HTTP v1
+
+`PUSH_PROVIDER=fcm` — server → Google, untuk klien **native** Android/iOS. Ia tidak pernah menyentuh browser, jadi nol byte di anggaran aset klien dan nol origin CSP baru; itulah sebabnya ADR-0074 menahan FCM HTTP v1 sambil menolak SDK FCM Web.
+
+**Tanpa dependensi.** Assertion service-account (RFC 7523) ditandatangani RS256 lewat `crypto.subtle`, meniru preseden `src/lib/auth/jwt-verify.ts` yang menolak menambah `jose` untuk verifikasi JWT. Access token di-cache per-proses, dikunci `client_email`, dan tidak pernah ditulis ke Redis/Postgres — ia kredensial bearer hidup, dan menyimpannya at-rest demi menghemat satu panggilan HTTP per jam adalah pertukaran yang salah arah.
+
+**Kredensial wajib base64** (`PUSH_FCM_CREDENTIALS_BASE64`): `config:validate` mem-parse `.env` baris demi baris, dan `private_key` sebuah service account adalah blok PEM multi-baris — ditempel mentah, ia terpotong diam-diam di baris pertama dan kegagalannya muncul saat kirim pertama, bukan saat boot. Parser-nya **pure** dan dipakai `config:validate` maupun adapter, jadi validator tak bisa berbeda pendapat dengan benda yang ia validasi.
+
+**Tiga hal yang halus dan sengaja:**
+
+- **Token mati TIDAK memicu circuit breaker.** Antrean normal membawa ribuan token basi; kalau itu dihitung sebagai kegagalan provider, satu batch registrasi lama akan menghentikan pengiriman ke setiap perangkat sehat — dan gejalanya ("push berhenti") menunjuk ke FCM. Hanya sinyal tentang LAYANAN yang memicunya: kegagalan transport, 429, dan 5xx.
+- **Kode error dibaca sebelum status.** FCM meng-overload status dua arah, dan 401 adalah kasus paling tajam: ia sekaligus "access token kadaluwarsa" (tanpa kode) dan `THIRD_PARTY_AUTH_ERROR` (kredensial APNs/web yang harus diperbaiki operator). Versi pertama fungsi ini memeriksa status lebih dulu, dan test menangkapnya.
+- **401 disegarkan tepat SEKALI.** Token yang kadaluwarsa di tengah batch berharga satu panggilan tambahan, bukan seluruh sisa batch; token baru yang tetap ditolak adalah masalah kredensial dan berhenti di situ.
+
+`healthCheck` membuktikan **kredensialnya**, bukan jalur kirim — mengirim notifikasi nyata butuh token perangkat nyata, dan mengarang satu akan dijawab `UNREGISTERED`, yaitu FCM sehat yang melapor gagal.
+
 ## Yang BELUM ada
 
-- **Adapter nyata.** Hanya `log` yang ada. FCM HTTP v1 dan Web Push/VAPID mendarat di #466. `PUSH_PROVIDER` sengaja belum menerima `fcm`/`web_push`: menamainya sekarang akan membuat deployment lolos validasi lalu gagal saat resolve.
+- **Adapter Web Push/VAPID untuk browser.** `PUSH_PROVIDER` sengaja belum menerima `web_push`: menamainya sekarang akan membuat deployment lolos validasi lalu gagal saat resolve.
 - **Permukaan HTTP.** Mendaftarkan dan mencabut langganan lewat API, plus layar admin, mendarat bersama adapter-nya. Sampai itu `enqueuePushToRecipients` belum punya pemanggil produksi — kesenjangan yang dicatat di ADR-0074 §Konsekuensi alih-alih dibiarkan ditemukan.
 - **FCM Web (SDK browser).** Ditolak, dengan angkanya, di ADR-0074 §Yang DITOLAK.

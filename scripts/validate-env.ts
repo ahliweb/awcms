@@ -14,6 +14,8 @@
  */
 import { readFile } from "node:fs/promises";
 
+import { parseFcmCredentialsBase64 } from "../src/modules/push-delivery/domain/fcm-credentials";
+
 type EnvBag = Record<string, string | undefined>;
 
 type Rule = {
@@ -260,8 +262,15 @@ const RULES: readonly Rule[] = [
   // listing them early would let a deployment pass validation here and then
   // fail at resolve time, which is the worst place to learn it.
   { name: "PUSH_ENABLED", required: false, type: "bool" },
-  { name: "PUSH_PROVIDER", required: false, type: "enum", values: ["log"] },
+  {
+    name: "PUSH_PROVIDER",
+    required: false,
+    type: "enum",
+    values: ["log", "fcm"]
+  },
   { name: "PUSH_SEND_MAX_RETRIES", required: false, type: "int", min: 0 },
+  { name: "PUSH_SEND_TIMEOUT_MS", required: false, type: "int", min: 1 },
+  { name: "PUSH_FCM_CREDENTIALS_BASE64", required: false, type: "string" },
 
   // visitor_analytics (ported from awcms-micro epic #617-#624). All optional,
   // privacy-first off-by-default; see
@@ -587,6 +596,30 @@ export function validateEnv(env: EnvBag): string[] {
       problems.push(
         "PUSH_PROVIDER wajib diisi saat PUSH_ENABLED=true (tanpa adapter, setiap notifikasi yang diantre langsung menjadi `failed`)."
       );
+    }
+
+    // Memakai parser yang SAMA dengan adapter (`parseFcmCredentialsBase64`),
+    // bukan cek terpisah. Validator yang mengimplementasikan ulang pemeriksaan
+    // bebas berbeda pendapat dengan benda yang ia validasi — dan akan berbeda,
+    // persis pada kasus yang tak diuji siapa pun.
+    if (provider === "fcm") {
+      const raw = env.PUSH_FCM_CREDENTIALS_BASE64?.trim() ?? "";
+
+      if (raw === "") {
+        problems.push(
+          "PUSH_FCM_CREDENTIALS_BASE64 wajib diisi saat PUSH_PROVIDER=fcm."
+        );
+      } else {
+        const parsed = parseFcmCredentialsBase64(raw);
+
+        if (!parsed.ok) {
+          // `reason` menyebut NAMA field dan bentuk, tidak pernah nilai —
+          // parser-nya ditulis supaya `private_key` tak bisa sampai ke pesan.
+          problems.push(
+            `PUSH_FCM_CREDENTIALS_BASE64 tidak valid: ${parsed.reason}.`
+          );
+        }
+      }
     }
   }
 
