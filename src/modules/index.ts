@@ -20,6 +20,7 @@ import { formDraftsModule } from "./form-drafts/module";
 import { siteSearchModule } from "./site-search/module";
 import { commentsModule } from "./comments/module";
 import { idnAdminRegionsModule } from "./idn-admin-regions/module";
+import { pushDeliveryModule } from "./push-delivery/module";
 
 /**
  * The reviewed BASE registry. Every module below is reviewed, in-repo code.
@@ -139,7 +140,16 @@ const baseModules: ModuleDescriptor[] = [
   // no `tenant_id`/RLS and are instead registered in
   // `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` with per-role privileges spelled out.
   // See src/modules/idn-admin-regions/module.ts's `description`.
-  idnAdminRegionsModule
+  idnAdminRegionsModule,
+  // Admitted by ADR-0074 (epic #463): a transactional outbox for device push
+  // notifications. It is a SECOND outbox deliberately — `domain_event_runtime`
+  // above calls its consumers INSIDE the claim transaction by design, and
+  // ADR-0006 forbids the external HTTP call a push provider needs from inside a
+  // transaction, so hanging push off domain events would violate that rule
+  // without a single gate going red. Depends on tenant_admin/logging, both
+  // already above, so the DAG stays acyclic; nothing depends on it yet.
+  // See src/modules/push-delivery/module.ts's `description`.
+  pushDeliveryModule
 ];
 
 /**

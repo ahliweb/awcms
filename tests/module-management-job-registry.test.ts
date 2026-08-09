@@ -107,6 +107,8 @@ describe("fetchModuleJobs", () => {
         "bun run idn-regions:rollback",
         "bun run logs:audit:purge",
         "bun run news-media:reconcile",
+        "bun run push:dispatch",
+        "bun run push:queue:purge",
         "bun run reporting:exports:dispatch",
         "bun run reporting:projections:refresh",
         "bun run site-search:reconcile",

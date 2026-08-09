@@ -115,6 +115,11 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
   sync_storage: "operations",
   data_lifecycle: "operations",
   domain_event_runtime: "operations",
+  // ADR-0074. Placed even though the module declares NO navigation yet: this
+  // map must cover every registered module, and the placement is what stops its
+  // first screen from landing silently in `general` — a real section, so the
+  // mistake would render as a plausible sidebar rather than as a gap.
+  push_delivery: "operations",
   // Master reference data. This module DOES declare navigation now
   // (`/admin/idn-regions`, landed with ADR-0053/PR #332). The comment that used
   // to sit here said its operator screen lived in awcms-astro per ADR-0047 —
