@@ -62,12 +62,27 @@ function guardTriplesFrom(source: string): Set<Triple> {
 }
 
 /** `permissionKey("workflow", "recovery", "force_decide")` → the same shape. */
+/**
+ * Both spellings, and issue #450 is why the second exists: a screen routed
+ * through `loadAdminScreen` states its guards as `AccessRequest` object
+ * literals — the SAME shape the routes use — instead of `permissionKey(...)`.
+ *
+ * Reading only the old spelling would have made this test demand the screen
+ * keep deciding access from the raw grant set, which is the defect. A contract
+ * test pins the PROPERTY, never the syntax that happened to express it.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
-  const pattern =
-    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 
-  for (const match of source.matchAll(pattern)) {
+  for (const match of source.matchAll(
+    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g
+  )) {
+    found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
+  }
+
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*"([a-z_]+)",\s*action:\s*"([a-z_]+)"/g
+  )) {
     found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
   }
 
