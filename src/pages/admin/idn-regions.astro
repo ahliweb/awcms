@@ -34,9 +34,8 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
-import { withTenantOrThrow } from "../../lib/database/tenant-context";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
-import { permissionKey } from "../../modules/identity-access/domain/access-control";
 import {
   resolvePlatformTenant,
   resolveTenancyMode,
@@ -56,59 +55,90 @@ if (!ssr) {
   );
 }
 
-const canReadDatasets = ssr.permissions.has(
-  permissionKey("idn_admin_regions", "dataset", "read")
-);
-const holdsActivate = ssr.permissions.has(
-  permissionKey("idn_admin_regions", "dataset", "configure")
-);
-const holdsRollback = ssr.permissions.has(
-  permissionKey("idn_admin_regions", "dataset", "restore")
-);
-
-let datasets: DatasetSummary[] = [];
+/**
+ * Resolved OUTSIDE any tenant transaction on purpose: both read RLS-free root
+ * tables (`awcms_tenants`, `awcms_setup_state`) and neither needs — or should
+ * imply — a tenant context.
+ *
+ * DISPLAY only, since #450. The DECISION about the two platform-scoped actions
+ * is the chokepoint's; this is here so the screen can say WHY a control is
+ * missing instead of leaving a blank space.
+ */
 let tenancyMode: TenancyMode = "single";
 let isPlatformTenant = false;
 let platformTenantCode: string | null = null;
-let loadError = false;
+let platformResolutionFailed = false;
 
-if (canReadDatasets || holdsActivate || holdsRollback) {
-  try {
-    const sql = getDatabaseClient();
-    const rows = canReadDatasets
-      ? await withTenantOrThrow(sql, ssr.tenantId, (tx) => listDatasets(tx))
-      : [];
+try {
+  const sql = getDatabaseClient();
+  const platformTenant = await resolvePlatformTenant(sql);
 
-    // Resolved OUTSIDE the tenant transaction on purpose: both read RLS-free
-    // root tables (`awcms_tenants`, `awcms_setup_state`) and neither needs — or
-    // should imply — a tenant context.
-    const platformTenant = await resolvePlatformTenant(sql);
-    tenancyMode = await resolveTenancyMode(sql);
+  tenancyMode = await resolveTenancyMode(sql);
+  isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
+  platformTenantCode = platformTenant?.tenantCode ?? null;
+} catch (error) {
+  logAdminPageError(
+    "admin/idn-regions.astro: failed to resolve platform tenant",
+    error,
+    { correlationId: Astro.locals.correlationId }
+  );
+  platformResolutionFailed = true;
+}
 
-    datasets = rows;
-    isPlatformTenant = platformTenant?.tenantId === ssr.tenantId;
-    platformTenantCode = platformTenant?.tenantCode ?? null;
-  } catch (error) {
+// Issue #450 — the entry decision and the read share ONE transaction, and the
+// decision is the chokepoint's.
+//
+// `dataset.read` is TENANT-scoped; `dataset.configure` and `dataset.restore`
+// are PLATFORM-scoped (ADR-0052/0053). That is why the hand-written
+// `holds… && isPlatformTenant` mirroring is gone rather than ported: `can(...)`
+// runs the same ADR-0053 gate the endpoint runs, so the screen no longer keeps
+// a SECOND copy of the platform rule that could drift from the first.
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "idn_admin_regions",
+    activityCode: "dataset",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time. Concurrent queries on a
+    // single transaction connection leak it, so nothing here runs in parallel.
+    datasets: await listDatasets(tx),
+    canActivate: await can({
+      moduleKey: "idn_admin_regions",
+      activityCode: "dataset",
+      action: "configure"
+    }),
+    canRollback: await can({
+      moduleKey: "idn_admin_regions",
+      activityCode: "dataset",
+      action: "restore"
+    })
+  }),
+  onError: (error) => {
     logAdminPageError(
       "admin/idn-regions.astro: failed to load dataset console",
       error,
       { correlationId: Astro.locals.correlationId }
     );
-    loadError = true;
   }
-}
+});
+
+const canReadDatasets = screen.state !== "denied";
+const loadError = screen.state === "error" || platformResolutionFailed;
+const datasets: DatasetSummary[] =
+  screen.state === "allowed" ? screen.data.datasets : [];
+const canActivate = screen.state === "allowed" && screen.data.canActivate;
+const canRollback = screen.state === "allowed" && screen.data.canRollback;
 
 /**
- * Holding the permission is not enough — the chokepoint also requires the
- * acting tenant to BE the platform tenant. Mirroring both halves here means the
- * screen never renders a button whose request is already destined for a 403.
+ * Held the permission but is not the platform tenant — worth explaining, not
+ * hiding. The chokepoint has already refused the two actions by this point; the
+ * flag exists so the refusal is narrated rather than rendered as absence.
  */
-const canActivate = holdsActivate && isPlatformTenant;
-const canRollback = holdsRollback && isPlatformTenant;
-
-/** Held the permission but is not the platform tenant — worth explaining, not hiding. */
 const withheldByPlatformScope =
-  (holdsActivate || holdsRollback) && !isPlatformTenant;
+  canReadDatasets && !isPlatformTenant && !canActivate && !canRollback;
 
 const activeDataset = datasets.find((dataset) => dataset.status === "active");
 const hasPreviousDataset = datasets.some(
@@ -145,7 +175,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   </header>
 
   {
-    !canReadDatasets && !holdsActivate && !holdsRollback && (
+    !canReadDatasets && (
       <p class="state-notice fade-in-up" id="idn-regions-denied">
         You do not have permission to view region datasets.
       </p>

@@ -29,13 +29,25 @@ const ROUTES = [
 
 type Triple = `${string}.${string}.${string}`;
 
-/** `permissionKey("idn_admin_regions", "dataset", "configure")` → the triple. */
+/**
+ * Permission triples the screen gates on, in BOTH spellings.
+ *
+ * Issue #450 is why the second exists: a screen routed through
+ * `loadAdminScreen` states its guards as `AccessRequest` object literals — the
+ * same shape the routes use — instead of `permissionKey(...)`.
+ */
 function pageTriplesFrom(source: string): Set<Triple> {
   const found = new Set<Triple>();
-  const pattern =
-    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g;
 
-  for (const match of source.matchAll(pattern)) {
+  for (const match of source.matchAll(
+    /permissionKey\(\s*"([a-z_]+)",\s*"([a-z_]+)",\s*"([a-z_]+)"\s*\)/g
+  )) {
+    found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
+  }
+
+  for (const match of source.matchAll(
+    /moduleKey:\s*"([a-z_]+)",\s*activityCode:\s*"([a-z_]+)",\s*action:\s*"([a-z_]+)"/g
+  )) {
     found.add(`${match[1]}.${match[2]}.${match[3]}` as Triple);
   }
 
@@ -89,20 +101,39 @@ describe("/admin/idn-regions permission gates", () => {
 
   test("write controls require the platform tenant, not just the permission", async () => {
     const page = await readFile(PAGE, "utf8");
+    const permissions =
+      listModules().find((module) => module.key === "idn_admin_regions")
+        ?.permissions ?? [];
+    const scopeOf = (action: string): string | undefined =>
+      permissions.find(
+        (permission) =>
+          permission.activityCode === "dataset" && permission.action === action
+      )?.scope;
 
-    // Both halves, ANDed. Rendering on the permission alone would produce
-    // buttons that are refused at the chokepoint for every non-platform tenant.
-    expect(page).toContain("resolvePlatformTenant");
-    expect(page).toMatch(
-      /const canActivate = holdsActivate && isPlatformTenant/
-    );
-    expect(page).toMatch(
-      /const canRollback = holdsRollback && isPlatformTenant/
-    );
+    // The PROPERTY, proven from the descriptor plus the chokepoint, not from a
+    // hand-written `holds… && isPlatformTenant` expression.
+    //
+    // That expression is what this used to pin, and issue #450 is why it is
+    // gone: it was a SECOND copy of ADR-0053's rule living in this template.
+    // `can(...)` runs `authorizeInTransaction`, which decides
+    // `platform_scope_required` before permissions are even looked up — so the
+    // two write controls are gated by the same code the endpoint uses, and the
+    // duplicate that could drift from it no longer exists.
+    expect(scopeOf("configure")).toBe("platform");
+    expect(scopeOf("restore")).toBe("platform");
+    expect(page).toMatch(/loadAdminScreen\(/);
+    expect(page).not.toMatch(/ssr\.permissions\.has\(/);
 
     // And the read panel must NOT be gated that way — every tenant is entitled
-    // to see which dataset version it is being served.
-    expect(page).toMatch(/canReadDatasets = ssr\.permissions\.has\(/);
+    // to see which dataset version it is being served. This is the asymmetry
+    // that makes the screen worth having on a non-platform tenant at all, so it
+    // is asserted from the descriptor rather than inferred from the page.
+    // `scope` is optional and absent MEANS tenant, so the claim is stated the
+    // way the chokepoint reads it: anything that is not `platform` is tenant.
+    expect(scopeOf("read")).not.toBe("platform");
+    expect(page).toMatch(
+      /authorize:\s*\{\s*moduleKey:\s*"idn_admin_regions",\s*activityCode:\s*"dataset",\s*action:\s*"read"/
+    );
   });
 
   test("the page never mutates directly — it posts to the guarded endpoints", async () => {

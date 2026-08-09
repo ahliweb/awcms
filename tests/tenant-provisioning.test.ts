@@ -175,9 +175,33 @@ describe("the route and screen behave", () => {
   test("the screen requires the platform tenant, not just the permission", async () => {
     const page = await readFile(PAGE, "utf8");
 
-    expect(page).toContain("resolvePlatformTenant");
-    expect(page).toMatch(/const canRead = holdsRead && isPlatformTenant/);
-    expect(page).toMatch(/const canCreate = holdsCreate && isPlatformTenant/);
+    // The PROPERTY, proven from the two things that actually enforce it, not
+    // from a hand-written `holds… && isPlatformTenant` expression.
+    //
+    // That expression is what this used to pin, and issue #450 is why it is
+    // gone: it was a SECOND copy of ADR-0053's rule living in a template, free
+    // to drift from the one in `access-guard.ts`. `authorizeInTransaction`
+    // decides `platform_scope_required` BEFORE permissions are looked up, so
+    // routing the screen through the chokepoint enforces it strictly harder —
+    // a grant row that reached the wrong tenant is inert rather than
+    // sufficient. Pinning the old spelling would have made this test a reason
+    // to keep the duplicate.
+    expect(page).toMatch(/loadAdminScreen\(/);
+    expect(page).not.toMatch(/ssr\.permissions\.has\(/);
+
+    const declared = listModules()
+      .find((module) => module.key === "tenant_admin")
+      ?.permissions?.find(
+        (permission) =>
+          permission.activityCode === "tenant_provisioning" &&
+          permission.action === "read"
+      );
+
+    // The half the chokepoint reads. If this ever became `tenant`, the screen
+    // would silently open to every tenant's owner, and no assertion about the
+    // page's own text would notice.
+    expect(declared?.scope).toBe("platform");
+
     expect(page).not.toMatch(
       /\b(INSERT\s+INTO|UPDATE\s+awcms_|DELETE\s+FROM)/i
     );
