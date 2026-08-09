@@ -99,6 +99,20 @@ export const tenantAdminModule = defineModule({
       activityCode: "tenant_settings",
       action: "update",
       description: "Update tenant settings"
+    },
+    {
+      activityCode: "tenant_lifecycle",
+      action: "disable",
+      scope: "platform",
+      description:
+        "Suspend a tenant: stop serving it, and refuse its live sessions and machine credentials from their next request (ADR-0073)"
+    },
+    {
+      activityCode: "tenant_lifecycle",
+      action: "restore",
+      scope: "platform",
+      description:
+        "Lift a tenant suspension and resume service (ADR-0073). Separate from `disable` on purpose: during an incident you want someone who can bring a customer back without being able to cut one off"
     }
   ]
 });

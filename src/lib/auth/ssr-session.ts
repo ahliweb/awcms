@@ -4,8 +4,9 @@ import { getDatabaseClient } from "../database/client";
 import { withTenant } from "../database/tenant-context";
 import {
   fetchGrantedPermissionKeys,
-  resolveTenantContext
+  resolveTenantPrincipal
 } from "../../modules/identity-access/application/auth-context";
+import { isTenantServiceStopped } from "../../modules/identity-access/domain/suspended-tenant-allowlist";
 import { hashSessionToken } from "./session-token";
 
 export const SESSION_COOKIE_NAME = "awcms_session";
@@ -38,8 +39,29 @@ export async function resolveSsrContext(
     const tokenHash = hashSessionToken(sessionToken);
 
     const result = await withTenant(sql, tenantId, async (tx) => {
-      const context = await resolveTenantContext(tx, tenantId, tokenHash, now);
-      if (!context) return null;
+      const principal = await resolveTenantPrincipal(
+        tx,
+        tenantId,
+        tokenHash,
+        now
+      );
+      if (!principal) return null;
+
+      // ADR-0073 — a suspended tenant's admin shell does not render.
+      //
+      // This one line covers all 32 admin screens, because `src/middleware.ts`
+      // routes every `/admin/*` request through here and redirects to `/login`
+      // when it answers null. Without it, suspension would stop the API and
+      // leave the entire admin UI up, which is most of what an operator sees.
+      //
+      // It is all-or-nothing, unlike the chokepoint's permission-level
+      // allow-list, and that is a real limitation rather than a design: there
+      // is no screen yet that a suspended tenant needs (billing arrives in
+      // Gelombang 5). When one exists, this branch has to grow the same
+      // allow-list the chokepoint has — noted here so it is found then.
+      if (isTenantServiceStopped(principal.tenantStatus)) return null;
+
+      const context = principal.context;
 
       const permissions = await fetchGrantedPermissionKeys(
         tx,

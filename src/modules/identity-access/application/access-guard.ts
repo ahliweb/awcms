@@ -16,7 +16,15 @@ import {
   permissionKey
 } from "../domain/access-control";
 import { isPlatformScopedPermissionKey } from "../domain/platform-scope";
-import { resolvePlatformTenant } from "../../../lib/tenant/platform-tenant";
+import {
+  resolvePlatformTenant,
+  resolvePlatformTenantIdIgnoringStatus
+} from "../../../lib/tenant/platform-tenant";
+import {
+  isAllowedWhileSuspended,
+  isSuspensionExemptTenant,
+  isTenantServiceStopped
+} from "../domain/suspended-tenant-allowlist";
 import type { BusinessScopeHierarchyPort } from "../../_shared/ports/business-scope-hierarchy-port";
 import type { SoDRuleDescriptor } from "../../_shared/module-contract";
 import { resolveBusinessScopeFacts } from "./business-scope-facts";
@@ -24,8 +32,8 @@ import { checkHighRiskSoDConflicts } from "./high-risk-sod-guard";
 import {
   fetchGrantedPermissionKeys,
   resolveModuleEnabled,
-  resolveTenantContext,
-  resolveTenantContextForTenantUser
+  resolveTenantPrincipal,
+  resolveTenantPrincipalForTenantUser
 } from "./auth-context";
 import { recordDecisionLog } from "./decision-log";
 import { loadActivePolicies } from "./policy-cache";
@@ -160,13 +168,15 @@ export async function authorizeInTransaction(
     ? await resolveActiveMachineCredential(tx, tenantId, tokenHash, now)
     : null;
 
-  const context = machine
-    ? await resolveTenantContextForTenantUser(
+  const principal = machine
+    ? await resolveTenantPrincipalForTenantUser(
         tx,
         tenantId,
         machine.tenantUserId
       )
-    : await resolveTenantContext(tx, tenantId, tokenHash, now);
+    : await resolveTenantPrincipal(tx, tenantId, tokenHash, now);
+
+  const context = principal?.context ?? null;
 
   if (!context) {
     // One shape for every failure — unknown, expired, revoked, and "machine
@@ -174,6 +184,50 @@ export async function authorizeInTransaction(
     return {
       allowed: false,
       denied: fail(401, "AUTH_REQUIRED", "Session is invalid or expired.")
+    };
+  }
+
+  // ADR-0073 — a SUSPENDED (or inactive) tenant stops being served, for
+  // sessions AND machine credentials alike.
+  //
+  // Decided here, before any permission is looked up, for the same reason the
+  // machine-credential refusal below is: the answer must not be able to depend
+  // on what the actor was granted. Before this existed, suspending a tenant
+  // killed its public site instantly while every already-issued admin session
+  // kept full access until it expired on its own, and machine credentials —
+  // which live up to a year — were untouched entirely. The customer lost what
+  // their visitors saw and kept what could change their data.
+  //
+  // The allow-list is a code declaration, not a column: a suspension a row
+  // could quietly undo is not a suspension. The platform tenant is exempt as a
+  // whole, because a control that can brick its own remedy is not a control.
+  if (
+    principal &&
+    isTenantServiceStopped(principal.tenantStatus) &&
+    !isAllowedWhileSuspended(guard) &&
+    !isSuspensionExemptTenant(
+      tenantId,
+      await resolvePlatformTenantIdIgnoringStatus(tx)
+    )
+  ) {
+    const decision = {
+      allowed: false,
+      reason: "Tenant is suspended.",
+      matchedPolicy: "tenant_suspended"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "TENANT_SUSPENDED", decision.reason)
     };
   }
 

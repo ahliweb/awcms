@@ -29,6 +29,15 @@
  * and one used that claim to justify not building an editor. It never existed.
  */
 export const NOT_YET_SCREENED: readonly string[] = [
+  // tenant_admin (2) — ADR-0073. Suspension is ENFORCED as of Issue #429; what
+  // is missing is the button. `/admin/tenants` already lists every tenant with
+  // its status, so this is a screen edit, not a new surface — deliberately not
+  // bundled into the enforcement PR, whose whole value is that a suspended
+  // customer's admin sessions and machine credentials stop working. Tracked as
+  // PROJECT_STATE §4 R7's class: a surface without a screen.
+  "tenant_admin.tenant_lifecycle.disable",
+  "tenant_admin.tenant_lifecycle.restore",
+
   // blog_content (7)
   "blog_content.ad_placements.configure",
   "blog_content.ad_placements.read",

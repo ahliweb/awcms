@@ -86,7 +86,12 @@ describe("tenant provisioning is platform-scoped", () => {
         ?.permissions ?? [];
 
     for (const permission of permissions) {
-      if (permission.activityCode !== "tenant_provisioning") {
+      // `tenant_lifecycle` joined `tenant_provisioning` as platform-scoped in
+      // ADR-0073, for the same reason: it changes another party's state.
+      if (
+        permission.activityCode !== "tenant_provisioning" &&
+        permission.activityCode !== "tenant_lifecycle"
+      ) {
         expect(permission.scope ?? "tenant").toBe("tenant");
       }
     }
