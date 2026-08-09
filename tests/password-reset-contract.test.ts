@@ -105,8 +105,11 @@ describe("the reset routes", () => {
     async (route) => {
       const source = await readFile(route, "utf8");
 
-      // Call sites, not the import block at the top of the file.
-      const rateLimitCall = source.indexOf("checkSharedRateLimit(");
+      // Call sites, not the import block at the top of the file. The name is
+      // `checkAuthRateLimit` since #447 — it pairs the per-tenant bucket these
+      // routes already had with a source ceiling whose key the caller cannot
+      // choose, and the ordering claim below is what still matters.
+      const rateLimitCall = source.indexOf("checkAuthRateLimit(");
       const clientCall = source.indexOf("getDatabaseClient()");
 
       expect(rateLimitCall).toBeGreaterThan(-1);

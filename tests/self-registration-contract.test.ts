@@ -87,7 +87,8 @@ describe("the public registration endpoint", () => {
 
   test("rate-limits before touching the database, with its own Turnstile action", async () => {
     const source = await readFile(PUBLIC_ROUTE, "utf8");
-    const rateLimitCall = source.indexOf("checkSharedRateLimit(");
+    // `checkAuthRateLimit` since #447 — see `tests/auth-source-rate-limit.test.ts`.
+    const rateLimitCall = source.indexOf("checkAuthRateLimit(");
     const clientCall = source.indexOf("getDatabaseClient()");
 
     expect(rateLimitCall).toBeGreaterThan(-1);

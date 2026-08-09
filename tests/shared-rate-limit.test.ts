@@ -148,9 +148,19 @@ describe("every authentication surface is limited", () => {
   ])("%s calls the shared limiter", async (route) => {
     // ASVS V11.2 wants anti-automation across the WHOLE authentication surface,
     // not most of it. Three of these had none before ADR-0066.
+    //
+    // Either entry point counts, and #447 is why there are two: seven of these
+    // routes keyed their bucket on the raw tenant header, so they now go
+    // through `checkAuthRateLimit`, which calls the shared limiter twice — once
+    // for a source ceiling whose key the caller cannot choose, once for the
+    // per-tenant bucket they already had. Asserting the inner name here would
+    // have made this ledger a reason NOT to fix that.
     const source = await Bun.file(`src/pages/api/v1/${route}`).text();
 
-    expect(source).toContain("checkSharedRateLimit(");
+    expect(
+      source.includes("checkSharedRateLimit(") ||
+        source.includes("checkAuthRateLimit(")
+    ).toBe(true);
   });
 
   test("no route still uses the per-instance limiter directly", async () => {

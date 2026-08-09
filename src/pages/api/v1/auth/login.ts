@@ -26,10 +26,8 @@ import {
   hashClientIp,
   summarizeUserAgent
 } from "../../../../lib/security/client-fingerprint";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../lib/security/auth-rate-limit";
 import {
   bodyTooLargeResponse,
   readJsonBody
@@ -234,9 +232,14 @@ export const POST: APIRoute = async ({
 
   const policy = resolveLoginPolicyConfig();
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(`${clientIp}:${tenantId}`, {
-    maxAttempts: policy.rateLimitMaxAttempts,
-    windowMs: policy.rateLimitWindowSec * 1000
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "login",
+    config: {
+      maxAttempts: policy.rateLimitMaxAttempts,
+      windowMs: policy.rateLimitWindowSec * 1000
+    }
   });
 
   if (!rateLimit.allowed) {

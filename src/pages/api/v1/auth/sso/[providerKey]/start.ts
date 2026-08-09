@@ -4,10 +4,8 @@ import { fail } from "../../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../../lib/database/client";
 import { withTenant } from "../../../../../../lib/database/tenant-context";
 import { TENANT_COOKIE_NAME } from "../../../../../../lib/auth/ssr-session";
-import {
-  checkSharedRateLimit,
-  resolveClientIp
-} from "../../../../../../lib/security/rate-limit";
+import { resolveClientIp } from "../../../../../../lib/security/rate-limit";
+import { checkAuthRateLimit } from "../../../../../../lib/security/auth-rate-limit";
 import {
   isSsoEnabled,
   resolveSsoOAuthRequestTtlSec
@@ -75,13 +73,15 @@ export const GET: APIRoute = async ({
   }
 
   const clientIp = resolveClientIp(request, clientAddress);
-  const rateLimit = await checkSharedRateLimit(
-    `${clientIp}:${tenantId}:sso-start`,
-    {
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId,
+    scope: "sso-start",
+    config: {
       maxAttempts: RATE_LIMIT_MAX_ATTEMPTS,
       windowMs: RATE_LIMIT_WINDOW_SEC * 1000
     }
-  );
+  });
 
   if (!rateLimit.allowed) {
     return fail(
