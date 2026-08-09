@@ -7782,6 +7782,128 @@ Requires `comments.settings.update`. A partial body is merged over the current s
 | 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
 | 409    | The Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
 
+## Push Delivery
+
+Transactional outbox for device push notifications (push_delivery module, ADR-0074) — the caller's own device registration/revocation plus the operator's queue diagnostics, message cancel, and end-to-end delivery probe. It is a SECOND outbox on purpose: domain-event-runtime calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Two transports, neither of which costs a client byte or a CSP origin: Web Push (RFC 8030/8291/8292, VAPID) to browsers — chosen over the FCM Web SDK, which is 2.1x the per-file asset budget and demands three third-party origins the CSP does not have — and FCM HTTP v1 server-to-Google for native clients. Managing one's own device is self-service (the subject is the caller and no recipient is accepted); everything that touches another person's rows or makes the deployment emit traffic goes through the ABAC chokepoint. Endpoints are credential-grade and are stored hashed/masked, projected raw by exactly one function immediately before a provider call.
+
+### `GET /api/v1/push/diagnostics` — The tenant's push outbox — queue counts, recent messages, attempts, devices.
+
+- **operationId**: `getPushDiagnostics`
+- **Security**: bearerAuth + tenantHeader
+
+One endpoint rather than four because the four parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated — the historical tail is removed by retention (`bun run push:queue:purge`), not browsed. Endpoints are masked everywhere and notification bodies are never projected. `configured` reports the DEPLOYMENT's push flag and adapter name, which is what distinguishes a stuck queue from a deployment where push is simply off. Requires `push_delivery.diagnostics.read`.
+
+**Parameters**
+
+| Name     | In    | Required | Type                                             | Description                                                                                                                                                                       |
+| -------- | ----- | -------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status` | query | no       | [`PushMessageStatus`](#schema-pushmessagestatus) | Narrow the message list to one queue status.                                                                                                                                      |
+| `limit`  | query | no       | integer                                          | 1-200, default 50. Out-of-range values are REJECTED rather than clamped: a caller asking for 1000 and silently receiving 200 would read the short list as "that is all there is". |
+
+**Responses**
+
+| Status | Description                                      | Schema                                 |
+| ------ | ------------------------------------------------ | -------------------------------------- |
+| 200    | Push outbox diagnostics.                         | object                                 |
+| 401    | Missing or invalid session.                      | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                      | [`ApiError`](#standard-error-envelope) |
+| 422    | Unknown status filter, or a limit outside 1-200. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/push/messages/{id}/cancel` — Cancel a push notification that has not been sent yet.
+
+- **operationId**: `cancelPushMessage`
+- **Security**: bearerAuth + tenantHeader
+
+Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. Deliberately NOT idempotency-keyed: a second call performs no new work, so there is no replay contract to honour. Requires `push_delivery.messages.cancel`.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                             | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The message was cancelled before delivery.                                                                                                                                                                              | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                       | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" — distinguishing them would hand a narrow grant an existence oracle over the queue. | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/push/subscriptions` — List the caller's own registered push devices.
+
+- **operationId**: `listOwnPushSubscriptions`
+- **Security**: bearerAuth + tenantHeader
+
+Every device the calling identity has registered in this tenant, newest first, with the endpoint MASKED — the raw endpoint is credential-grade and is projected by exactly one server-side function, immediately before a provider call. Also returns whether Web Push is configured on this deployment and, if so, the VAPID application server key the browser needs for PushManager.subscribe(). That key is public by definition; it travels with the list so a client needs one round trip rather than two. A machine credential presented here receives the ordinary 401: it has no device.
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | The caller's devices plus the deployment's Web Push capability. | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/push/subscriptions` — Register (or re-activate) a push device for the caller.
+
+- **operationId**: `registerOwnPushSubscription`
+- **Security**: bearerAuth + tenantHeader
+
+Takes the browser's own PushSubscription.toJSON() shape plus a transport discriminator. The owner is the calling identity and cannot be supplied: there is no recipient parameter on this endpoint. Re-registration is safe and expected — browsers re-issue PushManager.subscribe() on every page load once permission is granted, so a conflict on the endpoint hash updates the existing row (and re-activates it if a push service had previously reported it gone) instead of creating a second one. Returns 201 in both cases: "created" versus "already yours" is a distinction the client cannot act on. A suspended tenant is refused (ADR-0073).
+
+**Request body** (required): [`PushSubscriptionRegistration`](#schema-pushsubscriptionregistration)
+
+**Responses**
+
+| Status | Description                                                                                                                                                         | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The registered device.                                                                                                                                              | object                                 |
+| 400    | Validation error.                                                                                                                                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 422    | Malformed registration — unknown transport, a non-https endpoint, an endpoint pointing at a literal private address, or key material that is not the RFC 8291 size. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/push/subscriptions/{id}` — Retire one of the caller's own push devices.
+
+- **operationId**: `revokeOwnPushSubscription`
+- **Security**: bearerAuth + tenantHeader
+
+Ownership is matched inside the UPDATE rather than checked after a read, so there is no window between the two and no way to learn whether an id belongs to somebody else. "No such subscription", "belongs to another user" and "already revoked" all answer 404. The row survives as evidence that the device was revoked and when, but the stored endpoint does not: a user-initiated revocation destroys it, because unlike a subscription the push service reported gone, this one may still be perfectly usable.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The device was revoked.     | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/push/test` — Queue a test notification to the caller's own devices.
+
+- **operationId**: `sendPushTestNotification`
+- **Security**: bearerAuth + tenantHeader
+
+Proves the parts of the chain nothing else can see — that the VAPID key pair matches the one the browser subscribed with, that the service worker registered at the right scope, that the operating system is not withholding permission. Each of those fails as a queue that drains cleanly and a device that shows nothing. The recipient is the CALLER and the endpoint accepts no recipient parameter: a test that took one would be an arbitrary-notification surface, delivering system-branded text of the sender's choosing to any colleague's lock screen. Title and body are fixed for the same reason. Requires `push_delivery.diagnostics.check`.
+
+**Responses**
+
+| Status | Description                                                                                                                                                | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | How many devices the test was queued to.                                                                                                                   | object                                 |
+| 401    | Missing or invalid session.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                | [`ApiError`](#standard-error-envelope) |
+| 409    | Push is disabled on this deployment (the dispatcher would claim nothing, leaving the probe queued forever), or the caller has no active device to send to. | [`ApiError`](#standard-error-envelope) |
+
 ## Schema appendix
 
 Every schema referenced by at least one operation above (excluding the standard envelope schemas, covered in §Standard success/error envelope).
@@ -8488,6 +8610,49 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "clientKey": "string",
   "redirectUri": "string"
 }
+```
+
+### Schema: PushMessageStatus
+
+Enum values: `queued`, `retry_wait`, `sending`, `sent`, `failed`, `cancelled`.
+
+**Example**
+
+```json
+"queued"
+```
+
+### Schema: PushSubscriptionRegistration
+
+| Field       | Type                                     | Required | Nullable | Description                                                                                                                                                                                                                                |
+| ----------- | ---------------------------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `transport` | [`PushTransport`](#schema-pushtransport) | yes      | no       |                                                                                                                                                                                                                                            |
+| `endpoint`  | string                                   | yes      | no       | The push service URL (web_push, https: only, never a literal private address) or the FCM registration token. Bounded because it is an opaque credential-shaped string written by an authenticated caller; real values are ~200 characters. |
+| `keys`      | object                                   | no       | no       | REQUIRED for web_push, and rejected for fcm — a client sending both has confused its two registration paths, and silently dropping half of what it sent would store a row that cannot deliver while reporting success.                     |
+
+**Example**
+
+```json
+{
+  "transport": "web_push",
+  "endpoint": "string",
+  "keys": {
+    "p256dh": "string",
+    "auth": "string"
+  }
+}
+```
+
+### Schema: PushTransport
+
+`web_push` is RFC 8030/8291/8292 to a browser; `fcm` is FCM HTTP v1 to a native Android/iOS client. The choice is the CLIENT's — a deployment can serve both, and the dispatcher's configured provider must match the transport of the row it claims.
+
+Enum values: `web_push`, `fcm`.
+
+**Example**
+
+```json
+"web_push"
 ```
 
 ### Schema: RedeemSessionHandoffRequest

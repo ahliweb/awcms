@@ -69,6 +69,8 @@ tags:
     description: "Tenant-scoped, cross-content PostgreSQL full-text search over PUBLISHED public website content (site_search module, ADR-0040) — the public, anonymous, host-resolved query/suggest endpoints plus the admin index status/reconcile/rebuild, tenant search configuration, and failed-item diagnostics API. The index is a projection of public content only and is NEVER an authorization source: publication state is enforced at the source-to-index boundary, so a draft/private/deleted/scheduled resource is never even read into it. Query text is always a bound parameter into websearch_to_tsquery (no SQL injection) and snippets are HTML-escaped before the <mark> highlights are inserted (no XSS). index.rebuild is high-risk (delete + re-extract every document); index.reconcile is an idempotent, fully regenerable sync — both are idempotency-keyed and audited, as is settings.update, which changes what the public surface returns."
   - name: Comments
     description: "Tenant-scoped, moderation-first commenting over PUBLISHED, PUBLIC commentable resources (comments module, ADR-0041) — the public, anonymous, host-resolved submit/list/reply/edit/report/delete-request surface plus the ABAC-guarded admin moderation queue, per-decision transitions, bulk moderation, and tenant comment configuration. A comment is only ever accepted against, or shown on, a resource that satisfies its owning module's declarative publicationFilter, so a draft/private/deleted/scheduled resource never receives or exposes comments, and the comment surface is NEVER an authorization source for the underlying resource. Bodies are stored as raw plain text and HTML-escaped on render (no stored HTML, therefore no stored XSS), permitting only http(s) autolinks with rel=nofollow ugc noopener noreferrer. The public list returns approved rows only and never moderation metadata. Public submit responses are deliberately uniform: an anti-abuse block, an unresolved resource, and an accepted-but-pending comment all return the same neutral body, so the endpoint cannot be used as an oracle for blocked terms or for unpublished content. moderation.approve/restore/delete and settings.update are high-risk, idempotency-keyed, and audited with a reason code."
+  - name: Push Delivery
+    description: "Transactional outbox for device push notifications (push_delivery module, ADR-0074) — the caller's own device registration/revocation plus the operator's queue diagnostics, message cancel, and end-to-end delivery probe. It is a SECOND outbox on purpose: domain-event-runtime calls its consumers INSIDE the claim transaction by design, and ADR-0006 forbids the external HTTP call a push provider needs from inside a transaction. Two transports, neither of which costs a client byte or a CSP origin: Web Push (RFC 8030/8291/8292, VAPID) to browsers — chosen over the FCM Web SDK, which is 2.1x the per-file asset budget and demands three third-party origins the CSP does not have — and FCM HTTP v1 server-to-Google for native clients. Managing one's own device is self-service (the subject is the caller and no recipient is accepted); everything that touches another person's rows or makes the deployment emit traffic goes through the ABAC chokepoint. Endpoints are credential-grade and are stored hashed/masked, projected raw by exactly one function immediately before a provider call."
 paths:
   /api/v1/abac/policies:
     get:
@@ -10164,6 +10166,273 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/push/diagnostics:
+    get:
+      operationId: getPushDiagnostics
+      tags:
+        - Push Delivery
+      summary: The tenant's push outbox — queue counts, recent messages, attempts, devices.
+      description: "One endpoint rather than four because the four parts are only readable together: they come from ONE transaction, so a queue count and a message list can never describe two different instants. Bounded rather than paginated — the historical tail is removed by retention (`bun run push:queue:purge`), not browsed. Endpoints are masked everywhere and notification bodies are never projected. `configured` reports the DEPLOYMENT's push flag and adapter name, which is what distinguishes a stuck queue from a deployment where push is simply off. Requires `push_delivery.diagnostics.read`."
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Narrow the message list to one queue status.
+          schema:
+            $ref: "#/components/schemas/PushMessageStatus"
+        - name: limit
+          in: query
+          required: false
+          description: '1-200, default 50. Out-of-range values are REJECTED rather than clamped: a caller asking for 1000 and silently receiving 200 would read the short list as "that is all there is".'
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Push outbox diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      summary:
+                        $ref: "#/components/schemas/PushQueueSummary"
+                      messages:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PushMessage"
+                      attempts:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PushDeliveryAttempt"
+                      subscriptions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PushSubscription"
+                      configured:
+                        $ref: "#/components/schemas/PushDeploymentConfig"
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Unknown status filter, or a limit outside 1-200.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/push/messages/{id}/cancel:
+    post:
+      operationId: cancelPushMessage
+      tags:
+        - Push Delivery
+      summary: Cancel a push notification that has not been sent yet.
+      description: "Only `queued` and `retry_wait` are cancellable. A row in `sending` has been claimed by a dispatcher pass that may already be inside the HTTP call, so recording it as cancelled would be a claim this system cannot substantiate. Deliberately NOT idempotency-keyed: a second call performs no new work, so there is no replay contract to honour. Requires `push_delivery.messages.cancel`."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The message was cancelled before delivery.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      cancelled:
+                        type: boolean
+                        enum:
+                          - true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Not cancellable. One answer for "no such message", "already sent", "already failed", "already cancelled" and "being sent right now" — distinguishing them would hand a narrow grant an existence oracle over the queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/push/subscriptions:
+    get:
+      operationId: listOwnPushSubscriptions
+      tags:
+        - Push Delivery
+      summary: List the caller's own registered push devices.
+      description: "Every device the calling identity has registered in this tenant, newest first, with the endpoint MASKED — the raw endpoint is credential-grade and is projected by exactly one server-side function, immediately before a provider call. Also returns whether Web Push is configured on this deployment and, if so, the VAPID application server key the browser needs for PushManager.subscribe(). That key is public by definition; it travels with the list so a client needs one round trip rather than two. A machine credential presented here receives the ordinary 401: it has no device."
+      responses:
+        "200":
+          description: The caller's devices plus the deployment's Web Push capability.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      subscriptions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PushSubscription"
+                      webPush:
+                        $ref: "#/components/schemas/WebPushCapability"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: registerOwnPushSubscription
+      tags:
+        - Push Delivery
+      summary: Register (or re-activate) a push device for the caller.
+      description: 'Takes the browser''s own PushSubscription.toJSON() shape plus a transport discriminator. The owner is the calling identity and cannot be supplied: there is no recipient parameter on this endpoint. Re-registration is safe and expected — browsers re-issue PushManager.subscribe() on every page load once permission is granted, so a conflict on the endpoint hash updates the existing row (and re-activates it if a push service had previously reported it gone) instead of creating a second one. Returns 201 in both cases: "created" versus "already yours" is a distinction the client cannot act on. A suspended tenant is refused (ADR-0073).'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushSubscriptionRegistration"
+      responses:
+        "201":
+          description: The registered device.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      subscription:
+                        $ref: "#/components/schemas/PushSubscription"
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Malformed registration — unknown transport, a non-https endpoint, an endpoint pointing at a literal private address, or key material that is not the RFC 8291 size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/push/subscriptions/{id}:
+    delete:
+      operationId: revokeOwnPushSubscription
+      tags:
+        - Push Delivery
+      summary: Retire one of the caller's own push devices.
+      description: 'Ownership is matched inside the UPDATE rather than checked after a read, so there is no window between the two and no way to learn whether an id belongs to somebody else. "No such subscription", "belongs to another user" and "already revoked" all answer 404. The row survives as evidence that the device was revoked and when, but the stored endpoint does not: a user-initiated revocation destroys it, because unlike a subscription the push service reported gone, this one may still be perfectly usable.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The device was revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: boolean
+                        enum:
+                          - true
+                  meta:
+                    type: object
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/push/test:
+    post:
+      operationId: sendPushTestNotification
+      tags:
+        - Push Delivery
+      summary: Queue a test notification to the caller's own devices.
+      description: "Proves the parts of the chain nothing else can see — that the VAPID key pair matches the one the browser subscribed with, that the service worker registered at the right scope, that the operating system is not withholding permission. Each of those fails as a queue that drains cleanly and a device that shows nothing. The recipient is the CALLER and the endpoint accepts no recipient parameter: a test that took one would be an arbitrary-notification surface, delivering system-branded text of the sender's choosing to any colleague's lock screen. Title and body are fixed for the same reason. Requires `push_delivery.diagnostics.check`."
+      responses:
+        "200":
+          description: How many devices the test was queued to.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      queuedCount:
+                        type: integer
+                        minimum: 1
+                  meta:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Push is disabled on this deployment (the dispatcher would claim nothing, leaving the probe queued forever), or the caller has no active device to send to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/registration-requests:
     get:
       operationId: listRegistrationRequests
@@ -18417,6 +18686,187 @@ components:
             $ref: "#/components/schemas/PublicComment"
         nextCursor:
           $ref: "#/components/schemas/CommentKeysetCursor"
+    PushDeliveryAttempt:
+      type: object
+      description: 'One row per ATTEMPT. Successes are included as well as failures: a provider that started answering slowly, or one that changed which endpoints it accepts, is a pattern across both. A failures-only view answers "what broke" and never "since when".'
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        attemptNo:
+          type: integer
+        outcome:
+          type: string
+          enum:
+            - success
+            - failure
+        providerName:
+          type: string
+        providerResponseSnippet:
+          type: string
+          nullable: true
+          description: Truncated provider reply. Never the payload, never the endpoint.
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    PushDeploymentConfig:
+      type: object
+      description: "Deployment-level facts, not tenant configuration: both credentials authenticate the SERVER (an FCM service account belongs to one Firebase project; a VAPID key pair identifies one application server), so there is no per-tenant override and there is not meant to be one."
+      properties:
+        enabled:
+          type: boolean
+        provider:
+          type: string
+          nullable: true
+          enum:
+            - log
+            - fcm
+            - web_push
+    PushMessage:
+      type: object
+      description: "One row per (notification, device). `body` is deliberately not projected: an operator diagnosing delivery needs the category, the status and the error, and the notification text is the one field here that carries user-facing content."
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          type: string
+        status:
+          $ref: "#/components/schemas/PushMessageStatus"
+        priority:
+          type: string
+          enum:
+            - low
+            - normal
+            - high
+        title:
+          type: string
+        targetPath:
+          type: string
+          nullable: true
+          description: Same-origin path only — never an absolute URL.
+        retryCount:
+          type: integer
+        lastError:
+          type: string
+          nullable: true
+        providerName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        tenantUserId:
+          type: string
+          format: uuid
+        endpointMasked:
+          type: string
+        transport:
+          $ref: "#/components/schemas/PushTransport"
+    PushMessageStatus:
+      type: string
+      enum:
+        - queued
+        - retry_wait
+        - sending
+        - sent
+        - failed
+        - cancelled
+    PushQueueSummary:
+      type: object
+      properties:
+        countsByStatus:
+          type: object
+          description: Every status, including the ones with zero rows. A summary that omitted empty buckets would make "no failures" and "failures nobody asked about" render identically.
+          additionalProperties:
+            type: integer
+        oldestPendingAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+        activeSubscriptions:
+          type: integer
+        disabledSubscriptions:
+          type: integer
+    PushSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantUserId:
+          type: string
+          format: uuid
+        transport:
+          $ref: "#/components/schemas/PushTransport"
+        endpointMasked:
+          type: string
+          description: Origin plus a short tail for a Web Push URL, or a short head/tail pair for an opaque FCM token. Never the authenticating middle.
+        status:
+          type: string
+          enum:
+            - active
+            - disabled
+        disabledReason:
+          type: string
+          nullable: true
+          description: Why the device stopped receiving — `revoked_by_user`, or what the push service reported (404/410, FCM `UNREGISTERED`). Disabled rather than deleted, because a deleted row and one that never existed are indistinguishable, and the difference is exactly what "why did this user stop getting notifications" needs.
+        lastSuccessAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    PushSubscriptionRegistration:
+      type: object
+      required:
+        - transport
+        - endpoint
+      properties:
+        transport:
+          $ref: "#/components/schemas/PushTransport"
+        endpoint:
+          type: string
+          maxLength: 2048
+          description: "The push service URL (web_push, https: only, never a literal private address) or the FCM registration token. Bounded because it is an opaque credential-shaped string written by an authenticated caller; real values are ~200 characters."
+        keys:
+          type: object
+          description: REQUIRED for web_push, and rejected for fcm — a client sending both has confused its two registration paths, and silently dropping half of what it sent would store a row that cannot deliver while reporting success.
+          properties:
+            p256dh:
+              type: string
+              description: base64url, decoding to 65 bytes (uncompressed P-256 point, RFC 8291 §3.1).
+            auth:
+              type: string
+              description: base64url, decoding to 16 bytes (RFC 8291 §3.2).
+    PushTransport:
+      type: string
+      enum:
+        - web_push
+        - fcm
+      description: "`web_push` is RFC 8030/8291/8292 to a browser; `fcm` is FCM HTTP v1 to a native Android/iOS client. The choice is the CLIENT's — a deployment can serve both, and the dispatcher's configured provider must match the transport of the row it claims."
     RealtimeStats:
       type: object
       properties:
@@ -20011,6 +20461,16 @@ components:
         userAgentHash:
           type: string
           nullable: true
+    WebPushCapability:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: "False is a normal answer, not an error: an offline/LAN deployment has no push service to reach and no VAPID key pair configured."
+        applicationServerKey:
+          type: string
+          nullable: true
+          description: base64url VAPID public key, passed straight to PushManager.subscribe(). Public by definition — it is the value the browser hands the push service to identify this application server. Rotating it does NOT re-key existing subscriptions; it makes every one of them permanently undeliverable until the user subscribes again.
 security:
   - bearerAuth: []
     tenantHeader: []

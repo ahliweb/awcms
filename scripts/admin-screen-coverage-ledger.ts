@@ -19,7 +19,7 @@
  * but it is an edit somebody makes on purpose, in a file whose only content is
  * work not done.
  *
- * Nine modules, and the two largest groups are worth naming because they are not
+ * Ten modules, and the two largest groups are worth naming because they are not
  * cosmetic: every `email` suppression key (a suppressed address silently stops
  * receiving mail, including password resets, and nothing can list or clear it
  * from a page), and every `identity_access.business_scope_*` key (assignment
@@ -93,6 +93,15 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "module_management.permissions.read",
   "module_management.settings.read",
   "module_management.settings.update",
+
+  // push_delivery (3) — Issue #466. The endpoints landed with the module's
+  // operator surface; the console that drives them is the next PR, and the
+  // module stays `experimental` until it exists (ADR-0021 criterion 1 refuses
+  // an `active` module with no screen). Three lines that are scheduled to be
+  // deleted, not three decisions.
+  "push_delivery.diagnostics.check",
+  "push_delivery.diagnostics.read",
+  "push_delivery.messages.cancel",
 
   // profile_identity (3)
   "profile_identity.profile_management.delete",

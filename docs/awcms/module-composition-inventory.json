@@ -237,7 +237,7 @@
       "dependencies": ["tenant_admin", "logging"],
       "capabilitiesProvided": [],
       "capabilitiesConsumed": [],
-      "permissionCount": 0,
+      "permissionCount": 3,
       "navigationCount": 0,
       "jobCount": 2,
       "hasHealthCheck": false,

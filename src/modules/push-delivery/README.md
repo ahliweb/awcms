@@ -76,8 +76,29 @@ Token VAPID di-cache per **origin**, jadi satu batch 500 pelanggan Firefox berha
 
 `bun run push:vapid:generate` mencetak satu pasangan kunci dalam bentuk persis yang `.env` inginkan — beserta peringatan bahwa **merotasinya tidak me-re-key langganan yang ada**, melainkan membuat semuanya permanen tak-terkirimi sampai penggunanya berlangganan ulang.
 
+## Permukaan HTTP
+
+Dua kelas endpoint, dan pembelahannya adalah keputusan otorisasi — bukan penataan berkas.
+
+**Perangkat SENDIRI itu self-service** (`defineSelfServiceTenantRoute`, ADR-0049 §7). `GET|POST /api/v1/push/subscriptions` dan `DELETE …/{id}` tidak memeriksa permission apa pun, karena subjeknya adalah pemanggil: jawaban atas "boleh saya berlangganan di browser ini?" adalah "Anda sedang memegang sesinya". Rute-rute itu **tidak pernah menerima `tenantUserId`** — ia datang dari sesi yang di-resolve dan dari tidak ada tempat lain, jadi tak ada id untuk dibandingkan dengan apa pun.
+
+Menciptakan `push_delivery.subscriptions.create` justru akan menjadi jebakan latent-authz yang sudah pernah kena di repo ini: aksi yang tak di-seed role mana pun menolak **semua orang termasuk owner**, sementara kode pemanggilnya terbaca seolah tergerbangi dengan benar. Notifikasi push adalah untuk pengguna biasa; tembok permission di depannya adalah tembok di depan fiturnya.
+
+**Yang menyentuh baris orang lain, atau membuat deployment mengirim trafik nyata, lewat chokepoint.** Tiga permission, dan itu seluruhnya: `diagnostics.read`, `messages.cancel`, `diagnostics.check`.
+
+Kepemilikan pada pencabutan ditegakkan **di dalam `WHERE`**, bukan lewat baca-lalu-bandingkan: tak ada jendela di antara keduanya, dan tak ada keputusan yang harus diambil tentang baris yang sudah terbaca tapi tak boleh disentuh — persis cara sebuah oracle keberadaan lahir tanpa sengaja. "Tidak ada", "milik orang lain", dan "sudah dicabut" menjawab **404** yang sama.
+
+Pencabutan oleh pengguna juga **menghancurkan endpoint tersimpan**, tidak seperti `disablePushSubscription` yang menyimpannya sebagai bukti. Bedanya: yang satu mencatat apa kata push service tentang endpoint yang sudah mati; yang ini mencatat apa kata ORANGNYA tentang endpoint yang mungkin masih hidup sempurna. Baris tetap ada (operator masih perlu tahu perangkat itu dicabut dan kapan), kredensialnya tidak.
+
+`endpoint = EXCLUDED.endpoint` di upsert adalah pasangan wajibnya, dan tanpa pemikiran itu ia terlihat seperti baris mubazir: target konflik adalah HASH dari kolom itu sendiri, jadi di setiap kasus biasa nilainya identik. Ia ada untuk satu kasus — perangkat yang berlangganan ulang setelah dicabut akan kembali `active` sambil masih menunjuk nisan: terlihat sehat di konsol, tak terkirimi pada kenyataannya.
+
+### Probe kirim
+
+`POST /api/v1/push/test` mengirim ke perangkat **pemanggil sendiri**, dengan judul dan isi **tetap**, dan tidak menerima parameter penerima. Itu batas keamanan, bukan penyederhanaan: endpoint uji yang menerima penerima adalah permukaan notifikasi-sembarang — teks bermerek sistem, dipilih pengirim, dengan target klik, mendarat di lock screen kolega mana pun. Isi notifikasi adalah teks paling dipercaya yang bisa ditaruh aplikasi ini di depan seseorang.
+
+Alasan probe-nya perlu ada sama sekali: push gagal di tempat yang tak bisa dilihat apa pun di sistem ini — pasangan kunci VAPID yang tak cocok dengan yang dipakai browser saat berlangganan, service worker yang terdaftar di scope salah, sistem operasi yang diam-diam menahan izin. Ketiganya menghasilkan antrean yang terkuras bersih dan perangkat yang tak menampilkan apa-apa.
+
 ## Yang BELUM ada
 
-- **Permukaan HTTP dan service worker.** Mendaftarkan langganan lewat API, service worker yang menerima `push`, dan layar admin belum ada. Sampai itu, `enqueuePushToRecipients` belum punya pemanggil produksi dan modul ini tetap berstatus `experimental`.
-- **Permukaan HTTP.** Mendaftarkan dan mencabut langganan lewat API, plus layar admin, mendarat bersama adapter-nya. Sampai itu `enqueuePushToRecipients` belum punya pemanggil produksi — kesenjangan yang dicatat di ADR-0074 §Konsekuensi alih-alih dibiarkan ditemukan.
+- **Service worker dan layar admin.** Endpoint-nya sudah ada; konsol yang menggerakkannya belum, dan karena itu modul ini tetap `experimental` — ADR-0021 kriteria 1 menolak modul `active` tanpa layar admin, tanpa pengecualian. Tiga permission-nya sementara tercatat di ledger `NOT_YET_SCREENED`.
 - **FCM Web (SDK browser).** Ditolak, dengan angkanya, di ADR-0074 §Yang DITOLAK.

@@ -757,6 +757,21 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/push/diagnostics.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/push/messages/[id]/cancel.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/push/test.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/registration-requests/[id]/approve.ts",
       "workClass": "interactive",
       "source": "factory"

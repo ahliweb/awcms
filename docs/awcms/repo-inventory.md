@@ -8,12 +8,12 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 93    |
+| Migrasi                            | 94    |
 | Tabel `awcms_*`                    | 130   |
 | Tabel dengan `FORCE` RLS           | 119   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 328   |
-| Berkas route                       | 311   |
+| Berkas test                        | 329   |
+| Berkas route                       | 316   |
 | ADR                                | 75    |
 
 ### Modul
@@ -140,6 +140,7 @@
 | 91  | `sql/091_awcms_abac_decision_log_retention.sql`                    |
 | 92  | `sql/092_awcms_tenant_lifecycle.sql`                               |
 | 93  | `sql/093_awcms_push_delivery_schema.sql`                           |
+| 94  | `sql/094_awcms_push_delivery_permissions.sql`                      |
 
 ### Tabel & Row-Level Security
 
@@ -280,7 +281,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 280        |
+| `(root)`      | 281        |
 | `e2e`         | 12         |
 | `integration` | 35         |
 | `unit`        | 1          |
@@ -289,7 +290,7 @@
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 257    |
+| `/api/v1/**`    | 262    |
 | `/admin/**`     | 32     |
 | publik / anonim | 22     |
 

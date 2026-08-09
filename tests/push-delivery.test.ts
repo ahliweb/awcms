@@ -304,16 +304,17 @@ describe("retention cannot silently delete undelivered work", () => {
   });
 });
 
-describe("the module lands inert", () => {
-  test("no navigation, no API surface, no permissions — nothing to authorize yet", () => {
-    // Stated as an assertion rather than left implicit: this module ships a
-    // queue and a worker, and the HTTP surface arrives with the real adapters
-    // (#466). If any of these appear without permissions and a screen, the
-    // enforcement and screen-coverage gates are what should catch it — this
-    // records the starting point they measure against.
+describe("the module has a surface but not yet a screen", () => {
+  test("API and permissions are declared; navigation still is not", () => {
+    // The predecessor of this test asserted all three were absent, which was
+    // the honest starting point when the module shipped a queue and no way to
+    // reach it. Two of the three have now landed (#466); `navigation` has not,
+    // and that is what keeps the module `experimental` — ADR-0021 criterion 1
+    // refuses an `active` module with no admin screen, with zero exceptions.
+    expect(pushDeliveryModule.api?.basePath).toBe("/api/v1/push");
+    expect(pushDeliveryModule.permissions).toBeDefined();
     expect(pushDeliveryModule.navigation).toBeUndefined();
-    expect(pushDeliveryModule.api).toBeUndefined();
-    expect(pushDeliveryModule.permissions).toBeUndefined();
+    expect(pushDeliveryModule.status).toBe("experimental");
   });
 
   test("both jobs are declared and both are safe on an offline/LAN deployment", () => {
