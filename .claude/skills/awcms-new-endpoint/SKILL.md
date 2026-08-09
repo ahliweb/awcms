@@ -40,12 +40,17 @@ export const GET = defineTenantRoute({
 - **Bentuk callback `authorize`:** tulis `prepare` SEBELUM `authorize` di object
   literal. TypeScript menyimpulkan `TPrepared` menurut urutan sumber; `authorize`
   duluan mem-pin-nya ke `undefined` dan errornya menyesatkan.
-- **Gate `bun run api:tenant-route:check`** menolak rute BARU yang memanggil
-  `withTenant` langsung. 204 rute lama ada di `NOT_YET_MIGRATED` — daftar yang
-  **hanya boleh menyusut**; entri basi juga menggagalkan gate. **Jangan pernah
-  menambah baris ke daftar itu.**
+- **Gate `bun run api:tenant-route:check`** menolak rute BARU yang membuka
+  transaksi tenant sendiri. Ia memindai **dua** root sejak Issue #424:
+  `src/pages/api` (`.ts`) dan `src/pages/admin` (`.astro`). `NOT_YET_MIGRATED`
+  memuat 236 berkas — rute API lama plus **32 layar admin** (PROJECT_STATE §4
+  R3). Daftar itu **hanya boleh menyusut**; entri basi juga menggagalkan gate.
+  **Jangan pernah menambah baris ke daftar itu.**
 - Migrasi rute lama: satu modul per PR, tanpa perubahan perilaku, hapus barisnya
   dari daftar.
+- **Layar admin belum bisa dimigrasi:** helper `defineAdminScreen` belum ada (ia
+  Gelombang 1 dari #423). Sampai ia mendarat, jangan menambah layar `/admin/*`
+  yang membuka transaksinya sendiri — gate akan menolaknya, dan itu disengaja.
 
 ## Aturan
 
