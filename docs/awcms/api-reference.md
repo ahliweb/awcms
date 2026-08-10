@@ -6673,7 +6673,7 @@ Gated by data_lifecycle.legal_hold.release — a DISTINCT permission from create
 - **operationId**: `dataLifecycleRegistryList`
 - **Security**: bearerAuth + tenantHeader
 
-Gated by data_lifecycle.registry.read. Code-declared descriptor metadata only (table/owner/scope/cursor/retention bounds/execution mode) — never row contents, never a live count. The response body is identical for every tenant; auth/ABAC still applies.
+Gated by data_lifecycle.registry.read. Code-declared descriptor metadata only (table/owner/scope/cursor/retention bounds/execution mode) — never row contents, never a live count. The response body is identical for every tenant; auth/ABAC still applies. Two arrays, because a table's owner is either a module or infrastructure and the two cannot be spelled the same way (ADR-0076).
 
 **Parameters**
 

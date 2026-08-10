@@ -20,7 +20,7 @@ paths:
       tags:
         - Data Lifecycle
       summary: List the high-volume table lifecycle registry
-      description: Gated by data_lifecycle.registry.read. Code-declared descriptor metadata only (table/owner/scope/cursor/retention bounds/execution mode) — never row contents, never a live count. The response body is identical for every tenant; auth/ABAC still applies.
+      description: Gated by data_lifecycle.registry.read. Code-declared descriptor metadata only (table/owner/scope/cursor/retention bounds/execution mode) — never row contents, never a live count. The response body is identical for every tenant; auth/ABAC still applies. Two arrays, because a table's owner is either a module or infrastructure and the two cannot be spelled the same way (ADR-0076).
       operationId: dataLifecycleRegistryList
       parameters:
         - $ref: "#/components/parameters/CorrelationId"
@@ -42,6 +42,11 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/DataLifecycleDescriptor"
+                      infrastructureDescriptors:
+                        type: array
+                        description: Descriptors for tables owned by src/lib/ infrastructure rather than by a module (ADR-0076). Always executionMode "delegated" — the generic engine purges on behalf of an owning module, and these have none.
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleInfrastructureDescriptor"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -321,6 +326,48 @@ components:
         executionMode:
           type: string
           enum: [delegated, generic]
+    DataLifecycleInfrastructureDescriptor:
+      type: object
+      description: "Trusted code-declared metadata for a table with NO owning module — see src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry.ts. Identical to DataLifecycleDescriptor except that ownerPath (a src/lib/ directory) replaces ownerModuleKey: naming a module here would be a false ownership claim, which is the defect this registry exists to make unstateable."
+      required:
+        - key
+        - tableName
+        - ownerPath
+        - scope
+        - cursorColumn
+        - retentionClass
+        - retentionMinDays
+        - retentionMaxDays
+        - defaultRetentionDays
+        - batchLimit
+        - executionMode
+      additionalProperties: true
+      properties:
+        key:
+          type: string
+        tableName:
+          type: string
+        ownerPath:
+          type: string
+          description: The src/lib/<subsystem>/ directory that owns the schema.
+        scope:
+          type: string
+          enum: [tenant, global]
+        cursorColumn:
+          type: string
+        retentionClass:
+          type: string
+        retentionMinDays:
+          type: integer
+        retentionMaxDays:
+          type: integer
+        defaultRetentionDays:
+          type: integer
+        batchLimit:
+          type: integer
+        executionMode:
+          type: string
+          enum: [delegated]
     DataLifecycleDryRunRequest:
       type: object
       required:

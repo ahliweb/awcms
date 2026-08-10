@@ -23,7 +23,7 @@ import {
   type ReleaseLegalHoldInput
 } from "../domain/legal-hold";
 import { DATA_LIFECYCLE_MODULE_KEY } from "../domain/data-lifecycle-permissions";
-import { collectHighVolumeTableDescriptors } from "../domain/lifecycle-registry";
+import { collectAllLifecycleDescriptorKeys } from "../domain/infrastructure-lifecycle-registry";
 import { listModules } from "../../index";
 
 export type LegalHoldRow = {
@@ -106,9 +106,10 @@ export async function createLegalHold(
   // descriptor — otherwise the hold is "active" yet guards nothing (the purge
   // paths match on the exact key), so an operator typo would silently leave the
   // data purgeable. Validated against the live code-declared registry.
-  const validDescriptorKeys = collectHighVolumeTableDescriptors(
-    listModules()
-  ).map((descriptor) => descriptor.key);
+  // BOTH registries (ADR-0076). An infrastructure descriptor declaring
+  // `legalHold.applicable: true` that no hold could name would be a claim with
+  // no way to exercise it.
+  const validDescriptorKeys = collectAllLifecycleDescriptorKeys(listModules());
   const errors = validateCreateLegalHoldInput(input, validDescriptorKeys);
   if (errors.length > 0) {
     return { ok: false, errors };

@@ -38,8 +38,11 @@
  *
  * A table passes three ways, and a NEW table has only two of them:
  *
- * - a `dataLifecycle` descriptor (`data-lifecycle:registry:check` validates its
- *   contents; this gate only asks whether one exists);
+ * - a `dataLifecycle` descriptor — declared by the owning module, or (ADR-0076)
+ *   in `INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS` when the table is owned by
+ *   `src/lib/` and has no module to declare it. `data-lifecycle:registry:check`
+ *   validates the contents of both and proves the second kind really is
+ *   infrastructure-owned; this gate only asks whether one exists;
  * - `BOUNDED_BY_DESIGN` — a reasoned refusal. **Starts empty.** A new bounded
  *   table joins it with a sentence a reviewer can disagree with;
  * - `TABLES_PREDATING_THE_RULE` — the 114 tables that already existed. It may
@@ -56,12 +59,14 @@
  * traffic, and the honest place to answer it is `security:readiness` against a
  * real database, not a pure gate in the `check` chain.
  *
- * Pure: reads `sql/` and `listModules()`. No database, no network.
+ * Pure: reads `sql/`, `listModules()`, and the infrastructure registry. No
+ * database, no network.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { listModules } from "../src/modules";
+import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
 import { deriveTableRlsStates } from "./repo-inventory";
 
 const MIGRATIONS_DIR = "sql";
@@ -121,7 +126,6 @@ export const TABLES_PREDATING_THE_RULE: readonly string[] = [
   "awcms_domain_event_consumer_state",
   "awcms_domain_event_replays",
   "awcms_domain_events",
-  "awcms_edge_cache_purges",
   "awcms_email_suppression_list",
   "awcms_email_templates",
   "awcms_external_identities",
@@ -306,10 +310,24 @@ export function collectTables(): string[] {
   ).map((state) => state.table);
 }
 
+/**
+ * Both registries — a table has answered the question wherever its descriptor
+ * lives (ADR-0076).
+ *
+ * Reading only `listModules()` here was correct while modules were the only
+ * source. Left that way after the infrastructure registry landed, it would have
+ * counted `awcms_edge_cache_purges` as undescribed while its descriptor sat
+ * right there — a gate telling the truth about the wrong thing.
+ */
 export function collectDescribedTables(): string[] {
-  return listModules().flatMap((module) =>
-    (module.dataLifecycle ?? []).map((descriptor) => descriptor.tableName)
-  );
+  return [
+    ...listModules().flatMap((module) =>
+      (module.dataLifecycle ?? []).map((descriptor) => descriptor.tableName)
+    ),
+    ...INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS.map(
+      (descriptor) => descriptor.tableName
+    )
+  ];
 }
 
 function main(): void {

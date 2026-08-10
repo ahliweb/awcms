@@ -55,9 +55,32 @@ export function collectHighVolumeTableDescriptors(
   return modules.flatMap((module) => module.dataLifecycle ?? []);
 }
 
-function validateSingleDescriptor(
-  ownerModule: ModuleDescriptor,
-  descriptor: HighVolumeTableDescriptor
+/**
+ * The descriptor shape the two registries share.
+ *
+ * `ownerModuleKey` is optional HERE and nowhere else. A module-declared
+ * descriptor is a `HighVolumeTableDescriptor`, where the field is required by
+ * the type and its VALUE is checked below; the infrastructure registry
+ * (ADR-0076) has no module to name, so it passes `null` as the expected owner
+ * and the check is skipped rather than satisfied with a placeholder. Loosening
+ * the field on `HighVolumeTableDescriptor` itself was the alternative, and it
+ * would have turned a forgotten `ownerModuleKey` from an error into a silent
+ * claim of infrastructure ownership.
+ */
+export type LifecycleDescriptorShape = Omit<
+  HighVolumeTableDescriptor,
+  "ownerModuleKey"
+> & { ownerModuleKey?: string };
+
+/**
+ * Every structural rule that does not depend on WHO owns the table.
+ *
+ * `expectedOwnerKey` is the declaring module's key, or `null` for a descriptor
+ * with no module owner at all.
+ */
+export function validateLifecycleDescriptorShape(
+  expectedOwnerKey: string | null,
+  descriptor: LifecycleDescriptorShape
 ): LifecycleRegistryIssue[] {
   const issues: LifecycleRegistryIssue[] = [];
   const push = (message: string) =>
@@ -75,9 +98,12 @@ function validateSingleDescriptor(
     );
   }
 
-  if (descriptor.ownerModuleKey !== ownerModule.key) {
+  if (
+    expectedOwnerKey !== null &&
+    descriptor.ownerModuleKey !== expectedOwnerKey
+  ) {
     push(
-      `ownerModuleKey (${JSON.stringify(descriptor.ownerModuleKey)}) must equal the declaring module's own key (${JSON.stringify(ownerModule.key)}) — a module must not declare a descriptor it claims another module owns.`
+      `ownerModuleKey (${JSON.stringify(descriptor.ownerModuleKey)}) must equal the declaring module's own key (${JSON.stringify(expectedOwnerKey)}) — a module must not declare a descriptor it claims another module owns.`
     );
   }
 
@@ -295,7 +321,7 @@ export function validateLifecycleRegistry(
   for (const module of modules) {
     for (const descriptor of module.dataLifecycle ?? []) {
       allDescriptors.push(descriptor);
-      issues.push(...validateSingleDescriptor(module, descriptor));
+      issues.push(...validateLifecycleDescriptorShape(module.key, descriptor));
 
       seenKeys.set(descriptor.key, (seenKeys.get(descriptor.key) ?? 0) + 1);
       seenTableNames.set(
