@@ -356,6 +356,78 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 (lanjutan) — GELOMBANG 2 SELESAI.** Tiga PR
+  (#496/#497/#498 + entri ini). Permukaan sesi & kredensial dari
+  [program model keanggotaan](awcms/program-model-keanggotaan-2026-08-09.md)
+  lengkap; #430 dan #423 tetap terbuka secara sadar.
+
+  **Yang mendarat.** `GET`/`POST /api/v1/users/{id}/sessions[/revoke-all]`
+  (dua izin `user_sessions`, `sql/101`, plus panel sesi di `/admin/users`);
+  `POST /api/v1/auth/sessions/revoke-all`; `POST /api/v1/auth/password/change`.
+  Bersama PR 2.1 (#491) itu seluruh isi Gelombang 2.
+
+  **Tiga koreksi terhadap rencana, masing-masing terverifikasi terhadap kode:**
+
+  1. **Pemecahan izin `user_sessions` TERBALIK dari yang diduga.** Rencana
+     mengutip alasan `machine_credentials` ("yang bisa membunuh kredensial bocor
+     tanpa bisa mencetaknya"). Di sini sumbunya lain: hanya satu dari keduanya
+     MENGUNGKAPKAN sesuatu. `read` adalah jendela permanen ke gerak-gerik
+     kolega; `revoke` menghancurkan akses dan mengembalikan angka. Jadi yang
+     dibeli adalah `revoke` **tanpa** `read` — responder insiden tanpa
+     pandangan ke pergerakan semua orang.
+  2. **Flag `?exceptCurrent=true` TIDAK dibangun.** Nilai satunya juga
+     mengakhiri sesi yang sedang meminta, dan itu `POST /auth/logout` — yang
+     JUGA membersihkan cookie yang tak bisa dilihat rute itu. Default yang tak
+     boleh dibalik lebih jujur ditulis sebagai tiadanya parameter.
+  3. **Step-up aal2 pada ganti password mendarat BERSYARAT.** `requireStepUp`
+     menolak setiap sesi yang tidak sedang `aal2`, dan orang tanpa faktor
+     terdaftar tak akan pernah bisa mencapainya — tanpa syarat, setiap pengguna
+     tanpa MFA permanen tak bisa mengganti passwordnya, dan yang paling butuh
+     justru yang baru tahu passwordnya bocor. Jebakan ADR-0058 §E berbaju lain.
+     Mutasi `if (mfa.enabled)` → `if (true)` memerahkan 4 test.
+
+  **Temuan tentang #430 yang mengubah nilainya.** Mitigasi sementara yang
+  diusulkan issue-nya sendiri — kunci rate-limit `(ip, login_identifier)` alih-alih
+  `(ip, tenant, identifier)` — **sudah tertutup** oleh plafon per-SUMBER yang
+  mendarat di #447: `auth-source:${clientIp}` berlaku lintas SEMUA rute auth dan
+  tak peduli tenant, jadi rotasi header sudah dibatasi di sana. Docblock
+  `auth-rate-limit.ts` bahkan mengoreksi #430 secara langsung ("not 'bound N
+  times looser', as issue #430 described, but not bound"). Yang TERSISA di #430
+  adalah penghitung lockout di basis data (N × `maxFailedAttempts` sebelum satu
+  akun terkunci) dan asimetri MFA per-tenant — keduanya hanya ditutup principal
+  global.
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Menumbuhkan ledger `NOT_YET_SCREENED` untuk dua izin baru** — layar
+     `/admin/users` sudah ada dan merupakan rumah alaminya; permukaan tanpa
+     layar adalah persis kelas utang yang ledger itu ada untuk menghitung.
+  2. **Menolak target = diri sendiri pada revoke-all admin (409)** — lebih
+     sederhana, tetapi meninggalkan celah sampai PR 2.3 mendarat dan memaksa
+     operator menghafal asimetri. `token_hash <> caller` inert untuk target lain,
+     jadi gratis.
+  3. **Mengaudit revoke-all SELF-SERVICE** — jejak audit mencatat apa yang
+     dilakukan administrator terhadap ORANG LAIN; mencatat tiap pembersihan
+     sendiri memenuhi jejak yang dibaca investigator dengan orang yang bertindak
+     atas dirinya sendiri.
+  4. **Membersihkan lockout pada revoke-all self-service** — orang yang
+     membereskan sesi liar belum membuktikan apa pun tentang kredensialnya;
+     menyatukannya menjadikan kebersihan sesi sebuah oracle reset lockout.
+     (Ganti password MEMBERSIHKANNYA, karena di sana kredensialnya dibuktikan.)
+  5. **Menyatukan `revoke-all` self-service dan admin jadi satu endpoint
+     ber-parameter opsional** — subjeknya berbeda (bearer vs URL), gerbangnya
+     berbeda (nol izin vs dua), auditnya berbeda. Satu rute dengan tiga
+     percabangan itu adalah tiga rute yang berbagi bug.
+
+  **Perubahan seam.** `defineTenantRoute` kini menyerahkan `tokenHash` ke
+  handler-nya — nilainya sudah dihitung seam untuk `authorizeInTransaction`, dan
+  menurunkannya kedua kali di dalam rute adalah cara dua turunan satu nilai mulai
+  berbeda pendapat. Penambahan murni, nol call site berubah.
+
+  **Titik-lanjut.** Gelombang 3 (bentuk Policy Cloudflare — `awcms_access_policies`,
+  User Groups, kualifikasi scope), **risiko tertinggi di program** dan prasyaratnya
+  Gelombang 1 sudah selesai. #430 tetap Gelombang 7.
+
 - **PUTARAN 10 Agustus 2026 (analisis isu) — #477 ditutup dengan MENGHAPUS
   tabelnya, sensus #430 dilengkapi, Gelombang 2 dimulai.** Empat PR
   (#487/#490/#491 + entri ini); satu issue ditutup (#477); dua tetap terbuka
