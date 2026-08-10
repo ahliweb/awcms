@@ -2663,6 +2663,117 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/users/{id}/sessions:
+    get:
+      operationId: listTenantUserSessions
+      tags:
+        - Identity & Access
+      summary: List one tenant user's live sessions (identity_access.user_sessions.read).
+      description: >-
+        Where is this person signed in? Gated on
+        `identity_access.user_sessions.read` — the SENSITIVE half of the pair,
+        because it is a standing window into a colleague's movements. The revoke
+        endpoint beside it destroys access instead of disclosing anything, which
+        is why the two are separate permissions and why an incident responder can
+        hold the second without the first.
+
+        Returns no token, no token hash, no raw IP and no raw User-Agent.
+        `isCallerSession` is true only when an administrator points this at their
+        own tenant user. A malformed id, an id from another tenant and an unknown
+        id all answer 404 — distinguishing them would make this a probe for which
+        tenant user ids exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant user's live sessions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      sessions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TenantUserSessionSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/users/{id}/sessions/revoke-all:
+    post:
+      operationId: revokeAllTenantUserSessions
+      tags:
+        - Identity & Access
+      summary: End every live session of one tenant user (identity_access.user_sessions.revoke, audited).
+      description: >-
+        The incident control. Effective on the next request of every revoked
+        session, because authentication reads the same row. Grantable WITHOUT
+        `user_sessions.read`: stopping a suspected-compromised account should not
+        cost a standing window into where everyone is signed in.
+
+        The CALLER's own session is never revoked — the exclusion matches nothing
+        for any target other than the caller's own tenant user, and stops an
+        administrator from signing themselves out of the console mid-incident by
+        clicking their own row. `keptCallerSession` reports when that happened;
+        signing yourself out everywhere is the unpermissioned self-service
+        surface under `/api/v1/auth/sessions`.
+
+        No `Idempotency-Key`: the second call finds nothing live and reports
+        `revokedCount: 0`, so there is no duplicate to suppress. Audited even
+        when it revokes nothing.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: How many sessions were ended.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      revokedCount:
+                        type: integer
+                        minimum: 0
+                      keptCallerSession:
+                        type: boolean
+                        description: True when the target was the caller's own tenant user, so their current session was left alive.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/auth/session-handoff/issue:
     post:
       operationId: issueSessionHandoffCode
@@ -3455,6 +3566,41 @@ components:
         current:
           type: boolean
           description: True for the session this request is authenticated by.
+    TenantUserSessionSummary:
+      type: object
+      description: One live session of a named tenant user, as seen by an administrator. Same exclusions as OwnSessionSummary — no token, no raw IP, no raw User-Agent.
+      required:
+        - id
+        - issuedAt
+        - expiresAt
+        - assuranceLevel
+        - originAuth
+        - isCallerSession
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        assuranceLevel:
+          type: string
+          enum: [aal1, aal2]
+        originAuth:
+          type: string
+          enum: [password, sso, handoff]
+        clientIpHash:
+          type: [string, "null"]
+          description: Keyed, non-reversible pseudonym of the client IP. null when the deployment has no stable AUTH_IP_HASH_SECRET.
+        userAgentSummary:
+          type: [string, "null"]
+        isCallerSession:
+          type: boolean
+          description: True only when the endpoint is pointed at the caller's own tenant user AND this row is the session making the request.
     IssueSessionHandoffRequest:
       type: object
       required:

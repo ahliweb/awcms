@@ -110,6 +110,16 @@ export type TenantRouteHandlerContext<TPrepared> = TenantRouteRequestContext & {
   tx: Bun.TransactionSQL;
   /** Already narrowed to allowed — a deny was returned before `handler` ran. */
   auth: AuthorizedAccess;
+  /**
+   * Kind-tagged hash of the calling bearer (`session-token.ts`) — the same value
+   * the seam handed `authorizeInTransaction`, exposed so a handler that needs to
+   * recognise the CALLING session (rather than the calling person) does not
+   * re-derive it from `request`/`cookies`. Two derivations of one value is how
+   * they come to disagree.
+   *
+   * It is a hash of a live credential: compare it, never return it.
+   */
+  tokenHash: string;
   /** Whatever `prepare` returned (`undefined` when there is no `prepare`). */
   prepared: TPrepared;
 };
@@ -604,7 +614,13 @@ export function defineTenantRoute<TPrepared = undefined>(
           return auth.denied;
         }
 
-        return config.handler({ ...requestContext, tx, auth, prepared });
+        return config.handler({
+          ...requestContext,
+          tx,
+          auth,
+          tokenHash,
+          prepared
+        });
       },
       {
         workClass: config.workClass,

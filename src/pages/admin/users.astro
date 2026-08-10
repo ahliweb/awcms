@@ -55,6 +55,20 @@ const screen = await loadAdminScreen({
       moduleKey: "identity_access",
       activityCode: "access_control",
       action: "assign"
+    }),
+    // Gelombang 2 PR 2.2 (#423) — two SEPARATE keys, asked separately, because
+    // they are separately grantable on purpose: an incident responder may hold
+    // `revoke` without `read`, and the page must then show the button that ends
+    // sessions and NOT the one that lists them.
+    canReadSessions: await can({
+      moduleKey: "identity_access",
+      activityCode: "user_sessions",
+      action: "read"
+    }),
+    canRevokeSessions: await can({
+      moduleKey: "identity_access",
+      activityCode: "user_sessions",
+      action: "revoke"
     })
   }),
   onError: (error) => {
@@ -75,11 +89,16 @@ const users: TenantUserView[] =
 const roles: RoleView[] = screen.state === "allowed" ? screen.data.roles : [];
 const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 const canAssign = screen.state === "allowed" && screen.data.canAssign;
+const canReadSessions =
+  screen.state === "allowed" && screen.data.canReadSessions;
+const canRevokeSessions =
+  screen.state === "allowed" && screen.data.canRevokeSessions;
 
 // role code -> role id, so a user's assigned role codes can be turned into
 // removable controls carrying the id the unassign endpoint expects.
 const roleIdByCode = new Map(roles.map((role) => [role.roleCode, role.id]));
-const showActions = canConfigure || canAssign;
+const showActions =
+  canConfigure || canAssign || canReadSessions || canRevokeSessions;
 ---
 
 <AdminLayout title="Users">
@@ -145,96 +164,139 @@ const showActions = canConfigure || canAssign;
                 </tr>
               ) : (
                 users.map((user) => (
-                  <tr>
-                    <td data-label="Login identifier">
-                      <span class="cell-code">
-                        {user.loginIdentifierMasked}
-                      </span>
-                    </td>
-                    <td data-label="Status">
-                      <span
-                        class="status-badge"
-                        data-variant={
-                          user.status === "active" ? "success" : "neutral"
-                        }
-                      >
-                        <span class="status-dot" aria-hidden="true" />
-                        {user.status}
-                      </span>
-                    </td>
-                    <td data-label="Roles" class="stacked-block">
-                      {user.roles.length === 0 ? (
-                        <span class="cell-muted">—</span>
-                      ) : (
-                        <ul class="role-chip-list">
-                          {user.roles.map((code) => (
-                            <li>
-                              <span class="role-chip">{code}</span>
-                              {canAssign && roleIdByCode.has(code) && (
-                                <button
-                                  type="button"
-                                  class="link-button js-unassign-role"
-                                  data-user-id={user.id}
-                                  data-role-id={roleIdByCode.get(code)}
-                                  aria-label={`Remove role ${code}`}
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </td>
-                    {showActions && (
-                      <td data-label="Actions" class="stacked-block">
-                        <div class="row-actions">
-                          {canConfigure && (
-                            <button
-                              type="button"
-                              class="module-toggle js-user-status"
-                              data-user-id={user.id}
-                              data-next-status={
-                                user.status === "active" ? "inactive" : "active"
-                              }
-                            >
-                              {user.status === "active"
-                                ? "Deactivate"
-                                : "Activate"}
-                            </button>
-                          )}
-                          {canAssign && roles.length > 0 && (
-                            <span class="assign-role-control">
-                              <label
-                                class="visually-hidden"
-                                for={`assign-role-${user.id}`}
-                              >
-                                Role to assign
-                              </label>
-                              <select
-                                id={`assign-role-${user.id}`}
-                                class="js-assign-role-select"
-                              >
-                                {roles.map((role) => (
-                                  <option value={role.id}>
-                                    {role.roleCode}
-                                  </option>
-                                ))}
-                              </select>
+                  <>
+                    <tr>
+                      <td data-label="Login identifier">
+                        <span class="cell-code">
+                          {user.loginIdentifierMasked}
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span
+                          class="status-badge"
+                          data-variant={
+                            user.status === "active" ? "success" : "neutral"
+                          }
+                        >
+                          <span class="status-dot" aria-hidden="true" />
+                          {user.status}
+                        </span>
+                      </td>
+                      <td data-label="Roles" class="stacked-block">
+                        {user.roles.length === 0 ? (
+                          <span class="cell-muted">—</span>
+                        ) : (
+                          <ul class="role-chip-list">
+                            {user.roles.map((code) => (
+                              <li>
+                                <span class="role-chip">{code}</span>
+                                {canAssign && roleIdByCode.has(code) && (
+                                  <button
+                                    type="button"
+                                    class="link-button js-unassign-role"
+                                    data-user-id={user.id}
+                                    data-role-id={roleIdByCode.get(code)}
+                                    aria-label={`Remove role ${code}`}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      {showActions && (
+                        <td data-label="Actions" class="stacked-block">
+                          <div class="row-actions">
+                            {canConfigure && (
                               <button
                                 type="button"
-                                class="module-toggle js-assign-role"
+                                class="module-toggle js-user-status"
                                 data-user-id={user.id}
-                                data-select-id={`assign-role-${user.id}`}
+                                data-next-status={
+                                  user.status === "active"
+                                    ? "inactive"
+                                    : "active"
+                                }
                               >
-                                Assign
+                                {user.status === "active"
+                                  ? "Deactivate"
+                                  : "Activate"}
                               </button>
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                            )}
+                            {canAssign && roles.length > 0 && (
+                              <span class="assign-role-control">
+                                <label
+                                  class="visually-hidden"
+                                  for={`assign-role-${user.id}`}
+                                >
+                                  Role to assign
+                                </label>
+                                <select
+                                  id={`assign-role-${user.id}`}
+                                  class="js-assign-role-select"
+                                >
+                                  {roles.map((role) => (
+                                    <option value={role.id}>
+                                      {role.roleCode}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  class="module-toggle js-assign-role"
+                                  data-user-id={user.id}
+                                  data-select-id={`assign-role-${user.id}`}
+                                >
+                                  Assign
+                                </button>
+                              </span>
+                            )}
+                            {canReadSessions && (
+                              <button
+                                type="button"
+                                class="module-toggle js-user-sessions"
+                                data-user-id={user.id}
+                                aria-expanded="false"
+                                aria-controls={`sessions-${user.id}`}
+                              >
+                                Sessions
+                              </button>
+                            )}
+                            {canRevokeSessions && (
+                              <button
+                                type="button"
+                                class="module-toggle js-user-sessions-revoke"
+                                data-user-id={user.id}
+                              >
+                                Sign out everywhere
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                    {canReadSessions && (
+                      <tr
+                        class="session-panel-row"
+                        id={`sessions-${user.id}`}
+                        hidden
+                      >
+                        <td colspan={4}>
+                          <p
+                            class="cell-muted js-session-status"
+                            data-user-id={user.id}
+                            role="status"
+                          />
+                          <ul
+                            class="session-list js-session-list"
+                            data-user-id={user.id}
+                          />
+                        </td>
+                      </tr>
                     )}
-                  </tr>
+                  </>
                 ))
               )}
             </tbody>
@@ -279,9 +341,137 @@ const showActions = canConfigure || canAssign;
     unlock();
   }
 
+  type SessionSummary = {
+    id: string;
+    issuedAt: string;
+    expiresAt: string;
+    assuranceLevel: string;
+    originAuth: string;
+    clientIpHash: string | null;
+    userAgentSummary: string | null;
+    isCallerSession: boolean;
+  };
+
+  /**
+   * Reads one tenant user's live sessions. Page-local rather than a shared
+   * helper for the same reason `data-lifecycle.astro` keeps its own: `sendJson`
+   * deliberately discards the response body, and a GET whose whole purpose is
+   * the body needs its own narrow shape.
+   */
+  async function fetchSessions(
+    userId: string
+  ): Promise<SessionSummary[] | null> {
+    try {
+      const response = await fetch(`/api/v1/users/${userId}/sessions`, {
+        credentials: "same-origin"
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        data?: { sessions?: SessionSummary[] };
+      } | null;
+
+      if (response.ok && payload?.success === true) {
+        return payload.data?.sessions ?? [];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Built with `createElement` + `textContent`, never `innerHTML`. Every field
+   * here is server-derived and already coarse (`summarizeUserAgent` emits a
+   * bounded label, `clientIpHash` is hex), but a list of session metadata is
+   * exactly the kind of surface where "it is safe today" quietly stops being
+   * true, and the safe construction costs nothing.
+   */
+  function renderSessions(list: HTMLUListElement, sessions: SessionSummary[]) {
+    list.replaceChildren();
+
+    for (const session of sessions) {
+      const item = document.createElement("li");
+      item.className = "session-list-item";
+
+      const when = document.createElement("span");
+      when.className = "cell-code";
+      when.textContent = new Date(session.issuedAt).toLocaleString();
+      item.append(when);
+
+      const details = document.createElement("span");
+      details.className = "cell-muted";
+      details.textContent = [
+        session.userAgentSummary ?? "unknown device",
+        session.originAuth,
+        session.assuranceLevel,
+        // Null when the deployment has no stable hash key — say so rather than
+        // rendering an empty gap the reader has to interpret.
+        session.clientIpHash
+          ? `ip ${session.clientIpHash.slice(0, 12)}`
+          : "ip not recorded",
+        session.isCallerSession ? "this session" : null
+      ]
+        .filter((part) => part !== null)
+        .join(" · ");
+      item.append(details);
+
+      list.append(item);
+    }
+  }
+
+  async function toggleSessions(button: HTMLButtonElement): Promise<void> {
+    const userId = button.dataset.userId;
+    if (!userId) return;
+
+    const panel = document.getElementById(`sessions-${userId}`);
+    const list = panel?.querySelector(".js-session-list");
+    const status = panel?.querySelector(".js-session-status");
+    if (!panel || !(list instanceof HTMLUListElement) || !status) return;
+
+    if (!panel.hidden) {
+      panel.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+      return;
+    }
+
+    panel.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    status.textContent = "Loading sessions…";
+    list.replaceChildren();
+
+    const sessions = await fetchSessions(userId);
+
+    if (sessions === null) {
+      status.textContent = "Sessions could not be loaded.";
+      return;
+    }
+
+    status.textContent =
+      sessions.length === 0
+        ? "No live sessions."
+        : `${sessions.length} live session(s).`;
+    renderSessions(list, sessions);
+  }
+
   document.addEventListener("click", (event) => {
     const target = (event.target as HTMLElement | null)?.closest("button");
     if (!(target instanceof HTMLButtonElement)) return;
+
+    if (target.classList.contains("js-user-sessions")) {
+      void toggleSessions(target);
+      return;
+    }
+
+    if (target.classList.contains("js-user-sessions-revoke")) {
+      const userId = target.dataset.userId;
+      if (!userId) return;
+      void run(
+        target,
+        () => sendJson("POST", `/api/v1/users/${userId}/sessions/revoke-all`),
+        "Could not end this user's sessions. Please try again."
+      );
+      return;
+    }
 
     if (target.classList.contains("js-user-status")) {
       const userId = target.dataset.userId;
@@ -393,6 +583,27 @@ const showActions = canConfigure || canAssign;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-2);
+  }
+
+  .session-panel-row > td {
+    background: var(--color-surface-2);
+  }
+
+  .session-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin: var(--sp-2) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .session-list-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-2);
+    font-size: var(--fs-xs);
   }
 
   @media (prefers-reduced-motion: reduce) {
