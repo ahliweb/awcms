@@ -1160,6 +1160,36 @@ Authenticated by possession of the mfaChallengeToken from POST /auth/login, not 
 | 429    | Too many verification attempts from this source. | [`ApiError`](#standard-error-envelope) |
 | 500    | MFA misconfigured.                               | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/password/change` — Change your own password while signed in (self-service, no permission).
+
+- **operationId**: `changeOwnAuthPassword`
+- **Security**: bearerAuth + tenantHeader
+
+The counterpart to /api/v1/auth/password/reset: that endpoint serves someone who CANNOT sign in and proves control of a mailbox, this one serves someone who is signed in and proves control of the credential. Self-service by construction — the subject is the session bearer and the route accepts no parameter naming anybody else.
+A fresh second factor is required ONLY from callers who have one enrolled. Requiring aal2 unconditionally would permanently prevent every user without MFA from changing their password, and the users most likely to need to are the ones who just learned it leaked. The current password is the re-authentication for everyone; the second factor is additional for those who can supply it.
+On success the password is replaced, the lockout counters are cleared (whoever supplied the current password proved control of the credential), and every OTHER session of that identity is revoked — the calling one survives, because a password change that signs you out of the tab you changed it in reads as a failure and the security property is unaffected.
+Rate limited on the SOURCE despite being authenticated: `currentPassword` is a guessable secret, so this is a credential-guessing surface whenever a session is used by someone who does not know the password behind it. An identifier-keyed bucket would instead let anyone reaching the endpoint hold one person's own password change hostage.
+Audited on both the success and the failure, with the device shape and IP pseudonym, and with no password-shaped attribute — not even a length.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Password changed; the other sessions were revoked.                                                              | object                                 |
+| 400    | Validation failed, or currentPassword did not match (INVALID_CREDENTIALS).                                      | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | MFA is enrolled and this session is not currently stepped up (STEP_UP_REQUIRED).                                | [`ApiError`](#standard-error-envelope) |
+| 409    | The tenant policy signs this identity in through SSO; there is no password to change (PASSWORD_LOGIN_DISABLED). | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many password change attempts from this source.                                                             | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/auth/password/forgot` — Request a password reset link (account-enumeration-safe).
 
 - **operationId**: `postAuthPasswordForgot`

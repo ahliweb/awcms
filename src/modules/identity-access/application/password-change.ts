@@ -1,0 +1,131 @@
+/**
+ * A person changing their OWN password while signed in (Gelombang 2 PR 2.4 of
+ * #423).
+ *
+ * The reset flow (`password-reset.ts`) exists for someone who cannot sign in and
+ * proves control of the mailbox instead. This one is the opposite situation:
+ * they are signed in and prove control of the CREDENTIAL. Both end with the
+ * password replaced and stray sessions gone; what differs is what was proven and
+ * therefore what may be believed afterwards.
+ *
+ * ## Step-up is required only when the person HAS a second factor
+ *
+ * The program plan said "step-up aal2 + old password". Shipping the aal2 half
+ * unconditionally would have been the ADR-0058 §E trap wearing different
+ * clothes: `requireStepUp` denies any session that is not currently `aal2`, and
+ * a person with no enrolled factor can never reach `aal2` — so every user
+ * without MFA would be permanently unable to change their password, and the
+ * ones most likely to need to are the ones who just learned it leaked.
+ *
+ * So the rule is conditional and each half carries its own weight: the current
+ * password is the re-authentication for everyone, and a fresh second factor is
+ * additionally required from anyone who has one. Nobody is ever asked for less
+ * than they can supply, and nobody is asked for something they cannot.
+ *
+ * ## Order inside the function
+ *
+ * Step-up is evaluated BEFORE the argon2id verification. It is far cheaper, and
+ * it keeps a stale-step-up refusal from also being an answer about whether the
+ * submitted `currentPassword` was right.
+ */
+import { hashPassword, verifyPassword } from "../../../lib/auth/password";
+import { getMfaStatus } from "./mfa";
+import { requireStepUp } from "./mfa-session-assurance";
+import { revokeOtherOwnSessions } from "./session-directory";
+import { isPasswordLoginDisabledForIdentity } from "./tenant-auth-policy";
+
+export type ChangeOwnPasswordResult =
+  | { outcome: "changed"; identityId: string; revokedSessionCount: number }
+  /** The bearer names no live session. */
+  | { outcome: "unauthenticated" }
+  /** MFA is enrolled and this session is not currently stepped up. */
+  | { outcome: "step_up_required" }
+  /** The tenant policy says this identity signs in by SSO; there is no password to change. */
+  | { outcome: "password_login_disabled" }
+  /** `currentPassword` did not match. */
+  | { outcome: "invalid_credentials" };
+
+/**
+ * Replaces the caller's password.
+ *
+ * On success it also clears `failed_login_count` / `locked_until`, exactly as
+ * the reset path does and for the same reason: whoever submitted the current
+ * password proved control of the credential, which is a stronger signal than the
+ * failed-attempt counter that locked it. An attacker who could reach this branch
+ * already knows the password, so the lockout was protecting nothing from them.
+ *
+ * Other sessions are revoked; the CALLING one survives. A password change that
+ * signs you out of the tab you changed it in reads as a failure, and the
+ * security property is unaffected — a thief's session is among the ones that
+ * die.
+ */
+export async function changeOwnPassword(
+  tx: Bun.SQL,
+  tenantId: string,
+  tokenHash: string,
+  input: { currentPassword: string; newPassword: string },
+  now: Date
+): Promise<ChangeOwnPasswordResult> {
+  const sessionRows = (await tx`
+    SELECT identity_id FROM awcms_sessions
+    WHERE tenant_id = ${tenantId}
+      AND token_hash = ${tokenHash}
+      AND revoked_at IS NULL
+      AND expires_at > ${now}
+  `) as { identity_id: string }[];
+  const identityId = sessionRows[0]?.identity_id;
+
+  if (!identityId) return { outcome: "unauthenticated" };
+
+  const mfa = await getMfaStatus(tx, tenantId, identityId);
+
+  if (mfa.enabled) {
+    // The `denied` Response it builds is discarded on purpose: the wire shape of
+    // a refusal belongs to the route, and returning one from here would put a
+    // second response-builder inside the application layer.
+    const stepUp = await requireStepUp(tx, tenantId, tokenHash, now);
+
+    if (!stepUp.ok) return { outcome: "step_up_required" };
+  }
+
+  // Re-checked here rather than trusted from login time: the tenant may have
+  // switched to SSO-only since this session was issued, and the whole point of
+  // that policy is that a password cannot be used to get in. Writing a new one
+  // would be writing a credential the policy says must not work.
+  if (await isPasswordLoginDisabledForIdentity(tx, tenantId, identityId)) {
+    return { outcome: "password_login_disabled" };
+  }
+
+  const identityRows = (await tx`
+    SELECT password_hash FROM awcms_identities
+    WHERE tenant_id = ${tenantId} AND id = ${identityId} AND status = 'active'
+  `) as { password_hash: string }[];
+  const passwordHash = identityRows[0]?.password_hash;
+
+  // A live session whose identity is gone or deactivated: reported as
+  // unauthenticated, not as a bad password. The session is what stopped being
+  // valid.
+  if (!passwordHash) return { outcome: "unauthenticated" };
+
+  if (!(await verifyPassword(input.currentPassword, passwordHash))) {
+    return { outcome: "invalid_credentials" };
+  }
+
+  await tx`
+    UPDATE awcms_identities
+    SET password_hash = ${await hashPassword(input.newPassword)},
+        failed_login_count = 0,
+        locked_until = NULL,
+        updated_at = ${now}
+    WHERE tenant_id = ${tenantId} AND id = ${identityId}
+  `;
+
+  const revocation = await revokeOtherOwnSessions(tx, tenantId, tokenHash, now);
+
+  return {
+    outcome: "changed",
+    identityId,
+    revokedSessionCount:
+      revocation.outcome === "revoked" ? revocation.revokedCount : 0
+  };
+}
