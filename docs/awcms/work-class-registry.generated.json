@@ -1132,6 +1132,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/users/[id]/sessions/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/users/[id]/sessions/revoke-all.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/users/index.ts",
       "workClass": "interactive",
       "source": "default"

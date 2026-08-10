@@ -2064,6 +2064,57 @@ Sets the tenant user's status. `awcms_tenant_users` has no `deleted_at`, so deac
 | 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/users/{id}/sessions` — List one tenant user's live sessions (identity_access.user_sessions.read).
+
+- **operationId**: `listTenantUserSessions`
+- **Security**: bearerAuth + tenantHeader
+
+Where is this person signed in? Gated on `identity_access.user_sessions.read` — the SENSITIVE half of the pair, because it is a standing window into a colleague's movements. The revoke endpoint beside it destroys access instead of disclosing anything, which is why the two are separate permissions and why an incident responder can hold the second without the first.
+Returns no token, no token hash, no raw IP and no raw User-Agent. `isCallerSession` is true only when an administrator points this at their own tenant user. A malformed id, an id from another tenant and an unknown id all answer 404 — distinguishing them would make this a probe for which tenant user ids exist.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                    | Schema                                 |
+| ------ | ---------------------------------------------- | -------------------------------------- |
+| 200    | The tenant user's live sessions, newest first. | object                                 |
+| 400    | Validation error.                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/users/{id}/sessions/revoke-all` — End every live session of one tenant user (identity_access.user_sessions.revoke, audited).
+
+- **operationId**: `revokeAllTenantUserSessions`
+- **Security**: bearerAuth + tenantHeader
+
+The incident control. Effective on the next request of every revoked session, because authentication reads the same row. Grantable WITHOUT `user_sessions.read`: stopping a suspected-compromised account should not cost a standing window into where everyone is signed in.
+The CALLER's own session is never revoked — the exclusion matches nothing for any target other than the caller's own tenant user, and stops an administrator from signing themselves out of the console mid-incident by clicking their own row. `keptCallerSession` reports when that happened; signing yourself out everywhere is the unpermissioned self-service surface under `/api/v1/auth/sessions`.
+No `Idempotency-Key`: the second call finds nothing live and reports `revokedCount: 0`, so there is no duplicate to suppress. Audited even when it revokes nothing.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                   | Schema                                 |
+| ------ | ----------------------------- | -------------------------------------- |
+| 200    | How many sessions were ended. | object                                 |
+| 400    | Validation error.             | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.   | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.           | [`ApiError`](#standard-error-envelope) |
+
 ## Profile Identity
 
 Canonical person/organization profile lifecycle, identifiers, and entity links.

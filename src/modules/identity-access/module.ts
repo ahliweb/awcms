@@ -284,6 +284,31 @@ export const identityAccessModule = defineModule({
       action: "revoke",
       description:
         "Revoke a machine credential, effective on its next request — audited"
+    },
+    // Other people's sessions (Gelombang 2 PR 2.2 of #423, sql/101). A separate
+    // activity from `access_control` for the reason `registration_requests` and
+    // `machine_credentials` are: folding it in would make every role editor an
+    // observer of where their colleagues are signed in, by side effect.
+    //
+    // `read` and `revoke` split with the sides SWAPPED relative to
+    // `machine_credentials`, and that is the point. Here `read` is the sensitive
+    // one — a standing window into a colleague's movements — while `revoke`
+    // destroys access rather than disclosing anything. The split buys the
+    // direction that matters during an incident: sign a suspected-compromised
+    // account out of everywhere WITHOUT also being handed the surveillance view.
+    // The caller's own live session is never among the casualties; see
+    // `admin-session-directory.ts`.
+    {
+      activityCode: "user_sessions",
+      action: "read",
+      description:
+        "List another tenant user's live sessions (never their tokens, IPs, or User-Agents)"
+    },
+    {
+      activityCode: "user_sessions",
+      action: "revoke",
+      description:
+        "End every live session of another tenant user, effective on their next request — audited"
     }
   ],
   /**
