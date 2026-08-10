@@ -141,7 +141,6 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       // the grant goes first. Its event table references the policy, so it leads.
       await sql`DELETE FROM awcms_access_policy_events WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_access_policies WHERE tenant_id = ${tenantId}`;
-      await sql`DELETE FROM awcms_access_assignments WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_role_permissions WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_roles WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_tenant_mfa_policies WHERE tenant_id = ${tenantId}`;
@@ -227,8 +226,9 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       VALUES (${tenantId}, ${role[0]!.id}, ${perm[0]!.id})
     `;
     await sql`
-      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id)
-      VALUES (${tenantId}, ${tenantUserId}, ${role[0]!.id})
+      INSERT INTO awcms_access_policies
+        (tenant_id, tenant_user_id, role_id, scope_type, scope_id)
+      VALUES (${tenantId}, ${tenantUserId}, ${role[0]!.id}, 'tenant', ${tenantId})
     `;
   }
 

@@ -6,6 +6,8 @@
  * NOT receive is the rest of the identity: this projection is an allow-list, not
  * a row.
  */
+import { activeRoleGrants } from "./grant-source";
+
 export type SessionIntrospection = {
   identityId: string;
   tenantId: string;
@@ -65,10 +67,10 @@ export async function introspectSession(
   if (!tenantUser) return null;
 
   const roleRows = (await tx`
-    SELECT r.role_code
-    FROM awcms_access_assignments aa
-    JOIN awcms_roles r ON r.id = aa.role_id
-    WHERE aa.tenant_id = ${tenantId} AND aa.tenant_user_id = ${tenantUser.id}
+    SELECT DISTINCT r.role_code
+    FROM (${activeRoleGrants(tx, tenantId)}) g
+    JOIN awcms_roles r ON r.id = g.role_id AND r.tenant_id = ${tenantId}
+    WHERE g.tenant_user_id = ${tenantUser.id}
       AND r.deleted_at IS NULL
     ORDER BY r.role_code
   `) as { role_code: string }[];

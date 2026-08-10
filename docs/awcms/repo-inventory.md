@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 102   |
+| Migrasi                            | 103   |
 | Tabel `awcms_*`                    | 131   |
 | Tabel dengan `FORCE` RLS           | 120   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 344   |
+| Berkas test                        | 345   |
 | Berkas route                       | 324   |
-| ADR                                | 79    |
+| ADR                                | 80    |
 
 ### Modul
 
@@ -149,6 +149,7 @@
 | 100 | `sql/100_awcms_session_fingerprint.sql`                            |
 | 101 | `sql/101_awcms_identity_user_sessions_permissions.sql`             |
 | 102 | `sql/102_awcms_access_policies_schema.sql`                         |
+| 103 | `sql/103_awcms_access_assignments_backfill_retire.sql`             |
 
 ### Tabel & Row-Level Security
 
@@ -292,7 +293,7 @@
 | ------------- | ---------- |
 | `(root)`      | 294        |
 | `e2e`         | 12         |
-| `integration` | 37         |
+| `integration` | 38         |
 | `unit`        | 1          |
 
 ### Routes

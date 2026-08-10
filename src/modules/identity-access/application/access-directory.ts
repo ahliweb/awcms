@@ -16,6 +16,7 @@
  * be inside a `withTenant` transaction and must have passed the ABAC guard.
  */
 import { maskIdentifierValue } from "../../profile-identity/domain/identifier";
+import { activeRoleGrants } from "./grant-source";
 
 const LIST_LIMIT = 100;
 
@@ -45,14 +46,14 @@ export async function listTenantUsers(
       i.login_identifier,
       tu.status,
       COALESCE(
-        array_agg(r.role_code) FILTER (WHERE r.id IS NOT NULL),
+        array_agg(DISTINCT r.role_code) FILTER (WHERE r.id IS NOT NULL),
         '{}'
       ) AS roles
     FROM awcms_tenant_users tu
     JOIN awcms_identities i ON i.id = tu.identity_id
-    LEFT JOIN awcms_access_assignments aa ON aa.tenant_user_id = tu.id
+    LEFT JOIN (${activeRoleGrants(tx, tenantId)}) g ON g.tenant_user_id = tu.id
     LEFT JOIN awcms_roles r
-      ON r.id = aa.role_id AND r.deleted_at IS NULL
+      ON r.id = g.role_id AND r.deleted_at IS NULL
     WHERE tu.tenant_id = ${tenantId}
     GROUP BY tu.id, i.login_identifier, tu.status
     ORDER BY i.login_identifier

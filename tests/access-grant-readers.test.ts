@@ -41,7 +41,7 @@ describe("an unrecorded file that names a grant table is refused", () => {
   test("a new file assembling its own join fails the gate", () => {
     const problems = findGrantReaderProblems(
       withAllowedPresent({
-        "c.ts": "SELECT 1 FROM awcms_access_assignments aa"
+        "c.ts": "SELECT 1 FROM awcms_access_policies ap"
       }),
       ALLOWED
     );
@@ -51,6 +51,25 @@ describe("an unrecorded file that names a grant table is refused", () => {
     // The message must name the alternative, not merely deny: a gate that says
     // "no" without saying "instead" gets satisfied by adding an exception.
     expect(problems[0]!.message).toContain("fetchGrantedPermissionKeys");
+  });
+
+  test("a file naming a RETIRED table is told why, not just refused", () => {
+    // `awcms_access_assignments` is read-only history since `sql/103`
+    // (ADR-0079). The generic message would send the reader to add an
+    // allow-list entry — which is the one fix that must NOT be available here,
+    // because a row in that table can no longer be revoked. So the retired case
+    // names the live source instead.
+    const problems = findGrantReaderProblems(
+      withAllowedPresent({
+        "c.ts": "SELECT 1 FROM awcms_access_assignments aa"
+      }),
+      ALLOWED
+    );
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.message).toContain("RETIRED");
+    expect(problems[0]!.message).toContain("activeRoleGrants");
+    expect(problems[0]!.message).not.toContain("add an entry to GRANT_READERS");
   });
 
   test("it names WHICH table was found, so the fix does not need a second grep", () => {
@@ -132,14 +151,18 @@ describe("the list may not outlive its reasons", () => {
     }
   });
 
-  test("the three readers outside identity_access say so in their reason", () => {
+  test("the readers outside identity_access say so in their reason", () => {
     // Being on the list is not an endorsement, and the entries that cross a
     // module boundary are the ones a future grant-shape change must read first.
+    //
+    // It was three. `email/application/announcement-directory.ts` left in
+    // ADR-0079 — it now embeds `activeRoleGrants` instead of writing its own
+    // join, which is what this whole list is meant to produce.
     const outsiders = GRANT_READERS.filter(
       (entry) => !entry.file.startsWith("src/modules/identity-access/")
     );
 
-    expect(outsiders).toHaveLength(3);
+    expect(outsiders).toHaveLength(2);
 
     for (const entry of outsiders) {
       expect(entry.reason).toContain("OUTSIDE identity_access");

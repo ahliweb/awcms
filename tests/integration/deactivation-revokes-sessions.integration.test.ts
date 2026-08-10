@@ -100,9 +100,10 @@ async function seedFixtures(): Promise<void> {
   `;
 
   await admin`
-    INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-    VALUES (${TENANT}, ${ADMIN_USER}, ${ADMIN_ROLE}, ${ADMIN_USER}),
-           (${TENANT}, ${TARGET_USER}, ${TARGET_ROLE}, ${ADMIN_USER})
+    INSERT INTO awcms_access_policies
+      (tenant_id, tenant_user_id, role_id, scope_type, scope_id, granted_by_tenant_user_id)
+    VALUES (${TENANT}, ${ADMIN_USER}, ${ADMIN_ROLE}, 'tenant', ${TENANT}, ${ADMIN_USER}),
+           (${TENANT}, ${TARGET_USER}, ${TARGET_ROLE}, 'tenant', ${TENANT}, ${ADMIN_USER})
   `;
 
   await admin`

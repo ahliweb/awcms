@@ -61,6 +61,22 @@ export const GRANT_TABLES: readonly string[] = [
   "awcms_role_permissions"
 ];
 
+/**
+ * Grant tables that `sql/103` turned into read-only history (ADR-0079).
+ *
+ * `awcms_access_assignments` stays in `GRANT_TABLES` above rather than being
+ * deleted from it, and that is the entire protection: no file may name it, so a
+ * reader that drifts back onto it — the failure ADR-0079 exists to record, which
+ * happened to FIVE files at once and was invisible in every one of them — fails
+ * this gate instead of silently answering about rows no writer can add to.
+ *
+ * Listed here only so the message can say WHY rather than "not a recorded
+ * reader", which would send the next person to add an allow-list entry.
+ */
+export const RETIRED_GRANT_TABLES: readonly string[] = [
+  "awcms_access_assignments"
+];
+
 export type GrantReaderEntry = {
   /** Repo-relative path, forward slashes. */
   file: string;
@@ -69,33 +85,38 @@ export type GrantReaderEntry = {
 };
 
 /**
- * The eleven files that may name a grant table.
+ * The nine files that may name a grant table.
  *
- * Being on this list is NOT an endorsement. Entries 9-11 are outside
- * `identity_access` and each says what would go wrong if scope arrived while it
- * kept its own join — they are written down so that the next person changing the
- * grant shape has the list in front of them instead of a grep they might narrow.
+ * It was eleven. Three left in ADR-0079 — not because their reads went away but
+ * because they stopped writing their own join and now embed `activeRoleGrants`,
+ * which is the outcome this list is supposed to drive. Shrinking is the healthy
+ * direction; a file that leaves has one fewer way to be wrong.
+ *
+ * Being on this list is NOT an endorsement. The last two entries are outside
+ * `identity_access` and each says what would go wrong if the grant shape changed
+ * while it kept its own join — written down so the next person changing that
+ * shape has the list in front of them instead of a grep they might narrow.
  */
 export const GRANT_READERS: readonly GrantReaderEntry[] = [
   {
+    file: "src/modules/identity-access/application/grant-source.ts",
+    reason:
+      "THE definition, since ADR-0079. `activeRoleGrants` emits the 'which grants are in force' join once and every reader embeds it as a subquery — which is why eight of the entries that used to be on this list are not any more."
+  },
+  {
     file: "src/modules/identity-access/application/auth-context.ts",
     reason:
-      "THE reader. `fetchGrantedPermissionKeys` is what every guard goes through, and `access:chokepoint:check` keys its signal on that function name."
+      "THE reader. `fetchGrantedPermissionKeys` is what every guard goes through, and `access:chokepoint:check` keys its signal on that function name. Names `awcms_role_permissions` only — the grant side comes from `activeRoleGrants`."
   },
   {
     file: "src/modules/identity-access/application/business-scope-facts.ts",
     reason:
-      "The two SoD assignment resolvers. They must not lose precision when the grant shape changes — that is what `access:sod-fact-parity:check` will pin once groups can grant roles too."
+      "The two SoD assignment resolvers. They must not lose precision when the grant shape changes — that is what `access:sod-fact-parity:check` will pin once groups can grant roles too. ADR-0079 is what happens when they do lose it: the ordinary-RBAC resolver kept reading the abandoned table and SoD went blind to every grant written after PR 3.2."
   },
   {
     file: "src/modules/identity-access/application/access-directory.ts",
     reason:
       "The admin read model behind /admin/users and /admin/roles — 'who holds what', a listing rather than a decision."
-  },
-  {
-    file: "src/modules/identity-access/application/user-admin.ts",
-    reason:
-      "The assign/unassign writer for `awcms_access_assignments`, and the writer `tests/access-assignment-writers.test.ts` pins by name so a grant cannot start being minted somewhere else unnoticed."
   },
   {
     file: "src/modules/identity-access/application/role-admin.ts",
@@ -105,12 +126,7 @@ export const GRANT_READERS: readonly GrantReaderEntry[] = [
   {
     file: "src/modules/identity-access/application/access-policy-writer.ts",
     reason:
-      "THE writer, since ADR-0078. Every path that used to INSERT a grant calls `grantRolePolicy`, and removal goes through `revokeRoleGrants` — which names the LEGACY table too, deliberately: until PR 3.3's backfill runs a grant may live in either, and a remover that knew only about the new one would report success while the role survived."
-  },
-  {
-    file: "src/modules/identity-access/application/session-introspection.ts",
-    reason:
-      "Role CODES for `GET /api/v1/auth/session`. Reads roles, never permissions — a self-description of the session, not an authorization answer."
+      "THE writer, since ADR-0078. Every path that used to INSERT a grant calls `grantRolePolicy`, and removal goes through `revokeRoleGrants`. It no longer touches the legacy table: `sql/103` made that table history, and a DELETE against it would now fail the whole revocation with 42501."
   },
   {
     file: "src/modules/identity-access/application/owner-permission-backfill-job.ts",
@@ -120,17 +136,12 @@ export const GRANT_READERS: readonly GrantReaderEntry[] = [
   {
     file: "src/modules/tenant-admin/application/platform-bootstrap.ts",
     reason:
-      "OUTSIDE identity_access. It seeds a brand-new tenant's owner role and its grant, before `identity_access` has any surface to do it through — a bootstrap-ordering fact, recorded rather than excused. When grants carry scope, the seeded grant must be explicitly tenant-wide instead of inheriting that by default."
+      "OUTSIDE identity_access. It seeds a brand-new tenant's owner role and its grant, before `identity_access` has any surface to do it through — a bootstrap-ordering fact, recorded rather than excused. The seeded grant names its scope explicitly (tenant-wide) rather than inheriting that by default, and `awcms_setup` holds exactly the privileges those two INSERTs need (`sql/103`)."
   },
   {
     file: "src/pages/api/v1/access/policies/simulate.ts",
     reason:
-      "OUTSIDE identity_access, and a ROUTE assembling its own join. This is the one entry that is a scheduled refactor rather than a decision: an ABAC simulator whose grant set is computed differently from the real path simulates the wrong system, and the difference would show up as a policy that behaves in production unlike its preview."
-  },
-  {
-    file: "src/modules/email/application/announcement-directory.ts",
-    reason:
-      "OUTSIDE identity_access. Resolves 'who holds role X' to address an announcement — membership, not authorization, so the union-across-scope answer stays correct after Gelombang 3. Listed because the reasoning is not obvious from the call site, and the next person to touch it should not have to re-derive it."
+      "OUTSIDE identity_access, and a ROUTE. Its grant set comes from `fetchGrantedPermissionKeys` and `activeRoleGrants`, so the simulator and the real path can no longer disagree; it stays listed because it still names `awcms_role_permissions` to expand the hypothetical-roles branch, which has no subject and therefore no grant to read."
   }
 ];
 
@@ -181,9 +192,16 @@ export function findGrantReaderProblems(
 
     if (allowedFiles.has(file)) continue;
 
+    const retired = named.filter((table) =>
+      RETIRED_GRANT_TABLES.includes(table)
+    );
+
     problems.push({
       file,
-      message: `names grant table(s) ${named.join(", ")} but is not a recorded grant reader. Call fetchGrantedPermissionKeys (or the identity_access application function that owns this read) instead — or add an entry to GRANT_READERS in scripts/access-grant-readers-check.ts saying why this file assembles its own join.`
+      message:
+        retired.length > 0
+          ? `names RETIRED grant table(s) ${retired.join(", ")}. Those rows are read-only history (ADR-0079, sql/103): nothing writes them, revocation cannot remove them, and a reader consulting them reports access that no admin can take away. Read live grants through activeRoleGrants (identity-access/application/grant-source.ts).`
+          : `names grant table(s) ${named.join(", ")} but is not a recorded grant reader. Call fetchGrantedPermissionKeys (or the identity_access application function that owns this read) instead — or add an entry to GRANT_READERS in scripts/access-grant-readers-check.ts saying why this file assembles its own join.`
     });
   }
 

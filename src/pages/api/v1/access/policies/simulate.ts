@@ -13,6 +13,7 @@ import {
   resolveAuthInputs
 } from "../../../../../modules/identity-access/application/access-guard";
 import { fetchGrantedPermissionKeys } from "../../../../../modules/identity-access/application/auth-context";
+import { activeRoleGrants } from "../../../../../modules/identity-access/application/grant-source";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 import { validateAbacSimulationInput } from "../../../../../modules/identity-access/domain/abac-policy";
 import {
@@ -149,11 +150,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         input.subject.tenantUserId
       );
       const roleRows = (await tx`
-        SELECT r.role_code
-        FROM awcms_access_assignments aa
-        JOIN awcms_roles r ON r.id = aa.role_id
-        WHERE aa.tenant_id = ${tenantId}
-          AND aa.tenant_user_id = ${input.subject.tenantUserId}
+        SELECT DISTINCT r.role_code
+        FROM (${activeRoleGrants(tx, tenantId)}) g
+        JOIN awcms_roles r ON r.id = g.role_id AND r.tenant_id = ${tenantId}
+        WHERE g.tenant_user_id = ${input.subject.tenantUserId}
           AND r.deleted_at IS NULL
       `) as { role_code: string }[];
       roles = roleRows.map((row) => row.role_code);

@@ -136,8 +136,9 @@ async function seedRoleWithPermissions(
 
   if (assignTo) {
     await admin`
-      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id)
-      VALUES (${tenantId}, ${assignTo}, ${roleId})
+      INSERT INTO awcms_access_policies
+        (tenant_id, tenant_user_id, role_id, scope_type, scope_id)
+      VALUES (${tenantId}, ${assignTo}, ${roleId}, 'tenant', ${tenantId})
     `;
   }
 
@@ -369,7 +370,7 @@ suite("segregation of duties (Issue #181)", () => {
     const roleId = roleRows[0]!.id;
     await admin`INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id) VALUES (${TENANT_A}, ${roleId}, ${createPid[0]!.id})`;
     await admin`INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id) VALUES (${TENANT_A}, ${roleId}, ${approvePid[0]!.id})`;
-    await admin`INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id) VALUES (${TENANT_A}, ${A_SUBJECT}, ${roleId})`;
+    await admin`INSERT INTO awcms_access_policies (tenant_id, tenant_user_id, role_id, scope_type, scope_id) VALUES (${TENANT_A}, ${A_SUBJECT}, ${roleId}, 'tenant', ${TENANT_A})`;
 
     // A live session for the subject.
     const token = `sod-${crypto.randomUUID()}`;
@@ -782,7 +783,7 @@ suite("segregation of duties (Issue #181)", () => {
         )[0]!.id;
       await admin`INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id) VALUES (${TENANT_A}, ${bigRole}, ${pid})`;
     }
-    await admin`INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id) VALUES (${TENANT_A}, ${A_SUBJECT}, ${bigRole})`;
+    await admin`INSERT INTO awcms_access_policies (tenant_id, tenant_user_id, role_id, scope_type, scope_id) VALUES (${TENANT_A}, ${A_SUBJECT}, ${bigRole}, 'tenant', ${TENANT_A})`;
     for (let i = 0; i < 10; i += 1) {
       await admin`
         INSERT INTO awcms_business_scope_assignments

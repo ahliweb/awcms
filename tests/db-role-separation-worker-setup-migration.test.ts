@@ -70,10 +70,24 @@ const allMigrationStatements = readdirSync(path.join(repoRoot, "sql"))
   .join("\n");
 
 /**
- * Parses every `GRANT <verbs> ON <table> TO <role>;` for the two split roles
- * out of ALL migrations' text (ignoring `GRANT USAGE ON SCHEMA ...`), into the
- * same `{ role: { table: verbs[] } }` shape as the exported matrices. Table
- * grants are one-per-line, so a line regex is exact and needs no SQL parser.
+ * Replays every `GRANT`/`REVOKE ... ON <table> TO|FROM <role>;` for the two
+ * split roles across ALL migrations, IN ORDER, into the same
+ * `{ role: { table: verbs[] } }` shape as the exported matrices. Table grants
+ * are one-per-line, so a line regex is exact and needs no SQL parser.
+ *
+ * Order matters and is free: `allMigrationStatements` is concatenated in
+ * filename order, which IS apply order, so a replay of the statements in
+ * document order is a replay of what the database did.
+ *
+ * This started as a plain union, on the stated precondition that nothing ever
+ * revoked from these two roles — with a test asserting the precondition rather
+ * than assuming it, so that the first revoke would fail here and force the
+ * parser to be re-thought instead of quietly over-reporting. `sql/103`
+ * (ADR-0079) is that first revoke: `awcms_setup` loses INSERT on
+ * `awcms_access_assignments` when the table becomes read-only history. The
+ * precondition test is gone because the parser no longer needs it; what replaced
+ * it is the assertion below that the revoked privilege really has left the
+ * parsed matrix.
  */
 type ParsedGrants = {
   awcms_worker: Record<string, string[]>;
@@ -85,55 +99,48 @@ function parseTableGrants(): ParsedGrants {
     awcms_worker: {},
     awcms_setup: {}
   };
-  const grantLine =
-    /GRANT\s+([A-Z,\s]+?)\s+ON\s+(awcms_[a-z0-9_]+)\s+TO\s+(awcms_worker|awcms_setup)\s*;/g;
+  const privilegeStatement =
+    /(GRANT|REVOKE)\s+([A-Z,\s]+?)\s+ON\s+(awcms_[a-z0-9_]+)\s+(TO|FROM)\s+(awcms_worker|awcms_setup)\s*;/g;
 
-  for (const match of allMigrationStatements.matchAll(grantLine)) {
-    const verbs = match[1]!
+  for (const match of allMigrationStatements.matchAll(privilegeStatement)) {
+    const keyword = match[1]!;
+    const preposition = match[4]!;
+
+    // `GRANT ... FROM` / `REVOKE ... TO` is not SQL. Matching it would mean the
+    // regex had drifted, and silently ignoring the statement would under-report.
+    if (
+      (keyword === "GRANT") !== (preposition === "TO") ||
+      (keyword === "REVOKE") !== (preposition === "FROM")
+    ) {
+      throw new Error(
+        `unparsable privilege statement: ${keyword} ... ${preposition} ${match[5]}`
+      );
+    }
+
+    const verbs = match[2]!
       .split(",")
       .map((v) => v.trim())
-      .filter((v) => v.length > 0)
-      .sort();
-    const table = match[2]!;
-    const role = match[3]! as "awcms_worker" | "awcms_setup";
+      .filter((v) => v.length > 0);
+    const table = match[3]!;
+    const role = match[5]! as "awcms_worker" | "awcms_setup";
+    const held = new Set(result[role][table] ?? []);
 
-    // Grants are CUMULATIVE, so the effective privilege set is the union across
-    // migrations — `GRANT DELETE` after an earlier `GRANT SELECT` leaves the
-    // role holding both.
-    //
-    // This used to assert each (role, table) pair appeared exactly once, which
-    // was true and useful right up until a later migration needed to WIDEN an
-    // existing grant: ADR-0072 / `sql/091` adds DELETE on
-    // `awcms_abac_decision_logs`, which `sql/022` had already granted SELECT.
-    // Editing sql/022 in place is not an option — an applied migration is
-    // immutable, and rewriting it would block `db:migrate` on every running
-    // deployment while staying green on empty CI.
-    //
-    // The union model is only sound while nothing REVOKEs from these two roles.
-    // That is asserted below rather than assumed, so a future REVOKE fails here
-    // and forces this parser to be re-thought instead of quietly lying.
-    result[role][table] = [
-      ...new Set([...(result[role][table] ?? []), ...verbs])
-    ].sort();
+    // Grants are CUMULATIVE — `GRANT DELETE` after an earlier `GRANT SELECT`
+    // leaves the role holding both (ADR-0072 / `sql/091` is the live example,
+    // pinned by its own test below). Editing the earlier migration in place is
+    // never an option: an applied migration is immutable, and rewriting it would
+    // block `db:migrate` on every running deployment while staying green on
+    // empty CI.
+    for (const verb of verbs) {
+      if (keyword === "GRANT") held.add(verb);
+      else held.delete(verb);
+    }
+
+    if (held.size === 0) delete result[role][table];
+    else result[role][table] = [...held].sort();
   }
 
   return result;
-}
-
-/**
- * The precondition that makes `parseTableGrants`' union sound.
- *
- * `sql/021` revokes DELETE on `awcms_setup_state` from `awcms_app` — a
- * different role, deliberately outside this pair. If a migration ever revokes
- * from `awcms_worker`/`awcms_setup`, the union above stops describing the
- * effective privileges and this test would report MORE than the roles hold.
- */
-function migrationRevokesFromSplitRoles(): string[] {
-  return [
-    ...allMigrationStatements.matchAll(
-      /REVOKE\s+[A-Z,\s]+?\s+ON\s+(awcms_[a-z0-9_]+)\s+FROM\s+(awcms_worker|awcms_setup)\s*;/g
-    )
-  ].map((match) => `${match[2]} on ${match[1]}`);
 }
 
 function normalize(matrix: Record<string, string[]>): Record<string, string[]> {
@@ -221,11 +228,18 @@ describe("sql/022 — worker/setup role creation", () => {
 describe("migration GRANTs match the least-privilege matrix exactly (no drift)", () => {
   const granted = parseTableGrants();
 
-  test("nothing REVOKEs from the split roles, so the cumulative union is sound", () => {
-    // The precondition for reading GRANTs as a union at all. If this ever
-    // fails, `parseTableGrants` is over-reporting privileges and both
-    // assertions below become claims about a matrix nobody holds.
-    expect(migrationRevokesFromSplitRoles()).toEqual([]);
+  test("a later migration may REVOKE an earlier grant, and the replay honours it", () => {
+    // ADR-0079 / sql/103: `awcms_access_assignments` becomes read-only history,
+    // so the setup wizard's INSERT on it is revoked in the same migration that
+    // grants what the wizard writes instead. Asserted rather than assumed
+    // because a replay that dropped REVOKEs would report a privilege the role
+    // does NOT hold, and the drift assertions below would then be comparing the
+    // matrix against a fiction.
+    expect(granted.awcms_setup["awcms_access_assignments"]).toBeUndefined();
+    expect(granted.awcms_setup["awcms_access_policies"]).toEqual([
+      "INSERT",
+      "SELECT"
+    ]);
   });
 
   test("a later migration may WIDEN an earlier grant on the same table", () => {

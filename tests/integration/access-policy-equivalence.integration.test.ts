@@ -1,24 +1,30 @@
 /**
- * `awcms_access_policies` equivalence + effect (ADR-0078, Gelombang 3 PR 3.1 of
- * #423), against a real PostgreSQL under the WORLD-1 ephemeral-database harness.
+ * `awcms_access_policies` equivalence + effect (ADR-0078 and ADR-0079,
+ * Gelombang 3 PR 3.1/3.3 of #423), against a real PostgreSQL under the WORLD-1
+ * ephemeral-database harness.
  *
- * PR 3.1's whole safety argument is one sentence: **with the new table empty,
- * `fetchGrantedPermissionKeys` returns exactly what it returned before.** That
- * sentence is about a `UNION ALL` inside a SQL string, and no amount of reading
- * it proves it — a `JOIN` moved into a subquery, a `tenant_id` predicate lost on
- * one side, a `DISTINCT` that stopped covering a column, all look fine and all
- * change the answer. So the oracle runs the real query against real rows.
+ * PR 3.1's safety argument was one sentence: with the new table empty,
+ * `fetchGrantedPermissionKeys` returns exactly what it returned before. PR 3.3
+ * replaces it with the sentence that has to be true for the OLD table to be
+ * retired: **after the backfill, every subject's answer is the same one the
+ * pre-migration query gave for the same legacy rows.** Neither sentence can be
+ * proven by reading SQL — a `JOIN` moved into a subquery, a `tenant_id`
+ * predicate lost on one side, a `DISTINCT` that stopped covering a column all
+ * look fine and all change the answer. So the oracle runs the real query, and
+ * the migration under test is the real file rather than a transcription of it.
  *
- * Two halves, and both are needed:
+ * Three halves, and all are needed:
  *
- *   1. EQUIVALENCE — with no policy rows, the union's answer equals the answer
- *      of the pre-migration query, run side by side against the same fixtures.
- *      The old query is spelled out here as a literal rather than imported: a
- *      test that derives its expectation from the thing under test can only
- *      assert that the code agrees with itself.
- *   2. EFFECT — a policy row actually grants, and its lifecycle columns actually
- *      filter. Without this half, a `UNION ALL` branch that silently matched
- *      nothing at all would pass part 1 perfectly.
+ *   1. EQUIVALENCE ACROSS THE BACKFILL — the answer computed from the legacy
+ *      rows BEFORE `sql/103` runs equals the answer the live reader gives after
+ *      it. The pre-migration query is spelled out here as a literal rather than
+ *      imported: a test that derives its expectation from the thing under test
+ *      can only assert that the code agrees with itself.
+ *   2. THE RETIREMENT IS REAL — a legacy row that was NOT backfilled grants
+ *      nothing. Without this, a reader that quietly kept its old union would
+ *      satisfy part 1 perfectly, which is exactly the drift ADR-0079 records.
+ *   3. EFFECT — a policy row actually grants, and its lifecycle columns actually
+ *      filter.
  *
  * Gated on `DATABASE_URL` (harness §Gating).
  */
@@ -30,6 +36,7 @@ import {
   expect,
   test
 } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import {
   getAdminSql,
@@ -81,6 +88,27 @@ async function legacyGrantedKeys(
 
 function sorted(keys: Set<string>): string[] {
   return [...keys].sort();
+}
+
+/**
+ * Runs `sql/103` again, against whatever legacy rows a test has seeded.
+ *
+ * The harness applies every migration to an EMPTY database, so the backfill has
+ * already run and moved nothing. Re-running the real file is what puts rows
+ * through the real statement — and it is the real file, read from disk, because
+ * a transcription of a backfill is a backfill nobody has tested.
+ *
+ * Safe to run repeatedly by construction: the copy is guarded by `NOT EXISTS` on
+ * both the id and the active-grant shape, and the GRANT/REVOKE statements are
+ * idempotent. That is asserted below rather than assumed.
+ */
+async function applyBackfillMigration(): Promise<void> {
+  const sql = readFileSync(
+    "sql/103_awcms_access_assignments_backfill_retire.sql",
+    "utf8"
+  );
+
+  await getAdminSql().unsafe(sql);
 }
 
 async function seedFixtures(): Promise<void> {
@@ -210,73 +238,172 @@ suite("awcms_access_policies equivalence and effect (ADR-0078)", () => {
     await seedFixtures();
   });
 
-  test("with NO policy rows the union answers exactly what the pre-migration query answers", async () => {
+  test("after the backfill the reader answers exactly what the pre-migration query answered", async () => {
     const runtime = getRuntimeSql();
 
-    const [union, legacy] = await withTenantOrThrow(
-      runtime,
-      TENANT_A,
-      async (tx) => [
-        await fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT),
-        await legacyGrantedKeys(tx, TENANT_A, A_SUBJECT)
-      ]
+    const before = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      legacyGrantedKeys(tx, TENANT_A, A_SUBJECT)
     );
 
-    expect(sorted(union)).toEqual(sorted(legacy));
-    // And the fixture is not vacuous: the subject really does hold something,
-    // and the soft-deleted role really is excluded by both.
-    expect(sorted(union)).toEqual([ASSIGNED_KEY]);
-    expect(sorted(union)).not.toContain(DELETED_KEY);
+    // The fixture is not vacuous: the subject really did hold something through
+    // the legacy table, and the soft-deleted role really was already excluded.
+    expect(sorted(before)).toEqual([ASSIGNED_KEY]);
+    expect(sorted(before)).not.toContain(DELETED_KEY);
+
+    await applyBackfillMigration();
+
+    const after = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
+    );
+
+    expect(sorted(after)).toEqual(sorted(before));
   });
 
-  test("a subject with nothing at all still agrees, and both answer empty", async () => {
+  test("the backfill keeps the id, so an audit reference still resolves", async () => {
+    // The reason the migration copies `id` instead of minting one: audit rows,
+    // operator notes and incident tickets name a grant by id, and re-keying
+    // would break every one of them silently.
+    const admin = getAdminSql();
+    const legacyIds = (
+      (await admin`
+        SELECT id FROM awcms_access_assignments WHERE tenant_id = ${TENANT_A}
+        ORDER BY id
+      `) as { id: string }[]
+    ).map((row) => row.id);
+
+    expect(legacyIds).toHaveLength(2);
+
+    await applyBackfillMigration();
+
+    const policyIds = (
+      (await admin`
+        SELECT id FROM awcms_access_policies WHERE tenant_id = ${TENANT_A}
+        ORDER BY id
+      `) as { id: string }[]
+    ).map((row) => row.id);
+
+    expect(policyIds).toEqual(legacyIds);
+
+    // And every migrated grant carries the `granted` event its history table
+    // exists to hold — a policy with no lifecycle row is a grant with no origin.
+    const events = (await admin`
+      SELECT policy_id, event_type, metadata
+      FROM awcms_access_policy_events
+      WHERE tenant_id = ${TENANT_A}
+      ORDER BY policy_id
+    `) as { policy_id: string; event_type: string; metadata: unknown }[];
+
+    expect(events.map((row) => row.policy_id)).toEqual(legacyIds);
+    expect(events.every((row) => row.event_type === "granted")).toBe(true);
+  });
+
+  test("running the backfill twice moves nothing the second time", async () => {
+    // Migrations are applied once, but a re-run happens: a restored snapshot, a
+    // re-pointed `DATABASE_URL`, an operator repeating a step. Duplicating the
+    // grants would violate the active partial unique index and abort — the loud
+    // failure — but duplicating the EVENTS would not, and a history that says a
+    // grant was made twice is a history that misleads an investigator.
+    await applyBackfillMigration();
+    await applyBackfillMigration();
+
+    const admin = getAdminSql();
+    const counts = (await admin`
+      SELECT
+        (SELECT count(*) FROM awcms_access_policies WHERE tenant_id = ${TENANT_A}) AS policies,
+        (SELECT count(*) FROM awcms_access_policy_events WHERE tenant_id = ${TENANT_A}) AS events
+    `) as { policies: string; events: string }[];
+
+    expect(Number(counts[0]!.policies)).toBe(2);
+    expect(Number(counts[0]!.events)).toBe(2);
+  });
+
+  test("a legacy row that was NOT backfilled grants nothing", async () => {
+    // The retirement, asserted as a property rather than as a code shape. If any
+    // reader kept its old union, this is the test that reports it — and it is
+    // the same shape as the incident ADR-0079 records, only in the safe
+    // direction.
     const runtime = getRuntimeSql();
 
-    const [union, legacy] = await withTenantOrThrow(
-      runtime,
-      TENANT_A,
-      async (tx) => [
-        await fetchGrantedPermissionKeys(tx, TENANT_A, A_OTHER),
-        await legacyGrantedKeys(tx, TENANT_A, A_OTHER)
-      ]
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
     );
 
-    expect(sorted(union)).toEqual(sorted(legacy));
-    expect(sorted(union)).toEqual([]);
+    expect(sorted(keys)).toEqual([]);
   });
 
-  test("an ACTIVE policy grants its role's keys, and the union no longer matches the legacy query", async () => {
-    // The other half of the oracle. Without this, a UNION ALL branch that
-    // matched nothing at all would satisfy every equivalence assertion above.
+  test("a subject with nothing at all answers empty", async () => {
+    const runtime = getRuntimeSql();
+
+    await applyBackfillMigration();
+
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchGrantedPermissionKeys(tx, TENANT_A, A_OTHER)
+    );
+
+    expect(sorted(keys)).toEqual([]);
+  });
+
+  test("a legacy row naming another tenant's role is left behind, not aborted on", async () => {
+    // `awcms_access_assignments.role_id` is a single-column FK, so it cannot
+    // stop a cross-tenant reference; `awcms_access_policies`' composite FK can,
+    // and would abort the WHOLE migration on one such row. Such a row grants
+    // nothing today either, so leaving it behind changes no access — but the
+    // migration has to survive it, and only a real database can say whether it
+    // does.
+    const admin = getAdminSql();
+
+    await admin`
+      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id)
+      VALUES (${TENANT_A}, ${A_OTHER}, ${B_ROLE})
+    `;
+
+    await applyBackfillMigration();
+
+    const migrated = (await admin`
+      SELECT count(*)::int AS n FROM awcms_access_policies
+      WHERE tenant_id = ${TENANT_A}
+    `) as { n: number }[];
+
+    // The two good rows moved; the cross-tenant one did not.
+    expect(migrated[0]!.n).toBe(2);
+
+    const runtime = getRuntimeSql();
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchGrantedPermissionKeys(tx, TENANT_A, A_OTHER)
+    );
+
+    expect(sorted(keys)).toEqual([]);
+  });
+
+  test("an ACTIVE policy grants its role's keys on top of the migrated ones", async () => {
+    // The other half of the oracle. Without this, a grant source that matched
+    // nothing at all would satisfy every equivalence assertion above.
+    await applyBackfillMigration();
     await insertPolicy();
 
     const runtime = getRuntimeSql();
 
-    const [union, legacy] = await withTenantOrThrow(
-      runtime,
-      TENANT_A,
-      async (tx) => [
-        await fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT),
-        await legacyGrantedKeys(tx, TENANT_A, A_SUBJECT)
-      ]
-    );
-
-    expect(sorted(union)).toEqual([ASSIGNED_KEY, POLICY_KEY].sort());
-    expect(sorted(legacy)).toEqual([ASSIGNED_KEY]);
-  });
-
-  test("holding the SAME role through both shapes yields the key once", async () => {
-    // `UNION ALL` under `DISTINCT`. This is what lets PR 3.3 move rows one at a
-    // time: during the move a subject holds a role through both tables, and
-    // that must be indistinguishable from holding it through either.
-    await insertPolicy({ role_id: ROLE_ASSIGNED });
-
-    const runtime = getRuntimeSql();
-    const union = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
     );
 
-    expect(sorted(union)).toEqual([ASSIGNED_KEY]);
+    expect(sorted(keys)).toEqual([ASSIGNED_KEY, POLICY_KEY].sort());
+  });
+
+  test("the SAME role held at two scopes yields the key once", async () => {
+    // `DISTINCT` over the grant source. One role at three scopes is three rows
+    // (ADR-0078) — the shape the partial unique index permits and the shape
+    // PR 3.4 will start qualifying — and a subject must not be told about a
+    // permission N times because they hold it in N places.
+    await applyBackfillMigration();
+    await insertPolicy({ role_id: ROLE_ASSIGNED, scope_id: A_SUBJECT });
+
+    const runtime = getRuntimeSql();
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+      fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
+    );
+
+    expect(sorted(keys)).toEqual([ASSIGNED_KEY]);
   });
 
   test.each([
@@ -291,6 +418,9 @@ suite("awcms_access_policies equivalence and effect (ADR-0078)", () => {
       }
     ]
   ])("a %s policy grants nothing", async (_label, overrides) => {
+    // The migrated grant is the non-vacuous baseline: without it the assertion
+    // would pass just as well against a reader that returned nothing at all.
+    await applyBackfillMigration();
     await insertPolicy(overrides);
 
     const runtime = getRuntimeSql();
@@ -302,18 +432,32 @@ suite("awcms_access_policies equivalence and effect (ADR-0078)", () => {
   });
 
   test("a policy naming a soft-deleted role grants nothing", async () => {
-    // The role filter has to apply to BOTH branches. A `deleted_at` check left
-    // on the assignment side only would let a stale policy outlive the role it
-    // names — and a deleted role is exactly the thing an admin deletes in order
-    // to take access away.
-    await insertPolicy({ role_id: ROLE_DELETED });
+    // `deleted_at` belongs to the role, not to the grant, so the filter lives
+    // with the reader rather than in the shared grant source — a stale policy
+    // must not outlive the role it names, and deleting a role is exactly the
+    // thing an admin does in order to take that access away.
+    //
+    // The fixture's second legacy row names the soft-deleted role, so the
+    // backfill supplies the policy under test: the migration deliberately does
+    // NOT drop grants of deleted roles, because it must preserve the prior state
+    // exactly and the reader is what makes them inert.
+    await applyBackfillMigration();
+
+    const admin = getAdminSql();
+    const deletedRolePolicies = (await admin`
+      SELECT count(*)::int AS n FROM awcms_access_policies
+      WHERE tenant_id = ${TENANT_A} AND role_id = ${ROLE_DELETED}
+    `) as { n: number }[];
+
+    expect(deletedRolePolicies[0]!.n).toBe(1);
 
     const runtime = getRuntimeSql();
-    const union = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
     );
 
-    expect(sorted(union)).toEqual([ASSIGNED_KEY]);
+    expect(sorted(keys)).toEqual([ASSIGNED_KEY]);
+    expect(sorted(keys)).not.toContain(DELETED_KEY);
   });
 
   test("a cross-tenant policy row is refused by the composite FK, not merely filtered", async () => {
@@ -359,10 +503,10 @@ suite("awcms_access_policies equivalence and effect (ADR-0078)", () => {
     await insertPolicy();
 
     const runtime = getRuntimeSql();
-    const union = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
+    const keys = await withTenantOrThrow(runtime, TENANT_A, (tx) =>
       fetchGrantedPermissionKeys(tx, TENANT_A, A_SUBJECT)
     );
 
-    expect(sorted(union)).toEqual([ASSIGNED_KEY, POLICY_KEY].sort());
+    expect(sorted(keys)).toEqual([POLICY_KEY]);
   });
 });

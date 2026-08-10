@@ -140,8 +140,9 @@ async function seedFixtures(): Promise<void> {
   // new one never existed when this tenant was created. That is precisely the
   // pair the rule has to tell apart.
   await admin`
-    INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-    VALUES (${TENANT}, ${OWNER_USER}, ${OWNER_ROLE}, ${OWNER_USER})
+    INSERT INTO awcms_access_policies
+      (tenant_id, tenant_user_id, role_id, scope_type, scope_id, granted_by_tenant_user_id)
+    VALUES (${TENANT}, ${OWNER_USER}, ${OWNER_ROLE}, 'tenant', ${TENANT}, ${OWNER_USER})
   `;
 
   await admin`
