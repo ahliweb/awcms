@@ -136,6 +136,11 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       await sql`DELETE FROM awcms_sessions WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_audit_events WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_abac_decision_logs WHERE tenant_id = ${tenantId}`;
+      // ADR-0078 — bootstrap's owner grant lands in `awcms_access_policies`,
+      // whose composite FK to `awcms_roles` blocks the role delete below unless
+      // the grant goes first. Its event table references the policy, so it leads.
+      await sql`DELETE FROM awcms_access_policy_events WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_access_policies WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_access_assignments WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_role_permissions WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_roles WHERE tenant_id = ${tenantId}`;
