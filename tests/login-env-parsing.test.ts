@@ -136,7 +136,7 @@ describe("resolveLoginPolicyConfig (Issue #147 §4)", () => {
     expect(result.outcome).toBe("deny");
     expect(result).toMatchObject({ reason: "invalid_credentials" });
     expect(
-      result.outcome === "deny" ? result.lockedUntil : null
+      result.outcome === "deny" ? result.lockoutCandidateAt : null
     ).toBeInstanceOf(Date);
   });
 

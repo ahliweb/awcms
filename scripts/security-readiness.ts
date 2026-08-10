@@ -354,37 +354,52 @@ export async function checkPasswordHashingModern(): Promise<SecurityCheckResult>
 // 4. Login lockout is implemented (critical)
 // ---------------------------------------------------------------------------
 
-export function checkLoginLockoutImplemented(): SecurityCheckResult {
-  const name = "Login lockout is implemented";
+export async function checkLoginLockoutImplemented(): Promise<SecurityCheckResult> {
+  const name = "Login lockout is implemented, and counted atomically";
   const severity: CheckSeverity = "critical";
   const now = new Date("2026-01-01T00:00:00.000Z");
-  const maxFailedAttempts = 5;
 
-  // Synthetic "5th consecutive failed attempt": identity already has 4
-  // recorded failures; one more invalid password attempt should push the
-  // count to 5 (== maxFailedAttempts) and trigger a lockout.
+  // TWO halves, because either alone can be true while lockout does not work
+  // (Issue #483).
+  //
+  // The policy half is what this check used to be, and on its own it was
+  // reassuring about the wrong thing: it confirmed that a pure function
+  // returned a lockout timestamp, while the route wrote a JS-computed absolute
+  // counter that concurrent requests overwrote. The check passed for two years
+  // over a lockout that K parallel attempts could hold at one.
   const result = evaluateLoginAttempt({
     now,
     tenantStatus: "active",
     identity: { status: "active", failedLoginCount: 4, lockedUntil: null },
     tenantUserStatus: "active",
     passwordMatches: false,
-    maxFailedAttempts,
+    maxFailedAttempts: 5,
     lockoutMinutes: 15
   });
 
-  const lockedOut =
+  const policyCounts =
     result.outcome === "deny" &&
-    result.failedLoginCount === maxFailedAttempts &&
-    result.lockedUntil instanceof Date;
+    result.countFailedAttempt === true &&
+    result.lockoutCandidateAt instanceof Date;
 
-  if (lockedOut) {
+  // The mechanism half: the increment must be an expression over the COLUMN,
+  // evaluated by PostgreSQL. A parameterised absolute value is the defect.
+  const route = await readFile(
+    path.join(process.cwd(), "src/pages/api/v1/auth/login.ts"),
+    "utf8"
+  );
+  const incrementsInDb =
+    /failed_login_count\s*=\s*failed_login_count\s*\+\s*1/.test(route);
+  const locksConditionallyInDb =
+    /CASE\s+WHEN\s+failed_login_count\s*\+\s*1\s*>=/.test(route);
+
+  if (policyCounts && incrementsInDb && locksConditionallyInDb) {
     return {
       name,
       severity,
       status: "pass",
       evidence:
-        'evaluateLoginAttempt() with 5 consecutive failed attempts (maxFailedAttempts=5) returns outcome="deny" with a lockedUntil timestamp.'
+        "evaluateLoginAttempt() marks a 5th consecutive failure as countable with a lockout timestamp, and login.ts increments `failed_login_count = failed_login_count + 1` with a `CASE WHEN … >= max` lock — computed by PostgreSQL, not read-modify-written in JS."
     };
   }
 
@@ -392,7 +407,7 @@ export function checkLoginLockoutImplemented(): SecurityCheckResult {
     name,
     severity,
     status: "fail",
-    evidence: `evaluateLoginAttempt() did not lock out at the configured threshold; result=${JSON.stringify(result)}.`
+    evidence: `login lockout is not enforced atomically — policyCounts=${policyCounts} incrementsInDb=${incrementsInDb} locksConditionallyInDb=${locksConditionallyInDb}; result=${JSON.stringify(result)}.`
   };
 }
 
@@ -2587,7 +2602,7 @@ export async function runSecurityReadinessChecks(): Promise<
     await checkNoHardcodedSecret(),
     checkEnvNotTracked(),
     await checkPasswordHashingModern(),
-    checkLoginLockoutImplemented(),
+    await checkLoginLockoutImplemented(),
     await checkRlsEnabled(),
     await checkAppDbUserNotSuperuser(),
     await checkLeastPrivilegeRoleProvisioned(),

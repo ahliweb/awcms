@@ -27,10 +27,19 @@ import { buildRedisKey } from "../redis/config";
  * attacker-triggerable total denial of service on the control plane.
  *
  * What keeps that honest is that it is not the ONLY control:
- * `identity-access`'s per-identity lockout (`login-policy.ts`) is enforced in
- * PostgreSQL, atomically, and is unaffected by a Redis outage. This limiter is
- * the source-scoped backstop on top of it — the thing that catches an attacker
+ * `identity-access`'s per-identity lockout is enforced in PostgreSQL, in the
+ * same statement that increments the counter (`login.ts`'s
+ * `failed_login_count = failed_login_count + 1` with a `CASE WHEN … >= max`
+ * lock), and is unaffected by a Redis outage. This limiter is the
+ * source-scoped backstop on top of it — the thing that catches an attacker
  * rotating `loginIdentifier` values — not the last line.
+ *
+ * That sentence was true of the design and false of the code until Issue #483:
+ * the route read the counter, added one in JS, and wrote the absolute value
+ * back, so concurrent failures overwrote each other and K parallel attempts
+ * cost one increment. The fail-open posture above rested on it. Naming the
+ * statement rather than the file is deliberate — "atomically" was exactly the
+ * word that stayed true-looking while the mechanism underneath it was not.
  *
  * `security:readiness` reports a configured-but-unreachable Redis, so the
  * degraded state is visible rather than silent.
