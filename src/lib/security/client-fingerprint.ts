@@ -99,6 +99,39 @@ function resolveIpHashKey(): string {
   return ephemeralIpHashKey;
 }
 
+/**
+ * True when the IP-hash key comes from configuration rather than the
+ * per-process fallback.
+ *
+ * Audit attributes tolerate the fallback: an `ipHash` that only groups within
+ * one process is still non-reversible, and the warning above tells the operator
+ * how to make it comparable. A PERSISTED column does not tolerate it. Written
+ * to `awcms_sessions.client_ip_hash`, a fallback key means the same device
+ * hashes differently after every restart, and the session list a person uses to
+ * decide "which of these is not me" would show one device as several — silently,
+ * and in the direction that produces a wrong revocation.
+ *
+ * So the persisted column stays NULL on a deployment without the key, and the
+ * console says the grouping is unavailable instead of showing a wrong one.
+ */
+export function isIpHashKeyStable(): boolean {
+  const configured = process.env[IP_HASH_SECRET_ENV]?.trim();
+
+  return (
+    configured !== undefined &&
+    configured !== "" &&
+    !PLACEHOLDER_SECRETS.has(configured.toLowerCase())
+  );
+}
+
+/**
+ * `hashClientIp` for values that will be STORED — `null` rather than a hash
+ * that cannot be compared later.
+ */
+export function persistableClientIpHash(ip: string): string | null {
+  return isIpHashKeyStable() ? hashClientIp(ip) : null;
+}
+
 /** Test-only: forces the next `hashClientIp` to re-resolve the key. */
 export function resetClientFingerprintKeyForTests(): void {
   ephemeralIpHashKey = null;
