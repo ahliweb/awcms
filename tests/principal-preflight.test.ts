@@ -116,11 +116,15 @@ describe("the advisory finding does not block", () => {
       identity("i1", TENANT_A, "operator")
     ]);
 
-    expect(report.findings).toHaveLength(1);
-    expect(report.findings[0]!.kind).toBe("non_email_identifier");
-    // It still becomes a principal — it just can never receive an invitation
-    // or a reset. Blocking on it would stall the migration for a state that is
-    // survivable.
+    // TWO findings since #430's census was completed: `operator` is neither an
+    // address by shape nor mailable. They are separate questions and the sets
+    // do not coincide — see the `not_mailable` describe block below.
+    expect(report.findings.map((finding) => finding.kind).sort()).toEqual([
+      "non_email_identifier",
+      "not_mailable"
+    ]);
+    // It still becomes a principal. Blocking on it would stall the migration
+    // for a state that is survivable.
     expect(report.clear).toBe(true);
   });
 
@@ -154,5 +158,56 @@ describe("sizing", () => {
       findings: [],
       clear: true
     });
+  });
+});
+
+describe("not_mailable is a DIFFERENT question from non_email_identifier (#430)", () => {
+  function census(identifiers: readonly string[]) {
+    return runPrincipalPreflight(
+      identifiers.map((loginIdentifier, index) => ({
+        identityId: `id-${index}`,
+        tenantId: "tenant-a",
+        tenantCode: "a",
+        loginIdentifier
+      }))
+    );
+  }
+
+  function kinds(identifier: string): string[] {
+    return census([identifier])
+      .findings.map((finding) => finding.kind)
+      .sort();
+  }
+
+  test("`a@localhost` is NOT an email by the census, and IS mailable by the reset path", () => {
+    // The assertion that makes importing `isMailableLoginIdentifier` load-bearing
+    // rather than decorative. The census's docblock used to claim a non-email
+    // identifier "can never receive an invitation or a password reset"; this
+    // address is the counterexample, and the reset path duly sends to it.
+    expect(kinds("a@localhost")).toEqual(["non_email_identifier"]);
+  });
+
+  test("`operator` is neither an email nor mailable — both findings fire", () => {
+    expect(kinds("operator")).toEqual(["non_email_identifier", "not_mailable"]);
+  });
+
+  test("`@example.com` has an empty local part: an email by shape, not mailable", () => {
+    // `looksLikeEmail` accepts `[^\s@]+@[^\s@]+\.[^\s@]+`, which an empty local
+    // part fails — but the two predicates disagree on WHICH malformed shapes
+    // matter, and that disagreement is the point of reporting both.
+    const found = kinds("@example.com");
+
+    expect(found).toContain("not_mailable");
+  });
+
+  test("an ordinary address raises nothing", () => {
+    expect(kinds("alice@corp.com")).toEqual([]);
+  });
+
+  test("neither advisory blocks the migration — only a collision does", () => {
+    // `clear` must stay bound to `within_tenant_collision` alone. An advisory
+    // that blocked would turn a census into a gate, and a census that refuses
+    // to finish tells you nothing about the rest of the estate.
+    expect(census(["operator", "a@localhost"]).clear).toBe(true);
   });
 });
