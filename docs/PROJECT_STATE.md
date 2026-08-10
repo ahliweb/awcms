@@ -356,6 +356,70 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 (analisis isu) — #477 ditutup dengan MENGHAPUS
+  tabelnya, sensus #430 dilengkapi, Gelombang 2 dimulai.** Empat PR
+  (#487/#490/#491 + entri ini); satu issue ditutup (#477); dua tetap terbuka
+  secara sadar (#430, #423).
+
+  **#477 — pertanyaannya bukan "bagaimana mengisinya".**
+  [ADR-0077](adr/0077-one-outbox-sync-pull-reads-domain-events.md): `awcms_sync_outbox`
+  dihapus (`sql/099`), `/sync/pull` membaca `awcms_domain_events`. Perilakunya
+  tidak berubah — tetap `200` dengan daftar kosong — yang berubah **kenapa**:
+  dari "tak ada jalur" menjadi "`SYNC_REPLICABLE_EVENT_TYPES` kosong".
+
+  Allow-list itu kosong karena **mekanismenya belum benar**, dan itu hasil
+  paling berharga dari issue-nya: `event_sequence` diberikan saat `INSERT`
+  tetapi terlihat saat `COMMIT`, jadi cursor `event_sequence > checkpoint` bisa
+  **melewati** event yang commit-nya terlambat — dorman di tabel lama karena nol
+  penulis, NYATA di `awcms_domain_events`. Repo ini sudah punya jawaban yang
+  benar dan bukan cursor: `appendDomainEvent` menulis baris pengiriman per
+  consumer **di transaksi yang sama**.
+
+  **#430 — sensusnya mengklaim sesuatu yang salah.** `looksLikeEmail` (sensus)
+  dan `isMailableLoginIdentifier` (jalur reset password) adalah dua himpunan
+  berbeda: `a@localhost` bukan email menurut sensus tetapi **bisa** dikirimi
+  surat. Predikat otoritatifnya kini **diimpor**, bukan disalin, dan kategori
+  ketiga (`not_mailable`) dilaporkan terpisah.
+
+  **Gelombang 2 PR 2.1 mendarat** (#491): `GET`/`DELETE /api/v1/auth/sessions`,
+  **nol permission baru**, plus tiga kolom sidik jari (`sql/100`). Detail yang
+  tak ada di rencana: `hashClientIp` memakai kunci acak per-proses tanpa
+  `AUTH_IP_HASH_SECRET` — dapat ditoleransi untuk audit, TIDAK untuk kolom
+  persisten, jadi `persistableClientIpHash` mengembalikan `null` alih-alih hash
+  yang tak bisa dibandingkan sesudah restart.
+
+  **Empat koreksi terhadap rencana Gelombang 2**, diverifikasi terhadap kode:
+  penerbit sesi ada **dua** `INSERT` lewat **lima** entry point (bukan "tiga
+  penerbit"); `summarizeUserAgent` butuh `Request` sehingga tiap penerbit
+  menghitung sendiri lalu mengoper; `access:permissions:enforcement:check`
+  berskor **208/208** (bukan 203/203); dan `origin_auth: 'switch'` +
+  `switchable` **nol produsen** hari ini, jadi keduanya belum mendarat.
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Memberi `awcms_sync_outbox` sebuah produsen** — repo ini sudah punya
+     outbox transaksional; outbox kedua yang tak pernah tersambung sebaiknya
+     dihapus, bukan diisi.
+  2. **Mengisi allow-list replikasi dengan satu event "untuk membuktikan
+     mekanismenya"** — mekanismenya belum benar, dan satu entri akan
+     mendaratkan kehilangan event yang senyap dan permanen.
+  3. **Bucket rate-limit ketiga ber-key identifier untuk menutup #430 lebih
+     awal** — varian yang benar-benar menutupnya (key identifier-SAJA) memberi
+     penyerang anonim tuas menahan satu manusia tertolak login di SEMUA tenant,
+     yaitu keberatan yang PERSIS sama yang sudah dicatat menolak tabel lockout
+     global; varian yang aman `(ip, identifier)` nyaris inert di atas plafon
+     per-sumber #448 dan membeli KESAN bahwa #430 sudah ditangani.
+  4. **`last_seen_at` pada `awcms_sessions`** — satu UPDATE per request per sesi
+     di jalur baca otorisasi, selamanya, untuk kolom kosmetik.
+  5. **Nilai `switch` di CHECK `origin_auth`** — CHECK yang memuat nilai yang
+     tak bisa diproduksi apa pun terbaca sebagai kapabilitas yang sudah ada.
+
+  **Titik-lanjut.** Gelombang 2 PR 2.2 (permukaan admin untuk sesi orang lain —
+  `read` dan `revoke` sebagai DUA permission terpisah), lalu Gelombang 3
+  (bentuk Policy). #430 tetap Gelombang 7; angka yang menentukan besarnya
+  (`principalsSpanningMultipleTenants`) baru bisa diukur dengan menjalankan
+  sensusnya terhadap data produksi — lokal nol tenant, nol identitas.
+
 - **PUTARAN 10 Agustus 2026 (lanjutan) — kedua pemblokir #468 diputuskan, #468
   ditutup, dan satu cacat konkurensi ditemukan sambil jalan.** Empat PR
   (#482/#484/#485 + entri ini), dua issue ditutup (#468, #483), satu issue baru
