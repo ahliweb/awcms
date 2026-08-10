@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -37,7 +39,7 @@ describe("evaluateLoginAttempt", () => {
     expect(result).toEqual({ outcome: "allow" });
   });
 
-  test("locks the account once the failed attempt count reaches the max", () => {
+  test("marks a credential failure as countable and offers a lockout timestamp", () => {
     const result = evaluateLoginAttempt({
       now,
       tenantStatus: "active",
@@ -50,9 +52,43 @@ describe("evaluateLoginAttempt", () => {
 
     expect(result.outcome).toBe("deny");
     if (result.outcome === "deny") {
-      expect(result.failedLoginCount).toBe(5);
-      expect(result.lockedUntil).not.toBeNull();
+      expect(result.countFailedAttempt).toBe(true);
+      expect(result.lockoutCandidateAt).toEqual(
+        new Date(now.getTime() + 15 * 60_000)
+      );
     }
+  });
+
+  test("it does NOT return a counter value — the count belongs to the database", () => {
+    // Issue #483. This function used to return `identity.failedLoginCount + 1`
+    // and the route wrote that absolute value back, so two concurrent failures
+    // both read N and both wrote N+1. The absence asserted here is what stops
+    // anyone reintroducing a JS-side count: there is no field to put it in.
+    const result = evaluateLoginAttempt({
+      now,
+      tenantStatus: "active",
+      identity: { status: "active", failedLoginCount: 4, lockedUntil: null },
+      tenantUserStatus: "active",
+      passwordMatches: false,
+      maxFailedAttempts: 5,
+      lockoutMinutes: 15
+    });
+
+    expect(Object.keys(result)).not.toContain("failedLoginCount");
+  });
+
+  test("the route's SQL uses the same threshold this module states", () => {
+    // `shouldLockAccount` is the readable statement of the rule; the comparison
+    // that actually runs is in the route's UPDATE. Pinned here so the two
+    // cannot drift into saying different things — a `>` where the policy says
+    // `>=` would give every account one extra attempt, silently.
+    const route = readFileSync("src/pages/api/v1/auth/login.ts", "utf8");
+
+    expect(shouldLockAccount(5, 5)).toBe(true);
+    expect(route).toContain("failed_login_count = failed_login_count + 1");
+    expect(route).toMatch(
+      /CASE WHEN failed_login_count \+ 1 >= \$\{policy\.maxFailedAttempts\}/
+    );
   });
 
   test("denies with invalid_credentials for an unknown identity, without a failedLoginCount", () => {

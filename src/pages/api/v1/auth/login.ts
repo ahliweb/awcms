@@ -361,10 +361,28 @@ export const POST: APIRoute = async ({
     });
 
     if (result.outcome === "deny") {
-      if (identityRow && result.failedLoginCount !== undefined) {
+      if (identityRow && result.countFailedAttempt) {
+        // The increment and the conditional lock are computed IN-DB — never a
+        // JS read-modify-write (Issue #483).
+        //
+        // This used to `SELECT` the counter above, add one in
+        // `evaluateLoginAttempt`, and write the absolute value back. Under READ
+        // COMMITTED — which is what `sql.begin` gives — two concurrent failures
+        // both read N and both wrote N+1, so K attempts fired in PARALLEL cost
+        // ONE increment. No second tenant, no second IP, no second identity
+        // needed: just don't send them one at a time.
+        //
+        // Same shape as `mfa.ts`'s verify-failure counter, which has been right
+        // about this since it landed. The two differ in one place on purpose:
+        // MFA resets its counter to zero when it locks, this one keeps
+        // counting, because a successful login is what clears it here.
         await tx`
           UPDATE awcms_identities
-          SET failed_login_count = ${result.failedLoginCount}, locked_until = ${result.lockedUntil ?? null}
+          SET failed_login_count = failed_login_count + 1,
+              locked_until =
+                CASE WHEN failed_login_count + 1 >= ${policy.maxFailedAttempts}
+                     THEN ${result.lockoutCandidateAt ?? null}
+                     ELSE locked_until END
           WHERE id = ${identityRow.id}
         `;
       }

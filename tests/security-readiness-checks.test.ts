@@ -83,8 +83,8 @@ describe("scanLineForHardcodedSecret", () => {
 });
 
 describe("domain-backed checks", () => {
-  test("login lockout check passes against the real login policy", () => {
-    const result = checkLoginLockoutImplemented();
+  test("login lockout check passes against the real policy AND the real route", async () => {
+    const result = await checkLoginLockoutImplemented();
 
     expect(result.status).toBe("pass");
     expect(result.severity).toBe("critical");
