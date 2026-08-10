@@ -356,6 +356,124 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 (keempat) — GELOMBANG 3 SELESAI, dan tiga cacat
+  hidup ditemukan sambil menutupnya.** Empat PR (#508/#509/#510 + entri ini);
+  nol PR terbuka. ADR-0079, ADR-0080, ADR-0081.
+
+  **Yang direncanakan adalah backfill. Yang ditemukan lebih besar.** PR 3.2
+  (#506) memindahkan setiap PENULIS grant ke `awcms_access_policies`. **LIMA
+  pembaca tidak ikut**, jadi untuk setiap tenant yang dibuat sesudah PR itu
+  mereka menjawab tentang tabel yang tak ditulis siapa pun — dan tiap satunya
+  salah dengan cara berbeda:
+
+  1. `GET /api/v1/auth/session` melaporkan owner **tanpa satu pun peran**;
+  2. `/admin/users` menampilkan setiap pengguna dengan daftar peran kosong;
+  3. `TenantContext.roles` kosong → kebijakan ABAC `subject.roles` berhenti
+     cocok. Yang `allow` itu penyempitan (aman); yang **`deny` menjadi INERT,
+     yaitu PELEBARAN**;
+  4. SoD berhenti melihat grant RBAC biasa dan melapor "tak ada konflik";
+  5. guard `last_admin_blocked` menyimpulkan tenant tak punya administrator →
+     **owner terakhir bisa dinonaktifkan**, tenant terkunci tanpa pemulihan
+     in-app.
+
+  **38 gerbang hijau selama itu**, `bun run check` lewat, test unit lewat —
+  karena setiap satunya meng-assert sebuah pembaca terhadap **dirinya sendiri**.
+  Tak ada yang menulis grant lewat penulis sungguhan lalu BERTANYA kepada para
+  pembacanya. Itu bentuk test yang kini ada
+  (`tests/integration/grant-readers.integration.test.ts`), dan mengembalikan
+  satu pembaca ke tabel lama memerahkannya — diuji, bukan diklaim.
+
+  **Cacat kedua, dan gerbangnya tak bisa melihatnya.** `awcms_setup` tak pernah
+  diberi privilege pada tabel Policy, jadi setup wizard gagal
+  `permission denied` di setiap deployment ber-`SETUP_DATABASE_URL` sejak #506.
+  `checkWorkerSetupRoleGrants` memeriksa apakah grant COCOK dengan matriksnya —
+  dan kedua sisi masih setuju satu sama lain. Tak ada yang memeriksa apakah
+  matriksnya cocok dengan yang DIBUTUHKAN kode.
+
+  **Cacat ketiga, ditemukan saat menulis test bukan saat membaca:** stub `tx`
+  di `business-scope-facts-guard.test.ts` menjawab SETIAP statement dengan baris
+  yang sama, jadi query kedua apa pun akan dijawab dengan baris query pertama.
+  Assertion-nya tidak berubah; stub-nya yang berhenti berbohong.
+
+  **Yang mendarat.** ADR-0079: `sql/103` menyalin setiap baris
+  `awcms_access_assignments` ke Policy dengan **`id` dipertahankan**, lalu
+  mencabut tulis; `UNION ALL` runtuh **di perubahan yang sama** karena baris
+  lama dipertahankan sebagai sejarah, dan baris dipertahankan yang masih
+  dihitung adalah grant yang tak bisa dicabut siapa pun. ADR-0080: kualifikasi
+  scope, satu klausa yang **tidak punya cabang penghasil cakupan**, dibuktikan
+  sebagai properti atas korpus plus assertion anti-hampa; kill switch
+  **build-time** (dua instance tak boleh berbeda pendapat). ADR-0081: grup
+  sebagai SUBJEK yang memberi PERAN, menjangkau setiap pembaca lewat **satu
+  cabang** — imbalan ADR-0079, yang tanpanya PR itu harus menyentuh tujuh
+  pembaca.
+
+  **Tiga tempat rencana program tidak diikuti, semuanya dengan alasan yang
+  diperiksa terhadap kode:**
+
+  1. **PR 3.3 memensiunkan SATU tabel, bukan dua.**
+     `awcms_business_scope_assignments.role_id` tidak memberi satu pun
+     permission key hari ini, jadi memindahkannya akan memberi setiap subjek
+     ber-scope peran itu **di seluruh tenant** selama scope belum dikualifikasi;
+     dan `role_id`-nya nullable sedangkan tujuannya tidak.
+  2. **`fetchGrantedPermissionKeys` tetap `Set<string>`**, bukan
+     `{ keys, scopes }`. Peta itu akan menduplikasi apa yang sudah dijawab
+     `resolveBusinessScopeFacts` dari sumber yang sama — dan dua turunan satu
+     nilai adalah persis pelajaran ADR-0079.
+  3. **Gerbang `access:sod-fact-parity:check` tidak dibangun.** ADR-0079 sudah
+     menutup celahnya lebih rapat: pembaca tak lagi menyebut tabel grant sama
+     sekali. "Merujuk konstanta yang sama" bisa benar sementara kedua query
+     berbeda; "memakai fragmen yang sama" tidak bisa.
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **VIEW basis data sebagai definisi tunggal grant** — view pertama di repo
+     ini harus menjawab `security_invoker` di perubahan yang sama, dan tanpanya
+     ia berjalan sebagai PEMILIKNYA dan **melewati FORCE RLS** sementara setiap
+     test RLS tetap hijau.
+  2. **Menghapus baris lama alih-alih menyimpannya** — tabel kosong bukan
+     sejarah, dan rujukan audit ke `id` akan mati.
+  3. **Mencabut `SELECT` juga** — membuat sejarahnya tak terjangkau, bukan tak
+     bisa diubah.
+  4. **Menyaring grant ber-scope keluar dari `fetchGrantedPermissionKeys`** —
+     gerbang RBAC berjalan lebih dulu, jadi jalur ber-scope jadi mustahil
+     dijangkau dan grant ber-scope akan menolak segalanya termasuk di scope-nya
+     sendiri.
+  5. **Env var untuk kill switch scope** — dua instance dalam satu deployment
+     bisa berbeda pendapat.
+  6. **Grup memberi permission KEY langsung** — `subject.roles` kosong membuat
+     kebijakan DENY inert; itu pelebaran yang tak diamati siapa pun.
+  7. **Permission `user_groups.grant` tersendiri** — administrator grup yang
+     juga bisa memberi peran ke grupnya sendiri bisa memberi `owner` ke grup
+     yang ia anggotai.
+  8. **`delete` untuk grup** — tiga keputusan yang belum dijawab (grant-nya,
+     keanggotaannya, `external_id` yang besok disodorkan direktori lagi).
+  9. **Menerima `source` dari request** saat membuat grup — pemanggil akan
+     menyatakan grup tak-bisa-disunting tanpa direktori di belakangnya.
+  10. **Mengaudit daftar anggota saat grant peran diberikan ke grup** — daftar
+      itu berhenti benar begitu ada yang bergabung; yang diaudit GRUP-nya.
+
+  **Dua gerbang tumbuh, dan keduanya karena permukaannya berubah, bukan karena
+  gerbangnya rewel.** `RETIRED_TENANT_TABLE_PRIVILEGES` (kelas baru: tabel
+  tenant-scoped yang sengaja read-only harus DIDEKLARASIKAN, ditegakkan dua
+  arah), dan `GRANT_TABLES` bertambah dua nama grup — mengubah siapa yang ada di
+  sebuah grup adalah mengubah otorisasi. Plafon `BOUNDED_BY_DESIGN` naik 3 → 5,
+  dan menaikkan baris itu adalah tindakan yang direview: keempat entri satu
+  argumen dalam dua paruh (tabel ber-grant + tabel yang dibatasi olehnya).
+
+  **Batas yang WAJIB dibaca sebelum permukaan penulis grant ber-scope
+  dibangun.** Kualifikasi scope hanya sekuat rute yang **menyatakan** required
+  scope. `fetchGrantedPermissionKeys` tetap mengembalikan kunci dari semua grant
+  — ia harus, karena gerbang RBAC berjalan lebih dulu — sehingga pada rute yang
+  tak menyatakan scope, grant ber-scope memberi permission itu di seluruh
+  tenant. Hari ini inert (nol penulis, di-assert terhadap basis data), tetapi PR
+  permukaan admin **tidak boleh mendarat tanpa menjawabnya**.
+
+  **Titik-lanjut.** Gelombang 3 tuntas. Berikutnya **Gelombang 4** (undangan —
+  `awcms_invitations` + `awcms_invitation_policies`, undangan membawa
+  Policy-nya). Dua hal yang harus ikut: permukaan admin untuk grant ber-scope
+  (dengan jawaban atas batas di atas) dan keputusan lifecycle `delete` grup.
+  #430 tetap Gelombang 7.
+
 - **PUTARAN 10 Agustus 2026 (ketiga) — lima PR dependabot dibereskan, dua cacat
   review diperbaiki, GELOMBANG 3 SEPARUH JALAN.** Lima PR
   (#502/#503/#504/#505/#506 + entri ini); nol PR terbuka.
