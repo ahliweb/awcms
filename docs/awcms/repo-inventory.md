@@ -8,7 +8,7 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 97    |
+| Migrasi                            | 98    |
 | Tabel `awcms_*`                    | 130   |
 | Tabel dengan `FORCE` RLS           | 119   |
 | Tabel RLS-free (global, by design) | 11    |
@@ -144,6 +144,7 @@
 | 95  | `sql/095_awcms_email_retention.sql`                                |
 | 96  | `sql/096_awcms_object_sync_queue_retention.sql`                    |
 | 97  | `sql/097_awcms_domain_event_deliveries_retention.sql`              |
+| 98  | `sql/098_awcms_sync_outbox_not_connected_comment.sql`              |
 
 ### Tabel & Row-Level Security
 

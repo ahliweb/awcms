@@ -2624,7 +2624,7 @@ A full replace, not a merge: the payload IS the arrangement, so an omitted overr
 
 ## Sync Storage
 
-Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.
+Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue. NOT CONNECTED, server side: POST /api/v1/sync/pull reads awcms_sync_outbox, and nothing anywhere writes that table — no application code, no trigger, no migration. It therefore returns an empty event list every time, and a node polling it will conclude the server has no changes rather than that the path was never wired. The push direction (node to server) is fully implemented and unaffected. Tracked as issue #477; the operation's own description is unchanged because the pre-migration contract snapshot is frozen, so this notice lives here.
 
 ### `GET /api/v1/sync/conflicts` — List sync conflicts for the tenant (bearer session, not HMAC).
 

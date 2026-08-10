@@ -20,7 +20,10 @@ import path from "node:path";
 
 import { syncStorageModule } from "../src/modules/sync-storage/module";
 import { OBJECT_QUEUE_TERMINAL_STATUSES } from "../src/modules/sync-storage/application/object-queue-purge";
-import { TABLES_PREDATING_THE_RULE } from "../scripts/data-lifecycle-table-coverage-check";
+import {
+  BOUNDED_BY_DESIGN,
+  TABLES_PREDATING_THE_RULE
+} from "../scripts/data-lifecycle-table-coverage-check";
 import { WORKER_ROLE_GRANTS } from "../scripts/security-readiness";
 
 const PURGE = "src/modules/sync-storage/application/object-queue-purge.ts";
@@ -138,13 +141,15 @@ describe("the descriptor and the ledger agree", () => {
   });
 });
 
-describe("awcms_sync_outbox stays on the ledger because nothing writes it", () => {
+describe("awcms_sync_outbox is a reasoned exception because nothing writes it", () => {
   /**
    * Every `.ts` under `src/` and `sql/` file, scanned for a write to the table.
    *
-   * This is the assertion the descriptor's absence rests on. If somebody wires
-   * a producer, this fails — and the failure is the signal that the table has
-   * become a real queue and needs a real descriptor.
+   * This is the assertion the descriptor's absence rests on, and since #477 it
+   * is also the premise of the table's `BOUNDED_BY_DESIGN` entry. If somebody
+   * wires a producer, this fails — and the failure is the signal that the table
+   * has become a real queue, needs a real descriptor, and must leave that
+   * exception list.
    */
   function sourcesMentioningWrites(): string[] {
     const offenders: string[] = [];
@@ -182,12 +187,27 @@ describe("awcms_sync_outbox stays on the ledger because nothing writes it", () =
     expect(sourcesMentioningWrites()).toEqual([]);
   });
 
-  test("so it keeps its place on the debt ledger, and has no descriptor", () => {
+  test("so it is a REASONED exception, not a line of undifferentiated debt", () => {
     // A descriptor here would be fiction twice over: a terminal-status
     // predicate that can never match (nothing sets a status because nothing
-    // writes a row), on a table that cannot grow. And it would take the table
-    // OFF the ledger, out of anyone's view. The finding is filed separately.
-    expect(TABLES_PREDATING_THE_RULE).toContain("awcms_sync_outbox");
+    // writes a row), on a table that cannot grow.
+    //
+    // But the debt ledger was the wrong place for it too. That ledger carries
+    // exactly one reason — "nobody asked the retention question of these" — and
+    // the question HAS been asked here and answered. Sitting there, a table
+    // nobody CAN describe looked identical to a table nobody had got to yet,
+    // which is the confusion #477 and #479 were both about.
+    expect(TABLES_PREDATING_THE_RULE).not.toContain("awcms_sync_outbox");
+
+    const exception = BOUNDED_BY_DESIGN.find(
+      (entry) => entry.table === "awcms_sync_outbox"
+    );
+
+    expect(exception).toBeDefined();
+    // The entry's premise is the scan above. Binding them here is what makes
+    // the two move together: wire a producer and the scan fails, and this test
+    // says in the same run which claim the producer invalidated.
+    expect(exception!.reason).toContain("#477");
     expect(
       (syncStorageModule.dataLifecycle ?? []).some(
         (descriptor) => descriptor.tableName === "awcms_sync_outbox"

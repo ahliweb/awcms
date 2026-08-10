@@ -34,7 +34,7 @@ tags:
   - name: Module Management
     description: Database-backed module registry, tenant module lifecycle, settings, permission sync, jobs, and health.
   - name: Sync Storage
-    description: Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue.
+    description: "Offline-first sync node registration, HMAC-signed push/pull, conflict tracking, and the object sync upload queue. NOT CONNECTED, server side: POST /api/v1/sync/pull reads awcms_sync_outbox, and nothing anywhere writes that table — no application code, no trigger, no migration. It therefore returns an empty event list every time, and a node polling it will conclude the server has no changes rather than that the path was never wired. The push direction (node to server) is fully implemented and unaffected. Tracked as issue #477; the operation's own description is unchanged because the pre-migration contract snapshot is frozen, so this notice lives here."
   - name: Workflow Approval
     description: Managed, versioned graph-based approval workflows — definition lifecycle, approval inbox/decisions, delegation, escalation, and administrative recovery.
   - name: Email

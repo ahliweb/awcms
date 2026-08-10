@@ -143,12 +143,40 @@ describe("the real repository", () => {
     );
   });
 
-  test("`BOUNDED_BY_DESIGN` starts empty, and that is the interesting part", () => {
-    // An empty exemption list makes the first exemption the only entry, so it
-    // cannot arrive unnoticed — the same reason ADR-0058 drove
+  describe("`BOUNDED_BY_DESIGN` — short, and every entry argued", () => {
+    // This list started EMPTY, and that was the interesting part: the first
+    // exemption could not arrive unnoticed, for the reason ADR-0058 drove
     // `access:permissions:enforcement:check` to 0 exceptions rather than a
-    // short list.
-    expect(BOUNDED_BY_DESIGN).toHaveLength(0);
+    // short list. It did its job — `awcms_sync_outbox` (issue #477) is the
+    // first entry and it arrived through a red test.
+    //
+    // What replaces the emptiness assertion is not a weaker version of it. An
+    // exemption is cheap to add and expensive to notice later, so each of the
+    // three below is a property an entry cannot satisfy by accident, and the
+    // count is capped so the list cannot become a second ledger.
+
+    test("it stays short — an exemption list that grows is the debt ledger wearing a costume", () => {
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(3);
+    });
+
+    test("every entry names a table that really exists in sql/", () => {
+      // A dead entry is a claim about nothing, and it reads as coverage.
+      const tables = new Set(collectTables());
+
+      for (const entry of BOUNDED_BY_DESIGN) {
+        expect(tables.has(entry.table)).toBe(true);
+      }
+    });
+
+    test("every entry carries a reason a reviewer could dispute", () => {
+      // The gate itself rejects an EMPTY reason. This asks for more than
+      // non-empty: a sentence short enough to be a label is not an argument,
+      // and "bounded" without a mechanism is the exact shape of the lie this
+      // list is most likely to attract.
+      for (const entry of BOUNDED_BY_DESIGN) {
+        expect(entry.reason.trim().length).toBeGreaterThan(120);
+      }
+    });
   });
 
   test("it counts tables the same way `repo:inventory` does", () => {
