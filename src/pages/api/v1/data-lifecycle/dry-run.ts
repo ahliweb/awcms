@@ -10,6 +10,7 @@ import {
 } from "../../../../modules/identity-access/application/access-guard";
 import { listModules } from "../../../../modules";
 import { collectHighVolumeTableDescriptors } from "../../../../modules/data-lifecycle/domain/lifecycle-registry";
+import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../../../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
 import { planLifecycleDryRun } from "../../../../modules/data-lifecycle/application/dry-run-planner";
 import { fetchActiveLegalHoldsForPlanning } from "../../../../modules/data-lifecycle/application/legal-hold-service";
 
@@ -62,6 +63,21 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   );
 
   if (!descriptor) {
+    // An infrastructure descriptor (ADR-0076) is a real, registered key that
+    // this planner cannot serve. Answering 404 "unknown" would send the caller
+    // hunting for a typo that is not there, so the two cases are told apart.
+    const isInfrastructure = INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS.some(
+      (candidate) => candidate.key === body.descriptorKey
+    );
+
+    if (isInfrastructure) {
+      return fail(
+        400,
+        "VALIDATION_ERROR",
+        `Descriptor "${body.descriptorKey}" is owned by infrastructure, not by a module. On-demand dry-run is not available for it: its purge is delegated to \`bun run edge-cache:purge\`, and this planner has no status predicate, so any count it produced would include rows that purge will never touch.`
+      );
+    }
+
     return fail(
       404,
       "NOT_FOUND",

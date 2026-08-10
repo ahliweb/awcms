@@ -16,7 +16,16 @@
  * key must not strand the rest of the batch. The job only reports failure for a
  * fault that prevents it running at all. That means a green exit does NOT imply
  * every invalidation landed — the `failed` count in the summary line is what
- * says that, and `failed` rows are deliberately never pruned.
+ * says that.
+ *
+ * ## Retention (ADR-0076)
+ *
+ * `done` rows are pruned after seven days, `failed` rows after 180 — two
+ * windows because they answer to two different readers, and both declared in
+ * `data-lifecycle/domain/infrastructure-lifecycle-registry.ts` rather than
+ * here, so the numbers this job enforces are the ones the lifecycle registry
+ * publishes. A tenant under an active legal hold over `edge_cache.purges` is
+ * skipped for retention while its sends continue.
  *
  * ## No-op when disabled
  *
@@ -32,15 +41,13 @@ import {
   claimEdgeCachePurges,
   markEdgeCachePurgeDone,
   markEdgeCachePurgeFailed,
-  pruneCompletedEdgeCachePurges
+  pruneTerminalEdgeCachePurges
 } from "../src/lib/edge-cache/purge-queue";
+import { legalHoldGuardPortAdapter } from "../src/modules/data-lifecycle/application/legal-hold-guard-port-adapter";
 import { sendEdgeCachePurge } from "../src/lib/edge-cache/varnish-client";
 
 /** Safety bound mirroring the other purge jobs — never loop unboundedly. */
 const MAX_PASSES_PER_TENANT = 50;
-
-/** Completed rows older than this are pruned. `failed` rows are kept forever. */
-const COMPLETED_RETENTION_DAYS = 7;
 
 type TenantRow = { id: string };
 
@@ -59,13 +66,12 @@ async function main(): Promise<void> {
 
   const sql = getWorkerDatabaseClient();
   const now = new Date();
-  const pruneBefore = new Date(
-    now.getTime() - COMPLETED_RETENTION_DAYS * 24 * 60 * 60 * 1_000
-  );
 
   let sent = 0;
   let failed = 0;
-  let pruned = 0;
+  let prunedCompleted = 0;
+  let prunedFailed = 0;
+  let heldTenants = 0;
 
   try {
     const tenants = (await sql`
@@ -109,20 +115,23 @@ async function main(): Promise<void> {
         }
       }
 
-      pruned += await withTenantOrThrow(sql, tenant.id, (tx) =>
-        pruneCompletedEdgeCachePurges(
-          tx,
-          tenant.id,
-          pruneBefore,
-          config.purgeBatchSize
-        )
+      const retention = await withTenantOrThrow(sql, tenant.id, (tx) =>
+        pruneTerminalEdgeCachePurges(tx, tenant.id, legalHoldGuardPortAdapter, {
+          now,
+          limit: config.purgeBatchSize
+        })
       );
+
+      prunedCompleted += retention.prunedCompleted;
+      prunedFailed += retention.prunedFailed;
+      if (retention.heldByLegalHold) heldTenants += 1;
     }
 
     console.log(
       `edge-cache:purge complete — correlationId=${correlationId} ` +
         `mode=${config.mode} tenants=${tenants.length} ` +
-        `sent=${sent} failed=${failed} prunedCompleted=${pruned}`
+        `sent=${sent} failed=${failed} prunedCompleted=${prunedCompleted} ` +
+        `prunedFailed=${prunedFailed} legalHoldTenants=${heldTenants}`
     );
   } catch (error) {
     logScriptFailure("edge-cache:purge FAILED", error);

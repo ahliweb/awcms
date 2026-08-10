@@ -10,6 +10,7 @@ import {
 } from "../../../../modules/identity-access/application/access-guard";
 import { listModules } from "../../../../modules";
 import { collectHighVolumeTableDescriptors } from "../../../../modules/data-lifecycle/domain/lifecycle-registry";
+import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../../../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
 
 /**
  * `GET /api/v1/data-lifecycle/registry` (ADR-0037) — every registered
@@ -48,6 +49,13 @@ export const GET: APIRoute = async ({ request, cookies }) => {
 
     const descriptors = collectHighVolumeTableDescriptors(listModules());
 
-    return ok({ descriptors });
+    // Two arrays rather than one (ADR-0076). Merging them would need a single
+    // owner field, and the only spellings available are a module key the
+    // infrastructure table does not have or a path the module tables do not —
+    // either way one half of the list would be describing itself wrongly.
+    return ok({
+      descriptors,
+      infrastructureDescriptors: INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS
+    });
   });
 };

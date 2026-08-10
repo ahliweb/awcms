@@ -73,8 +73,17 @@ export function stripComments(source: string): string {
     .join("\n");
 }
 
-/** Owners that are not modules. Named so a violation reads as a sentence. */
-const INFRASTRUCTURE = "(src/lib infrastructure)";
+/**
+ * Owners that are not modules. Named so a violation reads as a sentence.
+ *
+ * `INFRASTRUCTURE` is exported because `data-lifecycle:registry:check`
+ * (ADR-0076) decides who may hold an infrastructure lifecycle descriptor by
+ * comparing against this exact literal. Passing it rather than re-typing it
+ * there is deliberate: two copies of the string would drift, and the drift
+ * would show up as a gate that quietly matches nothing.
+ */
+export const INFRASTRUCTURE_OWNER = "(src/lib infrastructure)";
+const INFRASTRUCTURE = INFRASTRUCTURE_OWNER;
 const TOOLING = "(scripts tooling)";
 const UNCLAIMED_ROUTE = "(unclaimed route)";
 

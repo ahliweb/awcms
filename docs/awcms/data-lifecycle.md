@@ -53,6 +53,33 @@ ada; atau `"generic"` — dieksekusi langsung oleh mesin ini). Divalidasi
 `bun run data-lifecycle:registry:check` (bagian `bun run check`) dan
 `security:readiness`'s `checkDataLifecycleRegistryValid`.
 
+### Tabel yang tidak punya modul pemilik ([ADR-0076](../adr/0076-infrastructure-tables-may-hold-lifecycle-descriptors.md))
+
+Sebagian kecil tabel dimiliki **infrastruktur** (`src/lib/`), bukan modul —
+sengaja, sama seperti subsistem database dan rate limit. Tabel seperti itu tidak
+punya `module.ts` untuk menaruh deskriptornya, dan `ownerModuleKey` tidak
+dilonggarkan untuknya: melonggarkannya akan membuat deskriptor modul yang **lupa**
+menyebut pemilik berhenti menjadi kesalahan dan mulai berarti "infrastruktur".
+
+Deskriptornya tinggal di
+`src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry.ts`, memakai
+`ownerPath` (direktori `src/lib/…/`) sebagai ganti `ownerModuleKey`, dan **wajib**
+`executionMode: "delegated"` — mesin generik menghapus atas nama modul pemilik,
+dan tabel ini tidak punya.
+
+Yang menjaga registry itu dari menjadi tempat parkir bukan aturan tertulis:
+`data-lifecycle:registry:check` memindai `src/` dengan `ownerOfFile()` — fungsi
+yang sama yang dipakai `modules:table-writes:check` — dan menolak deskriptor
+infrastruktur untuk tabel yang penulisnya sebuah modul, maupun untuk tabel yang
+tidak ditulis siapa pun.
+
+| Descriptor key      | Tabel                     | Owner                 | Mode        | Kelas retensi       | Jendela                          |
+| ------------------- | ------------------------- | --------------------- | ----------- | ------------------- | -------------------------------- |
+| `edge_cache.purges` | `awcms_edge_cache_purges` | `src/lib/edge-cache/` | `delegated` | `operational_queue` | `done` 7 hari, `failed` 180 hari |
+
+Purge-nya dijalankan `bun run edge-cache:purge` dan menghormati legal hold atas
+`edge_cache.purges` seperti setiap adopter terdelegasi lain.
+
 Descriptor di bawah adalah **contoh target ERP** (belum terdaftar di
 kode — belum ada modul finance/inventory/HR-payroll):
 

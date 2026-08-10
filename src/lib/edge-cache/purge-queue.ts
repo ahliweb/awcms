@@ -15,6 +15,13 @@
  * This is the same outbox discipline ADR-0006 applies to sync, for the same
  * reason.
  */
+import type { LegalHoldGuardPort } from "../../modules/_shared/ports/legal-hold-guard-port";
+import {
+  EDGE_CACHE_DONE_RETENTION_DAYS,
+  EDGE_CACHE_FAILED_RETENTION_DAYS,
+  EDGE_CACHE_PURGES_LIFECYCLE_KEY
+} from "../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
+
 import { buildSurrogateKey, type SurrogateKeyScope } from "./surrogate-keys";
 
 /** Minimal transaction shape — a tagged-template SQL executor. */
@@ -168,10 +175,10 @@ export async function markEdgeCachePurgeFailed(
 }
 
 /**
- * Prune completed rows older than the retention window. `failed` rows are
- * deliberately NOT pruned — they are the only record that an invalidation never
- * landed, and silently deleting them would hide stale content from the operator
- * who needs to know about it.
+ * Prune completed rows older than the retention window.
+ *
+ * `failed` rows are NOT touched here — see `pruneFailedEdgeCachePurges`, which
+ * bounds them on a far longer window and for a different reason.
  */
 export async function pruneCompletedEdgeCachePurges(
   tx: SqlExecutor,
@@ -193,4 +200,105 @@ export async function pruneCompletedEdgeCachePurges(
   `) as { id: string }[];
 
   return rows.length;
+}
+
+/**
+ * Prune exhausted rows older than the long window (ADR-0076).
+ *
+ * ## Why these were kept forever, and why "forever" was still wrong
+ *
+ * A `failed` row is the only record that an invalidation never landed, and
+ * deleting one early hides stale content from the operator who needs to know
+ * about it. That reasoning is intact — it is what sets this window six months
+ * out rather than seven days. What it does not support is keeping them without
+ * end: the content whose invalidation failed has expired from the edge
+ * thousands of times over by then, so the row has stopped being a work item and
+ * become archaeology, while remaining the one class of row in this table that
+ * nothing ever removes.
+ *
+ * Deliberately a SEPARATE function rather than a status list passed to the one
+ * above. Two statuses with two windows and two justifications collapse badly
+ * into one parameterised call: the next person to widen the "terminal" list
+ * would silently give `failed` rows the seven-day window meant for `done`.
+ *
+ * Ordered on `created_at` rather than `completed_at` — an exhausted row never
+ * completed, so `completed_at` is NULL and would exclude every row it was meant
+ * to select.
+ */
+export async function pruneFailedEdgeCachePurges(
+  tx: SqlExecutor,
+  tenantId: string,
+  olderThan: Date,
+  limit: number
+): Promise<number> {
+  const rows = (await tx`
+    DELETE FROM awcms_edge_cache_purges
+    WHERE id IN (
+      SELECT id
+      FROM awcms_edge_cache_purges
+      WHERE tenant_id = ${tenantId}
+        AND status = 'failed'
+        AND created_at < ${olderThan}
+      LIMIT ${limit}
+    )
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows.length;
+}
+
+export type EdgeCacheRetentionResult = {
+  prunedCompleted: number;
+  prunedFailed: number;
+  heldByLegalHold: boolean;
+};
+
+/**
+ * The retention entry point — legal hold first, then both terminal statuses
+ * (ADR-0076).
+ *
+ * The guard lives INSIDE this function rather than at the worker script, for
+ * the reason every other adopter puts it inside its own purge function: a check
+ * a caller has to remember is a check the next caller forgets. `data_lifecycle`
+ * never mutates a `delegated` table itself, so this is the only place a hold
+ * over `edge_cache.purges` can be honoured — and a descriptor declaring
+ * `legalHold.applicable: true` with nothing enforcing it would be precisely the
+ * unenforced claim Issue #479 was filed about.
+ *
+ * A held tenant returns zeros rather than throwing: a hold is a normal state,
+ * and the sending half of this job must keep running while it is in place.
+ */
+export async function pruneTerminalEdgeCachePurges(
+  tx: Bun.SQL,
+  tenantId: string,
+  legalHoldGuard: LegalHoldGuardPort,
+  options: { now: Date; limit: number }
+): Promise<EdgeCacheRetentionResult> {
+  if (
+    await legalHoldGuard.isDescriptorHeld(
+      tx,
+      tenantId,
+      EDGE_CACHE_PURGES_LIFECYCLE_KEY
+    )
+  ) {
+    return { prunedCompleted: 0, prunedFailed: 0, heldByLegalHold: true };
+  }
+
+  const cutoff = (days: number) =>
+    new Date(options.now.getTime() - days * 24 * 60 * 60 * 1_000);
+
+  const prunedCompleted = await pruneCompletedEdgeCachePurges(
+    tx,
+    tenantId,
+    cutoff(EDGE_CACHE_DONE_RETENTION_DAYS),
+    options.limit
+  );
+  const prunedFailed = await pruneFailedEdgeCachePurges(
+    tx,
+    tenantId,
+    cutoff(EDGE_CACHE_FAILED_RETENTION_DAYS),
+    options.limit
+  );
+
+  return { prunedCompleted, prunedFailed, heldByLegalHold: false };
 }

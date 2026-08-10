@@ -41,6 +41,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { listModules } from "../../modules";
 import { collectHighVolumeTableDescriptors } from "../../modules/data-lifecycle/domain/lifecycle-registry";
+import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
 import {
   listLegalHolds,
   type LegalHoldRow
@@ -67,9 +68,31 @@ if (!ssr) {
 // because it touches nothing but the module registry; it is only RENDERED, and
 // only offered as a picker, under `registry.read` (below).
 const descriptors = collectHighVolumeTableDescriptors(listModules());
-const tenantDescriptors = descriptors.filter(
-  (descriptor) => descriptor.scope === "tenant"
+
+// ADR-0076 — one table, two kinds of owner. Rendering them in separate
+// sections was the first shape and it was worse: an operator scanning for "is
+// this table covered?" would have to know which of the two lists to look in,
+// which is the same question the ledger could not answer before this landed.
+// One list with an OWNER column answers it by reading.
+const registryRows = [
+  ...descriptors.map((descriptor) => ({
+    descriptor,
+    owner: descriptor.ownerModuleKey,
+    ownerKind: "module"
+  })),
+  ...INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS.map((descriptor) => ({
+    descriptor,
+    owner: descriptor.ownerPath,
+    ownerKind: "infrastructure"
+  }))
+];
+const tenantDescriptors = registryRows.filter(
+  (row) => row.descriptor.scope === "tenant"
 );
+// Legal holds may target either registry, so the picker must offer both — an
+// infrastructure descriptor declaring `legalHold.applicable: true` that the
+// console cannot name would be enforcement nobody can reach.
+const holdTargetKeys = registryRows.map((row) => row.descriptor.key);
 
 // Issue #450 — the entry decision and the reads share ONE transaction, and the
 // decision is the chokepoint's.
@@ -218,7 +241,7 @@ const hasTenantWideHold = holds.some(
           </div>
           <div class="stat-card">
             <span class="stat-label">Registered tables</span>
-            <span class="stat-value">{descriptors.length}</span>
+            <span class="stat-value">{registryRows.length}</span>
             <span class="stat-hint">
               {tenantDescriptors.length} tenant-scoped
             </span>
@@ -238,11 +261,13 @@ const hasTenantWideHold = holds.some(
       <section class="admin-section fade-in-up" id="data-lifecycle-registry">
         <h2 class="admin-section-title">
           Lifecycle registry
-          <span class="count-pill">{descriptors.length}</span>
+          <span class="count-pill">{registryRows.length}</span>
         </h2>
         <p class="page-description">
-          Declared by each owning module in its own <code>module.ts</code> —
-          code, not tenant configuration. Nothing here reveals row contents or
+          Declared by each owning module in its own <code>module.ts</code>, or —
+          for a table owned by <code>src/lib/</code> infrastructure with no
+          module to declare it — in the infrastructure registry (ADR-0076).
+          Code, not tenant configuration. Nothing here reveals row contents or
           live counts.
         </p>
         <div class="data-table-scroll">
@@ -254,6 +279,7 @@ const hasTenantWideHold = holds.some(
               <tr>
                 <th scope="col">Descriptor</th>
                 <th scope="col">Table</th>
+                <th scope="col">Owner</th>
                 <th scope="col">Scope</th>
                 <th scope="col">Retention (days)</th>
                 <th scope="col">Execution</th>
@@ -263,13 +289,19 @@ const hasTenantWideHold = holds.some(
               </tr>
             </thead>
             <tbody>
-              {descriptors.map((descriptor) => (
+              {registryRows.map(({ descriptor, owner, ownerKind }) => (
                 <tr>
                   <td data-label="Descriptor">
                     <span class="cell-code">{descriptor.key}</span>
                   </td>
                   <td data-label="Table">
                     <span class="cell-code">{descriptor.tableName}</span>
+                  </td>
+                  <td data-label="Owner">
+                    <span class="cell-code">{owner}</span>
+                    {ownerKind === "infrastructure" && (
+                      <span class="cell-muted"> (infrastructure)</span>
+                    )}
                   </td>
                   <td data-label="Scope">{descriptor.scope}</td>
                   <td data-label="Retention (days)">
@@ -428,8 +460,8 @@ const hasTenantWideHold = holds.some(
             {canReadRegistry ? (
               <select id="hold-descriptor-key" name="descriptorKey">
                 <option value="">Every table (tenant-wide)</option>
-                {descriptors.map((descriptor) => (
-                  <option value={descriptor.key}>{descriptor.key}</option>
+                {holdTargetKeys.map((key) => (
+                  <option value={key}>{key}</option>
                 ))}
               </select>
             ) : (
