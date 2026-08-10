@@ -331,4 +331,30 @@ describe("the route is self-service and leaks no password anywhere", () => {
     expect(source).toContain('"cache-control": "private, no-store"');
     expect(source).not.toMatch(/\breturn ok\(/);
   });
+
+  test("the body is read BEFORE the transaction, never inside it", () => {
+    // `await request.json()` waits on the CLIENT. Reading it inside
+    // `withTenant` holds a reserved pool connection — and its work-class slot —
+    // for as long as a caller chooses to take sending its body, which turns one
+    // slow request into a connection held against every other request in the
+    // pool. `queueTimeoutMs` bounds ACQUIRING a connection, never holding one.
+    //
+    // Asserted positionally rather than by "does it appear": both `prepare` and
+    // `handler` mention the body one way or another, and the question is which
+    // side of the transaction boundary the read sits on.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    const prepareAt = code.indexOf("prepare:");
+    const handlerAt = code.indexOf("handler:");
+    const readAt = code.indexOf("readJsonBody(");
+
+    expect(prepareAt).toBeGreaterThan(-1);
+    expect(readAt).toBeGreaterThan(prepareAt);
+    expect(readAt).toBeLessThan(handlerAt);
+    // And the handler receives the parsed value rather than re-parsing it.
+    expect(code.slice(handlerAt)).toContain("prepared");
+    expect(code.slice(handlerAt)).not.toContain("readJsonBody");
+  });
 });
