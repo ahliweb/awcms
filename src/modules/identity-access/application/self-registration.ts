@@ -48,6 +48,7 @@ import { hashPassword } from "../../../lib/auth/password";
 import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
 import type { AuthNotificationPort } from "../../_shared/ports/auth-notification-port";
 import { isMailableLoginIdentifier } from "../domain/password-reset-policy";
+import { grantRolePolicy } from "./access-policy-writer";
 import {
   requestPasswordReset,
   type RequestPasswordResetOptions
@@ -320,13 +321,23 @@ export async function approveRegistrationRequest(
   `) as { id: string }[];
   const tenantUserId = tenantUserRows[0]!.id;
 
-  if (options.roleIds.length > 0) {
-    await tx`
-      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-      SELECT ${tenantId}, ${tenantUserId}, role_id, ${reviewerTenantUserId}
-      FROM unnest(${tx.array(options.roleIds, "uuid")}) AS role_id
-      ON CONFLICT (tenant_id, tenant_user_id, role_id) DO NOTHING
-    `;
+  // ADR-0078 — grants land in `awcms_access_policies`. Written one at a time
+  // rather than as a set-based INSERT: `grantRolePolicy` also records the
+  // `granted` lifecycle event, and a history that exists for grants made through
+  // the admin surface but not for grants made by approving a registration would
+  // be a gap exactly where an investigation looks first. The list is a handful of
+  // role ids chosen by a reviewer, not a batch.
+  //
+  // No `ON CONFLICT DO NOTHING` equivalent is needed: this runs immediately after
+  // the tenant user is created in the same transaction, so it can hold nothing
+  // yet, and duplicate role ids in one request are refused by validation.
+  for (const roleId of options.roleIds) {
+    await grantRolePolicy(tx, tenantId, {
+      tenantUserId,
+      roleId,
+      grantedByTenantUserId: reviewerTenantUserId,
+      reason: "self-registration approved"
+    });
   }
 
   await tx`

@@ -103,9 +103,9 @@ export const GRANT_READERS: readonly GrantReaderEntry[] = [
       "The role-to-permission writer for `awcms_role_permissions` — the surface where an admin deliberately narrows a role, which is why the backfill may only re-grant catalogue rows newer than the role itself."
   },
   {
-    file: "src/modules/identity-access/application/self-registration.ts",
+    file: "src/modules/identity-access/application/access-policy-writer.ts",
     reason:
-      "Approving a registration mints the account's first assignment; it is the only admin path in this repo that materialises an identity."
+      "THE writer, since ADR-0078. Every path that used to INSERT a grant calls `grantRolePolicy`, and removal goes through `revokeRoleGrants` — which names the LEGACY table too, deliberately: until PR 3.3's backfill runs a grant may live in either, and a remover that knew only about the new one would report success while the role survived."
   },
   {
     file: "src/modules/identity-access/application/session-introspection.ts",

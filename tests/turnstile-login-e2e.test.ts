@@ -175,6 +175,12 @@ describeOrSkip(
         "awcms_sessions",
         "awcms_audit_events",
         "awcms_abac_decision_logs",
+        // ADR-0078 — bootstrap's owner grant now lands in
+        // `awcms_access_policies`, whose composite FK to `awcms_roles` makes the
+        // role delete below fail unless the grant goes first. Its append-only
+        // event table references the policy, so it leads.
+        "awcms_access_policy_events",
+        "awcms_access_policies",
         "awcms_access_assignments",
         "awcms_role_permissions",
         "awcms_roles",

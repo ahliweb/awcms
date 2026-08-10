@@ -20,6 +20,11 @@
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { revokeAllSessionsForIdentity } from "./session-revocation";
+import {
+  grantRolePolicy,
+  revokeRoleGrants,
+  subjectHoldsRole
+} from "./access-policy-writer";
 
 const AUDIT_MODULE_KEY = "identity_access";
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -323,14 +328,27 @@ export async function assignRole(
     throw new SystemRoleAssignmentError();
   }
 
+  // ADR-0078 — the duplicate check no longer comes for free from one unique
+  // index, because a live grant can be in either table until PR 3.3's backfill
+  // runs. Asked BEFORE the write so "already assigned" stays a clean 409 rather
+  // than a unique violation that has already aborted the transaction.
+  if (await subjectHoldsRole(tx, tenantId, tenantUserId, roleId)) {
+    throw new DuplicateAssignmentError();
+  }
+
   let rows: Array<{ id: string }>;
   try {
-    rows = (await tx`
-      INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-      VALUES (${tenantId}, ${tenantUserId}, ${roleId}, ${actorTenantUserId})
-      RETURNING id
-    `) as Array<{ id: string }>;
+    rows = [
+      await grantRolePolicy(tx, tenantId, {
+        tenantUserId,
+        roleId,
+        grantedByTenantUserId: actorTenantUserId
+      })
+    ];
   } catch (error) {
+    // Still translated: the check above closes the window it can, and a
+    // concurrent grant of the same role can still lose the race at the partial
+    // unique index. That is the one case where 23505 is the honest answer.
     if (
       error instanceof Bun.SQL.PostgresError &&
       String(error.errno) === POSTGRES_UNIQUE_VIOLATION
@@ -381,15 +399,20 @@ export async function unassignRole(
     throw new SystemRoleAssignmentError();
   }
 
-  const rows = (await tx`
-    DELETE FROM awcms_access_assignments
-    WHERE tenant_id = ${tenantId}
-      AND tenant_user_id = ${tenantUserId}
-      AND role_id = ${roleId}
-    RETURNING id
-  `) as Array<{ id: string }>;
+  // Looks in BOTH tables (ADR-0078). A remover that only knew about the new one
+  // would report success while the role survived through a legacy row — the most
+  // dangerous shape available here, because it fails toward ACCESS RETAINED and
+  // nothing observes it.
+  const removed = await revokeRoleGrants(
+    tx,
+    tenantId,
+    tenantUserId,
+    roleId,
+    actorTenantUserId,
+    new Date()
+  );
 
-  if (rows.length === 0) return false;
+  if (!removed) return false;
 
   await recordAuditEvent(tx, {
     tenantId,

@@ -141,13 +141,30 @@ async function seedRole(
   return rows[0]!.id;
 }
 
+/**
+ * Live grants in a tenant, counted across BOTH tables.
+ *
+ * ADR-0078 moved new grants to `awcms_access_policies` while legacy rows keep
+ * working through the union until PR 3.3's backfill. Counting one table would
+ * make this helper answer a question about storage; the assertions below are
+ * about whether the person was GRANTED anything, which is the union.
+ *
+ * That distinction is not academic here: the "system role is refused, and the
+ * approval writes nothing at all" assertion is a security assertion, and a
+ * helper that looked at the wrong table would report zero for a grant that
+ * exists.
+ */
 async function assignmentCount(tenantId: string): Promise<number> {
   const rows = (await getAdminSql()`
-    SELECT count(*)::int AS n FROM awcms_access_assignments
-    WHERE tenant_id = ${tenantId}
-  `) as { n: number }[];
+    SELECT
+      (SELECT count(*) FROM awcms_access_assignments WHERE tenant_id = ${tenantId})
+      +
+      (SELECT count(*) FROM awcms_access_policies
+       WHERE tenant_id = ${tenantId} AND status = 'active')
+      AS n
+  `) as { n: number | string }[];
 
-  return rows[0]!.n;
+  return Number(rows[0]!.n);
 }
 
 async function rowCount(tenantId: string): Promise<number> {
