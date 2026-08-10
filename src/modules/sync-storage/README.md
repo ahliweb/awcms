@@ -11,23 +11,23 @@ docs `08_sop_operasional_user_guide.md` / `10_template_kode_coding_standard.md`.
 - `awcms_sync_nodes` — sync node registration per tenant (`node_code` unique
   per tenant), status active/inactive, checkpoint (`last_pull_sequence`),
   `last_pushed_at`/`last_pulled_at`. Nodes auto-register on first contact.
-- `awcms_sync_outbox` — **NOT CONNECTED** (issue #477). It is meant to hold
-  local events available to be pulled by other nodes, with `sequence`
-  (identity, monotonic) as the checkpoint cursor. **Nothing writes it** — no
-  application code, no trigger, no migration — so `POST /api/v1/sync/pull`, its
-  only reader, can only ever return an empty event list. Asserted by
-  `tests/object-queue-purge.test.ts`, which goes red the moment a producer
-  appears. The push direction below is fully implemented; only server → node is
-  missing.
+- ~~`awcms_sync_outbox`~~ — **RETIRED** by
+  [ADR-0077](../../../docs/adr/0077-one-outbox-sync-pull-reads-domain-events.md)
+  (`sql/099`). It never had a producer, and the question it raised was not how
+  to fill it but whether a second outbox should exist at all when
+  `awcms_domain_events` already is one. `POST /api/v1/sync/pull` now reads
+  `awcms_domain_events`, filtered by an explicit allow-list of replicable event
+  types (`domain/sync-replication.ts`) that **ships empty** — so the endpoint
+  still answers with an empty list, but now because of a policy written in one
+  place rather than a missing wire.
 - `awcms_sync_inbox` — events received from other nodes via push, stored with
   status `received` (this foundation has no domain module to actually "apply"
   the events — a derived app processes them).
 - `awcms_sync_push_batches` — idempotency ledger keyed
   `(tenant_id, node_id, batch_id)`; a push replayed with the same `batch_id`
   is treated as success without reprocessing its events.
-- Endpoints `POST /api/v1/sync/push`, `POST /api/v1/sync/pull` (**answers 200
-  with an empty list, always** — see `awcms_sync_outbox` above),
-  `GET /api/v1/sync/status`.
+- Endpoints `POST /api/v1/sync/push`, `POST /api/v1/sync/pull` (**empty until an
+  event type is declared replicable** — see above), `GET /api/v1/sync/status`.
 
 Schema: `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`.
 
@@ -197,13 +197,19 @@ contract — the dispatcher is purely internal.
 
 ## Belum tersedia
 
-- **Server → node replication (`awcms_sync_outbox` has no producer)** — issue
-  #477. The table, its RLS policy, its cursor index, and its reader endpoint all
-  exist; the writer never did. Whether to wire one or to retire the table is
-  open, and it is a product decision: this repo already has a working
-  transactional outbox in `awcms_domain_events` (dispatcher, DLQ, replay), so
-  the first question is not "how do we fill this" but "should it exist at all",
-  and the second is which events a node may receive.
+- **Server → node replication** — issue #477 / ADR-0077. The second outbox is
+  retired and `/sync/pull` now reads `awcms_domain_events`, but
+  `SYNC_REPLICABLE_EVENT_TYPES` ships **empty** and two things block the first
+  entry, both design work rather than typing:
+  1. **payload projection** — a node is HMAC-authenticated, not a session, so
+     each replicable event type needs its owning module to declare which fields
+     travel. `redactEventPayloadForResponse` cannot be reused: it masks
+     `email`/`phone`/`nik`/`npwp`, i.e. exactly what a replica needs;
+  2. **commit visibility** — `event_sequence` is assigned at `INSERT` and
+     visible at `COMMIT`, so a cursor `event_sequence > checkpoint` can skip an
+     event whose transaction committed late. `appendDomainEvent` already solves
+     this correctly for consumers by writing a delivery row in the same
+     transaction; replication should ride that, not repeat the cursor.
 - Automatic application of `awcms_sync_inbox` events to domain tables (this
   foundation has no domain module to apply them — events stay `received`; a
   derived app processes them).

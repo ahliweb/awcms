@@ -10,6 +10,10 @@ import {
   resolveOrRegisterSyncNode,
   verifySyncHeaders
 } from "../../../../modules/sync-storage/application/sync-auth";
+import {
+  SYNC_REPLICABLE_EVENT_TYPES,
+  syncReplicationIsDisabled
+} from "../../../../modules/sync-storage/domain/sync-replication";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
@@ -83,30 +87,39 @@ export const POST: APIRoute = async ({ request }) => {
     `;
       const sinceSequence = Number(checkpointRows[0]!.last_pull_sequence);
 
-      const rows = await tx`
-      SELECT sequence, event_type, aggregate_type, aggregate_id, payload_json, created_at
-      FROM awcms_sync_outbox
-      WHERE tenant_id = ${tenantId} AND sequence > ${sinceSequence}
-      ORDER BY sequence ASC
-      LIMIT ${limit}
-    `;
-
       type OutboxRow = {
-        sequence: string | number;
+        event_sequence: string | number;
         event_type: string;
         aggregate_type: string;
         aggregate_id: string | null;
-        payload_json: unknown;
-        created_at: Date;
+        payload: unknown;
+        recorded_at: Date;
       };
 
+      // ADR-0077. The source is `awcms_domain_events` — this repo's one
+      // transactional outbox — and no query runs while nothing is declared
+      // replicable. That is not an optimisation: an unconditional cursor scan
+      // here would read as "replication works", and it does not yet. See
+      // `domain/sync-replication.ts` for the two things that block an entry.
+      const rows = syncReplicationIsDisabled()
+        ? []
+        : await tx`
+      SELECT event_sequence, event_type, aggregate_type, aggregate_id, payload, recorded_at
+      FROM awcms_domain_events
+      WHERE tenant_id = ${tenantId}
+        AND event_sequence > ${sinceSequence}
+        AND event_type = ANY(${tx.array(SYNC_REPLICABLE_EVENT_TYPES as string[], "text")})
+      ORDER BY event_sequence ASC
+      LIMIT ${limit}
+    `;
+
       const events = (rows as OutboxRow[]).map((row) => ({
-        sequence: Number(row.sequence),
+        sequence: Number(row.event_sequence),
         eventType: row.event_type,
         aggregateType: row.aggregate_type,
         aggregateId: row.aggregate_id ?? undefined,
-        payload: row.payload_json,
-        createdAt: row.created_at.toISOString()
+        payload: row.payload,
+        createdAt: row.recorded_at.toISOString()
       }));
 
       const newCheckpoint =

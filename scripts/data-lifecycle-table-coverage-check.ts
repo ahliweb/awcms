@@ -83,13 +83,7 @@ const MIGRATIONS_DIR = "sql";
 export const BOUNDED_BY_DESIGN: readonly {
   table: string;
   reason: string;
-}[] = [
-  {
-    table: "awcms_sync_outbox",
-    reason:
-      "Zero producers repo-wide (issue #477): no application code, no trigger and no migration INSERTs into it, so it cannot grow at all — `POST /api/v1/sync/pull`, its only reference, only SELECTs. This is the one entry whose premise is MACHINE-CHECKED rather than argued: `tests/object-queue-purge.test.ts` scans every `.ts` and `.sql` under `src/` and `sql/` for a write and fails if one appears, which is also what forces this entry out again the day somebody wires the producer. Deliberately here rather than on TABLES_PREDATING_THE_RULE, whose one reason is 'nobody asked the retention question of these' — that is no longer true of this table, and leaving it there made a table nobody could describe look exactly like a table nobody had got to yet."
-  }
-];
+}[] = [];
 
 /**
  * The tables that existed when this rule landed. **May only shrink.**
