@@ -146,9 +146,10 @@ async function seedFixtures(): Promise<void> {
   // Both the service account and the human hold the SAME wide role, so any
   // difference in what they may do comes from the credential, not the grants.
   await admin`
-    INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-    VALUES (${TENANT_A}, ${SERVICE_USER_A}, ${ROLE_A}, ${HUMAN_USER_A}),
-           (${TENANT_A}, ${HUMAN_USER_A}, ${ROLE_A}, ${HUMAN_USER_A})
+    INSERT INTO awcms_access_policies
+      (tenant_id, tenant_user_id, role_id, scope_type, scope_id, granted_by_tenant_user_id)
+    VALUES (${TENANT_A}, ${SERVICE_USER_A}, ${ROLE_A}, 'tenant', ${TENANT_A}, ${HUMAN_USER_A}),
+           (${TENANT_A}, ${HUMAN_USER_A}, ${ROLE_A}, 'tenant', ${TENANT_A}, ${HUMAN_USER_A})
   `;
 }
 

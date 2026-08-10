@@ -26,6 +26,7 @@
  * changing anything above.
  */
 import { isBusinessScopeAssignmentCurrentlyActive } from "../domain/business-scope-assignment";
+import { activeRoleGrants } from "./grant-source";
 import {
   TENANT_WIDE_SCOPE_TYPE,
   type BusinessScopeFact
@@ -270,9 +271,11 @@ type OrdinaryRbacPermissionRow = {
 
 /**
  * Permissions the subject holds via an ORDINARY RBAC role grant
- * (`awcms_access_assignments` -> `awcms_role_permissions` ->
- * `awcms_permissions`) — the exact same path `auth-context.ts`'s
- * `fetchGrantedPermissionKeys` already reads for every ordinary ABAC decision.
+ * (`activeRoleGrants` -> `awcms_role_permissions` -> `awcms_permissions`) — the
+ * exact same path `auth-context.ts`'s `fetchGrantedPermissionKeys` already reads
+ * for every ordinary ABAC decision, through the same shared fragment so the two
+ * cannot drift (ADR-0079: they had, and SoD went blind to every grant written
+ * after PR 3.2 while looking untouched).
  * SoD conflict detection MUST reason about this path (not only the
  * business-scope-assignment path), or it is blind to the realistic, common
  * case where a subject holds BOTH halves of a registered conflict through an
@@ -290,11 +293,11 @@ async function resolveOrdinaryRbacFacts(
 ): Promise<SoDAssignmentFact[]> {
   const rows = (await tx`
     SELECT DISTINCT p.module_key, p.activity_code, p.action
-    FROM awcms_access_assignments aa
-    JOIN awcms_role_permissions rp ON rp.role_id = aa.role_id AND rp.tenant_id = aa.tenant_id
+    FROM (${activeRoleGrants(tx, tenantId)}) g
+    JOIN awcms_role_permissions rp ON rp.role_id = g.role_id AND rp.tenant_id = ${tenantId}
     JOIN awcms_permissions p ON p.id = rp.permission_id
-    JOIN awcms_roles r ON r.id = aa.role_id
-    WHERE aa.tenant_id = ${tenantId} AND aa.tenant_user_id = ${tenantUserId}
+    JOIN awcms_roles r ON r.id = g.role_id AND r.tenant_id = ${tenantId}
+    WHERE g.tenant_user_id = ${tenantUserId}
       AND r.deleted_at IS NULL
   `) as OrdinaryRbacPermissionRow[];
 

@@ -181,7 +181,10 @@ describeOrSkip(
         // event table references the policy, so it leads.
         "awcms_access_policy_events",
         "awcms_access_policies",
-        "awcms_access_assignments",
+        // `awcms_access_assignments` is absent since ADR-0079 / `sql/103`: no
+        // test can put a row there any more, and the DELETE would be the one
+        // statement in this teardown that fails outright once the suite runs as
+        // a role without the privilege.
         "awcms_role_permissions",
         "awcms_roles",
         "awcms_tenant_users",

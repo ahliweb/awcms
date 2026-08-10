@@ -253,8 +253,11 @@ describe("announcement target cap (Issue #153)", () => {
       roleId: "44444444-4444-4444-4444-444444444444"
     });
 
+    // Role membership comes from the shared `activeRoleGrants` fragment
+    // (ADR-0079), so the recognisable text is the EXISTS it is spliced into
+    // rather than a table name this file should not have an opinion about.
     const targetQuery = queries.find((query) =>
-      query.text.includes("FROM awcms_access_assignments")
+      query.text.includes("g.role_id =")
     );
 
     expect(targetQuery).toBeDefined();

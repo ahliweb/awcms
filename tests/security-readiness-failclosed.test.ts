@@ -127,5 +127,74 @@ describeOrSkip(
       expect(underDefault.status).toBe("pass");
       expect(underDefault.evidence).not.toContain(PROBE_TABLE);
     });
+
+    test("state (c): a RETIRED read-only table is checked in BOTH directions", async () => {
+      // ADR-0079. Retiring a tenant-scoped table inverts the default
+      // expectation — all four verbs become "exactly these" — so the
+      // declaration has to be enforced, not merely honoured. A one-directional
+      // check would let `awcms_access_assignments` drift back to full DML, and a
+      // retired grant table that can be written is a grant nobody can revoke.
+      if (!(await awcmsAppExists())) return;
+
+      // State (b) leaves its probe behind when it runs, and skips creating one
+      // when the role is absent — so this drops first rather than assuming.
+      await sql.unsafe(`DROP TABLE IF EXISTS ${PROBE_TABLE}`);
+      await sql.unsafe(`
+        CREATE TABLE ${PROBE_TABLE} (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          label text
+        )
+      `);
+      await sql.unsafe(
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON ${PROBE_TABLE} TO awcms_app`
+      );
+
+      // Declared read-only, actually holds every write: over-granted.
+      const overGranted = await checkRuntimeRoleGrants({
+        retiredTablePrivileges: {
+          ...defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges,
+          [PROBE_TABLE]: ["SELECT"]
+        }
+      });
+
+      expect(overGranted.status).toBe("fail");
+      expect(overGranted.evidence).toContain(PROBE_TABLE);
+      expect(overGranted.evidence).toContain(
+        "retired read-only table still has"
+      );
+      expect(overGranted.evidence).toContain("INSERT, UPDATE, DELETE");
+
+      // The other direction: a retained privilege the role does NOT hold means
+      // the history is unreadable, which is a different failure from a leftover
+      // write and must not be silently tolerated.
+      await sql.unsafe(`REVOKE SELECT ON ${PROBE_TABLE} FROM awcms_app`);
+
+      const underGranted = await checkRuntimeRoleGrants({
+        retiredTablePrivileges: {
+          ...defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges,
+          [PROBE_TABLE]: ["SELECT"]
+        }
+      });
+
+      expect(underGranted.status).toBe("fail");
+      expect(underGranted.evidence).toContain(
+        "retired table missing its retained SELECT"
+      );
+
+      // Narrowed exactly as declared: no finding.
+      await sql.unsafe(
+        `REVOKE INSERT, UPDATE, DELETE ON ${PROBE_TABLE} FROM awcms_app`
+      );
+      await sql.unsafe(`GRANT SELECT ON ${PROBE_TABLE} TO awcms_app`);
+
+      const exact = await checkRuntimeRoleGrants({
+        retiredTablePrivileges: {
+          ...defaultRuntimeRoleGrantsPolicy().retiredTablePrivileges,
+          [PROBE_TABLE]: ["SELECT"]
+        }
+      });
+
+      expect(exact.status).toBe("pass");
+    });
   }
 );

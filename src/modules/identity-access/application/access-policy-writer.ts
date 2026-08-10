@@ -1,29 +1,27 @@
 /**
  * The one place a role grant is written (ADR-0078, Gelombang 3 PR 3.2 of #423).
  *
- * Every path that used to `INSERT INTO awcms_access_assignments` now calls
+ * Every path that used to `INSERT INTO awcms_access_assignments` calls
  * `grantRolePolicy`, and every path that removed a grant calls
- * `revokeRoleGrants`. `fetchGrantedPermissionKeys` reads both tables, so a
- * subject granted through here is indistinguishable from one granted through the
- * old table — which is what lets the two coexist while PR 3.3 moves the
- * remaining rows across.
+ * `revokeRoleGrants`.
  *
  * ## NOT a dual write
  *
  * ADR-0078 chose a third table precisely so expand/migrate/contract needs no
- * dual write. A new grant lands in ONE table: `awcms_access_policies`. Legacy
- * rows stay where they are and keep working through the union until the backfill
- * moves them. Writing both would reintroduce the failure this design avoids —
- * two writes that can succeed apart, leaving a subject holding a role according
- * to one table and not the other, with no way to tell which is right.
+ * dual write. A grant lands in ONE table: `awcms_access_policies`. Writing both
+ * would reintroduce the failure this design avoids — two writes that can succeed
+ * apart, leaving a subject holding a role according to one table and not the
+ * other, with no way to tell which is right.
  *
- * ## Removal has to look in both places
+ * ## Why removal stopped looking in two places (ADR-0079)
  *
- * `revokeRoleGrants` deletes the legacy row AND revokes any active policy,
- * because for as long as the backfill has not run, a grant may live in either.
- * A remover that only knew about the new table would report success while the
- * role survived — the most dangerous shape available here, since it fails toward
- * ACCESS RETAINED and nothing observes it.
+ * Until `sql/103` it had to: a grant could live in either table, and a remover
+ * that knew only about the new one would report success while the role survived.
+ * The backfill ended that — every legacy row is now ALSO a policy row (same
+ * `id`), `awcms_access_assignments` is read-only history that no reader consults,
+ * and `awcms_app` no longer holds `DELETE` on it. Keeping the legacy `DELETE`
+ * here would now fail the whole revocation with `42501` on a statement that can
+ * only ever match rows nothing reads.
  */
 
 /** `scope_type` for a grant that is not confined to any business scope. */
@@ -80,12 +78,19 @@ export async function grantRolePolicy(
 }
 
 /**
- * Whether the subject already holds this role through EITHER table.
+ * Whether the subject already holds this role through a LIVE grant.
  *
- * The pre-check `assignRole` used to get for free from a unique index, which now
- * only covers one of the two places a live grant can be. Without this, assigning
- * a role somebody already holds through a legacy row would report success and
- * mint a second, redundant grant.
+ * The pre-check `assignRole` used to get for free from `awcms_access_assignments`'s
+ * unique index, which the partial index on active policies now provides — but
+ * only for the exact `(scope_type, scope_id)` being written, so the explicit
+ * check stays as the thing that answers "already holds this role" rather than
+ * "already holds it here".
+ *
+ * Reads only ACTIVE rows, which is what makes re-granting a revoked role work at
+ * all: history must not answer a question about the present. That is also why
+ * the retired `awcms_access_assignments` rows are not consulted — a legacy row
+ * that outlived its revocation would otherwise block the re-grant permanently
+ * with a `409` no admin could clear.
  */
 export async function subjectHoldsRole(
   tx: Bun.SQL,
@@ -94,12 +99,6 @@ export async function subjectHoldsRole(
   roleId: string
 ): Promise<boolean> {
   const rows = (await tx`
-    SELECT 1
-    FROM awcms_access_assignments
-    WHERE tenant_id = ${tenantId}
-      AND tenant_user_id = ${tenantUserId}
-      AND role_id = ${roleId}
-    UNION ALL
     SELECT 1
     FROM awcms_access_policies
     WHERE tenant_id = ${tenantId}
@@ -113,13 +112,17 @@ export async function subjectHoldsRole(
 }
 
 /**
- * Removes a role grant from wherever it lives, and reports whether anything was
- * actually removed.
+ * Revokes every live grant of `roleId` to this subject, and reports whether
+ * anything was actually revoked.
  *
- * The legacy row is DELETEd (it has no lifecycle to transition to) while a
- * policy is transitioned to `revoked` with its timestamp — the partial unique
- * index is on active rows only, so a revoked policy does not block re-granting
- * the same role later, which is the ordinary case rather than an edge one.
+ * A policy is transitioned to `revoked` with its timestamp rather than deleted —
+ * the partial unique index covers active rows only, so a revoked policy does not
+ * block re-granting the same role later, which is the ordinary case rather than
+ * an edge one, and the row is the only record that the access ever existed.
+ *
+ * The plural is load-bearing: once grants carry scope, one role held at three
+ * scopes is three rows, and "remove this role from this person" must mean all of
+ * them. `RETURNING id` drives one lifecycle event per revoked row.
  */
 export async function revokeRoleGrants(
   tx: Bun.SQL,
@@ -130,14 +133,6 @@ export async function revokeRoleGrants(
   now: Date,
   reason?: string
 ): Promise<boolean> {
-  const legacy = (await tx`
-    DELETE FROM awcms_access_assignments
-    WHERE tenant_id = ${tenantId}
-      AND tenant_user_id = ${tenantUserId}
-      AND role_id = ${roleId}
-    RETURNING id
-  `) as { id: string }[];
-
   const revoked = (await tx`
     UPDATE awcms_access_policies
     SET status = 'revoked',
@@ -160,5 +155,5 @@ export async function revokeRoleGrants(
     `;
   }
 
-  return legacy.length > 0 || revoked.length > 0;
+  return revoked.length > 0;
 }

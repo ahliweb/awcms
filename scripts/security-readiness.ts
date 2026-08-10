@@ -509,6 +509,32 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
  */
 const RLS_FREE_TABLES = new Set(Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES));
 
+/**
+ * Tenant-scoped tables that are deliberately READ-ONLY at runtime, with the
+ * exact privileges `awcms_app` may still hold.
+ *
+ * The default for a tenant-scoped table is all four verbs, and that default is
+ * load-bearing: a FORCE-RLS table the runtime cannot write is a `permission
+ * denied` waiting for the first request, and nothing else in the repo would say
+ * so. Retiring a table inverts that expectation, so the retirement has to be
+ * DECLARED here rather than merely performed in a migration — the same
+ * discipline `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` applies to RLS-free tables, and
+ * for the same reason: the check must be able to tell "narrowed on purpose" from
+ * "broken", and only a human can supply that difference.
+ *
+ * Both directions are then enforced against the entry, so this is not an escape
+ * hatch: a listed table that regains INSERT fails just as loudly as an unlisted
+ * one that loses SELECT.
+ */
+export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
+  // ADR-0079 / `sql/103`. Read-only history of role grants made before
+  // `awcms_access_policies` became the single grant table. SELECT is retained so
+  // an investigator can still answer "who held what in March"; every write is
+  // revoked, because a row that can be added or edited is not history, and a row
+  // that cannot be revoked must not be one the runtime can create.
+  awcms_access_assignments: ["SELECT"]
+};
+
 type RlsRow = {
   relname: string;
   relrowsecurity: boolean;
@@ -830,6 +856,8 @@ type RoleGrantRow = {
 export type RuntimeRoleGrantsPolicy = {
   rlsFreeTables: ReadonlySet<string>;
   forbiddenPrivileges: Record<string, string[]>;
+  /** Tenant-scoped tables narrowed on purpose — see `RETIRED_TENANT_TABLE_PRIVILEGES`. */
+  retiredTablePrivileges: Record<string, string[]>;
 };
 
 /**
@@ -842,7 +870,8 @@ export type RuntimeRoleGrantsPolicy = {
 export function defaultRuntimeRoleGrantsPolicy(): RuntimeRoleGrantsPolicy {
   return {
     rlsFreeTables: RLS_FREE_TABLES,
-    forbiddenPrivileges: GLOBAL_TABLE_FORBIDDEN_PRIVILEGES
+    forbiddenPrivileges: GLOBAL_TABLE_FORBIDDEN_PRIVILEGES,
+    retiredTablePrivileges: RETIRED_TENANT_TABLE_PRIVILEGES
   };
 }
 
@@ -854,6 +883,8 @@ export async function checkRuntimeRoleGrants(
   const rlsFreeTables = policy?.rlsFreeTables ?? RLS_FREE_TABLES;
   const forbiddenPrivileges =
     policy?.forbiddenPrivileges ?? GLOBAL_TABLE_FORBIDDEN_PRIVILEGES;
+  const retiredTablePrivileges =
+    policy?.retiredTablePrivileges ?? RETIRED_TENANT_TABLE_PRIVILEGES;
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -935,6 +966,35 @@ export async function checkRuntimeRoleGrants(
         continue;
       }
 
+      const retained = retiredTablePrivileges[row.relname];
+
+      if (retained !== undefined) {
+        // Deliberately narrowed (ADR-0079). Both directions, because a
+        // declaration that only checked one of them would let the table drift
+        // back to full DML — and a retired grant table that can be written is a
+        // grant nobody can revoke.
+        const missingRetained = retained.filter(
+          (privilege) => !privileges[privilege]
+        );
+        const excess = ALL_FOUR_PRIVILEGES.filter(
+          (privilege) => privileges[privilege] && !retained.includes(privilege)
+        );
+
+        if (missingRetained.length > 0) {
+          underGranted.push(
+            `${row.relname} (retired table missing its retained ${missingRetained.join(", ")})`
+          );
+        }
+
+        if (excess.length > 0) {
+          overGranted.push(
+            `${row.relname} (retired read-only table still has ${excess.join(", ")})`
+          );
+        }
+
+        continue;
+      }
+
       const missing = TENANT_SCOPED_REQUIRED_PRIVILEGES.filter(
         (privilege) => !privileges[privilege]
       );
@@ -949,7 +1009,7 @@ export async function checkRuntimeRoleGrants(
 
       if (overGranted.length > 0) {
         parts.push(
-          `over-granted on global RLS-free table(s): ${overGranted.join("; ")}`
+          `over-granted on global RLS-free or retired read-only table(s): ${overGranted.join("; ")}`
         );
       }
 
@@ -968,18 +1028,25 @@ export async function checkRuntimeRoleGrants(
     }
 
     const tenantScopedCount = rows.filter(
-      (row) => !rlsFreeTables.has(row.relname)
+      (row) =>
+        !rlsFreeTables.has(row.relname) &&
+        retiredTablePrivileges[row.relname] === undefined
     ).length;
     const narrowedGlobalTables = Object.entries(forbiddenPrivileges)
       .filter(([, forbidden]) => forbidden.length > 0)
       .map(([table]) => table)
       .join(", ");
+    const retiredTables = Object.keys(retiredTablePrivileges).join(", ");
+    const retiredNote =
+      retiredTables.length > 0
+        ? ` Retired read-only table(s) hold exactly their declared privileges (${retiredTables}).`
+        : "";
 
     return {
       name,
       severity,
       status: "pass",
-      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" holds SELECT/INSERT/UPDATE/DELETE on all ${tenantScopedCount} tenant-scoped table(s) and none of the forbidden writes on the narrowed global tables (${narrowedGlobalTables}).`
+      evidence: `Role "${LEAST_PRIVILEGE_APP_ROLE}" holds SELECT/INSERT/UPDATE/DELETE on all ${tenantScopedCount} tenant-scoped table(s) and none of the forbidden writes on the narrowed global tables (${narrowedGlobalTables}).${retiredNote}`
     };
   } catch (error) {
     return {
@@ -1213,7 +1280,14 @@ export const SETUP_ROLE_GRANTS: Record<string, string[]> = {
   awcms_tenant_users: ["SELECT", "INSERT"],
   awcms_roles: ["SELECT", "INSERT"],
   awcms_role_permissions: ["INSERT"],
-  awcms_access_assignments: ["INSERT"]
+  // ADR-0079 / `sql/103`. The bootstrap's grant moved to `awcms_access_policies`
+  // in PR 3.2 and this matrix did not follow, so the wizard failed with
+  // `permission denied` under `SETUP_DATABASE_URL` while this check stayed green:
+  // it compares the grants against this table, and both sides still agreed with
+  // each other. `SELECT` because that INSERT uses `RETURNING id`; the events
+  // table is INSERT-only.
+  awcms_access_policies: ["SELECT", "INSERT"],
+  awcms_access_policy_events: ["INSERT"]
 };
 
 export type WorkerSetupRoleGrantsPolicy = {

@@ -228,8 +228,9 @@ async function seedUserWithPermissions(
   }
 
   await admin`
-    INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id)
-    VALUES (${tenantId}, ${tenantUser[0]!.id}, ${role[0]!.id})
+    INSERT INTO awcms_access_policies
+      (tenant_id, tenant_user_id, role_id, scope_type, scope_id)
+    VALUES (${tenantId}, ${tenantUser[0]!.id}, ${role[0]!.id}, 'tenant', ${tenantId})
   `;
 
   const token = `it-token-${label}-${Date.now()}`;

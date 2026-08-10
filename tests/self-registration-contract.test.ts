@@ -47,6 +47,9 @@ describe("the public registration endpoint", () => {
       "awcms_identities",
       "awcms_tenant_users",
       "awcms_access_assignments",
+      // ADR-0079 — the live grant table. Listing only the retired one would let
+      // the route start minting grants through the table that actually grants.
+      "awcms_access_policies",
       "hashPassword"
     ]) {
       expect(source).not.toContain(forbidden);

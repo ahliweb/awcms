@@ -9,6 +9,7 @@
  * sends later, outside any transaction.
  */
 import { log } from "../../../lib/logging/logger";
+import { activeRoleGrants } from "../../identity-access/application/grant-source";
 import {
   hashIdentifierValue,
   maskIdentifierValue,
@@ -100,16 +101,21 @@ export async function resolveBoundedAnnouncementTargets(
       LIMIT ${ANNOUNCEMENT_MAX_RECIPIENTS}
     `) as TargetRow[];
   } else if (target.type === "role") {
+    // `EXISTS` rather than a JOIN: one subject may hold the same role through
+    // more than one grant once grants carry scope (ADR-0078), and a JOIN would
+    // then address the same person twice. Membership is a yes/no question here.
     rows = (await tx`
       SELECT tu.id AS tenant_user_id, i.login_identifier, p.display_name
-      FROM awcms_access_assignments aa
-      JOIN awcms_tenant_users tu
-        ON tu.id = aa.tenant_user_id AND tu.tenant_id = aa.tenant_id
+      FROM awcms_tenant_users tu
       JOIN awcms_identities i
         ON i.id = tu.identity_id AND i.tenant_id = tu.tenant_id
       JOIN awcms_profiles p
         ON p.id = i.profile_id AND p.tenant_id = tu.tenant_id
-      WHERE aa.tenant_id = ${tenantId} AND aa.role_id = ${target.roleId}
+      WHERE tu.tenant_id = ${tenantId}
+        AND EXISTS (
+          SELECT 1 FROM (${activeRoleGrants(tx, tenantId)}) g
+          WHERE g.tenant_user_id = tu.id AND g.role_id = ${target.roleId}
+        )
         AND tu.status = 'active' AND i.status = 'active'
       ORDER BY tu.created_at, tu.id
       LIMIT ${ANNOUNCEMENT_MAX_RECIPIENTS}

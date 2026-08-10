@@ -20,6 +20,7 @@
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { revokeAllSessionsForIdentity } from "./session-revocation";
+import { activeRoleGrants } from "./grant-source";
 import {
   grantRolePolicy,
   revokeRoleGrants,
@@ -196,21 +197,19 @@ export async function setTenantUserStatus(
     const adminState = (await tx`
       SELECT
         EXISTS (
-          SELECT 1 FROM awcms_access_assignments aa
+          SELECT 1 FROM (${activeRoleGrants(tx, tenantId)}) g
           JOIN awcms_roles r
-            ON r.id = aa.role_id AND r.tenant_id = aa.tenant_id
-          WHERE aa.tenant_id = ${tenantId}
-            AND aa.tenant_user_id = ${tenantUserId}
+            ON r.id = g.role_id AND r.tenant_id = ${tenantId}
+          WHERE g.tenant_user_id = ${tenantUserId}
             AND r.is_system = true AND r.deleted_at IS NULL
         ) AS target_is_admin,
         EXISTS (
-          SELECT 1 FROM awcms_access_assignments aa
+          SELECT 1 FROM (${activeRoleGrants(tx, tenantId)}) g
           JOIN awcms_roles r
-            ON r.id = aa.role_id AND r.tenant_id = aa.tenant_id
+            ON r.id = g.role_id AND r.tenant_id = ${tenantId}
           JOIN awcms_tenant_users tu
-            ON tu.id = aa.tenant_user_id AND tu.tenant_id = aa.tenant_id
-          WHERE aa.tenant_id = ${tenantId}
-            AND aa.tenant_user_id <> ${tenantUserId}
+            ON tu.id = g.tenant_user_id AND tu.tenant_id = ${tenantId}
+          WHERE g.tenant_user_id <> ${tenantUserId}
             AND r.is_system = true AND r.deleted_at IS NULL
             AND tu.status = 'active'
         ) AS other_active_admin_exists
