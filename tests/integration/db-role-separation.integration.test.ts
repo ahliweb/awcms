@@ -71,6 +71,16 @@ const TENANT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
  * assert "the code agrees with itself". Deleting a `FORCE` line from 017 must
  * fail HERE.
  */
+/**
+ * The tables migration 017 FORCEd RLS on, minus any a later migration has since
+ * dropped.
+ *
+ * It was 23. `awcms_sync_outbox` left when ADR-0077 retired it (`sql/099`) —
+ * and the `missing` assertion below is what noticed, which is the reason that
+ * assertion exists: a name that no longer resolves would otherwise leave this
+ * list silently covering 22 tables while claiming 23. Removing a name here is
+ * only correct alongside the migration that drops the table.
+ */
 const FORCED_RLS_TABLES = [
   "awcms_offices",
   "awcms_tenant_settings",
@@ -89,7 +99,6 @@ const FORCED_RLS_TABLES = [
   "awcms_tenant_modules",
   "awcms_module_settings",
   "awcms_sync_nodes",
-  "awcms_sync_outbox",
   "awcms_sync_inbox",
   "awcms_sync_push_batches",
   "awcms_sync_aggregate_versions",
@@ -172,7 +181,7 @@ suite(
     });
 
     describe("FORCE ROW LEVEL SECURITY — the owner posture (migration 017, PR #139)", () => {
-      test("all 23 tables migration 017 covers have RLS both ENABLED and FORCED (ENABLE alone is inert for the owner)", async () => {
+      test("all 22 surviving tables migration 017 covers have RLS both ENABLED and FORCED (ENABLE alone is inert for the owner)", async () => {
         // Fetched unfiltered and narrowed in JS rather than with
         // `= ANY(${FORCED_RLS_TABLES})`: Bun.SQL binds a JS array as a single
         // text parameter, which Postgres then rejects as a malformed array

@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 98    |
-| Tabel `awcms_*`                    | 130   |
-| Tabel dengan `FORCE` RLS           | 119   |
+| Migrasi                            | 99    |
+| Tabel `awcms_*`                    | 129   |
+| Tabel dengan `FORCE` RLS           | 118   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 336   |
+| Berkas test                        | 337   |
 | Berkas route                       | 318   |
-| ADR                                | 77    |
+| ADR                                | 78    |
 
 ### Modul
 
@@ -145,6 +145,7 @@
 | 96  | `sql/096_awcms_object_sync_queue_retention.sql`                    |
 | 97  | `sql/097_awcms_domain_event_deliveries_retention.sql`              |
 | 98  | `sql/098_awcms_sync_outbox_not_connected_comment.sql`              |
+| 99  | `sql/099_awcms_sync_outbox_retire.sql`                             |
 
 ### Tabel & Row-Level Security
 
@@ -257,7 +258,6 @@
 | `awcms_sync_conflicts`                   | `sql/011_awcms_sync_storage_conflict_schema.sql`           | ya    | ya    |
 | `awcms_sync_inbox`                       | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
 | `awcms_sync_nodes`                       | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
-| `awcms_sync_outbox`                      | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
 | `awcms_sync_push_batches`                | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
 | `awcms_tenant_auth_policies`             | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
 | `awcms_tenant_domains`                   | `sql/046_awcms_tenant_domain_schema.sql`                   | ya    | ya    |
@@ -285,7 +285,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 287        |
+| `(root)`      | 288        |
 | `e2e`         | 12         |
 | `integration` | 36         |
 | `unit`        | 1          |

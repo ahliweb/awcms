@@ -86,18 +86,17 @@ export const syncStorageModule = defineModule({
     }
   ],
   /**
-   * Issue #468, ADR-0072. ONE descriptor, not two, and the missing one is the
-   * finding rather than an omission.
+   * Issue #468, ADR-0072. ONE descriptor, because this module now owns one
+   * high-volume table.
    *
-   * `awcms_sync_outbox` is the other table this module has on
-   * `TABLES_PREDATING_THE_RULE`, and it stays there: it has **zero producers
-   * repo-wide**. Nothing INSERTs into it — no application code, no trigger, no
-   * migration — so `POST /api/v1/sync/pull`, its only reader, can only ever
-   * return an empty event list. A retention descriptor for it would be fiction
-   * twice over: a terminal-status predicate that can never match (nothing sets
-   * a status because nothing writes a row), on a table that cannot grow. Worse,
-   * it would take the table OFF the debt ledger and therefore out of anyone's
-   * view. Filed as its own finding instead.
+   * It used to own two on paper. `awcms_sync_outbox` had **zero producers
+   * repo-wide** — nothing INSERTed into it, so `POST /api/v1/sync/pull`, its
+   * only reader, could never return anything but an empty list. A retention
+   * descriptor for it would have been fiction twice over: a terminal-status
+   * predicate that could never match, on a table that could not grow.
+   * ADR-0077 answered the question that actually mattered — whether it should
+   * exist at all — and retired it (`sql/099`); `/sync/pull` now reads
+   * `awcms_domain_events`, this repo's one transactional outbox.
    *
    * ## Why `delegated`
    *

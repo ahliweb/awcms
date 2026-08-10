@@ -141,18 +141,32 @@ describe("the descriptor and the ledger agree", () => {
   });
 });
 
-describe("awcms_sync_outbox is a reasoned exception because nothing writes it", () => {
+describe("awcms_sync_outbox is gone, and nothing quietly recreated it", () => {
   /**
-   * Every `.ts` under `src/` and `sql/` file, scanned for a write to the table.
+   * ADR-0077 retired the table. What used to live here was a scan proving
+   * NOTHING WROTE it — the premise its `BOUNDED_BY_DESIGN` entry rested on.
+   * That premise has been superseded by a stronger one: the table does not
+   * exist.
    *
-   * This is the assertion the descriptor's absence rests on, and since #477 it
-   * is also the premise of the table's `BOUNDED_BY_DESIGN` entry. If somebody
-   * wires a producer, this fails — and the failure is the signal that the table
-   * has become a real queue, needs a real descriptor, and must leave that
-   * exception list.
+   * The scan is kept, pointed at the whole repo rather than at writes alone,
+   * because "retired" is a claim that decays quietly. A migration recreating
+   * the table, or a route still selecting from it, would leave `sync/pull`
+   * reading a second outbox again — the exact shape #477 was filed about — and
+   * nothing else in the suite would notice.
    */
-  function sourcesMentioningWrites(): string[] {
+  /**
+   * DDL and DML naming the retired table, anywhere under `src/` or `sql/`.
+   *
+   * Prose is deliberately NOT matched: `sql/010`, `sql/017`, `sql/096` and
+   * `sql/098` all name the table in comments or superseded DDL, and applied
+   * migrations are never edited. What must never come back is a table or a
+   * READ — `sync/pull` reading a second outbox again is the exact shape #477
+   * was filed about.
+   */
+  function ddlOrDmlNamingTheTable(): string[] {
     const offenders: string[] = [];
+    const pattern =
+      /(CREATE\s+TABLE(\s+IF\s+NOT\s+EXISTS)?|INSERT\s+INTO|UPDATE|FROM|JOIN)\s+awcms_sync_outbox\b/i;
 
     function walk(dir: string): void {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -163,13 +177,13 @@ describe("awcms_sync_outbox is a reasoned exception because nothing writes it", 
           continue;
         }
         if (!/\.(ts|astro|sql)$/.test(entry.name)) continue;
+        // The migration that drops it must name it in DDL to do so.
+        if (entry.name.startsWith("099_")) continue;
+        // `sql/010` created it and `sql/017` forced RLS on it; both are applied
+        // and therefore immutable.
+        if (/^(010|017)_/.test(entry.name)) continue;
 
-        const source = readFileSync(full, "utf8");
-
-        if (
-          /INSERT\s+INTO\s+awcms_sync_outbox/i.test(source) ||
-          /UPDATE\s+awcms_sync_outbox/i.test(source)
-        ) {
+        if (pattern.test(readFileSync(full, "utf8"))) {
           offenders.push(full);
         }
       }
@@ -181,37 +195,17 @@ describe("awcms_sync_outbox is a reasoned exception because nothing writes it", 
     return offenders;
   }
 
-  test("no INSERT or UPDATE exists anywhere in src/ or sql/", () => {
-    // `POST /api/v1/sync/pull` is its only reference and it only SELECTs, so
-    // that endpoint can currently return nothing but an empty event list.
-    expect(sourcesMentioningWrites()).toEqual([]);
+  test("nothing creates it again, and nothing reads it again", () => {
+    expect(ddlOrDmlNamingTheTable()).toEqual([]);
   });
 
-  test("so it is a REASONED exception, not a line of undifferentiated debt", () => {
-    // A descriptor here would be fiction twice over: a terminal-status
-    // predicate that can never match (nothing sets a status because nothing
-    // writes a row), on a table that cannot grow.
-    //
-    // But the debt ledger was the wrong place for it too. That ledger carries
-    // exactly one reason — "nobody asked the retention question of these" — and
-    // the question HAS been asked here and answered. Sitting there, a table
-    // nobody CAN describe looked identical to a table nobody had got to yet,
-    // which is the confusion #477 and #479 were both about.
+  test("it is on neither list, because a table that does not exist needs no answer", () => {
+    // The coverage gate derives its table set from `sql/`, and `DROP TABLE`
+    // removes it there. An entry left behind on either list would be a claim
+    // about nothing — which the gate itself now rejects as a stale entry.
     expect(TABLES_PREDATING_THE_RULE).not.toContain("awcms_sync_outbox");
-
-    const exception = BOUNDED_BY_DESIGN.find(
-      (entry) => entry.table === "awcms_sync_outbox"
+    expect(BOUNDED_BY_DESIGN.map((entry) => entry.table)).not.toContain(
+      "awcms_sync_outbox"
     );
-
-    expect(exception).toBeDefined();
-    // The entry's premise is the scan above. Binding them here is what makes
-    // the two move together: wire a producer and the scan fails, and this test
-    // says in the same run which claim the producer invalidated.
-    expect(exception!.reason).toContain("#477");
-    expect(
-      (syncStorageModule.dataLifecycle ?? []).some(
-        (descriptor) => descriptor.tableName === "awcms_sync_outbox"
-      )
-    ).toBe(false);
   });
 });
