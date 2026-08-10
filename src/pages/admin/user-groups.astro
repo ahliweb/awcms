@@ -1,0 +1,350 @@
+---
+/**
+ * User group management screen (ADR-0081, Gelombang 3 PR 3.5 of #423).
+ *
+ * A group is a SUBJECT that can hold role grants, so this screen answers a
+ * question the Users and Roles screens cannot: which authorities exist that
+ * nobody appears to hold. That is why the table shows a ROLE count next to the
+ * member count — a group holding three grants is three grants an administrator
+ * would otherwise only find by inspecting the group.
+ *
+ * Gated on `identity_access.user_groups.read`. Writers additionally need
+ * `user_groups.create` (the create form), `user_groups.update` (rename) and
+ * `user_groups.assign` (membership). Granting a group a ROLE is deliberately NOT
+ * here: it stays on `/admin/users`' assignment surface under
+ * `access_control.assign`, so a group administrator cannot also decide what
+ * their own group may do.
+ *
+ * Directory-managed (`scim`) groups render read-only. The API refuses them too
+ * with `409 GROUP_EXTERNALLY_MANAGED` — these controls are UX, the guard is the
+ * authority.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import {
+  listUserGroups,
+  type UserGroupView
+} from "../../modules/identity-access/application/user-group-admin";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "user_groups",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time — concurrent queries on a
+    // single transaction connection leak it.
+    const groups = await listUserGroups(tx, ssr.tenantId);
+
+    return {
+      groups,
+      canCreate: await can({
+        moduleKey: "identity_access",
+        activityCode: "user_groups",
+        action: "create"
+      }),
+      canUpdate: await can({
+        moduleKey: "identity_access",
+        activityCode: "user_groups",
+        action: "update"
+      }),
+      canAssign: await can({
+        moduleKey: "identity_access",
+        activityCode: "user_groups",
+        action: "assign"
+      })
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/user-groups.astro: failed to load user groups",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+// A pool/circuit-breaker refusal is NOT "this tenant has no groups": an empty
+// list would say nobody holds a group-derived role, which is a claim about
+// authorization this screen has no basis to make.
+const loadError = screen.state === "error";
+const groups: UserGroupView[] =
+  screen.state === "allowed" ? screen.data.groups : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+const canAssign = screen.state === "allowed" && screen.data.canAssign;
+const canMutate = canUpdate || canAssign;
+const colCount = canMutate ? 6 : 5;
+---
+
+<AdminLayout title="User groups">
+  <header class="page-header fade-in-up">
+    <h1 id="user-groups-heading">User groups</h1>
+    <p class="page-description">
+      A group is a subject: it can hold role grants, and everyone in it holds
+      them too. Granting a group a role is done from the role assignment surface
+      — this screen manages who is in which group.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="user-groups-denied">
+        You do not have permission to view user groups.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="user-groups-error">
+        User groups could not be loaded right now. Please try again later.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <p
+        id="user-groups-action-error"
+        class="admin-create-error"
+        role="alert"
+        hidden
+      />
+    )
+  }
+
+  {
+    canCreate && !loadError && (
+      <form id="user-group-create-form" class="admin-create-form fade-in-up">
+        <p class="form-legend">Create a group</p>
+        <p
+          id="user-group-create-error"
+          class="admin-create-error"
+          role="alert"
+          hidden
+        />
+
+        <label for="user-group-code">Group code</label>
+        <input
+          id="user-group-code"
+          name="groupCode"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <label for="user-group-name">Group name</label>
+        <input
+          id="user-group-name"
+          name="groupName"
+          type="text"
+          required
+          autocomplete="off"
+        />
+
+        <button type="submit" id="user-group-create-submit">
+          Create group
+        </button>
+      </form>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <div class="data-table-scroll fade-in-up">
+        <table class="data-table data-table--stack" id="user-groups-table">
+          <caption>{groups.length} group(s)</caption>
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Name</th>
+              <th scope="col">Source</th>
+              <th scope="col">Members</th>
+              <th scope="col">Roles held</th>
+              {canMutate && <th scope="col">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.length === 0 ? (
+              <tr>
+                <td class="data-table-empty" colspan={colCount}>
+                  <div class="empty-state">
+                    <span class="empty-state-icon" aria-hidden="true">
+                      ◆
+                    </span>
+                    <span class="empty-state-title">No groups yet</span>
+                    <span class="empty-state-text">
+                      {canCreate
+                        ? "Create the first group using the form above."
+                        : "Groups defined for this tenant will appear here."}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              groups.map((group) => (
+                <tr data-group-id={group.id}>
+                  <td data-label="Code">
+                    <code>{group.groupCode}</code>
+                  </td>
+                  <td data-label="Name">{group.groupName}</td>
+                  <td data-label="Source">
+                    {group.source === "scim" ? "Directory" : "Local"}
+                  </td>
+                  <td data-label="Members">{group.memberCount}</td>
+                  <td data-label="Roles held">{group.roleCount}</td>
+                  {canMutate && (
+                    <td data-label="Actions">
+                      {group.source !== "local" ? (
+                        <span class="state-notice">Managed externally</span>
+                      ) : (
+                        <>
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              data-action="rename"
+                              data-group-id={group.id}
+                              data-group-name={group.groupName}
+                            >
+                              Rename
+                            </button>
+                          )}
+                          {canAssign && (
+                            <button
+                              type="button"
+                              data-action="add-member"
+                              data-group-id={group.id}
+                            >
+                              Add member
+                            </button>
+                          )}
+                          {canAssign && group.memberCount > 0 && (
+                            <button
+                              type="button"
+                              data-action="remove-member"
+                              data-group-id={group.id}
+                            >
+                              Remove member
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
+  // cannot be runtime-conditional). Harmless without the write permissions: the
+  // buttons only render when the viewer holds them, so the listener finds no
+  // targets. The import forces Astro to bundle this EXTERNAL — an import-free
+  // script would be inlined, and inline scripts are blocked by this app's CSP.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const actionError = document.getElementById("user-groups-action-error");
+  const createError = document.getElementById("user-group-create-error");
+
+  function showActionError(message: string): void {
+    if (!actionError) return;
+    actionError.textContent = message;
+    actionError.hidden = false;
+  }
+
+  const createForm = document.getElementById("user-group-create-form");
+
+  createForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (createError) createError.hidden = true;
+
+    const form = event.currentTarget as HTMLFormElement;
+    const data = new FormData(form);
+    const submit = document.getElementById("user-group-create-submit");
+    const unlock = submit ? lockElement(submit, "…") : () => {};
+
+    const result = await sendJson("POST", "/api/v1/user-groups", {
+      groupCode: String(data.get("groupCode") ?? "").trim(),
+      groupName: String(data.get("groupName") ?? "").trim()
+    });
+
+    if (result.ok) return void window.location.reload();
+
+    if (createError) {
+      createError.textContent =
+        "Could not create the group. The code may already be in use, or it may not match the required format.";
+      createError.hidden = false;
+    }
+    unlock();
+  });
+
+  document
+    .getElementById("user-groups-table")
+    ?.addEventListener("click", async (event) => {
+      const button = (event.target as HTMLElement | null)?.closest("button");
+      if (!(button instanceof HTMLButtonElement)) return;
+
+      const action = button.dataset.action;
+      const groupId = button.dataset.groupId;
+      if (!action || !groupId) return;
+
+      if (actionError) actionError.hidden = true;
+
+      if (action === "rename") {
+        const next = window.prompt(
+          "New group name",
+          button.dataset.groupName ?? ""
+        );
+        if (next === null || next.trim().length === 0) return;
+
+        const unlock = lockElement(button, "…");
+        const result = await sendJson(
+          "PATCH",
+          `/api/v1/user-groups/${encodeURIComponent(groupId)}`,
+          { groupName: next.trim() }
+        );
+        if (result.ok) return void window.location.reload();
+        showActionError(
+          "Could not rename the group. Directory-managed groups can only be changed in the directory."
+        );
+        unlock();
+        return;
+      }
+
+      if (action === "add-member" || action === "remove-member") {
+        const tenantUserId = window.prompt(
+          action === "add-member"
+            ? "Tenant user id to add"
+            : "Tenant user id to remove"
+        );
+        if (tenantUserId === null || tenantUserId.trim().length === 0) return;
+
+        const unlock = lockElement(button, "…");
+        const result = await sendJson(
+          action === "add-member" ? "POST" : "DELETE",
+          "/api/v1/user-groups/members",
+          { userGroupId: groupId, tenantUserId: tenantUserId.trim() }
+        );
+        if (result.ok) return void window.location.reload();
+        showActionError(
+          "Could not change the membership. Check the tenant user id, and note that directory-managed groups cannot be changed here."
+        );
+        unlock();
+      }
+    });
+</script>

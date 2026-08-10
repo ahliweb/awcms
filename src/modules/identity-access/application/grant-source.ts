@@ -52,22 +52,30 @@
  */
 
 /**
- * The tables a live role grant can live in.
+ * The tables a live role grant can be reached through.
  *
- * ONE entry, and that is the point of PR 3.3: `awcms_access_assignments` was
- * removed from this list by the migration that made it read-only history
- * (`sql/103`), so a reader that still named it would be reading rows no writer
- * can add to and no revocation can remove from.
+ * `awcms_access_assignments` is deliberately absent: `sql/103` made it read-only
+ * history, so a reader that still named it would be reading rows no writer can
+ * add to and no revocation can remove from.
+ *
+ * The two group tables joined it in ADR-0081, and that they are LISTED rather
+ * than merely joined is the point: membership is now part of the answer to "what
+ * has been granted to whom", so a change to it is a change to authorization.
  *
  * `access:grant-readers:check` keeps the file-level allow-list; this constant is
  * what the readers themselves share, and `tests/grant-source-parity.test.ts`
  * pins that they do.
  */
-export const GRANT_SOURCE_TABLES: readonly string[] = ["awcms_access_policies"];
+export const GRANT_SOURCE_TABLES: readonly string[] = [
+  "awcms_access_policies",
+  "awcms_user_groups",
+  "awcms_user_group_members"
+];
 
 /**
  * The `(tenant_user_id, role_id, scope_type, scope_id)` grants in force in
- * `tenantId` at the database's transaction clock.
+ * `tenantId` at the database's transaction clock — held DIRECTLY or through a
+ * group the subject belongs to.
  *
  * Effective dating is evaluated with `now()` IN THE DATABASE rather than against
  * a caller-supplied clock, for the reason ADR-0078 records: a grant that expires
@@ -75,16 +83,47 @@ export const GRANT_SOURCE_TABLES: readonly string[] = ["awcms_access_policies"];
  * can extend. `now()` is the transaction start instant, so one authorization
  * decision never sees two different times.
  *
+ * ## Why the group branch belongs HERE and not in each reader
+ *
+ * A group grants a ROLE (ADR-0081), so group membership has to reach every
+ * reader that asks what roles a subject holds — `subject.roles`, the permission
+ * keys, the SoD facts, the admin listing, the last-administrator guard. Adding
+ * it in one place adds it to all of them in one commit; adding it per reader is
+ * the drift ADR-0079 is a record of, except that this time the readers that
+ * missed it would be the ones that keep a DENY policy working.
+ *
+ * `UNION ALL` rather than `UNION`: a subject can hold the same role directly and
+ * through a group, and every consumer already de-duplicates what it needs to
+ * (`SELECT DISTINCT` on the key/role-code reads, `EXISTS` on the membership
+ * ones). Paying for a sort here to spare them nothing would be paying on the
+ * authorization path.
+ *
+ * A soft-deleted group grants nothing — `deleted_at IS NULL` — which is what
+ * makes deleting a group a revocation rather than a rename with side effects.
+ *
  * Returns a Bun.SQL query object used ONLY as an embedded fragment. Awaiting it
- * directly would run `SELECT tenant_user_id, role_id` for the whole tenant,
- * which no caller wants; every caller filters it in the statement it is spliced
- * into.
+ * directly would run the whole tenant's grants, which no caller wants; every
+ * caller filters it in the statement it is spliced into.
  */
 export function activeRoleGrants(tx: Bun.SQL, tenantId: string) {
   return tx`
     SELECT ap.tenant_user_id, ap.role_id, ap.scope_type, ap.scope_id
     FROM awcms_access_policies ap
     WHERE ap.tenant_id = ${tenantId}
+      AND ap.subject_type = 'tenant_user'
+      AND ap.status = 'active'
+      AND ap.effective_from <= now()
+      AND (ap.effective_to IS NULL OR ap.effective_to > now())
+    UNION ALL
+    SELECT m.tenant_user_id, ap.role_id, ap.scope_type, ap.scope_id
+    FROM awcms_access_policies ap
+    JOIN awcms_user_groups gr
+      ON gr.id = ap.user_group_id AND gr.tenant_id = ap.tenant_id
+      AND gr.deleted_at IS NULL
+    JOIN awcms_user_group_members m
+      ON m.user_group_id = gr.id AND m.tenant_id = gr.tenant_id
+    WHERE ap.tenant_id = ${tenantId}
+      AND ap.subject_type = 'user_group'
       AND ap.status = 'active'
       AND ap.effective_from <= now()
       AND (ap.effective_to IS NULL OR ap.effective_to > now())

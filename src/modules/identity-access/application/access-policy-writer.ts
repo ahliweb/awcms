@@ -35,6 +35,13 @@ export type GrantRolePolicyInput = {
   reason?: string;
 };
 
+export type GrantGroupRolePolicyInput = {
+  userGroupId: string;
+  roleId: string;
+  grantedByTenantUserId: string | null;
+  reason?: string;
+};
+
 /**
  * Grants a role, tenant-wide, and records the `granted` lifecycle event.
  *
@@ -75,6 +82,111 @@ export async function grantRolePolicy(
   `;
 
   return { id: policyId };
+}
+
+/**
+ * Grants a role to a GROUP, tenant-wide (ADR-0081).
+ *
+ * The same shape as `grantRolePolicy`, one row in the same table, differing only
+ * in which subject column is populated — which is the whole design: a group is a
+ * subject, so it is granted through the mechanism that already exists rather
+ * than a parallel one that could answer differently. Every reader picks it up
+ * through `activeRoleGrants`, so this function has no downstream wiring at all.
+ *
+ * The lifecycle event names the GROUP as the resource, not its members: at grant
+ * time the members are whoever happens to be in it, and the row would go stale
+ * the moment somebody joined. Who was affected is a question membership answers,
+ * and membership is separately audited.
+ *
+ * Lets a unique violation propagate, for the reason `grantRolePolicy` records.
+ */
+export async function grantGroupRolePolicy(
+  tx: Bun.SQL,
+  tenantId: string,
+  input: GrantGroupRolePolicyInput
+): Promise<{ id: string }> {
+  const rows = (await tx`
+    INSERT INTO awcms_access_policies
+      (tenant_id, subject_type, user_group_id, role_id, scope_type, scope_id,
+       granted_by_tenant_user_id, reason)
+    VALUES
+      (${tenantId}, 'user_group', ${input.userGroupId}, ${input.roleId},
+       ${TENANT_WIDE_SCOPE_TYPE}, ${tenantId},
+       ${input.grantedByTenantUserId}, ${input.reason ?? null})
+    RETURNING id
+  `) as { id: string }[];
+
+  const policyId = rows[0]!.id;
+
+  await tx`
+    INSERT INTO awcms_access_policy_events
+      (tenant_id, policy_id, event_type, actor_tenant_user_id, reason)
+    VALUES (${tenantId}, ${policyId}, 'granted', ${input.grantedByTenantUserId}, ${input.reason ?? null})
+  `;
+
+  return { id: policyId };
+}
+
+/**
+ * Revokes every live grant of `roleId` to a GROUP.
+ *
+ * Separate from `revokeRoleGrants` rather than a parameter on it, because the
+ * two answer questions that must not be conflated: revoking a person's role must
+ * not touch a grant they hold through a group they are still in, and revoking a
+ * group's role must not look like it removed anybody's personal grant.
+ */
+export async function revokeGroupRoleGrants(
+  tx: Bun.SQL,
+  tenantId: string,
+  userGroupId: string,
+  roleId: string,
+  actorTenantUserId: string | null,
+  now: Date,
+  reason?: string
+): Promise<boolean> {
+  const revoked = (await tx`
+    UPDATE awcms_access_policies
+    SET status = 'revoked',
+        revoked_at = ${now},
+        revoked_by_tenant_user_id = ${actorTenantUserId},
+        revoke_reason = ${reason ?? null},
+        updated_at = ${now}
+    WHERE tenant_id = ${tenantId}
+      AND user_group_id = ${userGroupId}
+      AND role_id = ${roleId}
+      AND status = 'active'
+    RETURNING id
+  `) as { id: string }[];
+
+  for (const policy of revoked) {
+    await tx`
+      INSERT INTO awcms_access_policy_events
+        (tenant_id, policy_id, event_type, actor_tenant_user_id, reason)
+      VALUES (${tenantId}, ${policy.id}, 'revoked', ${actorTenantUserId}, ${reason ?? null})
+    `;
+  }
+
+  return revoked.length > 0;
+}
+
+/** Whether the GROUP already holds this role through a live grant. */
+export async function groupHoldsRole(
+  tx: Bun.SQL,
+  tenantId: string,
+  userGroupId: string,
+  roleId: string
+): Promise<boolean> {
+  const rows = (await tx`
+    SELECT 1
+    FROM awcms_access_policies
+    WHERE tenant_id = ${tenantId}
+      AND user_group_id = ${userGroupId}
+      AND role_id = ${roleId}
+      AND status = 'active'
+    LIMIT 1
+  `) as unknown[];
+
+  return rows.length > 0;
 }
 
 /**

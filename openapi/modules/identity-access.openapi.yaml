@@ -3681,8 +3681,384 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/user-groups:
+    get:
+      operationId: listUserGroups
+      tags:
+        - Identity & Access
+      summary: List the tenant's user groups (identity_access.user_groups.read).
+      description: >-
+        A group is a SUBJECT that can hold role grants, so this list carries a
+        `roleCount` beside `memberCount`: a group holding grants is an authority
+        no amount of looking at PEOPLE would reveal.
+
+        `source` is `local` or `scim`. A `scim` group is managed by an external
+        directory and refuses local mutation with 409
+        GROUP_EXTERNALLY_MANAGED — SCIM itself is not implemented, only the
+        refusal, because a local edit a later sync silently reverts is worse
+        than one that was never accepted.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The tenant's live user groups, ordered by code.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      groups:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/UserGroupSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createUserGroup
+      tags:
+        - Identity & Access
+      summary: Create a local user group (identity_access.user_groups.create, audited).
+      description: >-
+        Creates a group with no members and no grants. `source` is never accepted
+        from the request: a caller who could declare a group `scim` would be
+        declaring it un-editable through the only surface that exists, with no
+        directory behind it to edit it instead.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - groupCode
+                - groupName
+              properties:
+                groupCode:
+                  type: string
+                  pattern: "^[a-z][a-z0-9_-]{1,63}$"
+                groupName:
+                  type: string
+                  maxLength: 200
+                description:
+                  type: string
+                  nullable: true
+                  maxLength: 1000
+      responses:
+        "201":
+          description: The created group.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/UserGroupRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: A live group already holds this code (GROUP_CODE_TAKEN).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/user-groups/{id}:
+    get:
+      operationId: listUserGroupMembers
+      tags:
+        - Identity & Access
+      summary: List one group's members (identity_access.user_groups.read).
+      description: >-
+        Tenant-user ids only. The login identifier is PII and the caller who may
+        read this already has the user list to resolve them against.
+
+        An unknown group and an empty group answer identically — the alternative
+        needs a pre-read that says whether an id exists in this tenant, which is
+        the existence oracle every other read here refuses to be.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The group's members.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      members:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            tenantUserId:
+                              type: string
+                              format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      operationId: updateUserGroup
+      tags:
+        - Identity & Access
+      summary: Rename a local user group (identity_access.user_groups.update, audited).
+      description: >-
+        Changes the DISPLAY name and description. `groupCode` is not editable: it
+        is the tenant-facing identity of the group and the thing a tenant's own
+        runbooks name, so renaming it silently would make those wrong.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - groupName
+              properties:
+                groupName:
+                  type: string
+                  maxLength: 200
+                description:
+                  type: string
+                  nullable: true
+                  maxLength: 1000
+      responses:
+        "200":
+          description: The updated group.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    $ref: "#/components/schemas/UserGroupRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The group is directory-managed (GROUP_EXTERNALLY_MANAGED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/user-groups/members:
+    post:
+      operationId: addUserGroupMember
+      tags:
+        - Identity & Access
+      summary: Add a tenant user to a group (identity_access.user_groups.assign, audited).
+      description: >-
+        A grant in everything but name: membership confers every role the group
+        holds, at once and with no further step. `assign` is a HIGH-RISK action,
+        so this additionally passes the segregation-of-duties chokepoint.
+
+        Idempotent by intent: re-adding somebody already in the group answers 200
+        with `added: false`. Adding a person to a group they are already in
+        changes nothing about their access, and a 409 there would be an error
+        message about the state the caller asked for.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupMembershipInput"
+      responses:
+        "200":
+          description: Membership after the call.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      added:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The group is directory-managed (GROUP_EXTERNALLY_MANAGED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: removeUserGroupMember
+      tags:
+        - Identity & Access
+      summary: Remove a tenant user from a group (identity_access.user_groups.assign, audited).
+      description: >-
+        Takes away every role the group confers on that person, effective on
+        their next authorization decision — there is no cache between membership
+        and the grant read.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupMembershipInput"
+      responses:
+        "200":
+          description: The membership was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      removed:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The group is directory-managed (GROUP_EXTERNALLY_MANAGED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    UserGroupSummary:
+      type: object
+      description: One live user group, with the two counts that make the list decidable.
+      required:
+        - id
+        - groupCode
+        - groupName
+        - source
+        - memberCount
+        - roleCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupCode:
+          type: string
+        groupName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [local, scim]
+        externalId:
+          type: string
+          nullable: true
+          description: The directory's own identifier. It is the sync key rather than groupCode, because humans rename group codes and a rename must not orphan the group.
+        memberCount:
+          type: integer
+          minimum: 0
+        roleCount:
+          type: integer
+          minimum: 0
+          description: Active role grants held BY the group. Everyone in the group holds them too.
+    UserGroupRecord:
+      type: object
+      required:
+        - id
+        - groupCode
+        - groupName
+        - source
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupCode:
+          type: string
+        groupName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [local, scim]
+    UserGroupMembershipInput:
+      type: object
+      required:
+        - userGroupId
+        - tenantUserId
+      properties:
+        userGroupId:
+          type: string
+          format: uuid
+        tenantUserId:
+          type: string
+          format: uuid
     OwnSessionSummary:
       type: object
       description: One live session belonging to the caller. Carries no token, no raw IP and no raw User-Agent.
