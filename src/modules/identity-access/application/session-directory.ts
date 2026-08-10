@@ -145,3 +145,56 @@ export async function revokeOwnSession(
 
   return revoked.length > 0 ? { outcome: "revoked" } : { outcome: "not_found" };
 }
+
+export type RevokeOtherOwnSessionsResult =
+  { outcome: "revoked"; revokedCount: number } | { outcome: "unauthenticated" };
+
+/**
+ * "Sign me out everywhere else" — every live session of the caller's identity
+ * except the one making the request.
+ *
+ * ## Why the current session is EXCLUDED rather than offered as a flag
+ *
+ * The program plan drafted this as `?exceptCurrent=true`, i.e. a caller-supplied
+ * boolean. It ships without one. A parameter that can end the requesting session
+ * has exactly one honest value here — the other one duplicates
+ * `POST /auth/logout`, which additionally clears the cookies this route cannot
+ * see. Accepting the flag would mean shipping a second, worse logout whose only
+ * distinguishing feature is that it leaves the caller holding a dead cookie, and
+ * a default that must never be flipped is better expressed as no parameter.
+ *
+ * This is the endpoint someone reaches for after "I think my password leaked".
+ * It has to work while they are still signed in, or they will use it and then
+ * find they cannot change the password afterwards.
+ *
+ * ## Why it does NOT touch the password or the lockout counters
+ *
+ * `completePasswordReset` revokes sessions as a CONSEQUENCE of a credential
+ * change. This one is the reverse and stays that way: a person who ends stray
+ * sessions has not proven anything new about their credential, so nothing here
+ * clears `failed_login_count` or `locked_until`. Folding the two together would
+ * make session hygiene a lockout-reset oracle.
+ */
+export async function revokeOtherOwnSessions(
+  tx: Bun.SQL,
+  tenantId: string,
+  tokenHash: string,
+  now: Date
+): Promise<RevokeOtherOwnSessionsResult> {
+  const identityId = await resolveCallerIdentity(tx, tenantId, tokenHash, now);
+
+  if (!identityId) return { outcome: "unauthenticated" };
+
+  const revoked = (await tx`
+    UPDATE awcms_sessions
+    SET revoked_at = ${now}
+    WHERE tenant_id = ${tenantId}
+      AND identity_id = ${identityId}
+      AND token_hash <> ${tokenHash}
+      AND revoked_at IS NULL
+      AND expires_at > ${now}
+    RETURNING id
+  `) as { id: string }[];
+
+  return { outcome: "revoked", revokedCount: revoked.length };
+}

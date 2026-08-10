@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 
 import {
   listOwnSessions,
+  revokeOtherOwnSessions,
   revokeOwnSession
 } from "../src/modules/identity-access/application/session-directory";
 
@@ -170,33 +171,122 @@ describe("revocation refuses in one shape", () => {
   });
 });
 
+describe("bulk revocation spares the session making the call", () => {
+  test("the UPDATE excludes the caller's own token hash and nothing else can", async () => {
+    // The exclusion is the whole endpoint. Without it this is a worse
+    // `POST /auth/logout` — one that leaves the caller holding a dead cookie
+    // because it cannot clear them.
+    const { tx, calls } = recordingTx([
+      [{ identity_id: "identity-7" }],
+      [{ id: "session-2" }, { id: "session-3" }]
+    ]);
+
+    expect(await revokeOtherOwnSessions(tx, TENANT, TOKEN_HASH, NOW)).toEqual({
+      outcome: "revoked",
+      revokedCount: 2
+    });
+
+    const update = calls.at(-1)!;
+
+    expect(update.sql).toContain("UPDATE awcms_sessions");
+    expect(update.sql).toContain("token_hash <>");
+    expect(update.sql).toContain("identity_id =");
+    expect(update.values).toContain(TOKEN_HASH);
+    expect(update.values).toContain("identity-7");
+    // Restamping an already-revoked row would move the only timestamp an
+    // investigation has for when that access actually ended.
+    expect(update.sql).toContain("revoked_at IS NULL");
+  });
+
+  test("having nothing else to end is a success with zero, not a refusal", async () => {
+    const { tx } = recordingTx([[{ identity_id: "identity-7" }], []]);
+
+    expect(await revokeOtherOwnSessions(tx, TENANT, TOKEN_HASH, NOW)).toEqual({
+      outcome: "revoked",
+      revokedCount: 0
+    });
+  });
+
+  test("an unresolved caller never reaches the UPDATE", async () => {
+    const { tx, calls } = recordingTx([[]]);
+
+    expect(await revokeOtherOwnSessions(tx, TENANT, TOKEN_HASH, NOW)).toEqual({
+      outcome: "unauthenticated"
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  test("it touches no credential and no lockout counter", async () => {
+    // A person ending stray sessions has proven nothing new about their
+    // password. Clearing `failed_login_count` here would make session hygiene a
+    // lockout-reset oracle.
+    const { tx, calls } = recordingTx([
+      [{ identity_id: "identity-7" }],
+      [{ id: "session-2" }]
+    ]);
+
+    await revokeOtherOwnSessions(tx, TENANT, TOKEN_HASH, NOW);
+
+    for (const call of calls) {
+      expect(call.sql).not.toContain("awcms_identities");
+      expect(call.sql).not.toContain("failed_login_count");
+      expect(call.sql).not.toContain("locked_until");
+      expect(call.sql).not.toContain("password_hash");
+    }
+  });
+});
+
 describe("the routes carry no permission, on purpose", () => {
   const list = readFileSync("src/pages/api/v1/auth/sessions/index.ts", "utf8");
   const revoke = readFileSync("src/pages/api/v1/auth/sessions/[id].ts", "utf8");
+  const revokeAll = readFileSync(
+    "src/pages/api/v1/auth/sessions/revoke-all.ts",
+    "utf8"
+  );
 
-  test("both use the self-service seam and never call the chokepoint", () => {
+  test("the bulk route takes no caller-supplied flag", () => {
+    // The program plan drafted `?exceptCurrent=true`. A parameter whose other
+    // value duplicates `POST /auth/logout` — badly, since this route cannot
+    // clear cookies — is better expressed as no parameter.
+    //
+    // Asserted against the CODE with comments stripped: the docblock explains
+    // the rejection by name, and a prose mention must not be able to fail a
+    // test about behaviour (nor to satisfy one).
+    const code = revokeAll
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+
+    expect(code).not.toContain("exceptCurrent");
+    expect(code).not.toContain("searchParams");
+    // `url` is destructured by nothing here; reading it is the only way a flag
+    // could arrive, since the route accepts no body either.
+    expect(code).not.toMatch(/\burl\b/);
+    expect(code).not.toContain("readJsonBody");
+  });
+
+  test("all three use the self-service seam and never call the chokepoint", () => {
     // ADR-0049 §7. A permission for "your own sessions" would be a wall in
     // front of the feature AND a latent-authz trap: an action nothing seeds
     // denies everyone including the tenant owner (ADR-0058 §E).
-    for (const source of [list, revoke]) {
+    for (const source of [list, revoke, revokeAll]) {
       expect(source).toContain("defineSelfServiceTenantRoute");
       expect(source).not.toContain("authorizeInTransaction");
       expect(source).not.toContain("moduleKey:");
     }
   });
 
-  test("neither reads a caller-supplied subject — the identity comes from the token", () => {
+  test("none reads a caller-supplied subject — the identity comes from the token", () => {
     // The self-service seam hands the route a `tokenHash`, never a subject, and
-    // both resolve the identity from it inside the transaction. A route that
+    // each resolves the identity from it inside the transaction. A route that
     // accepted an id would be an admin surface with a friendly name.
-    for (const source of [list, revoke]) {
+    for (const source of [list, revoke, revokeAll]) {
       expect(source).toContain("tokenHash");
       expect(source).not.toMatch(/body\.\s*tenantUserId|params\.tenantUserId/);
     }
   });
 
   test("a machine credential is refused before any database work", () => {
-    for (const source of [list, revoke]) {
+    for (const source of [list, revoke, revokeAll]) {
       expect(source).toContain("isMachineCredentialToken");
       expect(source.indexOf("isMachineCredentialToken")).toBeLessThan(
         source.indexOf("handler:")
@@ -205,7 +295,7 @@ describe("the routes carry no permission, on purpose", () => {
   });
 
   test("every response is uncacheable, including the failures", () => {
-    for (const source of [list, revoke]) {
+    for (const source of [list, revoke, revokeAll]) {
       expect(source).toContain('"cache-control": "private, no-store"');
     }
   });
