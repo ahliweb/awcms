@@ -356,15 +356,32 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
-- **PUTARAN 10 Agustus 2026 (lanjutan) — GELOMBANG 2 SELESAI.** Tiga PR
-  (#496/#497/#498 + entri ini). Permukaan sesi & kredensial dari
+- **PUTARAN 10 Agustus 2026 (lanjutan) — GELOMBANG 2 SELESAI, prasyarat
+  Gelombang 3 mendarat.** Lima PR (#496/#497/#498/#499/#500 + entri ini).
+  Permukaan sesi & kredensial dari
   [program model keanggotaan](awcms/program-model-keanggotaan-2026-08-09.md)
   lengkap; #430 dan #423 tetap terbuka secara sadar.
 
   **Yang mendarat.** `GET`/`POST /api/v1/users/{id}/sessions[/revoke-all]`
   (dua izin `user_sessions`, `sql/101`, plus panel sesi di `/admin/users`);
   `POST /api/v1/auth/sessions/revoke-all`; `POST /api/v1/auth/password/change`.
-  Bersama PR 2.1 (#491) itu seluruh isi Gelombang 2.
+  Bersama PR 2.1 (#491) itu seluruh isi Gelombang 2. Plus gerbang ke-38
+  `access:grant-readers:check` (#500) — prasyarat Gelombang 3, dijelaskan di
+  bawah.
+
+  **Gerbang ke-38 dipindahkan KELUAR dari PR 3.1.** Rencana menempatkan
+  `access:grant-readers:check` di dalam PR paling berisiko di seluruh program.
+  Ia mendarat sendiri, lebih dulu, atas argumen yang sama yang menempatkan
+  `access:decision-log:coverage:check` sebelum cabang deny yang dijaganya:
+  gerbang yang harus hijau HARI INI paling murah ditambahkan hari ini, dan
+  daftar yang ditulis SESUDAH perubahan berisiko ditulis orang yang sudah punya
+  alasan memendekkannya. Hasilnya: **sebelas** berkas menyebut tabel grant, tiga
+  di antaranya DI LUAR `identity_access` — termasuk satu RUTE
+  (`access/policies/simulate.ts`) yang merakit join-nya sendiri untuk
+  mensimulasikan ABAC, sehingga pratinjau sebuah policy bisa berbeda dari
+  perilakunya di produksi. Tak satu pun melanggar gerbang yang sudah ada:
+  semuanya menjangkau tabelnya lewat template SQL, bukan impor, jadi DAG modul
+  tak punya pendapat dan `modules:table-writes:check` hanya mengatur TULIS.
 
   **Tiga koreksi terhadap rencana, masing-masing terverifikasi terhadap kode:**
 
@@ -424,9 +441,24 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   menurunkannya kedua kali di dalam rute adalah cara dua turunan satu nilai mulai
   berbeda pendapat. Penambahan murni, nol call site berubah.
 
-  **Titik-lanjut.** Gelombang 3 (bentuk Policy Cloudflare — `awcms_access_policies`,
-  User Groups, kualifikasi scope), **risiko tertinggi di program** dan prasyaratnya
-  Gelombang 1 sudah selesai. #430 tetap Gelombang 7.
+  **Titik-lanjut — dan satu batasan urutan yang WAJIB dibaca dulu.** Berikutnya
+  Gelombang 3 (bentuk Policy Cloudflare — `awcms_access_policies`, User Groups,
+  kualifikasi scope), **risiko tertinggi di program**. Kedua prasyaratnya sudah
+  terpenuhi dan keduanya diverifikasi, bukan diasumsikan: Gelombang 1 tuntas
+  (32/32 layar `src/pages/admin/**/*.astro` memakai `loadAdminScreen`,
+  `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` KOSONG), dan gerbang pembaca grant sudah
+  mengunci daftar pembacanya.
+
+  **PR 3.1 tidak boleh mendarat sendirian.** Ia menurunkan tabel
+  `awcms_access_policies` yang KOSONG dengan reader `UNION ALL` — sengaja, supaya
+  oracle ekuivalensinya bisa membuktikan hasilnya identik dengan hari ini. Tapi
+  berhenti di situ meninggalkan tabel yang tak ditulis siapa pun, yaitu **persis
+  cacat yang putaran sebelumnya HAPUS** di #477 (`awcms_sync_outbox`). Jadi 3.1
+  dan 3.2 (para penulis grant + `POST /api/v1/access/policies`) adalah satu unit
+  komitmen, bukan dua PR yang kebetulan berurutan — dan kalau hanya ada ruang
+  untuk satu, jangan mulai.
+
+  #430 tetap Gelombang 7.
 
 - **PUTARAN 10 Agustus 2026 (analisis isu) — #477 ditutup dengan MENGHAPUS
   tabelnya, sensus #430 dilengkapi, Gelombang 2 dimulai.** Empat PR
