@@ -85,6 +85,9 @@ async function main(): Promise<void> {
   const nonEmail = report.findings.filter(
     (finding) => finding.kind === "non_email_identifier"
   );
+  const notMailable = report.findings.filter(
+    (finding) => finding.kind === "not_mailable"
+  );
 
   if (collisions.length > 0) {
     console.log(
@@ -115,9 +118,11 @@ async function main(): Promise<void> {
       `\nADVISORY — ${nonEmail.length} identifier bukan alamat email.`
     );
     console.log(
-      "Ia tetap menjadi principal, tetapi tidak akan pernah bisa menerima undangan"
+      "Ia tetap menjadi principal — kuncinya apa pun hasil normalisasinya — tetapi"
     );
-    console.log("maupun reset password.\n");
+    console.log(
+      "bentuknya akan mengejutkan siapa pun yang mengira kunci principal itu alamat.\n"
+    );
 
     for (const finding of nonEmail.slice(0, 50)) {
       if (finding.kind !== "non_email_identifier") continue;
@@ -128,6 +133,36 @@ async function main(): Promise<void> {
 
     if (nonEmail.length > 50) {
       console.log(`  … dan ${nonEmail.length - 50} lagi`);
+    }
+  }
+
+  if (notMailable.length > 0) {
+    console.log(
+      `\nADVISORY — ${notMailable.length} identitas tidak bisa dikirimi surat.`
+    );
+    console.log(
+      "Diputuskan `isMailableLoginIdentifier`, yaitu predikat yang BENAR-BENAR dipakai"
+    );
+    console.log(
+      "jalur reset password — bukan salinan kedua darinya. Himpunan ini TIDAK sama"
+    );
+    console.log(
+      "dengan daftar bukan-email di atas: `a@localhost` bukan email menurut sensus"
+    );
+    console.log(
+      "tetapi bisa dikirimi surat, dan sebaliknya juga terjadi. Undangan Gelombang 4"
+    );
+    console.log("dan reset password akan melewati identitas-identitas ini.\n");
+
+    for (const finding of notMailable.slice(0, 50)) {
+      if (finding.kind !== "not_mailable") continue;
+      console.log(
+        `  [${finding.tenantCode}] ${JSON.stringify(finding.loginIdentifier)}`
+      );
+    }
+
+    if (notMailable.length > 50) {
+      console.log(`  … dan ${notMailable.length - 50} lagi`);
     }
   }
 
