@@ -194,7 +194,7 @@ export type TenantRouteConfig<TPrepared> = {
  * requirements (one response shape for several different failures) that a
  * shared default would quietly flatten.
  */
-export type SelfServiceTenantRouteConfig = {
+export type SelfServiceTenantRouteConfig<TPrepared = undefined> = {
   /** REQUIRED, same reasoning as `defineTenantRoute`. */
   workClass: WorkClass;
   queueTimeoutMs?: number;
@@ -210,18 +210,40 @@ export type SelfServiceTenantRouteConfig = {
   beforeTransaction?: (
     context: TenantRouteRequestContext & { token: string }
   ) => Response | undefined | Promise<Response | undefined>;
+  /**
+   * Reads and validates the request BODY, before the transaction opens.
+   *
+   * The mirror of `defineTenantRoute`'s `prepare`, and it exists for the same
+   * non-cosmetic reason: `await request.json()` waits on the CLIENT. Doing it
+   * inside `withTenant` holds a reserved pool connection — and its work-class
+   * slot — for as long as a caller chooses to take sending its body, which turns
+   * a slow request into a connection held against every other request in the
+   * pool. `queueTimeoutMs` bounds ACQUIRING a connection, never holding one.
+   *
+   * Returning a `Response` short-circuits; anything else is handed to `handler`
+   * as `prepared`.
+   *
+   * `beforeTransaction` cannot do this job: it returns only `Response |
+   * undefined`, so a body parsed there has nowhere to go and would have to be
+   * parsed a second time.
+   */
+  prepare?: (
+    context: TenantRouteRequestContext & { token: string }
+  ) => TPrepared | Response | Promise<TPrepared | Response>;
   handler: (
     context: TenantRouteRequestContext & {
       tx: Bun.TransactionSQL;
       token: string;
       /** Kind-tagged hash (`session-token.ts`) — machine vs session already distinguished. */
       tokenHash: string;
+      /** Whatever `prepare` returned (`undefined` when there is no `prepare`). */
+      prepared: TPrepared;
     }
   ) => Response | Promise<Response>;
 };
 
-export function defineSelfServiceTenantRoute(
-  config: SelfServiceTenantRouteConfig
+export function defineSelfServiceTenantRoute<TPrepared = undefined>(
+  config: SelfServiceTenantRouteConfig<TPrepared>
 ): APIRoute {
   return async ({ request, cookies, url, params, locals, clientAddress }) => {
     const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -247,6 +269,18 @@ export function defineSelfServiceTenantRoute(
 
     if (short) return short;
 
+    let prepared = undefined as TPrepared;
+
+    if (config.prepare) {
+      const prepareResult = await config.prepare({ ...requestContext, token });
+
+      if (prepareResult instanceof Response) {
+        return prepareResult;
+      }
+
+      prepared = prepareResult;
+    }
+
     return withTenant<Response>(
       sqlClientForRoute(),
       tenantId,
@@ -255,7 +289,8 @@ export function defineSelfServiceTenantRoute(
           ...requestContext,
           tx,
           token,
-          tokenHash: hashSessionToken(token)
+          tokenHash: hashSessionToken(token),
+          prepared
         }),
       {
         workClass: config.workClass,

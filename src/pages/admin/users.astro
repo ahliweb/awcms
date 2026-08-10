@@ -585,6 +585,19 @@ const showActions =
     gap: var(--sp-2);
   }
 
+  /* Load-bearing, not defensive.
+     `admin.css` turns every row of a `.data-table--stack` into a card below
+     `--bp-md` with `.data-table--stack tr { display: block }`. That selector
+     (0,1,1) outranks the user-agent `[hidden] { display: none }` (0,1,0), so
+     on a phone the collapsed panel below is NOT collapsed: every user row grows
+     a permanently-open, empty session strip that no button can close.
+     `.session-panel-row[hidden]` is (0,2,0) and wins in both directions, and it
+     lives outside the media query on purpose — media queries add no
+     specificity, so one rule covers both layouts. */
+  .session-panel-row[hidden] {
+    display: none;
+  }
+
   .session-panel-row > td {
     background: var(--color-surface-2);
   }

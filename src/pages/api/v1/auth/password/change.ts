@@ -17,7 +17,10 @@ import {
   summarizeUserAgent
 } from "../../../../../lib/security/client-fingerprint";
 import { changeOwnPassword } from "../../../../../modules/identity-access/application/password-change";
-import { validateCredentialChangeInput } from "../../../../../modules/identity-access/domain/credential-change-validation";
+import {
+  validateCredentialChangeInput,
+  type CredentialChangeInput
+} from "../../../../../modules/identity-access/domain/credential-change-validation";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
 
 /**
@@ -66,7 +69,7 @@ function authRequired(): Response {
   );
 }
 
-export const POST = defineSelfServiceTenantRoute({
+export const POST = defineSelfServiceTenantRoute<CredentialChangeInput>({
   workClass: "interactive",
   onUnauthenticated: (reason) =>
     reason === "tenant"
@@ -104,7 +107,11 @@ export const POST = defineSelfServiceTenantRoute({
       }
     );
   },
-  handler: async ({ tx, tenantId, tokenHash, request, clientAddress, now }) => {
+  // Reading the body waits on the CLIENT, so it happens BEFORE the transaction
+  // opens: doing it inside `withTenant` would hold a reserved pool connection —
+  // and its work-class slot — for as long as a caller chooses to take sending
+  // its body. `queueTimeoutMs` bounds acquiring a connection, never holding one.
+  prepare: async ({ request }) => {
     const body = await readJsonBody(request);
 
     if (body.tooLarge) return bodyTooLargeResponse(body.limitBytes);
@@ -122,11 +129,22 @@ export const POST = defineSelfServiceTenantRoute({
       );
     }
 
+    return validation.value;
+  },
+  handler: async ({
+    tx,
+    tenantId,
+    tokenHash,
+    prepared,
+    request,
+    clientAddress,
+    now
+  }) => {
     const result = await changeOwnPassword(
       tx,
       tenantId,
       tokenHash,
-      validation.value,
+      prepared,
       now
     );
 
