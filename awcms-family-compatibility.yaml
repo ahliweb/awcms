@@ -114,10 +114,10 @@ stack:
       declared: "1.3.0"
       source: .github/workflows/ci.yml minimum-supported job setup-bun (== engines floor)
   astro:
-    declared: "^7.1.6"
+    declared: "^7.2.0"
     source: package.json dependencies.astro
   astroNode:
-    declared: "^11.0.3"
+    declared: "^11.1.0"
     source: package.json dependencies["@astrojs/node"]
   typescript:
     declared: "^7.0.2"
@@ -160,7 +160,7 @@ intentionalDivergences:
     since: "2026-08-04"
 
   - id: astro-files-not-type-checked
-    summary: awcms-astro runs `astro check`; this repo cannot, so 42 `.astro` files (22,328 lines) have no type checker.
+    summary: awcms-astro runs `astro check`; this repo cannot, so 44 `.astro` files (24,359 lines) have no type checker.
     reason: >-
       Not a discipline gap — a toolchain one, and it points the opposite way from what the file counts
       suggest. `@astrojs/check` requires the TypeScript 6.x programmatic API; this repo is on TypeScript
