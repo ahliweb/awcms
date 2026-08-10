@@ -156,10 +156,17 @@ describe("the table list is the grant tables and nothing else", () => {
     expect(GRANT_TABLES).not.toContain("awcms_roles");
   });
 
-  test("it covers both halves of the join a guard actually walks", () => {
+  test("it covers every half of the join a guard actually walks", () => {
     // Assignment alone answers "holds the role"; role-permission alone answers
     // "the role implies the key". A reader that drifts needs only one of them.
     expect(GRANT_TABLES).toContain("awcms_access_assignments");
     expect(GRANT_TABLES).toContain("awcms_role_permissions");
+  });
+
+  test("the SCOPED grant table is covered too (ADR-0078)", () => {
+    // The entire reason this gate landed a wave early. A reader that walks only
+    // `awcms_access_assignments` after Gelombang 3 gives the OLD, wider answer
+    // while looking untouched.
+    expect(GRANT_TABLES).toContain("awcms_access_policies");
   });
 });

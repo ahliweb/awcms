@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 101   |
-| Tabel `awcms_*`                    | 129   |
-| Tabel dengan `FORCE` RLS           | 118   |
+| Migrasi                            | 102   |
+| Tabel `awcms_*`                    | 131   |
+| Tabel dengan `FORCE` RLS           | 120   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 342   |
+| Berkas test                        | 344   |
 | Berkas route                       | 324   |
-| ADR                                | 78    |
+| ADR                                | 79    |
 
 ### Modul
 
@@ -148,6 +148,7 @@
 | 99  | `sql/099_awcms_sync_outbox_retire.sql`                             |
 | 100 | `sql/100_awcms_session_fingerprint.sql`                            |
 | 101 | `sql/101_awcms_identity_user_sessions_permissions.sql`             |
+| 102 | `sql/102_awcms_access_policies_schema.sql`                         |
 
 ### Tabel & Row-Level Security
 
@@ -156,6 +157,8 @@
 | `awcms_abac_decision_logs`               | `sql/005_awcms_abac_access_control_schema.sql`             | ya    | ya    |
 | `awcms_abac_policies`                    | `sql/005_awcms_abac_access_control_schema.sql`             | ya    | ya    |
 | `awcms_access_assignments`               | `sql/005_awcms_abac_access_control_schema.sql`             | ya    | ya    |
+| `awcms_access_policies`                  | `sql/102_awcms_access_policies_schema.sql`                 | ya    | ya    |
+| `awcms_access_policy_events`             | `sql/102_awcms_access_policies_schema.sql`                 | ya    | ya    |
 | `awcms_audit_events`                     | `sql/007_awcms_audit_logging_schema.sql`                   | ya    | ya    |
 | `awcms_auth_providers`                   | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
 | `awcms_bff_clients`                      | `sql/088_awcms_session_handoff_schema.sql`                 | ya    | ya    |
@@ -287,9 +290,9 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 293        |
+| `(root)`      | 294        |
 | `e2e`         | 12         |
-| `integration` | 36         |
+| `integration` | 37         |
 | `unit`        | 1          |
 
 ### Routes
