@@ -356,6 +356,77 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 (lanjutan) — kedua pemblokir #468 diputuskan, #468
+  ditutup, dan satu cacat konkurensi ditemukan sambil jalan.** Empat PR
+  (#482/#484/#485 + entri ini), dua issue ditutup (#468, #483), satu issue baru
+  difile (#483) dari temuan yang tidak diminta siapa pun.
+
+  **Yang diputuskan, dan kenapa keduanya butuh jawaban berbeda.**
+  `TABLES_PREDATING_THE_RULE` tidak bisa membedakan tabel yang **belum**
+  dideskripsikan dari yang **tidak bisa**; keduanya satu baris, dan selama
+  begitu hitungannya berhenti bisa dibaca sebagai utang.
+  `awcms_edge_cache_purges` (#479) mendapat registry kedua ber-`ownerPath`
+  ([ADR-0076](adr/0076-infrastructure-tables-may-hold-lifecycle-descriptors.md)),
+  dengan `ownerOfFile()` — fungsi yang sama yang dipakai
+  `modules:table-writes:check` — sebagai penentu siapa boleh ada di sana;
+  `awcms_sync_outbox` (#477) pindah ke `BOUNDED_BY_DESIGN` sebagai entri
+  pertamanya, satu-satunya yang premisnya diperiksa mesin.
+
+  **Satu premis issue sendiri ternyata keliru.** #479 menulis bahwa tak ada yang
+  menghapus `awcms_edge_cache_purges`; `bun run edge-cache:purge` sudah
+  memangkas baris `done` sejak ADR-0042. Yang hilang adalah kemampuan
+  MENYATAKANNYA. Koreksi itu mengubah bentuk keputusannya — dari "tulis purge"
+  menjadi "beri kontraknya cara menyebut pemilik non-modul".
+
+  **Temuan yang tak diminta: lockout login bukan atomik** (#483). Jalur password
+  memakai read-modify-write di JS, jadi K percobaan gagal PARALEL berbiaya SATU
+  increment — diukur terhadap PostgreSQL nyata: empat percobaan → penghitung
+  `1`. Lebih buruk dari cacatnya: **empat dokumen menyatakannya "atomik di DB"**,
+  salah satunya menamai persis bentuk yang seharusnya dihindari, dan
+  `rate-limit.ts` menyandarkan postur fail-open Redis-nya pada kalimat itu.
+  Semua diperbaiki, dan kini menyebut statement-nya alih-alih kata "atomik".
+
+  **Gerbang yang hijau di atas jawaban yang salah, dua kali.**
+  `checkLoginLockoutImplemented` (severity `critical`) hanya memanggil fungsi
+  murni — hijau dua tahun di atas lockout yang bisa ditahan di satu; kini ia
+  memeriksa mekanismenya. Dan seluruh test lockout murni domain, **nol**
+  menaikkan penghitung lewat rute nyata, jadi suite-nya tidak akan pernah
+  melihat cacat itu maupun perbaikannya.
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Melonggarkan `ownerModuleKey` menjadi opsional** — menghemat satu berkas
+     dan membuat setiap deskriptor modul kehilangan penjagaannya: deskriptor
+     yang LUPA menyebut pemilik berhenti jadi kesalahan dan mulai berarti
+     "infrastruktur". Kesalahan ketik menjadi klaim kepemilikan.
+  2. **Menetapkan `awcms_edge_cache_purges` ke salah satu dari tiga modul
+     penulisnya** — sudah ditolak putaran sebelumnya; tetap ditolak.
+  3. **Menjadikan `src/lib/edge-cache/` sebuah modul** —
+     [ADR-0043](adr/0043-lib-boundary-and-module-presentation-layer.md) memerahkan
+     namespace `src/lib/<x>/` yang bertabrakan dengan `moduleKey`, dan
+     `scripts/module-job-registry-check.ts` sudah menolak "buat modul demi
+     kenyamanan dokumentasi" untuk tabel yang sama. Tetap terbuka sebagai
+     keputusan arsitektural, bukan sebagai cara menghijaukan gerbang.
+  4. **Tabel lockout GLOBAL tanpa RLS untuk menutup #430 lebih awal** — ia
+     memberi penyerang senjata yang hari ini tidak ada: mengunci satu manusia
+     dari SEMUA tenant, dari konteks tenant mana pun, tanpa endpoint unlock dan
+     dengan password reset yang hanya membersihkan `awcms_identities`. #430
+     menunggu Gelombang 7, dan sensus `identity:principals:preflight` yang
+     menentukan besarnya pengganda nyata belum dijalankan pada data produksi.
+  5. **Mengubah deskripsi operasi `/sync/pull` di OpenAPI** — snapshot kontrak
+     pra-migrasi beku dan mewajibkan tiap path byte-identical. Notice-nya
+     dipindah ke deskripsi TAG, yang tidak dibekukan dan justru ter-render ke
+     `awcms/api-reference.md`.
+  6. **Menyunting `awcms/repo-assessment-2026-08-04.md`** yang mengulang klaim
+     "atomik" — ia catatan bertanggal, dan menyunting temuan lama adalah
+     memalsukan rekaman.
+
+  **Titik-lanjut.** Gelombang 1 program model keanggotaan **SUDAH TUTUP** (#450,
+  33 layar, dua ledger nol) — dokumen programnya dikoreksi di PR ini karena ia
+  masih menjanjikan helper bernama `defineAdminScreen` yang tidak pernah ada.
+  Berikutnya **Gelombang 2** (permukaan sesi & kredensial). #477 tetap terbuka
+  untuk keputusan sambung-atau-pensiunkan; #430 terjadwal Gelombang 7.
+
 - **PUTARAN 10 Agustus 2026 — program notifikasi push (#463) tuntas, retensi
   outbox 4 dari 6, SSE mendarat dengan ADR-nya.** Dua belas PR, semuanya
   ter-merge; lima issue ditutup (#464, #465, #466, #467, sebagian #468) dan tiga

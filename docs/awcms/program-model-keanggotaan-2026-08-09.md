@@ -143,14 +143,37 @@ Tidak ada yang melebar; semuanya mengetatkan. Tiap PR bernilai sendiri.
 | 0.7 | #430        | `bun run identity:principals:preflight` — skrip **read-only**, nol migrasi: sensus tabrakan `lower(btrim(login_identifier))` **di dalam** satu tenant (legal hari ini, mustahil setelah principal), identifier non-email, identitas tanpa alamat yang bisa dikirimi surat. Prasyarat Gelombang 7, dijalankan berbulan-bulan sebelumnya                                                                                                                                                                                                                                                       | `scripts:inventory:check`                                                                  |
 | 0.8 | #431        | ADR: role menyatakan scope-nya (**menutup R8**). Migrasi: `awcms_roles.attachable_scope_types text[] DEFAULT '{tenant}'` + `permission_scope text DEFAULT 'tenant' CHECK IN ('tenant','platform')`. `listPermissionCatalog` mendapat predikat `scope`; `grantPermissionToRole` memeriksa ulang di server — picker adalah UI, cek adalah kontrolnya                                                                                                                                                                                                                                           | `tests/platform-scoped-permissions.test.ts`, `api:*:check`                                 |
 
-### Gelombang 1 — R3: 31 layar admin lewat chokepoint (1 + 7 PR)
+### Gelombang 1 — R3: layar admin lewat chokepoint — **SELESAI (#450)**
+
+> **Status per 10 Agustus 2026: TUTUP.** Diverifikasi dengan MENJALANKAN kedua
+> gerbangnya, bukan dengan membaca komentarnya —
+> `access:chokepoint:check` melaporkan _"33 admin screens, all routed through
+> loadAdminScreen (R3 closed; ledger: 0)"_ dan `admin:screen-coverage:check`
+> _"33 screens claim 137 of 208 declared permissions"_. Kedua ledger nol.
+>
+> **Tiga koreksi terhadap rencana di bawah**, dicatat karena pembaca berikutnya
+> bisa menyimpulkan gelombang ini belum mulai padahal ia sudah tutup:
+>
+> 1. helper-nya bernama **`loadAdminScreen`** (`src/lib/auth/admin-screen.ts`),
+>    bukan `defineAdminScreen` — nama diubah saat mendarat karena frontmatter
+>    `.astro` tidak punya handler untuk dibungkus, jadi "define" akan
+>    menjanjikan bentuk yang tidak ada; alasannya ditulis di header berkasnya;
+> 2. `extractScreenClaims` hidup di **`scripts/admin-screen-coverage-check.ts`**,
+>    bukan di `admin-screen-coverage-ledger.ts` — berkas itu tidak pernah ada;
+> 3. layarnya **33**, bukan 31 (32 top-level + `tenant/domains.astro`).
+>
+> Yang masih berlaku dari rencana ini adalah alasannya, dan ia menunjuk ke depan:
+> `ssr.permissions` (union RBAC mentah) masih dirakit tiap render dan masih
+> dibaca tiga tempat di dalam transaksi — mis.
+> `listProjectionSummariesForTenant(tx, tenantId, ssr.permissions)`. Begitu grant
+> membawa scope di Gelombang 3, union itu berhenti berarti "boleh membaca ini".
 
 **Wajib selesai sebelum Gelombang 3.** Setelah grant ber-scope,
 `ssr.permissions.has()` membaca union lintas-scope — R3 berubah dari "tanpa ABAC
 dan tanpa log" menjadi _over-disclosure_ sisi baca yang nyata.
 
 **PR 1.0** — helper `defineAdminScreen({ workClass, authorize, load })` di
-`src/lib/auth/`. Direktori itu sudah mengimpor `identity-access/application` dan
+`src/lib/auth/`. _(Mendarat sebagai `loadAdminScreen` — lihat koreksi di atas.)_ Direktori itu sudah mengimpor `identity-access/application` dan
 sudah masuk `SCAN_ROOTS` `logging:lint:check`, jadi tidak ada batas baru yang
 dilintasi. Helper **wajib** meniru `defineTenantRoute`: satu `withTenant`,
 `authorizeInTransaction`, dan `load` **di dalam transaksi yang sama** — kalau
@@ -168,10 +191,10 @@ kesalahan yang dicatat [ADR-0063](../adr/0063-ownership-grants-run-through-the-a
 Ledger `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` hanya boleh menyusut, plus cek entri
 basi.
 
-**[R] wajib se-PR:** `extractScreenClaims` di
-`scripts/admin-screen-coverage-ledger.ts` harus mengenali bentuk objek-literal
-`defineAdminScreen({ authorize: { moduleKey: … } })`. Tanpa itu, 133 klaim
-permission runtuh dan gerbang memerah karena alasan yang salah.
+**[R] wajib se-PR:** `extractScreenClaims` harus mengenali bentuk objek-literal
+yang dipakai helper-nya. Tanpa itu, klaim permission runtuh dan gerbang memerah
+karena alasan yang salah. _(Mendarat: fungsi itu ada di
+`scripts/admin-screen-coverage-check.ts`, dan mengenali `loadAdminScreen`.)_
 
 **PR 1.1–1.7** — ±5 layar per PR, tiap PR menghapus barisnya dari ledger, berkas
 `admin-*-page-contract` **tidak** diubah.
@@ -599,7 +622,7 @@ konsumen log.
 | Gerbang / test                                                                           | Memerah di                        | Sebab                                                                                                                                                                                                                                                                            |
 | ---------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `access:permissions:enforcement:check`                                                   | 0.6, 0.8, 2.1, 3.5, 4.1, 5.x, 8.x | daftar pengecualiannya **kosong** (skor 203/203); tiap permission baru butuh enforcer **di PR yang sama** — [ADR-0058](../adr/0058-unenforced-permissions-disposition.md) membuat satu entri pengecualian berharga satu ADR                                                      |
-| `admin:screen-coverage:check`                                                            | 0.6, 0.8, 1.0, 2.1, 3.5, 4.1, 5.4 | permission baru wajib diklaim layar atau masuk ledger satu-arah; **plus** `extractScreenClaims` harus mengenali `defineAdminScreen` di PR 1.0                                                                                                                                    |
+| `admin:screen-coverage:check`                                                            | 0.6, 0.8, 1.0, 2.1, 3.5, 4.1, 5.4 | permission baru wajib diklaim layar atau masuk ledger satu-arah; **plus** `extractScreenClaims` harus mengenali helper layar (mendarat sebagai `loadAdminScreen`)                                                                                                                |
 | `tests/access-assignment-writers.test.ts`                                                | 3.2                               | `WRITE_MARKER` menyebut tabel lama                                                                                                                                                                                                                                               |
 | `tests/shared-rate-limit.test.ts`                                                        | 4.2 (11→13), 7.4 (13→15)          | **paling mudah terlupa — ia tinggal di berkas test, bukan di `scripts/`**                                                                                                                                                                                                        |
 | `tests/repo-inventory.test.ts`                                                           | 5.1, 7.1                          | tiap tabel global baru wajib dideklarasikan di `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` **dan** peta hak `security-readiness.ts`                                                                                                                                                      |
