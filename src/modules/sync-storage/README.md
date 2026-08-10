@@ -11,15 +11,22 @@ docs `08_sop_operasional_user_guide.md` / `10_template_kode_coding_standard.md`.
 - `awcms_sync_nodes` — sync node registration per tenant (`node_code` unique
   per tenant), status active/inactive, checkpoint (`last_pull_sequence`),
   `last_pushed_at`/`last_pulled_at`. Nodes auto-register on first contact.
-- `awcms_sync_outbox` — local events available to be pulled by other nodes;
-  `sequence` (identity, monotonic) is the checkpoint cursor.
+- `awcms_sync_outbox` — **NOT CONNECTED** (issue #477). It is meant to hold
+  local events available to be pulled by other nodes, with `sequence`
+  (identity, monotonic) as the checkpoint cursor. **Nothing writes it** — no
+  application code, no trigger, no migration — so `POST /api/v1/sync/pull`, its
+  only reader, can only ever return an empty event list. Asserted by
+  `tests/object-queue-purge.test.ts`, which goes red the moment a producer
+  appears. The push direction below is fully implemented; only server → node is
+  missing.
 - `awcms_sync_inbox` — events received from other nodes via push, stored with
   status `received` (this foundation has no domain module to actually "apply"
   the events — a derived app processes them).
 - `awcms_sync_push_batches` — idempotency ledger keyed
   `(tenant_id, node_id, batch_id)`; a push replayed with the same `batch_id`
   is treated as success without reprocessing its events.
-- Endpoints `POST /api/v1/sync/push`, `POST /api/v1/sync/pull`,
+- Endpoints `POST /api/v1/sync/push`, `POST /api/v1/sync/pull` (**answers 200
+  with an empty list, always** — see `awcms_sync_outbox` above),
   `GET /api/v1/sync/status`.
 
 Schema: `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`.
@@ -190,6 +197,13 @@ contract — the dispatcher is purely internal.
 
 ## Belum tersedia
 
+- **Server → node replication (`awcms_sync_outbox` has no producer)** — issue
+  #477. The table, its RLS policy, its cursor index, and its reader endpoint all
+  exist; the writer never did. Whether to wire one or to retire the table is
+  open, and it is a product decision: this repo already has a working
+  transactional outbox in `awcms_domain_events` (dispatcher, DLQ, replay), so
+  the first question is not "how do we fill this" but "should it exist at all",
+  and the second is which events a node may receive.
 - Automatic application of `awcms_sync_inbox` events to domain tables (this
   foundation has no domain module to apply them — events stay `received`; a
   derived app processes them).
