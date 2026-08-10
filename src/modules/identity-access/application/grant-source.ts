@@ -40,14 +40,15 @@
  * A fragment needs none of that: the SQL that reaches Postgres is the same SQL
  * the reader would have written, so RLS applies exactly as before.
  *
- * ## What is deliberately NOT here
+ * ## The scope columns
  *
- * The subject's SCOPES. `activeRoleGrants` answers "does this subject hold this
- * role" and nothing narrower — `scope_type`/`scope_id` are not projected,
- * because every grant written today is tenant-wide and a column that is always
- * `'tenant'` teaches its readers a shape it does not yet have. Scope arrives at
- * evaluation time in PR 3.4, through `BusinessScopeFact`, and this is where the
- * projection widens when it does.
+ * PR 3.3 projected only `(tenant_user_id, role_id)`, because every grant written
+ * then was tenant-wide and a column that is always `'tenant'` teaches its readers
+ * a shape they do not yet have. ADR-0080 gave them a reader:
+ * `resolveBusinessScopeFacts` turns a NON-tenant-wide grant into a
+ * scope-qualified fact. Every other reader ignores the two extra columns, which
+ * is exactly why they belong here rather than in a second, nearly-identical
+ * fragment that could disagree with this one about what "in force" means.
  */
 
 /**
@@ -65,8 +66,8 @@
 export const GRANT_SOURCE_TABLES: readonly string[] = ["awcms_access_policies"];
 
 /**
- * The `(tenant_user_id, role_id)` grants in force in `tenantId` at the database's
- * transaction clock.
+ * The `(tenant_user_id, role_id, scope_type, scope_id)` grants in force in
+ * `tenantId` at the database's transaction clock.
  *
  * Effective dating is evaluated with `now()` IN THE DATABASE rather than against
  * a caller-supplied clock, for the reason ADR-0078 records: a grant that expires
@@ -81,7 +82,7 @@ export const GRANT_SOURCE_TABLES: readonly string[] = ["awcms_access_policies"];
  */
 export function activeRoleGrants(tx: Bun.SQL, tenantId: string) {
   return tx`
-    SELECT ap.tenant_user_id, ap.role_id
+    SELECT ap.tenant_user_id, ap.role_id, ap.scope_type, ap.scope_id
     FROM awcms_access_policies ap
     WHERE ap.tenant_id = ${tenantId}
       AND ap.status = 'active'

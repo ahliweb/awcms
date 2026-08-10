@@ -14,9 +14,24 @@ import type {
 const PAST = new Date("2026-01-01T00:00:00.000Z");
 const NOW = new Date("2026-06-01T00:00:00.000Z");
 
-/** A `Bun.SQL`-shaped tagged-template stub that returns fixed rows for the one SELECT `resolveBusinessScopeFacts` issues. */
+/**
+ * A `Bun.SQL`-shaped tagged-template stub that answers the ASSIGNMENT select
+ * with fixed rows and every other statement with none.
+ *
+ * It used to answer every statement identically, which was fine while
+ * `resolveBusinessScopeFacts` issued one. ADR-0080 gave it a second — the
+ * scoped-grant read — and a stub that cannot tell two queries apart would have
+ * replied to it with assignment rows, minting facts no grant produced. The
+ * assertions below are UNCHANGED; what changed is that the fake now represents
+ * the database rather than a single answer.
+ */
 function fakeTxReturning(rows: unknown[]): Bun.SQL {
-  return (() => Promise.resolve(rows)) as unknown as Bun.SQL;
+  return ((strings: TemplateStringsArray) => {
+    const sql = strings.raw.join("");
+    return Promise.resolve(
+      sql.includes("awcms_business_scope_assignments") ? rows : []
+    );
+  }) as unknown as Bun.SQL;
 }
 
 const oneActiveOfficeAssignment = fakeTxReturning([
