@@ -1360,6 +1360,30 @@ Ownership is enforced in the UPDATE's WHERE clause, never by a preceding read. U
 | 409    | The id names the session making this request (SESSION_IS_CURRENT) — use POST /api/v1/auth/logout. | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many revocation requests from this source.                                                    | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/sessions/revoke-all` — Sign the caller out of every OTHER session (self-service, no permission).
+
+- **operationId**: `revokeOtherOwnAuthSessions`
+- **Security**: bearerAuth + tenantHeader
+
+Ends every live session of the caller's identity except the one making the request. Self-service by construction — the subject is the session bearer and the route accepts no parameter with which to name anybody else — and unpermissioned for the same reason as the two endpoints beside it: this is what a person reaches for after "I think my password leaked", which is exactly when a permission wall is most expensive.
+There is deliberately no `exceptCurrent` flag. The only other value would also end the requesting session, which is `POST /api/v1/auth/logout` — that endpoint additionally clears the cookies this one cannot see, so the flag would ship a second, worse logout whose distinguishing feature is leaving the caller holding a dead cookie.
+It changes no credential and clears no lockout counter: ending stray sessions proves nothing new about the password, and folding the two together would make session hygiene a lockout-reset oracle. Not audited — `awcms_audit_events` records what administrators do to OTHER people; the paired admin endpoint under /api/v1/users/{id}/sessions/revoke-all writes that entry.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------- | -------------------------------------- |
+| 200    | How many other sessions were ended. Zero means there were none. | object                                 |
+| 400    | Validation error.                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                     | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many revocation requests from this source.                  | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
 - **operationId**: `getSsoPolicy`

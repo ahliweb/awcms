@@ -2264,6 +2264,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sessions/revoke-all:
+    post:
+      operationId: revokeOtherOwnAuthSessions
+      tags:
+        - Identity & Access
+      summary: Sign the caller out of every OTHER session (self-service, no permission).
+      description: |-
+        Ends every live session of the caller's identity except the one making the request. Self-service by construction — the subject is the session bearer and the route accepts no parameter with which to name anybody else — and unpermissioned for the same reason as the two endpoints beside it: this is what a person reaches for after "I think my password leaked", which is exactly when a permission wall is most expensive.
+        There is deliberately no `exceptCurrent` flag. The only other value would also end the requesting session, which is `POST /api/v1/auth/logout` — that endpoint additionally clears the cookies this one cannot see, so the flag would ship a second, worse logout whose distinguishing feature is leaving the caller holding a dead cookie.
+        It changes no credential and clears no lockout counter: ending stray sessions proves nothing new about the password, and folding the two together would make session hygiene a lockout-reset oracle. Not audited — `awcms_audit_events` records what administrators do to OTHER people; the paired admin endpoint under /api/v1/users/{id}/sessions/revoke-all writes that entry.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: How many other sessions were ended. Zero means there were none.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      revokedCount:
+                        type: integer
+                        minimum: 0
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many revocation requests from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/sso-policy:
     get:
       operationId: getSsoPolicy
