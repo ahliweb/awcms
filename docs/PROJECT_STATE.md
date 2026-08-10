@@ -356,6 +356,92 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 10 Agustus 2026 (ketiga) — lima PR dependabot dibereskan, dua cacat
+  review diperbaiki, GELOMBANG 3 SEPARUH JALAN.** Lima PR
+  (#502/#503/#504/#505/#506 + entri ini); nol PR terbuka.
+
+  **Lima PR dependabot digabung jadi dua, dan alasannya sama untuk keduanya:
+  tak satu pun bisa hijau sendirian.** `codeql-action/init` dan `analyze`
+  dipecah dependabot per-path, tetapi CodeQL menolak jalan dengan pasangan SHA
+  yang tak sepadan — jadi PR yang pertama merge tetap merah SAMPAI yang kedua
+  ikut, dan satu-satunya urutan yang hijau adalah satu PR (#502, bersama
+  `attest-build-provenance` di kedua langkah `release.yml`). Astro dan
+  `@astrojs/node` (#503) sama: `family:conformance:check` membandingkan manifes
+  keluarga dengan `package.json` field demi field. Ikut mendarat: divergensi
+  `astro-files-not-type-checked` menyatakan 42 berkas `.astro` (22.328 baris);
+  sesungguhnya **44 (24.359)** — entri itu ada untuk mencatat BESARNYA paparan
+  yang tak diperiksa `tsc`, jadi ringkasan yang mengecilkannya adalah
+  satu-satunya kesalahan yang merugikan di sana.
+
+  **Dua cacat dari review terhadap PR hari ini (#504), keduanya hijau di 38
+  gerbang:**
+
+  1. **`<tr hidden>` TIDAK tersembunyi di dalam tabel stacked.**
+     `.data-table--stack tr { display: block }` (0,1,1) mengalahkan
+     `[hidden] { display: none }` user-agent (0,1,0), jadi di ponsel panel sesi
+     `/admin/users` tak pernah tertutup: tiap baris user menumbuhkan strip
+     kosong permanen yang tak bisa ditutup tombol mana pun. Test regresinya
+     menegakkan sifat UMUM untuk semua layar admin — dan draf pertamanya
+     **dipuaskan oleh komentar CSS-nya sendiri**, sehingga mutasi yang MENGHAPUS
+     perbaikannya tetap hijau. Kali keenam bentuk itu muncul di repo ini.
+  2. **`POST /auth/password/change` membaca body di DALAM transaksi.**
+     `await request.json()` menunggu KLIEN, jadi ia menahan koneksi pool
+     tercadang berikut slot work-class-nya selama pemanggil memilih mengirim
+     body-nya. Seam self-service kini punya `prepare`, sama bentuknya dengan
+     `defineTenantRoute`.
+
+  **Gelombang 3 separuh jalan.** [ADR-0078](adr/0078-a-grant-carries-its-own-scope.md):
+  `sql/102` menurunkan `awcms_access_policies`, `fetchGrantedPermissionKeys`
+  membaca kedua bentuk grant lewat `UNION ALL` (#505), dan setiap grant baru
+  kini mendarat sebagai Policy (#506). 3.1 dan 3.2 mendarat sebagai **satu unit
+  komitmen**, seperti yang dicatat putaran sebelumnya.
+
+  **Tiga tempat rencana program tidak diikuti, semuanya ke arah "jangan kirim
+  yang belum bisa dipakai":** `subject_type` hanya menerima `'tenant_user'`
+  (`'user_group'` tiba bersama tabelnya); tipe kembalian
+  `fetchGrantedPermissionKeys` **belum** menjadi `{ keys, scopes }` (field yang
+  tak dibaca apa pun + sebelas call site teraduk di PR paling berisiko); dan
+  gerbang `access:grant-readers:check` dipindahkan **keluar** dari PR 3.1
+  (#500, putaran sebelumnya).
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Dual write ke kedua tabel grant** — dua tulis yang bisa berhasil
+     terpisah meninggalkan subjek yang memegang peran menurut satu tabel dan
+     tidak menurut yang lain, tanpa cara menentukan mana yang benar. Itulah
+     kegagalan yang dihindari ADR-0078 dengan memilih tabel ketiga.
+  2. **Purge berbasis usia untuk kedua tabel Policy** —
+     `executionMode: 'generic'` menghapus murni berdasarkan usia tanpa predikat
+     status, jadi ia akan menghapus grant HIDUP; dan baris tercabut adalah
+     satu-satunya yang menjawab "apakah orang ini punya akses Maret lalu".
+     Keduanya masuk `BOUNDED_BY_DESIGN` (2 dari plafon 3) dengan mekanisme
+     batasnya disebut.
+  3. **`platform-bootstrap.ts` memanggil penulis bersama** — `tenant_admin`
+     tidak boleh mengimpor kode aplikasi `identity_access`; DAG modul berjalan
+     ke arah sebaliknya. INSERT-nya inline dan dipatok test penulis.
+  4. **Menaikkan `TABLES_PREDATING_THE_RULE`** — ledger itu tertutup untuk
+     tabel baru, dan memakainya berarti melewati pertanyaan yang gerbangnya
+     ada untuk memaksa.
+
+  **Empat gerbang memerah di #506 dan tiap satunya benar** — termasuk penanda
+  "penulis" di `access-assignment-writers.test.ts` yang harus berubah DUA kali:
+  tabelnya pindah, DAN sebuah berkas kini bisa menyebabkan grant tanpa memuat
+  satu pun `INSERT`. Penanda yang cuma melihat INSERT akan diam-diam
+  mempersempit aturan empat-penulis jadi dua, dan `user-admin.ts` — pembawa
+  penolakan system-role utama repo ini — akan keluar dari aturannya.
+
+  **Satu cacat ditangkap CI, bukan lokal:** FK komposit `awcms_access_policies`
+  → `awcms_roles` memerahkan teardown dua suite e2e ber-DB yang menghapus role.
+  Lokal suite itu sudah merah karena artefak harness, jadi sinyalnya hanya
+  terbaca di CI.
+
+  **Titik-lanjut.** Gelombang 3 PR **3.3** — backfill baris lama ke Policy
+  (mempertahankan `id` agar rujukan audit selamat), lalu
+  `REVOKE INSERT,UPDATE,DELETE … FROM awcms_app` pada dua tabel lama sehingga
+  keduanya menjadi sejarah read-only. Oracle ekuivalensi dijalankan **sekali
+  lagi sesudah** backfill. Sesudah itu 3.4 (kualifikasi scope, kill switch
+  build-time) dan 3.5 (User Groups). #430 tetap Gelombang 7.
+
 - **PUTARAN 10 Agustus 2026 (lanjutan) — GELOMBANG 2 SELESAI, prasyarat
   Gelombang 3 mendarat.** Lima PR (#496/#497/#498/#499/#500 + entri ini).
   Permukaan sesi & kredensial dari
