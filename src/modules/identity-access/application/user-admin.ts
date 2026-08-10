@@ -22,7 +22,10 @@ import { recordAuditEvent } from "../../logging/application/audit-log";
 import { revokeAllSessionsForIdentity } from "./session-revocation";
 import { activeRoleGrants } from "./grant-source";
 import {
+  grantGroupRolePolicy,
   grantRolePolicy,
+  groupHoldsRole,
+  revokeGroupRoleGrants,
   revokeRoleGrants,
   subjectHoldsRole
 } from "./access-policy-writer";
@@ -101,7 +104,17 @@ export function validateSetStatusInput(
   return { valid: true, value: { status: record.status as TenantUserStatus } };
 }
 
-export type AssignmentInput = { tenantUserId: string; roleId: string };
+/**
+ * Who a role is being granted to (ADR-0081).
+ *
+ * A discriminated union rather than two optional ids, so the caller cannot name
+ * both and leave the endpoint to pick — the same XOR the database enforces on
+ * `awcms_access_policies`, stated once more at the edge where a client can
+ * actually get it wrong.
+ */
+export type AssignmentInput =
+  | { subject: "tenant_user"; tenantUserId: string; roleId: string }
+  | { subject: "user_group"; userGroupId: string; roleId: string };
 
 export function validateAssignmentInput(
   body: unknown
@@ -109,13 +122,36 @@ export function validateAssignmentInput(
   const record = (body ?? {}) as Record<string, unknown>;
   const errors: ValidationError[] = [];
 
+  const namesUser = record.tenantUserId !== undefined;
+  const namesGroup = record.userGroupId !== undefined;
+
+  if (namesUser === namesGroup) {
+    errors.push({
+      field: "tenantUserId",
+      message:
+        "Name exactly one subject: tenantUserId (a person) or userGroupId (a group)."
+    });
+  }
+
   if (
-    typeof record.tenantUserId !== "string" ||
-    !UUID_PATTERN.test(record.tenantUserId)
+    namesUser &&
+    (typeof record.tenantUserId !== "string" ||
+      !UUID_PATTERN.test(record.tenantUserId))
   ) {
     errors.push({
       field: "tenantUserId",
       message: "tenantUserId must be a valid UUID."
+    });
+  }
+
+  if (
+    namesGroup &&
+    (typeof record.userGroupId !== "string" ||
+      !UUID_PATTERN.test(record.userGroupId))
+  ) {
+    errors.push({
+      field: "userGroupId",
+      message: "userGroupId must be a valid UUID."
     });
   }
 
@@ -125,9 +161,21 @@ export function validateAssignmentInput(
 
   if (errors.length > 0) return { valid: false, errors };
 
+  if (namesGroup) {
+    return {
+      valid: true,
+      value: {
+        subject: "user_group",
+        userGroupId: record.userGroupId as string,
+        roleId: record.roleId as string
+      }
+    };
+  }
+
   return {
     valid: true,
     value: {
+      subject: "tenant_user",
       tenantUserId: record.tenantUserId as string,
       roleId: record.roleId as string
     }
@@ -327,10 +375,11 @@ export async function assignRole(
     throw new SystemRoleAssignmentError();
   }
 
-  // ADR-0078 — the duplicate check no longer comes for free from one unique
-  // index, because a live grant can be in either table until PR 3.3's backfill
-  // runs. Asked BEFORE the write so "already assigned" stays a clean 409 rather
-  // than a unique violation that has already aborted the transaction.
+  // ADR-0078 — the duplicate check does not come for free from one unique
+  // index any more: the active partial index covers one (role, scope) pair, not
+  // "already holds this role". Asked BEFORE the write so "already assigned"
+  // stays a clean 409 rather than a unique violation that has already aborted
+  // the transaction.
   if (await subjectHoldsRole(tx, tenantId, tenantUserId, roleId)) {
     throw new DuplicateAssignmentError();
   }
@@ -371,6 +420,136 @@ export async function assignRole(
   });
 
   return { id: rows[0]!.id, tenantUserId, roleId };
+}
+
+/**
+ * Grants a role to a GROUP (ADR-0081).
+ *
+ * The same three refusals as the per-person path, and deliberately so: an
+ * `is_system` role is refused here too, because granting `owner` to a group
+ * would hand it to everyone in the group AND to everyone added later — the
+ * escalation the per-person guard exists to prevent, with a delayed fuse.
+ *
+ * The audit row names the GROUP. Who it reached is a membership question, and
+ * membership has its own audit trail; naming the members here would record a
+ * snapshot that stops being true the next time somebody joins.
+ */
+export async function assignRoleToGroup(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  userGroupId: string,
+  roleId: string,
+  correlationId?: string
+): Promise<{ id: string; userGroupId: string; roleId: string }> {
+  const targets = (await tx`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM awcms_user_groups
+        WHERE tenant_id = ${tenantId} AND id = ${userGroupId}
+          AND deleted_at IS NULL
+      ) AS group_exists,
+      EXISTS (
+        SELECT 1 FROM awcms_roles
+        WHERE tenant_id = ${tenantId} AND id = ${roleId} AND deleted_at IS NULL
+      ) AS role_exists,
+      EXISTS (
+        SELECT 1 FROM awcms_roles
+        WHERE tenant_id = ${tenantId} AND id = ${roleId}
+          AND deleted_at IS NULL AND is_system = true
+      ) AS role_is_system
+  `) as Array<{
+    group_exists: boolean;
+    role_exists: boolean;
+    role_is_system: boolean;
+  }>;
+
+  if (!targets[0]!.group_exists || !targets[0]!.role_exists) {
+    throw new AssignmentTargetNotFoundError();
+  }
+  if (targets[0]!.role_is_system) {
+    throw new SystemRoleAssignmentError();
+  }
+  if (await groupHoldsRole(tx, tenantId, userGroupId, roleId)) {
+    throw new DuplicateAssignmentError();
+  }
+
+  let granted: { id: string };
+  try {
+    granted = await grantGroupRolePolicy(tx, tenantId, {
+      userGroupId,
+      roleId,
+      grantedByTenantUserId: actorTenantUserId
+    });
+  } catch (error) {
+    if (
+      error instanceof Bun.SQL.PostgresError &&
+      String(error.errno) === POSTGRES_UNIQUE_VIOLATION
+    ) {
+      throw new DuplicateAssignmentError();
+    }
+    throw error;
+  }
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "assign",
+    resourceType: "user_group",
+    resourceId: userGroupId,
+    severity: "warning",
+    message: "Role assigned to user group.",
+    attributes: { roleId },
+    correlationId
+  });
+
+  return { id: granted.id, userGroupId, roleId };
+}
+
+/** Revokes a role from a GROUP. `false` when it held none (→ 404 at the caller). */
+export async function unassignRoleFromGroup(
+  tx: Bun.SQL,
+  tenantId: string,
+  actorTenantUserId: string,
+  userGroupId: string,
+  roleId: string,
+  correlationId?: string
+): Promise<boolean> {
+  const systemRole = (await tx`
+    SELECT 1 FROM awcms_roles
+    WHERE tenant_id = ${tenantId} AND id = ${roleId}
+      AND deleted_at IS NULL AND is_system = true
+  `) as Array<{ "?column?": number }>;
+  if (systemRole.length > 0) {
+    throw new SystemRoleAssignmentError();
+  }
+
+  const revoked = await revokeGroupRoleGrants(
+    tx,
+    tenantId,
+    userGroupId,
+    roleId,
+    actorTenantUserId,
+    new Date()
+  );
+
+  if (!revoked) return false;
+
+  await recordAuditEvent(tx, {
+    tenantId,
+    actorTenantUserId,
+    moduleKey: AUDIT_MODULE_KEY,
+    action: "assign",
+    resourceType: "user_group",
+    resourceId: userGroupId,
+    severity: "warning",
+    message: "Role revoked from user group.",
+    attributes: { roleId, revoked: true },
+    correlationId
+  });
+
+  return true;
 }
 
 /**

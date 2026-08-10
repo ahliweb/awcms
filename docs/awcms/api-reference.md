@@ -2079,6 +2079,158 @@ A rejection email would confirm to an anonymous submitter that this tenant exist
 | 404    | Resource not found.                                                                         | [`ApiError`](#standard-error-envelope) |
 | 409    | The role's code was re-used by a live role while it was deleted (ROLE_CODE_ALREADY_EXISTS). | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/user-groups` — List the tenant's user groups (identity_access.user_groups.read).
+
+- **operationId**: `listUserGroups`
+- **Security**: bearerAuth + tenantHeader
+
+A group is a SUBJECT that can hold role grants, so this list carries a `roleCount` beside `memberCount`: a group holding grants is an authority no amount of looking at PEOPLE would reveal.
+`source` is `local` or `scim`. A `scim` group is managed by an external directory and refuses local mutation with 409 GROUP_EXTERNALLY_MANAGED — SCIM itself is not implemented, only the refusal, because a local edit a later sync silently reverts is worse than one that was never accepted.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The tenant's live user groups, ordered by code. | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/user-groups` — Create a local user group (identity_access.user_groups.create, audited).
+
+- **operationId**: `createUserGroup`
+- **Security**: bearerAuth + tenantHeader
+
+Creates a group with no members and no grants. `source` is never accepted from the request: a caller who could declare a group `scim` would be declaring it un-editable through the only surface that exists, with no directory behind it to edit it instead.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                              | Schema                                 |
+| ------ | -------------------------------------------------------- | -------------------------------------- |
+| 201    | The created group.                                       | object                                 |
+| 400    | Validation error.                                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                              | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                              | [`ApiError`](#standard-error-envelope) |
+| 409    | A live group already holds this code (GROUP_CODE_TAKEN). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/user-groups/{id}` — List one group's members (identity_access.user_groups.read).
+
+- **operationId**: `listUserGroupMembers`
+- **Security**: bearerAuth + tenantHeader
+
+Tenant-user ids only. The login identifier is PII and the caller who may read this already has the user list to resolve them against.
+An unknown group and an empty group answer identically — the alternative needs a pre-read that says whether an id exists in this tenant, which is the existence oracle every other read here refuses to be.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The group's members.        | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/user-groups/{id}` — Rename a local user group (identity_access.user_groups.update, audited).
+
+- **operationId**: `updateUserGroup`
+- **Security**: bearerAuth + tenantHeader
+
+Changes the DISPLAY name and description. `groupCode` is not editable: it is the tenant-facing identity of the group and the thing a tenant's own runbooks name, so renaming it silently would make those wrong.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | The updated group.                                         | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | The group is directory-managed (GROUP_EXTERNALLY_MANAGED). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/user-groups/members` — Add a tenant user to a group (identity_access.user_groups.assign, audited).
+
+- **operationId**: `addUserGroupMember`
+- **Security**: bearerAuth + tenantHeader
+
+A grant in everything but name: membership confers every role the group holds, at once and with no further step. `assign` is a HIGH-RISK action, so this additionally passes the segregation-of-duties chokepoint.
+Idempotent by intent: re-adding somebody already in the group answers 200 with `added: false`. Adding a person to a group they are already in changes nothing about their access, and a 409 there would be an error message about the state the caller asked for.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`UserGroupMembershipInput`](#schema-usergroupmembershipinput)
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | Membership after the call.                                 | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | The group is directory-managed (GROUP_EXTERNALLY_MANAGED). | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/user-groups/members` — Remove a tenant user from a group (identity_access.user_groups.assign, audited).
+
+- **operationId**: `removeUserGroupMember`
+- **Security**: bearerAuth + tenantHeader
+
+Takes away every role the group confers on that person, effective on their next authorization decision — there is no cache between membership and the grant read.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`UserGroupMembershipInput`](#schema-usergroupmembershipinput)
+
+**Responses**
+
+| Status | Description                                                | Schema                                 |
+| ------ | ---------------------------------------------------------- | -------------------------------------- |
+| 200    | The membership was removed.                                | object                                 |
+| 400    | Validation error.                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                        | [`ApiError`](#standard-error-envelope) |
+| 409    | The group is directory-managed (GROUP_EXTERNALLY_MANAGED). | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/users` — List the current tenant's users with their assigned role codes (login identifiers masked).
 
 - **operationId**: `listTenantUsers`
@@ -9097,6 +9249,22 @@ At least one field required. `status` may not be `active` (use verify); `hostnam
   "verificationRecordName": "string",
   "verificationRecordValue": "string",
   "redirectToPrimary": false
+}
+```
+
+### Schema: UserGroupMembershipInput
+
+| Field          | Type          | Required | Nullable | Description |
+| -------------- | ------------- | -------- | -------- | ----------- |
+| `userGroupId`  | string (uuid) | yes      | no       |             |
+| `tenantUserId` | string (uuid) | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "userGroupId": "00000000-0000-0000-0000-000000000000",
+  "tenantUserId": "00000000-0000-0000-0000-000000000000"
 }
 ```
 

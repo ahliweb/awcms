@@ -90,6 +90,16 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0078. Every row is created by an ADMINISTRATOR granting a role at a scope, never by traffic, and the active partial unique index means a subject can hold a given (role, scope) at most once at a time — so the ordinary ceiling is users x roles x scopes, all human-authored. Growth past that requires somebody granting and revoking the same thing repeatedly, which is an audit signal rather than load. An age-based purge would be actively WRONG here: `executionMode: 'generic'` deletes purely by age with no status predicate, so it would delete LIVE grants, and a revoked row is the only record that answers 'did this person have access last March' — the question an audit actually asks. Its two siblings `awcms_access_assignments` and `awcms_business_scope_assignments` sit on the predating ledger for want of the same answer; this one states it."
   },
   {
+    table: "awcms_user_groups",
+    reason:
+      "ADR-0081. A group is created by an ADMINISTRATOR naming it, never by traffic, and the partial unique index on `group_code` means a tenant holds at most one live group per code — so the ceiling is the number of names a tenant's administrators bother to invent. An age-based purge would be actively wrong for the same reason it is wrong for `awcms_access_policies`: the rows carry grants, so deleting one by age would silently remove every authority it confers. Soft-deleted rows are retained because a group's `external_id` is what a directory will present again, and forgetting it would resurrect the group as a stranger."
+  },
+  {
+    table: "awcms_user_group_members",
+    reason:
+      "ADR-0081, and bounded by the table above rather than independently: at most one row per (group, tenant user) by unique index, so its ceiling is groups x tenant users, both human-authored. It is not a log — a removed member is DELETEd, so the table holds the present rather than a history that could accumulate. What answers 'who was in this group last March' is the audit trail, which has its own retention."
+  },
+  {
     table: "awcms_access_policy_events",
     reason:
       "ADR-0078, and bounded by the table above rather than independently: append-only, at most three rows per policy (granted / revoked / expired), so its ceiling is a small multiple of a bound that is already human-authored. Given a retention policy it would be a grant PROVENANCE trail that forgets who widened someone's access, which is the one question the trail exists to answer — and its exact sibling `awcms_business_scope_assignment_events` has no retention either, so a rule applied here and not there would be a difference nobody could defend. Reviewed together with the live table on purpose: a table and its history treated differently is worse than either treatment."

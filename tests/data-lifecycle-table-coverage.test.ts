@@ -156,7 +156,18 @@ describe("the real repository", () => {
     // count is capped so the list cannot become a second ledger.
 
     test("it stays short — an exemption list that grows is the debt ledger wearing a costume", () => {
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(3);
+      // 5 since ADR-0081, and RAISING THIS LINE is the reviewable act — which is
+      // the cap doing its job rather than failing at it. The two entries that
+      // forced it (`awcms_user_groups` and `awcms_user_group_members`) are not a
+      // new kind of claim: all four entries are one argument in two halves — a
+      // table whose rows are grants an administrator authored, plus the table
+      // bounded by that one. An age-based purge of any of them deletes live
+      // authorization, which is why none can carry a descriptor instead.
+      //
+      // The next raise should be harder than this one, not easier. A fifth
+      // ARGUMENT (rather than a fifth table repeating these) is the point at
+      // which this list has stopped being one idea.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(5);
     });
 
     test("every entry names a table that really exists in sql/", () => {

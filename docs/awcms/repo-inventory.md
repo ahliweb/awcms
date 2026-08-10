@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 103   |
-| Tabel `awcms_*`                    | 131   |
-| Tabel dengan `FORCE` RLS           | 120   |
+| Migrasi                            | 105   |
+| Tabel `awcms_*`                    | 133   |
+| Tabel dengan `FORCE` RLS           | 122   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 347   |
-| Berkas route                       | 324   |
-| ADR                                | 81    |
+| Berkas test                        | 348   |
+| Berkas route                       | 328   |
+| ADR                                | 82    |
 
 ### Modul
 
@@ -150,6 +150,8 @@
 | 101 | `sql/101_awcms_identity_user_sessions_permissions.sql`             |
 | 102 | `sql/102_awcms_access_policies_schema.sql`                         |
 | 103 | `sql/103_awcms_access_assignments_backfill_retire.sql`             |
+| 104 | `sql/104_awcms_user_groups_schema.sql`                             |
+| 105 | `sql/105_awcms_user_groups_permissions.sql`                        |
 
 ### Tabel & Row-Level Security
 
@@ -276,6 +278,8 @@
 | `awcms_theming_config_versions`          | `sql/033_awcms_theming_config_schema.sql`                  | ya    | ya    |
 | `awcms_theming_preview_sessions`         | `sql/033_awcms_theming_config_schema.sql`                  | ya    | ya    |
 | `awcms_theming_tenant_state`             | `sql/033_awcms_theming_config_schema.sql`                  | ya    | ya    |
+| `awcms_user_group_members`               | `sql/104_awcms_user_groups_schema.sql`                     | ya    | ya    |
+| `awcms_user_groups`                      | `sql/104_awcms_user_groups_schema.sql`                     | ya    | ya    |
 | `awcms_visit_events`                     | `sql/050_awcms_visitor_analytics_schema.sql`               | ya    | ya    |
 | `awcms_visitor_daily_rollups`            | `sql/050_awcms_visitor_analytics_schema.sql`               | ya    | ya    |
 | `awcms_visitor_sessions`                 | `sql/050_awcms_visitor_analytics_schema.sql`               | ya    | ya    |
@@ -293,15 +297,15 @@
 | ------------- | ---------- |
 | `(root)`      | 295        |
 | `e2e`         | 12         |
-| `integration` | 39         |
+| `integration` | 40         |
 | `unit`        | 1          |
 
 ### Routes
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 269    |
-| `/admin/**`     | 33     |
+| `/api/v1/**`    | 272    |
+| `/admin/**`     | 34     |
 | publik / anonim | 22     |
 
 <!-- END GENERATED: repo-inventory -->

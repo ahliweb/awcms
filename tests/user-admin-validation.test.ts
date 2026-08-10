@@ -34,10 +34,43 @@ describe("validateSetStatusInput", () => {
 });
 
 describe("validateAssignmentInput", () => {
-  test("accepts two valid UUIDs", () => {
+  const GROUP_UUID = "22222222-2222-4222-8222-222222222222";
+
+  test("accepts a person subject", () => {
     expect(
       validateAssignmentInput({ tenantUserId: UUID, roleId: UUID })
-    ).toEqual({ valid: true, value: { tenantUserId: UUID, roleId: UUID } });
+    ).toEqual({
+      valid: true,
+      value: { subject: "tenant_user", tenantUserId: UUID, roleId: UUID }
+    });
+  });
+
+  test("accepts a group subject (ADR-0081)", () => {
+    expect(
+      validateAssignmentInput({ userGroupId: GROUP_UUID, roleId: UUID })
+    ).toEqual({
+      valid: true,
+      value: {
+        subject: "user_group",
+        userGroupId: GROUP_UUID,
+        roleId: UUID
+      }
+    });
+  });
+
+  test("refuses BOTH subjects, and refuses neither", () => {
+    // The XOR the database enforces on `awcms_access_policies`, restated at the
+    // edge where a client can actually get it wrong. Accepting both and picking
+    // one would grant a role to a subject the caller did not name.
+    const both = validateAssignmentInput({
+      tenantUserId: UUID,
+      userGroupId: GROUP_UUID,
+      roleId: UUID
+    });
+    expect(both.valid).toBe(false);
+
+    const neither = validateAssignmentInput({ roleId: UUID });
+    expect(neither.valid).toBe(false);
   });
 
   test("rejects a non-UUID tenantUserId or roleId", () => {
@@ -51,6 +84,15 @@ describe("validateAssignmentInput", () => {
     expect(badUser.valid).toBe(false);
     if (!badUser.valid) {
       expect(badUser.errors.map((e) => e.field)).toContain("tenantUserId");
+    }
+
+    const badGroup = validateAssignmentInput({
+      userGroupId: "not-a-uuid",
+      roleId: UUID
+    });
+    expect(badGroup.valid).toBe(false);
+    if (!badGroup.valid) {
+      expect(badGroup.errors.map((e) => e.field)).toContain("userGroupId");
     }
   });
 });

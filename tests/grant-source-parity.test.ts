@@ -92,12 +92,37 @@ const GRANT_CONSUMERS: { file: string; wouldBreak: string }[] = [
 ];
 
 describe("the grant source is one definition", () => {
-  test("it names the live grant table and NOT the retired one", () => {
-    expect(GRANT_SOURCE_TABLES).toEqual(["awcms_access_policies"]);
-    expect(grantSource).toContain("awcms_access_policies");
+  test("it names the live grant tables and NOT the retired one", () => {
+    // The group tables joined the list in ADR-0081 because membership is now
+    // part of the answer to "what has been granted to whom" — a change to who
+    // is in a group is a change to authorization.
+    expect(GRANT_SOURCE_TABLES).toEqual([
+      "awcms_access_policies",
+      "awcms_user_groups",
+      "awcms_user_group_members"
+    ]);
+
+    for (const table of GRANT_SOURCE_TABLES) {
+      expect(grantSource).toContain(table);
+    }
+
     // Reading the retired table would resurrect grants that revocation can no
     // longer remove — `sql/103` took DELETE away from `awcms_app`.
     expect(grantSource).not.toContain("awcms_access_assignments");
+  });
+
+  test("a group grant reaches its members, and a deleted group reaches nobody", () => {
+    // The union is what makes ADR-0081 safe to add in ONE place: every reader
+    // gets group-derived roles at once, so a DENY policy written against a role
+    // keeps working for somebody who holds it through a group. Asserted on the
+    // text because the behavioural half needs a database — see
+    // `tests/integration/user-groups.integration.test.ts`.
+    expect(grantSource).toContain("UNION ALL");
+    expect(grantSource).toContain("subject_type = 'user_group'");
+    expect(grantSource).toContain("gr.deleted_at IS NULL");
+    // And the direct branch must not start matching group rows: the two are
+    // discriminated, never merged.
+    expect(grantSource).toContain("subject_type = 'tenant_user'");
   });
 
   test("it filters the whole grant lifecycle", () => {

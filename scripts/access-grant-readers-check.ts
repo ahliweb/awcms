@@ -58,7 +58,13 @@ import { stripComments } from "./access-chokepoint-check";
 export const GRANT_TABLES: readonly string[] = [
   "awcms_access_assignments",
   "awcms_access_policies",
-  "awcms_role_permissions"
+  "awcms_role_permissions",
+  // ADR-0081 — a group holds grants, so membership is now part of the answer to
+  // "what has been granted to whom". A file that changes who is in a group is
+  // changing authorization, and it belongs on this list for the same reason the
+  // policy table does.
+  "awcms_user_groups",
+  "awcms_user_group_members"
 ];
 
 /**
@@ -85,7 +91,7 @@ export type GrantReaderEntry = {
 };
 
 /**
- * The nine files that may name a grant table.
+ * The eleven files that may name a grant table.
  *
  * It was eleven. Three left in ADR-0079 — not because their reads went away but
  * because they stopped writing their own join and now embed `activeRoleGrants`,
@@ -112,6 +118,16 @@ export const GRANT_READERS: readonly GrantReaderEntry[] = [
     file: "src/modules/identity-access/application/business-scope-facts.ts",
     reason:
       "The two SoD assignment resolvers. They must not lose precision when the grant shape changes — that is what `access:sod-fact-parity:check` will pin once groups can grant roles too. ADR-0079 is what happens when they do lose it: the ordinary-RBAC resolver kept reading the abandoned table and SoD went blind to every grant written after PR 3.2."
+  },
+  {
+    file: "src/modules/identity-access/application/user-admin.ts",
+    reason:
+      "The assign/unassign writer for BOTH subjects since ADR-0081. It names `awcms_user_groups` for one thing only — the existence check that refuses to grant a role to a group that does not live in this tenant — and it is exactly the check whose absence would let a composite-FK violation decide the answer instead of a 404."
+  },
+  {
+    file: "src/modules/identity-access/application/user-group-admin.ts",
+    reason:
+      "THE group surface, since ADR-0081. It writes membership — which confers every role the group holds — and reads `awcms_access_policies` for the ROLE COUNT its screen shows, because a group holding grants nobody can see by looking at the people is the thing this screen exists to make visible. It never writes a grant: that stays on `access_control.assign`."
   },
   {
     file: "src/modules/identity-access/application/access-directory.ts",

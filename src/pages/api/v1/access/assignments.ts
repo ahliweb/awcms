@@ -14,10 +14,12 @@ import {
 } from "../../../../modules/identity-access/application/access-guard";
 import {
   assignRole,
+  assignRoleToGroup,
   AssignmentTargetNotFoundError,
   DuplicateAssignmentError,
   SystemRoleAssignmentError,
   unassignRole,
+  unassignRoleFromGroup,
   validateAssignmentInput
 } from "../../../../modules/identity-access/application/user-admin";
 
@@ -34,9 +36,17 @@ const ASSIGN_GUARD = {
 
 /**
  * `POST /api/v1/access/assignments` — grant a role to a tenant user
- * (body: `{ tenantUserId, roleId }`). Idempotency is enforced at the DB unique
- * index: a repeat assign is a 23505 mapped to 409, caught INSIDE `withTenant`.
- * High-risk: audited.
+ * (`{ tenantUserId, roleId }`) or to a GROUP (`{ userGroupId, roleId }`,
+ * ADR-0081). Exactly one subject, refused at validation.
+ *
+ * Both subjects share this endpoint and this permission on purpose. Granting a
+ * role is one authority, and the thing that changes is who receives it; a
+ * separate `user_groups.grant` permission would let a group administrator hand
+ * `owner` to a group they belong to, which is the escalation `access_control.assign`
+ * exists to hold.
+ *
+ * A repeat assign is a 409 (checked before the write, and 23505 translated for
+ * the concurrent case), caught INSIDE `withTenant`. High-risk: audited.
  */
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -75,14 +85,25 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) return auth.denied;
 
     try {
-      const record = await assignRole(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        validation.value.tenantUserId,
-        validation.value.roleId,
-        correlationId
-      );
+      const input = validation.value;
+      const record =
+        input.subject === "user_group"
+          ? await assignRoleToGroup(
+              tx,
+              tenantId,
+              auth.context.tenantUserId,
+              input.userGroupId,
+              input.roleId,
+              correlationId
+            )
+          : await assignRole(
+              tx,
+              tenantId,
+              auth.context.tenantUserId,
+              input.tenantUserId,
+              input.roleId,
+              correlationId
+            );
       return ok(record);
     } catch (error) {
       // Caught INSIDE `withTenant` on purpose (same reasoning as
@@ -108,8 +129,12 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
 
 /**
  * `DELETE /api/v1/access/assignments` — revoke a role from a tenant user
- * (body: `{ tenantUserId, roleId }`). 404 when no such assignment exists.
- * High-risk: audited.
+ * (`{ tenantUserId, roleId }`) or from a GROUP (`{ userGroupId, roleId }`).
+ * 404 when no such grant exists. High-risk: audited.
+ *
+ * Revoking a person's role never touches a grant they hold THROUGH a group they
+ * are still in, and revoking a group's role never looks like it removed anyone's
+ * personal grant — two questions, two writers, one endpoint.
  */
 export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -148,14 +173,25 @@ export const DELETE: APIRoute = async ({ request, cookies, locals }) => {
     if (!auth.allowed) return auth.denied;
 
     try {
-      const removed = await unassignRole(
-        tx,
-        tenantId,
-        auth.context.tenantUserId,
-        validation.value.tenantUserId,
-        validation.value.roleId,
-        correlationId
-      );
+      const input = validation.value;
+      const removed =
+        input.subject === "user_group"
+          ? await unassignRoleFromGroup(
+              tx,
+              tenantId,
+              auth.context.tenantUserId,
+              input.userGroupId,
+              input.roleId,
+              correlationId
+            )
+          : await unassignRole(
+              tx,
+              tenantId,
+              auth.context.tenantUserId,
+              input.tenantUserId,
+              input.roleId,
+              correlationId
+            );
       if (!removed)
         return fail(404, "RESOURCE_NOT_FOUND", "Assignment not found.");
 

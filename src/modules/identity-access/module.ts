@@ -25,6 +25,7 @@ export const identityAccessModule = defineModule({
       "/api/v1/abac",
       "/api/v1/identity",
       "/api/v1/registration-requests",
+      "/api/v1/user-groups",
       "/login",
       "/forgot-password",
       "/reset-password",
@@ -98,6 +99,18 @@ export const identityAccessModule = defineModule({
       path: "/admin/abac-policies",
       order: 22,
       requiredPermission: "identity_access.access_control.read"
+    },
+    // Gated on `user_groups.read`, not the shared `access_control.read`: a group
+    // is a subject with its own membership, and seeing who is in which group is
+    // a different authority from reading the RBAC catalog (ADR-0081).
+    {
+      labelKey: "admin.layout.nav_user_groups",
+      path: "/admin/user-groups",
+      // 25, not 24: `nav_security` already holds 24, and two entries with the
+      // same order leave the sidebar's sequence to whatever the sort happened
+      // to do that build.
+      order: 25,
+      requiredPermission: "identity_access.user_groups.read"
     },
     // Gated on `registration_requests.read`, NOT the `access_control.read` the
     // three above share: this activity seeds its own `read`, so naming it is a
@@ -309,6 +322,38 @@ export const identityAccessModule = defineModule({
       action: "revoke",
       description:
         "End every live session of another tenant user, effective on their next request — audited"
+    },
+    // User groups (ADR-0081). A group is a SUBJECT that holds role grants, so
+    // these four decide who may shape the membership — never what the group can
+    // DO. Granting a group a role stays on `access_control.assign`, the
+    // permission that already means "hand out a role". Folding them together
+    // would create a privilege-escalation path with no obvious name: a group
+    // administrator who could also grant roles to their own group could grant
+    // `owner` to a group they belong to.
+    //
+    // There is deliberately no `delete`: retiring a group is three decisions
+    // (its grants, its membership, an `external_id` the directory will present
+    // again) and `sql/105` records why they get their own change.
+    {
+      activityCode: "user_groups",
+      action: "read",
+      description: "List user groups and their members"
+    },
+    {
+      activityCode: "user_groups",
+      action: "create",
+      description: "Create a local user group"
+    },
+    {
+      activityCode: "user_groups",
+      action: "update",
+      description: "Rename a local user group or change its description"
+    },
+    {
+      activityCode: "user_groups",
+      action: "assign",
+      description:
+        "Add or remove a tenant user from a group — audited, and a grant in everything but name (membership confers every role the group holds)"
     }
   ],
   /**

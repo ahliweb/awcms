@@ -1127,6 +1127,21 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/user-groups/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/user-groups/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/user-groups/members.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/users/[id].ts",
       "workClass": "interactive",
       "source": "default"
