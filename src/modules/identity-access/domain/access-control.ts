@@ -4,6 +4,7 @@ import {
   type AbacEnvironment,
   type CompiledPolicy
 } from "./abac-evaluator";
+import { SCOPE_NARROWING_ENABLED } from "./scope-narrowing";
 
 export type TenantContext = {
   tenantId: string;
@@ -200,6 +201,25 @@ export type BusinessScopeFact = {
   descendantScopes: readonly BusinessScopeReference[];
   /** Whether this fact is a tenant-wide grant (`scopeType === TENANT_WIDE_SCOPE_TYPE`), covering every required scope. */
   tenantWide: boolean;
+  /**
+   * The permission keys THIS fact covers, when the fact came from a grant that
+   * knows (ADR-0080, Gelombang 3 PR 3.4 of #423).
+   *
+   * `undefined` means "this fact does not qualify by permission" and is what
+   * every fact derived from `awcms_business_scope_assignments` carries — a scope
+   * assignment says which SCOPES the subject may act in and has never said which
+   * ACTIONS, so inventing a set for it would be inventing an answer.
+   *
+   * A scoped `awcms_access_policies` grant does know: it names a role, and that
+   * role's permissions are exactly what the grant confers at that scope. Such a
+   * fact carries the set, and the coverage predicate then refuses to let it
+   * cover a permission it does not include.
+   *
+   * The asymmetry is the safety property. `undefined` evaluates identically to
+   * before; a populated set can only remove coverage. There is no input, in any
+   * order, that turns a deny into an allow through this field.
+   */
+  permissionKeys?: ReadonlySet<string>;
 };
 
 const HIGH_RISK_ACTIONS: ReadonlySet<AccessAction> = new Set([
@@ -248,6 +268,29 @@ function scopeListContains(
   return list.some(
     (scope) => scope.scopeType === scopeType && scope.scopeId === scopeId
   );
+}
+
+/**
+ * Whether `fact` is allowed to cover `requiredKey` at all (ADR-0080).
+ *
+ * The entire security argument is readable in the expression: the only value
+ * this can contribute is `false`. There is no branch that produces coverage, so
+ * no input, in any order, can turn a deny into an allow through it. A fact with
+ * no `permissionKeys` — which is every fact derived from a scope ASSIGNMENT —
+ * qualifies for everything, exactly as it did before #423.
+ *
+ * `enabled` exists so both states of the build-time switch are TESTED rather
+ * than one of them being a claim. Production always passes the constant.
+ */
+export function scopeFactQualifies(
+  fact: BusinessScopeFact,
+  requiredKey: string,
+  enabled: boolean = SCOPE_NARROWING_ENABLED
+): boolean {
+  if (!enabled) return true;
+  if (fact.permissionKeys === undefined) return true;
+
+  return fact.permissionKeys.has(requiredKey);
 }
 
 /**
@@ -372,7 +415,19 @@ export function evaluateAccess(
     const highRisk = isHighRiskAction(request.action);
     const facts = businessScopeFacts ?? [];
 
+    const requiredKey = permissionKey(
+      request.moduleKey,
+      request.activityCode,
+      request.action
+    );
+
     const covered = facts.some((fact) => {
+      // Scope qualification (ADR-0080) — see `scopeFactQualifies`. FIRST, so it
+      // also constrains `tenantWide` below.
+      if (!scopeFactQualifies(fact, requiredKey)) {
+        return false;
+      }
+
       // Tenant-wide grant (reserved "tenant" scope type) covers every scope.
       if (fact.tenantWide) {
         return true;

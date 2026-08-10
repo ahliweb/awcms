@@ -26,6 +26,7 @@
  * changing anything above.
  */
 import { isBusinessScopeAssignmentCurrentlyActive } from "../domain/business-scope-assignment";
+import { SCOPE_NARROWING_ENABLED } from "../domain/scope-narrowing";
 import { activeRoleGrants } from "./grant-source";
 import {
   TENANT_WIDE_SCOPE_TYPE,
@@ -154,6 +155,66 @@ async function fetchActiveAssignmentRows(
   `) as ActiveAssignmentRow[];
 }
 
+type ScopedGrantRow = {
+  scope_type: string;
+  scope_id: string;
+  module_key: string;
+  activity_code: string;
+  action: string;
+};
+
+/**
+ * The permission keys the subject holds AT EACH NON-TENANT-WIDE SCOPE
+ * (ADR-0080), keyed `scopeType:scopeId`.
+ *
+ * Tenant-wide grants are excluded, and that exclusion is the whole reason this
+ * is safe to add. A tenant-wide grant is the ABSENCE of a scope confinement, not
+ * a confinement to a scope called "tenant" — minting a `tenantWide` fact from
+ * one would hand every subject holding any role coverage of EVERY required
+ * scope, which is a blanket widening of the #180 guard. What a tenant-wide grant
+ * does about a required-scope check is what it does today: nothing.
+ *
+ * Effective dating and status come from `activeRoleGrants`, so a scoped grant
+ * stops covering at exactly the instant it stops granting — one definition, not
+ * a second one that could drift. Soft-deleted roles are dropped here for the
+ * same reason `fetchGrantedPermissionKeys` drops them: `deleted_at` belongs to
+ * the role, not to the grant.
+ *
+ * ONE query regardless of how many scopes or permissions the subject holds.
+ */
+async function fetchScopedGrantKeys(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string
+): Promise<Map<string, Set<string>>> {
+  const byScope = new Map<string, Set<string>>();
+
+  // The switch is read BEFORE the query, so OFF costs nothing at all — not a
+  // round-trip, not a plan. Rollback has to be cheap in every sense or it stops
+  // being a rollback anyone reaches for.
+  if (!SCOPE_NARROWING_ENABLED) return byScope;
+
+  const rows = (await tx`
+    SELECT DISTINCT g.scope_type, g.scope_id, p.module_key, p.activity_code, p.action
+    FROM (${activeRoleGrants(tx, tenantId)}) g
+    JOIN awcms_role_permissions rp ON rp.role_id = g.role_id AND rp.tenant_id = ${tenantId}
+    JOIN awcms_permissions p ON p.id = rp.permission_id
+    JOIN awcms_roles r ON r.id = g.role_id AND r.tenant_id = ${tenantId}
+    WHERE g.tenant_user_id = ${tenantUserId}
+      AND g.scope_type <> ${TENANT_WIDE_SCOPE_TYPE}
+      AND r.deleted_at IS NULL
+  `) as ScopedGrantRow[];
+
+  for (const row of rows) {
+    const key = `${row.scope_type}:${row.scope_id}`;
+    const keys = byScope.get(key) ?? new Set<string>();
+    keys.add(`${row.module_key}.${row.activity_code}.${row.action}`);
+    byScope.set(key, keys);
+  }
+
+  return byScope;
+}
+
 /**
  * Resolves the subject's currently-in-force business-scope facts, each
  * enriched with hierarchy resolution from `hierarchyPort`. `status = 'active'`
@@ -167,6 +228,13 @@ async function fetchActiveAssignmentRows(
  * first) — a subject with many assignments to the same scope costs one
  * resolution, not N. Sequential awaits over the single `tx` (never
  * `Promise.all`): one Postgres connection serves one query at a time.
+ *
+ * Since ADR-0080 the result ALSO carries facts derived from grants that name
+ * their own scope (`awcms_access_policies` rows whose `scope_type` is not the
+ * reserved tenant-wide one), each qualified by the permission keys its role
+ * confers. Nothing writes such a grant yet, so this is inert today — and that is
+ * an assertion, not a hope: `tests/integration/scope-qualification` proves the
+ * fact set is unchanged for every subject who holds only tenant-wide grants.
  */
 export async function resolveBusinessScopeFacts(
   tx: Bun.SQL,
@@ -242,6 +310,46 @@ export async function resolveBusinessScopeFacts(
       ancestorScopes: resolution.resolved ? resolution.ancestorScopes : [],
       descendantScopes: resolution.resolved ? resolution.descendantScopes : [],
       tenantWide: false
+    });
+  }
+
+  // ADR-0080 — scope-qualified facts from grants that carry their own scope.
+  //
+  // Appended rather than merged into the loop above, and with their OWN dedupe
+  // set, because the two sources answer different questions and the wider answer
+  // must keep winning: a scope ASSIGNMENT covers every action at its scope (that
+  // is the #180 contract and it is unchanged), while a scoped GRANT covers only
+  // the actions its role confers. `evaluateAccess` uses `.some()`, so holding
+  // both for one scope resolves to the assignment's answer — which is exactly
+  // today's answer, and therefore not a change.
+  const scopedGrantKeys = await fetchScopedGrantKeys(
+    tx,
+    tenantId,
+    tenantUserId
+  );
+
+  for (const [dedupeKey, permissionKeys] of scopedGrantKeys) {
+    const separator = dedupeKey.indexOf(":");
+    const scopeType = dedupeKey.slice(0, separator);
+    const scopeId = dedupeKey.slice(separator + 1);
+
+    const resolution = await resolveScopeGuarded(
+      hierarchyPort,
+      tx,
+      tenantId,
+      scopeType,
+      scopeId,
+      guardConfig
+    );
+
+    facts.push({
+      scopeType,
+      scopeId,
+      resolved: resolution.resolved,
+      ancestorScopes: resolution.resolved ? resolution.ancestorScopes : [],
+      descendantScopes: resolution.resolved ? resolution.descendantScopes : [],
+      tenantWide: false,
+      permissionKeys
     });
   }
 
