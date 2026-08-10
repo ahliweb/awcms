@@ -50,12 +50,14 @@ import { stripComments } from "./access-chokepoint-check";
  * pickers that have no business being on this list. `awcms_roles` is absent for
  * the same reason — a role is a container, not a grant.
  *
- * When `awcms_access_policies` lands it belongs here, and the entry that adds it
- * is the one that should be reviewed hardest: at that moment every name below
- * either learns about scope or is proven not to need it.
+ * `awcms_access_policies` (ADR-0078) joined the list in the migration that
+ * created it — the moment this file said it should. Every name below is
+ * therefore already accountable for the scoped shape before a single scoped
+ * grant exists to read.
  */
 export const GRANT_TABLES: readonly string[] = [
   "awcms_access_assignments",
+  "awcms_access_policies",
   "awcms_role_permissions"
 ];
 

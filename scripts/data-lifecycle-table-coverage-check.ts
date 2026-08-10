@@ -83,7 +83,18 @@ const MIGRATIONS_DIR = "sql";
 export const BOUNDED_BY_DESIGN: readonly {
   table: string;
   reason: string;
-}[] = [];
+}[] = [
+  {
+    table: "awcms_access_policies",
+    reason:
+      "ADR-0078. Every row is created by an ADMINISTRATOR granting a role at a scope, never by traffic, and the active partial unique index means a subject can hold a given (role, scope) at most once at a time — so the ordinary ceiling is users x roles x scopes, all human-authored. Growth past that requires somebody granting and revoking the same thing repeatedly, which is an audit signal rather than load. An age-based purge would be actively WRONG here: `executionMode: 'generic'` deletes purely by age with no status predicate, so it would delete LIVE grants, and a revoked row is the only record that answers 'did this person have access last March' — the question an audit actually asks. Its two siblings `awcms_access_assignments` and `awcms_business_scope_assignments` sit on the predating ledger for want of the same answer; this one states it."
+  },
+  {
+    table: "awcms_access_policy_events",
+    reason:
+      "ADR-0078, and bounded by the table above rather than independently: append-only, at most three rows per policy (granted / revoked / expired), so its ceiling is a small multiple of a bound that is already human-authored. Given a retention policy it would be a grant PROVENANCE trail that forgets who widened someone's access, which is the one question the trail exists to answer — and its exact sibling `awcms_business_scope_assignment_events` has no retention either, so a rule applied here and not there would be a difference nobody could defend. Reviewed together with the live table on purpose: a table and its history treated differently is worse than either treatment."
+  }
+];
 
 /**
  * The tables that existed when this rule landed. **May only shrink.**
