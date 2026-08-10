@@ -126,7 +126,13 @@ export const DOCUMENTED_EXCEPTIONS: readonly {
     "awcms_tenant_users",
     "awcms_roles",
     "awcms_role_permissions",
-    "awcms_access_assignments"
+    "awcms_access_assignments",
+    // ADR-0078 moved the owner grant here. The exception moves WITH it rather
+    // than being added beside it: leaving the old table listed after nothing
+    // writes it would excuse a writer that no longer exists, and `sql/102` did
+    // not change who bootstraps a tenant — only which table records it.
+    "awcms_access_policies",
+    "awcms_access_policy_events"
   ].map((table) => ({
     table,
     excusedOwner: "tenant_admin",

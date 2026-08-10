@@ -131,9 +131,32 @@ export async function createTenantWithOwner(
     `;
   }
 
+  // ADR-0078 — the owner grant lands in `awcms_access_policies`, tenant-wide.
+  //
+  // Written inline rather than through `access-policy-writer.ts` for the reason
+  // this whole file exists: `tenant_admin` must not import `identity_access`
+  // application code (the module DAG runs the other way, and
+  // `modules:dag:check` enforces it). The duplication is two INSERTs and is
+  // pinned by `tests/access-assignment-writers.test.ts`, which scans for grant
+  // writers by table name and would report this one the moment it drifted.
+  //
+  // `granted_by` is the new owner themselves: bootstrap runs before any session
+  // exists, so there is no other actor it could name, and naming nobody would
+  // lose the fact that the grant was self-originating.
+  const bootstrapPolicy = (await tx`
+    INSERT INTO awcms_access_policies
+      (tenant_id, subject_type, tenant_user_id, role_id, scope_type, scope_id,
+       granted_by_tenant_user_id, reason)
+    VALUES
+      (${tenantId}, 'tenant_user', ${tenantUserId}, ${roleId}, 'tenant', ${tenantId},
+       ${tenantUserId}, 'tenant bootstrap')
+    RETURNING id
+  `) as { id: string }[];
+
   await tx`
-    INSERT INTO awcms_access_assignments (tenant_id, tenant_user_id, role_id, assigned_by)
-    VALUES (${tenantId}, ${tenantUserId}, ${roleId}, ${tenantUserId})
+    INSERT INTO awcms_access_policy_events
+      (tenant_id, policy_id, event_type, actor_tenant_user_id, reason)
+    VALUES (${tenantId}, ${bootstrapPolicy[0]!.id}, 'granted', ${tenantUserId}, 'tenant bootstrap')
   `;
 
   if (options.restoreTenantId) {
