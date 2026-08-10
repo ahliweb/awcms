@@ -17,6 +17,11 @@ import {
   setSessionCookies
 } from "../../../../../../../modules/identity-access/application/mfa-session-assurance";
 import { recordAuditEvent } from "../../../../../../../modules/logging/application/audit-log";
+import {
+  persistableClientIpHash,
+  summarizeUserAgent
+} from "../../../../../../../lib/security/client-fingerprint";
+import { resolveClientIp } from "../../../../../../../lib/security/rate-limit";
 
 const ENROLLMENT_TOKEN_HEADER = "x-awcms-mfa-enrollment-token";
 
@@ -31,7 +36,12 @@ type VerifyEnrollmentBody = { code?: unknown };
  * required MFA at login), the grant is consumed and a fresh `aal2` session is
  * minted — completing the two-step "must enroll" login self-recoverably.
  */
-export const POST: APIRoute = async ({ request, cookies, locals }) => {
+export const POST: APIRoute = async ({
+  request,
+  cookies,
+  locals,
+  clientAddress
+}) => {
   if (!isMfaFeatureEnabled()) {
     return fail(
       403,
@@ -134,7 +144,14 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
         identityId: auth.identityId,
         assuranceLevel: "aal2",
         ttlMin: policy.sessionTtlMin,
-        now
+        now,
+        issue: {
+          originAuth: "password",
+          clientIpHash: persistableClientIpHash(
+            resolveClientIp(request, clientAddress)
+          ),
+          userAgentSummary: summarizeUserAgent(request) ?? null
+        }
       });
 
       setSessionCookies(cookies, tenantId, created.token, policy.sessionTtlMin);

@@ -24,6 +24,7 @@ import {
 } from "../../../../lib/auth/ssr-session";
 import {
   hashClientIp,
+  persistableClientIpHash,
   summarizeUserAgent
 } from "../../../../lib/security/client-fingerprint";
 import { resolveClientIp } from "../../../../lib/security/rate-limit";
@@ -571,9 +572,19 @@ export const POST: APIRoute = async ({
 
     await tx`UPDATE awcms_identities SET failed_login_count = 0, last_login_at = ${now} WHERE id = ${identityRow!.id}`;
 
+    // The fingerprint columns exist so a person reading `GET /auth/sessions`
+    // can tell their own sessions apart well enough to end one they do not
+    // recognise (Gelombang 2, `sql/100`). `persistableClientIpHash` returns
+    // null when the deployment has no stable key — a stored hash that changes
+    // on every restart would show one device as several.
     await tx`
-      INSERT INTO awcms_sessions (tenant_id, identity_id, token_hash, expires_at)
-      VALUES (${tenantId}, ${identityRow!.id}, ${tokenHash}, ${expiresAt})
+      INSERT INTO awcms_sessions
+        (tenant_id, identity_id, token_hash, expires_at,
+         client_ip_hash, user_agent_summary, origin_auth)
+      VALUES (
+        ${tenantId}, ${identityRow!.id}, ${tokenHash}, ${expiresAt},
+        ${persistableClientIpHash(clientIp)}, ${summarizeUserAgent(request) ?? null}, 'password'
+      )
     `;
 
     // Issue #145 — the success counterpart of `recordLoginFailure`, and the

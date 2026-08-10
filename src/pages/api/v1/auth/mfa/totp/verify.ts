@@ -8,6 +8,7 @@ import { resolveClientIp } from "../../../../../../lib/security/rate-limit";
 import { checkAuthRateLimit } from "../../../../../../lib/security/auth-rate-limit";
 import {
   hashClientIp,
+  persistableClientIpHash,
   summarizeUserAgent
 } from "../../../../../../lib/security/client-fingerprint";
 import {
@@ -171,7 +172,14 @@ export const POST: APIRoute = async ({
       identityId,
       assuranceLevel: "aal2",
       ttlMin: policy.sessionTtlMin,
-      now
+      now,
+      issue: {
+        originAuth: "password",
+        clientIpHash: persistableClientIpHash(
+          resolveClientIp(request, clientAddress)
+        ),
+        userAgentSummary: summarizeUserAgent(request) ?? null
+      }
     });
 
     await recordAuditEvent(tx, {

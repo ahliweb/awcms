@@ -2753,6 +2753,110 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sessions:
+    get:
+      operationId: listOwnAuthSessions
+      tags:
+        - Identity & Access
+      summary: List the caller's own live sessions (self-service, no permission).
+      description: >-
+        Where am I signed in? Self-service by construction — the subject is the
+        session bearer and the route accepts no tenantUserId, so there is nobody
+        else it could be pointed at. Deliberately UNPERMISSIONED, like
+        GET /api/v1/auth/session: inventing a permission for "see your own
+        sessions" would wall off the feature and install a latent-authz trap
+        (an action nothing seeds denies everyone, including the tenant owner).
+        Returns no token, no raw IP and no raw User-Agent. clientIpHash is a
+        keyed pseudonym and is null on a deployment without AUTH_IP_HASH_SECRET,
+        because the fallback key is per-process and a stored hash would stop
+        being comparable after a restart.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The caller's live sessions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      sessions:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OwnSessionSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Too many session requests from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/sessions/{id}:
+    delete:
+      operationId: revokeOwnAuthSession
+      tags:
+        - Identity & Access
+      summary: End one of the caller's own sessions (self-service, no permission).
+      description: >-
+        Ownership is enforced in the UPDATE's WHERE clause, never by a preceding
+        read. Unknown id, another person's session, another tenant's session and
+        one already revoked or expired all answer 404 — distinguishing them
+        would make this an existence oracle for session ids, and the caller
+        could do nothing differently with the distinction. Revoking the CURRENT
+        session answers 409: that is POST /api/v1/auth/logout's job, which also
+        clears the cookies.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: The session was revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: boolean
+                        enum: [true]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The id names the session making this request (SESSION_IS_CURRENT) — use POST /api/v1/auth/logout.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many revocation requests from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/session:
     get:
       operationId: introspectAuthSession
@@ -3315,6 +3419,42 @@ paths:
                 $ref: "#/components/schemas/ApiError"
 components:
   schemas:
+    OwnSessionSummary:
+      type: object
+      description: One live session belonging to the caller. Carries no token, no raw IP and no raw User-Agent.
+      required:
+        - id
+        - issuedAt
+        - expiresAt
+        - assuranceLevel
+        - originAuth
+        - current
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        assuranceLevel:
+          type: string
+          enum: [aal1, aal2]
+        originAuth:
+          type: string
+          enum: [password, sso, handoff]
+          description: How the session was issued. A step-up rotation carries the original value forward.
+        clientIpHash:
+          type: [string, "null"]
+          description: Keyed, non-reversible pseudonym of the client IP. null when the deployment has no stable AUTH_IP_HASH_SECRET.
+        userAgentSummary:
+          type: [string, "null"]
+        current:
+          type: boolean
+          description: True for the session this request is authenticated by.
     IssueSessionHandoffRequest:
       type: object
       required:

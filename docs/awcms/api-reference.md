@@ -1313,6 +1313,53 @@ The minted session inherits the assurance level the original login REACHED and n
 | 200    | A session token for the human who authenticated.                                                    | object                                 |
 | 401    | The handoff could not be completed (`HANDOFF_REJECTED`) — one answer for every cause, deliberately. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/auth/sessions` — List the caller's own live sessions (self-service, no permission).
+
+- **operationId**: `listOwnAuthSessions`
+- **Security**: bearerAuth + tenantHeader
+
+Where am I signed in? Self-service by construction — the subject is the session bearer and the route accepts no tenantUserId, so there is nobody else it could be pointed at. Deliberately UNPERMISSIONED, like GET /api/v1/auth/session: inventing a permission for "see your own sessions" would wall off the feature and install a latent-authz trap (an action nothing seeds denies everyone, including the tenant owner). Returns no token, no raw IP and no raw User-Agent. clientIpHash is a keyed pseudonym and is null on a deployment without AUTH_IP_HASH_SECRET, because the fallback key is per-process and a stored hash would stop being comparable after a restart.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                                 | Schema                                 |
+| ------ | ------------------------------------------- | -------------------------------------- |
+| 200    | The caller's live sessions, newest first.   | object                                 |
+| 400    | Validation error.                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                 | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many session requests from this source. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/auth/sessions/{id}` — End one of the caller's own sessions (self-service, no permission).
+
+- **operationId**: `revokeOwnAuthSession`
+- **Security**: bearerAuth + tenantHeader
+
+Ownership is enforced in the UPDATE's WHERE clause, never by a preceding read. Unknown id, another person's session, another tenant's session and one already revoked or expired all answer 404 — distinguishing them would make this an existence oracle for session ids, and the caller could do nothing differently with the distinction. Revoking the CURRENT session answers 409: that is POST /api/v1/auth/logout's job, which also clears the cookies.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Responses**
+
+| Status | Description                                                                                       | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The session was revoked.                                                                          | object                                 |
+| 400    | Validation error.                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 409    | The id names the session making this request (SESSION_IS_CURRENT) — use POST /api/v1/auth/logout. | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many revocation requests from this source.                                                    | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sso-policy` — Read the tenant authentication policy (password/SSO/JIT/break-glass).
 
 - **operationId**: `getSsoPolicy`

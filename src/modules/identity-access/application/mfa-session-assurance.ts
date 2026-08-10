@@ -73,6 +73,28 @@ export async function resolveSessionAssurance(
  * step-up/last-auth stamps are set to `now`. Returns the raw token (caller sets
  * cookies). This is how the login MFA challenge completion mints its session.
  */
+export type SessionOriginAuth = "password" | "sso" | "handoff";
+
+/**
+ * How a session came to exist, plus what it looked like when it did
+ * (`sql/100`).
+ *
+ * Passed in rather than derived here: `summarizeUserAgent` needs the `Request`,
+ * which this application-layer function does not have and should not acquire —
+ * handing an HTTP object to a function that already takes a transaction would
+ * make it a route in everything but name.
+ *
+ * `originAuth` has no default. Every caller mints a session for a REASON, and a
+ * default would quietly stamp the most common one onto whichever issuer forgot
+ * to say — which is exactly the field somebody will later use to reason about
+ * blast radius.
+ */
+export type SessionIssueContext = {
+  originAuth: SessionOriginAuth;
+  clientIpHash?: string | null;
+  userAgentSummary?: string | null;
+};
+
 export async function createSessionWithAssurance(
   tx: Bun.SQL,
   input: {
@@ -81,6 +103,7 @@ export async function createSessionWithAssurance(
     assuranceLevel: SessionAssuranceLevel;
     ttlMin: number;
     now: Date;
+    issue: SessionIssueContext;
   }
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = generateSessionToken();
@@ -91,10 +114,13 @@ export async function createSessionWithAssurance(
   await tx`
     INSERT INTO awcms_sessions
       (tenant_id, identity_id, token_hash, expires_at,
-       assurance_level, last_authenticated_at, stepped_up_at)
+       assurance_level, last_authenticated_at, stepped_up_at,
+       client_ip_hash, user_agent_summary, origin_auth)
     VALUES (
       ${input.tenantId}, ${input.identityId}, ${tokenHash}, ${expiresAt},
-      ${input.assuranceLevel}, ${input.now}, ${steppedUpAt}
+      ${input.assuranceLevel}, ${input.now}, ${steppedUpAt},
+      ${input.issue.clientIpHash ?? null}, ${input.issue.userAgentSummary ?? null},
+      ${input.issue.originAuth}
     )
   `;
 
@@ -125,12 +151,30 @@ export async function stepUpSession(
       WHERE id = ${input.session.sessionId} AND revoked_at IS NULL
     `;
 
+    // The rotated session CARRIES the original row's issue context forward.
+    // A step-up raises assurance; it does not re-authenticate, so stamping it
+    // `password` here would rewrite an SSO session's provenance at the moment
+    // somebody proves a second factor — the one moment the record matters most.
+    const origin = (await tx`
+      SELECT client_ip_hash, user_agent_summary, origin_auth
+      FROM awcms_sessions WHERE id = ${input.session.sessionId}
+    `) as {
+      client_ip_hash: string | null;
+      user_agent_summary: string | null;
+      origin_auth: SessionOriginAuth;
+    }[];
+
     const created = await createSessionWithAssurance(tx, {
       tenantId: input.tenantId,
       identityId: input.session.identityId,
       assuranceLevel: "aal2",
       ttlMin: input.ttlMin,
-      now: input.now
+      now: input.now,
+      issue: {
+        originAuth: origin[0]?.origin_auth ?? "password",
+        clientIpHash: origin[0]?.client_ip_hash ?? null,
+        userAgentSummary: origin[0]?.user_agent_summary ?? null
+      }
     });
 
     return {

@@ -337,7 +337,16 @@ export async function redeemHandoffCode(
     // login into an aal2 session.
     assuranceLevel: won.assurance_level,
     ttlMin: input.sessionTtlMinutes,
-    now: input.now
+    now: input.now,
+    // `handoff`, and NOT the origin of the session that minted the code. This
+    // is a genuinely new session on a different origin — recording it as
+    // `password` would hide the hop that a person reviewing their session list
+    // is most likely to be surprised by.
+    //
+    // No fingerprint: this runs in the application layer with no `Request`, and
+    // the redeeming client is not the one that logged in. A hash taken here
+    // would describe the wrong device, which is worse than describing none.
+    issue: { originAuth: "handoff" }
   });
 
   await recordAuditEvent(tx, {

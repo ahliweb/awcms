@@ -10,6 +10,10 @@ import {
   createSessionWithAssurance,
   setSessionCookies
 } from "../../../../../../modules/identity-access/application/mfa-session-assurance";
+import {
+  persistableClientIpHash,
+  summarizeUserAgent
+} from "../../../../../../lib/security/client-fingerprint";
 import { resolveLoginPolicyConfig } from "../../../../../../modules/identity-access/application/login-policy";
 import { isSsoEnabled } from "../../../../../../lib/auth/sso-config";
 import { completeTenantSsoCallback } from "../../../../../../modules/identity-access/application/tenant-sso";
@@ -180,7 +184,14 @@ export const GET: APIRoute = async ({
       identityId: result.identityId,
       assuranceLevel: "aal1",
       ttlMin: policy.sessionTtlMin,
-      now
+      now,
+      issue: {
+        originAuth: "sso",
+        clientIpHash: persistableClientIpHash(
+          resolveClientIp(request, clientAddress)
+        ),
+        userAgentSummary: summarizeUserAgent(request) ?? null
+      }
     });
 
     if (result.provisioned) {
