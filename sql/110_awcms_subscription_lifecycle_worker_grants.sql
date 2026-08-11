@@ -1,0 +1,65 @@
+-- Gelombang 5 PR 5.2 (Issue #423), ADR-0084 — the grant the ladder job needs,
+-- and the three it deliberately does not get.
+--
+-- `bun run identity-access:subscription-lifecycle` walks each tenant's
+-- subscription one rung down the ladder when its own dates say so. It runs as
+-- `awcms_worker` (`WORKER_DATABASE_URL`), and `sql/109` granted that role
+-- nothing — the same omission `sql/108` had to correct for `awcms_invitations`,
+-- written here in the SAME wave rather than discovered by the first schedule.
+--
+-- ## Why exactly SELECT and UPDATE
+--
+-- Read from the job rather than assumed by analogy:
+--
+-- - `planTenantTransition` issues one `SELECT id, status, current_period_end,
+--   trial_ends_at, grace_ends_at`.
+-- - `applyTenantTransition` issues one `UPDATE … SET status, grace_ends_at,
+--   updated_at … WHERE tenant_id = ? AND id = ? AND status = ?`.
+--
+-- No INSERT: creating a subscription is a request-path action behind a
+-- permission, and a worker able to INSERT here could put any tenant on any plan
+-- — which is the whole entitlement gate, granted from a cron job.
+--
+-- No DELETE: this table is bounded at one row per tenant and never purged
+-- (`BOUNDED_BY_DESIGN`, ADR-0084). A DELETE the job never issues would be a
+-- privilege waiting for the first bug that reaches for it, and the row it could
+-- remove is the only record of what a customer was paying for.
+--
+-- ## Why `awcms_tenant_entitlements` gets nothing either
+--
+-- The ladder moves a SUBSCRIPTION. What a tenant holds outside its plan is
+-- written by an administrator or by the PR 5.3 backfill, and neither is this
+-- job. Granting it here "for symmetry" would let a billing timer revoke a
+-- grandfathered promise — the exact coupling `sql/109` split the two tables to
+-- prevent.
+--
+-- ## Why `awcms_tenants` gets nothing, which is the load-bearing one
+--
+-- The program plan has this wave ending in `suspendTenant` (ADR-0073). That
+-- would need `UPDATE` on `awcms_tenants` for `awcms_worker`, and
+-- `WORKER_ROLE_GRANTS` states the rule it would break: every `awcms_%` table not
+-- keyed there must be ungranted for this role, and `awcms_tenants` is keyed with
+-- `SELECT` alone. `awcms_tenants` is the RLS-FREE root table (ADR-0003), so no
+-- policy sits between a bad UPDATE and every tenant in the installation — a
+-- billing job holding that verb is one arithmetic error away from stopping the
+-- whole platform, unattended, overnight.
+--
+-- The consequence still arrives, through the gate this wave built:
+-- `suspended` and `cancelled` are outside `ENTITLING_SUBSCRIPTION_STATUSES`, so
+-- the plan stops conferring and every entitlement-gated module refuses at the
+-- chokepoint. That is also the proportionate answer — an unpaid invoice costs
+-- the customer the features they stopped paying for, not their public site and
+-- their login. See `transitionEndsEntitlement`.
+--
+-- `awcms_audit_events` needs no grant here: `sql/022` already gave the worker
+-- SELECT, INSERT, DELETE, which is what `recordAuditEvent` uses.
+--
+-- RLS FORCE from `sql/109` applies to `awcms_worker` too — the job reads and
+-- writes inside `withTenantOrThrow`, so `app.current_tenant_id` is set and the
+-- policy admits exactly the tenant being processed.
+
+BEGIN;
+
+GRANT SELECT, UPDATE ON awcms_tenant_subscriptions TO awcms_worker;
+
+COMMIT;

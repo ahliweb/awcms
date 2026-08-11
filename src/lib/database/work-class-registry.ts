@@ -139,6 +139,11 @@ export const JOB_WORK_CLASS_REGISTRY: Readonly<
     rationale:
       'Scheduled bounded archive/purge (data-lifecycle:archive-purge, Issue #745) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/form-draft-purge; every withTenantOrThrow call inside archive-purge-job.ts already passes workClass: "maintenance" explicitly.'
   },
+  "scripts/identity-access-subscription-lifecycle.ts": {
+    workClass: "maintenance",
+    rationale:
+      'Scheduled subscription-ladder sweep (identity-access:subscription-lifecycle, ADR-0084) — one bounded read plus at most one UPDATE per tenant, tolerant of delay by construction: every transition is anchored to a date the billing cycle owns, so running late changes what happens, never whether it happens. Every withTenantOrThrow call inside subscription-lifecycle-job.ts passes workClass: "maintenance" explicitly.'
+  },
   "scripts/identity-access-business-scope-expiry.ts": {
     workClass: "maintenance",
     rationale:

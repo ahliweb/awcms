@@ -1327,6 +1327,12 @@
       "rationale": "Scheduled expiry sweep for business-scope assignments/SoD conflict exceptions (identity-access:business-scope:expiry, Issue #746) — same tolerant-of-delay, never-latency-sensitive profile as audit-log-purge/data-lifecycle-archive-purge; every withTenantOrThrow call inside business-scope-expiry-job.ts already passes workClass: \"maintenance\" explicitly."
     },
     {
+      "path": "scripts/identity-access-subscription-lifecycle.ts",
+      "workClass": "maintenance",
+      "source": "registry",
+      "rationale": "Scheduled subscription-ladder sweep (identity-access:subscription-lifecycle, ADR-0084) — one bounded read plus at most one UPDATE per tenant, tolerant of delay by construction: every transition is anchored to a date the billing cycle owns, so running late changes what happens, never whether it happens. Every withTenantOrThrow call inside subscription-lifecycle-job.ts passes workClass: \"maintenance\" explicitly."
+    },
+    {
       "path": "scripts/idn-regions-activate.ts",
       "workClass": "maintenance",
       "source": "registry",
