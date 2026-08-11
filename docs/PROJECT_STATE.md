@@ -107,12 +107,12 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v7.0.1..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **107** (`sql/001`–`107`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0082** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-11).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **108** (`sql/001`–`108`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0083** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-11).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **46** (25.107 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **39** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **2.5.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.0.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -355,6 +355,215 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 11 Agustus 2026 (ketujuh) — SATU ENVIRONMENT, PROFIL `staging`
+  DIHAPUS, DAN AKAR BERHENTI 404.** Keputusan pemilik repo, mendarat sebagai
+  [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md).
+
+  **Repo ini punya tepat satu deployment hidup: production di
+  `awcms.ahlikoding.com`.** Tidak ada staging — bukan hanya "tidak punya
+  sendiri": profilnya pun sudah tidak ada, lihat dua paragraf berikutnya.
+  Alasannya diberikan pemilik dan dituliskan utuh di ADR: repo ini **template**;
+  deployment hidupnya menunjukkan dan memvalidasi template, bukan melayani
+  bisnis. Yang akan "di-stage" adalah templatenya sendiri — dan itu divalidasi
+  39 gerbang + suite integrasi ber-Postgres di CI, bukan salinan kedua yang
+  berjalan. Staging di sini bukan jaring pengaman, melainkan environment kedua
+  yang harus dirawat: satu set secret lagi, satu database lagi yang butuh
+  backup, satu antrean migrasi lagi.
+
+  **ADR-0083 DIAMANDEMEN DI TEMPAT, DAN PEMBALIKANNYA DICATAT DI SINI.** Edisi
+  pertama ADR itu — ditulis pagi yang sama, dalam putaran ini juga —
+  **MEMPERTAHANKAN** `staging` sebagai `DeploymentProfile` yang sah di
+  `module-contract.ts`, dengan argumen bahwa yang berubah adalah topologi repo
+  ini dan bukan kapabilitas templatenya, sehingga menghapusnya akan mencabut
+  sesuatu dari SETIAP pemakai template. **Pemilik repo membatalkan argumen
+  itu.** `staging` dihapus **SELURUHNYA**: bukan hanya environment milik repo
+  ini, melainkan profil deployment-nya sendiri dan setiap rujukan kepadanya.
+
+  **Alasan yang mengoreksi premis edisi pertama: profil deployment yang tak
+  pernah dijalankan siapa pun adalah KLAIM, bukan kapabilitas.** Yang
+  ditawarkan `staging` selama ini hanyalah sebuah literal string yang lolos
+  pemeriksaan tipe — nol jalur kode yang memperlakukannya berbeda dari
+  `production`, nol deployment yang pernah menegakkannya sebagai staging
+  sungguhan, dan (temuan putaran keenam) satu `APP_ENV=staging` yang justru
+  MELAYANI domain produksi di atas database staging. Kapabilitas yang hanya
+  bisa dibuktikan dengan menunjuk union tipe bukan kapabilitas; ia janji.
+  Pemakai template yang benar-benar butuh environment kedua membuatnya dengan
+  `APP_ENV=production` kedua dan basis data kedua — persis yang selama ini
+  sudah terjadi — tanpa perlu sebuah nama yang tak dibaca kode mana pun.
+
+  **Kenapa DIAMANDEMEN, bukan di-supersede.** ADR-0083 belum ter-commit dan
+  belum dirilis saat keputusan ini datang, jadi ia disunting di tempat alih-alih
+  dijawab ADR baru. Yang tidak boleh terjadi justru bentuk yang lebih rapi:
+  membiarkan sebuah ADR berbunyi "`staging` tetap sah" bersebelahan dengan kode
+  yang tak lagi memuatnya. Repo ini sudah berkali-kali digigit dokumen yang
+  percaya diri dan salah — dan sebuah ADR adalah dokumen yang paling dipercaya
+  pembaca berikutnya.
+
+  **Yang sebenarnya dikoreksi ADR ini adalah dokumen yang menjelaskan dunia yang
+  tidak ada.** Topologi dua-environment sudah berhenti berlaku sebelum putaran
+  ini: baris app produksi tidak ada di `applications`, tidak ada database
+  produksi, dan domain produksi dilayani deployment staging. ADR membuat dokumen
+  dan kenyataan sepakat **dengan memilih satu**, bukan membangun kembali yang
+  kedua.
+
+  **`/` berhenti menjadi 404.** ADR-0071 menerima 404 dengan premis terbuka
+  bahwa `awcms-astro` memikul akar domain. Premis itu benar untuk sebuah SITUS,
+  tidak untuk host deployment template ini — tak ada `awcms-astro` di depannya
+  (kedua app-nya `exited`). Pintu depan yang menjawab 404 kepada siapa pun yang
+  mengetik nama domain adalah cacat, bukan keputusan. `src/pages/index.astro`
+  kini melayaninya: **nol query basis data, nol konteks tenant, nol enumerasi**
+  (tak menyebut nama/jumlah tenant, versi, atau status modul), dan **nol skrip
+  klien BARU** — satu-satunya skrip adalah `THEME_INIT_SCRIPT_BODY` yang
+  hash-nya sudah ada di `script-src`, jadi CSP tidak berubah sama sekali.
+  Diverifikasi dengan MENJALANKAN server hasil build: `/` → **200**,
+  `/nope-xyz` → **404** (catch-all utuh), enam kartu ter-render, satu `<h1>`,
+  satu `<script>`, nol `src=` eksternal.
+
+  **Gerbang yang menagih, dan ia benar menagih.** `modules:routes:check` menolak
+  `/index` sebagai rute tak-terklaim. Ia masuk `PLATFORM_ROUTES` dengan alasan,
+  bukan diberikan ke sebuah modul: memberikannya ke modul membuat pintu depan
+  **bisa dinonaktifkan**, yaitu persis kegagalan (404 di akar) yang halaman ini
+  ada untuk memperbaikinya.
+
+  **Yang DITOLAK, dengan alasannya:** membangun ulang produksi terpisah +
+  staging (memulihkan biaya yang tak dibeli siapa pun); membiarkan domain
+  produksi dilayani `APP_ENV=staging` (nama environment yang berhenti berarti
+  apa pun lebih buruk dari nama yang hilang — pembaca `APP_ENV` berikutnya akan
+  salah dengan percaya diri); menjadikan landing sebagai halaman tenant ber-tema
+  (mengikat pintu depan pada `theming` + resolusi tenant); dan meredirect `/` ke
+  `/login` (menyodorkan formulir kredensial kepada orang yang belum tahu AWCMS
+  itu apa).
+
+  **Yang sempat ditolak lalu DIBALIK, dan ia tidak dihapus diam-diam:**
+  "menghapus `staging` dari union tipe" adalah butir 2 daftar tolakan edisi
+  pertama ADR-0083. Butir itulah yang kini justru dikerjakan. Ia ditulis begini
+  — sebagai tolakan yang dibatalkan, bukan sebagai tolakan yang tak pernah ada —
+  karena nilai dokumen ini adalah ia merekam pembalikan alih-alih memulusnya.
+  Pembaca berikutnya yang mengusulkan mengembalikan `staging` berhak tahu bahwa
+  argumen "kapabilitas template" sudah diajukan, ditulis, lalu ditimbang dan
+  ditolak — bukan tidak terpikir.
+
+  **Biaya yang diterima dan dinyatakan:** tak ada lagi latihan pra-produksi
+  untuk migrasi. Penggantinya suite integrasi CI + kewajiban backup
+  ter-verifikasi-restore sebelum migrasi (`deploy/backup/restore-postgres.sh`
+  mode verify-only). Itu mitigasi, **bukan pengganti setara**.
+
+  **Infrastruktur: BELUM dikerjakan saat entri ini ditulis — hanya backup yang
+  sudah.** Rencananya produksi berdiri di `awcms.ahlikoding.com`, lalu app
+  Coolify, database, dan Varnish staging dibongkar berikut rule Traefik yang
+  selama ini memetakan domain produksi ke Varnish staging. **Sampai itu terjadi,
+  domain produksi masih melayani database staging** — sama seperti yang dicatat
+  ADR-0083 §Konsekuensi, dan kedua dokumen harus tetap sepakat soal itu.
+
+  Yang SUDAH benar-benar dilakukan, dan hanya ini: **backup diambil dan
+  DIVERIFIKASI, sebelum apa pun dihapus:**
+
+  - berkas `/home/admin1/backups/awcms/awcms-preprod-20260811-090628.dump`
+  - sha256 `08f677c5f13d7386c77dd41841090b60f95159550bdab3e90b7bfb6353a0bd68`
+  - **di-restore-drill ke database scratch** (`awcms_tenants` = 1 baris terbaca
+    dari hasil restore) — bukan sekadar `pg_dump` yang exit 0.
+  - keputusan pemilik repo: data itu **dipromosikan**, bukan dibuang — produksi
+    menerima restore backup ini, sehingga tenant + akun owner yang ada tetap
+    bisa masuk dan setup wizard tidak perlu dijalankan.
+
+  Urutan itu bagian dari keputusannya, bukan kehati-hatian tambahan: ADR-0083
+  melepaskan latihan pra-produksi untuk migrasi, sehingga backup yang TERBUKTI
+  bisa di-restore adalah satu-satunya jaring yang tersisa — dan jaring yang
+  belum pernah ditarik bukan jaring. Ia juga satu-satunya salinan data yang
+  pernah dilayani `awcms.ahlikoding.com` selama periode putaran keenam,
+  ketika domain produksi berjalan di atas database staging.
+
+  **Titik-lanjut.** Setelah produksi berdiri, verifikasi kepada
+  `applications`/`standalone_postgresqls` Coolify, **bukan kepada `curl`** —
+  pelajaran putaran keenam yang menyesatkan berjam-jam: `https://awcms.ahlikoding.com`
+  menjawab 200 dan sehat sepanjang waktu produksi tidak ada.
+
+- **PUTARAN 11 Agustus 2026 (keenam) — AUDIT KESIAPAN DEPLOY. Kodenya siap;
+  yang tidak ada adalah TEMPATNYA.** Dipicu pertanyaan "apakah bisa deploy
+  sekarang". Audit 64 agen berverifikasi adversarial: **55 dari 56 temuan
+  TERBANTAHKAN**, satu bertahan. Tak ada satu pun pemblokir di kode.
+
+  **Temuan terbesar tidak ada di repo ini.** Environment **produksi awcms sudah
+  tidak ada**: tabel `applications` Coolify tak punya baris untuk
+  `got4etcblum9kowdv4mrixqo` (bukan soft-delete — barisnya hilang), dan
+  `standalone_postgresqls` tak punya database produksi, hanya `awcms_staging`.
+  Sementara itu `awcms-staging-varnish` memasang rule Traefik
+  ``Host(`awcms-staging.ahlikoding.com`) || Host(`awcms.ahlikoding.com`)`` —
+  jadi **domain produksi dilayani staging, memakai database staging**
+  (`APP_ENV=staging`). Yang berjalan adalah commit rilis v7.0.0 (`ea25fff6`),
+  **90 commit di belakang HEAD**; image v7.0.1 ter-build tapi tak pernah
+  di-deploy. Basis datanya di migrasi **090**. Belum diputuskan: disengaja atau
+  insiden. **Jangan berasumsi ada produksi untuk di-deploy.**
+
+  **Yang menghalangi secara prosedural, bukan teknis:** `release:verify` untuk
+  v7.1.0 exit 1 (package.json masih 7.0.1, CHANGELOG belum punya seksi, 72
+  changeset belum dikonsumsi → bump MINOR); image hanya dibangun dari tag rilis;
+  dan **migrasi WAJIB jalan SEBELUM container ditukar** karena
+  `grant-source.ts:111,119-123` membaca `awcms_access_policies` tanpa syarat di
+  jalur request terautentikasi. Precheck ke basis data hidup: `awcms_sync_outbox`
+  **0 baris** (jadi `sql/099` tidak abort), 1 tenant, 1 access assignment.
+
+  **Delapan perbaikan mendarat, semua `bun run check` hijau (3888 pass/0 fail):**
+
+  1. **CSP `img-src` — satu-satunya temuan yang lolos verifikasi.** `default-src
+'self'` tanpa `img-src` memblokir tiap gambar R2 lintas-origin milik
+     sendiri. **`media-src` punya cacat IDENTIK** dan ikut ditutup: renderer yang
+     sama memancarkan `<img>` dan `<video src=…>` dari URL R2 yang sama, jadi
+     menambal `img-src` saja meninggalkan kebijakan setengah-benar — gambar
+     tampil, video di sebelahnya tetap diblokir, tanpa error. `data:` sengaja
+     TIDAK dibawa ke `media-src`: tak ada yang memancarkan video data-URI.
+  2. **`sql/108`** — `awcms_invitations` tak pernah diberi GRANT ke
+     `awcms_worker` padahal deskriptornya `executionMode: "generic"`, dan
+     `archive-purge-job.ts` **nol `catch`** → satu `permission denied` membunuh
+     SELURUH purge. Verb-nya diturunkan dari kode, bukan analogi:
+     `SELECT, DELETE` saja — worker ber-`INSERT`/`UPDATE` bisa mengalamatkan
+     tawaran keanggotaan ke mailbox mana pun atau merotasi `token_hash`.
+  3. **Authoring artikel hidup.** Form create mengirim `contentText: ""` → 422
+     SELALU; kini ada `<textarea>` + jalur PATCH di `/admin/blog` dan
+     `/admin/blog-pages`. Validator TIDAK dilonggarkan — `content-quality-checklist.ts`
+     tak punya aturan konten-ada, jadi melonggarkannya meloloskan post kosong.
+  4. **Sitemap** tak lagi terpotong senyap di 200 URL (cursor diperlakukan opaque).
+  5. **Ops**: `deploy/backup/*.sh` + `deploy/cron/awcms.crontab` (23 job yang
+     selama ini tak punya penjadwal sama sekali) + `lock_timeout`/`statement_timeout`
+     di `db-migrate.ts`.
+  6. **Lima klaim docs yang salah** diperbaiki — `production:preflight` MEMANG
+     tak ada, dan lolos karena `scripts/skills-check.ts:134` men-whitelist-nya.
+  7. **Gerbang env berhenti buta.** `config:env:coverage:check` melapor OK atas
+     53 variabel sementara kode membaca **173**; header skripnya sendiri mencatat
+     batas itu sebagai "diterima". Kini ia **meresolusi alias** (`const env =
+process.env`, `env: NodeJS.ProcessEnv = process.env`) alih-alih mencocokkan
+     `env.X` apa pun — presisi lama dipertahankan, dibuktikan dua test negatif.
+     26 variabel deployment nyata masuk `.env.example`, termasuk **seluruh
+     `REDIS_*`**: tanpa `REDIS_ENABLED=true`, rate limiter lintas-instance
+     diam-diam jadi N× limit per replica.
+  8. Dua rentang `sql/NNN` basi di `ARCHITECTURE.md` + `.claude/skills/README.md`.
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Membangun ulang infrastruktur produksi & memicu deploy** — sulit dibalik,
+     dan menunggu keputusan apakah hilangnya environment itu disengaja.
+  2. **#430** — kedua workaround (rekey identifier, lockout global) sudah
+     ditolak tertulis di §816-821/§884-889; perbaikan sebenarnya principal
+     global, Gelombang 7. Jangan diusulkan ulang.
+  3. **Melonggarkan `validateContentTextField`** — lihat butir 3 di atas.
+  4. **Membalik default `SYNC_HMAC_ALLOW_LEGACY`** menjadi fail-closed —
+     `sync-auth.ts:29-31` memang fail-OPEN (absennya menerima v1 yang
+     cross-tenant forgeable, GHSA-c972-3q5p-g3h4), tetapi membaliknya memutus
+     node v1 yang sudah ter-deploy di instalasi lain; laten di sini karena sync
+     mati. Butuh keputusan sadar, bukan efek samping putaran ini.
+
+  **Batas yang WAJIB dibaca.** Gerbang env yang kini melihat 173 variabel TETAP
+  buta terhadap pembacaan terkomputasi (`process.env[prefix + suffix]`). Dan
+  `EMAIL_ENABLED` default `false` + `APP_URL` default `http://localhost:4321`
+  berarti **undangan Gelombang 4 ditulis lalu tak pernah terkirim**, dengan
+  tautan menunjuk localhost — fitur mati bukan karena bug, tapi karena config.
+
+  **Titik-lanjut.** Sisa rencana remediasi yang BELUM dikerjakan: gerbang yang
+  menurunkan verb worker dari tiap deskriptor `generic` (kelas cacat ini sudah
+  lolos DUA kali — `sql/091`, lalu `sql/106`), health/readiness yang benar-benar
+  503 saat DB mati/migrasi drift, deskriptor retensi untuk `awcms_sessions` dkk,
+  dan `/metrics`. Gelombang 5 (entitlement/SaaS) tetap berikutnya.
 
 - **PUTARAN 11 Agustus 2026 (kelima) — GELOMBANG 4 SELESAI.** Tiga PR
   (#512/#513 + entri ini); nol PR terbuka. ADR-0082.

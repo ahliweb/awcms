@@ -85,7 +85,7 @@ Legenda: Wajib = perlu untuk boot; Sensitif = jangan bocor ke log/response.
 
 | Var                         | Wajib | Default                 | Sensitif | Fungsi                                                           |
 | --------------------------- | ----- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| `APP_ENV`                   | Ya    | `development`           | –        | development/staging/production                                   |
+| `APP_ENV`                   | Ya    | `development`           | –        | development/test/production (`staging` DIHAPUS — ADR-0083)       |
 | `APP_URL`                   | Ya    | `http://localhost:4321` | –        | Base URL aplikasi                                                |
 | `LOG_LEVEL`                 | –     | `info`                  | –        | debug/info/warn/error                                            |
 | `AUDIT_LOG_RETENTION_DAYS`  | –     | `730`                   | –        | Retensi `awcms_audit_events` (hari), dipakai job purge audit log |
@@ -512,9 +512,16 @@ EMAIL_SEND_MAX_RETRIES=5
 | Environment         | Karakteristik                                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------------------------- |
 | development         | Semua provider off, DB lokal, cookie tidak secure                                                              |
-| staging             | Meniru prod, data uji, backup aktif                                                                            |
 | production (online) | HTTPS, secret manager, backup+restore teruji, sync opsional                                                    |
 | **offline/LAN**     | Tanpa internet; sync/R2/provider eksternal off atau tertunda; operasional inti tetap penuh jalan; backup lokal |
+
+Tiga, bukan empat: `staging` dihapus dari kosakata profil deployment
+([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)
+sebagaimana diamandemen). Kontrak isolasinya tidak ikut hilang — ia berlaku
+untuk environment kedua apa pun yang seseorang dirikan, dan tertulis di
+[`environments.md`](environments.md) §Kontrak isolasi environment kedua.
+`test` tetap nilai `APP_ENV` yang diterima untuk eksekusi test otomatis; itu
+bukan profil deployment.
 
 ## Topologi deployment LAN-first
 

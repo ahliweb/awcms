@@ -20,13 +20,27 @@
  * enough — that is how the `EMAIL_MAILKETING_*` credentials were already
  * handled, and it keeps secrets out of the repo.
  *
- * ## Known limit, stated rather than hidden
+ * ## The blind spot this used to have
  *
- * This matches `process.env.X` only. Config modules that thread
- * `env: NodeJS.ProcessEnv = process.env` through a parameter and then read
- * `env.X` are invisible here — `tenant-domain-dns-config.ts` does exactly that.
- * Broadening the pattern to any `env.X` would swallow unrelated identifiers, so
- * the gate stays precise and this comment records what it does not see.
+ * This matched `process.env.X` only, and the comment here recorded that as an
+ * accepted limit: config modules that thread `env: NodeJS.ProcessEnv =
+ * process.env` through a parameter and then read `env.X` were invisible.
+ * The limit was not academic — it hid roughly 129 of the ~178 variables the
+ * code actually reads, so the gate printed OK over 53 while 42 real deployment
+ * variables were missing from `.env.example`, `REDIS_*` among them. Wave 4 paid
+ * for it in the obvious way: three invitation variables had to be added BY HAND
+ * because nothing would have caught their absence.
+ *
+ * The fix keeps the precision the old comment was protecting. Broadening to any
+ * `env.X` would indeed swallow unrelated identifiers, so instead we resolve
+ * ALIASES: within a single file, find the names actually bound to `process.env`
+ * (`const env = process.env`, `env: NodeJS.ProcessEnv = process.env`), then read
+ * `<thatName>.X`. An `env.X` on a variable that is not bound to `process.env`
+ * stays invisible, which is the correct answer.
+ *
+ * Still not seen, and no longer worth hiding: computed reads
+ * (`process.env[prefix + suffix]`), whose name does not exist as a literal
+ * anywhere. Those need a human.
  *
  * Pure text, no database, no network — runs in `quality` on every PR.
  */
@@ -39,6 +53,48 @@ const ENV_EXAMPLE = ".env.example";
 
 /** `process.env.NAME` — the direct read. */
 const ENV_READ = /process\.env\.([A-Z][A-Z0-9_]*)/g;
+
+/**
+ * A name bound to the whole `process.env` object — `const env = process.env`,
+ * `env: NodeJS.ProcessEnv = process.env`, or a class field initialiser. The
+ * negative lookahead is what keeps `process.env.FOO` from being read as a
+ * binding of the object itself.
+ */
+const ENV_ALIAS_BINDING =
+  /([A-Za-z_$][\w$]*)\s*(?::\s*[^=;,)]+?)?\s*=\s*process\.env(?![.[\w$])/g;
+
+/** `const { NAME, OTHER } = process.env` — a read of each destructured name. */
+const ENV_DESTRUCTURE = /\{([^}]*)\}\s*=\s*process\.env(?![.[\w$])/g;
+
+/** Names inside a destructuring pattern, ignoring any `: rename` and defaults. */
+const DESTRUCTURED_NAME = /([A-Z][A-Z0-9_]*)\s*(?::|=|,|$)/g;
+
+/**
+ * Reads reached through an alias, resolved per FILE so a binding in one module
+ * never authorises an `env.X` in another.
+ */
+export function aliasedEnvReads(source: string): Set<string> {
+  const aliases = new Set<string>();
+
+  for (const match of source.matchAll(ENV_ALIAS_BINDING)) {
+    aliases.add(match[1]!);
+  }
+
+  const names = new Set<string>();
+
+  for (const match of source.matchAll(ENV_DESTRUCTURE)) {
+    for (const name of match[1]!.matchAll(DESTRUCTURED_NAME)) {
+      names.add(name[1]!);
+    }
+  }
+
+  for (const alias of aliases) {
+    const read = new RegExp(`\\b${alias}\\.([A-Z][A-Z0-9_]*)\\b`, "g");
+    for (const match of source.matchAll(read)) names.add(match[1]!);
+  }
+
+  return names;
+}
 
 /**
  * Variables that steer TOOLING rather than a deployment, so an operator copying
@@ -141,8 +197,12 @@ export async function collectEnvReads(): Promise<Map<string, string[]>> {
     for await (const file of walk(root)) {
       const source = stripComments(await Bun.file(file).text());
 
-      for (const match of source.matchAll(ENV_READ)) {
-        const name = match[1]!;
+      const names = new Set<string>();
+
+      for (const match of source.matchAll(ENV_READ)) names.add(match[1]!);
+      for (const name of aliasedEnvReads(source)) names.add(name);
+
+      for (const name of names) {
         const files = reads.get(name) ?? [];
         if (!files.includes(file)) files.push(file);
         reads.set(name, files);

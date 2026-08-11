@@ -15,6 +15,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   TOOLING_ONLY,
+  aliasedEnvReads,
   collectEnvReads,
   declaredInEnvExample,
   findCoverageViolations,
@@ -106,6 +107,61 @@ describe("stripComments", () => {
 
     expect(stripped).not.toContain("process.env.TOKEN");
     expect(stripped).toContain("process.env.DATABASE_URL");
+  });
+});
+
+describe("aliasedEnvReads", () => {
+  // The gate used to match `process.env.X` only, and said so in its own header
+  // as an accepted limit. It was not: the pattern it could not see is the one
+  // most config modules in this repo use, so ~129 of ~178 variables were
+  // invisible and the gate printed OK while `REDIS_*` was missing entirely.
+  test("sees a read through a parameter bound to process.env", () => {
+    const source = [
+      "export function readConfig(env: NodeJS.ProcessEnv = process.env) {",
+      "  return { enabled: env.REDIS_ENABLED, url: env.REDIS_URL };",
+      "}"
+    ].join("\n");
+
+    expect([...aliasedEnvReads(source)].sort()).toEqual([
+      "REDIS_ENABLED",
+      "REDIS_URL"
+    ]);
+  });
+
+  test("sees a read through a const binding, and a destructured read", () => {
+    const source = [
+      "const env = process.env;",
+      "const value = env.APP_URL;",
+      "const { DATABASE_URL } = process.env;"
+    ].join("\n");
+
+    expect([...aliasedEnvReads(source)].sort()).toEqual([
+      "APP_URL",
+      "DATABASE_URL"
+    ]);
+  });
+
+  // This is the precision the old header comment was protecting, and the reason
+  // the fix resolves aliases instead of matching any `env.X`: an identifier that
+  // merely happens to be called `env` is not process.env.
+  test("does NOT swallow an env-shaped identifier that is not process.env", () => {
+    const source = [
+      "const env = { MODE: 'test' };",
+      "const mode = env.MODE;",
+      "const other = someRecord.SOME_KEY;"
+    ].join("\n");
+
+    expect([...aliasedEnvReads(source)]).toEqual([]);
+  });
+
+  test("does not read `process.env.X` itself as a binding of the object", () => {
+    // `const x = process.env.FOO` must not register `x` as an alias, or every
+    // `x.BAR` afterwards would be reported as an env read.
+    const source = ["const x = process.env.FOO;", "const y = x.BAR;"].join(
+      "\n"
+    );
+
+    expect([...aliasedEnvReads(source)]).toEqual([]);
   });
 });
 

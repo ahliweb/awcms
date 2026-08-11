@@ -132,7 +132,20 @@ export function validateRedisConfig(
   }
 
   const appEnv = env.APP_ENV?.trim().toLowerCase();
-  const isOnlineEnvironment = appEnv === "staging" || appEnv === "production";
+  // What this predicate actually asks is NOT "which env names are in the list"
+  // but "is this deployment reachable from a network we do not control, where a
+  // plaintext, unauthenticated Redis is a real exposure?". It used to answer
+  // that with `staging || production` because those were the two APP_ENV values
+  // that named a hosted deployment. ADR-0083 (as amended 11 August 2026)
+  // removed `staging` entirely, so `production` is the whole set — the intent is
+  // unchanged, the enumeration got shorter. `development`/`test` stay OUT for
+  // the same reason as before (a developer's local Redis is not an exposure),
+  // and an unset/unknown APP_ENV keeps behaving exactly as it did: silent.
+  // Widening it to "anything that is not development/test" would be a different
+  // decision — it would start warning on every unset-APP_ENV caller, including
+  // `scripts/redis-health.ts` run ad hoc — and this change is not the place to
+  // take it.
+  const isOnlineEnvironment = appEnv === "production";
 
   if (
     isOnlineEnvironment &&
@@ -143,7 +156,7 @@ export function validateRedisConfig(
       severity: "warning",
       code: "redis_tls_recommended",
       message:
-        "Use rediss:// or a private/internal network for Redis in staging and production."
+        "Use rediss:// or a private/internal network for Redis in production."
     });
   }
 
@@ -151,8 +164,7 @@ export function validateRedisConfig(
     findings.push({
       severity: "warning",
       code: "redis_auth_recommended",
-      message:
-        "Use a dedicated Redis ACL username and secret in staging and production."
+      message: "Use a dedicated Redis ACL username and secret in production."
     });
   }
 

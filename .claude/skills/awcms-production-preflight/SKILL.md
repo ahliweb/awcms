@@ -90,8 +90,15 @@ Ketiga flag WAJIB bersamaan (`scripts/production-preflight.ts`'s
 di-restore), `--acknowledge-target=<nilai>` yang harus SAMA PERSIS dengan
 `APP_ENV` (penangkap typo — menjalankan di shell/`.env` yang salah dengan
 `--acknowledge-target` salah menghasilkan penolakan keras, bukan mutasi
-diam-diam ke database yang salah). Prosedur lengkap (rehearsal staging,
-bukti backup, apply, rollback): `docs/awcms/production-preflight-runbook.md`.
+diam-diam ke database yang salah). Prosedur lengkap (rehearsal, bukti backup,
+apply, rollback): `docs/awcms/production-preflight-runbook.md`. Tahap
+rehearsal-nya hanya berlaku bagi instalasi yang memang mendirikan environment
+kedua — repo ini tidak, dan tidak ada profil untuk itu: `staging` dihapus dari
+kosakata profil deployment
+([ADR-0083](../../../docs/adr/0083-this-template-deploys-to-one-environment.md)
+sebagaimana diamandemen; tersisa `development`/`production`/`offline-lan`).
+Tanpa environment pendahulu, `--backup-verified` berhenti menjadi atestasi
+seremonial: ia satu-satunya yang berdiri di depan migrasi produksi.
 
 ## Checklist go-live
 

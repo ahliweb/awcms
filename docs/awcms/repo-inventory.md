@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 107   |
+| Migrasi                            | 108   |
 | Tabel `awcms_*`                    | 135   |
 | Tabel dengan `FORCE` RLS           | 124   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 351   |
-| Berkas route                       | 334   |
-| ADR                                | 83    |
+| Berkas test                        | 352   |
+| Berkas route                       | 335   |
+| ADR                                | 84    |
 
 ### Modul
 
@@ -154,6 +154,7 @@
 | 105 | `sql/105_awcms_user_groups_permissions.sql`                        |
 | 106 | `sql/106_awcms_identity_invitations_schema.sql`                    |
 | 107 | `sql/107_awcms_identity_invitation_permissions.sql`                |
+| 108 | `sql/108_awcms_identity_invitations_worker_grants.sql`             |
 
 ### Tabel & Row-Level Security
 
@@ -299,7 +300,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 297        |
+| `(root)`      | 298        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
@@ -310,7 +311,7 @@
 | --------------- | ------ |
 | `/api/v1/**`    | 277    |
 | `/admin/**`     | 34     |
-| publik / anonim | 23     |
+| publik / anonim | 24     |
 
 <!-- END GENERATED: repo-inventory -->
 

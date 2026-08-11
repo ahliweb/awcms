@@ -1,0 +1,61 @@
+-- Gelombang 4 follow-up (Issue #423, ADR-0082) — the grant `sql/106` never made.
+--
+-- `identity-access/module.ts` registers `awcms_invitations` as a `dataLifecycle`
+-- descriptor with `executionMode: 'generic'` and a 90-day default retention, so
+-- the table is purged by `data-lifecycle:archive-purge` — a job that runs as
+-- `awcms_worker` (`WORKER_DATABASE_URL`, `docs/awcms/environments.md`). `sql/106`
+-- created the table and granted that role nothing. Its only occurrence of the
+-- word GRANT is prose.
+--
+-- ## Why this is not merely "the purge removes nothing"
+--
+-- `sql/091` recorded the softer version of this failure: a missing DELETE let the
+-- purge run, report success, and remove no rows. Here even the READ is missing,
+-- and `archive-purge-job.ts` has no `catch` anywhere in it — the first
+-- `permission denied for table awcms_invitations` propagates out of the tenant
+-- loop and aborts the WHOLE invocation, so every descriptor after this one in the
+-- registry is never reached either. What keeps that dormant today is only that
+-- the job is not yet scheduled; the first schedule is when it would be found.
+--
+-- ## Why exactly SELECT and DELETE
+--
+-- Read from the engine rather than assumed by analogy:
+--
+-- - `planLifecycleDryRun` issues `SELECT count(*)` over the table for the run
+--   record in `awcms_data_lifecycle_runs`.
+-- - `runGenericPurgePass` issues one `DELETE … WHERE id IN (SELECT id FROM …)
+--   … RETURNING created_at`. The subquery needs SELECT, and so does RETURNING —
+--   PostgreSQL requires SELECT on every column a RETURNING clause names.
+-- - `runGenericArchivePass` never runs at all: the descriptor declares
+--   `archive.archivable: false`, so there is no archive read and no archive
+--   write.
+--
+-- No INSERT and no UPDATE. Issuing, resending and revoking an invitation are all
+-- request-path writes on `awcms_app` behind their own permissions. A worker able
+-- to INSERT here could address an offer of membership to any mailbox; a worker
+-- able to UPDATE could rotate `token_hash` to a value it chose and hand itself a
+-- live link. Same reasoning `sql/073`/`sql/074` wrote for the two other
+-- identity_access tables this engine purges.
+--
+-- ## Why `awcms_invitation_policies` gets nothing
+--
+-- The child has no descriptor of its own — it is `BOUNDED_BY_DESIGN`, removed
+-- with its parent by the `ON DELETE CASCADE` in `sql/106`. That referential
+-- action is executed with the constraint owner's rights, not the rights of the
+-- role issuing the DELETE, so the worker needs no privilege on the child for the
+-- cascade to fire. Granting one anyway would be privilege the purge never uses.
+--
+-- ## Why a NEW migration instead of editing `sql/106`
+--
+-- `sql/106` is applied. Editing an applied migration blocks `db:migrate` on every
+-- running deployment while staying green on empty CI — the same reason `sql/091`
+-- widened `sql/022` from a separate file rather than in place. The least-privilege
+-- matrix `WORKER_ROLE_GRANTS` (`scripts/security-readiness.ts`) is CUMULATIVE
+-- across migrations and is updated in the same change; the two are one source of
+-- truth or they are worse than none.
+--
+-- Pure DDL, no rows written — the `NO FORCE -> DML -> FORCE` toggle `sql/103`
+-- needed does not apply. RLS FORCE from `sql/106` applies to `awcms_worker` too,
+-- so each `withTenantOrThrow`-scoped pass still sees only its own tenant's rows.
+
+GRANT SELECT, DELETE ON awcms_invitations TO awcms_worker;

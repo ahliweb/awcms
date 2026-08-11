@@ -85,7 +85,8 @@ URL yang diterima:
 - `redis+unix://`
 - `redis+tls+unix://`
 
-Gunakan `rediss://` atau jaringan internal tepercaya untuk staging/production.
+Gunakan `rediss://` atau jaringan internal tepercaya untuk setiap deployment
+online (produksi, dan environment kedua apa pun yang berdiri di sampingnya).
 Credential harus berasal dari environment/secret manager, bukan source code,
 dokumentasi, module settings, atau commit.
 

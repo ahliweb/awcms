@@ -111,17 +111,19 @@ Image rehearsal menumpuk di package `ghcr.io/ahliweb/awcms` di bawah tag `dryrun
 
 Setiap check di bawah hanya memakai data publik (registry, GitHub public attestation API, Sigstore public transparency log) — tidak ada yang butuh akses ke secret/CI environment repo ini.
 
+> **Tag image TIDAK berawalan `v`.** `release.yml` menghitung `VERSION="${GITHUB_REF_NAME#v}"`, jadi tag Git `v7.0.1` mem-publish `ghcr.io/ahliweb/awcms:7.0.1` (+ `:latest`, `:sha-<12>`). `…:v7.0.1` tidak ada di registry dan setiap perintah di bawah akan gagal dengan "manifest unknown" bila `v`-nya ikut ditulis. Ganti `X.Y.Z` di bawah dengan versi tanpa `v`.
+
 ```bash
 # 1. Verifikasi attestation SLSA build provenance milik image
-gh attestation verify oci://ghcr.io/ahliweb/awcms:vX.Y.Z \
+gh attestation verify oci://ghcr.io/ahliweb/awcms:X.Y.Z \
   --owner ahliweb
 
 # 2. Verifikasi attestation SBOM milik image
-gh attestation verify oci://ghcr.io/ahliweb/awcms:vX.Y.Z \
+gh attestation verify oci://ghcr.io/ahliweb/awcms:X.Y.Z \
   --owner ahliweb --predicate-type https://cyclonedx.org/bom
 
 # 3. Verifikasi signature keyless cosign langsung (tanpa gh CLI)
-cosign verify ghcr.io/ahliweb/awcms:vX.Y.Z \
+cosign verify ghcr.io/ahliweb/awcms:X.Y.Z \
   --certificate-identity-regexp "^https://github.com/ahliweb/awcms/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
@@ -148,6 +150,6 @@ Baik Changesets maupun pipeline ini tidak pernah menghapus atau menulis ulang ve
 
 - `docs/awcms/09_roadmap_repository_commit.md` (menyusul) — kebijakan SemVer dan alur Changesets yang diotomasi pipeline ini.
 - `branch-protection.md` (menyusul) — required status checks dan status branch protection `main`; ancestor-of-main guard dan environment-approval step dokumen ini mengikuti pola "dokumentasikan langkah admin manual, jangan diterapkan sendiri" yang sama.
-- [`performance-suite.md`](performance-suite.md) — sebelum rilis yang menyentuh jalur query kritikal atau sizing koneksi/work-class, jalankan performance lane penuh (`bun run performance:suite -- --full`) terhadap environment staging/isolated dan bandingkan laporan JSON-nya dengan rilis sebelumnya, sesuai §Comparing two releases/commits dokumen itu.
+- [`performance-suite.md`](performance-suite.md) — sebelum rilis yang menyentuh jalur query kritikal atau sizing koneksi/work-class, jalankan performance lane penuh (`bun run performance:suite -- --full`) terhadap database terisolasi (`APP_ENV=test`, bukan environment hidup mana pun) dan bandingkan laporan JSON-nya dengan rilis sebelumnya, sesuai §Comparing two releases/commits dokumen itu.
 - `.github/workflows/changesets.yml` / `.github/workflows/release.yml` — definisi workflow aktual yang dideskripsikan dokumen ini.
 - `scripts/changeset-policy-check.ts` / `scripts/release-verify.ts` — pure-function policy check yang melandasi kedua workflow, diuji unit di `tests/`.

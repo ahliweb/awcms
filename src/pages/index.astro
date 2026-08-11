@@ -1,0 +1,322 @@
+---
+/**
+ * Landing page — the front door of this deployment's domain (ADR-0083).
+ *
+ * ## Why this file exists
+ *
+ * ADR-0071 accepted `/` = 404 on an openly-stated premise: `awcms-astro` fronts
+ * the public surface, so the domain root is not this application's. That premise
+ * holds for a SITE. It does not hold for this template's own deployment host —
+ * nothing fronts `awcms.ahlikoding.com` — so the root answered 404 to anyone who
+ * typed the domain name. ADR-0083 amends that consequence and this page replaces
+ * it.
+ *
+ * ## What this page deliberately does NOT do
+ *
+ * Each of these is a decision, not an omission (ADR-0083 §"Akar berhenti
+ * menjadi 404"):
+ *
+ * - **No database query, no tenant context.** The front door of the domain must
+ *   not depend on tenant resolution — which, with `PUBLIC_TENANT_RESOLUTION_MODE`
+ *   unset, is not even switched on. A landing page that 500s or blanks because a
+ *   tenant could not be resolved would reintroduce the very failure it exists to
+ *   fix. This page renders from constants alone.
+ * - **No enumeration.** No tenant names, no tenant count, no version string, no
+ *   module status. `/login` already decides for itself how much it reveals (it
+ *   caps its tenant picker); this page does not widen that surface for an
+ *   anonymous visitor.
+ * - **No new client script.** The single `is:inline` script is the EXISTING
+ *   `THEME_INIT_SCRIPT_BODY`, whose SHA-256 is already unconditionally present
+ *   in `script-src` (`src/lib/security/security-headers.ts`). Reusing it means
+ *   this page honours the visitor's light/dark preference without adding one
+ *   byte of CSP surface. Do not inline anything else here.
+ * - **No `noindex`.** Unlike every other rendered surface in this repo, this
+ *   page describes the software rather than anyone's data, so it is the one page
+ *   that should be indexable.
+ *
+ * The catch-all `src/pages/[...path].ts` is untouched: Astro ranks rest params
+ * lowest, so this file wins `/` while every unknown path still gets the clean,
+ * leak-free 404 that `tests/e2e/not-found.e2e.ts` guards.
+ */
+import "../styles/tokens.css";
+import "../styles/motion.css";
+import { THEME_INIT_SCRIPT_BODY } from "../lib/security/theme-init-script";
+
+/**
+ * Static copy. Kept in this file rather than a catalog because it describes the
+ * SOFTWARE, not tenant content — there is no locale negotiation on this route
+ * and no tenant whose language could steer it.
+ */
+const CAPABILITIES = [
+  {
+    title: "Multi-tenant sejak lapisan basis data",
+    body: "Isolasi tenant ditegakkan PostgreSQL row-level security dengan FORCE, bukan oleh filter di kode aplikasi — sehingga sebuah query yang lupa menyaring tetap tidak bisa melihat data tenant lain."
+  },
+  {
+    title: "Otorisasi RBAC + ABAC default-deny",
+    body: "Setiap permukaan non-publik melewati satu gerbang otorisasi. Kebijakan dievaluasi dengan deny-overrides-allow, dan setiap keputusan meninggalkan jejak yang bisa diaudit."
+  },
+  {
+    title: "Modular monolith",
+    body: "Kapabilitas hidup sebagai modul yang mendeklarasikan permission, navigasi, job, dan retensi datanya sendiri, lalu dirakit dari satu registry — satu proses untuk dijalankan, batas yang tegas di dalamnya."
+  },
+  {
+    title: "Kontrak API yang dijaga",
+    body: "Spesifikasi OpenAPI dan AsyncAPI per modul dijaga gerbang CI, jadi permukaan yang terbit tidak bisa menyimpang dari yang diimplementasikan tanpa ada yang merah."
+  },
+  {
+    title: "Online-first, tahan offline",
+    body: "Jalur utamanya online. Mode LAN/offline ada sebagai ketahanan, dengan sinkronisasi ber-HMAC dan perlindungan replay saat sebuah node kembali terhubung."
+  },
+  {
+    title: "Siap dioperasikan",
+    body: "Audit log, idempotency pada mutasi berisiko, rate limiting, retensi data terjadwal, dan health check — bagian yang biasanya baru dipikirkan setelah insiden pertama."
+  }
+];
+---
+
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AWCMS — platform CMS & ERP multi-tenant</title>
+    <meta
+      name="description"
+      content="AWCMS adalah platform multi-tenant untuk manajemen konten dan back-office: isolasi tenant di lapisan basis data, otorisasi default-deny, dan arsitektur modular monolith."
+    />
+    <script is:inline set:html={THEME_INIT_SCRIPT_BODY} />
+  </head>
+  <body>
+    <a class="skip-link" href="#konten">Lompat ke konten</a>
+
+    <header class="site-header">
+      <span class="wordmark">AWCMS</span>
+      <a class="btn btn--ghost" href="/login">Masuk</a>
+    </header>
+
+    <main id="konten">
+      <section class="hero">
+        <h1>Platform multi-tenant untuk konten dan back-office</h1>
+        <p class="hero__lead">
+          AWCMS menggabungkan manajemen konten dengan fondasi ERP di atas satu
+          basis kode: isolasi antar-tenant ditegakkan basis data, otorisasi
+          menolak secara default, dan setiap kapabilitas dirakit sebagai modul.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="/login">Masuk ke dasbor</a>
+          <a
+            class="btn btn--ghost"
+            href="https://github.com/ahliweb/awcms"
+            rel="noreferrer noopener">Lihat repositori</a
+          >
+        </div>
+        <p class="hero__note">
+          Instance ini adalah deployment rujukan dari template AWCMS. Akses
+          dasbor memerlukan akun pada salah satu tenant-nya.
+        </p>
+      </section>
+
+      <section class="capabilities" aria-labelledby="kapabilitas">
+        <h2 id="kapabilitas">Yang ada di dalamnya</h2>
+        <ul class="card-grid">
+          {
+            CAPABILITIES.map((item) => (
+              <li class="card">
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        AWCMS — perangkat lunak sumber tersedia dari <a
+          href="https://github.com/ahliweb/awcms"
+          rel="noreferrer noopener">ahliweb/awcms</a
+        >.
+      </p>
+    </footer>
+  </body>
+</html>
+
+<style>
+  /*
+   * Scoped to this page and built entirely from `tokens.css` custom properties,
+   * so it follows the light/dark palette the theme-init script resolves rather
+   * than restating any colour of its own.
+   */
+  :global(body) {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-base);
+    line-height: var(--lh-normal);
+  }
+
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-radius: 0 0 var(--radius-md) 0;
+    z-index: 1;
+  }
+
+  .skip-link:focus {
+    left: 0;
+  }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--sp-5) var(--sp-5);
+  }
+
+  .wordmark {
+    font-weight: var(--fw-bold);
+    font-size: var(--fs-lg);
+    letter-spacing: var(--tracking-wide);
+  }
+
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 var(--sp-5) var(--sp-8);
+  }
+
+  .hero {
+    padding: var(--sp-7) 0 var(--sp-8);
+    max-width: 46rem;
+  }
+
+  h1 {
+    margin: 0 0 var(--sp-4);
+    font-size: var(--fs-2xl);
+    line-height: var(--lh-tight);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  .hero__lead {
+    margin: 0 0 var(--sp-6);
+    font-size: var(--fs-md);
+    line-height: var(--lh-relaxed);
+    color: var(--color-text-muted);
+  }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .hero__note {
+    margin: var(--sp-6) 0 0;
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-3) var(--sp-5);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    text-decoration: none;
+    transition: background-color var(--motion-fast) var(--ease-standard);
+  }
+
+  .btn--primary {
+    background: var(--color-primary-strong);
+    color: var(--color-primary-contrast);
+  }
+
+  .btn--primary:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .btn--ghost {
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .btn--ghost:hover {
+    background: var(--color-surface-hover);
+  }
+
+  .btn:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  h2 {
+    margin: 0 0 var(--sp-5);
+    font-size: var(--fs-xl);
+    line-height: var(--lh-snug);
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--sp-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .card {
+    padding: var(--sp-5);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .card h3 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-base);
+    font-weight: var(--fw-semibold);
+    line-height: var(--lh-snug);
+  }
+
+  .card p {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+  }
+
+  .site-footer {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: var(--sp-5);
+    border-top: 1px solid var(--color-border);
+    font-size: var(--fs-sm);
+    color: var(--color-text-muted);
+  }
+
+  .site-footer a,
+  .hero__note a {
+    color: var(--color-primary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn {
+      transition: none;
+    }
+  }
+</style>

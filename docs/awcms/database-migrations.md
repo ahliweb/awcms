@@ -8,6 +8,52 @@
 
 Dokumen ini mencatat runner migrasi PostgreSQL AWCMS.
 
+## Langkah 0 — ambil DAN verifikasi backup
+
+Berlaku untuk setiap environment bersama — produksi, dan environment
+kedua apa pun yang seseorang dirikan di sampingnya. Bukan
+saran, melainkan langkah pertama: migrasi di repo ini **forward-only**
+(tidak ada `down`), jadi satu-satunya jalur pembatalan yang nyata adalah
+restore. Backup yang belum pernah diuji-restore bukan jalur pembatalan —
+ia hanya berkas.
+
+```bash
+# 1. ambil backup (custom format + sidecar sha256, diverifikasi saat itu juga)
+DATABASE_URL=<url owner/privileged> \
+BACKUP_DIR=/var/backups/awcms \
+./deploy/backup/backup-postgres.sh
+
+# 2. buktikan dump itu benar-benar bisa di-restore — drill verify-only:
+#    restore ke database sekali-pakai, diperiksa, lalu di-DROP.
+#    Tanpa --target skrip ini TIDAK PERNAH menyentuh database live.
+DATABASE_URL=<url owner/privileged> \
+./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
+```
+
+Langkah 2 tidak opsional. `backup-postgres.sh` hanya membuktikan berkasnya
+terbaca; `restore-postgres.sh` yang membuktikan isinya kembali menjadi
+database — termasuk bahwa tabel ber-`FORCE ROW LEVEL SECURITY` selamat
+melewati round-trip. Isolasi tenant yang hilang saat restore adalah
+kegagalan senyap: semuanya tampak sehat, tak ada satu pun tenant yang
+terpisah.
+
+Database PostgreSQL di sini adalah container yang dikelola Coolify tanpa
+port ter-publish, jadi kedua skrip dijalankan sebagai container one-shot
+yang berbagi network namespace container DB — pola yang sama persis
+dengan menjalankan migrasi itu sendiri (lihat
+[`environments.md`](environments.md) §Menjalankan migrasi, dan header
+komentar di masing-masing skrip untuk perintah `docker run` lengkapnya).
+
+Catat nama berkas dump, `sha256`-nya, dan waktu drill di catatan deploy —
+itulah bukti yang diminta
+[`production-preflight-runbook.md`](production-preflight-runbook.md)
+Stage 2 sebelum `--backup-verified` boleh dipakai.
+
+> Enkripsi at-rest dan manifest bertanda tangan HMAC yang disebut runbook
+> itu **belum ada**; kedua skrip menolak jalan (bukan diam-diam
+> mengabaikan) bila variabel kuncinya diset, supaya tak ada yang mengira
+> dump polos itu terenkripsi.
+
 ## Perintah
 
 ```bash
@@ -27,6 +73,7 @@ DATABASE_URL=postgres://awcms:awcms_password@localhost:5432/awcms bun run db:mig
 - Checksum SHA-256 disimpan untuk setiap migration yang applied.
 - Jika migration yang sudah applied berubah, runner berhenti dan meminta migration baru.
 - Setiap migration baru dijalankan dalam transaction runner; wrapper `BEGIN; ... COMMIT;` luar boleh ada pada file lama dan akan dilepas sebelum eksekusi.
+- Runner menyetel `lock_timeout = 5s` dan `statement_timeout = 15min` pada sesinya sendiri, tepat setelah advisory lock diambil — bukan tanggung jawab operator di command line. `lock_timeout` mencegah satu DDL yang menunggu `ACCESS EXCLUSIVE` mengantrikan seluruh request di belakangnya (cara paling umum sebuah `ALTER TABLE` "cepat" menjatuhkan situs); `statement_timeout` memberi batas atas pada backfill yang meleset. Migration yang memang butuh lebih lama menyatakannya sendiri dengan `SET LOCAL statement_timeout` di dalam berkasnya, sehingga niat itu terbaca di tempat reviewer melihatnya.
 - Error menghentikan proses dengan exit code non-zero.
 - Pesan error tidak mencetak nilai `DATABASE_URL`.
 

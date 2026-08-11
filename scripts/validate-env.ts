@@ -33,10 +33,19 @@ const BOOL_VALUES = ["true", "false"] as const;
 
 const RULES: readonly Rule[] = [
   {
+    // `staging` DIHAPUS oleh ADR-0083 (diamandemen 11 Agustus 2026) bersama
+    // profil deployment-nya di `_shared/module-contract.ts`. Menyisakannya di
+    // sini akan membuat gerbang ini MENERIMA `APP_ENV=staging` untuk sebuah
+    // environment yang tidak ada — persis kegagalan yang ADR itu tutup: sebuah
+    // nama environment yang berhenti menandakan apa pun lebih buruk daripada
+    // nama yang hilang, karena pembaca `APP_ENV` berikutnya akan yakin dan
+    // salah. `test` BUKAN profil deployment dan tetap tinggal: ia dipakai
+    // harness (mis. drill DR/performa yang menolak `production`), dan tidak
+    // pernah menamai sebuah deployment.
     name: "APP_ENV",
     required: true,
     type: "enum",
-    values: ["development", "test", "staging", "production"]
+    values: ["development", "test", "production"]
   },
   { name: "APP_URL", required: true, type: "url-http" },
   {

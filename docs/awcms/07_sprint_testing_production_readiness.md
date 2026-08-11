@@ -316,7 +316,13 @@ playwright test`, Bun-only), terpisah dari `bun test`
 
 ### Saat migration
 
-- Jalankan staging dulu.
+- Latih dulu di environment kedua — **bila instalasi itu memang punya satu**.
+  Repo ini tidak, dan tidak ada profil untuk itu: `staging` dihapus dari
+  kosakata profil deployment
+  ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)
+  sebagaimana diamandemen; tersisa `development`/`production`/`offline-lan`).
+  Jadi yang berdiri di depan migrasi produksinya adalah butir "Backup
+  diverifikasi" di atas, dan butir itu berhenti menjadi formalitas.
 - Jalankan berurutan.
 - Catat start/end time.
 - Stop jika error.
@@ -339,8 +345,9 @@ langkah terpisah dan eksplisit (`--apply-migrations --backup-verified
 `GO-LIVE DIIZINKAN`. **Belum ada implementasi kode untuk `production:preflight`
 di repo ini** (tidak ada key itu di `package.json`, `scripts/production-preflight.ts`
 belum ada) — deskripsi di atas adalah target arsitektur. Prosedur rehearsal
-staging → bukti backup → apply → rollback lengkap serta status implementasi
-sesungguhnya: [`production-preflight-runbook.md`](production-preflight-runbook.md).
+(hanya bagi instalasi yang memang mendirikan environment kedua) → bukti
+backup → apply → rollback lengkap serta status implementasi sesungguhnya:
+[`production-preflight-runbook.md`](production-preflight-runbook.md).
 
 ## Legacy migration checklist
 

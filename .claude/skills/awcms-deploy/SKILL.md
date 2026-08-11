@@ -1,12 +1,23 @@
 ---
 name: awcms-deploy
-description: Pilih dan jalankan profil deployment AWCMS (development/staging/production/offline-LAN). Gunakan saat menyiapkan deployment baru, memutuskan LAN-first vs registry-based, atau deploy ke Coolify. Sesuai doc 18 dan deployment-profiles.md/deploy-coolify.md.
+description: Pilih dan jalankan profil deployment AWCMS (development/production/offline-LAN — TIGA profil; `staging` dihapus dari kosakata profil oleh ADR-0083, dan kontrak isolasinya kini berlaku untuk environment kedua apa pun). Gunakan saat menyiapkan deployment baru, memutuskan LAN-first vs registry-based, atau deploy ke Coolify. Sesuai doc 18 dan deployment-profiles.md/deploy-coolify.md.
 ---
 
 # AWCMS — Deployment Profile & Execution
 
 Ikuti `docs/awcms/deployment-profiles.md` (peta profil ke berkas
 `deploy/*`) dan `docs/awcms/deploy-coolify.md` (khusus Coolify).
+
+> **Tiga profil, bukan empat.** `development`, `production`, `offline-lan`.
+> `staging` DIHAPUS dari kosakata profil deployment (ADR-0083 sebagaimana
+> diamandemen) — bukan "ada tapi tak dipakai di sini". Jangan menuliskannya di
+> `deploymentProfiles` modul, di `APP_ENV`, atau di dokumen baru. Kontrak
+> isolasi yang dulu melekat padanya TIDAK hilang: ia kini aturan untuk
+> **environment kedua apa pun** yang seseorang dirikan di samping produksinya
+> (database sendiri, role/password sendiri, secret sendiri, integrasi keluar
+> mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge
+> per-environment) — tertulis di `docs/awcms/environments.md` §Kontrak isolasi
+> environment kedua.
 
 ## Pilih jalur
 

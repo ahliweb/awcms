@@ -16,7 +16,10 @@ import {
   type ModuleCompositionIssue
 } from "../src/modules/module-management/domain/module-composition";
 import { listBaseModules, listModules } from "../src/modules";
-import type { ModuleDescriptor } from "../src/modules/_shared/module-contract";
+import type {
+  ModuleDeploymentProfile,
+  ModuleDescriptor
+} from "../src/modules/_shared/module-contract";
 
 function descriptor(
   overrides: Partial<ModuleDescriptor> = {}
@@ -211,6 +214,30 @@ describe("deployment profile incompatibility", () => {
       )
     );
     expect(issueTypes(issues)).not.toContain("deployment_profile_incompatible");
+  });
+
+  /**
+   * The union is CLOSED at three, and `staging` is not one of them (ADR-0083 as
+   * amended 11 August 2026). Composition compares profiles as plain strings, so
+   * nothing at runtime would notice `staging` coming back — the only thing that
+   * can is the type. The `@ts-expect-error` below is the assertion: re-adding
+   * `"staging"` to `ModuleDeploymentProfile` makes the directive UNUSED, and
+   * `tsc --noEmit` fails on an unused `@ts-expect-error`. The array is spelled
+   * out (not derived) so a fourth member cannot slip in by inference.
+   */
+  test("the deployment-profile union is closed at three, without `staging`", () => {
+    const profiles: readonly ModuleDeploymentProfile[] = [
+      "development",
+      "production",
+      "offline-lan"
+    ];
+
+    // @ts-expect-error — `staging` was removed from the union; if this line ever
+    // compiles again, the profile came back and this test is the alarm.
+    const removed: ModuleDeploymentProfile = "staging";
+
+    expect(profiles).toHaveLength(3);
+    expect(profiles).not.toContain(removed);
   });
 });
 
