@@ -449,15 +449,34 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   ter-verifikasi-restore sebelum migrasi (`deploy/backup/restore-postgres.sh`
   mode verify-only). Itu mitigasi, **bukan pengganti setara**.
 
-  **Infrastruktur: BELUM dikerjakan saat entri ini ditulis — hanya backup yang
-  sudah.** Rencananya produksi berdiri di `awcms.ahlikoding.com`, lalu app
-  Coolify, database, dan Varnish staging dibongkar berikut rule Traefik yang
-  selama ini memetakan domain produksi ke Varnish staging. **Sampai itu terjadi,
-  domain produksi masih melayani database staging** — sama seperti yang dicatat
-  ADR-0083 §Konsekuensi, dan kedua dokumen harus tetap sepakat soal itu.
+  **Infrastruktur: SELESAI 11 Agustus 2026, v8.0.0 hidup di produksi.**
+  Diverifikasi, bukan diklaim: `https://awcms.ahlikoding.com/api/v1/health`
+  menjawab `moduleCount: 22` (v7.0.0 menjawab 21), `/` menjawab **200**
+  (halaman landing, bukan 404 lagi), tag image container
+  `1d9534f1717282440376263f8e18c8b812a8b997` = commit rilis `v8.0.0` persis, dan
+  `awcms-staging.ahlikoding.com` kini **503** karena tak ada lagi router yang
+  menyebutnya. `awcms_app` diperiksa `rolsuper=f, rolbypassrls=f`, jadi FORCE RLS
+  di 124 tabel benar-benar berlaku.
 
-  Yang SUDAH benar-benar dilakukan, dan hanya ini: **backup diambil dan
-  DIVERIFIKASI, sebelum apa pun dihapus:**
+  **Latihan migrasi terakhir yang ADR-0083 lepaskan — dipakai sekali sebelum
+  dilepas.** Karena staging masih ada, 18 migrasi (`091`–`108`) dijalankan lebih
+  dulu terhadap SALINAN data produksi (`awcms_rehearsal`) dan diperiksa
+  invariannya — `migrations=108`, `unbackfilled=0`, `force_rls=124`,
+  `awcms_invitations → awcms_worker = DELETE,SELECT` — baru kemudian dijalankan
+  sungguhan, dengan hasil identik. Latihan itu tak akan bisa diulang: staging
+  sudah tidak ada.
+
+  **Empat env var yang bolong sejak v7.0.0 ditutup saat standup:**
+  `TRUSTED_PROXY_ENABLED=true` + `TRUSTED_PROXY_HOP_COUNT=1` (tanpanya seluruh
+  klien runtuh ke satu bucket rate-limit di belakang Traefik),
+  `AUTH_COOKIE_SECURE=true`, dan `AUTH_SOURCE_RATE_LIMIT_MAX=60`.
+
+  **Tenant-nya sendiri ber-`tenant_code = staging`** dan bernama "AWCMS
+  Staging" — referensi staging di dalam DATA produksi. Diubah menjadi
+  `ahliweb` / "AWCMS", dan `PUBLIC_DEFAULT_TENANT_CODE` mengikuti. Konsekuensi
+  yang diterima: URL `/blog/staging/**` menjadi `/blog/ahliweb/**`.
+
+  **Backup diambil dan DIVERIFIKASI lebih dulu, sebelum apa pun dihapus:**
 
   - berkas `/home/admin1/backups/awcms/awcms-preprod-20260811-090628.dump`
   - sha256 `08f677c5f13d7386c77dd41841090b60f95159550bdab3e90b7bfb6353a0bd68`
@@ -474,10 +493,37 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   pernah dilayani `awcms.ahlikoding.com` selama periode putaran keenam,
   ketika domain produksi berjalan di atas database staging.
 
-  **Titik-lanjut.** Setelah produksi berdiri, verifikasi kepada
+  **Jebakan yang dibuat sendiri saat membongkar, dan cara ia ketahuan.**
+  Menghapus database `awcms_staging` membuat healthcheck container Postgres —
+  `psql -U awcms_staging -d awcms_staging -c "SELECT 1"`, dipanggang Coolify saat
+  container dibuat — menunjuk database yang tak ada lagi. Container masih
+  melapor `healthy` beberapa menit (interval belum lewat) sementara
+  `FailingStreak` sudah 4. Diperbaiki dengan meng-update `postgres_db` di
+  Coolify lalu me-restart resource-nya, dan **diverifikasi dengan membaca ulang
+  `Config.Healthcheck.Test` container barunya**, bukan dengan melihat kata
+  "healthy". Pelajarannya sama seperti putaran keenam: status hijau yang belum
+  sempat berubah bukan bukti.
+
+  **DUA sisa staging yang TIDAK bisa/tidak boleh dihapus, dan alasannya:**
+
+  1. **Record DNS `awcms-staging.ahlikoding.com` masih ada.** Token Cloudflare di
+     host hanya ber-scope zona `dinkes.top`, jadi zona `ahlikoding.com` di luar
+     jangkauan. Hostname-nya sendiri sudah mati (503, tak ada router). Hapus
+     record-nya secara manual untuk menuntaskan.
+  2. **Role Postgres `awcms_staging` sengaja DIPERTAHANKAN.** Ia adalah
+     `POSTGRES_USER` container (superuser/pemilik). Me-rename-nya membuat
+     `POSTGRES_USER`, healthcheck, dan connection string Coolify saling tidak
+     cocok — menukar nama kosmetik dengan risiko produksi tak bisa start. Nama
+     itu tinggal label; yang penting `awcms_app` (bukan ia) yang melayani
+     request, dan itu sudah diperiksa tidak menembus RLS.
+
+  **Titik-lanjut.** Verifikasi produksi selalu kepada
   `applications`/`standalone_postgresqls` Coolify, **bukan kepada `curl`** —
   pelajaran putaran keenam yang menyesatkan berjam-jam: `https://awcms.ahlikoding.com`
-  menjawab 200 dan sehat sepanjang waktu produksi tidak ada.
+  menjawab 200 dan sehat sepanjang waktu produksi tidak ada. Job
+  `sign-attest-publish` v8.0.0 menunggu approval maintainer di environment
+  `release`; image-nya sendiri sudah terbit karena job `build` mendahului
+  gerbang itu.
 
 - **PUTARAN 11 Agustus 2026 (keenam) — AUDIT KESIAPAN DEPLOY. Kodenya siap;
   yang tidak ada adalah TEMPATNYA.** Dipicu pertanyaan "apakah bisa deploy
