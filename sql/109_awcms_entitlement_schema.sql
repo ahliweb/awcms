@@ -257,6 +257,42 @@ VALUES (
 )
 ON CONFLICT (plan_code) DO NOTHING;
 
+-- 7. Narrowing the three GLOBAL tables to read-only at runtime.
+--
+-- REQUIRED, not decorative, and the reason is that `sql/019` set
+-- `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE,
+-- DELETE ON TABLES TO awcms_app`. Every table created after it is born with all
+-- four verbs, so a table DECLARED read-only in
+-- `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` and never revoked here is a declaration
+-- the database does not honour — the map would say "no writes" while `awcms_app`
+-- held all three.
+--
+-- That default is right for tenant-scoped tables (`sql/019`'s own comment: a new
+-- table must not silently ship unreachable at runtime) and wrong for these,
+-- which is exactly why `sql/080` wrote the same three lines for the region
+-- tables. The same shape, for the same reason.
+--
+-- Found by the DB-gated suite, not by review: every pure gate in the 40-segment
+-- chain passed with the declaration and the database disagreeing, because
+-- `checkRuntimeRoleGrants` is the only check that asks POSTGRES what
+-- `awcms_app` actually holds.
+--
+-- `awcms_worker` gets nothing at all. `sql/019`'s default privileges name only
+-- `awcms_app`, so the worker starts with none, and `WORKER_ROLE_GRANTS` states
+-- the rule for keeping it that way: any `awcms_%` table not keyed there must be
+-- ungranted for that role. No job reads a plan.
+REVOKE ALL ON awcms_entitlements FROM awcms_app;
+REVOKE ALL ON awcms_plans FROM awcms_app;
+REVOKE ALL ON awcms_plan_entitlements FROM awcms_app;
+
+-- SELECT is retained, and it is load-bearing: `resolveModuleAvailability` joins
+-- `awcms_plan_entitlements` on the request path. A revoke-everything here would
+-- turn every entitled request into `permission denied` — the mirror-image defect
+-- of the one this block fixes, and the one `sql/091` records.
+GRANT SELECT ON awcms_entitlements TO awcms_app;
+GRANT SELECT ON awcms_plans TO awcms_app;
+GRANT SELECT ON awcms_plan_entitlements TO awcms_app;
+
 COMMENT ON TABLE awcms_entitlements IS
   'Global catalogue of entitlement names (Gelombang 5, ADR-0084). Shaped after awcms_permissions and read-only at runtime for the same reason: a request path that can write this table can award itself a feature, and no RLS policy would object because there is no tenant column to police.';
 
