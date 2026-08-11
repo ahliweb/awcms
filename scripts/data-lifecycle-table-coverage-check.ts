@@ -105,6 +105,31 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0078, and bounded by the table above rather than independently: append-only, at most three rows per policy (granted / revoked / expired), so its ceiling is a small multiple of a bound that is already human-authored. Given a retention policy it would be a grant PROVENANCE trail that forgets who widened someone's access, which is the one question the trail exists to answer — and its exact sibling `awcms_business_scope_assignment_events` has no retention either, so a rule applied here and not there would be a difference nobody could defend. Reviewed together with the live table on purpose: a table and its history treated differently is worse than either treatment."
   },
   {
+    table: "awcms_entitlements",
+    reason:
+      "ADR-0084. The catalogue of entitlement NAMES, written only by a migration — `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` denies `awcms_app` every write verb on it, so no request path can add a row at all. Its ceiling is the number of names an operator has authored, and the same argument the `awcms_permissions` row makes for itself: a catalogue that grows with deployments rather than with traffic."
+  },
+  {
+    table: "awcms_plans",
+    reason:
+      "ADR-0084, and bounded for the same reason as the row above — migration-only writes, one row per package an operator sells. An age-based purge would be actively wrong twice over: it would delete the plan rows that `awcms_tenant_subscriptions.plan_code` references (the FK would abort the purge, so retention would silently never run — the failure `sql/108` records), and the `is_default` row is what PR 5.3's backfill lands every tenant on."
+  },
+  {
+    table: "awcms_plan_entitlements",
+    reason:
+      "ADR-0084, and bounded by the two above rather than independently: at most one row per (plan, entitlement) by primary key, so its ceiling is plans x entitlements, both migration-authored. Deleting a row by age would silently revoke a feature from every tenant on that plan — retention as an outage."
+  },
+  {
+    table: "awcms_tenant_subscriptions",
+    reason:
+      "ADR-0084. At most ONE row per tenant, enforced by `awcms_tenant_subscriptions_tenant_key`, so the ceiling is the tenant count — and a subscription HISTORY was deliberately not built for exactly this reason (it would be an unbounded table pretending to be configuration). The history that matters — who moved this tenant to which plan, and when — is an audit event with its own retention. An age-based purge here would delete a LIVE subscription and drop the tenant to unentitled, which is the same class of wrongness `awcms_access_policies` states one entry up."
+  },
+  {
+    table: "awcms_tenant_entitlements",
+    reason:
+      "ADR-0084, and bounded twice: at most one row per (tenant, entitlement) by unique index, and the entitlement side is itself migration-authored. Rows are written by an administrator or by the PR 5.3 backfill, never by traffic. Expiry is a TIMESTAMP rather than a deletion on purpose — an expired row is inert but still answers 'was this tenant entitled last March', which is the question a billing dispute starts from, and an age-based purge would delete both the expired rows and the live ones indiscriminately."
+  },
+  {
     table: "awcms_invitation_policies",
     reason:
       "ADR-0082, and bounded by its PARENT rather than independently — the strongest form of that claim in this list, because the binding is a database constraint rather than an argument: the `ON DELETE CASCADE` in `sql/106` means these rows are removed exactly when `awcms_invitations` is purged, and that table carries a real `dataLifecycle` descriptor (90d default, 7d floor). A descriptor of its own would be actively wrong — `executionMode: 'generic'` deletes purely by age, so it would strip the roles off a still-pending invitation and produce an acceptance that silently grants nothing. Its own ceiling is bounded twice over anyway: at most one row per (invitation, role, scope) by unique index, and at most 20 roles per invitation by `MAX_INVITATION_ROLE_COUNT`."

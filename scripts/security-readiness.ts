@@ -570,7 +570,23 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   // import job as `awcms_worker`. Neither may DELETE: a dataset is superseded,
   // never deleted, so 91k rows are never one wrong query away.
   awcms_idn_region_datasets: ["INSERT", "DELETE"],
-  awcms_idn_admin_regions: ["INSERT", "UPDATE", "DELETE"]
+  awcms_idn_admin_regions: ["INSERT", "UPDATE", "DELETE"],
+  // Entitlement catalogue (ADR-0084, sql/109) — the operator's plan catalogue.
+  // Global because a plan is not tenant-owned data: `pro` means the same thing
+  // to every customer, exactly as `province "Aceh"` does above.
+  //
+  // Read-only at runtime, all three, and this is the strongest form of that
+  // claim in this list. `awcms_permissions` is read-only because inventing a
+  // permission at request time would be absurd; these are read-only because
+  // writing one would be an ESCALATION. There is no `tenant_id` here for a
+  // policy to police, so a request path holding INSERT on
+  // `awcms_plan_entitlements` could award itself any feature and no RLS policy
+  // would object. Creating or repricing a plan is a migration; assigning a
+  // TENANT to a plan is a request-path write on `awcms_tenant_subscriptions`,
+  // which is tenant-scoped, FORCE-RLS'd, and keeps all four verbs.
+  awcms_entitlements: ["INSERT", "UPDATE", "DELETE"],
+  awcms_plans: ["INSERT", "UPDATE", "DELETE"],
+  awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"]
 };
 
 /**
