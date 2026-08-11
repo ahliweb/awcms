@@ -416,6 +416,75 @@ oleh pembacaan.
 server-side, cookie portal, CSRF, dan pemanggilan introspeksi per permintaan.
 Sisi `awcms` sudah lengkap.
 
+## Undangan (Gelombang 4, ADR-0082)
+
+Arah yang berlawanan dengan self-registration: registrasi adalah **tarik**
+(orang asing meminta, admin memutuskan), undangan adalah **dorong** (admin
+menawarkan, orang asing memutuskan). Keduanya tetap ada, masing-masing dengan
+permission dan cerita auditnya sendiri.
+
+- **Skema (`sql/106`, permission `sql/107`)** — `awcms_invitations` (tenant-scoped,
+  RLS `ENABLE`+`FORCE`) menyimpan `token_hash` sha256 dari 32 byte CSPRNG —
+  token mentah TIDAK PERNAH disimpan — plus `status`, `expires_at`,
+  `resend_count` (CHECK `<= 5`), dan `skip_email_confirmation`.
+  `awcms_invitation_policies` adalah grant yang dibawa tawaran itu.
+- **Sebuah tawaran BUKAN grant.** `activeRoleGrants` tidak membaca tabel ini dan
+  tak boleh diajari — subjek yang memegang peran karena sebuah baris menyatakan
+  ia pernah diundang adalah jalur grant KEDUA yang ADR-0079 runtuhkan.
+  Penerimaan memanggil `grantRolePolicy`, dan baris `awcms_access_policies`
+  yang dihasilkannya adalah satu-satunya yang dilihat pembaca mana pun.
+- **Mengundang dan MEMBERI PERAN dua otoritas.** Undangan ber-peran menuntut
+  `invitations.create` DAN `access_control.assign` (pemisahan ADR-0081, dengan
+  taruhan lebih tinggi: grant lewat undangan menjangkau orang yang belum ada).
+  Penolakan `is_system` diperiksa saat dibuat DAN lagi saat diterima — peran
+  bisa berubah di antara kedua momen itu.
+- **Scope dipatok tenant-wide** oleh CHECK basis data. Kolomnya ada supaya
+  pelebaran nanti satu `DROP`/`ADD CONSTRAINT`; CHECK-nya ada karena ADR-0080
+  melarang mengirim penulis grant ber-scope sebelum rute menyatakan required
+  scope-nya.
+- **`skip_email_confirmation` PLATFORM-scoped** (`invitations.configure`,
+  satu-satunya permission platform modul ini) kecuali alamatnya sudah memegang
+  identitas aktif di tenant ini. Ia menghapus satu-satunya bukti kendali
+  mailbox, dan setelah Gelombang 7 objek yang dicetaknya adalah principal
+  GLOBAL.
+- **Resend MEROTASI token** dan digerbangi `create`, bukan action tersendiri.
+  Tanpa rotasi, "kirim ulang" adalah permukaan perbanyakan token: satu undangan
+  menumbuhkan N tautan hidup dan mencabutnya berarti mencabut N rahasia yang tak
+  seorang pun hitung.
+- **Endpoint admin** — `GET`/`POST /api/v1/invitations` (list keyset + create,
+  `Idempotency-Key` wajib), `POST /api/v1/invitations/{id}/revoke`,
+  `POST /api/v1/invitations/{id}/resend`. Alamat SELALU ter-mask di list.
+- **Endpoint publik** — `GET /api/v1/auth/invitations/{token}` (preview:
+  nama tenant + nama pengundang, **tidak pernah** alamatnya) dan
+  `POST …/accept`. Keduanya `checkAuthRateLimit`; accept ber-Turnstile action
+  sendiri. Tak dikenal / tercabut / sudah diterima / kedaluwarsa / tenant salah
+  semuanya **404** — bukan 410, yang akan memberi tahu pemegang token bahwa
+  token itu pernah sah.
+- **Penerimaan tidak menerbitkan sesi.** Sesi dari sini melangkahi kebijakan MFA
+  tenant, `isPasswordLoginDisabledForIdentity` pada tenant SSO-only, dan rate
+  limit login. Undangan mencetak AKUN; `/login` yang memutuskan sesi.
+- **`materializeMembership()`** (`application/membership-materialization.ts`)
+  adalah SATU fungsi dengan satu pemanggil, sengaja: Gelombang 7 butuh persis
+  satu tempat untuk diarahkan ulang saat identity menjadi principal global.
+- **Kunci baris load-bearing** — `acceptInvitation` membaca `FOR UPDATE`.
+  Tanpanya dua penerimaan tautan yang sama sama-sama lolos cek status dan yang
+  kalah menabrak `awcms_identities_tenant_login_key` di tengah transaksi
+  (dibuktikan MERAH lewat mutasi di
+  `tests/integration/invitations.integration.test.ts`).
+- **Pengiriman lewat capability port** — `identity_access` tidak menulis
+  `awcms_email_*` (ADR-0013 §6). `AuthNotificationPort` mendapat operasi KEDUA
+  (`enqueueAuthAddressNotification`) karena undangan belum punya baris
+  `awcms_tenant_users` untuk dialamati. Tenant tanpa template `auth.invitation`
+  aktif → `delivery: "unavailable"` di respons (pemanggilnya admin
+  terautentikasi; menyembunyikannya hanya membuatnya menunggu tautan yang tak
+  akan pernah tiba).
+- **Belum ada layar admin** untuk undangan — keempat permission-nya duduk di
+  ledger `NOT_YET_SCREENED`, urutan yang sama dengan ADR-0056 (`media_library`
+  mendapat permukaan API lebih dulu, layarnya menyusul). Path-nya sengaja tidak
+  ditulis di sini: `skills:check` menuntut tiap URL `/admin/…` berbacktick
+  resolve ke halaman nyata, dan menyebutnya sekarang akan menjadi persis
+  kebohongan percaya diri yang gerbang itu ada untuk mencegah.
+
 ## Belum tersedia (Sprint 3+)
 
 Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:

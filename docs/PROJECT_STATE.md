@@ -356,6 +356,108 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 11 Agustus 2026 (kelima) — GELOMBANG 4 SELESAI.** Tiga PR
+  (#512/#513 + entri ini); nol PR terbuka. ADR-0082.
+
+  **Undangan mendarat utuh dalam dua PR.** `awcms_invitations` +
+  `awcms_invitation_policies` (`sql/106`, permission `sql/107`), lalu
+  penerimaan. Undangan menyebut alamat dan membawa peran yang akan dipegang
+  orang itu; peran itu **inert** sampai penerimaan memanggil `grantRolePolicy`,
+  penulis yang sama dengan setiap grant lain — sehingga `activeRoleGrants`
+  tidak pernah perlu tahu tabel ini ada, dan tak ada jalur grant kedua yang
+  lahir.
+
+  **Empat tempat rencana program tidak diikuti, semuanya dengan alasan yang
+  diperiksa terhadap kode:**
+
+  1. **Kolom scope ADA, tetapi DIPATOK** `CHECK (scope_type = 'tenant' AND
+scope_id = tenant_id)`. Ini jawaban atas batas yang ADR-0080 tulis
+     sendiri — PR yang menambahkan penulis grant ber-scope tak boleh mendarat
+     tanpa menjawabnya — dan jawabannya adalah **menolak menjadi penulis itu**.
+     Menghilangkan kolomnya juga dipertimbangkan: argumen "kolom yang diabaikan
+     penulisnya berbohong" benar untuk kolom TAK-dibatasi, dan CHECK
+     menghapusnya. Bentuk ADR-0078 dipertahankan, jadi pelebaran nanti satu
+     `DROP`/`ADD CONSTRAINT`.
+  2. **`resend` bukan action tersendiri.** Ia tidak ada di `AccessAction`, dan
+     menambahkannya berarti menyatakan mengirim ulang adalah otoritas berbeda
+     dari menerbitkan. Ia bukan — resend mencetak rahasia baru dengan daya yang
+     sama, jadi digerbangi `create`.
+  3. **Rate limit memakai `checkAuthRateLimit`, bukan `checkSharedRateLimit`
+     telanjang** seperti tertulis di rencana. Rencana itu mendahului #447:
+     header tenant adalah kunci yang bisa DIPILIH penyerang, dan
+     `checkAuthRateLimit` memeriksa plafon per-SUMBER lebih dulu. Prosanya
+     dikoreksi di ADR-0066 §C.
+  4. **`approveRegistrationRequest` TIDAK diarahkan ulang ke
+     `materializeMembership`.** Itu akan menjadikan PR penutup gelombang sebuah
+     refactor self-registration + SSO, dan memerahkan
+     `access-assignment-writers.test.ts` yang menyebut `self-registration.ts`
+     sebagai pemanggil langsung `grantRolePolicy`. Konvergensinya milik
+     Gelombang 7, yang memang menjadwalkannya.
+
+  **Dua cacat ditemukan, keduanya oleh MENJALANKAN bukan membaca:**
+
+  1. **Tautan undangan tak membawa tenant.** `buildInvitationUrl` hanya memuat
+     `?token=` sementara kedua endpoint publiknya menuntut header
+     `X-AWCMS-Tenant-ID` — tautannya menghasilkan halaman yang tak bisa
+     melakukan panggilan yang menjadi alasan keberadaannya. Ditemukan saat
+     MENULIS halamannya, bukan saat mereview penulisnya; 39 gerbang hijau
+     selama itu, karena tak satu pun gerbang menghubungkan bentuk tautan dengan
+     apa yang halamannya butuhkan.
+  2. **Satu asersi test saya sendiri salah, ke arah yang benar.** Saya menuntut
+     penerimaan konkuren yang kalah menjawab `identifier_taken`; ia menjawab
+     `invalid` — ia menunggu kunci baris, membaca ulang baris ber-`status =
+'accepted'`, dan **tak pernah sampai ke INSERT identity**. Itu jawaban
+     yang lebih baik, dan ia milik kuncinya: menghapus `FOR UPDATE OF i`
+     membuatnya MELEMPAR (23505 di tengah transaksi = 500 bagi orang yang
+     menekan tombol dua kali).
+
+  **Yang DITOLAK, dengan alasannya:**
+
+  1. **Penerimaan menerbitkan sesi** — akan melangkahi kebijakan MFA tenant
+     (`required_for_all` menghasilkan anggota ber-sesi penuh tanpa faktor
+     kedua), `isPasswordLoginDisabledForIdentity` pada tenant SSO-only, dan
+     rate limit login. Undangan mencetak AKUN; siapa boleh memegang sesi milik
+     `/login`.
+  2. **`410 Gone` untuk token kedaluwarsa** — memberi tahu pemegang token bahwa
+     token itu PERNAH sah. 404 seragam untuk kelima kelas kegagalan.
+  3. **Mengembalikan alamat di preview** — pemanggilnya tak terautentikasi.
+     Pemegang tautan sah sudah membacanya di mailbox-nya; pemegang tautan
+     CURIAN tidak.
+  4. **`recipientTenantUserId` yang nullable pada `AuthNotificationPort`** —
+     akan meninggalkan tiap pemanggil lama satu salah-ketik dari mengantre
+     pesan tanpa tujuan. Operasi KEDUA sebagai gantinya.
+  5. **`update` dan `delete` untuk undangan** — menyunting undangan yang sudah
+     terkirim membuat tautan di inbox seseorang tak lagi cocok dengan yang
+     di-review; menghapusnya menghancurkan satu-satunya catatan bahwa tawaran
+     pernah dibuat.
+  6. **Feature switch ala `AUTH_SELF_REGISTRATION_ENABLED`** — saklar itu ada
+     karena registrasi adalah endpoint PUBLIK yang menulis baris untuk pemanggil
+     anonim. Undangan hanya bisa diterbitkan pemegang permission, jadi tak ada
+     permukaan untuk dilindungi saklar.
+  7. **Deskriptor lifecycle tersendiri untuk `awcms_invitation_policies`** —
+     purge `generic` menghapus murni menurut usia, jadi ia akan melucuti peran
+     dari undangan yang masih pending dan menghasilkan penerimaan yang
+     diam-diam tak memberi apa pun. `BOUNDED_BY_DESIGN` + `ON DELETE CASCADE`.
+
+  **Gerbang yang tumbuh:** `BOUNDED_BY_DESIGN` 4 → 5 (plafonnya, dan kenaikan
+  berikutnya harus lebih sulit — ADR-0081 sudah menuliskan itu);
+  `NOT_YET_SCREENED` +4; `EXPECTED_PLATFORM_KEYS` +1; ledger rate limit 11 → 13
+  dan 7 → 9. Permission 214 → 218.
+
+  **Batas yang WAJIB dibaca.** `config:env:coverage:check` hanya mencocokkan
+  `process.env.X` dan **buta** terhadap `env.X` yang dilewatkan sebagai
+  parameter — batas yang gerbangnya catat sendiri di header. Tiga env undangan
+  dituliskan TANGAN di `.env.example` karena itu. Config module berikutnya yang
+  memakai pola `env: NodeJS.ProcessEnv = process.env` akan punya masalah yang
+  sama, dan tak ada yang akan memberitahunya.
+
+  **Titik-lanjut.** Gelombang 4 tuntas. Berikutnya **Gelombang 5**
+  (entitlement/SaaS — mendarat INERT). Tiga hal yang masih menggantung dari
+  gelombang sebelumnya dan belum dikerjakan: layar `/admin/invitations` (4
+  permission di ledger), permukaan admin untuk grant ber-scope (dengan jawaban
+  atas batas ADR-0080 — yang PR ini TUNDA, tidak selesaikan), dan keputusan
+  lifecycle `delete` grup. #430 tetap Gelombang 7.
+
 - **PUTARAN 10 Agustus 2026 (keempat) — GELOMBANG 3 SELESAI, dan tiga cacat
   hidup ditemukan sambil menutupnya.** Empat PR (#508/#509/#510 + entri ini);
   nol PR terbuka. ADR-0079, ADR-0080, ADR-0081.
