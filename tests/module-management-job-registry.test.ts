@@ -102,6 +102,7 @@ describe("fetchModuleJobs", () => {
         "bun run email:provider:health",
         "bun run email:queue:purge",
         "bun run email:templates:seed-defaults",
+        "bun run entitlements:backfill",
         "bun run form-drafts:purge",
         "bun run identity-access:business-scope:expiry",
         "bun run identity-access:subscription-lifecycle",
