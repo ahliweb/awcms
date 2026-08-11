@@ -46,6 +46,30 @@ export type AuthNotificationRequest = {
   correlationId?: string;
 };
 
+/**
+ * An auth email addressed to a raw ADDRESS rather than to an account
+ * (Gelombang 4 of Issue #423, ADR-0082 — the invitation).
+ *
+ * A second operation, not a nullable `recipientTenantUserId` on the first. The
+ * whole point of an invitation is that its recipient has no membership row yet,
+ * so the account-shaped request above cannot express it — and making that field
+ * optional would leave every existing caller one typo away from enqueueing a
+ * message with nobody to deliver it to, which is a runtime discovery rather
+ * than a compile-time one.
+ *
+ * `variables` carries the recipient's name explicitly, because there is no
+ * profile to read one from: the only name this system holds for an invitee is
+ * the one the inviter typed.
+ */
+export type AuthAddressNotificationRequest = {
+  tenantId: string;
+  templateKey: string;
+  /** The address itself. Normalized for hashing/suppression by the adapter, never by the caller. */
+  recipientAddress: string;
+  variables: Record<string, string>;
+  correlationId?: string;
+};
+
 export type AuthNotificationResult = {
   /** `false` when nothing was queued (no active template for the tenant, or the recipient address is suppressed). */
   enqueued: boolean;
@@ -55,5 +79,9 @@ export type AuthNotificationPort = {
   enqueueAuthNotification(
     tx: Bun.SQL,
     request: AuthNotificationRequest
+  ): Promise<AuthNotificationResult>;
+  enqueueAuthAddressNotification(
+    tx: Bun.SQL,
+    request: AuthAddressNotificationRequest
   ): Promise<AuthNotificationResult>;
 };

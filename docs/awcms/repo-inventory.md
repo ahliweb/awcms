@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 105   |
-| Tabel `awcms_*`                    | 133   |
-| Tabel dengan `FORCE` RLS           | 122   |
+| Migrasi                            | 107   |
+| Tabel `awcms_*`                    | 135   |
+| Tabel dengan `FORCE` RLS           | 124   |
 | Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 348   |
-| Berkas route                       | 328   |
-| ADR                                | 82    |
+| Berkas test                        | 350   |
+| Berkas route                       | 331   |
+| ADR                                | 83    |
 
 ### Modul
 
@@ -152,6 +152,8 @@
 | 103 | `sql/103_awcms_access_assignments_backfill_retire.sql`             |
 | 104 | `sql/104_awcms_user_groups_schema.sql`                             |
 | 105 | `sql/105_awcms_user_groups_permissions.sql`                        |
+| 106 | `sql/106_awcms_identity_invitations_schema.sql`                    |
+| 107 | `sql/107_awcms_identity_invitation_permissions.sql`                |
 
 ### Tabel & Row-Level Security
 
@@ -212,6 +214,8 @@
 | `awcms_identity_mfa_recovery_codes`      | `sql/024_awcms_mfa_totp_schema.sql`                        | ya    | ya    |
 | `awcms_idn_admin_regions`                | `sql/080_awcms_idn_admin_regions_schema.sql`               | tidak | tidak |
 | `awcms_idn_region_datasets`              | `sql/080_awcms_idn_admin_regions_schema.sql`               | tidak | tidak |
+| `awcms_invitation_policies`              | `sql/106_awcms_identity_invitations_schema.sql`            | ya    | ya    |
+| `awcms_invitations`                      | `sql/106_awcms_identity_invitations_schema.sql`            | ya    | ya    |
 | `awcms_machine_credentials`              | `sql/082_awcms_identity_machine_credentials_schema.sql`    | ya    | ya    |
 | `awcms_media_library_tenant_state`       | `sql/053_awcms_media_library_tenant_state_schema.sql`      | ya    | ya    |
 | `awcms_mfa_challenges`                   | `sql/024_awcms_mfa_totp_schema.sql`                        | ya    | ya    |
@@ -295,7 +299,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 295        |
+| `(root)`      | 297        |
 | `e2e`         | 12         |
 | `integration` | 40         |
 | `unit`        | 1          |
@@ -304,7 +308,7 @@
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 272    |
+| `/api/v1/**`    | 275    |
 | `/admin/**`     | 34     |
 | publik / anonim | 22     |
 

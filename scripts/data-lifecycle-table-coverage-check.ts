@@ -103,6 +103,11 @@ export const BOUNDED_BY_DESIGN: readonly {
     table: "awcms_access_policy_events",
     reason:
       "ADR-0078, and bounded by the table above rather than independently: append-only, at most three rows per policy (granted / revoked / expired), so its ceiling is a small multiple of a bound that is already human-authored. Given a retention policy it would be a grant PROVENANCE trail that forgets who widened someone's access, which is the one question the trail exists to answer — and its exact sibling `awcms_business_scope_assignment_events` has no retention either, so a rule applied here and not there would be a difference nobody could defend. Reviewed together with the live table on purpose: a table and its history treated differently is worse than either treatment."
+  },
+  {
+    table: "awcms_invitation_policies",
+    reason:
+      "ADR-0082, and bounded by its PARENT rather than independently — the strongest form of that claim in this list, because the binding is a database constraint rather than an argument: the `ON DELETE CASCADE` in `sql/106` means these rows are removed exactly when `awcms_invitations` is purged, and that table carries a real `dataLifecycle` descriptor (90d default, 7d floor). A descriptor of its own would be actively wrong — `executionMode: 'generic'` deletes purely by age, so it would strip the roles off a still-pending invitation and produce an acceptance that silently grants nothing. Its own ceiling is bounded twice over anyway: at most one row per (invitation, role, scope) by unique index, and at most 20 roles per invitation by `MAX_INVITATION_ROLE_COUNT`."
   }
 ];
 

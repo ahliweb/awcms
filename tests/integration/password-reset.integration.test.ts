@@ -68,6 +68,17 @@ function stubPort(sent: Sent, enqueued = true): AuthNotificationPort {
     async enqueueAuthNotification(_tx, request) {
       sent.push(request);
       return { enqueued };
+    },
+    // A password reset is always addressed to an ACCOUNT — it is reached
+    // through `awcms_identities`, so there is always a tenant user to name.
+    // Throwing rather than recording means that if this flow is ever
+    // re-pointed at the raw-address operation (ADR-0082's invitation path),
+    // the suite says so instead of passing quietly with a message nobody
+    // asserted the shape of.
+    async enqueueAuthAddressNotification() {
+      throw new Error(
+        "password reset must address an account, not a raw address"
+      );
     }
   };
 }

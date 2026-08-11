@@ -15,6 +15,7 @@
 
 export const BASE_EMAIL_TEMPLATE_CATEGORIES = [
   "auth.password_reset",
+  "auth.invitation",
   "system.announcement",
   "system.security_notice",
   "system.maintenance",
@@ -25,6 +26,18 @@ export const BASE_EMAIL_TEMPLATE_CATEGORIES = [
 
 const BASE_CATEGORY_ALLOWLISTS: Readonly<Record<string, readonly string[]>> = {
   "auth.password_reset": ["userName", "resetUrl", "expiresInMinutes"],
+  // No `userName`, and its absence is the decision. Every other category gets
+  // one from the recipient's profile, because every other category is
+  // addressed to an account. An invitee has none — the only name this system
+  // holds for them is the one the inviter typed, so the template greets them
+  // with `inviteeName` and names the tenant and the person who invited them.
+  "auth.invitation": [
+    "inviteeName",
+    "inviterName",
+    "tenantName",
+    "invitationUrl",
+    "expiresInHours"
+  ],
   "system.announcement": ["userName", "title", "body", "actionUrl"],
   "system.security_notice": [
     "userName",
