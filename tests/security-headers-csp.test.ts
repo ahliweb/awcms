@@ -1,26 +1,49 @@
 /**
- * Issue #148 — Content-Security-Policy. `buildSecurityHeaders` is a pure
- * function of its options (`src/middleware.ts` is what applies the result to
- * every response), so these are ordinary unit tests: no database, no build,
- * no browser.
+ * Issue #148 — Content-Security-Policy. `buildSecurityHeaders` is a function of
+ * its options (`src/middleware.ts` is what applies the result to every
+ * response), so these are ordinary unit tests: no database, no build, no
+ * browser. Its ONE environment read is `mediaPublicBaseUrl`'s default, which is
+ * why every case below passes that option explicitly and the two that exercise
+ * the default set and restore the variable themselves.
  *
- * A browser-level check of the kind awcms-mini needed (headless Chrome, to
- * catch inline scripts Astro's own hashing missed) has no subject here —
- * this base ships no `.astro` component, no inline script/style, and no
- * external origin, so there is no rendered page whose behavior a policy of
- * `'self'` could change. See `src/lib/security/security-headers.ts`'s
- * header for the full argument and for what must be re-verified if this
- * base ever gains real pages.
+ * This header used to argue that a browser-level check of the kind awcms-mini
+ * needed (headless Chrome, to catch inline scripts Astro's own hashing missed)
+ * had no subject here, because "this base ships no `.astro` component, no
+ * inline script/style, and no external origin". That stopped being true, and
+ * believing it is how the missing `img-src` survived: the base now renders
+ * dozens of `.astro` pages, and those pages load images from the R2 media
+ * origin, which `default-src 'self'` blocked without emitting a single error
+ * anywhere the server could see. What is still true is that a browser is not
+ * needed to catch THAT class of defect — a missing directive is visible in the
+ * header string, which is what the assertions below read. What a browser would
+ * add is the other direction (a page loading something the policy forbids),
+ * and `tests/e2e` is where that belongs.
+ *
+ * See `src/lib/security/security-headers.ts`'s header for the full argument.
  */
 import { describe, expect, test } from "bun:test";
 
 import { buildSecurityHeaders } from "../src/lib/security/security-headers";
 import { THEME_INIT_SCRIPT_HASH } from "../src/lib/security/theme-init-script";
 
-function cspFor(isProduction: boolean, turnstileEnabled = false): string {
-  const header = buildSecurityHeaders({ isProduction, turnstileEnabled }).find(
-    ([name]) => name === "Content-Security-Policy"
-  );
+/**
+ * `mediaPublicBaseUrl` is passed EXPLICITLY (default `""` — the unconfigured
+ * state) by every case below. Omitting it is a real code path, but it reads
+ * `NEWS_MEDIA_R2_PUBLIC_BASE_URL` from the ambient environment, and a suite
+ * whose exact-policy assertions depend on the developer's `.env` fails for a
+ * reason that has nothing to do with the policy. The default path gets its own
+ * test, which sets and restores that variable itself.
+ */
+function cspFor(
+  isProduction: boolean,
+  turnstileEnabled = false,
+  mediaPublicBaseUrl = ""
+): string {
+  const header = buildSecurityHeaders({
+    isProduction,
+    turnstileEnabled,
+    mediaPublicBaseUrl
+  }).find(([name]) => name === "Content-Security-Policy");
 
   if (!header) {
     throw new Error("Content-Security-Policy header was not emitted at all.");
@@ -29,8 +52,12 @@ function cspFor(isProduction: boolean, turnstileEnabled = false): string {
   return header[1];
 }
 
-function directives(isProduction = false, turnstileEnabled = false): string[] {
-  return cspFor(isProduction, turnstileEnabled)
+function directives(
+  isProduction = false,
+  turnstileEnabled = false,
+  mediaPublicBaseUrl = ""
+): string[] {
+  return cspFor(isProduction, turnstileEnabled, mediaPublicBaseUrl)
     .split(";")
     .map((directive) => directive.trim());
 }
@@ -42,14 +69,16 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     ).toContain("Content-Security-Policy");
   });
 
-  test("carries every directive ported from awcms-mini's own policy, plus the always-on script-src", () => {
+  test("carries every directive ported from awcms-mini's own policy, plus the always-on script-src and img-src", () => {
     expect(directives()).toEqual([
       "default-src 'self'",
       "object-src 'none'",
       "base-uri 'none'",
       "form-action 'self'",
       "frame-ancestors 'none'",
-      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`,
+      "img-src 'self' data:",
+      "media-src 'self'"
     ]);
   });
 
@@ -73,9 +102,13 @@ describe("buildSecurityHeaders — Content-Security-Policy (Issue #148)", () => 
     // `frame-src` still appears only for Turnstile. `script-src` IS present
     // now (the admin theme-init hash lives there) but names nothing beyond
     // `'self'` and that one self-authored hash — no origin, third-party or
-    // otherwise, is reachable through it.
+    // otherwise, is reachable through it. `img-src` is present for the same
+    // kind of reason and, with no media origin configured (this call passes
+    // the unconfigured `""`), names no origin either.
     expect(policy).not.toContain("frame-src");
     expect(policy).toContain(`script-src 'self' '${THEME_INIT_SCRIPT_HASH}'`);
+    expect(policy).toContain("img-src 'self' data:");
+    expect(policy).toContain("media-src 'self'");
   });
 
   test("keeps X-Frame-Options: DENY alongside frame-ancestors 'none' as an independent older-browser layer", () => {
@@ -227,5 +260,157 @@ describe("buildSecurityHeaders — Turnstile CSP origin (Issue #186)", () => {
         .filter((d) => !d.startsWith("script-src"))
         .every((d) => enabled.includes(d))
     ).toBe(true);
+  });
+});
+
+/**
+ * `img-src` and the R2 media origin.
+ *
+ * The defect this pins was invisible from inside the app: `default-src 'self'`
+ * governs images, so every cross-origin R2 image on a public page was blocked
+ * by this app's own policy, and a CSP-blocked image is an empty box rather than
+ * an error. `og:image` kept working (a meta tag is never fetched by the page),
+ * which is what made the pages look correct from the outside.
+ *
+ * So the assertions here are deliberately about the DIRECTIVE, not merely about
+ * the origin appearing somewhere in the header: `img-src` must exist even when
+ * nothing is configured, because the fall-through to `default-src` is the whole
+ * bug, and an origin allowed only in `default-src` would still be blocked for
+ * images by a present-but-narrow `img-src`.
+ */
+describe("buildSecurityHeaders — media img-src", () => {
+  const MEDIA_BASE = "https://media.example.com/news";
+  const MEDIA_ORIGIN = "https://media.example.com";
+
+  test("names the configured media ORIGIN, so a cross-origin R2 image is not blocked by our own policy", () => {
+    expect(directives(true, false, MEDIA_BASE)).toContain(
+      `img-src 'self' data: ${MEDIA_ORIGIN}`
+    );
+  });
+
+  test("uses the origin, never the configured path — a path prefix is a different (and redirect-fragile) policy", () => {
+    const policy = cspFor(true, false, MEDIA_BASE);
+
+    expect(policy).toContain(`img-src 'self' data: ${MEDIA_ORIGIN}`);
+    expect(policy).not.toContain(`${MEDIA_ORIGIN}/news`);
+  });
+
+  test("keeps a non-default port, which is part of the origin", () => {
+    // Dropping it allows a host the deployment does not serve from and blocks
+    // the one it does — the failure mode is identical to having no directive.
+    expect(directives(true, false, "http://localhost:9000/media")).toContain(
+      "img-src 'self' data: http://localhost:9000"
+    );
+  });
+
+  test("emits img-src 'self' data: with NO origin when no media is configured — the LAN/offline guarantee", () => {
+    const policy = cspFor(true, false, "");
+
+    expect(directives(true, false, "")).toContain("img-src 'self' data:");
+    // Same assertion the LAN/offline case above makes about the whole policy,
+    // restated here so this describe fails on its own if a future edit hardcodes
+    // an origin into the directive.
+    expect(policy).not.toMatch(/https?:\/\//);
+  });
+
+  test("a set-but-malformed media value adds no origin at all, rather than a broken one", () => {
+    // `deriveMediaPublicOrigin` already decides this; the point here is that the
+    // decision is honoured. A malformed host-source can make a browser reject
+    // the ENTIRE policy, taking `frame-ancestors`/`object-src` down with it.
+    for (const value of [
+      "media.example.com",
+      "not a url",
+      "file:///srv/media"
+    ]) {
+      expect(directives(true, false, value)).toContain("img-src 'self' data:");
+    }
+  });
+
+  test("is additive: enabling media changes img-src and media-src and nothing else", () => {
+    const withoutMedia = directives(true, false, "");
+    const withMedia = directives(true, false, MEDIA_BASE);
+
+    expect(withMedia.filter((d) => !withoutMedia.includes(d))).toEqual([
+      `img-src 'self' data: ${MEDIA_ORIGIN}`,
+      `media-src 'self' ${MEDIA_ORIGIN}`
+    ]);
+    expect(
+      withoutMedia
+        .filter((d) => !d.startsWith("img-src") && !d.startsWith("media-src"))
+        .every((d) => withMedia.includes(d))
+    ).toBe(true);
+  });
+
+  // The gallery renderer emits `<img>` and `<video>` from the SAME R2 URL, so a
+  // policy that admits one and not the other is the original defect surviving
+  // half-fixed: images load, videos beside them stay blocked, and nothing errors.
+  test("admits gallery video from the same origin it admits gallery images from", () => {
+    const list = directives(true, false, MEDIA_BASE);
+
+    expect(list).toContain(`media-src 'self' ${MEDIA_ORIGIN}`);
+  });
+
+  test("media-src carries no data: — nothing emits a data-URI video", () => {
+    expect(
+      directives(true, false, MEDIA_BASE).find((d) => d.startsWith("media-src"))
+    ).not.toContain("data:");
+  });
+
+  test("composes with Turnstile — both origins present, each only in its own directive", () => {
+    const list = directives(true, true, MEDIA_BASE);
+
+    expect(list).toContain(`img-src 'self' data: ${MEDIA_ORIGIN}`);
+    expect(list).toContain(
+      `script-src 'self' '${THEME_INIT_SCRIPT_HASH}' https://challenges.cloudflare.com`
+    );
+    expect(list).toContain("frame-src https://challenges.cloudflare.com");
+    // The media origin must NOT leak into script-src/frame-src: it serves
+    // operator-uploaded bytes, which is exactly what must never be executable.
+    expect(list.find((d) => d.startsWith("script-src"))).not.toContain(
+      MEDIA_ORIGIN
+    );
+    expect(list.find((d) => d.startsWith("frame-src"))).not.toContain(
+      MEDIA_ORIGIN
+    );
+  });
+
+  test("falls back to the deployment's own NEWS_MEDIA_R2_PUBLIC_BASE_URL when no caller passes one — an inert fix is the failure mode here", () => {
+    // `src/middleware.ts` and `src/lib/server/standalone-entry.ts` call
+    // `buildSecurityHeaders` WITHOUT this option, so if the default were the
+    // unconfigured value the directive would be right in every test and wrong on
+    // every real deployment.
+    const previous = process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL;
+    process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL = MEDIA_BASE;
+
+    try {
+      const policy = buildSecurityHeaders({ isProduction: true }).find(
+        ([name]) => name === "Content-Security-Policy"
+      )?.[1];
+
+      expect(policy).toContain(`img-src 'self' data: ${MEDIA_ORIGIN}`);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL;
+      } else {
+        process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL = previous;
+      }
+    }
+  });
+
+  test("an explicit empty string means unconfigured, not 'read the environment'", () => {
+    const previous = process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL;
+    process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL = MEDIA_BASE;
+
+    try {
+      // Every other case in this file relies on this: without it the suite's
+      // exact-policy assertions would depend on the developer's `.env`.
+      expect(cspFor(true, false, "")).not.toContain(MEDIA_ORIGIN);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL;
+      } else {
+        process.env.NEWS_MEDIA_R2_PUBLIC_BASE_URL = previous;
+      }
+    }
   });
 });

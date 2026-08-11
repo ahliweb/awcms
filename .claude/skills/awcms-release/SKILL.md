@@ -24,7 +24,7 @@ flowchart LR
 ## Prosedur
 
 1. `bun run changeset:status` — pastikan ada changeset pending dan tingkat bump sesuai SemVer (MAJOR breaking / MINOR fitur / PATCH fix). Bila kosong tapi ada perubahan perilaku → minta changeset dulu, jangan rilis. Setiap PR yang membutuhkan changeset sudah ditegakkan otomatis oleh `.github/workflows/changesets.yml` (`bun run changesets:policy:check`) — pending changeset di titik ini seharusnya sudah lengkap, bukan ditemukan baru saat rilis.
-2. Validasi lokal: `bun run check` (lint, docs, contracts, typecheck, test, build — `release.yml`'s `validate` job re-runs persis perintah yang sama, lihat `release-process.md` §validate job); untuk rilis production tambah `bun run production:preflight` (gate doc 07 — critical finding memblokir).
+2. Validasi lokal: `bun run check` (lint, docs, contracts, typecheck, test, build — `release.yml`'s `validate` job re-runs persis perintah yang sama, lihat `release-process.md` §validate job). Untuk rilis production tambah `bun run security:readiness` terhadap DB target (exit non-zero bila ada `critical` gagal — gate doc 07 yang NYATA ada di sini; daftar checknya `runSecurityReadinessChecks()` di `scripts/security-readiness.ts`, jumlahnya tumbuh dari rilis ke rilis). Orkestrator `production:preflight` yang dirujuk doc 07 **belum diimplementasikan di repo ini** — ia terdaftar sebagai target ditunda di `scripts/README.md` §Ditunda; jangan menjalankannya sebagai langkah rilis, ia akan gagal karena scriptnya tidak ada.
 3. `bun run changeset:version` — konsumsi changeset → bump `package.json` + entri `CHANGELOG.md`.
 4. Review diff; pastikan versi cocok peta doc 09 (0.1.0 Foundation … 1.0.0 production MVP).
 5. Commit: `chore(release): vX.Y.Z` (sertakan CHANGELOG + package.json + penghapusan file changeset), push ke `main`.
@@ -48,4 +48,4 @@ flowchart LR
 ## Verifikasi
 
 - `git tag --points-at HEAD` menunjukkan tag baru; CHANGELOG punya seksi versi; `package.json` versi sama dengan tag.
-- Setelah `release.yml` selesai: `gh attestation verify oci://ghcr.io/ahliweb/awcms:vX.Y.Z --owner ahliweb` dan `cosign verify ...` (perintah lengkap di `release-process.md` §Verification) — tidak butuh akses repo secret.
+- Setelah `release.yml` selesai: `gh attestation verify oci://ghcr.io/ahliweb/awcms:X.Y.Z --owner ahliweb` dan `cosign verify ...` (perintah lengkap di `release-process.md` §Verification) — tidak butuh akses repo secret. **Tag image tanpa awalan `v`**: `release.yml` memakai `${GITHUB_REF_NAME#v}`, jadi tag Git `v7.0.1` → image `ghcr.io/ahliweb/awcms:7.0.1`; `…:v7.0.1` tidak pernah ada di registry.

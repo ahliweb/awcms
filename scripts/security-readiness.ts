@@ -118,15 +118,22 @@ function errorMessage(error: unknown): string {
  *   `...`, `redacted`, `todo`) or an i18n/error-code lookup key.
  *
  * Known limitations (documented, not silently hidden):
- * - Cannot see through string concatenation/template interpolation.
- * - A variable whose name merely contains one of the four keywords (e.g. a
- *   `tokenType = "Bearer"` constant) would false-positive. No such case
- *   exists in this repo today (verified by running this script).
+ * - Cannot see through string concatenation, or through the VALUE of a
+ *   template literal it skips (see `TEMPLATE_INTERPOLATION_MARKER` below): a
+ *   secret assembled at runtime from pieces is invisible to a line regex.
+ * - A variable whose name merely contains one of the four keywords is the
+ *   dominant false-positive source, and this repo has ELEVEN of them — not
+ *   zero, as this comment claimed until the exclusions below were written.
+ *   They fall into exactly three shapes (a string-literal UNION type, a
+ *   `_PREFIX`/`_HEADER`/`_ACTION` constant naming a wire label rather than
+ *   holding a credential, and an interpolated template literal), each excluded
+ *   narrowly and separately below. Anything outside those three shapes still
+ *   fires, including on a name ending in one of the three suffixes.
  * - Only scans `src/`, `scripts/`, and root config files. `tests/` is
  *   excluded so test fixtures never count as findings.
  */
 const HARDCODED_SECRET_PATTERN =
-  /(^|[^.\w])([A-Za-z0-9_$]*(?:password|secret|api[_-]?key|token)[A-Za-z0-9_$]*)\s*(?<![=!<>])[:=](?!=)\s*["'`]([^"'`]{3,})["'`]/i;
+  /(^|[^.\w])([A-Za-z0-9_$]*(?:password|secret|api[_-]?key|token)[A-Za-z0-9_$]*)\s*(?<![=!<>])[:=](?!=)\s*(["'`])([^"'`]{3,})["'`]/i;
 
 const PLACEHOLDER_VALUE_PATTERN = /^(\*+|x+|change-?me|redacted|todo|\.{3})$/i;
 
@@ -158,6 +165,63 @@ const I18N_KEY_LIKE_VALUE_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const ENV_VAR_NAME_HOLDER_NAME_PATTERN = /_ENV$/;
 const ENV_VAR_NAME_LIKE_VALUE_PATTERN = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
+/**
+ * A TypeScript string-literal UNION, not an assignment — `secretSource:
+ * "encrypted" | "env"`, `type PasswordResetDenyReason = "not_found" |
+ * "expired" | ...`, `type ThemeTokenKind = "color" | "dimension" | ...`. Three
+ * of the eleven false positives this exclusion set was written to remove.
+ *
+ * Recognised by what FOLLOWS the matched literal rather than by guessing at
+ * "is this a type declaration", which a line regex cannot decide: a `|`
+ * immediately followed by another quoted literal. That continuation has no
+ * meaning as a VALUE — `"a" | "b"` evaluates to the number 0 — so a line
+ * shaped this way is a type, and a type cannot hold a credential. A
+ * single-member union (`type X = "lit"`) is deliberately NOT excluded: it is
+ * indistinguishable from an assignment on one line, and no such case exists
+ * here.
+ */
+const STRING_LITERAL_UNION_CONTINUATION = /^\s*\|\s*["'`]/;
+
+/**
+ * A constant naming a WIRE LABEL — an HTTP header name, a token prefix, an
+ * action identifier — not holding a credential. Five of the eleven:
+ * `MACHINE_CREDENTIAL_TOKEN_PREFIX = "awcmsm_"`, `PURGE_TOKEN_HEADER =
+ * "X-Edge-Purge-Token"`, `ENROLLMENT_TOKEN_HEADER =
+ * "x-awcms-mfa-enrollment-token"` (twice), `PASSWORD_RESET_TURNSTILE_ACTION =
+ * "password_reset"`.
+ *
+ * Narrowed the same way `_ENV` above is, and for the same reason: BOTH halves
+ * must agree. The name must END in one of exactly three SCREAMING_SNAKE
+ * suffixes (case-sensitive — a lowercase `tokenHeader` is not this shape), AND
+ * the value must be word-shaped: ASCII words joined by single `-`/`_`, with an
+ * optional trailing `_` for the prefix case. That value shape is what keeps
+ * the exclusion from being a hole: base64, hex-with-symbols, JWT-shaped and
+ * URL-shaped values all contain characters it rejects (`.`, `/`, `+`, `=`),
+ * so `const AUTH_TOKEN_HEADER = "eyJhbGciOi.eyJzdWIi.SflKxwRJ"` still fires.
+ *
+ * The residual trade, stated rather than hidden: a word-shaped secret
+ * deliberately named `..._HEADER` would be skipped. That requires a name that
+ * lies about what it holds, which is a different failure from the one this
+ * heuristic exists to catch.
+ */
+const WIRE_LABEL_HOLDER_NAME_PATTERN = /_(?:PREFIX|HEADER|ACTION)$/;
+const WIRE_LABEL_LIKE_VALUE_PATTERN =
+  /^[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*_?$/;
+
+/**
+ * A template literal that INTERPOLATES — `` `${signingInput}.${sig}` ``
+ * (vapid-jwt), `` `/theming/preview-tokens/${token}.css` `` (the preview
+ * route), and one docblock line quoting the shape `` `${tenantId}~${rawToken}`
+ * ``. The remaining three of the eleven.
+ *
+ * The value is composed at runtime, so the literal text on the line is not the
+ * secret — it is the RECIPE. Requires the backtick delimiter as well as the
+ * marker, so `const apiKey = "${literal-dollar-brace}"` in a plain quoted
+ * string is untouched, and a template literal with NO interpolation
+ * (`` const apiKey = `AKIAIOSFODNN7EXAMPLE` ``) still fires.
+ */
+const TEMPLATE_INTERPOLATION_MARKER = "${";
+
 const SECRET_SCAN_PATHSPECS = [
   "src/**/*.ts",
   "src/**/*.astro",
@@ -185,15 +249,23 @@ export function scanLineForHardcodedSecret(line: string): string | null {
   }
 
   const name = match[2];
-  const value = match[3];
+  const quote = match[3];
+  const value = match[4];
+  // What follows the closing quote — the only way to tell a string-literal
+  // UNION apart from an assignment, since both start identically.
+  const rest = line.slice(match.index + match[0].length);
 
   if (
     !name ||
     !value ||
     PLACEHOLDER_VALUE_PATTERN.test(value) ||
     I18N_KEY_LIKE_VALUE_PATTERN.test(value) ||
+    STRING_LITERAL_UNION_CONTINUATION.test(rest) ||
+    (quote === "`" && value.includes(TEMPLATE_INTERPOLATION_MARKER)) ||
     (ENV_VAR_NAME_HOLDER_NAME_PATTERN.test(name) &&
-      ENV_VAR_NAME_LIKE_VALUE_PATTERN.test(value))
+      ENV_VAR_NAME_LIKE_VALUE_PATTERN.test(value)) ||
+    (WIRE_LABEL_HOLDER_NAME_PATTERN.test(name) &&
+      WIRE_LABEL_LIKE_VALUE_PATTERN.test(value))
   ) {
     return null;
   }
@@ -1257,7 +1329,19 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // public-path write on awcms_app and approving/rejecting is an admin action,
   // so a worker with INSERT or UPDATE here could manufacture an approved
   // registration — i.e. an account.
-  awcms_registration_requests: ["SELECT", "DELETE"]
+  awcms_registration_requests: ["SELECT", "DELETE"],
+  // identity_access — the same generic purge over aged invitations (ADR-0082).
+  // `sql/106` created the table with a `dataLifecycle` descriptor and granted
+  // this role NOTHING, so the first scheduled run would have died on `permission
+  // denied` — and `archive-purge-job.ts` has no catch, so it would have taken
+  // every other descriptor's purge down with it, not just this one. `sql/108` is
+  // the grant. SELECT for the bounded cursor scan and the DELETE's own
+  // subquery/RETURNING, DELETE for the purge; no INSERT and no UPDATE, because a
+  // worker able to write here could address an offer of membership to any
+  // mailbox or rotate `token_hash` to a value it chose. The child
+  // `awcms_invitation_policies` is deliberately absent: it goes with its parent
+  // through `ON DELETE CASCADE`, which runs with the constraint owner's rights.
+  awcms_invitations: ["SELECT", "DELETE"]
 };
 
 /**

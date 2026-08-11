@@ -32,10 +32,28 @@
  *   `websearch_to_tsquery` surface behind `search.read` rejects. Two search
  *   boxes with different semantics on one screen is a worse answer than one.
  *
- * There is also **no body/content editor** here. Authoring a post body means a
- * rich-text or Markdown surface plus SEO fields, terms and featured media —
- * that is an editor, not a corner of a list. `posts.update` is still driven,
- * through "submit for review", which is the lifecycle half of that permission.
+ * There IS a body editor here, and its absence used to be a working-feature
+ * defect rather than a scope decision: the create form sent `contentJson: {}`
+ * with `contentText: ""`, `validateContentTextField` requires a non-empty
+ * `contentText`, so every create from this screen was answered 400 and no
+ * article could be published through the CMS at all. The repair is the missing
+ * INPUT — a plain-paragraph `<textarea>` converted by `lib/ui/blog-body-editor`
+ * — never a laxer validator: `content-quality-checklist.ts` has no
+ * "body present" rule, so an empty body accepted at write time reaches
+ * `publish` unchallenged.
+ *
+ * What that editor deliberately is NOT: rich text, SEO fields, terms or
+ * featured media. It writes `paragraph` blocks only, and REFUSES to edit a
+ * post whose stored document holds a gallery or a video embed — those blocks
+ * have no authoring surface anywhere in this repo, and a textarea that rewrote
+ * them as paragraphs would destroy them on the first save.
+ *
+ * Terms are still unassignable from here. `POST`/`PATCH` accept `termIds`, but
+ * a picker needs the taxonomy catalogue, and reading it under this screen's
+ * `posts.*` gates would be a read with no permission of its own —
+ * `blog_content.taxonomies.read` belongs to `/admin/blog-taxonomy`, and
+ * `tests/admin-blog-page-contract.test.ts` pins this screen to exactly eleven
+ * keys so that borrowing one is a decision somebody edits that file for.
  *
  * ## Reads
  *
@@ -85,6 +103,7 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import {
+  fetchBlogPostById,
   listBlogPostsForAdmin,
   type ListBlogPostsForAdminResult
 } from "../../modules/blog-content/application/blog-post-directory";
@@ -102,6 +121,7 @@ import {
   MAX_EXCERPT_LENGTH,
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
+import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
 
 const ssr = Astro.locals.ssrContext!;
 
@@ -143,6 +163,21 @@ const showsBin = readParam("view") === "deleted";
 /** `?post=<id>` opens the revision panel for one post, rather than N queries for a list nobody expanded. */
 const selectedPostId = readParam("post");
 
+/**
+ * `?edit=<id>` opens the editor for one post — again one row, not a body
+ * column on every row of a list nobody is editing.
+ *
+ * Shape-checked here rather than passed straight through: `fetchBlogPostById`
+ * binds it as a `uuid`, and a hand-edited `?edit=nonsense` aborts the
+ * transaction, which `onError` renders as "posts could not be loaded". That
+ * says "the list is broken" for what is really "no such post".
+ */
+const UUID_PARAM =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const editingPostId = UUID_PARAM.test(readParam("edit"))
+  ? readParam("edit")
+  : "";
+
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. `posts.read` is the entry: this screen's denied
 // state has always been `!canRead` alone.
@@ -174,6 +209,15 @@ const screen = await loadAdminScreen({
       action: "read"
     });
 
+    // Hoisted out of the returned literal because the editor read below is
+    // conditional on it: an edit form rendered from a row the chokepoint would
+    // refuse is a form that can only fail on save.
+    const canUpdate = await can({
+      moduleKey: "blog_content",
+      activityCode: "posts",
+      action: "update"
+    });
+
     return {
       listing,
       canReadRevisions,
@@ -195,11 +239,13 @@ const screen = await loadAdminScreen({
         action: "create"
       }),
       // Also the gate on "submit for review" — there is no `posts.submit`.
-      canUpdate: await can({
-        moduleKey: "blog_content",
-        activityCode: "posts",
-        action: "update"
-      }),
+      canUpdate,
+      // The list summary carries no body, so the editor needs the WHOLE row.
+      // One extra query for the one post being edited, never for the list.
+      editingPost:
+        editingPostId && canUpdate
+          ? await fetchBlogPostById(tx, ssr.tenantId, editingPostId)
+          : null,
       canPublish: await can({
         moduleKey: "blog_content",
         activityCode: "posts",
@@ -259,6 +305,17 @@ const canArchive = screen.state === "allowed" && screen.data.canArchive;
 const canDelete = screen.state === "allowed" && screen.data.canDelete;
 const canRestore = screen.state === "allowed" && screen.data.canRestore;
 const canPurge = screen.state === "allowed" && screen.data.canPurge;
+const editingPost = screen.state === "allowed" ? screen.data.editingPost : null;
+
+/**
+ * `null` when the stored document holds a block this plain-paragraph textarea
+ * cannot represent — a gallery, a video embed. The screen then offers NO body
+ * field for that post, so those blocks survive a save of its title or slug.
+ * `""` is the different, legitimate answer for a post with no blocks.
+ */
+const editingBodyText = editingPost
+  ? readParagraphBodyText(editingPost.contentJson)
+  : null;
 
 const STATUS_VARIANT: Record<string, string> = {
   draft: "neutral",
@@ -484,6 +541,20 @@ const selectedPost = selectedPostId
                               </span>
                             </a>
                           )}
+                          {/* A binned post cannot be updated — the endpoint
+                              matches `deleted_at IS NULL` — so the editor is
+                              offered on live rows only. */}
+                          {canUpdate && !showsBin && (
+                            <a
+                              class="quick-link"
+                              href={linkWith({ edit: post.id })}
+                            >
+                              Edit
+                              <span class="quick-link-arrow" aria-hidden="true">
+                                →
+                              </span>
+                            </a>
+                          )}
                           {canUpdate &&
                             !showsBin &&
                             post.status === "draft" && (
@@ -704,6 +775,110 @@ const selectedPost = selectedPostId
   }
 
   {
+    canUpdate && !loadError && editingPost && (
+      <section class="admin-section fade-in-up" aria-labelledby="edit-title">
+        <h2 class="admin-section-title" id="edit-title">
+          Edit post
+        </h2>
+        <form id="post-edit-form" class="admin-create-form">
+          <p class="form-legend">
+            <span class="cell-code">{editingPost.id}</span>
+            {" · "}
+            <a href={linkWith({ edit: null })}>Close</a>
+          </p>
+          <p class="form-legend">
+            A partial update: only the fields below are sent, so a change made
+            elsewhere to the SEO fields, terms or featured media is not
+            clobbered by a stale copy of them.
+          </p>
+          <p
+            id="post-edit-error"
+            class="admin-create-error"
+            role="alert"
+            hidden
+          />
+
+          <input type="hidden" id="edit-post-id" value={editingPost.id} />
+
+          <label for="edit-title-field">
+            Title
+            <input
+              type="text"
+              id="edit-title-field"
+              name="title"
+              required
+              maxlength={MAX_TITLE_LENGTH}
+              value={editingPost.title}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="edit-slug">
+            Slug
+            <input
+              type="text"
+              id="edit-slug"
+              name="slug"
+              required
+              value={editingPost.slug}
+              autocomplete="off"
+            />
+          </label>
+
+          <label for="edit-visibility">
+            Visibility
+            <select id="edit-visibility" name="visibility">
+              {BLOG_CONTENT_VISIBILITIES.map((value) => (
+                <option
+                  value={value}
+                  selected={editingPost.visibility === value}
+                >
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label for="edit-excerpt">
+            Excerpt (optional)
+            <textarea
+              id="edit-excerpt"
+              name="excerpt"
+              rows="2"
+              maxlength={MAX_EXCERPT_LENGTH}
+              set:text={editingPost.excerpt ?? ""}
+            />
+          </label>
+
+          {editingBodyText === null ? (
+            <p class="form-legend">
+              The body of this post holds blocks this plain-text editor cannot
+              represent — an image gallery or a video embed. Title, slug,
+              visibility and excerpt are still editable; the body is left
+              untouched, because saving it from here would drop those blocks.
+            </p>
+          ) : (
+            <label for="edit-body">
+              Body
+              <textarea
+                id="edit-body"
+                name="body"
+                rows="14"
+                required
+                set:text={editingBodyText}
+              />
+            </label>
+          )}
+
+          <button type="submit" id="post-edit-submit">
+            Save post
+          </button>
+        </form>
+      </section>
+    )
+  }
+
+  {
     canCreate && !loadError && (
       <section class="admin-section fade-in-up" aria-labelledby="create-title">
         <h2 class="admin-section-title" id="create-title">
@@ -711,8 +886,9 @@ const selectedPost = selectedPostId
         </h2>
         <form id="post-create-form" class="admin-create-form">
           <p class="form-legend">
-            Creates a draft. The body is written in the post editor, which is
-            not part of this screen yet.
+            Creates a draft. Separate paragraphs with a blank line — each one
+            becomes a <code>paragraph</code> block, the only block type this
+            editor writes.
           </p>
           <p
             id="post-create-error"
@@ -778,6 +954,15 @@ const selectedPost = selectedPostId
             />
           </label>
 
+          {/* The field whose absence made this form unusable: the API requires
+              a non-empty `contentText`, and the screen sent `""`. No
+              `maxlength` — the validator imposes no bound on the body, and a
+              hand-typed one would be a limit no server enforces. */}
+          <label for="create-body">
+            Body
+            <textarea id="create-body" name="body" rows="14" required />
+          </label>
+
           <button type="submit" id="post-create-submit">
             Create draft
           </button>
@@ -793,8 +978,37 @@ const selectedPost = selectedPostId
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    describeRejectedFields,
+    sendJsonWithFieldErrors
+  } from "../../lib/ui/admin-field-errors-client";
+  import {
+    buildContentJsonFromBodyText,
+    buildContentTextFromBodyText
+  } from "../../lib/ui/blog-body-editor";
 
   const actionError = document.getElementById("blog-action-error");
+
+  /**
+   * API field -> the control the operator can actually fix. `contentJson` and
+   * `contentText` are one textarea, so a body the validator rejects on both
+   * counts is reported once.
+   */
+  const FIELD_LABELS: Record<string, string> = {
+    title: "Title",
+    slug: "Slug",
+    excerpt: "Excerpt",
+    locale: "Locale",
+    visibility: "Visibility",
+    contentJson: "Body",
+    contentText: "Body"
+  };
+
+  function showFormError(element: HTMLElement | null, message: string): void {
+    if (!element) return;
+    element.textContent = message;
+    element.hidden = false;
+  }
 
   function showActionError(message: string): void {
     if (!actionError) return;
@@ -1013,6 +1227,21 @@ const selectedPost = selectedPostId
     const data = new FormData(createForm);
     const errorElement = document.getElementById("post-create-error");
     if (errorElement) errorElement.hidden = true;
+
+    const bodyText = String(data.get("body") ?? "");
+    const contentText = buildContentTextFromBodyText(bodyText);
+
+    // Checked here as well as by `required`, because `required` accepts a
+    // textarea holding only whitespace and the validator does not — this is
+    // the one rejection the form can name before the round trip.
+    if (contentText === "") {
+      showFormError(
+        errorElement,
+        "The body cannot be empty — write at least one paragraph."
+      );
+      return;
+    }
+
     const unlock = lockElement(submit, "Creating…");
 
     const excerpt = String(data.get("excerpt") ?? "").trim();
@@ -1021,10 +1250,12 @@ const selectedPost = selectedPostId
       slug: String(data.get("slug") ?? "").trim(),
       locale: String(data.get("locale") ?? "").trim() || "id",
       visibility: String(data.get("visibility") ?? "public"),
-      // The validator requires both content fields; a new draft starts empty
-      // and the body is written in the editor, which is not this screen.
-      contentJson: {},
-      contentText: ""
+      // `{ blocks: [...] }` — the shape `content-block-rendering.ts` defines
+      // and every reader of `content_json` expects. This used to be `{}` with
+      // an empty `contentText`, which `validateContentTextField` refuses: every
+      // create from this form was answered 400.
+      contentJson: buildContentJsonFromBodyText(bodyText),
+      contentText
     };
     // Omitted rather than sent as "": an empty string is a value, and the
     // validator treats absent as "no excerpt".
@@ -1033,20 +1264,99 @@ const selectedPost = selectedPostId
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
-    const result = await sendJson("POST", "/api/v1/blog/posts", body);
+    const result = await sendJsonWithFieldErrors(
+      "POST",
+      "/api/v1/blog/posts",
+      body
+    );
 
     if (result.ok) {
       window.location.reload();
       return;
     }
 
-    if (errorElement) {
-      errorElement.textContent =
-        result.errorCode === "CONFLICT"
-          ? "A post with that slug and locale already exists."
-          : "Could not create the draft. Check the title and slug, then try again.";
-      errorElement.hidden = false;
+    // The rejected FIELD, not a guess at it. The old copy named the title and
+    // the slug for what was always a `contentText` rejection — advice pointing
+    // at the two fields that were correct.
+    showFormError(
+      errorElement,
+      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
+        ? "A post with that slug and locale already exists."
+        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
+            "Could not create the draft. Please try again.")
+    );
+    unlock();
+  });
+
+  const editForm = document.getElementById(
+    "post-edit-form"
+  ) as HTMLFormElement | null;
+
+  editForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById(
+      "post-edit-submit"
+    ) as HTMLButtonElement | null;
+    const idField = document.getElementById(
+      "edit-post-id"
+    ) as HTMLInputElement | null;
+    if (!submit || submit.disabled || !idField) return;
+
+    const data = new FormData(editForm);
+    const errorElement = document.getElementById("post-edit-error");
+    if (errorElement) errorElement.hidden = true;
+
+    // PATCH is a partial update, and this screen sends only what it owns.
+    const body: Record<string, unknown> = {
+      title: String(data.get("title") ?? "").trim(),
+      slug: String(data.get("slug") ?? "").trim(),
+      visibility: String(data.get("visibility") ?? "public"),
+      // `null` clears it — the API distinguishes that from absent, which is
+      // "leave the excerpt alone".
+      excerpt: String(data.get("excerpt") ?? "").trim() || null
+    };
+
+    // Absent when the stored document holds blocks this editor cannot
+    // represent: the field is not rendered, so the body is not sent, so those
+    // blocks survive the save.
+    if (data.has("body")) {
+      const bodyText = String(data.get("body") ?? "");
+      const contentText = buildContentTextFromBodyText(bodyText);
+
+      if (contentText === "") {
+        showFormError(
+          errorElement,
+          "The body cannot be empty — write at least one paragraph."
+        );
+        return;
+      }
+
+      body.contentJson = buildContentJsonFromBodyText(bodyText);
+      body.contentText = contentText;
     }
+
+    const unlock = lockElement(submit, "Saving…");
+
+    // No `Idempotency-Key`: `PATCH /api/v1/blog/posts/{id}` requires none —
+    // a same-body retry converges to the same end state.
+    const result = await sendJsonWithFieldErrors(
+      "PATCH",
+      `/api/v1/blog/posts/${idField.value}`,
+      body
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    showFormError(
+      errorElement,
+      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
+        ? "A post with that slug and locale already exists."
+        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
+            "Could not save the post. Please try again.")
+    );
     unlock();
   });
 </script>

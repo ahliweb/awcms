@@ -238,7 +238,11 @@ tapi tidak lagi untuk record **serving**.
   lanjut; yang menyatakan hasil adalah hitungan `failed=` di baris ringkasan.
 - Dua environment **tidak boleh** sama-sama `TENANT_DOMAIN_DNS_PROVIDER=cloudflare`
   pada zona yang sama — keduanya akan saling menimpa record serving hostname
-  yang sama. Staging tetap `manual` (lihat `docs/awcms/environments.md`).
+  yang sama. Repo ini sendiri men-deploy satu environment saja
+  ([ADR-0083](../../../docs/adr/0083-this-template-deploys-to-one-environment.md),
+  lihat [`docs/awcms/environments.md`](../../../docs/awcms/environments.md)),
+  jadi aturan ini menjaga instalasi yang MEMANG menjalankan environment kedua:
+  tepat satu boleh `cloudflare`, sisanya `manual`.
 
 ## Yang BELUM ada (deferred, terdokumentasi)
 

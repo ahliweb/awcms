@@ -176,5 +176,5 @@ index.ts` base, taksonomi kegagalan komposisi, dan konvensi namespace
   Integration) sebelum kode ditulis.
 - [`docs/adr/`](../adr/README.md) — keputusan arsitektural base (ADR-0001 s.d. 0008).
 - `docs/awcms/01` s.d. `20` — paket dokumen master (§Peta dokumen di README ini).
-- [`deployment-profiles.md`](deployment-profiles.md) — profil deployment (development/staging/production/offline-LAN, LAN-first compose vs registry image).
+- [`deployment-profiles.md`](deployment-profiles.md) — profil deployment (development/production/offline-LAN — tiga sejak `staging` dihapus, ADR-0083; LAN-first compose vs registry image).
 - `.claude/skills/README.md` — katalog skill lengkap + peta pemakaian.

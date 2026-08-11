@@ -51,40 +51,71 @@ deployment-aware connection-capacity budget check, see
 the database. Applying pending migrations is a separate, explicit, gated
 action.
 
-## Stage 1 — Rehearsal (staging, always first)
+## Stage 1 — Rehearsal (only where a second environment exists)
 
-Never run `--apply-migrations` against production without first rehearsing
-the exact same migrations against a staging environment that is a recent
-copy of production.
+> **This repo has none, and there is no profile for one either.** Per
+> [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) (as
+> amended) the template deploys to exactly one live environment —
+> production — and `staging` has been removed from the deployment-profile
+> vocabulary itself: the surviving profiles are `development`,
+> `production`, and `offline-lan`. This stage therefore describes a
+> rehearsal environment somebody chooses to stand up, not a named tier the
+> template ships. Its isolation contract lives in
+> [`environments.md`](environments.md) §Kontrak isolasi environment kedua.
+> Here the stage has no target, and what stands in its place is deliberately
+> narrower: the CI integration suite against a real PostgreSQL service, plus
+> Stage 2's restore-tested backup — which stops being a formality the moment
+> nothing rehearses the migration first. That is a mitigation, not an equal
+> substitute; ADR-0083 §Konsekuensi records what was given up rather than
+> pretending it was free.
 
-1. Restore a recent production backup into staging (see §Backup evidence
+Where a rehearsal environment exists, never run `--apply-migrations` against
+production without first rehearsing the exact same migrations there, against
+a recent copy of production.
+
+1. Restore a recent production backup into it (see §Backup evidence
    below — the same restore path proves both "the backup works" and gives
-   you a realistic staging database in one step).
-2. Run the read-only preflight against staging:
+   you a realistic rehearsal database in one step). That environment owes
+   production the full isolation contract: its own database, its own role
+   and password, its own secrets, outbound integrations off.
+2. Run the read-only preflight against it:
    ```bash
-   APP_ENV=staging DATABASE_URL=<staging-url> bun run production:preflight
+   APP_ENV=production DATABASE_URL=<rehearsal-url> bun run production:preflight
    ```
    Confirm `GO-LIVE DIIZINKAN` and read the `migration:plan` stage's output
    — it lists exactly which migrations are pending, by name.
-3. Apply against staging:
+3. Apply against it:
    ```bash
-   APP_ENV=staging DATABASE_URL=<staging-url> bun run production:preflight \
-     --apply-migrations --backup-verified --acknowledge-target=staging
+   APP_ENV=production DATABASE_URL=<rehearsal-url> bun run production:preflight \
+     --apply-migrations --backup-verified --acknowledge-target=production
    ```
-4. Smoke-test staging (setup wizard already run / admin login / a
+   `--acknowledge-target` must equal `APP_ENV`, so it cannot distinguish the
+   rehearsal database from the real one. What distinguishes them is
+   `DATABASE_URL` — read it back before you press enter.
+4. Smoke-test it (setup wizard already run / admin login / a
    representative CRUD or posting flow per module touched by the pending
    migrations — e.g. a ledger posting or stock movement once those modules
    exist).
-5. Run the full DR drill against the SAME staging environment (see
-   [`resilience-dr-verification.md`](resilience-dr-verification.md)):
+5. Run the full DR drill (see
+   [`resilience-dr-verification.md`](resilience-dr-verification.md)) against a
+   **throwaway restore of the same backup**, not against the rehearsal
+   environment you just ran production rules on:
    ```bash
-   APP_ENV=staging DATABASE_URL=<staging-url> \
-   bun run resilience:dr-drill -- --confirm-non-production=staging --full
+   APP_ENV=test DATABASE_URL=<throwaway-url> \
+   bun run resilience:dr-drill -- --confirm-non-production=test --full
    ```
-   Confirm `overall = pass` — this is the H-7/H-3 backup/restore/rollback
+   That split is forced, not stylistic: the drill's safety interlock gives
+   `APP_ENV=production` no override flag at all, so an environment configured
+   to exercise production rules can never be its target. Removing `staging`
+   removed the one `APP_ENV` value that used to be both production-like and
+   drillable; `test` is what is left, and it does not turn production rules
+   on. Confirm `overall = pass` — this is the H-7/H-3 backup/restore/rollback
    rehearsal evidence doc 07's go-live plan calls for, produced as a
    reproducible JSON report rather than an ad hoc manual restore.
-6. Only proceed to production once staging rehearsal is clean.
+6. Only proceed to production once that rehearsal is clean. Without a second
+   environment — this repo's case — nothing here is skippable in the sense of
+   "done elsewhere": Stage 2 becomes the whole of the safety net, so the
+   restore test is mandatory rather than advisable.
 
 ## Stage 2 — Backup evidence (required before any `--apply-migrations`)
 

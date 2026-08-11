@@ -48,7 +48,20 @@ export const BLOG_POST_SEO_RESOURCE_TYPE = "blog_post";
 
 const DEFAULT_PUBLIC_BASE_PATH = "/blog";
 const DEFAULT_LIST_PAGE_SIZE = 50;
-const MAX_LIST_PAGE_SIZE = 200;
+
+/**
+ * This provider's hard ceiling on ONE `listPublicResourceFacts` response — the
+ * per-request bound that keeps a single crawl of `/sitemap-{n}.xml` from turning
+ * into an unbounded scan of `awcms_blog_posts`.
+ *
+ * A caller asking for more is CLAMPED, not refused, so `pageSize` is a request
+ * and never a guarantee: a caller that reads one response and stops sees a short
+ * page it cannot tell apart from an exhausted one. `nextCursor` is the only
+ * honest signal, and it is always set when rows remain. Exported so the consumer
+ * side can assert its own per-child-page request budget against the real number
+ * instead of a copy of it.
+ */
+export const BLOG_CONTENT_SEO_MAX_LIST_PAGE_SIZE = 200;
 
 type BlogPostSeoRow = {
   id: string;
@@ -270,7 +283,7 @@ export function createBlogContentSeoFactsAdapter(
     ): Promise<SeoResourceFactsPage> {
       const pageSize = Math.min(
         Math.max(1, options?.pageSize ?? DEFAULT_LIST_PAGE_SIZE),
-        MAX_LIST_PAGE_SIZE
+        BLOG_CONTENT_SEO_MAX_LIST_PAGE_SIZE
       );
       const localeFilter = options?.locale ?? null;
       const order = options?.order ?? "id_asc";

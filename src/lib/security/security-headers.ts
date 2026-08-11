@@ -67,9 +67,43 @@
  * reachable.) When Turnstile is enabled, the widget loader (`api.js`) needs
  * `script-src` and its challenge iframe needs `frame-src`, both narrowed to
  * that one origin.
+ *
+ * MEDIA IMAGES — `img-src`, and why its absence was invisible. `default-src`
+ * governs images too, so until this directive existed the policy said
+ * `img-src 'self'` by fall-through. Every article/gallery image is served from
+ * R2, a DIFFERENT origin (`NEWS_MEDIA_R2_PUBLIC_BASE_URL`), which means this
+ * app was blocking its own images — and a CSP-blocked image is an empty box,
+ * not an error, so nothing in the response said so. `og:image` is a meta tag
+ * the page never fetches, so link previews kept working and made the pages
+ * look correct from the outside. The concrete emitters are
+ * `src/modules/_shared/rendering/gallery-block-renderer.ts` (`<img src>` built
+ * from a `publicUrl` that `media-object-key.ts` guarantees is an absolute
+ * https URL on the media host, or throws) and `src/layouts/PublicThemeLayout.astro`
+ * (the theme logo).
+ *
+ * The origin is NOT re-derived here: it comes from
+ * `media_library`'s own `deriveMediaPublicOrigin`, the same function
+ * `GET /api/v1/media/public-origin` hands to build clients for exactly this
+ * purpose. A second derivation would be the two-copies-of-one-value shape that
+ * file was written to prevent, and it would fail the same silent way. That
+ * helper also decides what "configured" means (unset, unparseable, or a
+ * non-http(s) scheme all report `configured: false`), so a malformed
+ * deployment value can never reach the header — a rejected policy would take
+ * every other directive down with it.
+ *
+ * When no public media is configured — the LAN/offline default — the directive
+ * is `img-src 'self' data:` and NO third-party origin appears anywhere in the
+ * policy. That guarantee is unchanged. `data:` is stated in both cases because
+ * a data URI is never covered by a host-source list, and it is the bounded
+ * allowance that stops a future inline placeholder from being answered with a
+ * wildcard: nothing in this repo emits one today, and the schemes where `data:`
+ * is genuinely dangerous (`script-src`, `object-src`, `frame-src`) all stay
+ * closed.
  */
 import { TURNSTILE_ORIGIN } from "./turnstile";
 import { THEME_INIT_SCRIPT_HASH } from "./theme-init-script";
+import { deriveMediaPublicOrigin } from "../../modules/media-library/domain/media-public-origin";
+import { resolveNewsMediaR2Config } from "../../modules/media-library/domain/media-r2-config";
 
 const BASE_CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -100,10 +134,61 @@ function scriptSrcSources(turnstileEnabled: boolean): string {
   return sources.join(" ");
 }
 
-function buildContentSecurityPolicy(turnstileEnabled: boolean): string {
+/**
+ * `img-src` is ALWAYS present, and always names `'self'` and `data:`; the
+ * media origin joins them only on a deployment that actually serves public
+ * media. Naming the directive unconditionally is what stops the fall-through
+ * to `default-src 'self'` that was silently blocking every R2 image (see the
+ * module header).
+ *
+ * The host-wide form (`origin`) is used rather than the path-scoped one
+ * (`baseUrl`): `deriveMediaPublicOrigin`'s own header notes that a path prefix
+ * is tighter but interacts badly with redirects, and R2 custom domains serve
+ * nothing but this bucket anyway.
+ */
+function imgSrcSources(mediaPublicBaseUrl: string): string {
+  const sources = ["'self'", "data:"];
+  const media = deriveMediaPublicOrigin(mediaPublicBaseUrl);
+
+  if (media.configured && media.origin !== null) {
+    sources.push(media.origin);
+  }
+
+  return sources.join(" ");
+}
+
+/**
+ * `media-src` exists for the same reason `img-src` does, and was missed for the
+ * same reason. `gallery-block-renderer.ts` emits `<img>` for an image record and
+ * `<video src=…>` for a video one, from the SAME cross-origin R2 URL — but
+ * `<video>` is governed by `media-src`, so fixing only `img-src` would have left
+ * every gallery video blocked by fall-through while the images beside it loaded.
+ *
+ * No `data:` here: nothing emits a data-URI video, and unlike `img-src` (where
+ * the LAN/offline test pins `data:`) there is no existing contract asking for
+ * it. The directive is emitted unconditionally for the same reason as `img-src`
+ * — naming it is what stops the fall-through to `default-src 'self'`.
+ */
+function mediaSrcSources(mediaPublicBaseUrl: string): string {
+  const sources = ["'self'"];
+  const media = deriveMediaPublicOrigin(mediaPublicBaseUrl);
+
+  if (media.configured && media.origin !== null) {
+    sources.push(media.origin);
+  }
+
+  return sources.join(" ");
+}
+
+function buildContentSecurityPolicy(
+  turnstileEnabled: boolean,
+  mediaPublicBaseUrl: string
+): string {
   const directives: string[] = [...BASE_CSP_DIRECTIVES];
 
   directives.push(`script-src ${scriptSrcSources(turnstileEnabled)}`);
+  directives.push(`img-src ${imgSrcSources(mediaPublicBaseUrl)}`);
+  directives.push(`media-src ${mediaSrcSources(mediaPublicBaseUrl)}`);
 
   if (turnstileEnabled) {
     directives.push(`frame-src ${TURNSTILE_ORIGIN}`);
@@ -121,6 +206,22 @@ export type SecurityHeaderOptions = {
    * pre-#186 LAN/offline policy. Callers pass `isTurnstileRequired()`.
    */
   turnstileEnabled?: boolean;
+  /**
+   * The deployment's public media base URL, whose ORIGIN goes into `img-src`.
+   *
+   * Unlike `isProduction`/`turnstileEnabled` this defaults to reading the
+   * deployment's own `NEWS_MEDIA_R2_PUBLIC_BASE_URL` rather than to the
+   * closed value, and deliberately so: it is one deployment-wide constant that
+   * is identical at both call sites (`src/middleware.ts`,
+   * `src/lib/server/standalone-entry.ts`) and identical for every request, and
+   * a default of "unconfigured" would make this directive silently wrong on
+   * every deployment that DOES serve media — which is the bug being fixed, not
+   * a state worth defaulting to.
+   *
+   * Pass it explicitly to keep a caller (a test) independent of the ambient
+   * environment; `""` is the unconfigured state, not "use the default".
+   */
+  mediaPublicBaseUrl?: string;
 };
 
 export function buildSecurityHeaders(
@@ -129,7 +230,10 @@ export function buildSecurityHeaders(
   const headers: Array<[string, string]> = [
     [
       "Content-Security-Policy",
-      buildContentSecurityPolicy(options.turnstileEnabled === true)
+      buildContentSecurityPolicy(
+        options.turnstileEnabled === true,
+        options.mediaPublicBaseUrl ?? resolveNewsMediaR2Config().publicBaseUrl
+      )
     ],
     ["X-Content-Type-Options", "nosniff"],
     // Kept alongside `frame-ancestors 'none'` as a second, independent

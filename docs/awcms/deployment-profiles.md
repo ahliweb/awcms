@@ -2,7 +2,9 @@
 
 > **Status dokumen:** target/rencana operasional, bukan status implementasi. Repo `awcms` saat ini belum punya kode modul ERP maupun `deploy/*`/`docker-compose.yml` yang nyata — dokumen ini mengadaptasi standar deployment yang sudah terbukti di basis `awcms-mini` (fully implemented di sana) menjadi **prosedur target** untuk platform ERP `awcms`. Struktur/mekanisme (profil environment, topologi TLS, model dua-peran database, job registry) dipertahankan sebagai standar wajib; nomor issue/PR dan riwayat implementasi spesifik `awcms-mini` dihapus karena tidak relevan untuk repo ini.
 >
-> **Koreksi: `Dockerfile.production` SUDAH ada.** Berbeda dari `deploy/*`/`docker-compose.yml` (memang belum ada), `Dockerfile.production` nyata ada di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis — lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat. Jalur image-registry (Coolify pull-image, `docker run` langsung) di dokumen ini karena itu sudah bisa dipakai hari ini; hanya jalur `docker-compose.yml`/systemd/nginx/pgbouncer LAN-first di bawah yang masih rencana.
+> **Koreksi: sebagian `deploy/*` SUDAH ada.** `deploy/backup/backup-postgres.sh` + `deploy/backup/restore-postgres.sh` (§Backup lokal), `deploy/pgbouncer/`, `deploy/cron/`, dan `deploy/redis/` nyata di repo; yang masih rencana adalah `deploy/systemd/`, `deploy/nginx/`, `deploy/postgres/`, dan `docker-compose*.yml` di root repo. Perlakukan tiap rujukan berkas di bawah menurut daftar itu, bukan menurut kalimat status di atas.
+>
+> **Koreksi: `Dockerfile.production` SUDAH ada.** Ia nyata ada di root repo (multi-stage, non-root user `bun`, healthcheck) dan sudah dipakai aktif oleh `build` job `.github/workflows/release.yml` untuk build+push image ke `ghcr.io/ahliweb/awcms` setiap rilis — lihat [`release-process.md`](release-process.md) untuk deskripsi status yang akurat. Jalur image-registry (Coolify pull-image, `docker run` langsung) di dokumen ini karena itu sudah bisa dipakai hari ini; hanya jalur `docker-compose.yml`/systemd/nginx/pgbouncer LAN-first di bawah yang masih rencana.
 
 Dokumen ini adalah standar profil deployment untuk AWCMS (lihat ADR-0001, [`01_canvas_induk.md`](01_canvas_induk.md) §Stack final) — melengkapi referensi environment variable (`docs/awcms/18_configuration_env_reference.md`, menyusul) dengan pemetaan konkret: berkas mana di `deploy/` dan `docker-compose.yml` dipakai pada profil environment yang mana, begitu keduanya diimplementasikan.
 
@@ -11,19 +13,21 @@ Dokumen ini adalah standar profil deployment untuk AWCMS (lihat ADR-0001, [`01_c
 ```mermaid
 flowchart LR
   Dev[development] -->|bun run dev| Local[Lokal, tanpa provider]
-  Stg[staging] -->|docker compose / systemd| Mirror[Mirror produksi]
   Prod[production online] -->|systemd + nginx TLS| Public[Terpapar internet]
   Lan[offline/LAN] -->|systemd atau compose, tanpa nginx| Lan1[Satu server LAN]
 ```
 
-Empat profil target dan berkas `deploy/*` yang relevan untuk masing-masing (berkas-berkas ini **belum ada** di repo — direncanakan mengikuti pola yang sama dengan basis `awcms-mini`):
+Tiga profil dan berkas `deploy/*` yang relevan untuk masing-masing (`deploy/backup/*` dan `deploy/pgbouncer/*` sudah nyata; `deploy/systemd/*`, `deploy/nginx/*`, dan `docker-compose.yml` masih rencana — lihat koreksi status di atas):
 
 | Profil                  | Karakteristik                                                                                                                       | Berkas `deploy/`/root yang relevan (rencana)                                                                                                                                                                            |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **development**         | Semua provider off, DB lokal, cookie tidak secure                                                                                   | `bun run dev` langsung (tidak perlu `deploy/*` atau `docker-compose.yml`); `.env` disalin dari `.env.example` apa adanya                                                                                                |
-| **staging**             | Meniru produksi, data uji, backup aktif                                                                                             | Sama seperti production (di bawah), plus data/tenant uji                                                                                                                                                                |
 | **production (online)** | HTTPS, secret manager, backup+restore teruji, sync opsional (mis. Coretax/payment gateway/marketplace)                              | `deploy/systemd/awcms.service.example`, `deploy/nginx/awcms.conf.example` (TLS termination), `deploy/backup/*`, opsional `deploy/pgbouncer/*` bila banyak koneksi pendek                                                |
 | **offline/LAN**         | Tanpa internet; sync/integrasi eksternal off atau tertunda; operasional ERP (transaksi, gudang, HR) tetap jalan penuh; backup lokal | `deploy/systemd/awcms.service.example` (atau `docker-compose.yml`) menjalankan app langsung di port 4321 — **nginx dapat dilewati sepenuhnya**, tidak ada eksposur publik; `deploy/backup/*` tetap wajib (backup lokal) |
+
+**Tiga, bukan empat.** `staging` dulu baris keempat di tabel ini; ia **dihapus dari kosakata profil** ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md), sebagaimana diamandemen) — bukan sekadar tidak dijalankan di sini. `ModuleDeploymentProfile` di `src/modules/_shared/module-contract.ts` karena itu `development | production | offline-lan`. Sebuah profil yang tak pernah dilatih siapa pun adalah klaim, bukan kapabilitas: ia menempel di setiap `deploymentProfiles` modul, di setiap tabel dokumen, dan di setiap percabangan `APP_ENV` tanpa satu pun deployment yang membuktikannya benar.
+
+Yang **tidak** hilang bersamanya adalah kontrak isolasinya — database sendiri, role/password sendiri, secret sendiri, integrasi keluar mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge per-environment. Kontrak itu berpindah rumah ke [`environments.md`](environments.md) §Kontrak isolasi environment kedua, dan kini berlaku bagi **environment kedua apa pun** yang seseorang dirikan di samping produksinya, apa pun namanya. Deployment milik repo ini sendiri tetap cuma satu: production di `awcms.ahlikoding.com` — yang akan "di-stage" di sini adalah templatenya sendiri, dan itu divalidasi rantai gerbang CI plus suite integrasi ber-Postgres, bukan salinan kedua yang berjalan. Panduan Coolify yang menurunkan aturan ini ke tingkat operator: [`deploy-coolify.md`](deploy-coolify.md).
 
 Prinsip pemilihan: nginx (`deploy/nginx/`) hanya dibutuhkan saat butuh terminasi TLS untuk klien di luar mesin/jaringan tepercaya atau saat memfasadkan beberapa instance upstream — topologi LAN-first satu server bisa langsung menyajikan aplikasi di port 4321 tanpa reverse proxy sama sekali. PgBouncer (`deploy/pgbouncer/`) hanya untuk skenario koneksi pendek bervolume tinggi (mis. banyak worker sync integrasi eksternal berjalan bersamaan) — bukan kebutuhan default.
 
@@ -42,7 +46,7 @@ bun run db:migrate
 bun run dev
 ```
 
-### staging / production (online) — bare-metal (systemd)
+### production (online) — bare-metal (systemd)
 
 ```bash
 bun install && bun run build
@@ -57,7 +61,7 @@ sudo systemctl reload nginx
 
 Sama seperti di atas, minus langkah nginx — klien LAN mengakses aplikasi langsung di `http://<ip-server-lan>:4321`.
 
-### staging / production / offline-LAN — container (docker-compose.yml)
+### production / offline-LAN — container (docker-compose.yml)
 
 `docker-compose.yml` di root repo (direncanakan) akan menjalankan stack LAN-first default: `app` (image `oven/bun:1.3.14` pinned, bukan `node`, sesuai standar Bun-only) dan `db` (`postgres:18.4`). PgBouncer tersedia sebagai service opsional `pgbouncer`, digerbangi Compose `profiles` sehingga tidak pernah otomatis aktif:
 
@@ -185,13 +189,13 @@ Prinsip konfigurasi wajib: "Konfigurasi tervalidasi saat boot; nilai wajib yang 
 
 Pola dispatcher CLI terjadwal (bukan endpoint HTTP) adalah standar untuk semua job yang bergantung provider eksternal (email, sync object storage, integrasi payment gateway/marketplace/Coretax/logistik) — direncanakan mengikuti pola `scripts/*.ts` yang idempoten (claim-lease `FOR UPDATE SKIP LOCKED`), aman dijalankan berulang, dengan retry/backoff dan circuit breaker per provider. Tidak melakukan apa pun (exit 0, tanpa efek) bila fitur terkait dimatikan di env — profil mana pun yang mematikan sebuah integrasi (mis. offline/LAN) aman menjalankan dispatcher tanpa efek samping.
 
-| Profil                                       | Cara menjadwalkan                                                                                                                                                      |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **development**                              | Jalankan manual sesuai kebutuhan. Fitur eksternal biasanya `false` di `.env` dev — tidak perlu dijadwalkan sama sekali.                                                |
-| **offline/LAN**                              | Integrasi eksternal biasanya off atau tertunda. Bila diaktifkan (mis. relay lokal), jadwalkan seperti profil systemd di bawah.                                         |
-| **staging/production (bare-metal, systemd)** | `cron` atau systemd timer terpisah dari service utama (`awcms.service`).                                                                                               |
-| **container (`docker-compose.yml`)**         | Jalankan sebagai `docker compose exec app bun run <job>` lewat cron host, atau tambahkan service terjadwal terpisah.                                                   |
-| **Coolify/VPS**                              | Scheduled Task Coolify (bila tersedia) atau cron di VPS yang menjalankan `docker exec <container-app> bun run <job>` — lihat [`deploy-coolify.md`](deploy-coolify.md). |
+| Profil                               | Cara menjadwalkan                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **development**                      | Jalankan manual sesuai kebutuhan. Fitur eksternal biasanya `false` di `.env` dev — tidak perlu dijadwalkan sama sekali.                                                                                                                                                                                                                                                     |
+| **offline/LAN**                      | Integrasi eksternal biasanya off atau tertunda. Bila diaktifkan (mis. relay lokal), jadwalkan seperti profil systemd di bawah.                                                                                                                                                                                                                                              |
+| **production (bare-metal, systemd)** | `cron` atau systemd timer terpisah dari service utama (`awcms.service`).                                                                                                                                                                                                                                                                                                    |
+| **container (`docker-compose.yml`)** | Jalankan sebagai `docker compose exec app bun run <job>` lewat cron host, atau tambahkan service terjadwal terpisah.                                                                                                                                                                                                                                                        |
+| **Coolify/VPS**                      | Scheduled Task Coolify (bila tersedia) atau cron di VPS yang menjalankan **container one-shot** dari checkout repo pada tag rilis yang sedang berjalan — **bukan** `docker exec` ke container app: `Dockerfile.production` menghasilkan image runtime saja dan tidak mengirim `scripts/`. Perintah lengkap: [`deploy-coolify.md`](deploy-coolify.md) §Dispatcher terjadwal. |
 
 Contoh crontab (bare-metal/systemd, setiap 2 menit — pola generik untuk dispatcher email/sync):
 
@@ -256,8 +260,8 @@ sama alih-alih menebak dari nama command.
 
 **On-demand/manual (bukan cron berulang)** — dijalankan operator sesuai kebutuhan:
 
-- `security:readiness` — sebelum go-live, dan periodik (mis. mingguan) di staging/production untuk mendeteksi drift.
-- `config:validate`/`production:preflight` — sebelum setiap deploy.
+- `security:readiness` — sebelum go-live, dan periodik (mis. mingguan) terhadap **setiap** deployment hidup untuk mendeteksi drift. Di repo ini itu berarti satu deployment (production, [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)); instalasi yang menjalankan lebih dari satu environment menjalankannya di masing-masing, dengan `DATABASE_URL` environment itu sendiri — hasil dari satu environment tidak pernah menjadi bukti untuk environment lain.
+- `config:validate` — sebelum setiap deploy.
 
 ## Shared worker runner
 
@@ -300,9 +304,11 @@ Panduan adopsi untuk job baru:
 
 ## Backup lokal (semua profil)
 
-`deploy/backup/backup-postgres.sh` dan `deploy/backup/restore-postgres.sh` (direncanakan) — backup lokal wajib pada **semua** profil non-development, termasuk offline/LAN. Untuk platform ERP, ini krusial: backup adalah satu-satunya jalur pemulihan data finansial/inventori/payroll bila terjadi kegagalan.
+`deploy/backup/backup-postgres.sh` dan `deploy/backup/restore-postgres.sh` **nyata ada** di repo ini (Bash, membungkus `pg_dump`/`pg_restore`) — backup lokal wajib pada **semua** profil non-development, termasuk offline/LAN. Untuk platform ERP, ini krusial: backup adalah satu-satunya jalur pemulihan data finansial/inventori/payroll bila terjadi kegagalan.
 
-Standar wajib: **enkripsi backup** (`BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE`, keduanya file, bukan CLI/env-content) — alur lokal terenkripsi ini berjalan penuh **tanpa internet**, jadi profil offline/LAN tidak kehilangan apa pun. Off-site copy (pola 3-2-1) dan restore drill terjadwal **opsional/dikonfigurasi** — dilewati (bukan gagal) bila tidak dikonfigurasi.
+**Backup yang sudah diverifikasi bisa di-restore adalah prasyarat migrasi, bukan tugas rutin di sampingnya.** Migrasi di repo ini forward-only (tidak ada `down`), jadi satu-satunya pembatalan yang nyata adalah restore — dan sebuah dump yang belum pernah diuji-restore bukan jalur pembatalan, ia hanya berkas. Pada topologi satu-environment ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md)) beban itu bertambah: tidak ada environment pendahulu yang menerima `sql/NNN` lebih dulu, sehingga drill restore inilah yang ADR-0083 §Konsekuensi tunjuk sebagai penggantinya — mitigasi, bukan pengganti setara. `restore-postgres.sh` **tanpa** `--target` selalu restore ke database sekali pakai lalu men-drop-nya, jadi drill itu tidak pernah menyentuh database live; prosedur lengkapnya di [`database-migrations.md`](database-migrations.md) §Langkah 0, bentuk container one-shot untuk Coolify di [`deploy-coolify.md`](deploy-coolify.md) §Backup. Instalasi yang menjalankan lebih dari satu environment tetap wajib melakukannya per environment — dump satu environment tidak pernah menjadi jalur pemulihan environment lain.
+
+Yang benar-benar dikirim skrip itu hari ini: dump `--format=custom` polos plus sidecar `.sha256`, dan pemangkasan retensi (`BACKUP_RETENTION_DAYS`, default 14). Semuanya berjalan penuh **tanpa internet**, jadi profil offline/LAN tidak kehilangan apa pun. Enkripsi at-rest dan manifest bertanda tangan HMAC (`BACKUP_ENCRYPTION_KEY_FILE`/`BACKUP_HMAC_KEY_FILE`) tetap **standar target** dan disebut [`production-preflight-runbook.md`](production-preflight-runbook.md) §Stage 2 — tetapi **belum diimplementasikan**, dan skrip menolak jalan (bukan diam-diam mengabaikan) begitu salah satu variabel kunci itu diset, supaya tidak ada yang mengira dump polos itu terenkripsi. Sampai varian terenkripsinya ada, dump dilindungi izin filesystem dan salinan off-host, bukan oleh keyakinan. Off-site copy (pola 3-2-1) dan restore drill terjadwal juga belum dikirim sebagai otomasi — drill dijalankan manual sesuai [`database-migrations.md`](database-migrations.md) §Langkah 0.
 
 Direncanakan menyusul: `bun run resilience:dr-drill` untuk verifikasi failure-injection terkontrol (disconnect PostgreSQL, pool saturation, worker interruption, partial provider outage) — lihat `resilience-dr-verification.md` (menyusul, mengadaptasi pola yang sama dari basis).
 

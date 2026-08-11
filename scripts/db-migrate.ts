@@ -23,6 +23,33 @@ type MigrationResult = {
 
 const MIGRATION_FILE_PATTERN = /^\d{3}_awcms_[a-z0-9_]+\.sql$/;
 const MIGRATION_LOCK_KEY = 8_402_017_551;
+
+/**
+ * Session timeouts for a migration batch, set by the runner rather than left to
+ * the operator's shell.
+ *
+ * `lock_timeout` — a migration that needs `ACCESS EXCLUSIVE` on a table a live
+ * request is holding will otherwise wait forever, and while it waits it queues
+ * every subsequent reader behind itself. That is the classic way a "quick
+ * `ALTER TABLE`" takes a production site down: not the DDL, the lock queue
+ * behind it. Five seconds is short enough that the migration fails and the site
+ * stays up; the operator retries in a quieter window.
+ *
+ * `statement_timeout` — a batch backfill on a large table can run for hours
+ * unnoticed. Fifteen minutes is long enough for any migration this repo has,
+ * and finite. A migration that genuinely needs longer should say so itself with
+ * a `SET LOCAL statement_timeout` inside its own file, which overrides this for
+ * that transaction only and leaves the intent in the migration where a reviewer
+ * can see it.
+ *
+ * Both are set on the session AFTER the advisory lock is taken (see
+ * `runMigrations`) — `lock_timeout` applies to lock acquisition, and applying it
+ * to `pg_advisory_lock` itself would make two concurrent deployers fail instead
+ * of one waiting for the other, which is the exact behaviour that lock exists to
+ * provide.
+ */
+const MIGRATION_LOCK_TIMEOUT = "5s";
+const MIGRATION_STATEMENT_TIMEOUT = "15min";
 const MIGRATION_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS awcms_schema_migrations (
   id bigserial PRIMARY KEY,
@@ -108,6 +135,15 @@ async function runMigrations(
   await sql`SELECT pg_advisory_lock(${MIGRATION_LOCK_KEY})`;
 
   try {
+    // Immediately after the lock, so no operator can forget: the runbook asks
+    // for these on the command line, and a command line is exactly where a step
+    // gets dropped at 2am. Inside the `try` so a failure here still releases the
+    // lock. `set_config(..., false)` is session-scoped, and the client is opened
+    // with `max: 1`, so this is the same connection the migration transactions
+    // below run on.
+    await sql`SELECT set_config('lock_timeout', ${MIGRATION_LOCK_TIMEOUT}, false)`;
+    await sql`SELECT set_config('statement_timeout', ${MIGRATION_STATEMENT_TIMEOUT}, false)`;
+
     const appliedRows = await sql<AppliedMigration[]>`
       SELECT migration_name, checksum FROM awcms_schema_migrations ORDER BY migration_name ASC
     `;

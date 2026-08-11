@@ -35,13 +35,23 @@
  *   `deleted_at IS NULL`, so both 404 on a binned page;
  * - **Purge** — BOTH, because `canPurgePage` accepts archived OR soft-deleted.
  *
- * ## No body editor, and one absence worth naming
+ * ## A body editor, and one absence worth naming
  *
- * Same boundary `/admin/blog` drew: authoring a page body is a rich-text
- * surface plus SEO fields and media, not a corner of a list. `pages.update` is
- * driven through the STRUCTURE fields this screen genuinely owns — title,
- * slug, page type, menu order — which is what an operator reorganising a site
- * menu actually needs, and what no other screen offers.
+ * This screen shipped WITHOUT one, and that was a working-feature defect
+ * rather than a scope decision: the create form sent `contentJson: {}` with
+ * `contentText: ""`, `validateContentTextField` requires a non-empty
+ * `contentText`, so every create from this screen was answered 400 and no page
+ * could be authored through the CMS at all. The repair is the missing INPUT —
+ * a plain-paragraph `<textarea>` converted by `lib/ui/blog-body-editor` —
+ * never a laxer validator: `content-quality-checklist.ts` has no
+ * "body present" rule, so an empty body accepted at write time reaches
+ * `publish` unchallenged.
+ *
+ * The editor writes `paragraph` blocks only, and REFUSES to touch a page whose
+ * stored document holds a gallery or a video embed: those blocks have no
+ * authoring surface anywhere in this repo, and a textarea that rewrote them as
+ * paragraphs would destroy them on the first save. Structure — page type, menu
+ * order — remains editable for such a page; only the body field is withheld.
  *
  * `parent_page_id` is displayed but not editable here. Re-parenting is a tree
  * operation: it needs cycle detection the API does not currently perform, and
@@ -69,6 +79,7 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import {
+  fetchBlogPageById,
   listBlogPagesForAdmin,
   type ListBlogPagesForAdminResult
 } from "../../modules/blog-content/application/blog-page-directory";
@@ -86,6 +97,7 @@ import {
   MAX_EXCERPT_LENGTH,
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
+import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
 
 const ssr = Astro.locals.ssrContext!;
 
@@ -112,8 +124,19 @@ const pageNumber = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1;
 
 const showsBin = readParam("view") === "deleted";
 
-/** `?edit=<id>` opens the structure form for one page, below the table. */
-const editingPageId = readParam("edit");
+/**
+ * `?edit=<id>` opens the editor for one page, below the table.
+ *
+ * Shape-checked rather than passed straight through: `fetchBlogPageById` binds
+ * it as a `uuid`, and a hand-edited `?edit=nonsense` aborts the transaction,
+ * which `onError` renders as "pages could not be loaded" — "the list is
+ * broken" for what is really "no such page".
+ */
+const UUID_PARAM =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const editingPageId = UUID_PARAM.test(readParam("edit"))
+  ? readParam("edit")
+  : "";
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's rather than `ssr.permissions.has()`.
@@ -131,52 +154,67 @@ const screen = await loadAdminScreen({
     activityCode: "pages",
     action: "read"
   },
-  load: async ({ tx, can }) => ({
+  load: async ({ tx, can }) => {
     // One transaction, one awaited query at a time. Concurrent queries on a
     // single transaction connection leak it, so nothing here runs in parallel.
-    listing: await listBlogPagesForAdmin(tx, ssr.tenantId, {
+    const listing = await listBlogPagesForAdmin(tx, ssr.tenantId, {
       search: searchFilter || undefined,
       status: statusFilter,
       pageType: pageTypeFilter,
       deletedOnly: showsBin || undefined,
       page: pageNumber
-    }),
-    canCreate: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "create"
-    }),
-    canUpdate: await can({
+    });
+
+    // Hoisted out of the returned literal because the editor read below is
+    // conditional on it: an edit form rendered from a row the chokepoint would
+    // refuse is a form that can only fail on save.
+    const canUpdate = await can({
       moduleKey: "blog_content",
       activityCode: "pages",
       action: "update"
-    }),
-    canPublish: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "publish"
-    }),
-    canArchive: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "archive"
-    }),
-    canDelete: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "delete"
-    }),
-    canRestore: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "restore"
-    }),
-    canPurge: await can({
-      moduleKey: "blog_content",
-      activityCode: "pages",
-      action: "purge"
-    })
-  }),
+    });
+
+    return {
+      listing,
+      canUpdate,
+      // The list summary carries no body, so the editor needs the WHOLE row.
+      // One extra query for the one page being edited, never for the list.
+      editingPage:
+        editingPageId && canUpdate
+          ? await fetchBlogPageById(tx, ssr.tenantId, editingPageId)
+          : null,
+      canCreate: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "create"
+      }),
+      canPublish: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "publish"
+      }),
+      canArchive: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "archive"
+      }),
+      canDelete: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "delete"
+      }),
+      canRestore: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "restore"
+      }),
+      canPurge: await can({
+        moduleKey: "blog_content",
+        activityCode: "pages",
+        action: "purge"
+      })
+    };
+  },
   onError: (error) => {
     // Includes `DatabaseBusyError` (pool/circuit-breaker refusal). A refusal
     // must never render as "this tenant has no pages".
@@ -237,8 +275,22 @@ const showsRowActions =
   canUpdate || canPublish || canArchive || canDelete || canRestore || canPurge;
 const pageColumns = 5 + (showsRowActions ? 1 : 0);
 
-const editingPage = editingPageId
-  ? (pages.find((entry) => entry.id === editingPageId) ?? null)
+/**
+ * The WHOLE row, not the list summary it used to be read from: the summary
+ * carries no `content_json`, so an editor built on it could show structure and
+ * never a body. It also means `?edit=` resolves a page that paging or a filter
+ * has pushed off the current list, instead of silently rendering no form.
+ */
+const editingPage = screen.state === "allowed" ? screen.data.editingPage : null;
+
+/**
+ * `null` when the stored document holds a block this plain-paragraph textarea
+ * cannot represent — a gallery, a video embed. The screen then offers NO body
+ * field for that page, so those blocks survive a save of its structure. `""`
+ * is the different, legitimate answer for a page with no blocks.
+ */
+const editingBodyText = editingPage
+  ? readParagraphBodyText(editingPage.contentJson)
   : null;
 ---
 
@@ -433,7 +485,7 @@ const editingPage = editingPageId
                               class="quick-link"
                               href={linkWith({ edit: entry.id })}
                             >
-                              Edit structure
+                              Edit
                               <span class="quick-link-arrow" aria-hidden="true">
                                 →
                               </span>
@@ -541,7 +593,7 @@ const editingPage = editingPageId
     canUpdate && !loadError && editingPage && (
       <section class="admin-section fade-in-up" aria-labelledby="edit-title">
         <h2 class="admin-section-title" id="edit-title">
-          Edit structure
+          Edit page
         </h2>
         <form id="page-edit-form" class="admin-create-form">
           <p class="form-legend">
@@ -550,11 +602,9 @@ const editingPage = editingPageId
             <a href={linkWith({ edit: null })}>Close</a>
           </p>
           <p class="form-legend">
-            Structure only — title, address and menu placement. The page body is
-            written in the editor, which is not part of this screen.
-            Re-parenting is not offered here: it needs cycle detection the API
-            does not perform, and a control that can build a loop is worse than
-            none.
+            Title, address, menu placement and body. Re-parenting is not offered
+            here: it needs cycle detection the API does not perform, and a
+            control that can build a loop is worse than none.
           </p>
           <p
             id="page-edit-error"
@@ -615,8 +665,39 @@ const editingPage = editingPageId
             />
           </label>
 
+          <label for="edit-excerpt">
+            Excerpt (optional)
+            <textarea
+              id="edit-excerpt"
+              name="excerpt"
+              rows="2"
+              maxlength={MAX_EXCERPT_LENGTH}
+              set:text={editingPage.excerpt ?? ""}
+            />
+          </label>
+
+          {editingBodyText === null ? (
+            <p class="form-legend">
+              The body of this page holds blocks this plain-text editor cannot
+              represent — an image gallery or a video embed. Structure and
+              excerpt are still editable; the body is left untouched, because
+              saving it from here would drop those blocks.
+            </p>
+          ) : (
+            <label for="edit-body">
+              Body
+              <textarea
+                id="edit-body"
+                name="body"
+                rows="14"
+                required
+                set:text={editingBodyText}
+              />
+            </label>
+          )}
+
           <button type="submit" id="page-edit-submit">
-            Save structure
+            Save page
           </button>
         </form>
       </section>
@@ -631,8 +712,9 @@ const editingPage = editingPageId
         </h2>
         <form id="page-create-form" class="admin-create-form">
           <p class="form-legend">
-            Creates a draft. The body is written in the page editor, which is
-            not part of this screen yet.
+            Creates a draft. Separate paragraphs with a blank line — each one
+            becomes a <code>paragraph</code> block, the only block type this
+            editor writes.
           </p>
           <p
             id="page-create-error"
@@ -715,6 +797,15 @@ const editingPage = editingPageId
             />
           </label>
 
+          {/* The field whose absence made this form unusable: the API requires
+              a non-empty `contentText`, and the screen sent `""`. No
+              `maxlength` — the validator imposes no bound on the body, and a
+              hand-typed one would be a limit no server enforces. */}
+          <label for="create-body">
+            Body
+            <textarea id="create-body" name="body" rows="14" required />
+          </label>
+
           <button type="submit" id="page-create-submit">
             Create draft
           </button>
@@ -730,8 +821,39 @@ const editingPage = editingPageId
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    describeRejectedFields,
+    sendJsonWithFieldErrors
+  } from "../../lib/ui/admin-field-errors-client";
+  import {
+    buildContentJsonFromBodyText,
+    buildContentTextFromBodyText
+  } from "../../lib/ui/blog-body-editor";
 
   const actionError = document.getElementById("pages-action-error");
+
+  /**
+   * API field -> the control the operator can actually fix. `contentJson` and
+   * `contentText` are one textarea, so a body the validator rejects on both
+   * counts is reported once.
+   */
+  const FIELD_LABELS: Record<string, string> = {
+    title: "Title",
+    slug: "Slug",
+    excerpt: "Excerpt",
+    locale: "Locale",
+    visibility: "Visibility",
+    pageType: "Page type",
+    menuOrder: "Menu order",
+    contentJson: "Body",
+    contentText: "Body"
+  };
+
+  function showFormError(element: HTMLElement | null, message: string): void {
+    if (!element) return;
+    element.textContent = message;
+    element.hidden = false;
+  }
 
   function showActionError(message: string): void {
     if (!actionError) return;
@@ -877,19 +999,44 @@ const editingPage = editingPageId
     const data = new FormData(editForm);
     const errorElement = document.getElementById("page-edit-error");
     if (errorElement) errorElement.hidden = true;
+
+    // PATCH is a partial update; only the fields this screen owns are sent, so
+    // the SEO fields and featured media are not clobbered by a stale copy.
+    const body: Record<string, unknown> = {
+      title: String(data.get("title") ?? "").trim(),
+      slug: String(data.get("slug") ?? "").trim(),
+      pageType: String(data.get("pageType") ?? "standard"),
+      menuOrder: Number(data.get("menuOrder") ?? 0),
+      // `null` clears it — the API distinguishes that from absent, which is
+      // "leave the excerpt alone".
+      excerpt: String(data.get("excerpt") ?? "").trim() || null
+    };
+
+    // Absent when the stored document holds blocks this editor cannot
+    // represent: the field is not rendered, so the body is not sent, so those
+    // blocks survive the save.
+    if (data.has("body")) {
+      const bodyText = String(data.get("body") ?? "");
+      const contentText = buildContentTextFromBodyText(bodyText);
+
+      if (contentText === "") {
+        showFormError(
+          errorElement,
+          "The body cannot be empty — write at least one paragraph."
+        );
+        return;
+      }
+
+      body.contentJson = buildContentJsonFromBodyText(bodyText);
+      body.contentText = contentText;
+    }
+
     const unlock = lockElement(submit, "Saving…");
 
-    // PATCH is a partial update; only the structure fields this screen owns
-    // are sent, so a concurrent body edit is not clobbered by a stale copy.
-    const result = await sendJson(
+    const result = await sendJsonWithFieldErrors(
       "PATCH",
       `/api/v1/blog/pages/${idField.value}`,
-      {
-        title: String(data.get("title") ?? "").trim(),
-        slug: String(data.get("slug") ?? "").trim(),
-        pageType: String(data.get("pageType") ?? "standard"),
-        menuOrder: Number(data.get("menuOrder") ?? 0)
-      }
+      body
     );
 
     if (result.ok) {
@@ -897,13 +1044,14 @@ const editingPage = editingPageId
       return;
     }
 
-    if (errorElement) {
-      errorElement.textContent =
-        result.errorCode === "CONFLICT"
-          ? "A page with that slug and locale already exists."
-          : "Could not save the page. Check the title and slug, then try again.";
-      errorElement.hidden = false;
-    }
+    // The rejected FIELD, not a guess at it.
+    showFormError(
+      errorElement,
+      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
+        ? "A page with that slug and locale already exists."
+        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
+            "Could not save the page. Please try again.")
+    );
     unlock();
   });
 
@@ -921,6 +1069,21 @@ const editingPage = editingPageId
     const data = new FormData(createForm);
     const errorElement = document.getElementById("page-create-error");
     if (errorElement) errorElement.hidden = true;
+
+    const bodyText = String(data.get("body") ?? "");
+    const contentText = buildContentTextFromBodyText(bodyText);
+
+    // Checked here as well as by `required`, because `required` accepts a
+    // textarea holding only whitespace and the validator does not — this is
+    // the one rejection the form can name before the round trip.
+    if (contentText === "") {
+      showFormError(
+        errorElement,
+        "The body cannot be empty — write at least one paragraph."
+      );
+      return;
+    }
+
     const unlock = lockElement(submit, "Creating…");
 
     const excerpt = String(data.get("excerpt") ?? "").trim();
@@ -931,10 +1094,12 @@ const editingPage = editingPageId
       visibility: String(data.get("visibility") ?? "public"),
       pageType: String(data.get("pageType") ?? "standard"),
       menuOrder: Number(data.get("menuOrder") ?? 0),
-      // The validator requires both content fields; a new draft starts empty
-      // and the body is written in the editor, which is not this screen.
-      contentJson: {},
-      contentText: ""
+      // `{ blocks: [...] }` — the shape `content-block-rendering.ts` defines
+      // and every reader of `content_json` expects. This used to be `{}` with
+      // an empty `contentText`, which `validateContentTextField` refuses: every
+      // create from this form was answered 400.
+      contentJson: buildContentJsonFromBodyText(bodyText),
+      contentText
     };
     // Omitted rather than sent as "": an empty string is a value, and the
     // validator treats absent as "no excerpt".
@@ -942,20 +1107,25 @@ const editingPage = editingPageId
 
     // No `Idempotency-Key`: `POST /api/v1/blog/pages` requires none — a retry
     // that duplicates a create is caught by the slug/locale unique index.
-    const result = await sendJson("POST", "/api/v1/blog/pages", body);
+    const result = await sendJsonWithFieldErrors(
+      "POST",
+      "/api/v1/blog/pages",
+      body
+    );
 
     if (result.ok) {
       window.location.reload();
       return;
     }
 
-    if (errorElement) {
-      errorElement.textContent =
-        result.errorCode === "CONFLICT"
-          ? "A page with that slug and locale already exists."
-          : "Could not create the draft. Check the title and slug, then try again.";
-      errorElement.hidden = false;
-    }
+    // The rejected FIELD, not a guess at it.
+    showFormError(
+      errorElement,
+      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
+        ? "A page with that slug and locale already exists."
+        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
+            "Could not create the draft. Please try again.")
+    );
     unlock();
   });
 </script>

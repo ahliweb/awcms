@@ -25,7 +25,10 @@
  * module's internals (the `seo_facts` port is the only shared surface).
  *
  * Bounded by construction: the sitemap index sizes itself from a cheap
- * `summarize` roll-up; each child page is one bounded window; feeds are capped at
+ * `summarize` roll-up; each child page is one bounded window — filled by a
+ * cursor-paged walk of at most `SITEMAP_PROVIDER_REQUESTS_PER_PAGE` provider
+ * requests, because `pageSize` is a request a provider may clamp and a short
+ * page must never be mistaken for an exhausted one; feeds are capped at
  * `feed_item_limit` (≤ 200). No request enumerates all tenant content.
  */
 import {
@@ -42,7 +45,9 @@ import type {
 import { SEO_RENDER_CONTRACT_VERSION } from "../domain/seo-document";
 import { buildDiscoverySignature, buildEtag } from "../domain/discovery-cache";
 import {
+  SEO_FACTS_PROVIDER_PAGE_SIZE,
   SITEMAP_PROTOCOL_MAX_URLS,
+  SITEMAP_PROVIDER_REQUESTS_PER_PAGE,
   SITEMAP_URLS_PER_PAGE
 } from "../domain/discovery-limits";
 import {
@@ -187,10 +192,14 @@ async function providerSummary(
   while (count < SITEMAP_PROTOCOL_MAX_URLS) {
     const page = await provider.listPublicResourceFacts(tx, tenantId, {
       cursor,
-      pageSize: 1000,
+      // A size providers actually honor (see `SEO_FACTS_PROVIDER_PAGE_SIZE`);
+      // this walk already pages on `nextCursor`, so a clamp only costs
+      // round-trips here — it never truncates the roll-up.
+      pageSize: SEO_FACTS_PROVIDER_PAGE_SIZE,
       locale: locale ?? undefined,
       order: "id_asc"
     });
+    if (page.items.length === 0) break;
     for (const fact of page.items) {
       count++;
       latestLastmod = maxIso(latestLastmod, fact.sitemap?.lastmod ?? null);
@@ -231,11 +240,79 @@ async function summarizeAll(
 }
 
 /**
+ * ONE provider's slice of a child-sitemap window: skip `skip` entries of its
+ * stable `id_asc` order, then collect up to `take` — PAGING on the provider's
+ * own `nextCursor` rather than asking for `take` in a single call.
+ *
+ * Asking once for `take` is what silently truncated the sitemap. `pageSize` is a
+ * REQUEST, not a guarantee (`ListPublicResourceFactsOptions`): a provider clamps
+ * it to its own ceiling — `blog_content` clamps at 200 — and a clamped page is
+ * indistinguishable from a genuinely exhausted one EXCEPT through `nextCursor`.
+ * The old code read `page.items` once and stopped, so a tenant with more than
+ * that ceiling lost every remaining URL of every child page, with no error on
+ * any surface: the index still advertised the full `ceil(count / perPage)`
+ * children, and each child quietly returned the first 200 rows.
+ *
+ * The cursor is OPAQUE and stays that way: it is handed back to the provider
+ * byte-for-byte, never parsed, re-encoded, or round-tripped through a JS `Date`.
+ * That last one is not hypothetical here — a keyset cursor in this repo carries
+ * its timestamp as FULL-PRECISION text because `timestamptz` has microseconds
+ * while a `Date` has milliseconds, so a `new Date(cursor).toISOString()` on the
+ * way through truncates the last three digits and skips every row inside that
+ * microsecond — the same class of silent drop this function exists to fix.
+ *
+ * Bounded by `SITEMAP_PROVIDER_REQUESTS_PER_PAGE`, and by breaking on an empty
+ * page: a provider that clamps very low, or that keeps handing back a cursor
+ * forever, costs a fixed number of queries instead of an unbounded loop.
+ */
+async function listProviderSlice(
+  ctx: SeoDiscoveryContext,
+  provider: SeoFactsSource,
+  skip: number,
+  take: number
+): Promise<SeoResourceFacts[]> {
+  const out: SeoResourceFacts[] = [];
+  let cursor: string | null = null;
+
+  for (
+    let request = 0;
+    request < SITEMAP_PROVIDER_REQUESTS_PER_PAGE && out.length < take;
+    request++
+  ) {
+    const pageSize = Math.min(take - out.length, SEO_FACTS_PROVIDER_PAGE_SIZE);
+    // `offset` positions the FIRST request only; every later one is positioned by
+    // the cursor alone. Sending both would double-skip on a provider that honors
+    // each independently (the port lets `cursor` win, but a slice must not depend
+    // on that tie-break).
+    const options: ListPublicResourceFactsOptions =
+      cursor === null
+        ? { offset: skip, pageSize, order: "id_asc" }
+        : { cursor, pageSize, order: "id_asc" };
+    const page = await provider.listPublicResourceFacts(
+      ctx.tx,
+      ctx.tenantId,
+      options
+    );
+    out.push(...page.items);
+    if (page.items.length === 0 || page.nextCursor === null) break;
+    cursor = page.nextCursor;
+  }
+
+  return out.length > take ? out.slice(0, take) : out;
+}
+
+/**
  * The global `[offset, offset+pageSize)` window over providers concatenated in a
  * fixed order (id_asc within each) — deterministic child-sitemap paging without
- * walking earlier pages. One bounded query per provider that overlaps the window.
+ * walking earlier pages. A bounded, cursor-paged walk per provider that overlaps
+ * the window (see `listProviderSlice`).
+ *
+ * Exported for unit testing: "nothing is dropped and nothing is duplicated
+ * across child pages" is a property of THIS function against a provider that
+ * clamps `pageSize`, and asserting it through `buildSitemapPagePayload` would
+ * need a database for `loadBase`'s settings/host/updated_at reads.
  */
-async function listWindow(
+export async function listWindow(
   ctx: SeoDiscoveryContext,
   offset: number,
   pageSize: number
@@ -252,18 +329,16 @@ async function listWindow(
       skip -= count;
       continue;
     }
-    const options: ListPublicResourceFactsOptions = {
-      offset: skip,
-      pageSize: remaining,
-      order: "id_asc"
-    };
-    const page = await provider.listPublicResourceFacts(
-      ctx.tx,
-      ctx.tenantId,
-      options
+    // Never ask a provider for more than the roll-up says it holds past `skip` —
+    // that would spend a whole extra request to learn it is exhausted.
+    const slice = await listProviderSlice(
+      ctx,
+      provider,
+      skip,
+      Math.min(remaining, count - skip)
     );
-    out.push(...page.items);
-    remaining -= page.items.length;
+    out.push(...slice);
+    remaining -= slice.length;
     skip = 0;
   }
 

@@ -17,12 +17,12 @@ isFullOnlineSecurityActive = AUTH_ONLINE_SECURITY_ENABLED === "true"
                           && AUTH_ONLINE_SECURITY_PROFILE === "full_online"
 ```
 
-| Profil                            | `AUTH_ONLINE_SECURITY_*`    | `TURNSTILE_ENABLED` | Hasil                                  |
-| --------------------------------- | --------------------------- | ------------------- | -------------------------------------- |
-| LAN/offline (default)             | unset / `false`             | apa pun             | **OFF** — tak ada widget/CSP/outbound  |
-| LAN dengan flag Turnstile menyala | `false` / profil `disabled` | `true`              | **OFF total** (gerbang profil menang)  |
-| Full-online, Turnstile mati       | `true` + `full_online`      | `false` / unset     | OFF (staging kredensial diperbolehkan) |
-| Full-online, Turnstile hidup      | `true` + `full_online`      | `true`              | **AKTIF** — enforcement fail-closed    |
+| Profil                            | `AUTH_ONLINE_SECURITY_*`    | `TURNSTILE_ENABLED` | Hasil                                                |
+| --------------------------------- | --------------------------- | ------------------- | ---------------------------------------------------- |
+| LAN/offline (default)             | unset / `false`             | apa pun             | **OFF** — tak ada widget/CSP/outbound                |
+| LAN dengan flag Turnstile menyala | `false` / profil `disabled` | `true`              | **OFF total** (gerbang profil menang)                |
+| Full-online, Turnstile mati       | `true` + `full_online`      | `false` / unset     | OFF (menyiapkan kredensial lebih dulu diperbolehkan) |
+| Full-online, Turnstile hidup      | `true` + `full_online`      | `true`              | **AKTIF** — enforcement fail-closed                  |
 
 Widget (`login.astro`), origin CSP (`security-headers.ts`), dan enforcement (`login.ts`/`initialize.ts`) semuanya digerbangi fungsi yang sama, sehingga tak mungkin drift (mis. CSP terbuka tapi widget tak dirender).
 

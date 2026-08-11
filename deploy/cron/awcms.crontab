@@ -1,0 +1,278 @@
+# awcms.crontab — the recurring jobs AWCMS declares, as an installable crontab.
+#
+# THIS FILE IS A MANIFEST, NOT A LIVE CONFIGURATION. Nothing in this repo reads
+# it, no deploy applies it, and merging it schedules nothing. An operator has to
+# install it on the host by hand:
+#
+#   sudo cp deploy/cron/awcms.crontab /etc/cron.d/awcms   # then edit the vars
+#   sudo chown root:root /etc/cron.d/awcms
+#   sudo chmod 0644 /etc/cron.d/awcms
+#
+# (For /etc/cron.d each line needs a user field between the schedule and the
+# command — see §Installing below. As written here the file is a USER crontab,
+# `crontab -u awcms deploy/cron/awcms.crontab`, which needs no user field.)
+#
+# Why it exists: every job below is declared in a module's
+# `ModuleDescriptor.jobs` with a `recommendedSchedule`, and `modules:jobs:check`
+# guarantees that declaration exists. Nothing guaranteed a SCHEDULER existed.
+# Until this file, 22 recurring jobs had a recommended schedule in the registry
+# and no crontab anywhere in the repo — so on a real deployment they simply
+# never ran, and nothing said so: no gate, no health check, no alarm. Retention
+# never ran, outboxes never drained, scheduled posts never published.
+#
+# The schedules below are transcribed from those descriptors. The descriptor is
+# the source of truth; if the two disagree, the descriptor wins and this file is
+# stale. Read the live list instead of trusting this comment:
+#
+#   GET /api/v1/modules/{moduleKey}/jobs
+#
+# ===========================================================================
+# The invocation pattern: one-shot container, NOT `docker exec`
+# ===========================================================================
+#
+# `docker exec <app-container> bun run <job>` FAILS BY DESIGN on this
+# deployment. `Dockerfile.production` builds a runtime-only image: `scripts/`
+# is not in it, so every one of these commands dies with
+# `Module not found "scripts/…"`. That is the shape of the image, and
+# docs/awcms/environments.md §Menjalankan migrasi says explicitly it is not to
+# be changed. The app container's name also changes on every Coolify deploy,
+# so a crontab naming it would rot within a day.
+#
+# What works is the same one-shot container the migration runbook uses: a Bun
+# image, a repo checkout bind-mounted at /app, joined to the DATABASE
+# container's network namespace so the DSN can say 127.0.0.1 (Coolify publishes
+# no database port).
+#
+# ---------------------------------------------------------------------------
+# Prerequisites, once per host, and again after every deploy
+# ---------------------------------------------------------------------------
+#
+# 1. A checkout at /opt/awcms on the SAME commit as the deployed image. These
+#    jobs run against the deployed schema; a checkout drifting from the image
+#    is a job running last week's code against this week's tables.
+#
+#      git clone --depth 1 --branch main https://github.com/ahliweb/awcms.git /opt/awcms
+#      cd /opt/awcms && bun install --frozen-lockfile
+#
+#    (The migration runbook uses `--frozen-lockfile --production`. That is
+#    verified for `db:migrate` only; whether every worker below runs with dev
+#    dependencies pruned has NOT been verified, so the full install is what is
+#    written here.)
+#
+# 2. Two env files, `KEY=value` per line, no quotes — that is all
+#    `docker run --env-file` parses. Both mode 0600, owned by the cron user;
+#    they hold database passwords.
+#      /etc/awcms/worker.env  — `DATABASE_URL`, plus `WORKER_DATABASE_URL` if
+#                               the least-privilege worker role is enabled
+#                               (it should be)
+#      /etc/awcms/backup.env  — `DATABASE_URL` for the privileged owner role,
+#                               and `BACKUP_DIR=/backup`
+#    Host must be `127.0.0.1` in both, because of the shared network namespace.
+#
+# 3. The DB container's real name — `docker ps --format '{{.Names}}'`. The
+#    values below are the ones docs/awcms/environments.md records for the
+#    Coolify apps (production DB `eel59mczdlkidkm5a6fhbdeh`, staging DB
+#    `my85c1xd4txesedhic72maeu`). VERIFY before installing; do not assume.
+#
+# 4. `mkdir -p /var/log/awcms /var/backups/awcms /var/lock`, a logrotate rule
+#    for /var/log/awcms/*.log (these append forever otherwise), and `flock`
+#    from util-linux on PATH.
+#
+# ---------------------------------------------------------------------------
+# EDIT THESE FOUR LINES, then the job lines need no further changes
+# ---------------------------------------------------------------------------
+#
+# cron performs NO expansion inside a variable assignment, so $AWCMS_RUN below
+# must spell out the container name, paths and image literally — a nested
+# $VARIABLE here would be passed through as text and the job would fail.
+# The job lines themselves ARE expanded, because cron hands each command to
+# $SHELL, which expands (and word-splits) $AWCMS_RUN into arguments.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+CRON_TZ=UTC
+
+AWCMS_RUN=docker run --rm --network container:eel59mczdlkidkm5a6fhbdeh -v /opt/awcms:/app -w /app --env-file /etc/awcms/worker.env oven/bun:1.3.14-alpine bun run
+AWCMS_PGRUN=docker run --rm --network container:eel59mczdlkidkm5a6fhbdeh -v /var/backups/awcms:/backup -v /opt/awcms/deploy/backup:/scripts:ro --env-file /etc/awcms/backup.env postgres:18.4 bash
+AWCMS_LOG=/var/log/awcms
+
+# CRON_TZ=UTC matters: `analytics:rollup` is declared as "daily (shortly after
+# UTC midnight)" because it rolls up whole UTC days. If your cron does not
+# support CRON_TZ, either run the host in UTC or shift every `H M` below by
+# your offset — do not leave it to chance.
+#
+# Failure visibility: every line redirects both streams to a log, so cron mails
+# nothing, ever. That is deliberate (these jobs print telemetry on success and
+# would otherwise mail on every tick), but it means a job that starts failing is
+# invisible until someone reads the log. Wire $AWCMS_LOG into whatever watches
+# this host, or drop the `2>&1` on the jobs you want mailed.
+#
+# Overlap: most jobs take a per-name Postgres advisory lock (`runJob`) or claim
+# rows with `FOR UPDATE SKIP LOCKED`, so a slow tick overlapping the next one is
+# harmless. Four do NEITHER yet (issue #291): `comments:retention`,
+# `form-drafts:purge`, `site-search:reconcile`, `tenant-domain:dns:sync`. Those
+# four are wrapped in `flock -n` here, and must be scheduled from exactly one
+# host.
+
+# ===========================================================================
+# Every minute — queue drains
+# ===========================================================================
+
+# domain_event_runtime — descriptor: "Every 30-60 seconds". One minute is the
+# finest granularity cron has; the 30s end of that range needs a systemd timer
+# (OnUnitActiveSec=30s) or a supervised loop instead.
+* * * * * $AWCMS_RUN domain-events:dispatch >> $AWCMS_LOG/domain-events-dispatch.log 2>&1
+
+# email — descriptor: "Every 1-2 minutes". No-op unless EMAIL_ENABLED=true.
+* * * * * $AWCMS_RUN email:dispatch >> $AWCMS_LOG/email-dispatch.log 2>&1
+
+# sync_storage — descriptor: "Every 1-2 minutes". No-op when STORAGE_DRIVER=local.
+* * * * * $AWCMS_RUN sync:objects:dispatch >> $AWCMS_LOG/sync-objects-dispatch.log 2>&1
+
+# push_delivery — descriptor: "Every 1-2 minutes". No-op unless PUSH_ENABLED=true.
+* * * * * $AWCMS_RUN push:dispatch >> $AWCMS_LOG/push-dispatch.log 2>&1
+
+# ===========================================================================
+# Every few minutes
+# ===========================================================================
+
+# reporting — descriptor: "Every 2 minutes".
+*/2 * * * * $AWCMS_RUN reporting:projections:refresh >> $AWCMS_LOG/reporting-projections-refresh.log 2>&1
+
+# workflow — descriptor: "Every 1-5 minutes".
+*/2 * * * * $AWCMS_RUN workflow:escalations:dispatch >> $AWCMS_LOG/workflow-escalations-dispatch.log 2>&1
+
+# blog_content — descriptor: "Every 1-5 minutes". This is what makes a
+# scheduled post actually appear; without it "publish at" is decoration.
+*/2 * * * * $AWCMS_RUN blog:publish:scheduled >> $AWCMS_LOG/blog-publish-scheduled.log 2>&1
+
+# ===========================================================================
+# Every quarter hour
+# ===========================================================================
+
+# reporting — descriptor: "Every 15 minutes".
+*/15 * * * * $AWCMS_RUN reporting:exports:dispatch >> $AWCMS_LOG/reporting-exports-dispatch.log 2>&1
+
+# site_search — descriptor: "every 15 minutes (or after a bulk content change)".
+# No cross-instance lock yet (#291) — flock, single host.
+*/15 * * * * flock -n /var/lock/awcms-site-search-reconcile.lock $AWCMS_RUN site-search:reconcile >> $AWCMS_LOG/site-search-reconcile.log 2>&1
+
+# tenant_domain — descriptor: "Every 15 minutes". Only reaches an external DNS
+# provider when TENANT_DOMAIN_DNS_PROVIDER=cloudflare; 'manual' keeps it local.
+# No cross-instance lock yet (#291) — flock, single host.
+*/15 * * * * flock -n /var/lock/awcms-tenant-domain-dns-sync.lock $AWCMS_RUN tenant-domain:dns:sync >> $AWCMS_LOG/tenant-domain-dns-sync.log 2>&1
+
+# ===========================================================================
+# Hourly
+# ===========================================================================
+
+# identity_access — descriptor: "Hourly". Offset off the top of the hour so it
+# does not queue behind everything else that likes :00.
+7 * * * * $AWCMS_RUN identity-access:business-scope:expiry >> $AWCMS_LOG/identity-access-business-scope-expiry.log 2>&1
+
+# ===========================================================================
+# Daily — staggered on purpose, so the nightly work does not land in one heap
+# ===========================================================================
+
+# visitor_analytics — descriptor: "daily (shortly after UTC midnight)".
+10 0 * * * $AWCMS_RUN analytics:rollup >> $AWCMS_LOG/analytics-rollup.log 2>&1
+
+# visitor_analytics — descriptor: "daily". Destructive; the descriptor says to
+# use --dry-run first. Run it by hand once before trusting this line.
+30 0 * * * $AWCMS_RUN analytics:purge >> $AWCMS_LOG/analytics-purge.log 2>&1
+
+# ---- backup, before the purges run ----------------------------------------
+# Not a module descriptor job: deploy/backup/backup-postgres.sh, scheduled here
+# because docs/awcms/deploy-coolify.md §Backup says backups run from cron on the
+# VPS. Different image (needs pg_dump, version-matched to the server) and a
+# different env file (privileged owner DSN), hence $AWCMS_PGRUN.
+0 2 * * * $AWCMS_PGRUN /scripts/backup-postgres.sh >> $AWCMS_LOG/backup-postgres.log 2>&1
+
+# A backup nobody restores is not a backup. Weekly verify-only drill: restores
+# the newest dump into a scratch database, checks it, drops it. Never touches a
+# live database. Runs on Sunday, an hour after that night's backup.
+0 3 * * 0 $AWCMS_PGRUN -c 'ls -1t /backup/awcms_*.dump | head -n 1 | xargs -r /scripts/restore-postgres.sh' >> $AWCMS_LOG/restore-drill.log 2>&1
+
+# ---- retention / purge sweeps ---------------------------------------------
+
+# logging — descriptor: "Daily, off-peak (e.g. 03:00)". Without this line
+# AUDIT_LOG_RETENTION_DAYS has no effect at all.
+0 3 * * * $AWCMS_RUN logs:audit:purge >> $AWCMS_LOG/logs-audit-purge.log 2>&1
+
+# domain_event_runtime — descriptor: "Daily, off-peak".
+10 3 * * * $AWCMS_RUN domain-events:deliveries:purge >> $AWCMS_LOG/domain-events-deliveries-purge.log 2>&1
+
+# sync_storage — descriptor: "Daily, off-peak". Runs regardless of
+# STORAGE_DRIVER: rows from when R2 was on are exactly the ones nothing else
+# will ever clean up.
+20 3 * * * $AWCMS_RUN sync:objects:purge >> $AWCMS_LOG/sync-objects-purge.log 2>&1
+
+# email — descriptor: "Daily, off-peak". Runs regardless of EMAIL_ENABLED.
+30 3 * * * $AWCMS_RUN email:queue:purge >> $AWCMS_LOG/email-queue-purge.log 2>&1
+
+# push_delivery — descriptor: "Daily, off-peak". Runs regardless of PUSH_ENABLED.
+40 3 * * * $AWCMS_RUN push:queue:purge >> $AWCMS_LOG/push-queue-purge.log 2>&1
+
+# comments — descriptor: "daily (off-peak)". No cross-instance lock yet (#291).
+50 3 * * * flock -n /var/lock/awcms-comments-retention.lock $AWCMS_RUN comments:retention >> $AWCMS_LOG/comments-retention.log 2>&1
+
+# form_drafts — descriptor: "Daily". No cross-instance lock yet (#291).
+0 4 * * * flock -n /var/lock/awcms-form-drafts-purge.lock $AWCMS_RUN form-drafts:purge >> $AWCMS_LOG/form-drafts-purge.log 2>&1
+
+# data_lifecycle — descriptor: "Daily".
+20 4 * * * $AWCMS_RUN data-lifecycle:archive-purge >> $AWCMS_LOG/data-lifecycle-archive-purge.log 2>&1
+
+# media_library — descriptor: "Daily". No-op unless NEWS_MEDIA_R2_ENABLED=true;
+# when on it needs real network egress to the Cloudflare R2 API.
+40 4 * * * $AWCMS_RUN news-media:reconcile >> $AWCMS_LOG/news-media-reconcile.log 2>&1
+
+# ===========================================================================
+# Infrastructure job, not a module job
+# ===========================================================================
+
+# edge-cache:purge is the one documented exception in
+# `scripts/module-job-registry-check.ts`: edge cache is infrastructure under
+# `src/lib/edge-cache/` (ADR-0043) and there is no `edge_cache` MODULE to hang a
+# descriptor on. Its stated schedule is every 10-30 seconds, which cron cannot
+# express — a minute is the floor. Enabled below at one minute, which is a
+# compromise, not the target: if EDGE_CACHE_MODE is on and editors notice stale
+# pages, move this to a systemd timer with OnUnitActiveSec=15s. With
+# EDGE_CACHE_MODE unset the job exits immediately without touching the database,
+# so leaving this line in place on a deployment that has not adopted the edge
+# cache costs one container start per minute and nothing else.
+* * * * * $AWCMS_RUN edge-cache:purge >> $AWCMS_LOG/edge-cache-purge.log 2>&1
+
+# ===========================================================================
+# Deliberately NOT scheduled
+# ===========================================================================
+#
+# These carry job descriptors too, but their `recommendedSchedule` says
+# on-demand or one-shot. Putting them on a timer would be a bug, not diligence:
+#
+#   config:validate                 before every deploy (preflight stage 1)
+#   email:provider:health           manual / deploy smoke test; real egress
+#   email:templates:seed-defaults   once per tenant, after setup; needs args
+#   blog:ads:ingest                 one-shot legacy migration, retired after
+#   blog:ads:drop-readiness         by hand, before writing the drop migration
+#   idn-regions:import              on deploy when the vendored dataset changes
+#   idn-regions:activate            by a platform operator, after review
+#   idn-regions:rollback            by a platform operator, to undo an activation
+#   security:readiness              before go-live, then periodically
+#   production:preflight            before every deploy
+#
+# ===========================================================================
+# Installing into /etc/cron.d instead of a user crontab
+# ===========================================================================
+#
+# /etc/cron.d entries take a USER field between the schedule and the command:
+#
+#   * * * * * awcms $AWCMS_RUN domain-events:dispatch >> $AWCMS_LOG/…
+#              ^^^^^
+#
+# That user must be in the `docker` group (which is root-equivalent on this
+# host — a deliberate trade, and the reason these jobs run as a dedicated
+# account rather than as a login user). Add the field to every line if you take
+# that route; leave the file as-is for `crontab -u awcms deploy/cron/awcms.crontab`.
+#
+# A user crontab needs a trailing newline at end of file or the last entry is
+# silently dropped by some cron implementations. There is one below.

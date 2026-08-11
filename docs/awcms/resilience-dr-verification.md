@@ -203,9 +203,16 @@ rather than a plain boolean:
   (`production-preflight-runbook.md` §Stage 1 — Rehearsal). Run it
   manually before a major release or infrastructure change:
   ```bash
-  APP_ENV=staging DATABASE_URL=<staging-url> \
-  bun run resilience:dr-drill -- --confirm-non-production=staging --full
+  APP_ENV=test DATABASE_URL=<isolated-url> \
+  bun run resilience:dr-drill -- --confirm-non-production=test --full
   ```
+  `test` is not a stylistic choice: `APP_ENV=production` has no override flag
+  (§Safety interlock), and `staging` is gone from the deployment-profile
+  vocabulary entirely
+  ([ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md), as
+  amended). The drill therefore always runs against an isolated database
+  restored for the purpose — never against a live environment, whatever it is
+  called.
 
 ## Runbook discrepancy (tracked follow-up, inherited from base)
 

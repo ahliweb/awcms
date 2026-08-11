@@ -835,6 +835,15 @@ berbiaya satu baris ditambah satu asersi. Nomor 6 mendahului sisanya bukan karen
 penting melainkan karena **prasyarat**: sampai staging menjalankan `main`, ia
 tidak bisa membuktikan apa pun tentang perubahan ini.
 
+> **Catatan 11 Agustus 2026 — rekomendasi 6 GUGUR, bukan tertunda.**
+> [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) memutuskan
+> repo ini men-deploy ke **satu** environment (produksi) dan tidak memelihara
+> staging miliknya sendiri, jadi "deploy staging ke `main`" berhenti menjadi
+> prasyarat yang menunggu dikerjakan — ia prasyarat bagi environment yang
+> sengaja tidak ada. Temuan bertanggal di §9.3b/§9.3c dibiarkan apa adanya: ia
+> catatan tentang apa yang benar pada 4 Agustus 2026, dan mengubahnya agar
+> cocok dengan hari ini akan memalsukannya.
+
 Rekomendasi kompresi **dicabut, bukan ditunda.** Probe ke staging dan produksi
 membuktikan respons memang terkompresi (oleh Cloudflare), jadi menambah lapisan
 kedua akan menciptakan tepat dua tempat yang memutuskan hal yang sama — persis

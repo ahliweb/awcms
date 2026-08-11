@@ -169,8 +169,8 @@ Contoh (redacted):
 - **Safe (CI, setiap PR — direncanakan sebagai bagian `quality` job):** `bun run performance:suite -- --confirm-non-production=test` (skala `safe` default, 5 skenario) dan `bun run performance:query-plan:check -- --confirm-non-production=test`. Keduanya berjalan sebagai role least-privilege `awcms_app` sehingga RLS benar-benar ditegakkan, bukan dilewati. Bersama-sama selesai dalam beberapa detik terhadap skala fixture `safe`.
 - **Penuh (`--full`, terjadwal/manual saja — TIDAK PERNAH di-wire ke `bun run check` atau setiap-PR CI):**
   ```bash
-  APP_ENV=staging DATABASE_URL=<staging-or-isolated-url> \
-  bun run performance:suite -- --confirm-non-production=staging --full \
+  APP_ENV=test DATABASE_URL=<isolated-url> \
+  bun run performance:suite -- --confirm-non-production=test --full \
     --json-output=/tmp/performance-report.json \
     --report-path=/tmp/performance-report.md
   ```

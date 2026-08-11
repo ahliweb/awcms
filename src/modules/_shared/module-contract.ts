@@ -120,8 +120,8 @@ export type ModuleHealthContract = {
 
 /**
  * Deployment profile names (Issue #178, epic #177 ERP-readiness, ADR-0025).
- * Same four operating profiles `docs/awcms/deployment-profiles.md` defines
- * (development / staging / production / offline-LAN). Declared inline here
+ * Same three operating profiles `docs/awcms/deployment-profiles.md` defines
+ * (development / production / offline-LAN). Declared inline here
  * as string literals rather than imported from a config module, to keep
  * this contract file dependency-free — every module's `module.ts`
  * transitively depends on this file, so it must never import anything itself.
@@ -130,9 +130,22 @@ export type ModuleHealthContract = {
  * these structurally (plain string equality), so keeping the list in sync
  * with the deployment-profiles doc is a documentation obligation, not a
  * compile-time-enforced one.
+ *
+ * `staging` was REMOVED by ADR-0083 as amended on 11 August 2026. The ADR as
+ * first written kept it and listed its deletion under REJECTED ("revoking a
+ * capability from every template user"); the repo owner overrode that, so the
+ * profile does not exist anywhere — not as this repo's topology, and not as an
+ * option offered downstream. Nothing about the removal is enforced at runtime:
+ * composition compares plain strings, so a descriptor that reaches this build
+ * as DATA carrying `"staging"` is simply a profile no dependency declares. What
+ * the union buys is the authoring path — every `module.ts` in the family is
+ * TypeScript, so a stale `deploymentProfiles: ["staging"]` is a compile error
+ * rather than a silent no-op. Do not re-add it to "be compatible": an
+ * environment name nothing deploys to is exactly the confidently-wrong artefact
+ * ADR-0083 exists to remove.
  */
 export type ModuleDeploymentProfile =
-  "development" | "staging" | "production" | "offline-lan";
+  "development" | "production" | "offline-lan";
 
 export type ModuleCompatibilityContract = {
   minAppVersion?: string;
@@ -773,8 +786,19 @@ export type HighVolumeTableDescriptor = {
  * field plus the `ModulePermissionScope` exported type — MINOR: purely
  * additive, and omitting it means `"tenant"`, which is exactly what every
  * existing descriptor already meant.
+ *
+ * `3.0.0` (ADR-0083 as amended 11 August 2026) — REMOVED the `"staging"` member
+ * of the exported `ModuleDeploymentProfile` union. MAJOR by this file's own
+ * rule and by the `2.0.0` precedent: the exported type shape SHRANK, so a
+ * `module.ts` that was valid against `2.5.0` — any descriptor declaring
+ * `compatibility.deploymentProfiles: ["staging", ...]` — stops compiling. No
+ * base module declares `deploymentProfiles` at all, so the in-repo blast radius
+ * is zero; the bump exists for the consumer that reads this number instead of
+ * the diff. Deliberately NOT called a PATCH "documentation sync": narrowing a
+ * published union is a capability withdrawal, and pretending otherwise would
+ * let a downstream pin `^2` and get a type it cannot satisfy.
  */
-export const MODULE_CONTRACT_VERSION = "2.5.0";
+export const MODULE_CONTRACT_VERSION = "3.0.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

@@ -68,6 +68,16 @@ const PLATFORM_ROUTES: readonly { route: string; reason: string }[] = [
       "so by construction it is the absence of a module rather than one module's " +
       "surface. Renders the generic 404 (HTML for browsers, the standard JSON " +
       "envelope for /api/*)."
+  },
+  {
+    route: "/index",
+    reason:
+      "The deployment domain's front door (ADR-0083), which is the platform's " +
+      "surface and not any module's: it renders from constants alone — no " +
+      "database query, no tenant context, no module state — precisely so that " +
+      "the root cannot break when a module is disabled or a tenant fails to " +
+      "resolve. Giving it to a module would make the front door disableable, " +
+      "which is the failure (a 404 at the root) this page exists to fix."
   }
 ];
 

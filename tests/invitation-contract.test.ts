@@ -20,10 +20,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import { stripComments } from "../scripts/access-chokepoint-check";
+import {
+  SETUP_ROLE_GRANTS,
+  WORKER_ROLE_GRANTS
+} from "../scripts/security-readiness";
 import { listModules } from "../src/modules";
 
 const SCHEMA = "sql/106_awcms_identity_invitations_schema.sql";
 const PERMISSIONS = "sql/107_awcms_identity_invitation_permissions.sql";
+const WORKER_GRANT = "sql/108_awcms_identity_invitations_worker_grants.sql";
 const TOKEN = "src/lib/auth/invitation-token.ts";
 const ADMIN = "src/modules/identity-access/application/invitation-admin.ts";
 const CREATE_ROUTE = "src/pages/api/v1/invitations/index.ts";
@@ -125,11 +130,77 @@ describe("sql/106 — the schema", () => {
     expect(sql).toContain("awcms_invitations_accepted_consistency_check");
   });
 
-  test("no GRANT to awcms_worker or awcms_setup", () => {
-    // `awcms_app` is covered by sql/019's ALTER DEFAULT PRIVILEGES. Neither the
-    // worker nor the setup wizard touches these tables, and a GRANT without a
-    // matching entry in the security-readiness matrices fails `bun test`.
+  test("the worker grant is NOT here — this migration is applied and immutable", () => {
+    // This assertion used to be the whole story, under a comment claiming
+    // "neither the worker nor the setup wizard touches these tables". That was
+    // factually wrong the day it was written: the descriptor below registers
+    // this table for the GENERIC purge engine, which runs as `awcms_worker`.
+    // What survives of the old test is only the narrow, true half — editing an
+    // APPLIED migration to add the missing grant would block `db:migrate` on
+    // every running deployment while staying green on empty CI, so the grant
+    // lives in `sql/108` and is asserted there.
     expect(sql).not.toMatch(/GRANT[\s\S]*?TO awcms_(worker|setup)/);
+  });
+
+  test("the setup wizard really does touch neither table", () => {
+    // The half of the old claim that was true, kept: `bootstrapPlatformTenant`
+    // creates a tenant and its first owner directly, never through an
+    // invitation, so `awcms_setup` holds nothing on either table.
+    expect(sqlOf(WORKER_GRANT)).not.toMatch(/TO awcms_setup/);
+    expect(Object.keys(SETUP_ROLE_GRANTS)).not.toContain("awcms_invitations");
+    expect(Object.keys(SETUP_ROLE_GRANTS)).not.toContain(
+      "awcms_invitation_policies"
+    );
+  });
+});
+
+describe("sql/108 — the grant the generic purge needs", () => {
+  const sql = sqlOf(WORKER_GRANT);
+  const descriptor = listModules()
+    .find((module) => module.key === "identity_access")!
+    .dataLifecycle!.find((entry) => entry.tableName === "awcms_invitations")!;
+
+  test("the descriptor really does hand this table to the generic engine", () => {
+    // The premise of everything below. If this ever becomes "delegated" the
+    // grant stops being required — and the assertions after it should be
+    // re-derived rather than kept passing.
+    expect(descriptor.executionMode).toBe("generic");
+    expect(descriptor.deletion.mode).toBe("hard_delete");
+    expect(descriptor.archive.archivable).toBe(false);
+  });
+
+  test("awcms_worker is granted SELECT and DELETE on awcms_invitations", () => {
+    // `archive-purge-job.ts` has NO catch block anywhere in it, so the missing
+    // grant would not have under-purged this one table — the first `permission
+    // denied` would have aborted the whole invocation, taking every other
+    // descriptor's purge with it. SELECT because the DELETE's own subquery and
+    // its `RETURNING created_at` both need it (and `planLifecycleDryRun`
+    // counts rows), DELETE because the purge deletes.
+    expect(sql).toContain(
+      "GRANT SELECT, DELETE ON awcms_invitations TO awcms_worker;"
+    );
+    expect(WORKER_ROLE_GRANTS.awcms_invitations).toEqual(["SELECT", "DELETE"]);
+  });
+
+  test("the worker gets no INSERT and no UPDATE on the table", () => {
+    // Issuing, resending and revoking are request-path writes on `awcms_app`.
+    // A worker able to INSERT could address an offer of membership to any
+    // mailbox; able to UPDATE, it could rotate `token_hash` to a value it
+    // chose. Both mint a credential.
+    for (const verb of ["INSERT", "UPDATE"]) {
+      expect(sql).not.toContain(verb);
+      expect(WORKER_ROLE_GRANTS.awcms_invitations).not.toContain(verb);
+    }
+  });
+
+  test("the child table is granted nothing — the cascade needs no privilege", () => {
+    // `awcms_invitation_policies` has no descriptor of its own; its rows go
+    // with the parent through `ON DELETE CASCADE`, and a referential action
+    // executes with the constraint owner's rights, not the deleting role's.
+    expect(sql).not.toContain("awcms_invitation_policies");
+    expect(Object.keys(WORKER_ROLE_GRANTS)).not.toContain(
+      "awcms_invitation_policies"
+    );
   });
 });
 
