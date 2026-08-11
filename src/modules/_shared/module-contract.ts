@@ -280,6 +280,30 @@ export type ModuleDescriptor = {
    * governance maker/checker rule over its `legal_hold.create`/`.release`.
    */
   sodRules?: SoDRuleDescriptor[];
+  /**
+   * The entitlement key this module's GUARDED surface requires (ADR-0084,
+   * Gelombang 5 of #423). Absence — which is every base module today — means
+   * "no commercial precondition", which is exactly what every descriptor has
+   * always meant, and is what makes the entitlement gate land inert.
+   *
+   * Deliberately a single optional STRING and not an array of conditions. A
+   * module either is or is not part of what a customer bought; expressing "any
+   * of these three" here would be a policy language, and a policy language on
+   * the deny path is how a deny-only gate grows an accidental allow. A
+   * deployment that needs finer granularity attaches entitlements to more
+   * modules, not to more expressions.
+   *
+   * It is NOT read at the module's own boundary. `identity_access`'s chokepoint
+   * resolves it (`requiredEntitlementForModule`) and refuses with
+   * `403 ENTITLEMENT_REQUIRED` before any permission is looked up, so a module
+   * declaring one needs no code of its own and cannot forget to check.
+   *
+   * A descriptor with `isCore: true` may not declare one — `module_management`
+   * is what re-enables everything else, so a plan wall in front of it is a
+   * control that bricks its own remedy. `requiredEntitlementForModule` ignores
+   * it and `bun run modules:compose:check` reports the contradiction.
+   */
+  requiresEntitlement?: string;
 };
 
 /**
@@ -797,8 +821,14 @@ export type HighVolumeTableDescriptor = {
  * the diff. Deliberately NOT called a PATCH "documentation sync": narrowing a
  * published union is a capability withdrawal, and pretending otherwise would
  * let a downstream pin `^2` and get a type it cannot satisfy.
+ *
+ * `3.1.0` (ADR-0084, Gelombang 5 PR 5.1 of #423) — added the optional
+ * `ModuleDescriptor.requiresEntitlement` field. MINOR: purely additive, and
+ * omitting it means "no commercial precondition", which is what every existing
+ * descriptor already meant. No base module declares it, so the in-repo blast
+ * radius is zero by construction — that is what "the wave lands inert" is.
  */
-export const MODULE_CONTRACT_VERSION = "3.0.0";
+export const MODULE_CONTRACT_VERSION = "3.1.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

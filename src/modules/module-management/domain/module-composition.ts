@@ -94,6 +94,16 @@ export type ModuleCompositionIssue =
       moduleKey: string;
       command: string;
       errors: readonly string[];
+    }
+  | {
+      type: "core_module_declares_entitlement";
+      moduleKey: string;
+      entitlementKey: string;
+    }
+  | {
+      type: "invalid_entitlement_key";
+      moduleKey: string;
+      entitlementKey: string;
     };
 
 export type ModuleCompositionResult =
@@ -127,6 +137,10 @@ export function formatModuleCompositionIssue(
       return `Navigation path "${issue.path}" is declared by more than one module: ${issue.moduleKeys.join(", ")}.`;
     case "invalid_job_descriptor":
       return `Module "${issue.moduleKey}" declares an invalid job "${issue.command}": ${issue.errors.join("; ")}`;
+    case "core_module_declares_entitlement":
+      return `Core module "${issue.moduleKey}" declares requiresEntitlement "${issue.entitlementKey}". A core module is what re-enables everything else, so a plan wall in front of it is a control that bricks its own remedy (ADR-0084) — and requiredEntitlementForModule ignores the declaration, so leaving it would be a claim the runtime does not honour.`;
+    case "invalid_entitlement_key":
+      return `Module "${issue.moduleKey}" declares requiresEntitlement "${issue.entitlementKey}", which is not lower_snake_case. awcms_entitlements.entitlement_key enforces the same shape (sql/109), so this descriptor could never match a catalogue row and would deny the module's whole surface forever.`;
   }
 }
 
@@ -281,6 +295,50 @@ function checkJobDescriptors(
 }
 
 /**
+ * ADR-0084 — two ways a `requiresEntitlement` declaration is wrong on its face,
+ * both caught at build time rather than becoming a 403 nobody can explain.
+ *
+ * A CORE module may not declare one: `requiredEntitlementForModule` refuses to
+ * honour it (a plan wall in front of `module_management` would lock a tenant out
+ * of the screen that re-enables everything), and a declaration the runtime
+ * ignores is worse than no declaration — it reads to the next person as a
+ * control that exists.
+ *
+ * A key that cannot match the catalogue's own format CHECK is a permanent deny
+ * for that module's entire guarded surface, and it would look exactly like a
+ * billing problem.
+ */
+function checkEntitlementDeclarations(
+  registry: readonly ModuleDescriptor[]
+): ModuleCompositionIssue[] {
+  const issues: ModuleCompositionIssue[] = [];
+
+  for (const module of registry) {
+    const entitlementKey = module.requiresEntitlement;
+
+    if (entitlementKey === undefined) continue;
+
+    if (module.isCore === true) {
+      issues.push({
+        type: "core_module_declares_entitlement",
+        moduleKey: module.key,
+        entitlementKey
+      });
+    }
+
+    if (!/^[a-z][a-z0-9_]*$/.test(entitlementKey)) {
+      issues.push({
+        type: "invalid_entitlement_key",
+        moduleKey: module.key,
+        entitlementKey
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
  * The full rule engine. Reports EVERY distinct issue across the whole
  * registry in one pass (never stops at the first), the same philosophy
  * `validateModuleDependencyGraph` already uses.
@@ -296,7 +354,8 @@ export function validateComposedModuleRegistry(
     ...checkCapabilityBindings(registry),
     ...checkDeploymentProfiles(registry),
     ...checkNavigationPaths(registry),
-    ...checkJobDescriptors(registry)
+    ...checkJobDescriptors(registry),
+    ...checkEntitlementDeclarations(registry)
   ];
 }
 

@@ -156,18 +156,43 @@ describe("the real repository", () => {
     // count is capped so the list cannot become a second ledger.
 
     test("it stays short — an exemption list that grows is the debt ledger wearing a costume", () => {
-      // 5 since ADR-0081, and RAISING THIS LINE is the reviewable act — which is
-      // the cap doing its job rather than failing at it. The two entries that
-      // forced it (`awcms_user_groups` and `awcms_user_group_members`) are not a
-      // new kind of claim: all four entries are one argument in two halves — a
-      // table whose rows are grants an administrator authored, plus the table
-      // bounded by that one. An age-based purge of any of them deletes live
-      // authorization, which is why none can carry a descriptor instead.
+      // 5 since ADR-0081. **10 since ADR-0084**, and this is the second raise —
+      // written out because the previous comment asked the next one to be harder
+      // rather than easier, and a raise that does not answer that is the list
+      // becoming a ledger.
       //
-      // The next raise should be harder than this one, not easier. A fifth
-      // ARGUMENT (rather than a fifth table repeating these) is the point at
-      // which this list has stopped being one idea.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(5);
+      // The five that forced it are the entitlement schema (`sql/109`), and they
+      // are the SAME argument as the first five rather than a new one: rows that
+      // are AUTHORED — by a migration or by an administrator — never accumulated
+      // by traffic, where an age-based purge deletes LIVE state. `executionMode:
+      // 'generic'` deletes purely by age with no status predicate, so a
+      // descriptor on any of them is not retention but an outage: a deleted plan
+      // row breaks the FK its subscriptions reference, and a deleted entitlement
+      // silently stops serving a customer who is paying.
+      //
+      // ## The DERIVATION that would have avoided this raise, and why it is false
+      //
+      // Three of the five are GLOBAL catalogue tables on which
+      // `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` denies `awcms_app` every write verb.
+      // That suggests a derived exemption needing no hand-written entry at all:
+      // "the request path cannot write it, therefore it cannot grow with
+      // traffic" — exactly the shape #437 wanted and could not find.
+      //
+      // It is unsound, and this repo already contains the counter-example.
+      // `awcms_idn_admin_regions` forbids `awcms_app` all three write verbs and
+      // holds ~91,000 rows, because the forbidden list constrains `awcms_app`
+      // and the import job runs as `awcms_worker`. Deriving from it would have
+      // exempted the largest table in the schema on the grounds that requests
+      // cannot write it. Tightening the rule to "no worker grant either" means
+      // parsing GRANT statements across 109 cumulative migrations to answer a
+      // question five sentences answer better.
+      //
+      // Recorded rather than dropped: the idea is attractive enough that
+      // somebody will propose it again.
+      //
+      // The bar for the NEXT raise is unchanged and now overdue: a genuinely
+      // different argument, not a sixth table repeating this one.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(10);
     });
 
     test("every entry names a table that really exists in sql/", () => {

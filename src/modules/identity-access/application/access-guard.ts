@@ -30,8 +30,13 @@ import type { SoDRuleDescriptor } from "../../_shared/module-contract";
 import { resolveBusinessScopeFacts } from "./business-scope-facts";
 import { checkHighRiskSoDConflicts } from "./high-risk-sod-guard";
 import {
+  evaluateEntitlementRequirement,
+  requiredEntitlementForModule
+} from "../domain/entitlement";
+import { listModules } from "../../index";
+import {
   fetchGrantedPermissionKeys,
-  resolveModuleEnabled,
+  resolveModuleAvailability,
   resolveTenantPrincipal,
   resolveTenantPrincipalForTenantUser
 } from "./auth-context";
@@ -261,13 +266,20 @@ export async function authorizeInTransaction(
   // looked up, so a disabled module is refused no matter what the actor was
   // granted. `module_management` is `isCore` and cannot be disabled, so its
   // own lifecycle endpoints can never lock a tenant out of re-enabling.
-  const moduleEnabled = await resolveModuleEnabled(
-    tx,
-    tenantId,
-    guard.moduleKey
+  const requiredEntitlementKey = requiredEntitlementForModule(
+    guard.moduleKey,
+    listModules()
   );
 
-  if (!moduleEnabled) {
+  const availability = await resolveModuleAvailability(
+    tx,
+    tenantId,
+    guard.moduleKey,
+    requiredEntitlementKey,
+    now
+  );
+
+  if (!availability.enabled) {
     const decision = {
       allowed: false,
       reason: "Module is disabled for this tenant.",
@@ -286,6 +298,68 @@ export async function authorizeInTransaction(
     return {
       allowed: false,
       denied: fail(403, "MODULE_DISABLED", decision.reason)
+    };
+  }
+
+  // ADR-0084 — a commercial precondition, decided AFTER `module_disabled` and
+  // before any permission is looked up.
+  //
+  // The order between these two is a decision, not an accident. A tenant that
+  // turned its OWN module off is owed that answer, not an upsell: telling
+  // someone to upgrade when the fix is a toggle they already control is a
+  // support ticket manufactured by an error message. So `module_disabled` wins
+  // whenever both apply.
+  //
+  // Above `fetchGrantedPermissionKeys` for the reason every structural gate in
+  // this function is (the program's cross-wave rule 1): the answer must not be
+  // able to depend on what the caller was granted. A plan wall a grant row could
+  // step over is not a plan wall.
+  //
+  // This branch is UNREACHABLE in this base — no module declares
+  // `requiresEntitlement`, so `requiredEntitlementKey` is `null` for all 22 and
+  // `evaluateEntitlementRequirement` returns `null` without consulting anything
+  // else. `tests/entitlement-guard-chain.test.ts` proves that rather than
+  // asserting it.
+  //
+  // The platform tenant is resolved HERE and not earlier so the round trip is
+  // paid only on the path that is about to refuse. Its exemption is the same one
+  // ADR-0073 wrote for suspension: a control that can lock the operator out of
+  // the screen where the control is fixed is not a control.
+  // Only a request that is otherwise ABOUT to be refused needs this answer, and
+  // asking costs a round trip. `false` here is not a fail-open: it feeds a
+  // function that has already decided to allow on one of the two branches above
+  // it, so the value is unread. Writing it as an explicit variable rather than a
+  // conditional inside the call keeps "when do we ask" reviewable.
+  const entitlementRefusalPending =
+    requiredEntitlementKey !== null && !availability.entitlementHeld;
+
+  const entitlementDenial = evaluateEntitlementRequirement({
+    requiredEntitlementKey,
+    held: availability.entitlementHeld,
+    actingTenantIsPlatform: entitlementRefusalPending
+      ? tenantId === (await resolvePlatformTenantIdIgnoringStatus(tx))
+      : false
+  });
+
+  if (entitlementDenial) {
+    const decision = {
+      allowed: false,
+      reason: entitlementDenial.reason,
+      matchedPolicy: entitlementDenial.matchedPolicy
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "ENTITLEMENT_REQUIRED", decision.reason)
     };
   }
 

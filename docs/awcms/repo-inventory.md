@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 108   |
-| Tabel `awcms_*`                    | 135   |
-| Tabel dengan `FORCE` RLS           | 124   |
-| Tabel RLS-free (global, by design) | 11    |
-| Berkas test                        | 352   |
+| Migrasi                            | 109   |
+| Tabel `awcms_*`                    | 140   |
+| Tabel dengan `FORCE` RLS           | 126   |
+| Tabel RLS-free (global, by design) | 14    |
+| Berkas test                        | 354   |
 | Berkas route                       | 335   |
-| ADR                                | 84    |
+| ADR                                | 85    |
 
 ### Modul
 
@@ -155,6 +155,7 @@
 | 106 | `sql/106_awcms_identity_invitations_schema.sql`                    |
 | 107 | `sql/107_awcms_identity_invitation_permissions.sql`                |
 | 108 | `sql/108_awcms_identity_invitations_worker_grants.sql`             |
+| 109 | `sql/109_awcms_entitlement_schema.sql`                             |
 
 ### Tabel & Row-Level Security
 
@@ -207,6 +208,7 @@
 | `awcms_email_messages`                   | `sql/014_awcms_email_schema.sql`                           | ya    | ya    |
 | `awcms_email_suppression_list`           | `sql/014_awcms_email_schema.sql`                           | ya    | ya    |
 | `awcms_email_templates`                  | `sql/014_awcms_email_schema.sql`                           | ya    | ya    |
+| `awcms_entitlements`                     | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
 | `awcms_external_identities`              | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
 | `awcms_form_drafts`                      | `sql/062_awcms_form_drafts_schema.sql`                     | ya    | ya    |
 | `awcms_idempotency_keys`                 | `sql/009_awcms_domain_event_runtime_schema.sql`            | ya    | ya    |
@@ -234,6 +236,8 @@
 | `awcms_oidc_auth_requests`               | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
 | `awcms_password_reset_tokens`            | `sql/073_awcms_identity_password_reset_schema.sql`         | ya    | ya    |
 | `awcms_permissions`                      | `sql/005_awcms_abac_access_control_schema.sql`             | tidak | tidak |
+| `awcms_plan_entitlements`                | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
+| `awcms_plans`                            | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
 | `awcms_profile_entity_links`             | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profile_identifiers`              | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profiles`                         | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
@@ -274,10 +278,12 @@
 | `awcms_sync_push_batches`                | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
 | `awcms_tenant_auth_policies`             | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
 | `awcms_tenant_domains`                   | `sql/046_awcms_tenant_domain_schema.sql`                   | ya    | ya    |
+| `awcms_tenant_entitlements`              | `sql/109_awcms_entitlement_schema.sql`                     | ya    | ya    |
 | `awcms_tenant_mfa_policies`              | `sql/024_awcms_mfa_totp_schema.sql`                        | ya    | ya    |
 | `awcms_tenant_modules`                   | `sql/008_awcms_module_management_schema.sql`               | ya    | ya    |
 | `awcms_tenant_settings`                  | `sql/002_awcms_tenant_office_schema.sql`                   | ya    | ya    |
 | `awcms_tenant_status_transitions`        | `sql/092_awcms_tenant_lifecycle.sql`                       | ya    | ya    |
+| `awcms_tenant_subscriptions`             | `sql/109_awcms_entitlement_schema.sql`                     | ya    | ya    |
 | `awcms_tenant_users`                     | `sql/004_awcms_identity_login_schema.sql`                  | ya    | ya    |
 | `awcms_tenants`                          | `sql/002_awcms_tenant_office_schema.sql`                   | tidak | tidak |
 | `awcms_theming_config_versions`          | `sql/033_awcms_theming_config_schema.sql`                  | ya    | ya    |
@@ -300,7 +306,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 298        |
+| `(root)`      | 300        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |

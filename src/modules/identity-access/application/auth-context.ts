@@ -1,4 +1,5 @@
 import type { TenantContext } from "../domain/access-control";
+import { ENTITLING_SUBSCRIPTION_STATUSES } from "../domain/entitlement";
 import { activeRoleGrants } from "./grant-source";
 import { resolveActiveSession } from "./session-lookup";
 
@@ -152,6 +153,13 @@ export async function resolveTenantPrincipal(
  * Whether `moduleKey` is available for `tenantId`. No row means "never
  * toggled" — available by default, the same convention the tenant module
  * lifecycle service itself uses (`tenant-module-lifecycle.ts`).
+ *
+ * Retained alongside `resolveModuleAvailability` below rather than folded into
+ * it: three routes call this directly before assembling an ADR-0063 ownership
+ * grant (`blog/posts/[id].ts` and two siblings), and those calls are asking a
+ * genuinely narrower question. Changing their signature would put an
+ * entitlement argument in three files that have no business resolving one — the
+ * chokepoint they hand the ownership grant to already does.
  */
 export async function resolveModuleEnabled(
   tx: Bun.SQL,
@@ -164,6 +172,108 @@ export async function resolveModuleEnabled(
   `) as { enabled: boolean }[];
 
   return rows[0]?.enabled ?? true;
+}
+
+/** What the chokepoint learned about a module in ONE round trip (ADR-0084). */
+export type ModuleAvailability = {
+  enabled: boolean;
+  /**
+   * Whether the tenant holds `requiredEntitlementKey`. Always `true` when no
+   * key was asked for — "nothing was required, so nothing is missing". The
+   * DECISION about what that means is not taken here; it belongs to
+   * `evaluateEntitlementRequirement`, which is the only function allowed to
+   * turn these facts into a refusal.
+   */
+  entitlementHeld: boolean;
+};
+
+/**
+ * `resolveModuleEnabled` plus the entitlement question, in a single query
+ * (ADR-0084, Gelombang 5 PR 5.1 of #423).
+ *
+ * ## The null path is the old query, unchanged
+ *
+ * When `requiredEntitlementKey` is `null` — which is every request in this base,
+ * because no module declares `requiresEntitlement` — this issues literally the
+ * statement `resolveModuleEnabled` issues and returns `entitlementHeld: true`.
+ * Not "an equivalent statement": the same one, so the wave's inertness is a
+ * property of the code rather than a claim about it, and
+ * `tests/entitlement-guard-chain.test.ts` asserts the emitted SQL is identical.
+ *
+ * ## Why a LEFT JOIN and not a second await
+ *
+ * The chokepoint runs on every guarded request. A second round trip for a
+ * question whose answer is "nothing was required" 100% of the time would be a
+ * permanent cost bought for a feature nobody enabled. The entitlement half is
+ * folded into the `awcms_tenant_modules` read that already happens, so a
+ * deployment that DOES sell something pays one query for both answers and a
+ * deployment that does not pays nothing at all.
+ *
+ * ## The union, and why it is resolved live
+ *
+ * A tenant holds an entitlement when EITHER a direct grant in
+ * `awcms_tenant_entitlements` is live (no expiry, or an expiry in the future),
+ * OR its subscription sits in an entitling status and its plan contains the key.
+ * Both halves are read at request time; nothing is materialized. A cached
+ * effective set would mean a downgrade takes effect on the next refresh, and the
+ * gap between those two moments is exactly when someone still reaches what they
+ * stopped paying for.
+ *
+ * `now` is the request timestamp already threaded through the guard, not
+ * `now()`: a CHECK or a comparison that mixes the application clock with the
+ * transaction clock is the trap `postgres now() = transaction start` records,
+ * and expiry that lands on a transaction boundary would read differently to the
+ * two halves of the same decision.
+ */
+export async function resolveModuleAvailability(
+  tx: Bun.SQL,
+  tenantId: string,
+  moduleKey: string,
+  requiredEntitlementKey: string | null,
+  now: Date
+): Promise<ModuleAvailability> {
+  if (requiredEntitlementKey === null) {
+    return {
+      enabled: await resolveModuleEnabled(tx, tenantId, moduleKey),
+      entitlementHeld: true
+    };
+  }
+
+  const rows = (await tx`
+    SELECT
+      COALESCE(tm.enabled, true) AS enabled,
+      (
+        EXISTS (
+          SELECT 1 FROM awcms_tenant_entitlements te
+          WHERE te.tenant_id = ${tenantId}
+            AND te.entitlement_key = ${requiredEntitlementKey}
+            AND (te.expires_at IS NULL OR te.expires_at > ${now})
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM awcms_tenant_subscriptions ts
+          JOIN awcms_plan_entitlements pe ON pe.plan_code = ts.plan_code
+          WHERE ts.tenant_id = ${tenantId}
+            AND ts.status = ANY(${tx.array(
+              [...ENTITLING_SUBSCRIPTION_STATUSES],
+              "text"
+            )})
+            AND pe.entitlement_key = ${requiredEntitlementKey}
+        )
+      ) AS entitlement_held
+    FROM (SELECT 1) AS anchor
+    LEFT JOIN awcms_tenant_modules tm
+      ON tm.tenant_id = ${tenantId} AND tm.module_key = ${moduleKey}
+  `) as { enabled: boolean; entitlement_held: boolean }[];
+
+  // A missing row is impossible here — the anchor guarantees exactly one — but
+  // the fallback states which way it would fail if that ever stopped being
+  // true: available and UNENTITLED, so the structural gate refuses rather than
+  // waving a request through on a query that returned nothing.
+  return {
+    enabled: rows[0]?.enabled ?? true,
+    entitlementHeld: rows[0]?.entitlement_held ?? false
+  };
 }
 
 /**
