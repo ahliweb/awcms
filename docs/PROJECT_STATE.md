@@ -356,6 +356,119 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 12 Agustus 2026 (kedelapan) — GELOMBANG 5 (ENTITLEMENT/SaaS) TIGA
+  PEREMPAT SELESAI. Mesinnya berdiri, mendarat INERT, dan PR 5.4 berubah
+  bentuk.** [ADR-0084](adr/0084-an-entitlement-refuses-it-never-grants.md), tiga
+  PR: #517 (skema + cabang penolakan + gerbang deny-only), #518 (tangga
+  langganan + job), #519 (grandfathering + laporan blast-radius).
+
+  **Sebuah entitlement MENOLAK, ia tidak pernah memberi.** Setiap fungsi
+  keputusan yang diekspor `identity-access/domain/entitlement.ts` bertipe
+  `EntitlementDenial | null` — tak ada bentuk nilai yang berarti "ya". Properti
+  itu diperiksa mesin oleh gerbang baru `access:entitlement:deny-only:check`
+  (rantai **39 → 40**), bukan diserahkan pada review, karena mutasi yang
+  merusaknya satu baris dan terbaca seperti kerapian. Ia adalah bentuk dari
+  penolakan yang §4 ini sudah catat: `subject.entitlements` DITOLAK sebagai
+  atribut ABAC.
+
+  **Mendarat INERT, dan dibuktikan bukan diklaim.** Nol modul mendeklarasikan
+  `requiresEntitlement`, dan `resolveModuleAvailability` pada jalur null
+  mengeluarkan **pernyataan SQL yang SAMA** seperti sebelum gelombang ini —
+  dibandingkan sebagai TEKS di test.
+
+  ### Empat tempat rencana tidak diikuti
+  1. **Job tangga langganan TIDAK memanggil `suspendTenant`**, dan alasannya
+     sebuah HAK, bukan preferensi. Itu menuntut `UPDATE` pada `awcms_tenants`
+     untuk `awcms_worker`, sementara `WORKER_ROLE_GRANTS` menuliskan sendiri
+     aturan yang dilanggarnya — dan `awcms_tenants` adalah tabel akar TANPA RLS,
+     jadi tak ada policy di antara satu UPDATE keliru dan setiap tenant di
+     instalasi. Konsekuensinya tetap tiba lewat gerbang entitlement (`suspended`
+     dan `cancelled` di luar `ENTITLING_SUBSCRIPTION_STATUSES`), dan itu juga
+     jawaban yang PROPORSIONAL: tagihan tak terbayar merenggut fitur yang
+     berhenti dibayar, bukan situs publik, login, dan akses data.
+  2. **Ceiling `BOUNDED_BY_DESIGN` dinaikkan 5 → 10**, dengan derivasi yang akan
+     menghindarinya dicatat sebagai DITOLAK: "request path tak bisa menulis,
+     jadi tak tumbuh dengan traffic" salah, dan counter-example-nya ada di repo
+     ini — `awcms_idn_admin_regions` melarang `awcms_app` ketiga verba tulis dan
+     memuat ~91.000 baris, karena daftar itu mengikat `awcms_app` sementara job
+     import berjalan sebagai `awcms_worker`.
+  3. **Batas blast-radius pada job** (`MAX_ENTITLEMENT_LOSSES_PER_RUN = 25`)
+     tidak ada di rencana. Ia bukan rate limit melainkan detektor "ini bug, bukan
+     hari Selasa": atrisi nyata menetes, setiap mode kegagalan yang penting tiba
+     sebagai tebing. Semua-atau-tidak-sama-sekali, dan menghitung KERUGIAN bukan
+     transisi.
+  4. **Deklarasi `requiresEntitlement` pada modul `isCore` memerahkan
+     `modules:compose:check`**, bukan hanya diabaikan runtime. Deklarasi yang
+     diabaikan runtime lebih buruk daripada tidak ada deklarasi — ia terbaca
+     sebagai kontrol yang ada.
+
+  ### Dua cacat, keduanya ditemukan dengan MENJALANKAN
+  - **`sql/109` tidak mencabut hak yang default privileges berikan.** `sql/019`
+    memasang `ALTER DEFAULT PRIVILEGES ... GRANT SELECT, INSERT, UPDATE, DELETE
+ON TABLES TO awcms_app`, jadi tiga tabel katalog GLOBAL lahir dengan keempat
+    verba sementara `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` menyatakannya read-only.
+    **Keempat puluh gerbang murni hijau** selama deklarasi dan basis data saling
+    bertentangan; hanya `checkRuntimeRoleGrants` — di suite DB-gated CI — yang
+    BERTANYA kepada Postgres apa yang sebenarnya dipegang. Ini pengulangan
+    persis pelajaran "jalankan, jangan dibaca".
+  - **Test urutan gerbang struktural menemukan cacatnya sendiri saat ditulis.**
+    Cabang entitlement tidak memuat sentinelnya secara tekstual karena ia
+    MENERUSKAN `entitlementDenial.matchedPolicy`. Detektornya dikunci pada kode
+    error alih-alih dilonggarkan: meniru literalnya demi keseragaman dengan empat
+    cabang lama justru akan MENGEMBALIKAN drift yang dihapus konstanta itu.
+
+  ### PR 5.4 BERUBAH BENTUK — baca ini sebelum mengerjakannya
+
+  Rencana menulis PR 5.4 sebagai "pelekatan entitlement nyata pertama pada satu
+  modul non-core". **Bentuk itu salah untuk repo ini, dan alasannya baru terlihat
+  setelah 5.1–5.3 mendarat.**
+
+  Memasang `requiresEntitlement` pada mis. `site_search` membuat SETIAP tenant di
+  SETIAP instalasi turunan kehilangan modul itu, karena `resolveModuleAvailability`
+  menuntut langganan ber-status entitling ATAU grant langsung — dan **tak ada
+  tenant yang punya baris langganan sama sekali**: `createTenantWithOwner`
+  (`tenant-admin/application/platform-bootstrap.ts`) tidak membuatnya, dan tak ada
+  migrasi yang mem-backfill-nya. Template yang mengirimkan plan wall secara
+  default menjual keputusan produk yang bukan miliknya.
+
+  Bentuk yang benar, dan urutannya mengikat:
+
+  1. `createTenantWithOwner` membuat langganan pada plan `is_default` (`base`,
+     diseed `sql/109`), plus migrasi yang mem-backfill tenant lama;
+  2. `awcms_plan_entitlements` memetakan `base` ke SETIAP entitlement yang
+     dideklarasikan, sehingga pelekatan pertama membuat cabangnya HIDUP tanpa
+     menolak siapa pun — operator turunan yang ingin menjual tingkatan menulis
+     plan yang lebih sempit sendiri;
+  3. baru kemudian satu modul non-core mendeklarasikan `requiresEntitlement`;
+  4. `bun run security:readiness` WAJIB melaporkan **nol** tenant tertolak
+     sebelum langkah 3 di-merge — itulah alasan laporan itu dibangun di 5.3.
+
+  Ditambah yang memang ada di rencana: `409 ENTITLEMENT_REQUIRED` di endpoint
+  enable `module_management` (sopan santun, bukan kontrolnya) dan layar
+  `/admin/subscriptions` (menugaskan tenant ke plan; ia TIDAK PERNAH bisa
+  mengubah isi plan — katalog itu migration-only).
+
+  ### Status gelombang
+
+  | Gelombang | Status                                                                                                |
+  | --------- | ----------------------------------------------------------------------------------------------------- |
+  | 0–4       | selesai                                                                                               |
+  | **5**     | **3/4 PR mendarat (#517, #518, #519); PR 5.4 tersisa, bentuknya dikoreksi di atas**                   |
+  | 6         | belum — metering & kuota (IaaS)                                                                       |
+  | 7         | belum — principal global; **#430 ditutup di sini (PR 7.2)**, tidak bisa mendahului `awcms_principals` |
+  | 8         | belum — partner/EaaS + akses terdelegasi                                                              |
+
+  ### Yang menghalangi merge, dan bukan milik agen untuk diselesaikan
+
+  Ketiga PR hijau penuh secara lokal (40 segmen) dan #517 hijau penuh di CI
+  termasuk suite integrasi ber-Postgres. **Ruleset `main` menuntut check
+  `GitGuardian Security Checks`, dan check itu tidak pernah melapor pada PR ini
+  sama sekali** — bukan gagal, tidak ada. Merge karena itu `BLOCKED`. Melewatinya
+  butuh `--admin`, yaitu menembus kontrol keamanan wajib, dan itu keputusan
+  pemilik repo. #518 dan #519 bertumpuk di atas #517: diff-nya memuat pendahulunya
+  sampai yang di bawah di-merge, dan base-nya sengaja `main` karena PR ber-base
+  cabang lain memicu NOL gerbang di repo ini.
+
 - **PUTARAN 11 Agustus 2026 (ketujuh) — SATU ENVIRONMENT, PROFIL `staging`
   DIHAPUS, DAN AKAR BERHENTI 404.** Keputusan pemilik repo, mendarat sebagai
   [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md).
