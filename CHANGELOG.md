@@ -1,5 +1,3835 @@
 # awcms
 
+## 8.0.0
+
+### Major Changes
+
+- 26334bd: feat(kontrak,config): konsekuensi KODE dari hilangnya profil `staging` — `MODULE_CONTRACT_VERSION` 2.5.0 → 3.0.0, predikat "online" Redis, enum `APP_ENV`
+
+  Sisi kode dari penghapusan `staging` ([ADR-0083](docs/adr/0083-this-template-deploys-to-one-environment.md) sebagaimana diamandemen 11 Agustus 2026). Union `ModuleDeploymentProfile` kini `development | production | offline-lan`; yang berikut ini adalah akibat-akibatnya yang tidak selesai dengan menghapus satu baris.
+
+  **`MODULE_CONTRACT_VERSION` naik MAJOR, bukan PATCH "sinkronisasi dokumentasi".** Aturan file itu sendiri berkata MAJOR untuk field yang dihapus, dan preseden `2.0.0` sudah menaikkan MAJOR untuk tipe ekspor yang dihapus. Union yang MENYEMPIT adalah penarikan kemampuan: sebuah `module.ts` yang sah terhadap `2.5.0` — deskriptor mana pun dengan `deploymentProfiles: ["staging", ...]` — berhenti dikompilasi. Menyebutnya PATCH akan membiarkan konsumen hilir mem-pin `^2` lalu menerima tipe yang tak bisa ia penuhi. `awcms-family-compatibility.yaml` ikut di-update: gerbang `family:conformance:check` mem-cross-check angka itu terhadap konstanta sumbernya, jadi keduanya tak bisa berpisah diam-diam. Nol modul base mendeklarasikan `deploymentProfiles`, jadi radius ledakan di dalam repo ini nol — kenaikannya untuk konsumen yang membaca angka, bukan diff.
+
+  **`isOnlineEnvironment` di `src/lib/redis/config.ts` tidak sekadar kehilangan satu cabang.** Predikat itu sebenarnya menanyakan "apakah deployment ini terjangkau dari jaringan yang tidak kita kendalikan, sehingga Redis polos tanpa autentikasi adalah paparan nyata?" — dulu dijawab `staging || production` karena itulah dua nilai `APP_ENV` yang menamai deployment ter-host. Kini `production` adalah seluruh himpunannya: maksudnya utuh, enumerasinya yang memendek. `development`/`test` tetap di luar dengan alasan yang sama seperti sebelumnya, dan `APP_ENV` kosong/tak dikenal tetap diam persis seperti dulu. Melebarkannya menjadi "apa pun selain development/test" adalah keputusan LAIN — ia akan mulai memperingatkan setiap pemanggil tanpa `APP_ENV`, termasuk `redis:health` yang dijalankan ad hoc — dan bukan di sini tempat mengambilnya. Dua pesan temuannya ikut berhenti menjanjikan environment yang tidak ada.
+
+  **`APP_ENV=staging` kini DITOLAK `bun run config:validate`.** Membiarkannya di daftar nilai sah berarti gerbang itu menerima nama environment yang tidak ada — persis kegagalan yang ADR-0083 tutup. `test` BUKAN profil deployment dan tetap tinggal: ia dipakai harness (drill DR/performa yang menolak `production`) dan tidak pernah menamai sebuah deployment.
+
+  Yang hanya terasa saat mengembangkan:
+
+  - **Penutupan union itu diuji, dan buktinya dijalankan.** `tests/module-composition.test.ts` menambah satu `@ts-expect-error` atas `const removed: ModuleDeploymentProfile = "staging"`. Komposisi build-time membandingkan profil sebagai string biasa, jadi tidak ada apa pun di runtime yang akan menyadari `staging` kembali — hanya tipe yang bisa. Dibuktikan menggigit dengan mengembalikan `"staging"` ke union: `tsc --noEmit` merah dengan `TS2578: Unused '@ts-expect-error' directive`, lalu dikembalikan.
+  - **Enam sebutan "staging" lain di `src/` dan `scripts/` sengaja TIDAK disentuh.** Semuanya bukan rujukan ke profil: kata kerja bahasa Inggris ("staging the policy", "staging credentials ahead of go-live"), sebutan generik untuk salinan situs non-produksi yang masih boleh dijalankan pemakai template, atau PROVENANCE historis (cacat kontrak ADR-0047 memang diverifikasi terhadap staging; invalidasi Varnish yang tak pernah bekerja memang ketahuan dengan menaruhnya di depan staging). Menghapus profil dari union tidak membuat satu pun kalimat itu menjadi salah, dan menyapunya akan menghapus sejarah yang menjelaskan kenapa kodenya berbentuk begitu.
+
+### Minor Changes
+
+- 9862234: feat(push): adapter FCM HTTP v1 — tanpa dependensi, tanpa satu pun origin CSP baru
+
+  `PUSH_PROVIDER=fcm` mengaktifkan pengiriman ke klien **native** Android/iOS.
+  Server → Google, jadi ia tidak menyentuh browser: nol byte di anggaran aset
+  klien dan nol origin CSP baru. Itulah pembagian yang ADR-0074 tetapkan —
+  FCM HTTP v1 ditahan, SDK FCM Web ditolak.
+
+  **Tanpa menambah dependensi.** `google-auth-library` dan `firebase-admin`
+  sama-sama melakukan ini, dan keduanya akan jadi dependensi runtime baru di repo
+  yang hidup dengan dua. Presedennya sudah tertulis: `src/lib/auth/jwt-verify.ts`
+  melakukan verifikasi JWT tanpa `jose`. Assertion service-account (RFC 7523)
+  ditandatangani RS256 lewat `crypto.subtle`, tak pernah implementasi RSA
+  tangan-sendiri.
+
+  Test yang paling menanggung beban bukan percabangan status — itu mudah benar dan
+  mudah diuji. Yang bisa salah secara halus dan senyap adalah assertion-nya: JWT
+  yang ditolak Google terlihat persis seperti masalah kredensial, dan "tambahkan
+  `google-auth-library`" adalah kesimpulan yang akan diambil siapa pun setelah
+  satu jam begitu. Jadi assertion-nya tidak sekadar dihasilkan — ia
+  **diverifikasi**, dengan kunci publik pasangannya, lewat `crypto.subtle`.
+  Pasangan kunci RSA nyata dibangkitkan di dalam test, diekspor ke bentuk PEM
+  PKCS#8 yang sama dengan terbitan Google, dan dilewatkan parser sungguhan.
+
+  **Kredensial wajib base64.** `config:validate` mem-parse `.env` baris demi
+  baris, dan `private_key` adalah blok PEM multi-baris — ditempel mentah ia
+  terpotong diam-diam dan kegagalannya muncul saat kirim pertama, bukan saat boot.
+  Parser-nya pure dan dipakai **kedua** sisi, jadi validator tak bisa berbeda
+  pendapat dengan benda yang ia validasi. Pesan kegagalannya menyebut **nama
+  field**, tak pernah nilai: ada test yang meng-assert `private_key` tak muncul.
+
+  **Tiga keputusan yang halus:**
+
+  - **Token mati tidak memicu circuit breaker.** Antrean normal membawa ribuan
+    token basi; kalau itu dihitung sebagai kegagalan provider, satu batch
+    registrasi lama menghentikan pengiriman ke setiap perangkat sehat — dan
+    gejalanya menunjuk ke FCM. Diuji dua arah: sepuluh `UNREGISTERED` berturut
+    meninggalkan breaker `closed`, lima `UNAVAILABLE` membukanya.
+  - **Kode error dibaca SEBELUM status.** Versi pertama memeriksa `status === 401`
+    lebih dulu, dan **test menangkapnya**: `THIRD_PARTY_AUTH_ERROR` (juga HTTP 401) dilaporkan sebagai "token kadaluwarsa", sehingga adapter mencetak token
+    baru dan mengulang — menghabiskan satu round-trip untuk ditolak dengan alasan
+    sama, dan melabeli kesalahan konfigurasi permanen sebagai kedaluwarsa.
+  - **401 disegarkan tepat sekali.** Token yang mati di tengah batch berharga satu
+    panggilan tambahan, bukan seluruh sisa batch; token baru yang tetap ditolak
+    adalah masalah kredensial dan berhenti di situ (non-retryable).
+
+  Setiap panggilan keluar lewat `ssrfSafeFetch`, bukan `fetch` telanjang: tujuannya
+  diturunkan dari `token_uri` sebuah kredensial dan dari baris langganan — nilai
+  yang datang dari luar kode ini. Seam-nya sebuah TIPE, bukan pembungkus `fetch`,
+  supaya test menggerakkan adapter tanpa jaringan **dan tanpa harus mematikan
+  guard-nya** — test yang harus mematikan guard sedang menguji jalur berbeda dari
+  yang dijalankan produksi.
+
+  `healthCheck` membuktikan kredensialnya, bukan jalur kirim: mengirim notifikasi
+  nyata butuh token perangkat nyata, dan mengarang satu akan dijawab
+  `UNREGISTERED` — FCM sehat yang melapor gagal.
+
+  `web_push` masih **belum** diterima `PUSH_PROVIDER`. Test yang dulu meng-assert
+  `fcm` ditolak kini meng-assert `fcm` diterima dan `web_push` tidak — itulah guna
+  meng-assert yang negatif: daftarnya tak bisa tumbuh mendahului kodenya tanpa
+  test itu ikut disunting di perubahan yang sama.
+
+- 15ab660: feat(push): adapter Web Push (VAPID) — nol byte klien, nol origin CSP, diverifikasi terhadap vektor RFC 8291
+
+  `PUSH_PROVIDER=web_push` mengaktifkan pengiriman ke **browser** lewat RFC 8030 +
+  8291 + 8292. Inilah yang ADR-0074 pilih sebagai ganti SDK FCM Web, dan alasannya
+  terukur: SDK itu **45.041 B** melawan plafon **21.000 B** per berkas, dan
+  menuntut `www.gstatic.com` di `script-src` plus dua origin `googleapis.com` di
+  `connect-src` — melawan CSP yang punya enam direktif, **tidak punya
+  `connect-src` sama sekali**, dan sebuah test yang mengunci nol origin pihak
+  ketiga (ADR-0029).
+
+  `PushManager.subscribe()` adalah API browser, bukan `fetch` dari skrip halaman.
+  Jadi jalur ini berharga **nol byte klien dan nol origin CSP**. Anggaran aset
+  tetap 140.008 / 180.000 B, tak bergerak satu byte pun.
+
+  ## Kenapa buktinya vektor RFC, bukan round-trip
+
+  Ini kode paling berisiko di seluruh program push, dan alasannya perlu disebut
+  lebih dulu: **push service tidak memvalidasi payload.** Ia meneruskan ciphertext
+  ke browser, dan browser yang tak bisa mendekripsinya membuang notifikasi itu
+  **diam-diam**. Key schedule yang salah menghasilkan sistem yang menerima setiap
+  pesan, mencatat setiap kirim sebagai **sukses**, dan tidak mengantarkan apa pun
+  — tanpa satu error pun di mana pun dalam rantai.
+
+  Test round-trip tidak bisa menangkap itu: ia membuktikan encryptor dan decryptor
+  sepakat, bukan bahwa keduanya cocok dengan spesifikasi. Keduanya bisa salah baca
+  spec dengan cara yang sama, yang persis mode kegagalan di atas.
+
+  Jadi implementasinya mereproduksi **contoh kerja RFC 8291 sendiri** (§5 dan
+  Lampiran A):
+
+  | Nilai                        | Cocok                           |
+  | ---------------------------- | ------------------------------- |
+  | `ecdh_secret`                | ya                              |
+  | `PRK_key`                    | ya                              |
+  | `IKM`                        | ya                              |
+  | `PRK`                        | ya                              |
+  | `CEK`                        | ya                              |
+  | `NONCE`                      | ya                              |
+  | **body terenkripsi lengkap** | **ya, 144 byte, byte per byte** |
+
+  Angka-angka itu datang dari pihak ketiga; mereproduksinya adalah bukti
+  interoperabilitas, bukan konsistensi diri. Masing-masing di-assert terpisah agar
+  kegagalan menyebut **langkah mana** yang menyimpang, bukan sekadar melaporkan
+  ciphertext-nya tak cocok lagi.
+
+  HKDF ditulis di atas HMAC `crypto.subtle` alih-alih memakai
+  `deriveBits({name:"HKDF"})` — justru supaya nilai-nilai antara itu **bisa
+  diamati**; `deriveBits` melakukan extract-then-expand sebagai satu operasi buram.
+  Dua puluh baris RFC 5869, nol kriptografi yang diciptakan sendiri.
+
+  ## Detail yang halus dan diuji
+  - **Pasangan kunci ECDH server ephemeral per pesan** — desain RFC, bukan
+    optimasi yang belum dikerjakan: satu pasangan yang dipakai ulang membuat setiap
+    notifikasi ke satu pelanggan berbagi key schedule, sehingga memulihkan satu
+    plaintext memulihkan semuanya. Diuji: dua kirim dengan payload identik
+    menghasilkan salt DAN keyid berbeda.
+  - **`aud` VAPID adalah ORIGIN endpoint**, bukan endpoint-nya. Menandatangani
+    endpoint penuh adalah kesalahan klasik yang gejalanya 401 dan terbaca seperti
+    masalah kunci. Pemanggil menyerahkan endpoint dan tak pernah audience.
+  - **Tanda tangan ES256 adalah r||s mentah 64 byte**, bukan DER — bentuk DER
+    ditolak setiap push service dan didiagnosis oleh tak satu pun dari mereka.
+  - **Langganan mati tidak memicu circuit breaker** (sepuluh `410` berturut
+    meninggalkan breaker `closed`), konsisten dengan adapter FCM.
+  - Token VAPID di-cache per **origin**: satu batch 500 pelanggan Firefox berharga
+    satu tanda tangan, bukan 500.
+
+  ## Operasional
+
+  `bun run push:vapid:generate` mencetak satu pasangan kunci dalam bentuk persis
+  yang `.env` inginkan. Ia ada alih-alih "pakai openssl" karena formatnya spesifik
+  dan mudah salah secara halus: publik = **titik P-256 tak-terkompres 65 byte**,
+  privat = **skalar mentah 32 byte**, keduanya base64url tanpa padding —
+  sementara `openssl ecparam` mengeluarkan PEM, dan tiap resep konversinya
+  berpeluang menyerahkan bentuk terbungkus DER, yang **berhasil diimpor di sini**
+  lalu ditolak setiap push service sebagai 401.
+
+  Perintah itu juga mencetak peringatan bersama kuncinya, bukan menyimpannya di
+  dokumen: **merotasi pasangan kunci tidak me-re-key langganan yang ada** — ia
+  membuat semuanya permanen tak-terkirimi sampai penggunanya berlangganan ulang,
+  karena kunci publik dipanggang ke dalam tiap langganan saat `subscribe()`.
+
+  `SsrfFetchOptions.body` melebar menerima `Uint8Array`: body Web Push adalah
+  ciphertext `aes128gcm`, dan tak ada penyandian teks yang selamat melewati
+  `string`. `fetch` selalu menerima keduanya; hanya tipenya yang lebih sempit dari
+  benda yang ia teruskan.
+
+- 5fcf7bf: fix(keamanan): approve registrasi berhenti bisa memberikan role `owner`
+
+  `POST /api/v1/registration-requests/{id}/approve` memvalidasi `roleIds` hanya
+  dengan `SELECT id FROM awcms_roles WHERE tenant_id = … AND deleted_at IS NULL`
+  (`identity-access/application/self-registration.ts`), lalu menulis langsung ke
+  `awcms_access_assignments`. Tidak ada penyaringan `is_system`.
+
+  `owner` **adalah** system role, dan `tenant-admin/application/platform-bootstrap.ts`
+  men-seed-nya dengan **seluruh** katalog permission tenant. Jadi prinsipal yang
+  hanya memegang `identity_access.registration_requests.{read,approve}` — peran
+  yang docblock rutenya sendiri rancang agar **tidak** menyentuh katalog RBAC
+  ("the authority to admit someone to a tenant is not the authority to edit
+  roles") — bisa meng-approve dengan `roleIds: [<id owner>]` dan mencetak akun
+  ber-izin penuh. Dan bukan lewat `curl` saja: `/admin/registrations` merender
+  picker dari `listRoles`, yang tidak menyaring `is_system`, sehingga `owner`
+  tampil sebagai salah satu opsi di dropdown.
+
+  Jalur resmi menolaknya sejak awal: `user-admin.ts#assignRole` melempar
+  `SystemRoleAssignmentError` dan rutenya digerbangi `access_control.assign`
+  (→ `409 ROLE_SYSTEM_PROTECTED`). **Dua penulis satu tabel dengan dua aturan
+  berbeda** — itu kelas cacatnya, bukan satu baris yang terlewat.
+
+  Perbaikannya:
+
+  - Service menolak sebelum menulis apa pun (`outcome: "system_role"` +
+    `roleCodes`). Sengaja **bukan** dikolapskan ke `unknown_role`: role-nya ada
+    dan layar reviewer baru saja merendernya, jadi menjawab "tidak ada" adalah
+    kebohongan tentang baris yang mereka lihat. Ia juga tidak membocorkan apa pun
+    — `registration_requests.read` sudah menampilkan daftar role tenant itu.
+  - Route memetakannya ke **`409 ROLE_SYSTEM_PROTECTED`**, kode yang SAMA dengan
+    `POST /api/v1/access/assignments` untuk penolakan yang sama.
+  - Baris audit `registration_approved` kini membawa `roleCodes`, bukan hanya
+    `roleCount`. Approval yang memberi role adalah pemberian privilese, dan
+    `roleCount: 1` tak bisa menjawab satu-satunya pertanyaan auditor tentangnya.
+  - Picker di `/admin/registrations` tidak lagi menawarkan system role —
+    presentasi saja; otoritasnya tetap endpoint.
+
+  Gerbang yang ikut mendarat, dan ia menutup KELASNYA bukan kejadiannya:
+  `tests/access-assignment-writers.test.ts` menuntut **setiap** berkas `src/**`
+  yang memuat `INSERT INTO awcms_access_assignments` juga membaca `is_system`,
+  atau terdaftar sebagai pengecualian ber-alasan (hari ini tepat satu:
+  `platform-bootstrap.ts` — bootstrap tenant memang perbuatan membuat owner
+  pertama, berjalan sebelum ada sesi mana pun). Entri basi ikut memerahkan.
+  Mutation-proven: mengembalikan cacat aslinya membuatnya MERAH dan menyebut
+  berkasnya; menghapus filter picker memerahkan contract test.
+  Dua test integrasi (`system_role` → nol baris `awcms_access_assignments`, nol
+  identitas, request tetap `pending`; role biasa tetap diberikan dan disebut
+  namanya) menjaga sisi database — arah kedua itu perlu, karena
+  `AND is_system = false` yang salah tulis bisa menolak **semua** role sambil
+  membuat test pertama tetap hijau.
+
+  **Yang SENGAJA tidak dikerjakan di sini, dan alasannya.** Approval tetap boleh
+  memberikan role NON-system tanpa pemanggilnya memegang
+  `access_control.assign`. Itu desain yang tertulis eksplisit di docblock rutenya,
+  dan menyempitkannya adalah perubahan **otoritas** — tempatnya ADR, bukan
+  perbaikan bug. Konsekuensinya dinyatakan, bukan disembunyikan: tenant yang
+  membuat role non-system ber-izin besar membuat pemegang `approve` bisa
+  memberikannya. Yang ditutup PR ini adalah eskalasi ke katalog PENUH lewat role
+  yang tak seorang pun bisa buat lewat API (`role-admin.ts#createRole` menulis
+  `is_system` sebagai `false` tetap).
+
+  Nol migrasi: kolom, katalog permission, dan proteksi system-role di jalur
+  sebelah sudah ada — yang hilang hanya penegakannya di penulis kedua.
+
+- be88f88: fix(keamanan): aset statis berhenti disajikan tanpa satu pun header keamanan
+
+  `@astrojs/node` (mode `standalone`) menyusun handler-nya sebagai
+  `staticHandler(req, res, () => appHandler(req, res))`. Handler statis jalan
+  **lebih dulu**, dan `appHandler` — satu-satunya yang menjalankan
+  `src/middleware.ts` — cuma jadi fallback ketika berkasnya tidak ada. Akibatnya
+  setiap berkas yang benar-benar ada di `dist/client/` dijawab **tanpa**
+  `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy`, `Permissions-Policy`, COOP/CORP, dan tanpa `X-Correlation-ID`:
+  `public/js/news-share.js`, `public/css/public-content.css`, dan seluruh
+  `_astro/**`.
+
+  Terukur pada build nyata sebelum perbaikan: `curl -sI /css/public-content.css`
+  memberi **0** dari tiga header yang dicek, sementara `/api/v1/health` memberi
+  **3**. Sesudah perbaikan keduanya **3**, dengan `Content-Type` dan
+  `Cache-Control` milik `send` utuh.
+
+  Dua komentar di repo ini menegaskan yang sebaliknya dan dipakai sebagai
+  invarian — `astro.config.mjs` ("dipasang `src/middleware.ts` ke SETIAP
+  response") dan `src/middleware.ts` ("Routing ALL responses … guarantees no
+  response ever reaches Varnish unlabelled"). Keduanya benar untuk response yang
+  di-render dan salah untuk berkas statis; sekarang keduanya menyebut batasnya.
+  Satu bullet di `security-headers.ts` yang mendaftar `public/**` sebagai alasan
+  CORP aman juga diperbaiki — sebelum ini ia menyatakan niat, bukan fakta.
+
+  Dampak pada himpunan berkas hari ini sedang: dua aset milik sendiri plus bundel
+  ber-hash, semuanya ber-MIME benar. Yang membuatnya ditutup sekarang dan bukan
+  sekadar didokumentasikan adalah bahwa invarian itu **load-bearing** — ia alasan
+  tertulis mengapa tidak ada lapisan header kedua di mana pun. Menjatuhkan satu
+  berkas `.html` ke `public/` menyajikannya sebagai dokumen tanpa CSP dan tanpa
+  `X-Frame-Options`, dan service worker (#466) mendarat di jalur yang sama.
+
+  **Perbaikannya membungkus, bukan menulis ulang.** `src/lib/server/standalone-entry.ts`
+  mematikan autostart adapter, mengimpor `handler` yang sudah dibangunnya, dan
+  memasang `buildSecurityHeaders()` dengan `setHeader` sebelum mendelegasikan.
+  Itu berarti `send` tetap yang menangani conditional GET, range request, 304,
+  redirect `trailingSlash`, penolakan dotfile beserta pengecualian `.well-known`,
+  dan `Cache-Control` immutable untuk `assetsDir` — menulis ulang semua itu demi
+  empat header akan menukar bug header dengan kelas bug yang jauh lebih buruk.
+
+  Pemasangannya adalah **lantai, bukan override**: Node menggabungkan
+  `writeHead(status, headers)` di atas nilai `setHeader` dengan objek `writeHead`
+  menang saat nama bentrok, jadi response yang di-render tetap membawa persis apa
+  yang dihitung middleware. Klaim penggabungan itu yang diuji terhadap server
+  `node:http` sungguhan di `tests/standalone-entry.test.ts`, dua arah — bukan
+  sekadar "builder mengembalikan empat header", yang sudah hijau sepanjang bug ini
+  hidup.
+
+  Entrypoint produksi berpindah ke `dist/standalone-entry.mjs`: `package.json`
+  `start`, `Dockerfile.production` `CMD`, dan job `e2e-smoke` di `ci.yml`.
+  `tests/family-conformance-ci-parity.test.ts` kini meng-assert entry baru **dan**
+  melarang entry adapter mentah, karena kembali ke sana adalah regresinya persis
+  dan terlihat tak berbahaya di dalam diff.
+
+- 26334bd: docs: `staging` dihapus dari kosakata profil, kontrak isolasinya pindah rumah
+
+  Pagi ini dokumen-dokumen ini masih menulis `staging` sebagai profil deployment
+  yang sah — sebuah kapabilitas yang ditawarkan template kepada pemakainya.
+  Pemilik repo membatalkan itu: `staging` hilang seluruhnya, bukan sekadar tidak
+  dijalankan di sini. Yang tersisa tiga — `development`, `production`,
+  `offline-lan` — dan `deployment-profiles.md` kini mendokumentasikan tiga baris,
+  bukan empat.
+
+  **Yang tidak boleh ikut terbuang adalah kontraknya.** Database sendiri,
+  role/password sendiri, secret sendiri, integrasi keluar mati, tanpa tulis ke
+  bucket media produksi, provider DNS `manual`, token purge per-environment — itu
+  mahal untuk diturunkan ulang, dan sebagiannya dibayar dengan kesalahan nyata di
+  `awcms-micro`. Jadi ia dipindah-rumahkan, bukan dihapus: dari sebuah tingkatan
+  bernama menjadi aturan untuk **environment kedua apa pun** yang seseorang
+  dirikan di samping produksinya, di `environments.md` §Kontrak isolasi
+  environment kedua. Kegagalannya tidak pernah peduli nama tingkatannya.
+
+  Satu konsekuensi ikut ditulis alih-alih ditutupi: `staging` dulu satu-satunya
+  nilai `APP_ENV` yang sekaligus production-like DAN boleh menjadi sasaran DR
+  drill (`APP_ENV=production` tidak punya flag override sama sekali). Tanpa dia,
+  rehearsal dan drill terpaksa berjalan di dua database — runbook preflight
+  sekarang mengatakannya, bukan menyisakan resep yang akan ditolak interlock-nya
+  sendiri.
+
+  Catatan bertanggal **tidak** ditulis ulang. Probe 4 Agustus dan verifikasi host
+  11 Agustus tetap menyebut `awcms_staging`/`awcms-staging-varnish`, karena itu
+  memang nama sumber daya yang ada saat itu; yang ditambahkan hanyalah penunjuk
+  bertanggal bahwa sumber daya itu sedang dibongkar dan namanya bukan nama sebuah
+  profil.
+
+- 8e5bea8: feat(auth): ganti password sendiri — dan step-up hanya diminta dari orang yang punya faktor kedua
+
+  Gelombang 2 PR 2.4 dari #423. `POST /api/v1/auth/password/change`: pasangan dari
+  `password/reset` — yang itu melayani orang yang **tidak bisa** masuk dan
+  membuktikan penguasaan kotak surat; yang ini melayani orang yang **sudah** masuk
+  dan membuktikan penguasaan kredensialnya. Self-service, nol izin baru.
+
+  **Rencana program menulis "step-up aal2 + password lama". Bagian aal2-nya
+  mendarat BERSYARAT, dan itu koreksi terhadap rencana, bukan penyederhanaan.**
+  `requireStepUp` menolak setiap sesi yang tidak sedang `aal2`, dan orang tanpa
+  faktor terdaftar **tidak akan pernah** bisa mencapai `aal2`. Mengirimkannya
+  tanpa syarat berarti setiap pengguna tanpa MFA permanen tak bisa mengganti
+  passwordnya — dan yang paling mungkin butuh justru mereka yang baru saja tahu
+  passwordnya bocor. Itu jebakan ADR-0058 §E dengan baju berbeda: gerbang yang
+  terbaca benar sambil menolak semua orang.
+
+  Jadi aturannya bersyarat dan tiap bagian menanggung bebannya sendiri: **password
+  lama adalah re-autentikasi untuk semua orang**, dan **faktor kedua yang segar
+  diminta tambahan dari siapa pun yang punya**. Tak ada yang diminta kurang dari
+  yang bisa ia berikan, dan tak ada yang diminta sesuatu yang tak bisa ia berikan.
+
+  Step-up dievaluasi **sebelum** verifikasi argon2id: jauh lebih murah, dan menjaga
+  penolakan step-up basi tidak sekalian menjadi jawaban apakah `currentPassword`
+  yang dikirim benar.
+
+  **Kebijakan SSO-only diperiksa ulang di sini**, tidak dipercaya dari waktu login:
+  tenant bisa saja berpindah ke SSO-only sejak sesi ini terbit, dan seluruh maksud
+  kebijakan itu adalah password tidak bisa dipakai masuk. Menulis password baru
+  berarti menulis kredensial yang menurut kebijakan tak boleh bekerja. → `409`.
+
+  **Sesi pemanggil selamat, sisanya mati.** Ganti password yang mengeluarkan Anda
+  dari tab tempat Anda menggantinya terbaca sebagai kegagalan, sementara properti
+  keamanannya tidak berubah — sesi pencuri termasuk yang mati. Penghitung lockout
+  dibersihkan, alasan yang sama dipakai jalur reset: siapa pun yang menyerahkan
+  password saat ini sudah membuktikan penguasaan kredensial, sinyal yang lebih kuat
+  dari penghitung yang menguncinya; penyerang yang bisa sampai ke cabang itu sudah
+  tahu passwordnya.
+
+  **Dibatasi laju meski sudah terautentikasi.** `currentPassword` adalah rahasia
+  yang bisa ditebak, jadi ini permukaan tebak-kredensial bahkan di balik sesi —
+  kasus yang penting adalah sesi pinjaman atau curian dipakai memburu password yang
+  tidak ikut terbawa. Di-key ke **sumber**, bukan ke akun: bucket ber-key identifier
+  di sini memberi siapa pun yang bisa menjangkau endpoint tuas menahan ganti
+  password satu orang — keberatan yang persis sama sudah tercatat menolak bucket
+  login ber-key identifier.
+
+  Sukses **dan** gagal sama-sama diaudit: `currentPassword` yang salah dikirim lewat
+  sesi hidup adalah sinyal bahwa sebuah sesi dipakai orang yang tak tahu kredensial
+  di belakangnya. Atributnya membawa bentuk perangkat dan pseudonim IP, dan **tak
+  membawa password — bahkan panjangnya**. Asersinya berjalan terhadap nilai
+  `attributes:` itu sendiri, bukan terhadap seluruh berkas: docblock menyebut kedua
+  field, dan prosa tak boleh memutuskan test tentang perilaku.
+
+  Password yang tidak berubah ditolak sebagai **validation error**, bukan dijawab
+  sukses no-op: "berhasil diganti" dibaca orang sebagai "password lama saya sudah
+  tidak berlaku", dan itu tidak akan benar.
+
+- d8562b7: feat(auth): sesi bisa dilihat dan diakhiri sendiri — Gelombang 2 PR 2.1
+
+  `GET /api/v1/auth/sessions` dan `DELETE /api/v1/auth/sessions/{id}`: di mana
+  saya sedang masuk, dan akhiri yang bukan saya.
+
+  **Nol permission baru, dan itu keputusan bukan kelalaian.** Subjeknya adalah
+  pemanggil, dan rutenya tidak menerima `tenantUserId` — tidak ada orang lain yang
+  bisa diarahkan. Mengarang permission untuk "lihat sesi sendiri" akan memasang
+  tembok di depan fiturnya **dan** menanam jebakan latent-authz ADR-0058 §E: aksi
+  yang tak di-seed apa pun menolak semua orang termasuk owner tenant, sementara
+  kodenya terbaca seolah digerbangi benar. Konsekuensinya
+  `access:permissions:enforcement:check` dan `admin:screen-coverage:check` tidak
+  tersentuh sama sekali.
+
+  **Tiga kolom sidik jari** (`sql/100`), karena daftar id opaque tidak bisa
+  menopang keputusan "mana yang bukan saya": `client_ip_hash`,
+  `user_agent_summary`, `origin_auth` (`password` | `sso` | `handoff`).
+
+  Satu detail yang tidak ada di rencana dan hanya terlihat dengan membaca kedua
+  sisi: **`hashClientIp` memakai kunci acak per-proses** bila
+  `AUTH_IP_HASH_SECRET` tak diset. Dapat ditoleransi untuk atribut audit — masih
+  non-reversible — dan **tidak** dapat ditoleransi untuk kolom yang dipersistenkan:
+  sesudah restart perangkat yang sama menghasilkan hash berbeda, dan daftar yang
+  dipakai orang untuk memutuskan "akhiri yang mana" akan menampilkan satu
+  perangkat sebagai beberapa, diam-diam, ke arah yang menghasilkan pencabutan yang
+  salah. Karena itu `persistableClientIpHash` mengembalikan **null** bila kuncinya
+  tidak stabil; konsol menyebut pengelompokan tak tersedia alih-alih menampilkan
+  yang keliru.
+
+  **`origin_auth` tanpa default di kode.** Kompiler menyebut keempat penerbit
+  sesi, satu per satu, dan tiap satu menamai alasannya. Sebuah default akan
+  diam-diam menstempel yang paling umum ke penerbit yang lupa — justru field yang
+  nanti dipakai menalar radius ledakan.
+
+  **Rotasi step-up MEMBAWA asal aslinya.** Menaikkan assurance bukan
+  mengautentikasi ulang; menstempel `password` di sana akan menulis ulang
+  provenance sebuah sesi SSO tepat pada saat seseorang membuktikan faktor kedua.
+
+  **Empat penolakan, satu bentuk.** Id tak dikenal, sesi orang lain, sesi tenant
+  lain, dan yang sudah dicabut/kedaluwarsa semuanya `404` — membedakannya
+  menjadikan endpoint ini oracle keberadaan id sesi. Kepemilikan ditegakkan di
+  klausa `WHERE` UPDATE-nya, bukan oleh pembacaan sebelumnya. Mencabut sesi yang
+  sedang dipakai dijawab `409` yang **menyebut penggantinya** (`/auth/logout`),
+  bukan sukses senyap yang meninggalkan cookie mati.
+
+  **Tanpa `last_seen_at`**, sengaja: ia harus ditulis di jalur baca otorisasi —
+  satu UPDATE per request per sesi, selamanya — untuk kolom yang tugasnya kosmetik.
+
+  CHECK-nya sengaja **tidak** memuat `switch`: tak ada endpoint tenant-switch di
+  repo ini, dan CHECK yang memuat nilai yang tak bisa diproduksi apa pun terbaca
+  sebagai kapabilitas yang sudah ada.
+
+  Migrasi diterapkan dua kali ke Postgres nyata (apply + idempotensi).
+
+- 845ec9f: feat(access): sebuah grant ber-scope hanya mencakup apa yang diberikan perannya
+
+  [ADR-0080](docs/adr/0080-a-scoped-grant-covers-only-what-its-role-confers.md),
+  Gelombang 3 PR 3.4. Tanpa migrasi.
+
+  `BusinessScopeFact` mendapat `permissionKeys?`, dan predikat cakupan
+  `evaluateAccess` mendapat satu klausa. Sebuah baris `awcms_access_policies` yang
+  `scope_type`-nya bukan tenant-wide kini melahirkan fakta ber-scope yang membawa
+  persis permission key yang diberikan perannya; fakta dari
+  `awcms_business_scope_assignments` membawa `undefined` dan berperilaku persis
+  seperti sebelumnya.
+
+  **Seluruh argumen keamanannya bisa dibaca, bukan dipercaya.**
+  `scopeFactQualifies` tidak punya cabang yang menghasilkan cakupan — satu-satunya
+  nilai yang bisa disumbangkannya adalah `false`. Sisanya dibuktikan sebagai
+  properti atas korpus (6 bentuk fakta × 5 himpunan relasi × 2 aksi × 4 himpunan
+  kunci): jawaban ber-kualifikasi tak pernah `true` di mana jawaban
+  tanpa-kualifikasi `false`. Ditambah satu assertion bahwa korpusnya **tidak
+  hampa** — klausa yang tak melakukan apa-apa memuaskan properti pertama dengan
+  sempurna, dan itulah cara test semacam ini biasanya berbohong.
+
+  **Klausanya PERTAMA, sebelum `tenantWide`.** Fakta tenant-wide mencakup setiap
+  scope yang diminta; kalau klausanya sesudahnya, fakta tenant-wide yang membawa
+  kunci akan mencakup permission yang tidak diberikan perannya hanya karena ia
+  mencakup semua scope. Urutan, bukan penyaringan, yang membuatnya benar — jadi
+  di-assert.
+
+  **Grant tenant-wide tidak melahirkan fakta sama sekali.** Ini arah yang akan
+  menjadi pelebaran menyeluruh kalau salah: grant tenant-wide adalah _ketiadaan_
+  pengurungan scope, bukan pengurungan ke scope bernama `tenant`, dan melahirkan
+  fakta `tenantWide` darinya berarti memberikan jawaban gerbang #180 kepada setiap
+  orang yang memegang peran apa pun. Test integrasi pertamanya adalah itu.
+
+  **Kill switch build-time.** `SCOPE_NARROWING_ENABLED` bukan env var: dua instance
+  dari satu deployment bisa berbeda pendapat tentang env var — restart bergulir,
+  container basi, `--env-file` yang terlupa — dan aturan otorisasi yang jawabannya
+  bergantung pada socket mana yang menerima request bukanlah aturan. Membaliknya
+  berarti perubahan kode dan redeploy, dan itu memang maksudnya. Kedua keadaannya
+  diuji (flag-nya parameter), jadi keadaan mati bukan keadaan yang belum pernah
+  dijalankan.
+
+  **Batas yang WAJIB dibaca sebelum permukaan penulisnya dibangun.** Kualifikasi
+  scope hanya sekuat rute yang **menyatakan** required scope.
+  `fetchGrantedPermissionKeys` tetap mengembalikan kunci dari semua grant — ia
+  harus, karena gerbang RBAC berjalan lebih dulu dan kunci yang absen di sana
+  membuat jalur ber-scope tak pernah terjangkau — sehingga pada rute yang tak
+  menyatakan scope, sebuah grant ber-scope memberi permission itu di seluruh
+  tenant. Hari ini inert (nol penulis, dan itu di-assert terhadap basis data
+  sungguhan, bukan diargumentasikan), tetapi PR yang membangun permukaan admin
+  untuk menulisnya tidak boleh mendarat tanpa menjawabnya.
+
+  Satu test yang ADA memang berubah, dan alasannya layak disebut karena catatan
+  reviewer rencana berbunyi "setiap test business-scope yang ada harus lulus tanpa
+  diubah". Yang berubah bukan assertion-nya — `toHaveLength(1)` tetap
+  `toHaveLength(1)` — melainkan **stub `tx`-nya**, yang dulu menjawab setiap
+  statement dengan baris yang sama. Resolver kini mengeluarkan dua query, dan stub
+  yang tak bisa membedakan keduanya akan menjawab pembacaan grant dengan baris
+  assignment, melahirkan fakta yang tak diproduksi grant mana pun. Semantik domain
+  memang tidak berubah: `business-scope-access-control.test.ts` lulus apa adanya.
+
+- 33f082c: feat(access): tabel grant lama menjadi sejarah, dan lima pembaca yang sudah basi diperbaiki
+
+  [ADR-0079](docs/adr/0079-the-legacy-grant-table-becomes-read-only-history.md).
+  `sql/103` menyalin setiap baris `awcms_access_assignments` ke
+  `awcms_access_policies` dengan **`id` dipertahankan** — rujukan audit menamai
+  sebuah grant lewat id-nya, dan backfill yang mencetak id baru akan memutus
+  semuanya secara senyap — lalu mencabut `INSERT`/`UPDATE`/`DELETE` dari
+  `awcms_app`. `SELECT` sengaja ditahan: sejarah yang tak bisa dibaca bukan
+  sejarah, ia hanya tak bisa diubah.
+
+  **Yang dicari dan yang ditemukan bukan hal yang sama.** Yang direncanakan adalah
+  backfill. Yang ternyata ada di sana: sejak PR sebelumnya (#506) memindahkan
+  setiap PENULIS grant ke tabel baru, **lima pembaca masih membaca tabel lama** —
+  dan untuk setiap tenant yang dibuat sesudah PR itu, mereka menjawab tentang
+  tabel yang tak ditulis siapa pun. Tiap satunya salah dengan cara berbeda:
+
+  - `GET /api/v1/auth/session` melaporkan owner **tanpa satu pun peran**;
+  - `/admin/users` menampilkan setiap pengguna dengan daftar peran kosong;
+  - `TenantContext.roles` kosong, sehingga kebijakan ABAC `subject.roles` berhenti
+    cocok — `allow` yang berhenti cocok itu penyempitan (aman), tetapi **`deny`
+    yang berhenti cocok adalah PELEBARAN**, dan tak ada yang mengamatinya;
+  - SoD berhenti melihat grant RBAC biasa dan melaporkan "tak ada konflik";
+  - guard `last_admin_blocked` menyimpulkan tenant tak punya administrator, jadi
+    **owner terakhir bisa dinonaktifkan** — tenant terkunci tanpa jalan pulih di
+    dalam aplikasi.
+
+  38 gerbang hijau selama itu, `bun run check` lewat, dan test unit lewat — karena
+  setiap satunya meng-assert sebuah pembaca terhadap **dirinya sendiri**. Tak ada
+  yang menulis grant lewat penulis sungguhan lalu bertanya kepada para pembacanya.
+
+  **Jadi perbaikannya bukan membetulkan lima query.** `activeRoleGrants`
+  (`identity-access/application/grant-source.ts`) adalah satu-satunya definisi
+  "peran apa yang sedang dipegang", disisipkan setiap pembaca sebagai subquery.
+  Sebuah pembaca memakainya atau ia bukan pembaca:
+  `tests/grant-source-parity.test.ts` mengunci itu secara statis dan
+  `tests/integration/grant-readers.integration.test.ts` secara perilaku — yang
+  kedua adalah bentuk yang akan menangkapnya sejak awal, karena sebuah pembaca
+  bisa diarahkan ke tabel apa pun dan tetap ter-compile. Mengembalikan satu
+  pembaca ke tabel lama memerahkan keduanya (diuji).
+
+  **Fragmen, bukan VIEW.** View juga akan jadi satu definisi, tetapi yang pertama
+  di repo ini harus menjawab `security_invoker` di perubahan yang sama — tanpanya
+  view berjalan sebagai PEMILIKNYA dan **melewati FORCE RLS** tabel di bawahnya,
+  dan setiap test RLS yang ada akan tetap hijau. Fragmen menghasilkan SQL yang
+  persis sama dengan yang akan ditulis pembacanya, jadi RLS berlaku seperti
+  sebelumnya dan jumlah query tidak bertambah.
+
+  **`awcms_business_scope_assignments` sengaja TIDAK ikut dipensiunkan**, meski
+  rencana program menyebut "dua tabel lama". `role_id` di sana tidak memberi satu
+  pun permission key hari ini — hanya SoD yang membacanya, dan hanya sebagai
+  fakta. Memindahkannya sekarang akan memberi setiap subjek ber-scope permission
+  peran itu **di seluruh tenant**, karena belum ada yang mengualifikasi scope saat
+  evaluasi sampai PR 3.4; dan `role_id`-nya nullable sedangkan tujuannya tidak.
+
+  **Satu cacat lain ikut ketahuan, dan gerbangnya tak bisa melihatnya.**
+  `awcms_setup` tak pernah diberi privilege pada tabel Policy, jadi setup wizard
+  gagal `permission denied for table awcms_access_policies` di setiap deployment
+  ber-`SETUP_DATABASE_URL` sejak #506. `checkWorkerSetupRoleGrants` memeriksa
+  apakah grant COCOK dengan matriks yang dideklarasikan — dan kedua sisi memang
+  masih setuju satu sama lain; tak ada yang memeriksa apakah matriksnya cocok
+  dengan yang DIBUTUHKAN kode.
+
+  Sisanya adalah kelas gerbang baru: tabel tenant-scoped yang sengaja read-only
+  harus **dideklarasikan** di `RETIRED_TENANT_TABLE_PRIVILEGES`, dan ditegakkan
+  **dua arah** — tabel terdaftar yang mendapatkan kembali `INSERT` gagal sekeras
+  tabel tak-terdaftar yang kehilangan `SELECT`. Default keempat-verb untuk tabel
+  tenant-scoped menanggung beban nyata (tabel FORCE RLS yang tak bisa ditulis
+  runtime adalah `permission denied` yang menunggu request pertama), jadi
+  membaliknya harus jadi kalimat yang ditulis seseorang, bukan efek samping sebuah
+  migrasi.
+
+- 4ba359e: feat(access): sebuah grant membawa scope-nya sendiri — dan dengan tabelnya kosong, jawabannya identik dengan hari ini
+
+  Gelombang 3 PR 3.1 dari #423, [ADR-0078](docs/adr/0078-a-grant-carries-its-own-scope.md).
+  `sql/102` menurunkan `awcms_access_policies` (+ riwayat append-only-nya), dan
+  `fetchGrantedPermissionKeys` membaca **kedua** bentuk grant lewat `UNION ALL`.
+
+  Hari ini sebuah grant adalah `awcms_access_assignments (tenant_user_id, role_id)`
+  dan menjawab satu pertanyaan: apakah orang ini memegang peran itu **di mana pun**
+  dalam tenant. Sebuah Policy menjawab yang lebih sempit — peran ini **pada scope
+  ini** — yaitu bentuk yang membuat "editor satu kantor" bisa dinyatakan tanpa
+  menciptakan sumbu otorisasi kedua.
+
+  **Dengan tabel barunya kosong, hasilnya identik dengan sebelumnya.** Itu seluruh
+  argumen keamanan PR ini, dan ia tentang `UNION ALL` di dalam sebuah string SQL —
+  membacanya tidak membuktikan apa pun. Satu `JOIN` yang pindah ke subquery, satu
+  predikat `tenant_id` yang hilang di satu sisi, satu `DISTINCT` yang berhenti
+  mencakup satu kolom: semuanya terbaca baik-baik saja dan semuanya mengubah
+  jawaban. Jadi oracle-nya menjalankan query sungguhan terhadap baris sungguhan,
+  berdampingan dengan **transkripsi tangan** query pra-migrasi. Oracle yang berbagi
+  sumber dengan benda yang ia adili tidak mengadili apa pun.
+
+  Oracle itu punya **dua** paruh, dan keduanya perlu: ekuivalensi (tabel kosong →
+  jawaban sama) **dan** efek (baris policy benar-benar memberi grant, dan kolom
+  siklus hidupnya benar-benar menyaring). Tanpa paruh kedua, cabang `UNION ALL`
+  yang diam-diam tidak mencocoki apa pun akan lulus paruh pertama dengan sempurna.
+
+  **Tabel BARU, bukan kolom tambahan**, tiga alasan dan yang pertama menyelesaikan:
+  `UNIQUE (tenant_id, tenant_user_id, role_id)` justru yang harus **mati** (satu
+  peran di tiga scope = tiga baris), dan mencabut indeks unik dari tabel otorisasi
+  yang hidup **di migrasi yang sama** dengan yang melebarkan makna tabelnya adalah
+  perubahan dengan mode kegagalan terburuk yang tersedia: kalau salah, ia salah ke
+  arah **membolehkan**, tanpa satu pun gerbang memerah. Dua alasan lainnya di ADR.
+
+  **Dua tempat rencana program tidak diikuti, keduanya ke arah "jangan kirim yang
+  belum bisa dipakai":**
+
+  1. `subject_type` hanya menerima `'tenant_user'`. Rencana menulis
+     `('tenant_user', 'user_group')` plus XOR dua kolom subjek, tetapi grup
+     pengguna belum ada — CHECK yang memuat nilai yang tak bisa diproduksi apa pun
+     terbaca sebagai kapabilitas yang sudah ada, dan `user_group_id` tanpa tabel
+     tujuan adalah FK yang tak bisa ditulis. Disiplin yang sama dipakai `sql/100`
+     untuk `origin_auth`. Kolom **diskriminatornya** ada sejak sekarang justru
+     supaya penambahan nilai nanti bukan backfill.
+  2. Tipe kembalian `fetchGrantedPermissionKeys` **belum** menjadi
+     `{ keys, scopes }`. Field yang tak dibaca apa pun adalah bau
+     kapabilitas-tak-terpakai yang persis dihapus ADR-0077, dan ia akan mengaduk
+     **sebelas** call site di PR yang paling tak mampu menanggung diff tak
+     berkaitan. Tipenya berubah di PR yang mengonsumsinya (3.4).
+
+  **Namanya tidak boleh berubah**, dan ada test yang menjaganya:
+  `access-chokepoint-check.ts` mengunci sinyal "handler ini memutuskan permission"
+  pada literal `fetchGrantedPermissionKeys(`, sehingga rename meninggalkan gerbang
+  itu **hijau sambil melaporkan nol handler yang memutuskan**.
+
+  Penanggalan efektif dievaluasi **di basis data**: grant yang kedaluwarsa menurut
+  gagasan aplikasi tentang waktu adalah grant yang bisa diperpanjang oleh bug
+  aplikasi.
+
+  `awcms_access_policies` masuk `GRANT_TABLES` gerbang `access:grant-readers:check`
+  **di PR yang sama dengan yang menciptakannya**, jadi tak pernah ada berkas yang
+  merakit join atasnya tanpa tercatat.
+
+- a4812cb: feat(access): sebuah grup pengguna adalah subjek, dan ia memberi peran
+
+  [ADR-0081](docs/adr/0081-a-user-group-is-a-subject-that-grants-roles.md),
+  Gelombang 3 PR 3.5 — penutup gelombang. `sql/104` (dua tabel + `subject_type`
+  melebar), `sql/105` (empat permission).
+
+  Sebuah grup memegang grant di `awcms_access_policies` persis seperti orang
+  memegangnya, dan keanggotaan menjangkau **setiap pembaca lewat SATU cabang**
+  tambahan di `activeRoleGrants`.
+
+  **Mode kegagalan senyap yang ditolak desain ini.** Sebuah grup bisa saja
+  dibangun untuk memberi permission KEY langsung; dari luar tampilannya identik.
+  Subjek akan memegang kuncinya sementara `subject.roles` tetap KOSONG — sehingga
+  kebijakan tenant `subject.roles in ["editor"]` diam-diam berhenti cocok. Yang
+  `allow` berhenti cocok itu penyempitan (aman, ada yang menyadarinya); yang
+  **`deny` berhenti cocok itu INERT, yaitu pelebaran**, dan tak ada yang
+  mengamatinya. SoD buta dengan cara yang sama, persis untuk grant yang keberadaan
+  fitur grup dimaksudkan menciptakannya.
+
+  Test integrasinya karena itu tidak berbunyi "keanggotaan bekerja". Ia berbunyi:
+  peran turunan-grup sampai ke `subject.roles`, ke `fetchGrantedPermissionKeys`,
+  ke resolver SoD, dan ke daftar admin — keempatnya, dalam satu assertion.
+
+  **Gerbang yang diminta rencana tidak dibangun, dan itu bukan pemotongan.**
+  `access:sod-fact-parity:check` mewajibkan kedua resolver merujuk satu konstanta
+  bersama. ADR-0079 sudah menutup celahnya lebih rapat: para pembaca tidak lagi
+  menyebut tabel grant sama sekali, mereka menyisipkan fragmennya, dan
+  `access:grant-readers:check` menolak berkas yang merakit join sendiri. "Merujuk
+  konstanta yang sama" bisa benar sementara kedua query berbeda; "memakai fragmen
+  yang sama" tidak bisa.
+
+  **Empat keputusan yang menanggung beban:**
+
+  - **Memberi grup sebuah PERAN memakai `access_control.assign`**, bukan permission
+    grup. Membaliknya adalah eskalasi tanpa nama yang jelas: administrator grup
+    yang juga bisa memberi peran kepada grupnya sendiri bisa memberi `owner`
+    kepada grup yang ia anggotai. `assignRoleToGroup` juga menolak peran
+    `is_system` — di sini penolakan itu lebih penting daripada di jalur per-orang,
+    karena grant kepada grup menjangkau juga setiap orang yang ditambahkan NANTI.
+  - **`external_id`, bukan `group_code`, adalah kunci sinkron.** Rename di IdP
+    tidak boleh meng-orphan grup. SCIM **tidak dibangun** — yang dibangun adalah
+    penolakannya (`409 GROUP_EXTERNALLY_MANAGED`), karena suntingan lokal yang
+    diam-diam dibatalkan sinkron berikutnya lebih buruk daripada yang tak pernah
+    diterima. `source` juga tak pernah diterima dari request.
+  - **Tak ada `delete`.** Memensiunkan grup adalah tiga keputusan — grant-nya,
+    keanggotaannya, dan `external_id` yang besok disodorkan direktori lagi.
+    Soft-delete sudah punya arti yang benar (`deleted_at IS NULL` ada di cabang
+    grup, jadi grup terhapus memberi nol), tetapi permukaan yang menyetelnya
+    menunggu keputusan itu.
+  - **`UNION ALL`, bukan `UNION`.** Subjek bisa memegang peran yang sama langsung
+    DAN lewat grup, dan tiap konsumen sudah men-dedupe apa yang perlu. Membayar
+    sort di jalur otorisasi untuk menghemat mereka nol adalah membayar di tempat
+    paling mahal.
+
+  **Mencabut `NOT NULL` dari tabel otorisasi hidup**, kata-kata yang terdengar
+  persis seperti perubahan yang DITOLAK ADR-0078. Perbedaannya: di sana yang
+  dicabut indeks unik, yang salah ke arah MEMBOLEHKAN tanpa gerbang memerah. Di
+  sini ia DIGANTI CHECK yang lebih ketat di blok yang sama — baris tanpa subjek,
+  dengan dua subjek, atau dengan subjek yang tak sesuai diskriminatornya kini
+  ditolak (diuji terhadap basis data, lewat koneksi yang melewati API). Dan indeks
+  unik parsialnya wajib dapat saudara: `NULL` tidak sama dengan `NULL`, jadi yang
+  lama berhenti membatasi apa pun begitu `tenant_user_id` boleh NULL.
+
+  Plafon `BOUNDED_BY_DESIGN` naik dari 3 ke 5, dan **menaikkan baris itu adalah
+  tindakan yang direview** — yaitu plafonnya bekerja, bukan gagal. Keempat entri
+  adalah satu argumen dalam dua paruh: tabel yang barisnya grant buatan
+  administrator, plus tabel yang dibatasi olehnya. Purge berbasis usia pada salah
+  satunya menghapus otorisasi yang hidup.
+
+- 26334bd: Profil deployment `staging` dihapus SELURUHNYA (ADR-0083, sebagaimana diamandemen)
+
+  Bukan hanya environment staging milik repo ini yang dibongkar, melainkan
+  `staging` sebagai profil deployment: ia keluar dari `ModuleDeploymentProfile`
+  (`src/modules/_shared/module-contract.ts`), dari nilai `APP_ENV` yang diterima,
+  dari `.env.example`, dan dari seluruh dokumentasi. Profil yang tersisa:
+  `development` / `production` / `offline-lan`.
+
+  **Ini membalik ADR-0083 edisi pertama.** ADR itu, ditulis hari yang sama,
+  MEMPERTAHANKAN `staging` dan mendaftarkan penghapusannya sebagai DITOLAK dengan
+  alasan "mencabut kapabilitas dari setiap pemakai template". Pemilik repo
+  membatalkan argumen itu, dan karena ADR-0083 belum ter-commit dan belum dirilis
+  ia **diamandemen di tempat** alih-alih di-supersede ADR baru — sebuah ADR yang
+  berbunyi "`staging` tetap sah" di sebelah kode yang tak memuatnya adalah persis
+  dokumen percaya-diri-dan-salah yang berulang kali menggigit repo ini.
+
+  Alasan yang menggantikannya: **profil deployment yang tak pernah dijalankan
+  siapa pun adalah klaim, bukan kapabilitas.** `staging` tidak pernah punya satu
+  pun jalur kode yang memperlakukannya berbeda dari `production`; satu-satunya
+  `APP_ENV=staging` yang benar-benar berjalan justru sedang melayani domain
+  produksi di atas database staging. Pemakai template yang butuh environment kedua
+  membuatnya dengan `APP_ENV=production` kedua dan basis data kedua.
+
+  **Dampak bagi instalasi turunan (BREAKING pada level authoring, bukan runtime):**
+  `module.ts` yang mendeklarasikan `deploymentProfiles: ["staging"]` kini gagal
+  typecheck. Ganti ke profil yang tersisa, atau hilangkan field-nya (absennya
+  berarti "tanpa batasan profil"). Komposisi build-time membandingkan string biasa,
+  jadi tidak ada perilaku runtime yang berubah. Deployment yang menjalankan
+  `APP_ENV=staging` harus pindah ke `APP_ENV=production` sebelum upgrade —
+  `config:validate` menolak nilai lama.
+
+  Sisi infrastruktur (di luar repo): produksi ditegakkan di `awcms.ahlikoding.com`;
+  app Coolify, database, dan Varnish staging dibongkar setelah backup diambil DAN
+  diverifikasi lewat restore-drill ke database scratch.
+
+- 02b0f4d: feat(rute): keluarga `/news/**` dipensiunkan dengan 301 ke `/blog/{tenantCode}/**` (ADR-0071 §4); keputusan RUM ADR-0067 diambil
+
+  **Ini perubahan URL publik.** Empat rute `/news/**` yang ADR-0059 daratkan tidak lagi dilayani repo ini, dan setiap permintaan ke sana kini **301 permanen** ke `/blog/{tenantCode}/**`. Tidak ada tenant yang perlu mengubah konfigurasi, dan tidak ada tenant yang bisa memilih untuk tetap dilayani — keluarga rutenya hilang untuk semua orang, sesuai [ADR-0071](docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md) yang membelah kosakata URL keluarga: `/blog/**` milik repo ini, `/news/**` milik `ahliweb/awcms-astro`.
+
+  `publicRouteMode` masih `domain_default` sebagai bawaan modul, artinya `/news/**` **menyala** untuk setiap tenant yang tidak mematikannya. Menghapusnya tanpa penerus akan mematikan URL yang sitemap dan feed repo ini sudah iklankan; 301 adalah penerusnya.
+
+  - **Redirect-nya adalah kebalikan dari yang sudah ada.** `domain/legacy-blog-redirect.ts` — yang memetakan `/blog/{tenantCode}` → `/news` — diganti `domain/retired-news-redirect.ts` yang memetakan arah sebaliknya, dan strategi 1 di `redirect-resolution-service.ts` dibalik bersamanya. Arah yang salah tidak melempar, tidak menggagalkan typecheck, dan hanya terlihat sebagai loop pada tenant yang kebetulan punya kedua bentuk hidup — jadi test pertamanya soal **arah**, dan ia menamai apa yang dijaganya.
+  - **Tidak ber-policy, dan tidak digerbangi `seo_distribution` aktif.** Yang digantikannya adalah rewrite OPSIONAL yang tenant nyalakan; ini migrasi URL yang tak seorang pun pilih. Menggerbanginya pada modul yang bisa dimatikan tenant berarti tenant yang mematikannya justru yang URL terbitnya mati.
+  - **Satu syarat bertahan, dan ia menjaga invarian ADR-0071 §3.** Tenant dengan `legacyTenantRouteEnabled: false` **tidak** mendapat redirect: ia sudah mematikan seluruh permukaan konten publiknya, jadi 301 ke `/blog/{tenantCode}` adalah 301 ke 404 yang pasti. "Jangan pernah mengiklankan URL yang tidak kita layani" berlaku untuk tujuan redirect, bukan hanya entri sitemap.
+  - **`legacy_blog_redirect_enabled` (`sql/060`) pensiun tetapi tidak dihapus.** Migrasi terapan immutable dan di-checksum `scripts/db-migrate.ts`, dan permukaan API-nya sudah terbit. Tidak ada lagi yang membacanya — ia kini benar-benar inert, dan untuk alasan yang **diputuskan** alih-alih kebetulan.
+  - **Batas segmen bukan hipotetis.** Repo ini punya nama kapabilitas `newsletter`; `startsWith("/news")` telanjang akan mem-301 `/newsletter` menjadi `/blog/{tenantCode}letter`. Ada testnya.
+
+  Yang ikut dicabut bersama keluarga rutenya: `publicRouteMode`, `withHostResolvedBlogTenant`, `padUnresolvedHostRouteLatency`, `HOST_RESOLVED_PUBLIC_BASE_PATH`, dan `"/news"` dari `blog_content.api.routes`. Tabel base path SEO menciut dari tiga baris ke dua — tenant menyajikan `/blog/{tenantCode}` atau tidak menyajikan apa pun; baris `null` yang membawa invariannya tidak berubah.
+
+  **Penanda §4 ADR-0071 dibalik ke SUDAH DILAKSANAKAN**, dan `tests/url-vocabulary-split.test.ts` memang **memerah di antara** penghapusan rute dan pembalikan penanda itu — gerbang yang ditulis untuk jendela ini terbukti menutupnya, bukan sekadar mengklaimnya.
+
+  Yang hanya terasa saat mengembangkan:
+
+  - **ADR-0067 berhenti `Proposed`.** Bagian RUM yang sengaja ditinggalkan pada 4 Agustus mendapat keputusannya: **Opsi B** — agregasi di titik masuk, nol baris mentah, Opsi C tetap ditolak. Statusnya `Accepted (belum diimplementasikan)` dan itu **digerbangi**: ADR ini kini punya entri di peta `tests/adr-implementation-status.test.ts`, yang menuntut kualifikasi selama artefaknya belum ada dan menuntut pencabutannya pada PR yang mendaratkannya. Artefak yang dipetakan **agregatnya**, bukan endpoint-nya — memetakan endpoint akan membiarkan implementasi baris-mentah memuaskan gerbangnya.
+  - **`POST /api/v1/analytics/vitals` adalah permukaan tulis publik tanpa autentikasi**, kelas yang paling sedikit dimiliki repo ini. Adendum ADR-0067 menuliskan apa yang wajib dibawa PR implementasinya: rate limit ADR-0066 + batas badan sebelum satu baris ditulis, normalisasi rute ke POLA dari daftar rute nyata (bukan string klien), validasi rentang nilai metrik, dan `VISITOR_ANALYTICS_ENABLED` tetap saklarnya.
+  - **Dua baris celah §9 berhenti berbohong.** C13 menyatakan approval rilis tertahan dan "GitHub Release terbaru masih `v6.4.0`" — `v7.0.0` dan `v7.0.1` sudah terbit. C7 menyatakan bagian RUM menunggu pemilik produk — tidak lagi. Nol celah `TERBUKA` tersisa di dokumen yang dilabeli LIVING dan disuruh dibaca sebelum go-live.
+
+- f8fdcd8: feat(push): service worker + konsol `/admin/push-notifications` — modul jadi `active`
+
+  Modul `push_delivery` mendapat permukaan operatornya, dan dengan itu berpindah
+  dari `experimental` ke **`active`**. Perpindahan itu bukan pernyataan: ADR-0021
+  kriteria 1 menolak modul `active` tanpa layar admin, **tanpa pengecualian**, dan
+  modul ini memilih status jujur selama tiga PR daripada menulis carve-out —
+  komentar test itu sendiri mencatat apa yang terjadi terakhir kali seseorang
+  menulis carve-out: alasannya menua dan justru akan membiarkan sebuah modul
+  **kehilangan** layarnya tanpa ketahuan.
+
+  Tiga baris `NOT_YET_SCREENED` yang ditambahkan PR sebelumnya dihapus. Ledger itu
+  hanya boleh **menyusut**: meninggalkannya setelah layar dibangun akan
+  memerahkan `admin:screen-coverage:check`, dan itulah yang menjaga angkanya
+  jujur.
+
+  ## Dua audiens dalam satu halaman, dengan sengaja
+
+  Separuh atas **self-service** — "notifikasi di perangkat ini" — dan tidak
+  memerlukan permission apa pun: subjeknya adalah orang yang sedang melihatnya.
+  Separuh bawah adalah antrean tenant dan butuh `diagnostics.read`.
+
+  Keduanya berbagi halaman karena bersama-sama menjawab satu pertanyaan. "Saya
+  sudah mengaktifkan notifikasi dan tidak ada yang datang" dijawab oleh panel
+  perangkat (browser ini berlangganan?) **dan** panel antrean (ada yang masuk
+  antrean, dan apa kata push service?) — dan operator yang harus mengorelasikan
+  dua layar akan mengorelasikan dua momen waktu.
+
+  ## Service worker: dua perilaku yang terlihat opsional dan tidak
+
+  **Push tanpa payload tetap menampilkan notifikasi.** Beberapa push service
+  mengirim "tickle" tanpa isi, dan payload yang gagal didekripsi tak terpakai.
+  Diam bukan default yang aman: browser **mewajibkan** notifikasi terlihat untuk
+  setiap push, menjawab yang senyap dengan "situs ini diperbarui di latar
+  belakang" miliknya sendiri, dan bila berulang **mencabut izinnya**.
+
+  **Target klik di-resolve terhadap origin ini lalu dibandingkan.**
+  `push-target-path.ts` sudah memvalidasi sebelum baris ditulis, jadi ini tembok
+  kedua — tapi inilah kode yang benar-benar menavigasi, dan notifikasi yang
+  membawa nama serta ikon situs ini adalah kendaraan open-redirect paling
+  meyakinkan yang ada. `new URL(path, origin)` yang membuatnya bisa diputuskan:
+  `//evil.example/x` protocol-relative me-resolve ke origin lain dan tertangkap,
+  sementara uji string "diawali `/`" akan meloloskannya.
+
+  Ikon **tidak** diambil dari payload: ia akan di-fetch saat ditampilkan,
+  menyerahkan alamat IP penerima dan fakta bahwa ia sedang online kepada siapa pun
+  yang memilih URL-nya.
+
+  Berkasnya ada di `public/` pada path **tetap**, dan itu bukan kemalasan:
+  registrasi dikunci pada URL skrip, jadi nama ber-hash-konten akan berganti
+  setiap build lalu meninggalkan setiap langganan yang dibuat build sebelumnya.
+
+  ## Konversi kunci VAPID adalah tempat ini diam-diam rusak
+
+  `atob` **menolak** alfabet base64url, jadi kunci yang mengandung `-` atau `_`
+  melempar `InvalidCharacterError` saat `subscribe()` — dan kira-kira tiga
+  perempat kunci nyata mengandung salah satunya, karena masing-masing dari 65 byte
+  punya peluang menghasilkannya. Kunci yang kebetulan tidak mengandungnya bekerja,
+  yang persis cara hal ini rilis hijau lalu gagal untuk sebagian besar deployment.
+  Konversinya ditulis sendiri dan diuji dengan kunci yang **dipastikan**
+  mengandung keduanya.
+
+  ## Angka klien, disebut ulang supaya perbandingan ADR-0074 tetap jujur
+
+  "Nol byte SDK" tetap benar dan itu memang klaimnya. Sisi klien tidak gratis:
+
+  |                                                                    | Byte       |
+  | ------------------------------------------------------------------ | ---------- |
+  | `push-sw.js` (disalin apa adanya dari `public/`, tak diminifikasi) | 5.515      |
+  | skrip halaman (terbundel + terminifikasi)                          | 4.659      |
+  | **total**                                                          | **10.174** |
+  | SDK FCM Web yang DITOLAK (halaman + service worker)                | **91.333** |
+
+  Selisihnya 9×, kedua berkas SDK itu menembus plafon per-berkas 21.000 B, dan
+  janji CSP ADR-0029 tetap utuh: `worker-src` jatuh ke `default-src 'self'`,
+  service worker-nya same-origin, dan **tidak ada satu pun direktif yang berubah**.
+
+  Anggaran aset: 150.182 / 180.000 B.
+
+  ## `enqueuePushToRecipients` akhirnya punya pemanggil produksi
+
+  `POST /api/v1/push/test`. Kesenjangan yang ADR-0074 catat di §Konsekuensi
+  alih-alih dibiarkan ditemukan, kini ditutup dan ADR-nya diperbarui.
+
+- 70483a0: feat(auth): `approvals` dan `reporting` memakai entry any-of (#450, R3)
+
+  Ledger 7 → 5.
+
+  `approvals` (dua panel, delapan permission) dan `reporting` (tiga panel, tujuh
+  permission) — keduanya bentuk any-of yang sama: panel yang bisa dibaca
+  independen, penolakan halaman hanya bila semua panel ditolak.
+
+  `approvals` layak disebut: ia inbox persetujuan, jadi keputusan tentang siapa
+  boleh MELIHAT tugas yang menunggu keputusannya kini ikut tercatat di
+  `awcms_abac_decision_logs`, dan `deny` ABAC tenant berlaku pada pembacaannya —
+  bukan hanya pada tombol Approve. Enam afordans tulisnya, termasuk tiga jalur
+  `recovery` (`reassign`, `cancel`, `force_decide`), diputuskan lewat `can(...)`
+  pada transaksi yang sama.
+
+  `reporting` menyimpan satu detail yang mudah rusak saat dipindahkan: peta
+  `reconciliationsByKey` diisi dengan satu query per proyeksi, berurutan di dalam
+  transaksi yang sama. Ia tetap begitu — `tx` satu koneksi ter-reserve, jadi
+  sebuah `Promise.all` di sana akan membocorkannya.
+
+  Dua contract test-nya mengekstrak klaim hanya dari `permissionKey(...)`;
+  ekstraktornya kini membaca kedua ejaan.
+
+- b35fd65: feat(auth): `loadAdminScreen` mendapat entry ANY-OF, dan dua konsol pertama memakainya (#450, R3)
+
+  Delapan konsol admin sisa punya bentuk yang sama: beberapa panel yang bisa
+  dibaca secara independen, dan penolakan halaman hanya bila **semua** panel
+  ditolak (`canSeeAnything = canReadNodes || canReadConflicts || canReadQueue`).
+
+  Memaksa satu permission menjadi ENTRY untuk layar-layar itu akan menolak
+  operator yang sah memegang baca satu panel dan bukan panel lain — **penyempitan
+  akses nyata yang menyamar sebagai refactor**. Jadi helper-nya yang belajar
+  bentuk itu, bukan layarnya yang dibengkokkan.
+
+  `authorize` kini menerima array: diizinkan bila **setidaknya satu** diizinkan.
+  Array KOSONG menolak — "tidak ada request yang mengotorisasi halaman ini" tidak
+  boleh terbaca sebagai "request apa pun mengotorisasinya", penalaran fail-closed
+  yang sama dengan tenant platform yang tak terselesaikan di `access-guard.ts`.
+
+  Setiap request entry dievaluasi — daftarnya TIDAK di-short-circuit pada izin
+  pertama — dan hasilnya dikembalikan lewat `entry: readonly boolean[]` mengikuti
+  urutan deklarasi. Itu justru intinya: panel membaca jawabannya sendiri dari
+  sana alih-alih bertanya lagi lewat `can()`, yang akan menulis baris
+  `awcms_abac_decision_logs` KEDUA untuk keputusan identik dalam satu render —
+  derau di jejak audit, bukan bukti.
+
+  ## Aturannya diuji sebagai fungsi murni
+
+  `selectEntryOutcome` diekstrak supaya setiap cabangnya bisa diuji tanpa
+  database, dan `tests/admin-screen-entry.test.ts` baru menguji delapan hal —
+  termasuk mutasi yang paling berbahaya: menulis aturannya sebagai "tidak SEMUA
+  request ditolak" meloloskan `[]`, karena `[].every(...)` bernilai **true**.
+  Sebuah layar yang kehilangan request entry-nya dalam sebuah suntingan akan
+  terbuka untuk setiap pengguna terautentikasi tenant itu, tanpa satu gerbang pun
+  merah.
+
+  Sampai PR ini helper-nya belum punya test perilaku sama sekali — hanya gerbang
+  struktural yang membuktikan layar meruteinya.
+
+  ## Dua konsol pertama
+
+  `sync` (tiga panel, enam permission) dan `domain-events` (tiga panel, lima
+  permission). Ledger 9 → 7.
+
+  Dua contract test-nya mengekstrak klaim hanya dari `permissionKey(...)`;
+  ekstraktornya kini membaca kedua ejaan, sekelas dengan koreksi di batch 1, 4, 5
+  dan platform-scope.
+
+- 9d14876: feat(admin): layar `/admin/blog-settings` — pengaturan blog berhenti hanya bisa diubah lewat `curl`
+
+  `GET`/`PATCH /api/v1/blog/settings` mendarat lengkap bersama Issue #543 —
+  ter-guard di dalam `withTenant`, ter-audit, tervalidasi — dan punya **nol
+  konsumen UI**. `rssEnabled` dan `sitemapEnabled` menentukan apakah feed dan
+  sitemap tenant dilayani sama sekali, dan sampai sekarang satu-satunya cara
+  mengubahnya adalah `curl`. Kapabilitas yang tak bisa dijangkau operator adalah
+  kapabilitas yang sebenarnya tidak dimiliki deployment.
+
+  **Ini BUKAN layar setting modul, dan bedanya load-bearing.**
+  `/admin/modules/blog_content` (Module Management, generik) menulis
+  `awcms_module_settings` — override per-tenant atas `settings.defaults`
+  descriptor, yang hari ini tinggal `legacyTenantRouteEnabled`. Layar ini menulis
+  `awcms_blog_settings`, tabel berbeda dengan permission berbeda
+  (`blog_content.settings.*`) dan endpoint berbeda. README modul mencatat
+  pemisahan dua-store itu sebagai keputusan.
+
+  Risikonya karena itu bukan store yang hilang, melainkan **kontrol yang
+  terduplikasi**: dua layar yang sama-sama tampak menawarkan "pengaturan blog"
+  sambil menulis baris yang berbeda. Layar ini karena itu **tidak merender apa pun**
+  dari store setting modul dan hanya menautkan ke layar generiknya. Field yang
+  dicerminkan dua layar adalah field yang basi diam-diam, karena layar yang diedit
+  belakangan menang dan tak satu pun mengatakannya.
+
+  Dua field endpoint sengaja TIDAK ada di form, dan disebutkan namanya supaya
+  absennya terbaca sebagai keputusan: `contentQualityChecklistPolicy` (peta
+  override severity bersarang — menaruh kebijakan pemblokir-publish di balik
+  textarea JSON tanpa umpan balik per-rule bukan kontrol yang layak) dan
+  `socialPreviewFallbackImageMediaId` (mengetik UUID bukan media picker;
+  `/admin/media` sudah memiliki pemilihan objek, dan field id mentah justru
+  mengundang menempel id milik tenant lain yang endpoint-nya tolak sebagai galat
+  validasi yang tak bisa ditindaklanjuti operator).
+
+  Satu permission menggerbangi seluruh field (`settings.configure`) karena
+  `sql/036` tidak men-seed permission tulis per-field — mengarang gerbang per-field
+  di UI akan menyiratkan wewenang yang tak akan dihormati `authorizeInTransaction`
+  mana pun.
+
+  Entri navigasi digerbangi `settings.read`, bukan salah satu dari empat entri
+  `blog_content` yang sudah ada: operator bisa memegang authoring blog tanpa
+  memegang saklar discovery tenant. `tests/admin-blog-page-contract.test.ts`
+  mematok jumlah entri navigasi persis supaya tiap kedatangan layar baru menjadi
+  baris yang diedit dengan sengaja — dan ia memang memerah saat layar ini mendarat,
+  lalu dinaikkan dari empat ke lima.
+
+- 80310dc: feat(auth): lima layar admin berikutnya melewati chokepoint (#450, R3)
+
+  Gelombang 1 batch 2. `registrations`, `modules`, `abac-policies`,
+  `blog-settings`, dan `comments` berhenti memutuskan akses dari
+  `ssr.permissions.has(...)` — himpunan RBAC mentah — dan berpindah ke
+  `loadAdminScreen`, yang menjalankan `authorizeInTransaction` dan pembacaan
+  datanya di dalam SATU transaksi.
+
+  Yang dipulihkan pada kelima layar itu: evaluasi kebijakan ABAC (sebuah `deny`
+  yang ditulis tenant lewat `/api/v1/abac/policies` ditegakkan di API dan **inert**
+  di layar), `resolveModuleAvailability` (tenant yang mematikan modulnya sendiri
+  tetap melihat layarnya penuh data), fakta business-scope, SoD saat-aksi, dan
+  `recordDecisionLog` — sebuah pembacaan yang terjadi tidak meninggalkan baris yang
+  menyatakan bahwa ia terjadi.
+
+  `abac-policies.astro` adalah kasus yang paling tajam: ia layar tempat tenant
+  **mengarang** kebijakannya, dan sampai sekarang kebijakan yang ditulisnya tidak
+  berlaku pada halaman yang mendaftarkannya.
+
+  Tiap afordans tulis (`approve`/`reject` registrasi, `enable`/`disable` modul,
+  `configure` policy dan setelan blog, empat verb moderasi komentar) kini
+  diputuskan lewat `can(...)` pada transaksi yang sama, bukan dari himpunan grant
+  mentah — jadi `deny` menyembunyikan tombolnya alih-alih baru menolak saat
+  ditekan. Endpoint tetap otoritasnya.
+
+  Dua ledger menyusut bersama: `ADMIN_SCREEN_CHOKEPOINT_MIGRATION`
+  (`access:chokepoint:check`) dan `NOT_YET_MIGRATED` (`api:tenant-route:check`),
+  28 → 23. Keduanya menghitung utang yang sama dari sudut berbeda — "siapa
+  memutuskan permission di luar chokepoint" versus "siapa membuka transaksinya
+  sendiri" — dan catatan itu kini tertulis di header keduanya supaya PR migrasi
+  berikutnya tidak menemukannya lewat gerbang merah.
+
+  Teks remediasi `api:tenant-route:check` diperbaiki: ia masih berkata helper-nya
+  "belum ada" dan menyuruh penulis layar baru **menunggu**. Banner "belum ada"
+  menua ke arah sebaliknya dari koreksi biasa — ia menyuruh orang berhenti
+  mengerjakan hal yang sudah bisa dikerjakan.
+
+  Dua cabang mati ikut hilang: `registrations`, `modules`, dan `abac-policies`
+  memeriksa `result instanceof Response` terhadap `withTenantOrThrow`, yang
+  melempar dan tidak pernah mengembalikan `Response`. Ketiganya juga menelan
+  kegagalan baca dengan `catch {}` kosong; kini kegagalan itu tercatat lewat
+  `logAdminPageError` dengan `correlationId`, dan `error` tetap state ketiga yang
+  tidak pernah dibaca sebagai penolakan.
+
+- 8f631d2: feat(auth): lima layar admin berikutnya melewati chokepoint (#450, R3)
+
+  Gelombang 1 batch 3. `users`, `roles`, `offices`, `sidebar-menu`, dan
+  `tenant/domains` berpindah dari `ssr.permissions.has(...)` ke `loadAdminScreen`:
+  `authorizeInTransaction` dan pembacaan datanya kini di dalam SATU transaksi.
+
+  `users.astro` dan `roles.astro` adalah pasangan yang paling berarti di batch
+  ini: keduanya **mendaftarkan siapa memegang apa**. Sampai sekarang membaca
+  roster akses sebuah tenant tidak melewati evaluasi ABAC dan tidak meninggalkan
+  satu baris pun di `awcms_abac_decision_logs` — sebuah `deny` yang ditulis tenant
+  tentang `access_control` berlaku saat MENGUBAH keanggotaan dan tidak berlaku saat
+  MEMBACANYA.
+
+  `tenant/domains.astro` adalah satu-satunya layar yang tidak tertangkap glob
+  `src/pages/admin/*.astro` tingkat-atas — blind spot yang sama yang membuat #424
+  menyebut 31 padahal jumlah sebenarnya 32. Ia ikut di batch ini justru supaya
+  tidak menjadi sisa terakhir yang terlupa.
+
+  Enam afordans tulisnya (`create`, `update`, `delete`, `verify`, `set_primary`)
+  kini diputuskan lewat `can(...)` pada transaksi yang sama.
+
+  `roles.astro` mempertahankan logika R8-nya utuh — katalog permission masih
+  disaring `includePlatformScoped` terhadap `resolvePlatformTenant(tx)`, dan
+  pemuatan katalog itu tetap hanya terjadi bila `configure` diizinkan; bedanya
+  sekarang izin itu jawaban chokepoint, bukan pembacaan himpunan grant mentah.
+
+  Dua ledger menyusut bersama, 23 → 18: `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` dan
+  `NOT_YET_MIGRATED`.
+
+  Kebersihan: cabang mati `result instanceof Response` terhadap
+  `withTenantOrThrow` dihapus di empat layar, dan pemeriksaan bentuk di
+  `sidebar-menu.astro` (`"entries" in result`) — yang ada persis karena
+  `Response` itu truthy — tidak lagi diperlukan sebab tipe `AdminScreenOutcome`
+  membedakan `allowed`/`denied`/`error` secara langsung. `catch {}` kosong diganti
+  `logAdminPageError` ber-`correlationId`.
+
+- 7acdee0: feat(auth): empat layar admin ber-aktivitas-tunggal melewati chokepoint (#450, R3)
+
+  Gelombang 1 batch 4: `index`, `blog-pages`, `blog-taxonomy`, `media` berpindah
+  ke `loadAdminScreen`. Ledger 18 → 14.
+
+  `index.astro` adalah halaman pendaratan yang pertama dilihat setiap operator,
+  jadi ia juga tempat sebuah `deny` ABAC atas `reporting.dashboard.read` paling
+  kasat mata inert-nya.
+
+  `blog-pages` menggerbangi delapan permission — jumlah terbanyak dari layar mana
+  pun sejauh ini — dan ketujuh afordans tulisnya kini diputuskan lewat `can(...)`
+  pada transaksi yang sama.
+
+  ## Satu keputusan yang sengaja tidak ditulis rapi
+
+  Ketujuh `can(...)` di `blog-pages.astro` ditulis satu per satu, bukan di-loop
+  atas array aksi. Versi loop-nya lebih enak dibaca dan **membuat ketujuhnya tidak
+  terlihat** oleh `admin:screen-coverage:check`, yang matcher-nya hanya membaca
+  triple literal: layar tetap menggerbangi dengan benar sementara gerbangnya
+  melaporkan tujuh permission sebagai tidak punya layar sama sekali. Alasannya
+  ditulis di layar itu supaya tidak "dirapikan" kembali nanti.
+
+  ## Tiga contract test diperbaiki, sekelas dengan batch 1
+
+  `admin-blog-taxonomy`, `admin-blog-pages`, dan `admin-media` mengekstrak klaim
+  layar hanya dari `permissionKey(...)`. Sesudah migrasi sebuah layar menyatakan
+  guard-nya sebagai objek literal `AccessRequest` — bentuk yang SAMA dengan
+  rute — sehingga test-nya memerah. Membiarkannya berarti test itu menuntut layar
+  tetap memutuskan dari himpunan grant mentah, yaitu cacatnya sendiri.
+
+  Ekstraktor `pageKeys`/`pageTriplesFrom` kini menggabungkan ekstraktor guard yang
+  sudah ada di berkas yang sama. Yang dipatok tetap sifatnya — "layar ini
+  menggerbangi tepat kedelapan/keempat/kedua ini" — bukan sintaks yang kebetulan
+  mengungkapkannya.
+
+  Kebersihan: pemeriksaan bentuk `"tenantActivity" in result` di `index.astro`,
+  yang ada persis karena `withTenant` mengembalikan `Response` yang truthy saat
+  circuit terbuka, tidak lagi diperlukan — `AdminScreenOutcome` memisahkan
+  `allowed`/`denied`/`error` secara langsung. `DASHBOARD_PERMISSION` dipertahankan
+  sebagai konstanta TAMPILAN: ia dirender di state ditolak supaya operator bisa
+  membaca kunci persis yang harus dimintanya.
+
+- a49f3c9: feat(auth): tiga konsol besar berlayar-tunggal melewati chokepoint (#450, R3)
+
+  `blog`, `analytics`, `theming` berpindah ke `loadAdminScreen`. Ledger 12 → 9.
+
+  Ketiganya ber-aktivitas-jamak tetapi **state penolakannya selalu satu
+  permission** (`!canRead` / `!canView`), jadi menjadikan permission itu ENTRY
+  tidak mengubah siapa yang ditolak — ia hanya MENAMBAH gerbang yang tidak pernah
+  diterapkan pemeriksaan grant mentah. Itu yang membedakan ketiganya dari delapan
+  layar sisa, yang menolak hanya bila SEMUA permission bacanya absen; layar-layar
+  itu butuh rancangan tersendiri dan tidak dipaksakan ke sini.
+
+  `blog.astro` menggerbangi sebelas permission — terbanyak di repo ini.
+
+  ## Satu gerbang sengaja TIDAK disentuh
+
+  `analytics.astro` sudah lebih dulu menyelesaikan `raw_detail.read` lewat
+  `evaluateFieldAccessInTransaction`, bukan `ssr.permissions.has(...)`. Ia
+  keputusan tingkat-FIELD tentang kolom mana yang dibentuk pada sebuah baris
+  (IP, user-agent, snapshot login), bukan tentang mencapai halaman — dan ia tidak
+  pernah menjadi bagian dari cacat R3. Jadi ia tetap apa adanya: migrasi ini tidak
+  punya alasan menulis ulang satu-satunya gerbang di layar itu yang sudah benar.
+
+  `analytics` juga kini meneruskan `now` yang sama ke `loadAdminScreen` yang
+  dipakainya menghitung rentang, jadi keputusan dan datanya dibaca pada satu jam.
+
+  ## Dua contract test diperbaiki
+
+  `admin-blog-page-contract` dan `admin-theming-page-contract` mengekstrak klaim
+  layar hanya dari `permissionKey(...)`. `theming` tidak bisa sekadar memakai
+  ulang ekstraktor guard di berkasnya: yang itu mencocokkan ROUTE, yang menyusun
+  guard-nya dari konstanta `THEMING_*_ACTIVITY_CODE`, sementara layar menuliskan
+  kode aktivitasnya. Jadi ia mendapat matcher literal sendiri.
+
+- fef7cc4: feat(auth): dua layar platform-scoped berhenti menyalin aturan ADR-0053 (#450, R3)
+
+  `tenants` dan `idn-regions` berpindah ke `loadAdminScreen`. Ledger 14 → 12.
+
+  Keduanya bukan migrasi mekanis: masing-masing menyimpan **salinan kedua** aturan
+  platform-scope ADR-0053, ditulis tangan di frontmatter sebagai
+  `holds… && isPlatformTenant`, bebas menyimpang dari satu-satunya salinan yang
+  mengikat di `access-guard.ts`.
+
+  `authorizeInTransaction` memutuskan `platform_scope_required` **sebelum**
+  permission dicari sama sekali. Itu lebih keras daripada yang disalin: baris grant
+  yang sampai ke tenant yang salah — restore backup, INSERT tangan, jalur
+  provisioning baru yang lupa `WHERE scope = 'tenant'` — menjadi inert, bukan
+  mencukupi. Jadi salinan tangannya dihapus, tidak diporting.
+
+  Asimetri keduanya berbeda dan itu yang membuat masing-masing menarik:
+
+  - **`tenants`** — `tenant_provisioning.read` sendiri PLATFORM-scoped, jadi
+    keputusan masuknya sepenuhnya milik chokepoint.
+  - **`idn-regions`** — `dataset.read` TENANT-scoped sementara `configure` dan
+    `restore` PLATFORM-scoped. `can(...)` menjalankan gerbang ADR-0053 yang sama
+    dengan endpoint-nya, jadi dua tombol tulisnya kini digerbangi kode yang sama,
+    bukan tiruannya.
+
+  `resolvePlatformTenant` tetap dipanggil di kedua layar, kini **untuk TAMPILAN
+  saja**: supaya layar bisa mengatakan MENGAPA sebuah kontrol tidak ada, bukan
+  meninggalkan ruang kosong. Ia tetap di luar transaksi tenant — keduanya membaca
+  tabel root bebas-RLS dan tidak butuh konteks tenant.
+
+  ## Satu kalimat yang berhenti mengklaim apa yang tak lagi diketahui
+
+  Pemberitahuan scope di `/admin/tenants` berbunyi "Your role carries the
+  permission; the action is refused because of where it is being made". Sesudah
+  migrasi kalimat itu **tidak bisa lagi dibuktikan**: gerbang platform menolak
+  sebelum permission dicari, jadi halaman ini tidak tahu apakah pembacanya
+  benar-benar memegangnya. Diganti menjadi klaim yang tetap benar — penolakannya
+  soal DI MANA aksi dilakukan, dan tidak ada grant di tenant ini yang bisa
+  membukanya.
+
+  Dua state penolakan kini dipisah jujur: bukan tenant platform → catatan scope;
+  tenant platform tetapi ditolak → catatan permission.
+
+  ## Tiga test diperbaiki, dan alasannya sama dengan yang dihapus
+
+  `tenant-provisioning` dan `admin-idn-regions-page-contract` mematok persis
+  ekspresi `holds… && isPlatformTenant` yang menjadi cacatnya. Mempertahankannya
+  akan menjadikan test itu alasan untuk MENYIMPAN duplikat aturan.
+
+  Keduanya kini membuktikan sifat yang sama dari dua hal yang benar-benar
+  menegakkannya: `scope` di deskriptor modul (data hidup — kalau
+  `tenant_provisioning.read` pernah berubah menjadi `tenant`, layarnya diam-diam
+  terbuka untuk setiap owner tenant, dan asersi atas teks halaman tidak akan
+  menyadarinya) dan perutean lewat `loadAdminScreen`. Ekstraktor klaim
+  `admin-idn-regions` juga digabungkan dengan bentuk objek-literal, sekelas dengan
+  batch 1 dan 4.
+
+- ea27ae6: feat(auth): R3 DITUTUP — ke-32 layar admin memutuskan di chokepoint (#450)
+
+  Lima layar terakhir — `data-lifecycle`, `security`, `seo`, `site-search`,
+  `blog-presentation` — berpindah ke `loadAdminScreen`. **Kedua ledger kini
+  kosong**: `ADMIN_SCREEN_CHOKEPOINT_MIGRATION` dan bagian layar admin di
+  `NOT_YET_MIGRATED`.
+
+  Tidak ada lagi layar admin yang memutuskan akses dari `ssr.permissions.has(...)`.
+  Setiap render kini melewati evaluasi kebijakan ABAC, `resolveModuleAvailability`,
+  fakta business-scope, SoD saat-aksi, dan `recordDecisionLog`.
+
+  ## Tiga hal yang diporting VERBATIM, bukan "diperbaiki"
+
+  `data-lifecycle` menerima **lima** request entry, dua di antaranya **tulis**
+  (`legal_hold.create`, `plan.analyze`). Itulah `showAnything` selama ini: konsol
+  ini mengizinkan siapa pun yang bisa melakukan apa pun di sini, termasuk orang
+  yang boleh memasang legal hold tanpa bisa mendaftar hold yang sudah ada.
+  Memangkasnya ke tiga baca akan diam-diam mengunci mereka.
+
+  `security` memakai `mfa_admin.reset` sebagai gerbang BACA panel MFA. Modul ini
+  tidak menyeed satu pun aksi baca MFA; permission reset itulah yang selama ini
+  menggerbanginya. Diporting apa adanya, bukan "dikoreksi" ke permission yang
+  tidak ada.
+
+  `blog-presentation` memilih section aktif dari permission baca. Pemilihan itu
+  pindah ke DALAM `load`, karena section mana yang tersedia kini jawaban
+  chokepoint, dan fallback-nya harus dihitung dari jawaban yang sama. Helper
+  file-local `can(activity, action)`-nya hilang — itu helper yang membuat
+  `admin:screen-coverage:check` menumbuhkan matcher penyelesai-helper-nya.
+
+  ## Gerbangnya diperketat, karena mutasi membuktikan ia bocor
+
+  Setelah ledger kosong, saya menanam bypass nyata ke `users.astro` untuk menguji
+  gerbangnya. Ia **hijau**: keluar dengan kode 0 sambil baris ringkasannya sendiri
+  berbunyi _"1 still decide outside the chokepoint"_.
+
+  Sebabnya kelonggaran se-BERKAS: sebuah layar yang memanggil `loadAdminScreen`
+  untuk entry-nya boleh tetap memutuskan sebuah AFFORDANCE dari
+  `ssr.permissions.has(...)`. Itu benar selama migrasi — layar setengah-jadi tidak
+  boleh dilaporkan dua kali — dan salah begitu layar terakhir mendarat: ia jalan
+  masuk kembali, satu tombol demi satu tombol.
+
+  Rute mempertahankan kelonggaran itu (`defineTenantRoute` membungkus di level
+  modul dan memanggil chokepoint sendiri, jadi ia benar-benar menutupi tiap
+  handler di berkas). Layar tidak: satu berkas `.astro` = satu jalur render, jadi
+  tidak ada handler saudara yang pantas ikut tertutupi. Asimetrinya dipatok test
+  di kedua arah.
+
+  ## Dua alarm yang menjadi inert pada nol, diganti
+
+  Self-test detektor berbunyi "nol layar memutuskan sementara ledger tidak kosong
+  = detektor rusak". Itu persis cek yang mati saat layar terakhir dimigrasikan:
+  sejak itu nol adalah jawaban yang BENAR, dan nol dari detektor yang rusak tidak
+  bisa dibedakan darinya. Diganti **probe sintetis** — `sliceScreen` ditanya
+  tentang layar yang pasti bypass dan layar yang pasti tidak; keduanya harus
+  benar, pada ukuran ledger berapa pun.
+
+  Kedua, gerbang kini menuntut setiap layar benar-benar **TERUTE**, bukan sekadar
+  diam: layar yang tidak membaca permission apa pun DAN tidak membuka chokepoint
+  akan lolos filter bypass tanpa tertutupi apa pun.
+
+  Aturan "hanya boleh menyusut" juga kehilangan penegaknya pada nol — entri basi
+  adalah temuan, tetapi pada daftar kosong tidak ada yang bisa basi. Jadi
+  `tests/access-chokepoint.test.ts` meng-assert kekosongan itu langsung.
+
+  Ketiga arah kegagalan diuji dengan menanam cacatnya dan memastikan gerbangnya
+  MERAH, bukan sekadar memastikan ia hijau hari ini.
+
+- 660f844: feat(data-lifecycle): tabel milik infrastruktur bisa menjawab pertanyaan retensi — dan klasifikator kepemilikan yang memutuskan siapa boleh
+
+  `awcms_edge_cache_purges` duduk di `TABLES_PREDATING_THE_RULE` bukan karena
+  belum sempat, melainkan karena kontraknya tidak bisa menyatakannya: registry
+  mewajibkan `ownerModuleKey` sama dengan key modul yang mendeklarasikan, dan
+  tabel ini dimiliki `src/lib/edge-cache/` yang **sengaja** bukan modul.
+
+  Masalahnya bukan satu tabel yang lolos. Ledger itu tidak bisa membedakan tabel
+  yang **belum** dideskripsikan dari yang **tidak bisa** — keduanya satu baris —
+  sehingga hitungannya berhenti bisa dibaca sebagai hitungan utang.
+
+  **Satu koreksi terhadap premis Issue #479:** retensinya bukan tidak ada.
+  `bun run edge-cache:purge` sudah memangkas baris `done` di atas tujuh hari sejak
+  ADR-0042. Yang hilang adalah kemampuan **menyatakannya** — persis bentuk
+  `executionMode: "delegated"`, yang satu-satunya penghalangnya adalah kata
+  _module_.
+
+  **Registry kedua, bukan `ownerModuleKey` yang dilonggarkan** (ADR-0076).
+  `INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS` memakai `ownerPath` sebagai ganti key
+  modul. Melonggarkan field-nya akan menghemat satu berkas dan membuat setiap
+  deskriptor modul kehilangan penjagaannya: sebuah deskriptor yang **lupa**
+  menyebut pemilik berhenti menjadi kesalahan dan mulai berarti "infrastruktur" —
+  kesalahan ketik menjadi klaim kepemilikan.
+
+  **Yang menahannya jadi tempat parkir bukan paragraf.** `data-lifecycle:registry:check`
+  kini memindai `src/` dengan `ownerOfFile()` — fungsi yang sama yang dipakai
+  `modules:table-writes:check` — dan menolak deskriptor infrastruktur untuk tabel
+  yang penulisnya sebuah modul, untuk tabel yang tak ditulis siapa pun, dan untuk
+  key yang namespace-nya sebuah modul terdaftar. Kepemilikan yang salah menjadi
+  tak bisa dinyatakan, di kedua arah. Gerbangnya karena itu berhenti murni; itu
+  harga yang dibayar sadar.
+
+  **Dua perubahan perilaku ikut mendarat, karena tanpanya deskriptornya tidak benar:**
+
+  - baris `failed` kini dipangkas setelah **180 hari**. Sebelumnya disimpan
+    selamanya dengan sengaja — dan alasannya benar, mereka satu-satunya jejak
+    bahwa sebuah invalidasi tak pernah mendarat. Alasan itu membatasi umur
+    **bergunanya**, bukan memperpanjangnya tanpa akhir: setelah enam bulan konten
+    yang gagal diinvalidasi sudah kedaluwarsa ribuan kali;
+  - purge-nya kini menghormati **legal hold**, lewat `LegalHoldGuardPort` yang sama
+    dengan tujuh adopter terdelegasi lain. Tanpa ini `legalHold.applicable: true`
+    akan jadi deklarasi tanpa penegak.
+
+  `GET /api/v1/data-lifecycle/registry` mendapat array `infrastructureDescriptors`
+  (aditif) dan `/admin/data-lifecycle` mendapat kolom **Owner**; legal hold bisa
+  menargetkan key-nya dari API maupun konsol. `POST /dry-run` menjawab 400
+  ber-alasan alih-alih 404 "key tak dikenal" — planner-nya tak punya predikat
+  status, jadi angka apa pun yang ia hasilkan akan memuat baris yang purge tak
+  akan pernah sentuh.
+
+  **Tanpa migrasi:** `GRANT SELECT, UPDATE, DELETE` ke `awcms_worker` dan index
+  `(tenant_id, status, created_at)` sudah ada sejak `sql/068`.
+
+  Ledger utang turun 110 → 109. Empat mutasi dibuktikan **merah** sebelum diklaim:
+  legal hold dilucuti, prune `failed` diarahkan ke `completed_at` (kolom yang NULL
+  pada baris yang justru dituju), deskriptor infrastruktur untuk tabel milik modul,
+  dan registry dikosongkan setelah entri ledger dilepas.
+
+  Menutup #479.
+
+- 8307af4: feat(push): antrean pengiriman push mendarat sebagai outbox KEDUA, bukan consumer domain-event
+
+  `awcms_domain_events` sudah punya dispatcher, DLQ, dan replay, jadi
+  menggantungkan pengiriman push padanya adalah langkah pertama yang wajar bagi
+  siapa pun. Ia tidak bisa, dan alasannya tertulis di berkasnya sendiri:
+  `dispatch-domain-events.ts` menyatakan di header-nya bahwa CLAIM + handler +
+  FINALIZE berjalan dalam **satu** transaksi, **sengaja**, dan memanggil handler
+  di dalamnya — sementara **ADR-0006 melarang panggilan jaringan di dalam
+  transaksi DB**. `broker-adapter-port.ts` sudah menuliskan konsekuensinya
+  ("would need the lease-based shape back") dan ia sendiri **kode mati**:
+  `getDomainEventBrokerAdapter()` nol pemanggil di seluruh repo.
+
+  Yang membuat ini layak sebuah ADR: **tidak ada gerbang yang akan
+  menangkapnya.** Consumer FCM yang didaftarkan dengan cara paling wajar akan
+  menahan koneksi pool selama round-trip ke Google sambil memegang row lock, dan
+  mengubah tiap kegagalan jaringan menjadi rollback event — sehingga event yang
+  **sudah** terkirim dikirim ulang — dengan seluruh 37 gerbang hijau.
+
+  Jadi: modul `push_delivery` (ADR-0074) dengan pola lease yang sudah terbukti
+  tiga kali di sini (`email-dispatch`, `object-dispatch`, `purge-queue`), tiga
+  tabel di `sql/093`, port `PushProvider`, adapter `log`, dan dua job —
+  `bun run push:dispatch` serta `bun run push:queue:purge`.
+
+  Empat keputusan ikut mendarat, masing-masing karena default-nya salah:
+
+  - **Endpoint dan token adalah kredensial.** Endpoint Web Push dan token FCM
+    sama-sama bearer-ish, jadi keduanya memakai disiplin tiga kolom yang sama
+    dengan alamat email (`endpoint`/`_hash`/`_masked`), dengan kolom mentah
+    disebut di **satu** berkas. Mask-nya memakai `origin` URL, bukan N karakter
+    pertama — hitungan karakter tetap mendarat di tengah host untuk satu vendor
+    dan di tengah path untuk vendor lain.
+  - **`subscriptionGone` adalah cabang hasil tersendiri**, bukan
+    `retryable: false`. `404`/`410`/`UNREGISTERED` bukan kegagalan kirim: itu
+    langganan yang melaporkan dirinya mati. Melipatnya ke "gagal, jangan ulangi"
+    meninggalkan endpoint nisan yang memungut satu kegagalan permanen per pesan,
+    selamanya.
+  - **Retensi `delegated`, bukan `generic`.** `HighVolumeTableDescriptor` tidak
+    punya predikat status, jadi executor generik menghapus murni berdasarkan
+    umur — diarahkan ke antrean, ia menghapus pekerjaan yang **belum terkirim**,
+    dan lenyapnya terlihat persis seperti housekeeping berhasil. Dibuktikan
+    terhadap Postgres nyata: dengan cutoff 400 hari ke depan, purge mengambil
+    2 attempt + 1 pesan terminal dan **baris `queued` selamat**.
+  - **`targetPath` hanya path same-origin**, divalidasi sebelum baris ditulis.
+    Baris antrean ber-URL absolut adalah open-redirect tersimpan dengan
+    notifikasi sistem sebagai kendaraannya, datang membawa nama dan ikon origin
+    ini sendiri.
+
+  Status modulnya **`experimental`, bukan `active`**, dan itu ditegakkan bukan
+  kosmetik: `tests/admin-media-page-contract.test.ts` mewajibkan tiap modul
+  `active` punya layar admin, TANPA pengecualian (ADR-0021), dan komentarnya
+  sendiri mencatat apa yang terjadi terakhir kali orang menulis carve-out. Modul
+  ini tidak mengambil pengecualian itu; ia mengambil status yang jujur — antrean
+  dan worker-nya jalan, permukaan operatornya belum ada, dan itu kesenjangan
+  nyata yang tutup bersama adapter di #466.
+
+  Mendarat **inert**: tanpa `PUSH_ENABLED=true` dispatcher tidak mengklaim satu
+  baris pun. `PUSH_PROVIDER` sengaja belum menerima `fcm`/`web_push` — menamainya
+  sekarang membuat deployment lolos `config:validate` lalu gagal saat resolve.
+  `config:validate` juga menolak `PUSH_ENABLED=true` tanpa adapter, karena tanpa
+  itu setiap notifikasi yang diantre langsung menjadi `failed` dengan pesan yang
+  hanya terlihat di buku percobaan kirim.
+
+  **FCM Web ditolak, dengan angkanya**, di ADR-0074: 45.041 B versus plafon
+  21.000 B per berkas, total 185.049 B versus 180.000 B, dan CSP repo ini
+  mengunci nol origin pihak ketiga (ADR-0029) — sementara Web Push/VAPID memberi
+  hasil sama dengan nol byte SDK dan nol origin baru.
+
+- 874d03e: feat(keamanan): `suspended` berhenti menjadi status login dan menjadi status LAYANAN
+
+  `awcms_tenants.status` menerima `'suspended'` sejak `sql/002`. Ia dibaca di jalur
+  login/reset/registrasi/SSO-start dan di resolver host publik — dan **tidak pernah**
+  di `authorizeInTransaction`.
+
+  Asimetrinya mengarah ke sisi yang salah:
+
+  | Permukaan                    | Setelah suspend, sebelum ini               |
+  | ---------------------------- | ------------------------------------------ |
+  | Situs publik tenant          | mati seketika                              |
+  | Sesi admin yang sudah terbit | **penuh akses sampai kedaluwarsa sendiri** |
+  | Machine credential           | **tidak tersentuh** — umur sampai 365 hari |
+
+  Pelanggan yang ditangguhkan kehilangan hal yang **dilihat pengunjungnya** dan
+  mempertahankan hal yang **bisa mengubah datanya**.
+
+  Kini ditegakkan di chokepoint untuk sesi **dan** machine credential
+  (`403 TENANT_SUSPENDED`), diputuskan **sebelum** permission dicari. Tidak ada
+  sapuan pencabutan sesi, dan tidak diperlukan: pemeriksaannya pada **tenant**,
+  bukan pada kredensial.
+
+  Statusnya ikut lewat **JOIN pada query yang sudah berjalan** — `awcms_tenants`
+  adalah tabel akar yang sengaja RLS-free, jadi nol round-trip tambahan.
+  `resolveTenantContext` dipertahankan apa adanya karena tujuh pemanggil di luar
+  chokepoint memakainya; `resolveTenantPrincipal` yang baru berbagi satu query
+  dengannya sehingga keduanya tak bisa menyimpang.
+
+  Shell admin ikut diblokir di `resolveSsrContext` — **satu baris** yang mencakup
+  ke-32 layar, karena middleware merutekan tiap `/admin/*` melaluinya. Batasnya
+  ditulis, bukan disembunyikan: ia semua-atau-tidak, dan ketika layar penagihan
+  tiba di Gelombang 5 cabang itu harus menumbuhkan allow-list yang sama.
+
+  Tenant **platform** dikecualikan dua lapis, dan lapis pertamanya menemukan
+  jebakan: `resolvePlatformTenant` sengaja menuntut `status = 'active'`, jadi
+  platform tenant yang ter-suspend akan membuatnya `null`, pengecualiannya
+  bernilai false, dan operatornya ditolak **setiap** aksi termasuk yang mengangkat
+  penangguhan itu. `resolvePlatformTenantIdIgnoringStatus` menjawab pertanyaan yang
+  berbeda dan **tidak memberi apa pun** — permission platform-scoped tetap lewat
+  resolver lama beserta cek aktifnya.
+
+  `disable` dan `restore` adalah **dua** permission, keduanya `scope: platform`.
+
+  Satu test menangkap lubang nyata saat dikerjakan: `scope: 'platform'` di basis
+  data tidak berarti apa-apa sampai kuncinya juga terdeklarasi di **kode** —
+  `tests/platform-scoped-permissions.test.ts` memerah sampai keduanya ditambahkan.
+  Itulah inti ADR-0053: kolom memutuskan siapa yang diberi, kode memutuskan apakah
+  gerbangnya ditanyakan.
+
+- 1968a05: feat(auth): undangan diterima, dan keanggotaan lahir di satu fungsi (ADR-0082, #423)
+
+  Gelombang 4 PR 4.2, penutup gelombang. Dua endpoint publik —
+  `GET /api/v1/auth/invitations/{token}` (preview) dan
+  `POST /api/v1/auth/invitations/{token}/accept` — plus halaman
+  `/accept-invitation`.
+
+  **`materializeMembership()` sengaja SATU fungsi dengan SATU pemanggil.** Sudah
+  ada tiga tempat yang melahirkan keanggotaan di repo ini
+  (`approveRegistrationRequest`, `jitProvisionIdentity`, `bootstrapPlatformTenant`),
+  dan ketiganya pernah menyimpang sekali pada detail yang paling penting
+  (`verification_status`). Yang keempat ini ditulis sebagai satu fungsi supaya
+  Gelombang 7 punya persis satu tempat untuk diarahkan ulang saat identity menjadi
+  principal global. Mengarahkan ulang ketiganya SEKARANG akan menjadikan PR ini
+  refactor self-registration dan SSO sekaligus — dan memerahkan
+  `tests/access-assignment-writers.test.ts`, yang menyebut `self-registration.ts`
+  sebagai pemanggil langsung `grantRolePolicy` di asersi non-hampanya.
+
+  **Penolakan `is_system` diperiksa kedua kalinya di sini**, bukan seremonial:
+  sebuah peran bisa ditandai system, di-soft-delete, atau keluar dari katalog di
+  antara saat undangan dikirim dan saat ia diterima. Test integrasi mengubah peran
+  itu di antara kedua momen dan menuntut penerimaannya ditolak — plus bahwa TIDAK
+  ADA akun setengah jadi yang tertinggal.
+
+  **Penerimaan tidak menerbitkan sesi.** Undangan yang mencetak sesi akan
+  melangkahi kebijakan MFA tenant (`required_for_all` akan menghasilkan anggota
+  ber-sesi penuh tanpa faktor kedua), melangkahi
+  `isPasswordLoginDisabledForIdentity` pada tenant SSO-only, dan melangkahi rate
+  limit login. Undangan mencetak AKUN; siapa yang boleh memegang sesi adalah
+  keputusan `/login`.
+
+  **Kedaluwarsa dijawab 404, bukan 410.** Tak dikenal, tercabut, sudah diterima,
+  kedaluwarsa, dan milik tenant lain semuanya menjawab identik. Preview
+  mengembalikan nama tenant dan nama pengundang, dan **tidak pernah** alamatnya.
+
+  **Satu cacat PR 4.1 diperbaiki di sini, ditemukan saat menulis halamannya:**
+  `buildInvitationUrl` hanya memuat `?token=`, sementara kedua endpoint publiknya
+  menuntut header `X-AWCMS-Tenant-ID` — jadi tautannya menghasilkan halaman yang
+  tak bisa melakukan panggilan yang menjadi alasan keberadaannya. Kini ia membawa
+  tenant juga, disegel AES-256-GCM jadi satu `?p=` bila
+  `AUTH_URL_PARAM_ENCRYPTION_KEY` diset, persis seperti tautan reset password.
+
+  Ledger `tests/shared-rate-limit.test.ts` naik **11 → 13** dan
+  `tests/auth-source-rate-limit.test.ts` **7 → 9**; prosa ADR-0066 §C yang menulis
+  "sebelas" diberi catatan pembaruan alih-alih dibiarkan menua sendirian — angka
+  itu hidup di berkas test, bukan di `scripts/`, jadi ia yang paling mudah
+  terlupa.
+
+  Diverifikasi terhadap PostgreSQL nyata: 16 test integrasi baru lulus, dan kunci
+  barisnya dibuktikan load-bearing — menghapus `FOR UPDATE OF i` membuat penerimaan
+  kedua MELEMPAR (tabrakan 23505 di tengah transaksi, yaitu 500 bagi orang yang
+  menekan tombol dua kali) alih-alih ditolak bersih.
+
+- afdef4b: feat(access): setiap grant peran baru mendarat sebagai Policy — dan pencabutan mencari di KEDUA tempat
+
+  Gelombang 3 PR 3.2 dari #423, menutup unit komitmen yang dibuka
+  [ADR-0078](docs/adr/0078-a-grant-carries-its-own-scope.md). Sejak PR ini
+  `awcms_access_policies` punya penulis produksi; tabel tanpa penulis adalah cacat
+  yang ADR-0077 hapus, dan PROJECT_STATE §4 mencatat 3.1 dan 3.2 sebagai satu unit
+  justru supaya keadaan itu tak pernah menetap.
+
+  Tiga jalur pindah: `assignRole`, penerimaan pendaftaran mandiri, dan bootstrap
+  tenant. `fetchGrantedPermissionKeys` membaca keduanya, jadi subjek yang diberi
+  grant lewat jalur baru tak bisa dibedakan dari yang lewat tabel lama.
+
+  **Ini BUKAN dual write.** ADR-0078 memilih tabel ketiga justru supaya
+  expand/migrate/contract tidak butuh dual write. Satu grant baru mendarat di
+  **satu** tabel. Menulis keduanya akan menghidupkan kembali kegagalan yang
+  dihindari rancangan ini: dua tulis yang bisa berhasil terpisah, meninggalkan
+  subjek yang memegang peran menurut satu tabel dan tidak menurut yang lain, tanpa
+  cara menentukan mana yang benar.
+
+  **Pencabutan harus mencari di kedua tempat.** `revokeRoleGrants` menghapus baris
+  lama **dan** mencabut policy aktif, karena selama backfill (PR 3.3) belum jalan
+  sebuah grant bisa hidup di mana saja. Penghapus yang hanya tahu tabel baru akan
+  melaporkan sukses sementara perannya selamat — bentuk paling berbahaya yang
+  tersedia di sini, karena ia gagal ke arah **AKSES TETAP ADA** dan tak ada yang
+  mengamatinya.
+
+  **Pemeriksaan duplikat tidak lagi gratis dari satu indeks unik**, jadi ia
+  ditanyakan eksplisit terhadap kedua tabel sebelum menulis. Terjemahan 23505 tetap
+  ada untuk satu kasus yang tersisa dan hanya itu: dua permintaan bersamaan yang
+  memberi peran sama, di mana salah satunya kalah di indeks unik parsial.
+
+  **Empat gerbang memerah dan tiap satunya benar:**
+
+  1. `access:grant-readers:check` menangkap penulis bersama yang baru **dan**
+     entri basi untuk `self-registration.ts` yang berhenti menyebut tabel grant.
+     Persis dua arah yang dirancangkan gerbang itu, di PR pertama yang menggerakkannya.
+  2. `modules:table-writes:check` menangkap `platform-bootstrap.ts` (milik
+     `tenant_admin`) menulis tabel `identity_access`. Pengecualiannya **dipindahkan
+     bersama** grant-nya alih-alih ditambahkan di sebelahnya: membiarkan tabel lama
+     terdaftar setelah tak ada yang menulisnya berarti memaafkan penulis yang tak
+     ada lagi.
+  3. `tests/access-assignment-writers.test.ts` — penanda "penulis" harus berubah
+     **dua kali**: tabelnya pindah, DAN sebuah berkas kini bisa menyebabkan grant
+     tanpa memuat satu pun `INSERT`. Penanda yang cuma melihat INSERT akan
+     diam-diam mempersempit aturan empat-penulis menjadi dua, dan `user-admin.ts`
+     — pembawa penolakan system-role utama repo ini — akan keluar dari aturannya.
+  4. Integrasi self-registration: helper `assignmentCount` menghitung satu tabel.
+     Ia kini menghitung **union**, karena asersi di sekitarnya bertanya "apakah
+     orang ini diberi grant", bukan "berapa baris di tabel ini" — dan salah satu
+     asersinya adalah asersi keamanan ("peran sistem ditolak, dan penerimaan tidak
+     menulis apa pun"), yang akan melaporkan nol untuk grant yang ada.
+
+  `platform-bootstrap.ts` menulis INSERT-nya **inline** alih-alih memanggil penulis
+  bersama: `tenant_admin` tidak boleh mengimpor kode aplikasi `identity_access` —
+  DAG modul berjalan ke arah sebaliknya dan `modules:dag:check` menegakkannya.
+  Duplikasinya dua INSERT dan dipatok test penulis di atas.
+
+  Setiap grant yang ditulis hari ini **tenant-wide**. Scope yang lebih sempit bisa
+  ditulis ketika PR 3.4 mengajari evaluasi mengualifikasinya — mengirimkan penulis
+  untuk scope yang masih diabaikan evaluator berarti membagikan grant yang
+  **terlihat sempit dan tidak**.
+
+- c86b40a: feat(push): permukaan HTTP — perangkat sendiri self-service, sisanya lewat chokepoint
+
+  Lima endpoint mendarat di `/api/v1/push`, dan pembelahannya adalah keputusan
+  otorisasi, bukan penataan berkas.
+
+  ## Perangkat SENDIRI tidak punya permission, dan itu disengaja
+
+  `GET|POST /api/v1/push/subscriptions` dan `DELETE …/{id}` memakai
+  `defineSelfServiceTenantRoute` (ADR-0049 §7): subjeknya adalah pemanggil, dan
+  jawaban atas "boleh saya berlangganan di browser ini?" adalah "Anda sedang
+  memegang sesinya". Rute-rute itu **tidak pernah menerima `tenantUserId`** — ia
+  datang dari sesi yang di-resolve, jadi tak ada id untuk dibandingkan dengan apa
+  pun.
+
+  Menciptakan `push_delivery.subscriptions.create` justru akan menjadi jebakan
+  latent-authz yang sudah pernah kena di repo ini (ADR-0058 §E): aksi yang tak
+  di-seed role mana pun menolak **semua orang termasuk owner**, sementara kode
+  pemanggilnya terbaca seolah tergerbangi dengan benar. Notifikasi push adalah
+  untuk pengguna biasa; tembok permission di depannya adalah tembok di depan
+  fiturnya.
+
+  Yang menyentuh baris orang lain atau membuat deployment mengirim trafik nyata
+  tetap lewat chokepoint — tiga permission (`sql/094`), dan itu seluruhnya:
+  `diagnostics.read`, `messages.cancel`, `diagnostics.check`.
+
+  ## Rute self-service ikut membawa cek suspensi
+
+  ADR-0073 menjadikan `suspended` status LAYANAN, dan chokepoint menegakkannya
+  untuk setiap rute tergerbangi. Rute self-service tidak lewat sana, jadi ia
+  memeriksanya sendiri — kalau tidak, satu-satunya kelas endpoint yang melewati
+  guard menjadi satu-satunya tempat tenant tersuspensi masih bisa menambah
+  kapasitas keluar.
+
+  ## Empat hal yang halus
+
+  **Pencabutan oleh pengguna menghancurkan endpoint tersimpan.** Beda dari
+  `disablePushSubscription`, yang mencatat apa kata push service tentang endpoint
+  yang sudah mati dan menyimpannya sebagai bukti: yang ini mencatat apa kata
+  ORANGNYA tentang endpoint yang mungkin masih hidup sempurna. Baris tetap ada,
+  kredensialnya tidak.
+
+  **`endpoint = EXCLUDED.endpoint` di upsert adalah pasangan wajibnya.** Tanpa
+  pemikiran di atas ia terlihat mubazir — target konflik adalah HASH dari kolom
+  itu sendiri, jadi di setiap kasus biasa nilainya identik. Ia ada untuk satu
+  kasus: perangkat yang berlangganan ulang setelah dicabut akan kembali `active`
+  sambil masih menunjuk nisan — sehat di konsol, tak terkirimi pada kenyataannya.
+
+  **Kepemilikan ada di `WHERE`, bukan di baca-lalu-bandingkan.** Tak ada jendela
+  di antara keduanya, dan tak ada keputusan yang harus diambil tentang baris yang
+  sudah terbaca tapi tak boleh disentuh — persis cara oracle keberadaan lahir
+  tanpa sengaja. "Tidak ada", "milik orang lain", dan "sudah dicabut" menjawab
+  404 yang sama.
+
+  **`POST /api/v1/push/test` mengirim ke perangkat pemanggil sendiri, dengan teks
+  tetap.** Endpoint uji yang menerima penerima adalah permukaan
+  notifikasi-sembarang: teks bermerek sistem, dipilih pengirim, dengan target
+  klik, di lock screen kolega mana pun. Probe-nya perlu ada karena push gagal di
+  tempat yang tak bisa dilihat apa pun di sistem ini — kunci VAPID yang tak cocok,
+  service worker di scope salah, izin OS yang ditahan diam-diam — dan ketiganya
+  menghasilkan antrean yang terkuras bersih dan perangkat yang tak menampilkan
+  apa-apa.
+
+  ## Satu bug yang hanya ketahuan karena diuji
+
+  `isBlockedAddress` **gagal-tertutup untuk apa pun yang bukan literal IP** —
+  benar di tempat ia biasa dipanggil (alamat hasil resolusi), fatal di sini:
+  dipanggil langsung ia menjawab "diblokir" untuk
+  `https://updates.push.services.mozilla.com/…` juga. Pendaftaran akan mustahil
+  untuk **setiap** push service nyata, dengan pesan error yang menyebut alamat
+  privat. Pertanyaan literal-IP kini hanya DIAJUKAN ketika host-nya memang
+  literal.
+
+  Setengah pertanyaan yang bergantung DNS sengaja **tidak** dijawab saat
+  pendaftaran: jawaban DNS di sini sudah basi saat pengiriman. Otoritasnya tetap
+  `ssrfSafeFetch` di jalur kirim, yang me-resolve tepat sebelum menyambung.
+
+  ## Yang belum
+
+  Modul tetap `experimental`: ADR-0021 kriteria 1 menolak modul `active` tanpa
+  layar admin, tanpa pengecualian, dan konsolnya belum ada. Tiga permission-nya
+  tercatat sementara di ledger satu-arah `NOT_YET_SCREENED` — bukan tiga
+  keputusan, tiga baris yang dijadwalkan dihapus.
+
+- 00bd70f: feat(auth): sesi orang lain bisa dilihat dan diakhiri — dengan `read` sebagai izin yang LEBIH mahal dari `revoke`
+
+  Gelombang 2 PR 2.2 dari #423. `GET /api/v1/users/{id}/sessions` dan
+  `POST /api/v1/users/{id}/sessions/revoke-all`, ditambah panel sesi di
+  `/admin/users`. Pasangan self-service yang mendarat di PR 2.1 menyelesaikan
+  subjeknya dari token pemanggil dan tak bisa diarahkan ke siapa pun; dua endpoint
+  ini melakukan kebalikannya — subjeknya disebut di URL — jadi keduanya digerbangi,
+  diaudit, dan dipecah ke **dua** izin.
+
+  **Pemecahannya terbalik dari `machine_credentials`, dan justru itu isinya.**
+  `sql/083` memisah `create`/`revoke` karena hanya satu dari keduanya MENCIPTAKAN
+  kapabilitas. Di sini yang memisah adalah kebalikannya: hanya satu dari keduanya
+  MENGUNGKAPKAN sesuatu. `read` adalah jendela permanen ke gerak-gerik seorang
+  kolega — kapan ia masuk, dari berapa bentuk perangkat, jam berapa — dan itu tetap
+  bahan pengawasan ketika yang membacanya administrator. `revoke` menghancurkan
+  akses dan mengembalikan sebuah angka.
+
+  Jadi yang dibeli pemecahan ini adalah arah yang penting saat insiden: seorang
+  responder bisa diberi kemampuan mengeluarkan akun yang diduga jebol dari
+  mana-mana **tanpa** sekalian diberi pandangan ke pergerakan semua orang. Satu izin
+  yang mencakup keduanya membuat tindakan darurat yang aman berharga izin permanen
+  yang tidak aman.
+
+  **Sesi pemanggil tidak pernah ikut mati.** `UPDATE`-nya membawa
+  `token_hash <> ${callerTokenHash}`, dan untuk target selain tenant user pemanggil
+  sendiri klausa itu tidak mencocoki apa pun — hash token pemanggil tak bisa muncul
+  di antara sesi identitas lain. Jadi ia gratis di kasus normal dan membeli satu
+  properti di kasus tidak normal: administrator yang sedang membereskan insiden tak
+  bisa mengeluarkan dirinya dari konsol yang sedang ia pakai dengan menekan baris
+  yang kebetulan miliknya. `keptCallerSession` melaporkannya alih-alih diam —
+  operator yang diberi tahu "3 diakhiri" sementara konsolnya masih hidup perlu tahu
+  sebabnya, atau ia menyimpulkan kontrolnya tidak bekerja.
+
+  Itu bukan lubang: mengeluarkan diri sendiri dari mana-mana adalah
+  `DELETE /api/v1/auth/sessions/{id}` dan `POST /api/v1/auth/logout`, keduanya tanpa
+  izin. Endpoint ini menolak menjadi cara ketiga untuk hal yang sudah dilakukan dua
+  endpoint tak-berizin, dalam satu-satunya susunan di mana melakukannya adalah
+  kecelakaan.
+
+  **Aktivitas `user_sessions` baru, bukan `access_control` yang diperluas** — alasan
+  yang sama ditulis `sql/075` untuk `registration_requests` dan `sql/083` untuk
+  `machine_credentials`: melipatnya ke `access_control.read` akan menjadikan setiap
+  pembaca katalog RBAC seorang pengamat gerak-gerik koleganya, sebagai efek samping,
+  tanpa satu migrasi pun mengatakannya.
+
+  **Empat keputusan yang lebih kecil:**
+
+  - **Id yang tak berbentuk UUID dijawab 404, bukan 400.** 400 untuk "bukan uuid"
+    plus 404 untuk "tak ada usernya" bersama-sama memberi tahu pemanggil id mana yang
+    berbentuk benar DAN id mana yang ada.
+  - **User nonaktif didaftar kosong, bukan 404.** `setTenantUserStatus` sudah
+    mencabut sesinya, jadi daftar kosong adalah jawaban yang diharapkan — dan itulah
+    yang sedang diperiksa operator saat itu. 404 tak bisa dibedakan dari salah id.
+  - **Diaudit meski nol sesi diakhiri.** "Seseorang mencoba mengeluarkan akun ini
+    dan tak ada yang tersisa untuk diakhiri" justru entri yang paling dicari
+    investigasi; jejak audit yang hanya mencatat aksi efektif tak bisa
+    membedakannya dari tak ada yang pernah melihat.
+  - **Tanpa `Idempotency-Key`.** Panggilan kedua tidak menemukan apa pun yang hidup
+    dan melaporkan `revokedCount: 0` — tak ada duplikat untuk ditekan, jadi tak ada
+    yang perlu dilindungi respons tersimpan.
+
+  `tokenHash` kini ikut diserahkan `defineTenantRoute` ke handler-nya. Nilainya sudah
+  dihitung seam itu untuk `authorizeInTransaction`; menurunkannya kedua kali di dalam
+  rute adalah cara dua turunan satu nilai mulai berbeda pendapat.
+
+  `sql/101` hanya memperluas katalog global — tenant lama mendapatkannya lewat
+  `bun run identity-access:permissions:backfill`, yang memberi tepat baris katalog
+  yang LEBIH BARU dari role-nya sehingga tak bisa menghidupkan kembali izin yang
+  sengaja dicabut admin.
+
+- ba84e5b: feat(domain-events): buku pengiriman keluar dari ledger retensi — tiga predikat, dan `dead_letter` bukan salah satunya
+
+  `awcms_domain_event_deliveries` mendapat deskriptor `dataLifecycle`, job
+  `bun run domain-events:deliveries:purge`, dan barisnya dihapus dari
+  `TABLES_PREDATING_THE_RULE`. Ini purge terdelegasi ketiga di repo ini, dan
+  satu-satunya yang butuh lebih dari satu predikat di luar cutoff.
+
+  ## `dead_letter` dikecualikan, dan itu jebakannya
+
+  Ia **terlihat** terminal — dispatcher tak akan pernah mencobanya lagi sendiri —
+  dan ia justru baris yang dibuka operator di `/admin/domain-events` untuk
+  di-replay. Jendela retensi yang menyapunya akan menghapus **pekerjaan beserta
+  buktinya**, dan penghapusannya tak bisa dibedakan dari antrean yang terkuras
+  bersih. Hanya `delivered` dan `skipped` yang settled.
+
+  ## Dua predikat lagi, dan keduanya soal foreign key
+
+  `awcms_domain_event_replays` membawa **dua** FK NOT NULL ke tabel ini —
+  `original_delivery_id` dan `replay_delivery_id`. Menghapus salah satu sisinya
+  gagal pada constraint, dan purge yang setengah berhasil tiap malam lebih buruk
+  daripada yang tak pernah jalan: error-nya intermiten dan backlog tetap tumbuh.
+  Baris replay itu sendiri adalah catatan audit tindakan manual operator, jadi
+  jawabannya adalah **melewati** delivery-nya, bukan melebarkan delete.
+
+  `replay_of_delivery_id` adalah **self-FK**: satu percobaan replay adalah baris
+  baru yang menunjuk balik ke aslinya. Constraint yang sama, perlakuan yang sama.
+
+  Keduanya `NOT EXISTS` di dalam statement yang sama, bukan join dengan round-trip
+  kedua — baris yang menjadi tereferensi antara SELECT dan DELETE tidak terhapus,
+  karena tak ada jendela di antara keduanya.
+
+  ## Index-nya parsial, dan index terdekat yang ada tidak berguna
+
+  `awcms_domain_event_deliveries_tenant_status_idx` adalah `(tenant_id, status)`
+  **tanpa kolom waktu sama sekali**. Pada tabel yang seluruh masalahnya adalah
+  baris `delivered` menumpuk, itu berarti membaca setiap baris delivered di tenant
+  untuk menemukan yang lama. `sql/097` menambah `(tenant_id, updated_at)` PARSIAL
+  pada dua status yang bisa dipurge — jalur panas dispatcher adalah
+  `status = 'pending'`, yang tak punya alasan menumpang index ini.
+
+  ## Yang sengaja TIDAK dicakup
+
+  `awcms_domain_events` — induknya, yang menyimpan payload — **tetap di ledger**.
+  Menghapus delivery tidak mengecilkannya, dan berapa lama sebuah PAYLOAD layak
+  disimpan adalah pertanyaan berbeda dari berapa lama sebuah TANDA TERIMA layak
+  disimpan: yang pertama catatan bisnis yang di-replay hal lain, yang kedua
+  pembukuan transport. Mengklaim keduanya dalam satu PR berarti menjawab yang
+  mudah dan mengubur yang sulit.
+
+- ac7922b: feat(data-lifecycle): `awcms_abac_decision_logs` mendapat retensi — dan sengketa otoritas proyeksinya diselesaikan
+
+  Tabel tanpa batas terbesar di repo: satu baris untuk **setiap** keputusan
+  otorisasi, ±8,6 juta baris/hari pada 100 req/s, dan **nol retensi** sejak
+  `sql/005`. Ia tumbuh sebanding dengan **lalu lintas**, bukan dengan data
+  pelanggan — sebuah tenant yang tidak menambah satu pun konten tetap menambah
+  baris di sini tiap kali stafnya membuka layar. Ia juga tabel yang paling
+  dibutuhkan saat insiden, persis ketika query terhadapnya paling lambat.
+
+  **Job purge-nya, kalau ditulis hari ini, akan menghapus nol baris.** `sql/022`
+  memberi `awcms_worker` hanya `SELECT`. `sql/091` memberi `DELETE`. Tanpa itu
+  purge-nya berjalan, melapor sukses, dan tidak menghapus apa pun — kegagalan yang
+  tidak berbunyi seperti kegagalan, melainkan seperti "tidak ada yang perlu
+  dihapus".
+
+  **Sengketa yang lahir bersama retensinya, diselesaikan di ADR-0072.** Modul
+  `reporting` memakai tabel ini sebagai sumber cursor dan deskripsinya berbunyi
+  "append-only — never updated/deleted, the ideal cursor_table source". Retensi
+  membatalkan klaim itu, dan akibatnya bukan kosmetik: penghitung **inkremental**
+  tidak terpengaruh purge, sementara **rebuild** menghitung ulang dari baris yang
+  masih ada. Setelah purge pertama, operator yang menekan rebuild diam-diam
+  **menghancurkan** hitungan historis dan menggantinya dengan yang lebih kecil,
+  tanpa satu pun error.
+
+  Keputusannya: keduanya diberi nama dan cakupan. Inkremental otoritatif untuk
+  sepanjang-masa; rebuild otoritatif untuk "sejak horizon retensi". Deskripsi
+  proyeksi diperbaiki di tempat implementor membacanya, dan sebuah test dua arah
+  menjaga keduanya jujur terhadap satu sama lain.
+
+  **Jendela 365 hari, bukan 90.** Angkanya tidak dipilih demi penyimpanan — ia
+  horizon di mana proyeksi itu masih bisa di-rebuild. 90 hari akan memilih angka
+  yang menyembunyikan koplingnya alih-alih menghadapinya.
+
+  **Satu klaim di rancangan awal ternyata salah, dan tidak jadi ditulis.** Issue
+  mengusulkan index `(tenant_id, created_at)` menaik karena purge memindai
+  `ORDER BY … ASC` sementara index yang ada menurun. Btree PostgreSQL **bisa
+  dipindai mundur**, jadi index yang ada sudah melayaninya tanpa sort. Index kedua
+  hanya akan menambah beban tulis pada tabel yang paling sering ditulis di seluruh
+  repo. Alasannya ditulis di header `sql/091` supaya usulan itu tidak lahir
+  kembali.
+
+  Retensi belum berlaku sampai `bun run data-lifecycle:archive-purge` dijadwalkan
+  — pelajaran yang sama sudah tercatat untuk `AUDIT_LOG_RETENTION_DAYS`.
+
+- 9b06820: feat(sync): antrean upload objek keluar dari ledger utang retensi — dan tabel di sebelahnya ternyata tak punya produsen
+
+  `awcms_object_sync_queue` mendapat deskriptor `dataLifecycle`, job
+  `bun run sync:objects:purge`, dan barisnya dihapus dari
+  `TABLES_PREDATING_THE_RULE`.
+
+  `delegated`, bukan `generic`, dengan alasan yang sama seperti dua antrean
+  sebelumnya: `HighVolumeTableDescriptor` tak punya predikat status, jadi executor
+  generik menghapus murni berdasarkan umur. Diarahkan ke antrean ini ia menghapus
+  **upload yang belum terjadi** — termasuk baris `sending`, yang diklaim satu pass
+  dispatcher dan lease-nya (`next_retry_at`) satu-satunya yang memulihkannya bila
+  pass itu mati.
+
+  ## Kursornya `created_at`, dan itu dipaksa skema bukan dipilih
+
+  Antrean email dan push menyapu pada `updated_at` — saat baris berhenti bergerak.
+  Tabel ini tidak punya kolom itu. `uploaded_at` terlihat seperti pengganti yang
+  tepat dan justru salah: ia **NULL untuk setiap baris `failed`**, jadi kursor di
+  atasnya membuat kegagalan abadi — satu kelas baris yang paling ingin dibatasi
+  operator. Konsekuensinya ditulis, bukan dibiarkan disangka kelalaian: baris yang
+  retry seminggu diukur dari sebelum percobaan terakhirnya.
+
+  ## Tanpa index baru, dan itu kebalikan kasus email
+
+  `awcms_object_sync_queue_tenant_status_created_idx` (`sql/012`) sudah persis
+  bentuk jalur purge. Ia dideklarasikan DESC, yang tak berbiaya — PostgreSQL
+  membaca btree mundur, jadi scan menaik tak butuh sort. Bandingkan dengan
+  `sql/095`, di mana index dispatcher menutupi himpunan status **berlawanan** dan
+  index baru memang harus ditambah.
+
+  ## Temuan: `awcms_sync_outbox` punya NOL produsen
+
+  Tabel kedua modul ini di ledger **tetap di sana**, dan itu keputusan, bukan
+  kelalaian. Tak ada yang meng-INSERT ke dalamnya — bukan kode aplikasi, bukan
+  trigger, bukan migrasi mana pun. Satu-satunya rujukannya adalah
+  `POST /api/v1/sync/pull`, yang hanya SELECT; artinya endpoint itu **tak pernah
+  bisa mengembalikan apa pun selain daftar event kosong**, sementara README modul
+  menggambarkannya sebagai "local events available to be pulled by other nodes".
+
+  Deskriptor retensi untuknya akan menjadi fiksi dua kali: predikat status
+  terminal yang tak akan pernah cocok (tak ada yang menyetel status karena tak ada
+  yang menulis baris), pada tabel yang tak bisa tumbuh. Dan lebih buruk — ia akan
+  mengeluarkan tabel itu dari ledger, yaitu dari pandangan siapa pun.
+
+  Ketiadaan itu **diasersikan**, bukan dikomentari: test memindai seluruh `src/`
+  dan `sql/` untuk INSERT/UPDATE ke tabel itu. Kalau seseorang memasang
+  produsennya, test merah — dan merahnya adalah sinyal bahwa tabel itu sudah
+  menjadi antrean sungguhan dan butuh deskriptor sungguhan.
+
+- 019bb17: feat(email): outbox email keluar dari ledger utang retensi
+
+  Dua dari enam tabel yang issue #468 sebut — `awcms_email_messages` dan
+  `awcms_email_delivery_attempts` — mendapat deskriptor `dataLifecycle`, sebuah
+  job purge, dan barisnya dihapus dari `TABLES_PREDATING_THE_RULE`. Ledger itu
+  jujur tentang apa yang tak bisa dilakukannya: _"tell you that an EXISTING table
+  on that ledger is quietly eating the disk"_.
+
+  Angkanya nyata: `awcms_email_delivery_attempts` menulis satu baris **per
+  percobaan**, jadi satu pesan yang gagal berharga hingga enam baris permanen.
+
+  ## Keduanya `delegated`, dan itu seluruh argumen keamanannya
+
+  `HighVolumeTableDescriptor` membawa `cursorColumn` dan **tidak** membawa
+  predikat status, jadi executor generik menghapus murni berdasarkan umur.
+  Diarahkan ke antrean ini, ia menghapus surat yang **belum terkirim** — pesan
+  yang tersangkut di balik gangguan provider lebih lama dari jendela retensi akan
+  lenyap, dan lenyapnya terlihat persis seperti housekeeping yang berhasil.
+
+  Dua status paling mudah terbalik, dan keduanya disebut eksplisit:
+  `suppressed` **terminal** (alamatnya ada di daftar suppression saat dispatch —
+  jawaban final), `sending` **tidak** (ia diklaim satu pass dispatcher yang
+  mungkin sedang di tengah kirim, dan lease-nya yang memulihkannya bila pass itu
+  mati).
+
+  Daftar status terminal diturunkan dari CHECK constraint `sql/014`, bukan
+  ditebak: status yang ditambahkan ke skema dan tidak ke sini akan menumpuk
+  selamanya tanpa error di mana pun.
+
+  ## `--dry-run` ada di sini, dan sengaja tidak ada di `push:queue:purge`
+
+  Bukan inkonsistensi. Tabel push dibuat oleh PR yang sama dengan job-nya, jadi
+  run pertamanya punya paling banyak satu jendela retensi di belakangnya. Dua
+  tabel ini menumpuk sejak `sql/014` **tanpa retensi sama sekali**, jadi run
+  pertama di deployment hidup adalah delete terbesar yang akan pernah dilakukan
+  job ini, terhadap baris yang belum pernah dihitung siapa pun.
+
+  ## Worker mendapat verb yang dulu sengaja ditolak
+
+  `sql/022` memberi worker persis yang dibutuhkan **dispatcher** — SELECT/UPDATE
+  pada messages, INSERT pada attempts — dan tidak lebih. Itu benar: dispatcher
+  yang bisa DELETE adalah dispatcher yang bisa menghilangkan antrean karena satu
+  bug. Purge adalah entrypoint worker kedua dengan pekerjaan berbeda, jadi
+  `sql/095` memberinya DELETE, dan peta hak di `security-readiness.ts` ikut
+  diperbarui — grant di SQL yang tak diketahui peta itu adalah privilege yang tak
+  direview apa pun.
+
+  Index-nya milik purge sendiri: `awcms_email_messages_dispatch_idx` menutupi
+  himpunan status yang **berlawanan** (`queued`/`retry_wait`) dan berkunci pada
+  `next_attempt_at`.
+
+- 26334bd: ADR-0083: repo ini men-deploy ke SATU environment (production, `awcms.ahlikoding.com`) karena ia template, dan `/` berhenti menjadi 404 — `src/pages/index.astro` melayani halaman landing informasional bertaut `/login`, tanpa query basis data, tanpa enumerasi, dan tanpa skrip klien baru.
+- 38a5fd5: feat(sync): satu outbox — `awcms_sync_outbox` dipensiunkan, dan `/sync/pull` membaca `awcms_domain_events`
+
+  Issue #477 menanyakan bagaimana mengisi tabel yang tak pernah punya produsen.
+  Jawabannya: jangan. Repo ini sudah punya outbox transaksional yang bekerja —
+  `awcms_domain_events`, lengkap dengan dispatcher, DLQ, dan replay — dan outbox
+  kedua yang tak pernah tersambung sebaiknya tidak mendapatkan produsen,
+  melainkan dihapus (ADR-0077, `sql/099`).
+
+  **Perilaku tidak berubah:** `/sync/pull` tetap menjawab `200` dengan daftar
+  kosong. Yang berubah adalah **kenapa** ia kosong. Sebelumnya karena tak ada
+  jalur; sekarang karena `SYNC_REPLICABLE_EVENT_TYPES` kosong — kebijakan yang
+  tertulis di satu tempat dan bisa direview.
+
+  **Kenapa allow-list-nya kosong, bukan diisi satu untuk "membuktikan
+  mekanismenya".** Karena mekanismenya belum benar, dan menemukan itu adalah
+  hasil paling berharga dari issue ini:
+
+  - **visibilitas commit.** `event_sequence` diberikan saat `INSERT` tetapi
+    terlihat saat `COMMIT`. Dua transaksi bisnis yang tumpang tindih bisa commit
+    tidak berurutan, dan pembaca ber-cursor `event_sequence > checkpoint` yang
+    berjalan di antaranya akan melihat 101, memajukan checkpoint, dan **tak pernah
+    melihat 100** — kehilangan senyap dan permanen, pada protokol yang tugasnya
+    justru tidak kehilangan apa pun. Dorman di tabel lama (nol penulis), **nyata**
+    di `awcms_domain_events` (tujuh call site produksi di dua modul);
+  - **proyeksi payload.** Node ber-HMAC bukan sesi. `redactEventPayloadForResponse`
+    **tidak bisa** dipakai ulang: ia menutupi `email`/`phone`/`nik`/`npwp` —
+    persis field yang perlu direplikasi — dan dipasang di permukaan admin.
+
+  Repo ini sudah punya jawaban benar untuk yang pertama, dan bukan cursor:
+  `appendDomainEvent` menulis satu baris `awcms_domain_event_deliveries` **per
+  consumer di transaksi yang sama** dengan event-nya, jadi tak ada cursor untuk
+  dilompati. Replikasi node yang sungguhan harus menumpang mekanisme itu.
+
+  **Kenapa sekarang.** `last_pull_sequence` setiap node terbukti bernilai `0` —
+  query lama tak pernah bisa memajukannya. Memindahkan sumber cursor hari ini
+  berharga satu `DROP TABLE`; setelah ada produsen, ia berharga pemetaan sequence
+  lintas-tabel per node.
+
+  **Migrasinya MENOLAK, bukan menghancurkan:** ia menghitung baris lebih dulu dan
+  `RAISE EXCEPTION` bila menemukan satu pun — dibuktikan terhadap Postgres nyata
+  (`ERROR: awcms_sync_outbox holds 1 row(s)`). Diterapkan dua kali untuk
+  membuktikan idempotensi; index cursor `(tenant_id, event_sequence)` ikut
+  mendarat bersama endpoint yang akan memakainya, bukan nanti bersama entri
+  allow-list pertama — perubahan satu baris yang diam-diam mengubah bounded scan
+  menjadi full scan adalah jenis yang mendarat tanpa diukur siapa pun.
+
+  `BOUNDED_BY_DESIGN` kembali **kosong**: tabelnya tidak ada lagi, jadi tak ada
+  pertanyaan retensi untuk dijawab.
+
+  Menutup #477.
+
+- ba6a9a6: feat(auth): "keluarkan saya dari semua perangkat lain" — tanpa flag yang nilai satunya adalah logout yang lebih buruk
+
+  Gelombang 2 PR 2.3 dari #423. `POST /api/v1/auth/sessions/revoke-all` mengakhiri
+  setiap sesi hidup milik identitas pemanggil **kecuali** yang sedang dipakai.
+  Self-service, nol izin baru, sejalan dengan dua endpoint di sebelahnya.
+
+  **Flag `?exceptCurrent=true` dari rencana program tidak ikut mendarat.** Boolean
+  itu hanya punya satu nilai yang jujur di sini: nilai satunya juga mengakhiri sesi
+  yang sedang meminta, dan itu `POST /api/v1/auth/logout` — yang **juga**
+  membersihkan cookie yang tak bisa dilihat rute ini. Jadi menerima flag-nya berarti
+  mengirimkan logout kedua yang lebih buruk, yang satu-satunya ciri khasnya adalah
+  meninggalkan pemanggil memegang cookie mati. Default yang tak boleh dibalik lebih
+  jujur ditulis sebagai tiadanya parameter.
+
+  Ini endpoint yang dicari orang setelah "sepertinya password saya bocor". Ia harus
+  bekerja **sementara** mereka masih masuk, atau mereka memakainya lalu menemukan
+  tak bisa mengganti password sesudahnya.
+
+  **Ia tidak menyentuh kredensial dan tidak menyentuh penghitung lockout.**
+  `completePasswordReset` mencabut sesi sebagai **akibat** perubahan kredensial; yang
+  ini kebalikannya dan tetap begitu. Orang yang membereskan sesi liar belum
+  membuktikan apa pun yang baru tentang kredensialnya, jadi tak ada yang
+  membersihkan `failed_login_count` atau `locked_until` di sini — menyatukan keduanya
+  akan menjadikan kebersihan sesi sebuah oracle reset lockout. Ada test yang
+  meng-assert nol query menyebut `awcms_identities`.
+
+  **Tidak diaudit, sengaja.** `awcms_audit_events` mencatat apa yang dilakukan
+  **administrator terhadap orang lain**; endjoint admin pasangannya
+  (`POST /api/v1/users/{id}/sessions/revoke-all`, PR 2.2) menulis entrinya. Orang
+  yang merapikan sesinya sendiri bukan tindakan administratif atas siapa pun, dan
+  mencatat tiap pembersihan self-service akan memenuhi jejak yang dibaca investigator
+  dengan entri tentang orang yang bertindak atas dirinya sendiri.
+
+  Jawabannya `200` dengan **angka**, bukan `204` kosong: "katanya berhasil, tapi
+  apakah saya masih masuk di ponsel" adalah pertanyaan berikutnya, dan nol adalah
+  jawaban nyata (memang tak ada yang lain) alih-alih kegagalan.
+
+  Asersi "tanpa flag" dijalankan terhadap **kode dengan komentar dibuang** — docblock
+  menyebut penolakannya dengan nama, dan sebutan dalam prosa tak boleh bisa
+  memerahkan test tentang perilaku, maupun menghijaukannya.
+
+- c51fe6a: feat(sse): koneksi SSE meng-otorisasi ulang setiap tick — ADR-0075, dan konsol push jadi pemakai pertamanya
+
+  SSE mendarat dengan satu keputusan yang ditulis lebih dulu: **berapa lama sebuah
+  keputusan otorisasi boleh dipakai.**
+
+  `defineTenantRoute` mengembalikan koneksi ke pool dan melepas slot work-class
+  **sebelum** satu byte pun sampai ke klien. Untuk request JSON itu benar dan
+  hemat. Untuk koneksi tiga puluh menit ia mengubah keputusan sesaat menjadi
+  **izin berdiri**: peran yang dicabut di menit kedua tetap dilayani sampai klien
+  memutus sendiri. Itu persis postur yang baru saja dihapus #450 dari 32 layar
+  admin.
+
+  Yang membuatnya layak ADR bukan bahwa SSE berbahaya, melainkan bahwa
+  **default-nya diam**: tak ada gerbang yang bisa melihat "keputusan ini berumur
+  30 menit" — `access:chokepoint:check` menghitung handler yang memutuskan, bukan
+  berapa lama keputusannya dipakai. Endpoint SSE yang benar menurut setiap aturan
+  repo hari ini tetap menghasilkan izin berdiri, dan tak ada yang akan memberi
+  tahu.
+
+  **Keputusan (ADR-0075):** tiap tick membuka transaksi sendiri, memanggil
+  `authorizeInTransaction` lagi, dan membaca snapshot hanya setelah ia
+  mengizinkan. Deny bersifat terminal — tak dilewati, tak di-retry.
+
+  **Ditolak:** TTL koneksi pendek + reconnect. Ia memindahkan pertanyaannya alih-
+  alih menjawabnya (pencabutan masih terlambat sebesar TTL) dan menukar satu angka
+  yang harus dijaga konsisten dengan dua.
+
+  ## Dua nama event terminal, dan perbedaannya menanggung beban
+
+  `authorization-revoked` versus `stream-error`. Memberi tahu klien bahwa aksesnya
+  dicabut padahal basis data sekadar sibuk adalah kebohongan ke arah yang
+  diselidiki sebagai bug perizinan — **dan** ia menyuruh klien yang taat untuk
+  tidak pernah reconnect atas gangguan sementara. `EventSource` reconnect sendiri;
+  klien menutupnya pada `authorization-revoked` supaya sesi yang dicabut tidak
+  menggedor endpoint yang akan menolaknya tiap lima detik.
+
+  ## Byte pertama ditulis segera, dan komentarnya menjelaskan kenapa
+
+  `writeResponse` Astro memanggil `writeHead()` **tanpa** `flushHeaders()`, dan Bun
+  menahan header sampai `write()` pertama. Terukur dengan `Bun.serve` nyata: header
+  tiba di **+3013 ms** ketika byte pertama ditunda, **+1 ms** ketika langsung
+  ditulis. Sampai itu `EventSource.onopen` tak pernah menyala dan klien menganggap
+  koneksinya menggantung. Perbaikannya satu baris — dan justru karena sepele ia
+  akan "dirapikan" orang berikutnya kalau alasannya tidak ditulis di sebelahnya.
+
+  ## Satu bug yang ditangkap kompiler dan berarti lebih dari kompilasi
+
+  `withTenant` — bukan `withTenantOrThrow` — **mengembalikan** `Response` saat pool
+  atau circuit breaker menolak, bukan melempar. `catch` saja karena itu akan
+  melewatkan jalur penolakan utama, dan sebuah `Response` akan mengalir ke klien
+  sebagai kalau-kalau snapshot. Kini dipetakan eksplisit ke `stream-error`.
+
+  ## Loop-nya fungsi, dan itu sebabnya bisa dibuktikan
+
+  `runSseLoop` menerima efeknya sebagai parameter, jadi properti yang #467 minta —
+  _"aliran BERHENTI ketika grant dicabut"_ — dibuktikan dengan memanggil sebuah
+  fungsi, bukan dengan basis data, sesi, dan detik jam dinding. Test-nya
+  mengasersikan bahwa deny mengakhiri loop, bahwa **tak ada** yang ditulis
+  sesudahnya, dan bahwa otorisasi ditanya **tepat sekali lagi** — yang terakhir
+  itulah bukti bahwa "tidak" pertama bersifat final.
+
+  ## Pemakai pertamanya nyata
+
+  `GET /api/v1/push/stream` mengalirkan ringkasan antrean ke konsol push, tiap 5
+  detik, dengan plafon koneksi 10 menit. Operator yang menunggu backlog terkuras
+  adalah kasus SSE paling kanonik yang ada, dan konsolnya baru saja dibangun.
+  Daftar pesan dan percobaan **tidak** dialirkan: keduanya dibatasi 50 baris dan
+  berubah bentuk bukan nilai.
+
+  Fan-out multi-instance **belum ada, dan itu ditulis alih-alih didiamkan** — tiap
+  koneksi mem-poll sendiri, yang bekerja pada default satu instance dan tidak akan
+  pecah saat replika dinaikkan, hanya tidak menjadi lebih murah. Jebakan penerusnya
+  ikut dicatat: `RedisClient` Bun yang sudah `subscribe` memblokir hampir semua
+  perintah lain, jadi subscriber wajib koneksi terpisah.
+
+  ## Dan satu gerbang yang buta terhadap dokumen baru
+
+  `check:docs` membaca `git ls-files`, yaitu **index**, bukan working tree. Berkas
+  `.md` yang baru dibuat dan belum di-stage karena itu tak terlihat olehnya —
+  padahal dokumen baru justru yang paling mungkin membawa tautan salah.
+
+  Ditemukan dengan cara paling mahal: ADR-0075 lolos `check:docs` **lokal** dengan
+  tautan rusak ke berkas ADR yang tidak ada, lalu memerahkan CI setelah di-commit.
+  Hijau lokal lalu merah di CI adalah kegagalan gerbang, bukan sekadar
+  ketidaknyamanan — ia melatih orang untuk tidak mempercayai run lokalnya.
+
+  Diperbaiki dengan `--others --exclude-standard`, dan dibuktikan: berkas
+  tak-ter-track dengan tautan rusak kini **merah** di mesin lokal.
+
+- a704a0a: feat(access): sebuah undangan membawa Policy-nya sendiri (ADR-0082, #423)
+
+  Gelombang 4 PR 4.1. `awcms_invitations` + `awcms_invitation_policies`
+  (`sql/106`, permission `sql/107`): sebuah undangan menyebut alamat dan membawa
+  daftar peran yang akan dipegang orang itu begitu ia menerima. Peran-peran itu
+  **inert** sampai penerimaan — yang mendarat di PR 4.2 — memanggil
+  `grantRolePolicy`, penulis yang sama dengan setiap grant lain, sehingga
+  `activeRoleGrants` tidak pernah perlu tahu tabel ini ada.
+
+  **Mengundang dan memberi peran tetap dua otoritas.** Undangan ber-peran
+  menuntut `identity_access.invitations.create` DAN
+  `identity_access.access_control.assign` — pengulangan pemisahan ADR-0081 dengan
+  taruhan lebih tinggi, karena grant lewat undangan menjangkau orang yang belum
+  ada. `skip_email_confirmation` menuntut permission ber-`scope: 'platform'`
+  (satu-satunya milik modul ini) kecuali alamatnya sudah memegang identitas aktif
+  di tenant ini.
+
+  **Kolom scope ada tetapi dipatok** `CHECK (scope_type = 'tenant' AND scope_id =
+tenant_id)`. ADR-0080 menulis sendiri bahwa PR yang menambahkan penulis grant
+  ber-scope tidak boleh mendarat tanpa menjawab batasnya; ini menjawabnya dengan
+  menolak menjadi penulis itu, sambil menyisakan pelebaran nanti sebagai satu
+  `DROP`/`ADD CONSTRAINT`.
+
+  Resend **merotasi** token (tanpa rotasi, "kirim ulang" adalah permukaan
+  perbanyakan token) dan digerbangi `create`; batas 5 kali hidup di CHECK basis
+  data, dan ditegakkan di predikat UPDATE-nya sendiri, bukan lewat baca-lalu-tulis
+  di JS.
+
+  Perubahan yang ikut, dan alasannya:
+
+  - `AuthNotificationPort` mendapat operasi KEDUA
+    (`enqueueAuthAddressNotification`) alih-alih `recipientTenantUserId` yang
+    nullable. Seorang undangan belum punya baris `awcms_tenant_users`, jadi
+    operasi lama tidak bisa mengalamatinya — dan membuat field itu opsional akan
+    meninggalkan setiap pemanggil lama satu salah-ketik dari mengantre pesan tanpa
+    tujuan.
+  - Kategori template `auth.invitation` + template default en/id.
+  - `awcms_invitation_policies` masuk `BOUNDED_BY_DESIGN` (4 → 5): ia dibatasi
+    induknya lewat `ON DELETE CASCADE`, dan cascade itu load-bearing — tanpanya
+    purge `generic` induknya akan gagal di FK anak dan retensinya diam-diam tak
+    pernah berjalan.
+  - Empat permission baru masuk ledger `NOT_YET_SCREENED`; `/admin/invitations`
+    adalah perubahan tersendiri (urutan yang sama dengan ADR-0056).
+  - Tiga env baru dituliskan tangan di `.env.example` karena
+    `config:env:coverage:check` hanya mencocokkan `process.env.X` dan buta
+    terhadap `env.X` yang dilewatkan sebagai parameter — batas yang gerbangnya
+    catat sendiri.
+
+### Patch Changes
+
+- fef7381: fix(test,gerbang): asersi anti-regresi chokepoint berhenti lolos secara hampa saat rename
+
+  Dua asersi di `tests/access-chokepoint.test.ts` menjaga invarian utama ADR-0063
+  — `ownershipGrant` **melebarkan** himpunan kunci, tidak pernah men-_short-circuit_
+  ke `allowed: true` — dengan `expect(source).not.toMatch(/ownershipGrant…/)`.
+
+  Regex-nya berlabuh pada literal nama variabel. `not.toMatch` terhadap pola yang
+  **tidak akan pernah cocok** selalu hijau, jadi sebuah rename membuat keduanya
+  lolos tanpa menguji apa pun.
+
+  Diverifikasi, bukan diduga. Dengan `ownershipGrant`/`ownershipApplied` di-rename
+  habis di `access-guard.ts` (0 kemunculan nama lama, 7 nama baru), asersi lama
+  tetap **HIJAU**; asersi baru **MERAH**.
+
+  Penggantinya menamai kedua variabel itu nol kali: ambil badan
+  `authorizeInTransaction` saja (bukan seluruh berkas — deklarasi tipe
+  `AuthorizeResult` di atasnya sah menulis `allowed: true;`), lalu tuntut **tepat
+  satu** `allowed: true` dan indeksnya **setelah** `evaluateAccess(`. Sebuah early
+  allow adalah kecocokan kedua, apa pun nama variabelnya.
+
+  Dipasangkan test kedua yang **menuntut identifier itu ADA**. Aturan yang
+  diadopsi: asersi berbasis sumber wajib rename-proof, **atau** dipasangkan asersi
+  keberadaan — kalau tidak, ia menjaga mekanisme yang mungkin sudah tidak ada.
+
+  Dua asersi hampa lain ikut ditutup di jalan: `expect(evaluate).toBeGreaterThan(-1)`
+  sebelum perbandingan indeks (tanpanya perbandingannya berbunyi `> -1` dan lolos
+  untuk penempatan apa pun), dan `expect(start).toBeGreaterThan(-1)` di pengekstrak
+  badan fungsi (tanpanya seluruh asersi menjangkau string kosong — cacat #425 lahir
+  kembali di dalam perbaikannya sendiri).
+
+  **Sisi gerbang.** `scripts/access-chokepoint-check.ts` mengklasifikasi handler
+  lewat literal `fetchGrantedPermissionKeys(`. Rename fungsi itu membuat setiap
+  `decidesPermissions` bernilai false, `findChokepointBypasses` mengembalikan
+  kosong, dan gerbang mencetak **"0 handler memutuskan permission"** lalu keluar
+  dengan **sukses**. Nama itu justru akan berubah bentuk di #423 (tipe kembalinya
+  diubah) — momen ketika orang paling tergoda menggantinya.
+
+  Sekarang `deciding.length === 0` adalah kegagalan dengan pesan yang menyebut
+  sinyalnya. Diverifikasi: sinyal yang tak lagi cocok apa pun → **MERAH** (dulu
+  hijau).
+
+  Nol perubahan runtime.
+
+- 26334bd: fix(admin): CMS ini akhirnya bisa menerbitkan artikel lewat layarnya sendiri — form create mengirim `contentText: ""` ke validator yang menolaknya
+
+  `/admin/blog` dan `/admin/blog-pages` mengirim `contentJson: {}` dengan
+  `contentText: ""`, di bawah legenda yang menjanjikan editor body "belum bagian
+  dari layar ini". `validateContentTextField` mewajibkan `contentText` tak-kosong,
+  jadi **setiap** create dari kedua layar dijawab 400: tidak ada satu pun artikel
+  atau halaman yang pernah bisa dibuat lewat UI-nya sendiri.
+
+  Perbaikannya adalah INPUT yang hilang, bukan validator yang dilonggarkan.
+  `content-quality-checklist.ts` tidak punya aturan "body ada", jadi melemahkan
+  `validateContentTextField` akan membuat post yang benar-benar kosong lolos
+  sampai `publish`.
+
+  - **`<textarea>` body** pada form create kedua layar, dikonversi oleh
+    `src/lib/ui/blog-body-editor.ts` menjadi `{ blocks: [{ type: "paragraph",
+text }] }` — bentuk yang didefinisikan `content-block-rendering.ts`, bukan
+    bentuk karangan sendiri. Tipe `ParagraphBlock` di-`Extract` dari union modul
+    itu, sehingga perubahan di sana gagal di typecheck, bukan diam-diam
+    menghasilkan blok yang tak dirender siapa pun.
+  - **Jalur PATCH**: `/admin/blog` tidak punya form edit sama sekali (`grep -c
+PATCH` = 0), jadi post yang sudah ada hanya bisa disunting lewat `curl`.
+    Kini ada form edit ber-`?edit=<id>`, mengikuti pola `/admin/blog-pages` yang
+    sudah ada (partial update, tanpa `Idempotency-Key` — kedua endpoint memang
+    menolaknya). Form edit `/admin/blog-pages` ikut mendapat body dan excerpt.
+  - **Editor MENOLAK menyunting body** yang memuat blok di luar `paragraph`
+    (gallery, video embed). Blok-blok itu tak punya permukaan authoring di repo
+    ini, dan textarea yang menulis ulangnya sebagai paragraf akan
+    **menghancurkannya** pada simpan pertama. `readParagraphBodyText` menjawab
+    `null`, dan layar tidak merender field body sama sekali untuk baris itu.
+  - **Pesan galat menyebut field yang benar.** Sebelumnya setiap kegagalan
+    dijawab "Check the title and slug" — justru dua field yang selalu BENAR,
+    sementara yang ditolak API adalah `contentText`. `sendJsonWithFieldErrors`
+    membaca `error.details` yang `sendJson` sengaja buang, dan hanya NAMA field
+    yang ditampilkan lewat peta label layar (bukan teks pesan server). Cabang
+    konflik slug juga diperbaiki: kode yang dikirim endpoint adalah
+    `SLUG_CONFLICT`, sedangkan layar memeriksa `CONFLICT` yang tak pernah cocok.
+
+  Baris `?edit=` divalidasi sebagai UUID di frontmatter: `fetchBlogPostById`
+  mengikatnya sebagai `uuid`, dan `?edit=nonsense` akan membatalkan transaksi
+  sehingga seluruh layar menjadi "posts could not be loaded" — "daftarnya rusak"
+  untuk sesuatu yang sebenarnya "tidak ada post itu".
+
+  Skrip klien tetap DIIMPOR (dua modul baru di `src/lib/ui/`), bukan inline:
+  CSP `default-src 'self'` tanpa `'unsafe-inline'` memblokir `<script>` yang
+  di-inline Astro saat tak ada import. Diverifikasi dari `dist/`: keduanya
+  ter-emit sebagai `/_astro/*.js` eksternal, dan `import type` membuat renderer
+  `content-block-rendering.ts` tidak ikut ke bundle browser.
+
+  Penugasan taksonomi (`termIds`) TETAP absen di `/admin/blog`: picker-nya butuh
+  katalog taksonomi, dan membacanya di bawah gerbang `posts.*` layar ini adalah
+  pembacaan tanpa permission sendiri. `blog_content.taxonomies.read` milik
+  `/admin/blog-taxonomy`, dan `tests/admin-blog-page-contract.test.ts` mengunci
+  layar ini pada sebelas key — meminjam satu harus jadi keputusan yang ditulis di
+  berkas itu.
+
+- c31f2a2: chore(actions): `codeql-action` 4.37.4 → 4.37.6 dan `attest-build-provenance` 4.1.1 → 4.2.2
+
+  Menggantikan tiga PR dependabot (#493, #494, #495) dengan satu.
+
+  **`codeql-action/init` dan `codeql-action/analyze` WAJIB satu PR.** Dependabot
+  memecahnya per-path, sehingga tiap PR memindahkan satu langkah ke SHA baru dan
+  meninggalkan pasangannya di SHA lama — dan CodeQL menolak jalan dengan
+  `init`/`analyze` yang tak sepadan. Keduanya di sini pindah ke SHA yang sama
+  (`5595ccaf…`), yang memang SHA yang diusulkan kedua PR itu.
+
+  Ini bukan preferensi gaya: dua PR yang masing-masing memerahkan `Analyze` tak
+  bisa di-merge berurutan, karena yang pertama merah **sampai** yang kedua
+  mendarat. Satu-satunya urutan yang hijau adalah satu PR.
+
+  `attest-build-provenance` dinaikkan di **dua** langkah `release.yml` sekaligus
+  (attest image + attest SBOM); membiarkan salah satunya berarti satu rilis
+  menandatangani dua artefak dengan dua versi penanda tangan.
+
+  Semua pin tetap SHA-pinned dengan komentar versi — bentuk yang sudah dipakai
+  seluruh workflow di repo ini, dan yang membuat tag yang dipindahkan tidak bisa
+  mengubah apa yang berjalan.
+
+- c54c296: chore(deps): astro 7.1.6 → 7.2.0 dan @astrojs/node 11.0.3 → 11.1.0
+
+  Menggantikan dua PR dependabot (#488, #489) dengan satu.
+
+  **Digabung karena keduanya tak bisa hijau sendirian.** `family:conformance:check`
+  membandingkan `awcms-family-compatibility.yaml` dengan `package.json` field demi
+  field, jadi menaikkan satu dependensi tanpa memperbarui manifesnya membuat
+  gerbang itu **merah** — dan itulah yang terjadi pada kedua PR dependabot. Manifes
+  diperbarui di sini untuk keduanya sekaligus; memperbaikinya dua kali berarti dua
+  PR yang masing-masing merah sampai yang lain mendarat.
+
+  Adapter node dan astro juga berpasangan: `@astrojs/node@11.1.0` menyatakan
+  `peerDependencies: { astro: "^7.0.0" }`, dan `bun install` **tidak menolak**
+  peer mismatch — ia memasang dan diam. Jadi bukti bahwa pasangan ini benar bukan
+  lockfile-nya melainkan `bun run build` yang hijau, yang dijalankan rantai `check`.
+
+  **Satu koreksi yang ikut mendarat.** Divergensi `astro-files-not-type-checked`
+  menyatakan "42 berkas `.astro` (22.328 baris)"; angka sesungguhnya **44 berkas
+  (24.359 baris)**. Divergensi itu ada untuk mencatat BESARNYA paparan yang tidak
+  diperiksa `tsc`, jadi ringkasan yang mengecilkannya adalah satu-satunya jenis
+  kesalahan yang benar-benar merugikan di entri itu. Diukur ulang
+  (`find src -name '*.astro'`), bukan ditaksir.
+
+- 5944e94: fix(cache-tepi): tiga surface untuk rute yang tak ada lagi dicabut — dan gerbangnya berhenti menerima izin-cache yang inert
+
+  [ADR-0061](docs/adr/0061-host-resolved-public-surfaces-are-edge-cacheable.md) §A
+  menambahkan tiga entri `PUBLIC_CACHE_SURFACES` untuk keluarga host-resolved
+  `/news/**`. [ADR-0071](docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+  kemudian **menghapus keluarga rutenya dari repo ini**, dan ketiga entri itu
+  bertahan beberapa hari lebih lama dari rute yang mereka layani.
+
+  Diverifikasi ke kode, bukan disimpulkan — keduanya sekaligus:
+  `extractTenantCodeFromPath("/news/hello-world")` → `null` (`TENANT_CODE_PATH`
+  hanya mengenal `blog|theming`), dan `publishEdgeCacheTenant` **nol pemanggil**
+  untuk path itu (satu-satunya pemanggilnya `seo-distribution/presentation/discovery-route.ts:145`).
+  Jadi ketiganya **inert**: `requiresTenant: true` membuat tenant yang tak
+  ter-resolve gagal-tertutup, dan tak ada rute yang menyajikannya.
+
+  **Inert bukan alasan membiarkannya.** Sebuah entri di registry ini adalah
+  pernyataan berdiri bahwa cache **BERSAMA** boleh menyimpan sebuah path — lengkap
+  dengan `rationale` yang berargumen mengapa itu aman — untuk rute yang tak bisa
+  dibaca siapa pun. Pembaca berikutnya membacanya sebagai bukti keluarga itu
+  hidup, dan `edge-cache:surfaces:check` yang melapor `OK — 11 declared surfaces`
+  terbaca sebagai cakupan **11** hal, bukan 8.
+
+  Yang berubah:
+
+  - Ketiga entri (`news-index`/`news-taxonomy`/`news-post`) dicabut → **8
+    surface**. Komentar header `surface-registry.ts` yang masih mengklaim "Their
+    routes publish `locals.edgeCacheTenantId`" untuk keduanya dibetulkan: hari ini
+    hanya rute discovery root yang mempublikasikannya.
+  - **Gerbang baru `findSurfacesWithoutServingRoutes`**: tiap surface wajib punya
+    entri `api.routes` di modul pemiliknya yang bisa menyajikannya. `api.routes`
+    adalah otoritas yang tepat karena registry sudah memperlakukannya sebagai
+    klaim modul atas ruang URL — `modules:routes:check` yang mengikatnya ke
+    filesystem. Cakupan diperiksa **dua arah**: rute boleh lebih luas dari surface
+    (`/blog` vs prefiks `/blog/`) atau lebih sempit (`/sitemap.xml` vs prefiks
+    `/sitemap` dari `^\/sitemap(-\d+)?\.xml$`).
+  - `tests/edge-cache.test.ts`: kelima pin `/news/**` pindah dari "resolve ke
+    surface X" menjadi "**tidak** cacheable". Sengaja dipertahankan sebagai probe
+    alih-alih dihapus — `/news/**` masih kosakata hidup di `awcms-astro`, jadi
+    bentuk path itu akan terus muncul di hadapan pembaca, dan mendeklarasikan
+    ulang surface untuk rute yang repo ini tak sajikan harus **memerahkan** daftar
+    itu, bukan lewat tanpa terlihat.
+
+  **Ekstraksi prefiksnya menangani alternasi satu tingkat, dan itu bukan
+  hiasan.** `seo-feed` adalah `^\/(feed\.xml|atom\.xml|feed\.json)$`, yang prefiks
+  polosnya `/` — prefiks yang cocok dengan **setiap** rute yang pernah
+  dideklarasikan, sehingga aturan ini akan vakum persis untuk keluarga yang paling
+  membutuhkannya. Alternasi diekspansi hanya bila **seluruh** cabangnya literal
+  DAN grupnya mengakhiri pola; kalau tidak, prefiks berhenti di situ (menjatuhkan
+  teks setelah grup diam-diam akan melebarkan apa yang dianggap "tercakup"). Test
+  mengunci keduanya, plus satu asersi bahwa **setiap** cabang harus bisa disajikan
+  — modul yang hanya mendeklarasikan `/feed.xml` tetap MERAH.
+
+  **Mutation-proven:** mengembalikan satu entri `news-index` → gerbang MERAH
+  menyebut surface, prefiks, dan `api.routes` yang dideklarasikan pemiliknya.
+  Sebelum perubahan ini, kesebelas entri lolos: 8 lolos, tepat 3 gagal.
+
+  Ikut dibetulkan: `tests/news-routes-edge-cache-contract.test.ts` **dihapus
+  bersama rutenya**, tetapi masih dikutip tiga dokumen current-state
+  (`edge-cache-architecture.md`, skill `awcms-edge-cache`, dan docblock test
+  saudaranya). Aturan disclosure yang dijaganya — publikasikan tenant hanya pada
+  jalur yang MENYAJIKAN, karena 404 boleh di-cache — **tidak ikut dicabut**; ia
+  berlaku untuk tiap surface host-resolved berikutnya, dan kini dirujuk ke
+  penjaganya yang masih ada. Kutipan di ADR-0061 sengaja **tidak** disentuh: ADR
+  adalah catatan keputusan pada satu titik waktu.
+
+- 26334bd: CSP menambahkan `img-src` dan `media-src` dari origin media terkonfigurasi, sehingga gambar DAN video R2 lintas-origin tidak lagi diblokir kebijakan aplikasi sendiri.
+- 404202e: fix(ci): 36 test DB-gated berhenti hijau-palsu — lima berkas yang tak pernah dijalankan pipeline mana pun
+
+  Suite DB-gated di akar `tests/` tak bisa berjalan satu proses dengan
+  `tests/integration/` (empiris: 26 tabrakan), jadi kedua pipeline menjalankannya
+  sebagai step tersendiri dengan **daftar berkas eksplisit**. Daftar eksplisit
+  memang keputusan yang benar di situ — `bun test` telanjang akan menumbuhkan
+  kembali tabrakannya — tetapi daftar eksplisit **drift**, dan yang ini drift.
+
+  Ia lahir dengan **10** entri (#176). Lima berkas DB-gated mendarat sesudahnya
+  (#188, #189, #190, #191) dan **tak satu pun PR-nya menyentuh daftar itu**:
+
+  - `tests/mfa-integration.test.ts` — atomisitas lockout & replay counter di
+    Postgres (CAS + `FOR UPDATE`), konsumsi recovery code sekali-pakai di bawah
+    konkurensi, RLS FORCE, penolakan lintas-tenant.
+  - `tests/mfa-login-e2e.test.ts` — enforcement enrollment + step-up pada handler
+    login/step-up/admin-reset yang SEBENARNYA.
+  - `tests/oidc-integration.test.ts` — penolakan lintas-tenant atas empat tabel
+    OIDC, validasi klaim ID token, guard SSRF terhadap issuer privat.
+  - `tests/turnstile-login-e2e.test.ts` — Turnstile berjalan SEBELUM lookup
+    identitas/kerja password di handler nyata, gagal-tertutup, dan tiap rute
+    terikat action-nya sendiri.
+  - `tests/openapi-office-response-schema-postgres.test.ts` — konformansi payload
+    respons terhadap schema `Office` di bundel OpenAPI.
+
+  Hasilnya **36 test yang skip di setiap pipeline** sambil terbaca sebagai
+  cakupan pada setiap run hijau. Dan bukan salah tafsir: header keempat berkas
+  itu **menuliskan sendiri** bahwa mereka "runs in the dedicated legacy
+  `bun test <files>` step" — step yang daftarnya tak pernah memanggil mereka.
+
+  Tak ada yang bisa menangkapnya. `bun run check` memang berjalan dengan
+  `DATABASE_URL` kosong, jadi berkas-berkas itu SEHARUSNYA skip di sana — skip
+  bukan sinyal. Satu-satunya pengamat yang bisa membedakan "skip karena tak ada
+  database" dari "skip selamanya" adalah pemeriksa yang membandingkan filesystem
+  dengan workflow, dan pemeriksa itu **tidak butuh database**.
+
+  Perbaikannya: kelimanya masuk daftar di **kedua** workflow (`ci.yml` dan
+  `release.yml` — `release.yml` justru pipeline yang mereka tuju saat ditulis),
+  komentar "These 9 files" yang sudah salah sejak lama dibetulkan jadi 15, dan
+  `tests/db-gated-suite-ci-parity.test.ts` mengikat daftar itu ke filesystem
+  **dua arah atas kedua workflow**:
+
+  1. tiap berkas DB-gated di akar `tests/` wajib disebut;
+  2. tiap entri wajib menunjuk berkas yang ADA dan MASIH DB-gated — entri yang
+     berhentinya DB-gated akan berjalan di step yang seluruh tujuannya isolasi
+     database sambil tak membuktikan apa pun;
+  3. kedua pipeline wajib menjalankan himpunan yang SAMA — berkas yang ada di
+     `ci.yml` tapi tidak di `release.yml` lebih buruk daripada yang tak ada di
+     keduanya: PR hijau atas bukti yang rilis tak pernah periksa ulang, dan
+     itulah persis cara kelima entri ini bertahan.
+
+  **Mutation-proven tiga kali:** mengembalikan cacat aslinya (buang lima entri)
+  → MERAH; entri menunjuk berkas tak-ada → MERAH; berkas berhenti DB-gated tapi
+  tetap terdaftar → MERAH.
+
+  **Catatan menghitung, karena draf pertama perubahan ini salah menghitungnya.**
+  Menjalankan kelima berkas dengan `DATABASE_URL` kosong melaporkan **46 skip**,
+  dan 46 **bukan** jumlah test: bun ikut menghitung **hook** yang di-skip, dan
+  kelimanya punya persis `beforeAll` + `afterAll` — 36 test + 10 hook. Yang jujur
+  adalah jumlah deklarasi (`grep -cE '^\s*(test|it)\('`), dan itulah yang kini
+  benar-benar dieksekusi pipeline: 14 + 3 + 9 + 1 + 9, diverifikasi per berkas
+  dari log run yang memulihkannya, bukan disimpulkan. Nol di antaranya merah —
+  90 migrasi berlalu sejak berkas-berkas itu ditulis, dan ternyata tak ada yang
+  membusuk.
+
+  Dan gerbangnya menangkap satu cacat pada dirinya sendiri sebelum di-commit:
+  draf pertama mencocokkan seluruh dokumen YAML, sehingga **komentar** yang
+  menyebut nama berkas ikut terbaca sebagai entri daftar. Itu kelas cacat yang
+  ADR-0062 sudah catat untuk ekstraktor path `skills:check`. Baris komentar kini
+  dibuang lebih dulu, dan alasannya ditulis di berkasnya.
+
+- d30f932: docs(blog_content): descriptor dan README berhenti menjanjikan keluarga `/news/**` yang sudah dihapus
+
+  Pelaksanaan ADR-0071 §4 menghapus keempat rute `/news/**`, gerbang
+  `withHostResolvedBlogTenant`, dan setting `publicRouteMode` dari kode — tetapi
+  **deskripsi descriptor `blog_content` dan `README.md`-nya tidak ikut berubah**.
+  Keduanya masih menyajikan ketiganya sebagai permukaan hidup:
+
+  - `module.ts` `description` masih berbunyi "ADR-0059 adds the SECOND,
+    host-resolved public family `/news/**` … carries its own switch
+    `publicRouteMode`". Deskripsi descriptor bukan komentar — ia yang dibaca
+    `listModules()` dan yang muncul di layar Module Management, jadi operator
+    membacanya sebagai daftar kapabilitas.
+  - `README.md` memuat ~180 baris yang mendokumentasikan gerbang, saklar, dan
+    keempat rute itu, termasuk **tabel setting yang mencantumkan `publicRouteMode`
+    sebagai field yang bisa ditulis** lengkap dengan write path
+    `PATCH /api/v1/tenant/modules/blog_content/settings` — instruksi untuk menulis
+    setting yang sudah tidak ada.
+
+  Ini kelas cacat yang sama yang berulang di repo ini: dokumen yang membantah
+  kodenya sendiri, dan tak satu gerbang pun melihatnya karena semua gerbang
+  cakupan mengukur ENDPOINT, bukan prosa descriptor.
+
+  Yang dipertahankan sebagai catatan historis, bukan dihapus: paragraf yang
+  menyatakan keluarga itu PERNAH ada dan kenapa dipensiunkan. Menghapusnya akan
+  membuat orang berikutnya mengusulkannya lagi sebagai fitur baru enam bulan
+  kemudian — alasan yang sama dipakai tabel celah §9 untuk menahan baris yang
+  sudah tertutup.
+
+  Nol perubahan perilaku: hanya string deskripsi dan markdown.
+
+- 26334bd: Perbaiki lima instruksi operator yang tidak bisa jalan: `.env.example` gagal `config:validate`-nya sendiri, `docker exec … email:dispatch` pada image tanpa `scripts/`, `production:preflight` yang tidak ada, tag image ber-`v`, dan checkout migrasi dari `main` bukan tag rilis.
+- 33c7dba: docs(keluarga): `awcms-astro` dinyatakan memikul halaman publik + admin USER; mini/micro ditegakkan sebagai arsip (ADR-0070)
+
+  Dua permintaan, dan hasil pemeriksaannya berbeda satu sama lain.
+
+  **Yang KURANG: peran `awcms-astro`.** Pada 8 Agustus 2026 repo sebelah
+  mendaratkan ADR-0034 — situs publik sebagai fungsi utama, plus permukaan admin
+  untuk seorang **USER** bila situsnya menyatakannya lewat `permukaanAdmin`,
+  dengan `owner` ditolak gerbang di sana. §Hubungan-nya menuliskan ketegangannya
+  dengan ADR-0051 repo ini secara terbuka lalu menutupnya dengan permintaan yang
+  tidak bisa ia penuhi sendiri: catat selisih ini sebagai divergence keluarga,
+  karena "repo ini tidak bisa menulisnya sendiri". Tidak ada satu pun ADR di sini
+  yang membolehkannya; ADR-0051 berbunyi **"seluruh layar admin … dibangun di repo
+  `awcms`"**, dan satu-satunya ADR yang pernah memberi `awcms-astro` peran admin
+  (ADR-0048) sudah di-supersede — lagipula peran yang diberikannya `owner`/internal,
+  persis yang ditolak gerbang di sana.
+
+  **Yang SUDAH ADA: penghentian mini/micro.** ADR-0047 membekukan keduanya dan
+  ADR-0055 §1 menutup jalur port keluar; keduanya final. Yang tertinggal bukan
+  keputusannya melainkan **penerapannya** — jadi tidak ada ADR ketiga yang
+  mengulanginya, hanya penyuntingan berkas yang belum menyusul.
+
+  - **[ADR-0070] MEMPERSEMPIT ADR-0051, tidak men-supersede-nya.** Sumbu pembagian
+    layar bergeser dari AUDIENS (tenant vs owner/internal/platform) menjadi **APA
+    YANG DIKELOLA**: admin **SISTEM** (modul, peran, tenant, jejak audit, apa pun
+    lintas-tenant) tetap di sini di bawah satu shell `/admin/*`; admin **USER**
+    (seseorang mengerjakan bagiannya sendiri di SATU situs) boleh di `awcms-astro`.
+    Men-supersede akan mencabut ketiga gerbang pengganti ADR-0051 bersama
+    keputusannya — kebalikan dari yang diinginkan.
+  - **Ketiga gerbang pengganti ADR-0051 dikutip utuh dan tidak dilonggarkan
+    sedikit pun** — termasuk klausa penegakan butir 3 ("tetap ditolak endpoint-nya
+    kalau ia menebak URL-nya"), yang justru bagian yang klaim "tidak dilonggarkan"
+    bersandar padanya. Temuan terbukanya untuk `idn_admin_regions.dataset.configure`/`.restore`
+    sudah **ditutup** ADR-0052 (`sql/084`) lalu ADR-0053 (`sql/085`, scope
+    `platform`), dan ADR ini tidak mengubahnya. Yang membuat penyempitan ini murah
+    adalah kalimat ADR-0051 sendiri: yang menahan aksi lintas-tenant adalah gerbang otorisasi, bukan alamat
+    repo tempat tombolnya digambar.
+  - **Tidak ada kemampuan yang hanya ada di sana.** Setiap fitur yang dijangkau
+    USER wajib juga bisa dikelola dari `/admin/*` di sini — jadi urutan kerjanya
+    **`awcms` dulu, selalu**.
+  - **Entri `admin-user-surface-in-awcms-astro`** masuk `intentionalDivergences`
+    (`owner: @ahliweb`, `reviewDate: 2027-02-04`, sekohort dengan empat entri lain).
+    Yang ditinjau bukan apakah admin USER boleh di sana — itu diputuskan — melainkan
+    apakah **batasnya** masih di tempat yang sama.
+  - **`family.role` di manifes dipersempit.** Ia satu-satunya pernyataan peran yang
+    machine-readable, dan tidak ada tes yang meng-assert isinya — validator hanya
+    menuntut string non-kosong. Itulah persis cara ia membusuk sampai mengklaim
+    kepemilikan atas "every admin screen" berbulan-bulan setelah itu berhenti benar.
+  - **ADR-0047 statusnya diperbaiki** `Accepted` → `Superseded by ADR-0055`, sesuai
+    Aturan 2 indeks ADR sendiri. Isinya TIDAK ditulis ulang (Aturan 2 juga — ADR ditandai, bukan ditulis ulang); yang
+    ditambahkan hanya banner bahwa §Keputusan butir 1 ("porting _out_ stays
+    encouraged") sudah tidak berlaku. Ini sisa mini/micro yang paling berbahaya,
+    karena statusnya membuat jalur port-keluar terbaca sebagai keputusan HIDUP.
+
+  Yang hanya terasa saat mengembangkan:
+
+  - **Kedua README nol menyebut `awcms-astro`** dan menyatakan keluarga terdiri dari
+    tiga repo, dua di antaranya arsip. Wajah publik repo ini karena itu tidak memuat
+    repo pasangannya yang hidup. Diperbaiki di kedua bahasa beserta hash i18n-nya.
+  - **`AGENTS.md` memuat kontradiksi internal yang sudah ada sebelum ADR-0034 sisi
+    sana:** tabel §"Di repo mana sebuah LAYAR dibangun" mengklaim `awcms` memikul
+    "frontend PUBLIK", sementara tabel §"Di repo mana pekerjaan dilakukan" di berkas
+    yang sama menyerahkan situs publik ke `awcms-astro`. Keduanya kini satu cerita.
+  - **`docs/awcms/family-compatibility.md` §5 memuat daftar yang 100% salah** —
+    sembilan entri era-mini, sementara manifes memuat empat entri yang sama sekali
+    berbeda, dan tidak ada gerbang yang membandingkan keduanya. Judul dokumennya
+    pun masih "terhadap standar AWCMS-Mini", poros yang dicabut ADR-0055.
+  - **`awcms-sync-hmac` menggantungkan saklar keamanan pada repo arsip:**
+    `SYNC_HMAC_ALLOW_LEGACY=false` disyaratkan menunggu `awcms-mini` diperbarui —
+    syarat yang tidak akan pernah terpenuhi, sehingga celah pemalsuan v1 tidak akan
+    pernah bisa dinyatakan tertutup. Dinyatakan ulang terhadap deployment nyata.
+  - **Provenance tidak disapu.** ~40 rujukan `sql/`, riwayat versi kontrak di
+    `module-contract.ts`, asal-usul modul di `index.ts`, dan penanda
+    `<!-- sql-refs: awcms-mini … -->` semuanya DIPERTAHANKAN: yang pertama fakta
+    permanen, yang terakhir load-bearing (menghapusnya memerahkan `check:docs`).
+    Yang diubah hanya kalimat yang memperlakukan mini/micro sebagai standar atau
+    antrean kerja yang HIDUP.
+
+  **Nol perubahan kode berjalan, nol izin berpindah.** Ini keputusan tata kelola;
+  seluruh gerbang teknis tetap utuh. Gerbang `reviewDate` dibuktikan menggigit
+  dengan memundurkan tanggalnya, memastikan MERAH, lalu mengembalikannya.
+
+  **Ditemukan verifikasi adversarial, dan ikut diperbaiki di sini.** Empat lensa
+  membaca cabang ini sebelum ia di-push; yang mereka temukan bukan satu kesalahan
+  melainkan satu bentuk kesalahan yang berulang — pernyataan diperbarui di tempat
+  yang terlihat, dan tidak di tempat yang membantahnya.
+
+  - **ADR-0051 dan ADR-0055 kini membawa penanda balik.** Sebelumnya rujukannya
+    satu arah, sehingga pembaca yang membuka ADR-0051 langsung — dan `AGENTS.md`
+    menautkannya di tiga tempat — mendapat aturan yang sudah dipersempit tanpa
+    tanda apa pun. Itu persis bentuk kegagalan yang §Alternatif ADR-0070 katakan
+    ingin dicegah. Keduanya mendapat banner; kalimatnya tidak ditulis ulang.
+  - **Baris indeks ADR-0051** ikut ditandai `Accepted (dipersempit ADR-0070)` di
+    kedua bahasa, meniru pola yang cabang ini sendiri pakai untuk ADR-0047.
+  - **Tiga banner SOP faktual salah dan dihapus, bukan diparafrase**:
+    `08_sop_operasional_user_guide.md` menyatakan `blog_content`, `data_lifecycle`,
+    dan business-scope/SoD "belum ada di repo ini" padahal ketiganya live sejak
+    `sql/035`–`sql/040`, `sql/055`–`sql/056`, dan `sql/027`–`sql/030`. Cacat ini
+    mendahului cabang ini; tidak ada gerbang yang mengadu klaim "belum ada di
+    `src/modules`" dengan isi `src/modules/`.
+  - **`src/modules/_shared/family-contract.ts`** — satu-satunya pernyataan poros
+    keluarga yang ada di KODE — masih menyatakan dirinya deklarasi konformansi ke
+    standar `awcms-mini`, membantah header manifes yang cabang ini sendiri sunting
+    ("self-anchored since ADR-0055").
+  - Ditambah: rujukan "Aturan 3" yang sebenarnya Aturan 2, tanggal ADR-0052 yang
+    tertulis 2 Agustus padahal 1 Agustus, alasan tidak memperluas ADR-0065 yang
+    dibantah `COMMITTED_PATHS` di kodenya sendiri, daftar permukaan publik yang
+    menghilangkan keluarga `/news/**` sambil mengatasnamakan ADR-0059, satu jangkar
+    tautan rusak yang lahir di cabang ini, dan baris §11 `standar-performa-dan-keamanan.md`
+    untuk divergence kelima.
+
+- 02b0f4d: fix(keamanan): `bun audit` berhenti jadi klaim tanpa pemeriksa — tiga advisory `high` ditutup dan digerbangi
+
+  `docs/awcms/standar-performa-dan-keamanan.md` menjadikan `bun audit` bukti untuk
+  **tiga** tabel kepatuhan sekaligus — OWASP A06, ISO/IEC 27001 A.8.8, dan NIST
+  SSDF RV.1 — sementara `grep -rn "bun audit" package.json .github/workflows/
+scripts/` mengembalikan **nol** kemunculan. Tidak ada satu perintah pun yang
+  menjalankannya. Baris A06 berbunyi "`bun audit` bersih per 4 Agustus 2026";
+  dijalankan 8 Agustus ia keluar dengan **3 advisory high**:
+
+  - `nanoid <3.3.17` (GHSA-2v37-7h3g-55p8), lewat `astro › vite › postcss`
+  - `js-yaml >=3.0.0 <3.15.1` dan `>=4.0.0 <4.3.1` (GHSA-5p4m-2wfm-xmqj,
+    CVE-2026-59870), lewat `astro`, `@astrojs/node`, dan `@changesets/cli`
+
+  Ketiganya ditutup lewat `overrides`, dan yang ketiga adalah alasan yang dua
+  lainnya tidak punya: mengoverride `js-yaml` SENDIRIAN **merusak tooling rilis**.
+  `read-yaml-file@1.1.0` — dipatok transitif oleh `@changesets/cli@2.31.1`, yang
+  sendirinya sudah versi terbaru — memanggil `yaml.safeLoad`, API yang dihapus di
+  js-yaml 4. Dibuktikan dengan memanggilnya: `Function yaml.safeLoad is removed in
+js-yaml 4`. Karena Bun 1.3.14 **mengabaikan diam-diam** baik `overrides`
+  bersarang gaya npm maupun `resolutions` ber-path gaya yarn (keduanya tidak
+  menghasilkan entri bersarang di `bun.lock`), override tidak bisa dipersempit ke
+  satu jalur — jadi konsumennya yang dinaikkan: `read-yaml-file ^2.1.0`, versi
+  terbaru yang masih CommonJS (`3.0.0` sudah `"type": "module"` sedangkan
+  `@manypkg/get-packages` menjangkaunya lewat `require()`) dan sudah memakai
+  `js-yaml ^4.1.1`.
+
+  Gerbang barunya `bun run deps:audit:check`, disisipkan ke rantai `check`:
+
+  - memblokir `high`/`critical`; `moderate`/`low` dicetak tetapi tidak memblokir,
+    karena gerbang yang berbunyi pada derau adalah gerbang yang dihapus orang
+  - **gagal-TERTUTUP** saat `bun audit` tidak bisa dijalankan — audit yang tak
+    terjangkau registry melaporkan hijau yang sama dengan audit bersih, dan hanya
+    satu dari keduanya yang benar
+  - daftar pengecualian **KOSONG** dan dijaga tetap kosong; entri yang tidak lagi
+    cocok dengan advisory mana pun **memerahkan** gerbang, sehingga daftarnya tak
+    bisa jadi museum kerentanan yang sudah lama diperbaiki upstream
+
+  Dua jebakan yang ditemukan sambil mengerjakan ini dan ditulis di header skrip
+  supaya tidak ditemukan ulang: `bun update <nama>` pada dependensi **transitif**
+  tidak memutakhirkan salinan bersarangnya — ia menambahkan paket itu sebagai
+  dependensi **langsung** repo; dan `bun install` inkremental **tidak memangkas**
+  `node_modules/*/node_modules/<pkg>` peninggalan instalasi sebelumnya, sehingga
+  pohon direktori bisa memuat salinan rentan sementara gerbang hijau. Yang diaudit
+  adalah lockfile — dan lockfile pula yang dikirim (`--frozen-lockfile` di CI dan
+  image), jadi itu yang benar; "hijau" berarti lockfile-nya bersih, bukan setiap
+  byte di `node_modules/`.
+
+  Ketiga baris kepatuhan dikoreksi agar menamai gerbang yang berjalan, bukan
+  perintah yang tersedia.
+
+- 04c2899: feat(gerbang): `access:decision-log:coverage:check` mengunci jejak keputusan otorisasi
+
+  `authorizeInTransaction` menulis satu baris `awcms_abac_decision_logs` di setiap
+  jalur terminal. Properti itulah yang membuat sistem ini bisa menjawab "kenapa
+  permintaan ini ditolak" dari sebuah tabel alih-alih dari tebakan — dan ia
+  ditopang **kebiasaan review saja**.
+
+  Program model keanggotaan menambahkan **tiga** cabang keluar baru ke fungsi yang
+  sama: `TENANT_SUSPENDED`, `ENTITLEMENT_REQUIRED`, dan penolakan
+  principal/delegasi. Regresi paling mungkin di seluruh program adalah salah satu
+  darinya kembali lebih awal tanpa menulis log. Tidak ada yang akan menangkapnya:
+  suite default berjalan **tanpa** PostgreSQL, jadi "sebuah baris ditulis" tidak
+  bisa di-assert di sana; permintaannya tetap ditolak dengan benar, jadi tidak ada
+  test yang gagal dan tidak ada pengguna yang mengeluh. Yang hilang hanya jejaknya
+  — pada penolakan yang paling perlu dijelaskan ke pelanggan.
+
+  Gerbang ini **hijau hari ini**. Nilainya bukan menemukan cacat sekarang,
+  melainkan mengunci properti sebelum tiga cabang baru mendarat di atasnya.
+
+  **Aturan naif salah, dan membaca guard-nya yang menunjukkan itu.** "Setiap
+  `return` didahului `recordDecisionLog(`" keliru di dua arah sekaligus:
+
+  - Return `401 AUTH_REQUIRED` **tidak bisa** menulis log — ia menyala ketika
+    `context` bernilai null, jadi tidak ada `tenantUserId` untuk mengatribusikan
+    barisnya. Menuntut log di sana berarti menuntut baris yang mustahil. Ia masuk
+    daftar pengecualian ber-alasan.
+  - Return `403 SOD_CONFLICT` didahului `recordDecisionLog` yang mencatat sebuah
+    **allow** — keputusan ABAC-nya memang allow, dan SoD adalah deny aditif yang
+    dicatat di `awcms_sod_conflict_evaluations`. Aturan "log tepat sebelum return"
+    meluluskannya karena alasan yang salah; aturan "log di blok yang sama"
+    menggagalkannya karena alasan yang salah.
+
+  Jadi aturannya **dominansi**, diaproksimasi secara leksikal: untuk sebuah return,
+  telusuri rantai blok yang melingkupinya dan cari `recordDecisionLog(` pada
+  kedalaman blok itu sendiri, sebelum posisi return-nya. Log di dalam
+  `if (machine && …) { … }` karena itu mencakup return cabang itu dan **tidak**
+  mencakup return di luarnya.
+
+  Lima mutasi memerahkan gerbang, diverifikasi lokal. Yang paling menentukan:
+  memindahkan panggilan log ke **cabang saudara** — ia tetap ada di berkas dan
+  tetap tekstual lebih dulu dari return-nya, dan gerbangnya tetap **MERAH**. Itu
+  yang membedakan dominansi dari regex. Empat lainnya: cabang keluar baru tanpa
+  log; log dominan dihapus; fungsi target di-rename (gerbang tidak boleh diam-diam
+  OK); dan pengecualian basi untuk kode yang kini sudah menulis log.
+
+  Batas yang ditulis, bukan disembunyikan: pengecualian di-key oleh **kode error**
+  (bukan offset baris, yang membusuk tiap kali ada suntingan di atasnya), sehingga
+  return kedua yang memakai kode yang sudah dikecualikan akan mewarisi
+  pengecualiannya. Dan gerbang ini menalar **satu** fungsi —
+  `evaluateFieldAccessInTransaction` sengaja di luar cakupan dan sengaja tidak
+  menulis log.
+
+  Nol perubahan runtime. Rantai `check` 36 → 37 segmen.
+
+- 343d69e: feat(gerbang): kelas "hanya bisa lewat `curl`" berhenti dicari dengan tangan — 54 permission tanpa layar jadi angka yang hanya boleh mengecil
+
+  [ADR-0051](docs/adr/0051-admin-screens-consolidated-in-awcms.md) memutuskan
+  setiap layar admin SISTEM dibangun di repo ini, lalu **tidak memasang apa pun
+  yang mengukur kepatuhannya**. Akibatnya "modul ini hanya bisa dipakai lewat
+  `curl`" ditemukan dengan tangan — berulang kali, dan tiap kali terlambat.
+
+  Pemeriksa yang tampak berdekatan menjawab pertanyaan lain:
+
+  - `access:permissions:enforcement:check` — "apakah permission ini punya
+    **penegak**?" Sebuah rute sudah cukup. Permukaan `curl`-only lolos selamanya.
+  - `tests/admin-navigation-registry.test.ts` — "apakah tiap entri `navigation`
+    menunjuk halaman, dan sebaliknya?" Modul tanpa `navigation` tak punya apa pun
+    untuk diperiksa.
+  - contract test per-layar — "apakah layar INI menggerbangi key yang benar?" Ia
+    tak bisa melihat permission yang tak disebut layar mana pun.
+
+  `bun run admin:screen-coverage:check` (murni, di rantai `check`, gerbang ke-36)
+  menanyakan yang hilang: **apakah ada layar yang mengklaim permission ini?**
+  Hasil pemindaian pertama: **32 layar mengklaim 133 dari 203 permission**; 16
+  keputusan tertulis, **54 menunggu layar, tersebar di sembilan modul.**
+
+  Dua daftar, dan pemisahannya adalah inti desainnya:
+
+  - **`DELIBERATELY_UNSCREENED`** — keputusan ber-alasan ("operator memang tidak
+    seharusnya menggerakkan ini dari halaman"), bentuk yang sama dengan register
+    `permission-enforcement-check.ts`. Isinya diambil dari alasan yang **sudah
+    tertulis di kode**: keenam `workflow.definition.*` (butuh editor graf; textarea
+    JSON yang menerima graf rusak sampai `publish` menolaknya lebih buruk daripada
+    tak ada), unggah media tiga-langkah, saklar `enforcement` satu-arah,
+    `blog_content.ads.*` yang ADR-0044 pensiunkan jadi 410, dan tiga lainnya.
+  - **`NOT_YET_SCREENED`** — ledger **satu arah** yang isinya bukan penilaian
+    apa-apa, hanya "belum ada yang membangunnya". Memberi sebuah permission layar
+    lalu meninggalkan barisnya di sini **memerahkan CI**, jadi angkanya selalu
+    angka yang sebenarnya. Itulah yang membuatnya layak ditulis: sebelum berkas
+    ini, "13 dari 21 modul tanpa layar" adalah kalimat yang harus diturunkan ulang
+    dengan tangan, dan pernah diturunkan **salah** lebih dari sekali.
+
+  Mencampur keduanya akan membuat pekerjaan yang belum selesai memperoleh
+  penampilan sebuah penilaian — persis cara ADR-0058 menemukan enam entri
+  pengecualian yang ternyata enam bug.
+
+  Dua kelompok terbesar di ledger bukan kosmetik, dan namanya disebut di
+  berkasnya: seluruh key `email.suppression.*` (alamat yang di-suppress berhenti
+  menerima email **termasuk reset password**, dan tak ada halaman untuk
+  melihat/menghapusnya) dan seluruh `identity_access.business_scope_*` (assignment
+  plus alur exception maker/checker tanpa inbox untuk checker-nya).
+  `module_management.settings.*` adalah yang punya alibi palsu: tiga dokumen
+  menyatakan panel setting generik `/admin/modules/{key}` sudah ada, dan satu
+  memakai klaim itu untuk membenarkan tidak membangun editor. Layar itu tak pernah
+  ada (dikoreksi di PR sebelumnya).
+
+  **Matcher-nya menyelesaikan helper file-first, dan itu load-bearing.** Matcher
+  yang hanya membaca triple literal `permissionKey("m","a","x")` melaporkan
+  **delapan** permission `blog_content` yang ter-ship dan bekerja sebagai
+  tak-terklaim, karena `blog-presentation.astro` mengikat
+  `const can = (activity, action) => …permissionKey("blog_content", activity, action)`
+  lalu memanggilnya delapan kali dengan literal. Diverifikasi dengan membuang
+  resolusi itu: **8 false positive**. Scanner yang menjawab "tak tercakup" untuk
+  yang tercakup lebih buruk daripada tak ada scanner — ia melatih pembacanya
+  menambah pengecualian sampai gerbangnya tak menanyakan apa pun, dan
+  `permission-enforcement-check.ts` butuh empat draf untuk mempelajarinya.
+  Resolusinya sengaja **sempit**: helper hanya dihitung bila badannya mengikat
+  module key sebagai LITERAL dan meneruskan kedua parameternya sendiri. Selain itu
+  dibiarkan tak-terselesaikan — dan gagal ke arah "tak-terklaim", arah yang
+  memaksa manusia melihat.
+
+  **Batas yang dinyatakan di docblock-nya:** gerbang ini menjawab "apakah ada yang
+  mengklaim?", **bukan** "apakah kontrolnya benar". Tombol Restore `/admin/blog`
+  mengklaim `posts.restore` sambil dirender pada baris yang pasti 404 (#351);
+  gerbang ini akan berkata "tercakup" sepanjang waktu itu. Kebenaran kontrol tetap
+  tugas contract test per-layar.
+
+  **Mutation-proven empat arah:** permission tanpa layar & tanpa entri → MERAH;
+  entri ledger basi (layarnya sudah ada) → MERAH "only ever shrinks"; resolusi
+  helper dibuang → 8 false positive; layar menggerbangi key yang tak dideklarasikan
+  siapa pun → MERAH. Plus 15 unit test atas aturannya, digerakkan snapshot
+  tertanam.
+
+- 04908df: Gerbang baru `data-lifecycle:table-coverage:check` (#437) — tabel baru tidak
+  bisa lagi mendarat tanpa menjawab pertanyaan retensi.
+
+  Rencananya menyebut gerbang atas tabel **volume-tinggi** yang daftarnya
+  DITURUNKAN, bukan ditulis tangan. Tiga cara menurunkannya dibangun dan diukur
+  terhadap skema ini, dan ketiganya gagal: _append-only di sumber_ (46 tabel —
+  `INSERT … ON CONFLICT DO UPDATE` terbaca sebagai append), _tanpa jalur hapus_
+  (94 tabel — repo ini memakai `ON DELETE CASCADE` di satu migrasi saja), dan
+  _tak-terbatas menurut skema_ (121 dari 128 — tabel terbatas yang nyata berkunci
+  pada teks terkurasi seperti `module_key`, yang tak bisa dibedakan dari nilai
+  bebas lewat DDL). Gerbang yang daftar pengecualiannya 90% skema adalah daftar
+  tulis-tangan yang menyamar.
+
+  Jadi pertanyaannya diganti. Alih-alih menurunkan tabel MANA yang volume-tinggi —
+  yang menuntut tahu bagaimana produknya dipakai — turunkan bahwa sebuah tabel
+  ADA, lalu buat kewajibannya mustahil dilewati. Tabel diambil dari `sql/` lewat
+  `deriveTableRlsStates`, fungsi yang sama yang dipakai `repo:inventory`, supaya
+  ada SATU jawaban untuk "tabel apa saja yang ada".
+
+  Tabel lolos lewat tiga jalan, dan tabel BARU hanya punya dua: deskriptor
+  `dataLifecycle`; `BOUNDED_BY_DESIGN` (**mulai kosong**, wajib beralasan); atau
+  `TABLES_PREDATING_THE_RULE` — 114 tabel yang sudah ada, hanya boleh MENYUSUT dan
+  tertutup untuk tabel baru. Entri ledger yang sudah punya deskriptor adalah
+  error, bukan duplikat yang ditoleransi, dan panjangnya dipatok test supaya entri
+  ke-115 tidak bisa bersembunyi di antara 114 lainnya.
+
+  Batasnya dinyatakan, bukan dibiarkan tersirat: ini tidak bisa memberi tahu bahwa
+  tabel LAMA di ledger sedang memakan disk. Itu pertanyaan tentang lalu lintas,
+  dan tempat jujurnya `security:readiness` terhadap basis data nyata.
+
+  Rantai `check` 37 → 38 segmen.
+
+- 5672add: `access:chokepoint:check` mendapat root kedua — layar admin — plus
+  `loadAdminScreen` dan ledger migrasi satu-arah (#450, PROJECT_STATE §4 R3).
+
+  Ke-32 layar `src/pages/admin/**/*.astro` memutuskan apa yang dirender dari
+  `ssr.permissions.has(...)`, yaitu `fetchGrantedPermissionKeys` — **RBAC mentah**.
+  Jalur itu melewati `authorizeInTransaction`, jadi ia melewati semua yang hanya
+  ada di sana: policy `deny` ABAC yang ditulis tenant (ditegakkan di API, **inert
+  di layar**), `resolveModuleAvailability` (tenant yang mematikan modulnya tetap
+  melihat layarnya berisi data), fakta business-scope, SoD action-time, dan
+  `recordDecisionLog` — sehingga sebuah pembacaan yang terjadi tidak meninggalkan
+  satu baris pun yang mengatakannya. Yang **tidak** hilang, supaya temuannya tidak
+  dibesar-besarkan: RBAC dasar tetap ditegakkan dan tidak pernah ada kebocoran
+  lintas-tenant — `withTenantOrThrow` + FORCE RLS selalu ada di jalur itu.
+
+  `loadAdminScreen` membuka SATU transaksi, memanggil chokepoint, lalu menjalankan
+  `load` **di dalam transaksi yang sama**. Deny me-render state ditolak, bukan
+  redirect. Refusal pool/circuit-breaker adalah state KETIGA — sebuah penolakan
+  yang dirender sebagai "Anda tidak boleh melihat ini" adalah kebohongan ke arah
+  yang diselidiki sebagai bug perizinan.
+
+  Gerbangnya tetap SATU skrip: dua skrip berarti dua daftar pengecualian yang
+  menyimpang, dan yang kedua selalu jadi yang longgar. Kedua root hanya berbeda di
+  dua tempat — cara berkas diiris (`.astro` per-BERKAS: satu berkas = satu jalur
+  render) dan apa yang dihitung sebagai memutuskan (`.permissions.has(`).
+
+  `form-drafts.astro` ikut dimigrasikan supaya mekanismenya **dibuktikan**, bukan
+  sekadar disediakan; ledger mendarat berisi 31, bukan 32.
+
+  Dua koreksi yang muncul saat membangunnya: `stripComments` ditambahkan setelah
+  sinyalnya cocok dengan komentar layar yang baru dimigrasikan yang menjelaskan
+  bahwa ia TIDAK lagi memakai `ssr.permissions.has()`; dan `extractScreenClaims`
+  menemukan bahwa `visitor_analytics.raw_detail.read` sudah lama diklaim layar
+  `analytics.astro` lewat evaluator ABAC — satu baris `NOT_YET_SCREENED` yang basi
+  sejak sebelum PR ini.
+
+- 26334bd: `config:env:coverage:check` kini melihat env yang dibaca lewat alias `process.env`, bukan hanya `process.env.X` — 53 → 173 variabel terlihat, dan 26 variabel deployment nyata (termasuk seluruh `REDIS_*`) ditambahkan ke `.env.example`.
+- e3aa680: `scripts:inventory:check` membandingkan SELURUH blok ter-generate, bukan hanya
+  baris tabelnya (#442).
+
+  `renderInventory()` menulis dua hal: kalimat hitungan dan tabel. Pemeriksanya
+  memanggil `parseInventoryBlock()`, yang menyaring `line.startsWith("| \`")`—
+jadi kalimat di atas tabel dihasilkan lalu tidak pernah dibandingkan dengan
+apa pun.`main` hari ini berbunyi "78 target … 32 di antaranya" sementara
+  tabelnya memuat 79 baris dan kebenarannya 79/33.
+
+  Yang membuat ini layak diperbaiki bukan angkanya, melainkan **siapa yang
+  menuliskannya**: git, bukan manusia. #435 dan #440 lahir dari base yang sama,
+  masing-masing menambah satu target, jadi keduanya mengubah baris kalimat itu
+  menjadi teks yang IDENTIK. Rebase yang kedua di atas yang pertama tidak
+  menemukan konflik pada baris yang kedua sisinya sama, menggabungkan baris
+  tabel yang berbeda dengan benar, dan menghasilkan blok yang separuhnya benar
+  — nol konflik, nol gerbang merah.
+
+  Arah itulah temuannya: pemeriksa lama meliputi tepat bagian yang git TIDAK
+  BISA salah gabung dan melewatkan bagian yang BISA. Karena itu unit
+  pembandingnya kini blok, dinormalisasi hanya terhadap apa yang prettier
+  tulis ulang (padding kolom + garis pemisah) — sehingga apa pun yang
+  generatornya diajari tulis berikutnya ikut tercakup tanpa ada yang perlu
+  mengingatnya.
+
+  Buktinya bukan test yang ditulis untuk hijau: gerbang yang sudah diperbaiki
+  dijalankan terhadap `main` apa adanya dan MERAH pada cacat yang benar-benar
+  ada di sana, lalu hijau setelah regenerasi. Nol perubahan runtime.
+
+- 12fe682: fix(gerbang,docs): klaim "modul ini belum ada" berhenti bersembunyi di `src/modules/`
+
+  `tests/module-absence-claims.test.ts` dibangun karena tiga skill menyatakan modul
+  yang ada di `listModules()` sebagai tidak ada — klaim yang membuat agen tidak
+  mencarinya, tidak memanggilnya, dan dengan senang hati men-stub ulang sesuatu
+  yang sudah bekerja. Gerbang itu memindai `.claude/skills/*/SKILL.md` dan
+  `docs/awcms/*.md`.
+
+  **Kalimat yang sama persis ternyata ada di `src/modules/data-lifecycle/README.md`**
+  — "`form_drafts`/`newsletter`/`comments` (unported in this base) are not
+  registered as adopters here" — sementara `form_drafts` dan `comments` keduanya
+  mendeklarasikan descriptor `dataLifecycle` nyata. Ia duduk **satu direktori di
+  luar** korpus gerbangnya. README dan header descriptor sebuah modul justru
+  tempat paling load-bearing untuk klaim semacam ini, karena itulah yang dibaca
+  orang sebelum menyentuh modul tersebut.
+
+  Dua pelebaran, dan yang kedua diperlukan agar yang pertama tidak sia-sia:
+
+  1. Korpus ditambah `src/modules/*/README.md` dan `src/modules/*/module.ts`,
+     di-assert terpisah supaya glob yang resolve ke nol tidak lolos secara hampa —
+     mode kegagalan yang persis pernah terjadi pada `dot: true`.
+  2. Daftar frasa ditambah bentuk **Inggris** (`not ported`, `unported`,
+     `does not exist in this base`, `no longer exists`). Berkas di `src/modules/`
+     ditulis dalam bahasa Inggris, jadi daftar Indonesia-saja akan memindai berkas
+     baru itu sambil **tidak mencocokkan apa pun** di dalamnya.
+
+  Dibuktikan lewat dua mutasi: mengembalikan kalimat ASLI membuat gerbang merah
+  dan menyebut kedua modul; mempertahankan cacat itu **tetap tertanam** sementara
+  frasa Inggris dilepas membuat gerbang **hijau** — jadi penambahan frasa itu
+  load-bearing, bukan hiasan.
+
+  **Tujuh dokumen yang membantah kodenya sendiri diperbaiki**, tiap klaim
+  diverifikasi ke kode lebih dulu:
+
+  - `media-library/module.ts` menyatakan `/api/v1/media/objects/*` dan
+    `/admin/media` "NOT ported here" dan "declares no `navigation` yet (the
+    `/admin/media` page it would point at does not exist in this base)" —
+    keduanya ADA, dan entri `navigation`-nya dideklarasikan **40 baris di bawah**
+    paragraf itu di berkas yang sama. Bukan cacat fungsional (layarnya
+    terjangkau), tetapi deskripsi descriptor adalah yang dibaca `listModules()`
+    dan tampil di layar Module Management.
+  - `data-lifecycle/README.md` — di atas.
+  - `blog-content/module.ts` masih menulis "Two entries … Taxonomy, presentation,
+    settings and homepage composition are still sibling screens" setelah lima
+    entri mendarat. Ini kelalaian saya sendiri dari PR sebelumnya.
+  - `absorb-awcms-micro-roadmap.md` memesan `2.4.0` untuk
+    `newsletterContentSources`; slot itu sudah dipakai `api.routes` (#267) dan
+    `2.5.0` oleh ADR-0053. Kini `2.6.0`.
+  - `module-contract.ts` melompati **entri changelog `2.4.0`** seluruhnya
+    (2.3.0 → 2.5.0) — dan justru itulah sebab roadmap memesan slot yang sudah
+    terpakai. Ditambahkan.
+  - `docs/ARCHITECTURE.md` masih membingkai `newsletter`/`social-publishing`/dll.
+    sebagai "belum di-port … urutan porting". ADR-0055 mencabut jalur itu:
+    mini/micro ARSIP, kapabilitas DIBANGUN di sini lewat ADR admission sendiri.
+  - `docs/adr/0067` menyebut `/news/**` sebagai permukaan HTML repo ini. Kalimat
+    aslinya **dipertahankan** dengan catatan supersession — ia benar saat ditulis,
+    dan ADR adalah catatan keputusan, bukan dokumen current-state. **Hanya
+    kalimat konteks itu** yang disentuh; keputusan RUM di ADR yang sama tidak.
+
+- 9f8744e: feat(gerbang): sebelas berkas membaca tabel grant — sekarang daftarnya tertulis, dan yang kedua belas memerahkan CI
+
+  Gerbang baru `access:grant-readers:check` di rantai `check`. Setiap berkas yang
+  menyebut `awcms_access_assignments` atau `awcms_role_permissions` ada di daftar,
+  berikut **alasannya**; apa pun di luar itu menggagalkan build. Hijau hari ini,
+  nol perubahan perilaku — dan itulah maksudnya.
+
+  **Apa yang dijaganya.** Hari ini sebuah grant adalah `(tenant_user, role)` dan
+  menjawab satu pertanyaan: apakah orang ini memegang role itu, **di mana pun**
+  dalam tenant. Gelombang 3 program keanggotaan (#423) membuat grant membawa
+  **scope**-nya sendiri, sehingga join yang sama berhenti berarti "boleh
+  bertindak" dan mulai berarti "boleh bertindak **DI SUATU TEMPAT**" — dan tiap
+  pembaca yang merakit join-nya sendiri tetap memberi jawaban lama yang lebih
+  lebar sambil terlihat tak tersentuh.
+
+  Itu bukan mode kegagalan hipotetis. Bentuknya persis PROJECT_STATE §4 R3, tempat
+  31 layar admin memutuskan dari RBAC mentah dan **tiap satu di antaranya terbaca
+  benar**.
+
+  **Kenapa mendarat SEBELUM benda yang dijaganya.** Gerbang yang harus hijau hari
+  ini paling murah ditambahkan hari ini — dan daftar yang ditulis **sesudah**
+  perubahan berisiko adalah daftar yang ditulis orang yang sudah punya alasan
+  memendekkannya. `access:decision-log:coverage:check` (#426) mendarat atas
+  argumen yang persis sama, satu gelombang lebih awal.
+
+  **Kenapa daftar BERKAS, bukan aturan call-graph.** Sinyal yang jujur adalah
+  "berkas ini menyebut tabelnya". Aturan tentang modul mana boleh meng-IMPOR modul
+  mana akan melewatkan semuanya: kesebelas berkas menjangkau tabelnya lewat
+  template SQL, bukan impor, jadi DAG modul tak punya pendapat apa pun tentang
+  mereka dan `modules:table-writes:check` hanya mengatur TULIS. **Tiga** dari
+  sebelas berada **di luar** `identity_access`, dan tak satu pun melanggar gerbang
+  yang sudah ada:
+
+  - `tenant-admin/…/platform-bootstrap.ts` — menyemai grant owner tenant baru
+    sebelum `identity_access` punya permukaan untuk melakukannya. Fakta urutan
+    bootstrap, dicatat bukan dimaafkan.
+  - `pages/api/v1/access/policies/simulate.ts` — sebuah **RUTE** yang merakit
+    join-nya sendiri. Satu-satunya entri yang berupa refactor terjadwal, bukan
+    keputusan: simulator ABAC yang menghitung himpunan grant berbeda dari jalur
+    nyata **mensimulasikan sistem yang salah**, dan bedanya muncul sebagai policy
+    yang berperilaku di produksi tidak seperti pratinjaunya.
+  - `email/…/announcement-directory.ts` — menyelesaikan "siapa memegang role X"
+    untuk menyasar pengumuman. Keanggotaan, bukan otorisasi, jadi jawaban
+    union-lintas-scope tetap benar sesudah Gelombang 3. Terdaftar karena
+    penalarannya tidak jelas dari call site-nya.
+
+  **Komentar tidak bisa memutuskan hasilnya, dua arah.** Tiga berkas di repo ini
+  membahas tabel-tabel itu di docblock dan tak menyentuhnya — mereka tidak masuk
+  daftar. Sebaliknya, sebuah berkas tidak bisa **mempertahankan** slotnya dengan
+  menyebut tabelnya di komentar setelah query-nya dicabut: entri basi dilaporkan.
+  Keduanya diuji. `stripComments` dipakai ulang dari `access-chokepoint-check.ts`,
+  yang sudah mencatat kenapa justru PERBAIKAN yang menanam false positive — sebuah
+  perbaikan menjelaskan apa yang ia hapus.
+
+  **Dibuktikan mengikat, bukan sekadar hijau:** menyisipkan
+  `"SELECT 1 FROM awcms_access_assignments"` ke `src/pages/admin/roles.astro`
+  membuat gerbangnya **merah** dengan pesan yang menyebut nama tabelnya dan
+  alternatifnya. Pesan yang berkata "tidak" tanpa berkata "pakai ini" adalah pesan
+  yang dipuaskan orang dengan menambah pengecualian.
+
+  `awcms_permissions` sengaja **tidak** termasuk: ia katalog global tentang apa
+  sebuah permission ITU, tak membawa grant, dan dibaca migrasi seed serta picker
+  admin yang tak ada urusannya dengan daftar ini. Daftar sepanjang itu adalah
+  daftar yang tak dibaca siapa pun.
+
+- 86f2a81: fix(gerbang): `api:tenant-route:check` berhenti buta terhadap 32 layar admin
+
+  Ke-32 layar `src/pages/admin/**/*.astro` membuka `withTenantOrThrow` sendiri dan
+  memutuskan akses dengan `ssr.permissions.has()` saja — PROJECT_STATE §4 **R3**.
+  Mereka tak terlihat oleh `access:chokepoint:check` (root-nya `src/pages/api/v1`)
+  **dan** tak terlihat di sini, karena root gerbang ini berhenti di `src/pages/api`.
+
+  Gerbang ini sudah mencocokkan `withTenantOrThrow(` sejak awal. Ia hanya tidak
+  pernah diarahkan ke direktori tempat ke-32 layar itu tinggal.
+
+  `ROUTES_ROOT` tunggal menjadi `SCAN_ROOTS`, tiap root membawa ekstensinya sendiri
+  (`.ts` untuk API, `.astro` untuk admin) dan kalimat perbaikannya sendiri — karena
+  jawabannya berbeda: rute API harus memakai `defineTenantRoute`, sedangkan layar
+  admin **belum punya** factory untuk dipakai. Ke-32 layar masuk `NOT_YET_MIGRATED`
+  (236 entri, dari 204).
+
+  **Ratchet, bukan migrasi.** `defineAdminScreen` belum ada — ia Gelombang 1 dari
+  \#423. Nilainya adalah sejak commit ini sebuah layar admin BARU tidak bisa lagi
+  menambah utang R3, berbulan-bulan sebelum utangnya sendiri dilunasi.
+
+  Penjaga nol-berkas kini **per-root**. Total gabungan akan membiarkan satu root
+  sehat menutupi root kedua yang memindai nol berkas — persis "OK yang ceria dan
+  tak bermakna" yang diperingatkan header berkas ini, satu direktori kemudian.
+  Diverifikasi dengan mutasi: mengarahkan root admin ke direktori yang tidak ada
+  **merah**, dan mempertahankan root sambil mengganti ekstensinya juga **merah**.
+
+  Angka di issue #424 tertulis 31; yang benar **32**. Glob `src/pages/admin/*.astro`
+  melewatkan `src/pages/admin/tenant/domains.astro`, satu-satunya layar di
+  subdirektori. `find -name "*.astro"` menemukannya, dan 32 cocok dengan hitungan
+  R3 yang sudah tercatat.
+
+  Nol perubahan runtime. Nol migrasi. Nol permission.
+
+- bfccbbe: IP klien untuk rate limit dihitung dari **kanan** `X-Forwarded-For`, bukan dari
+  kiri (#438).
+
+  `resolveClientIp` membaca entri paling KIRI, dengan prasyarat yang ditulis
+  sebagai prosa: sah "hanya bila proxy itu MENIMPA (bukan menambah)" header.
+  Prasyarat yang tidak bisa diverifikasi operator dari dalam kode bukan kontrol,
+  dan kegagalan yang diizinkannya total, bukan sebagian: di belakang proxy yang
+  MENAMBAH — perilaku RFC 7239, dan yang dilakukan
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` milik nginx —
+  penyerang mengirim `X-Forwarded-For: <acak>`, proxy menambahkan peer aslinya di
+  kanan, entri paling kiri tetap apa pun yang diketik penyerang, dan tiap request
+  mendarat di bucket baru. Itu persis bypass yang `TRUSTED_PROXY_ENABLED`
+  diperkenalkan untuk menutup, dibuka kembali oleh topologi yang ia layani.
+
+  Gradien kepercayaan header itu berjalan kanan-ke-kiri. Jadi klien adalah entri
+  sejauh `TRUSTED_PROXY_HOP_COUNT` (baru, default `1`) dari kanan, dan tidak ada
+  posisi yang bisa dijangkau penyerang yang pernah dibaca. Default `1` **identik
+  byte** dengan perilaku lama untuk satu-satunya topologi yang pernah sah: proxy
+  yang menimpa mengirim satu nilai, dan di sana paling-kiri = paling-kanan.
+
+  Header yang lebih pendek dari rantai yang dideklarasikan jatuh ke
+  `clientAddress` — merosot ke over-limit (semua berbagi bucket proxy), bukan ke
+  no-limit. Nilai hop yang malformed jatuh ke `1`, tidak pernah ke `0`: nol akan
+  mengindeks lewat tepi kanan dan diam-diam mematikan kepercayaan header pada
+  deployment yang mengira sudah menyetelnya. `config:validate` menolak
+  `TRUSTED_PROXY_HOP_COUNT` yang diset tanpa `TRUSTED_PROXY_ENABLED=true`.
+
+  Ini **tidak** mengadopsi aturan `resolveAnalyticsClientIp`, yang menolak header
+  multi-nilai dan mengembalikan `null`. Itu benar di sana — IP analitik yang
+  hilang berharga satu baris presisi. Di sini tidak ada `null` untuk
+  dikembalikan, dan menolak multi-nilai akan meruntuhkan setiap klien di belakang
+  rantai 2-hop yang sah menjadi satu bucket: seluruh pengguna tenant terkunci
+  oleh dua puluh password salah. Prinsip sama, fallback berbeda.
+
+  Dibuktikan dengan mutasi: mengembalikan `parts[0]` memerahkan 7 test.
+
+- 5dd40fb: docs(seo,modul): redirect legacy `/blog/{tenantCode}` → `/news` berhenti disebut INERT; tiga komentar kode yang membantah kodenya sendiri diperbaiki
+
+  Ditemukan saat verifikasi adversarial atas ADR-0070, di luar cakupannya, jadi dikerjakan terpisah.
+
+  **Yang paling mahal: sebuah saklar dinyatakan tidak berefek, padahal berefek.** Enam tempat menyatakan auto-redirect legacy "INERT in awcms — no `/news` route family". Itu benar saat [ADR-0039](docs/adr/0039-seo-distribution-redirect-governance.md) menulisnya. [ADR-0059](docs/adr/0059-host-resolved-public-content-routes.md) kemudian mendaratkan keluarga `/news/**` — `/news`, `/news/{slug}`, `/news/category/{slug}`, `/news/tag/{slug}` — dan **setiap tujuan yang bisa dihasilkan pemetaan ini sekarang resolve**. Rantainya utuh dan hidup: `src/middleware.ts` → `resolvePublicRedirectForRequest` → `resolvePublicRedirect` → `resolveLegacyBlogRedirect`.
+
+  Kenapa ini bukan sekadar kalimat basi: `legacy_blog_redirect_enabled` tetap `DEFAULT false`, jadi tidak ada yang berubah bagi operator yang membiarkannya. Tetapi seorang operator yang membaca komentar itu akan menyalakannya **dengan keyakinan bahwa itu no-op** — dan yang ia dapat adalah 301 permanen atas lalu lintas `/blog/{tenantCode}` yang hidup. 301 di-cache browser dan perantara; ia tidak dibatalkan dengan mengembalikan kolomnya ke `false`. Menyalakannya adalah migrasi URL konten, bukan preferensi, dan itu yang sekarang dikatakan keenam tempat itu.
+
+  `sql/060` sengaja TIDAK disunting: migrasi terapan itu immutable dan di-checksum `scripts/db-migrate.ts`, jadi menyunting komentarnya akan memerahkan setiap environment yang sudah menerapkannya. Koreksinya hidup di README modul, yang menyebutkan hal itu eksplisit supaya pembaca berikutnya tidak "memperbaiki" migrasinya.
+
+  **Nol perubahan perilaku.** Tidak ada default yang berubah dan tidak ada gerbang yang bergeser — yang berubah adalah apa yang repo ini katakan tentang perilaku yang sudah berlaku sejak ADR-0059.
+
+  Tiga komentar lain yang membantah kodenya sendiri:
+
+  - **`idn-admin-regions/module.ts`** membuka dengan "No `navigation`" tepat di atas blok `navigation` yang ia deklarasikan. Komentarnya benar untuk jeda antara ADR-0052 (mencabut permukaan HTTP-nya) dan ADR-0053 (mengembalikannya di balik gerbang platform-scoped, dan layarnya mendarat bersamanya, PR #332).
+  - **`module-management/domain/sidebar-menu.ts`** menyatakan modul itu tidak punya navigasi di repo ini "karena layar operatornya ada di awcms-astro, ADR-0047" — dua kesalahan dalam satu kalimat: pembagian itu ADR-0048, bukan ADR-0047, dan keputusannya sudah dicabut (ADR-0051 mengonsolidasikan layar admin SISTEM ke sini; ADR-0047 sendiri di-supersede ADR-0055).
+  - **`tenant-domain` dan `visitor-analytics`** masih menyebut "PORT DEFERRAL" pada deskriptor modulnya. ADR-0055 §1 menutup jalur port, dan yang ditunda `tenant_domain` — keluarga rute konten host-resolved — justru sudah mendarat di `blog_content` sebagai `/news/**` (ADR-0059).
+
+- 27e6074: docs(state,ci): `PROJECT_STATE` berhenti membantah kodenya sendiri; tiga job CI jadi required check
+
+  **Ruleset `main only` naik dari 7 ke 10 required status check.** Tiga job
+  `ci.yml` berjalan di setiap PR tanpa memblokir merge apa pun: `Integration tests
+(RLS + DB role separation)`, `E2E smoke (Playwright)`, dan `Minimum-supported
+versions (Bun 1.3.0 floor)`. Job `integration-tests` adalah **satu-satunya**
+  tempat Postgres nyata dijalankan — isolasi RLS, pemisahan role DB, dan seluruh
+  anggaran query hidup di sana — sementara job `quality` sengaja berjalan dengan
+  `DATABASE_URL: ""`. Artinya required check yang ada **buta secara struktural**
+  terhadap kelas itu: pelanggaran isolasi tenant memerahkan CI tanpa menahan
+  merge, dan seluruh penalaran "gerbang X ada di rantai" hanya sekuat kebiasaan
+  orang membaca CI merah.
+
+  Biaya yang diterima dan dinyatakan, bukan disembunyikan: job integrasi menarik
+  image Postgres dari Docker Hub, sehingga outage registry kini memblokir merge.
+  Itu terjadi sekali pada 8 Agustus (run `31234082007`, tiga retry semuanya
+  timeout) — satu kegagalan dari 14 run yang disampel, dan **bukan** kegagalan
+  test. Empat jenis aturan ruleset lainnya diverifikasi tidak berubah.
+
+  **Tiga klaim `docs/PROJECT_STATE.md` yang dibantah kode diperbaiki:**
+
+  - §4 mencatat anggaran query sudah mendarat, lalu beberapa ratus baris kemudian
+    masih menulis "dari 34 gerbang, satu memeriksa performa" dan "pembangun
+    sitemap belum beranggaran" — padahal `query-budget-admin.integration.test.ts`
+    sudah mencakupnya. Hitungan itu **tidak diperbarui melainkan dihapus**, diganti
+    rujukan ke `standar-performa-dan-keamanan.md` §8 sebagai satu-satunya tempat ia
+    dipelihara. Menduplikasi angka adalah penyebab basinya, bukan gejalanya.
+  - "sebelas permission dari **43**" → **41**. `sql/089` mencabut
+    `blog_content.seo.configure` dan `.posts.export` saat ADR-0058 mengosongkan
+    daftar pengecualian. Diverifikasi lewat `listModules()`: 21 modul, 203
+    permission, `blog_content` 41.
+  - `posts.export` masih disajikan sebagai "absen yang digerbangi contract test".
+    Ia tidak ada lagi untuk diabsenkan — dicabut justru karena tak ada endpoint
+    yang menegakkannya.
+
+  **Satu entri jebakan §6 diperkuat karena ia menyuruh memverifikasi hal yang
+  tidak cukup.** "Subagent di working tree bersama bisa memindahkan HEAD →
+  verifikasi `git branch --show-current`" — nama branch yang baru dibuat SELALU
+  terlihat benar; yang harus diverifikasi adalah **commit induknya**. Ini terjadi
+  pada 8 Agustus: PR #409 dibuat saat HEAD berada di branch sesi lain, membawa 32
+  berkas alih-alih 10, dan merge-nya mendaratkan seluruh isi PR #408 ke `main`
+  tanpa PR itu di-review. Gejala yang terlewat: pesan squash memuat pesan commit
+  PR lain sebagai butir.
+
+- 41ff13e: docs(kosakata): `/blog/**` di sini, `/news/**` di `awcms-astro` — ADR-0071 men-supersede ADR-0059
+
+  [ADR-0070](docs/adr/0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md) menyatakan `awcms-astro` memikul halaman publik sebagai fungsi utama, tetapi §Konsekuensi-nya masih menyebut keluarga `/news/**` sebagai permukaan publik repo ini. Akibatnya kedua repo boleh melayani berita publik, pada dua alamat, dari satu sumber konten yang sama — dua jawaban untuk satu pertanyaan, dan pertanyaannya ditanyakan setiap kali sebuah deployment dibangun.
+
+  **ADR-0071 membelah kosakata URL publik keluarga: satu keluarga rute per repo, dan tidak pernah keduanya di satu repo.** `/blog/{tenantCode}/**` di sini (path-scoped, ADR-0009); `/news/**` di `awcms-astro` (sebuah tab bernama `news` ber-`urutanSeksi: "terbaru"`, ADR-0033 repo sana).
+
+  - **Yang dibelah URL, bukan kepemilikan konten.** Keduanya dilayani modul `blog_content` yang sama di sini, dan repo sebelah membacanya lewat `GET /api/v1/blog/posts` yang sudah dibekukan ADR-0065. Aturan cermin ADR-0070 §4 — tidak ada kemampuan yang hanya ada di sana — karena itu terpenuhi tanpa pekerjaan tambahan: tidak ada kemampuan yang **pindah**, yang pindah rendering halamannya.
+  - **ADR-0059 di-supersede, tetapi dua keputusannya dinyatakan ULANG** supaya tidak ikut gugur: invarian §C (tenant yang mematikan permukaan publiknya mendapat sitemap **kosong**, bukan sitemap berisi tautan yang pasti 404) dan penolakan §E mendeklarasikan surface cache tepi host-resolved sebelum kunci per-host diverifikasi di VCL. Men-supersede mencabut seluruh keputusan sebuah ADR; kedua hal itu tidak boleh ikut tercabut diam-diam.
+  - **Premis ADR-0061 §A gugur ke arah yang menguntungkan.** ADR itu menyimpulkan cache tepi "mempercepat bentuk warisan dan tidak menyentuh bentuk maju sama sekali" — benar, tetapi bersandar pada premis bahwa `/blog/{tenantCode}` sedang ditinggalkan. Ia kini kosakata permanen, dan ia path-scoped, jadi sudah bisa di-cache hari ini. ADR-0061 diberi banner, **tidak** di-supersede: analisisnya tetap benar untuk rute discovery root, yang adalah mayoritas isinya.
+
+  Yang hanya terasa saat mengembangkan:
+
+  - **Ada jendela nyata antara aturan ini dan kodenya, dan ia digerbangi.** Empat rute masih ada di `src/pages/news/` dan `publicRouteMode` masih `domain_default` — artinya `/news/**` **menyala** untuk setiap tenant yang tidak mematikannya. `tests/url-vocabulary-split.test.ts` mengikat penanda §4 pada keberadaan rutenya **dua arah**: rute ada → ADR wajib berkata BELUM; rute hilang → wajib berkata SUDAH, pada PR yang sama.
+  - **Kualifikasi `Accepted (belum diimplementasikan)` tidak bisa dipakai, dan itu informatif.** Gerbangnya mengikat kualifikasi pada **keberadaan** artefak yang dijanjikan (absen → berkualifikasi, ada → polos). ADR ini menjanjikan sebuah **penghapusan**, jadi arahnya terbalik, dan aturan (d) gerbang itu melarang kualifikasi dipakai di luar petanya. Karena itu §4 mendapat gerbangnya sendiri: disiplin dua arah yang sama, untuk bentuk janji yang berlawanan.
+  - **PR implementasinya wajib membawa 301, bukan 404.** URL `/news/**` sudah diiklankan sitemap dan feed repo ini; mematikannya tanpa penerus adalah biaya SEO yang dibayar pembaca. Ia juga wajib **mematikan auto-redirect legacy** `/blog/{tenantCode}` → `/news`, yang arahnya terbalik di bawah aturan ini — ia akan mengirim lalu lintas ke keluarga yang repo ini tidak lagi layani.
+  - **Penanda §4 memakai prefiks yang kebal prosa.** Draf pertama mencocokkan kata telanjang dan menghitung DUA: daftar langkah §4 sendiri menyuruh implementernya membalik penanda itu, jadi ia mengeja keadaan tujuannya. Penanda status yang bisa dijatuhkan instruksinya sendiri adalah penanda yang melaporkan kata-katanya, bukan keadaannya.
+
+  **Nol perubahan kode berjalan.** Modul `blog_content`, kontrak ADR-0065, seluruh layar admin, dan setiap izin tetap persis seperti sebelumnya.
+
+- c22e88a: fix(auth): penghitung lockout login dinaikkan di dalam SQL — K percobaan paralel berhenti berbiaya satu increment
+
+  Jalur login password menaikkan `awcms_identities.failed_login_count` dengan
+  **read-modify-write di JavaScript**: `SELECT` tanpa `FOR UPDATE`, `+1` di
+  `evaluateLoginAttempt`, lalu `UPDATE … SET failed_login_count = <nilai JS>`.
+  Transaksinya READ COMMITTED, jadi dua kegagalan berbarengan sama-sama membaca
+  `N` dan sama-sama menulis `N+1`.
+
+  **Diukur terhadap PostgreSQL nyata: empat percobaan gagal paralel meninggalkan
+  penghitung di `1`.** Penyerang tidak butuh tenant kedua, IP kedua, atau
+  identitas kedua — hanya perlu berhenti mengirimnya satu per satu.
+
+  Perbaikannya meniru `mfa.ts` yang sudah benar sejak mendarat:
+
+  ```sql
+  SET failed_login_count = failed_login_count + 1,
+      locked_until = CASE WHEN failed_login_count + 1 >= $max
+                          THEN $lockoutCandidateAt ELSE locked_until END
+  ```
+
+  `evaluateLoginAttempt` tetap memutuskan izin/tolak dan tetap murni; yang ia
+  berhenti lakukan adalah **mengarang nilai penghitung**. Field `failedLoginCount`
+  dihapus dari hasilnya — bukan dibiarkan lalu diabaikan, karena field yang
+  terbaca otoritatif dan tidak dipakai adalah undangan untuk dipakai lagi. Satu
+  test meng-assert ketiadaannya.
+
+  **Klaim yang menopang keputusan lain, dan tidak benar.**
+  `src/lib/security/rate-limit.ts` menyandarkan postur **fail-open**-nya saat
+  Redis mati pada kalimat _"per-identity lockout is enforced in PostgreSQL,
+  atomically"_. Saat Redis mati, kontrol yang tersisa justru yang bisa dikalahkan
+  dengan mengirim percobaan berbarengan. Kalimat itu dan dua salinannya di
+  `docs/awcms/standar-performa-dan-keamanan.md` diperbaiki, keduanya kini
+  **menyebut statement-nya** alih-alih kata "atomik" — kata itulah yang tetap
+  tampak benar sementara mekanismenya tidak.
+
+  `.claude/skills/awcms-security-hardening/SKILL.md` diperbaiki dua tempat. Salah
+  satunya berbunyi _"atomik di DB (CAS/`FOR UPDATE`, bukan read-modify-write JS)"_
+  — menamai persis bentuk yang seharusnya dihindari, untuk kode yang memakainya.
+  Skill yang salah lebih berbahaya daripada dokumen basi: agen berikutnya
+  mengikutinya.
+
+  `docs/awcms/repo-assessment-2026-08-04.md` **sengaja tidak disentuh** — ia
+  catatan bertanggal, dan menyunting temuan lama adalah memalsukan rekaman.
+
+  **Gerbang readiness-nya juga diperbaiki, bukan cuma disesuaikan.**
+  `checkLoginLockoutImplemented` (severity `critical`) hanya memanggil fungsi
+  murni dan meng-assert ia mengembalikan timestamp — hijau selama dua tahun di
+  atas lockout yang bisa ditahan di satu. Kini ia memeriksa **dua** hal: kebijakan
+  menandai kegagalan sebagai terhitung, **dan** rute benar-benar menulis increment
+  sebagai ekspresi atas kolomnya.
+
+  **Test yang dibutuhkan tidak ada sebelumnya.** Seluruh test lockout murni domain
+  dan **nol** menaikkan penghitung lewat rute nyata, jadi suite-nya tidak akan
+  pernah melihat cacat ini maupun perbaikannya.
+  `tests/integration/login-lockout-concurrency.integration.test.ts` menembakkan K
+  percobaan **paralel** dan membaca barisnya. Dibuktikan **MERAH** dengan
+  mengembalikan read-modify-write aslinya: `Expected: 4, Received: 1`.
+
+  Terpisah dari #430 dan tidak menutupnya: #430 soal **keying**
+  (`(tenant, email)` versus manusia), ini soal **atomisitas** pada satu baris.
+  Keduanya bertumpuk — sampai sekarang tiap baris penghitung juga lebih murah
+  dinaikkan daripada yang tertulis.
+
+  Menutup #483.
+
+- 4dfa4df: fix(typecheck): kode mati berhenti lolos ke `main` — `tsc` menolak local & parameter tak terpakai
+
+  CodeQL alert #147 (`js/unused-local-variable`) melaporkan impor mati
+  `MEDIA_PERMISSIONS` di `src/pages/api/v1/media/objects/index.ts` — di `main`,
+  seminggu setelah ia merge. Tidak ada satu pun dari 34 gerbang rantai `check`
+  yang bersuara: `lint` adalah `prettier --check` yang memformat dan tidak pernah
+  menganalisis, dan repo ini tidak memakai ESLint/oxlint. `tsc` sudah berjalan di
+  setiap PR dan akan menangkapnya dalam hitungan detik, tetapi `tsconfig.json`
+  meng-`extends` `astro/tsconfigs/strict`, sementara `noUnusedLocals` dan
+  `noUnusedParameters` berada satu tingkat di atas di `strictest`. Repo sudah
+  memetik `noUncheckedIndexedAccess` dan `noImplicitOverride` dari `strictest`;
+  dua ini sekadar tidak ikut terbawa.
+
+  Menyalakan keduanya memunculkan temuan kedua yang TIDAK dilaporkan CodeQL:
+  flag `timedOut` di `src/lib/jobs/job-runner.ts`, ditulis oleh timer timeout job
+  dan tidak pernah dibaca, bersebelahan dengan klasifikasi status yang justru
+  menyimpulkan `"timeout"` lewat eliminasi (`terminatedBy ? "terminated" :
+"timeout"`). Flag itu dihapus, dan invarian yang membuat eliminasi tersebut
+  sahih kini ditulis eksplisit di tempatnya: `controller` tidak pernah keluar dari
+  fungsi kecuali sebagai `signal` read-only, jadi hanya ada dua pemanggil
+  `abort()`. Sumber abort ketiga wajib mengembalikan klasifikasi menjadi positif —
+  kalau tidak, abort-nya akan tercatat di log job sebagai timeout yang tak pernah
+  terjadi.
+
+  Perubahan perilaku: tidak ada. `timedOut` tidak pernah dibaca, sehingga
+  menghapusnya tidak dapat mengubah status job mana pun; dua parameter di
+  `seo-distribution/application/redirect-resolution-service.ts` hanya diberi
+  awalan garis bawah karena kedua strategi redirect sengaja berbagi satu
+  signature (`resolveLegacyBlogRedirect` mengenali tenant dari PATH, bukan dari
+  HOST). Yang berubah adalah kelas cacat ini sekarang gagal secara lokal dan di
+  PR, bukan muncul sebagai alert keamanan mingguan setelah mendarat.
+
+  `tests/typecheck-unused-code-gate.test.ts` menjaga keduanya — setelan compiler
+  dapat dihapus dalam commit yang sama dengan galat yang mengganggu seseorang,
+  tanpa sinyal apa pun. Kedua sisi diuji karena masing-masing inert sendirian:
+  flag tak berarti bila tidak ada perintah yang menjalankan `tsc`, dan
+  menjalankan `tsc` tak membuktikan apa pun bila flag-nya hilang.
+
+- 7448c6d: Tiga layar admin pertama melewati chokepoint (#450, R3): `audit-trail`,
+  `profiles`, `email-templates`.
+
+  Ketiganya kini memutuskan lewat `authorizeInTransaction` dan membaca di dalam
+  transaksi yang sama, jadi policy `deny` ABAC tenant, ketersediaan modul, fakta
+  business-scope, SoD, dan `recordDecisionLog` berlaku pada jalur BACA-nya. Pada
+  `audit-trail` itu punya bentuk yang enak disebut: **pembacaan jejak audit kini
+  ikut teraudit.**
+
+  `canCreate` di `profiles` dan `email-templates` juga diputuskan chokepoint lewat
+  `can()` alih-alih diambil dari set grant mentah — jadi `deny` tenant
+  menyembunyikan formulirnya, bukan sekadar menggagalkan POST di baliknya.
+
+  Dua cabang mati ikut hilang: `profiles` dan `email-templates` memeriksa
+  `result instanceof Response` terhadap `withTenantOrThrow`, yang tidak pernah
+  mengembalikan `Response` — ia melempar.
+
+  Ledger `access:chokepoint:check` 31 → **28**, dan ledger `api:tenant-route:check`
+  ikut menyusut tiga baris; dua gerbang menghitung utang yang sama dari dua sudut
+  dan bergerak bersama.
+
+  Satu test yang saya tulis di PR fondasi ikut diperbaiki: ia mematok "31 layar
+  memutuskan, 1 memakai chokepoint" — dua angka yang berubah tiap PR migrasi dan
+  melatih penulis berikutnya untuk mengedit angka alih-alih membacanya. Diganti
+  identitas yang berlaku di SETIAP titik migrasi: ledger memuat semua-dan-hanya
+  layar yang masih bypass.
+
+- 69714a5: docs(kosakata,gerbang): `/news/**` berhenti hidup di dokumen yang paling banyak dibaca — dan gerbangnya berhenti bisa dibohongi berkas `.astro`
+
+  [ADR-0071](docs/adr/0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.md)
+  membelah kosakata URL publik — `/blog/**` permanen di repo ini, `/news/**` milik
+  `ahliweb/awcms-astro` — dan §4-nya sudah berbunyi **SUDAH DILAKSANAKAN**:
+  `src/pages/news/` tidak ada, `withHostResolvedBlogTenant` dan `publicRouteMode`
+  hanya tersisa sebagai komentar sejarah.
+
+  Dokumennya belum menyusul, dan yang paling parah justru yang paling banyak
+  dibaca:
+
+  - **`AGENTS.md`** — berkas **pertama yang dibaca setiap agen** — masih memuat
+    blockquote "**Jendela yang masih terbuka**" yang menyatakan keempat rute
+    "MASIH ADA di `src/pages/news/`" dan **MENJADWALKAN** penghapusannya, sambil
+    menyebut `tests/url-vocabulary-split.test.ts` sebagai penegak jadwal itu.
+    Sebuah jadwal untuk pekerjaan yang sudah selesai membuat pembaca berikutnya
+    mencari berkas yang tidak ada lalu menyimpulkan repo-nya rusak — atau
+    membangun ulang keluarga rute yang **dilarang tiga paragraf di atasnya**.
+  - **`docs/ARCHITECTURE.md`** — "Rute `/news/**` host-resolved kini **SUDAH
+    ada**".
+  - **`docs/PROJECT_STATE.md`** — entri "Rute publik host-resolved — SELESAI"
+    berada di bawah heading **"Yang sudah selesai (jangan dibangun ulang)"**.
+  - **`docs/awcms/standar-performa-dan-keamanan.md`** — baris §11 masih
+    membingkai "kapan memakai `awcms-astro` alih-alih rute publik `awcms`"
+    sebagai pilihan per situs.
+  - **`.claude/skills/awcms-blog-content/SKILL.md`** — frontmatter mengiklankan
+    "**DUA keluarga rute publik**", dan badannya menyatakan Issue #560 "menambah
+    `src/pages/news/` (7 `APIRoute` paralel)". Skill DIIKUTI, bukan sekadar
+    dibaca.
+
+  Semuanya ditulis ulang **per konteks**, bukan dengan `sed` seragam — dan dua
+  kutipan yang sengaja dipertahankan (agar catatan "apa yang dulu dipercaya" tidak
+  hilang) dipagari penanda `<!-- historis:mulai -->`/`<!-- historis:selesai -->`.
+
+  **Dan gerbangnya sendiri punya dua lubang.**
+
+  1. **Ia hanya membaca ADR + filesystem, tak pernah dokumen.** Kelima klaim di
+     atas lolos aturan (a)–(d) tanpa satu pun memerah. Aturan **(e)** menutupnya:
+     selama rutenya tidak ada, dokumen **current-state** tidak boleh menyatakan
+     keluarga itu ADA. Deteksinya **sempit dengan sengaja** — sebuah token
+     (`src/pages/news`, `publicRouteMode`, `withHostResolvedBlogTenant`,
+     `/news/**`) hanya memerah bila berdampingan dengan **frasa klaim keberadaan**
+     dalam jarak 160 karakter. Larangan token telanjang akan memerahkan kalimat
+     yang justru BENAR — README dan descriptor `blog_content` menyebut ketiganya
+     persis untuk mengatakan bahwa mereka hilang, dan itu teks yang paling
+     dibutuhkan pembaca. Gerbang yang memerah pada prosa benar melatih pembacanya
+     melemahkannya; `skills:check` butuh tiga draf untuk belajar itu.
+     Korpusnya ditulis eksplisit dan **tidak** melebar ke seluruh `docs/awcms/`
+     (§10 sudah menolaknya); ADR sengaja **di luar** korpus — ADR-0059 memang
+     harus tetap berkata `/news/**` ada, itu catatan keputusan pada satu waktu.
+  2. **Ia mengikat EMPAT NAMA BERKAS, bukan direktori.** `NEWS_ROUTE_FILES`
+     mendaftar `index.ts`/`[slug].ts`/`category/[slug].ts`/`tag/[slug].ts`, jadi
+     sebuah `src/pages/news/index.astro` — rute yang sama, ekstensi yang justru
+     lebih lazim untuk halaman Astro — menghidupkan kembali keluarga itu tanpa
+     satu pun asersi bergerak. **Diverifikasi terhadap gerbang LAMA, bukan
+     disimpulkan:** menaruh berkas satu baris di sana meninggalkannya di
+     **9 pass / 0 fail**. Kini ia memindai direktorinya.
+
+  Mutation-proven keduanya: mengembalikan teks AGENTS.md hari ini → MERAH
+  menyebut `AGENTS.md:98`; menaruh `src/pages/news/index.astro` → MERAH menyebut
+  berkasnya.
+
+  Proksimitas 160 karakter itu sendiri lahir dari satu false positive nyata:
+  pemasangan token↔frasa se-BARIS memerahkan baris skill sepanjang **1.721
+  karakter**, di mana "sudah ada" (tentang helper iklan/widget) duduk ~300
+  karakter dari sebutan `src/pages/news` yang tak berhubungan. Vonisnya kebetulan
+  benar tentang berkasnya dan salah tentang alasannya — jenis yang paling buruk,
+  karena ia mengajari pembaca bahwa pesan gerbang tak bisa dipercaya.
+
+  Nol perubahan kode produksi. Tiga entri surface cache tepi `news-*` yang kini
+  inert dan komentar `surface-registry.ts` yang menyertainya **sengaja tidak
+  disentuh di sini** — itu perubahan kode dengan pemeriksanya sendiri, dan
+  dikerjakan sebagai unit terpisah.
+
+- 26334bd: Backup/restore PostgreSQL, manifest crontab 22 job terjadwal, dan timeout migrasi yang tak bisa dilupakan operator: tiga perkakas yang selama ini hanya disebut dokumen kini benar-benar ada.
+- 808df00: fix(admin,auth): panel sesi yang tak bisa ditutup di ponsel, dan body yang dibaca di dalam transaksi
+
+  Dua cacat dari review terhadap PR yang mendarat hari ini (#496, #498). Keduanya
+  hijau di seluruh 38 gerbang, dan keduanya hanya terlihat dengan membaca dua
+  berkas bersamaan.
+
+  **1. `<tr hidden>` TIDAK tersembunyi di dalam tabel stacked.** `admin.css`
+  mengubah tiap baris `.data-table--stack` menjadi kartu di bawah `--bp-md`
+  lewat `.data-table--stack tr { display: block }`. Selektor itu berspesifisitas
+  (0,1,1); aturan user-agent yang membuat atribut `hidden` bekerja —
+  `[hidden] { display: none }` — berspesifisitas (0,1,0). Aturan author menang,
+  jadi `hidden` **diam-diam berhenti menyembunyikan**, dan berhentinya persis di
+  layout yang tak diperiksa siapa pun lebih dulu.
+
+  Akibatnya bukan kosmetik seperti kedengarannya: baris detail yang tak bisa
+  menutup akan me-render isinya untuk **setiap** baris tabel sekaligus, dan tombol
+  yang seharusnya membukanya tidak melakukan apa pun yang terlihat. Panel sesi di
+  `/admin/users` mendarat dengan persis itu.
+
+  Perbaikannya `.session-panel-row[hidden] { display: none }` — (0,2,0), menang
+  dua arah — dan **di luar** media query, karena media query tak menambah
+  spesifisitas sehingga satu aturan meliputi kedua layout.
+
+  Test regresinya menegakkan sifat UMUM, bukan satu berkas: tiap layar admin yang
+  memakai tabel stacked **dan** menyembunyikan baris dengan atribut `hidden` wajib
+  membawa aturan `[hidden] { display: none }`-nya sendiri. Draf pertamanya
+  **dipuaskan oleh komentar CSS-nya sendiri** yang mengutip aturan itu verbatim —
+  mutasi yang MENGHAPUS perbaikannya tetap hijau. Komentar kini dibuang sebelum
+  pencocokan; ini kali keenam bentuk itu muncul di repo ini, dan selalu
+  PERBAIKAN-lah yang menanam false positive, karena sebuah perbaikan menjelaskan
+  apa yang ia hapus.
+
+  **2. `POST /auth/password/change` membaca body di DALAM transaksi.**
+  `await request.json()` menunggu **klien**. Melakukannya di dalam `withTenant`
+  menahan satu koneksi pool tercadang — berikut slot work-class-nya — selama
+  pemanggil memilih untuk mengirim body-nya, sehingga satu permintaan lambat
+  menjadi koneksi yang ditahan terhadap setiap permintaan lain di pool.
+  `queueTimeoutMs` membatasi **memperoleh** koneksi, tak pernah **menahan**-nya.
+
+  `defineTenantRoute` punya `prepare` justru untuk ini; seam self-service tidak
+  punya, jadi rutenya tak punya tempat lain. Seam-nya kini punya `prepare` yang
+  sama bentuknya — penambahan murni, nol call site berubah. `beforeTransaction`
+  tidak bisa mengerjakannya: ia hanya mengembalikan `Response | undefined`, jadi
+  body yang di-parse di sana tak punya tempat tujuan dan harus di-parse dua kali.
+
+  Asersinya **posisional**, bukan "apakah muncul": `prepare` dan `handler`
+  sama-sama menyinggung body dengan satu atau lain cara, dan pertanyaannya adalah
+  di sisi mana batas transaksi pembacaan itu berada.
+
+- 9e89c63: Rate limit permukaan auth publik mendapat plafon per-SUMBER yang kuncinya tidak
+  bisa dipilih penyerang (#447).
+
+  Tujuh rute tak-terautentikasi mengunci bucket-nya pada `${clientIp}:${tenantId}`,
+  dan `tenantId` adalah header `x-awcms-tenant-id` mentah — tidak divalidasi, tidak
+  dicari. Pemeriksaan pertama terjadi di dalam `withTenant`, jauh setelah limiter
+  memutuskan. Jadi kunci bucket-nya **dipilih penyerang**: UUID acak yang berbeda
+  per request memberi bucket segar setiap kali, dan limiternya tidak mengikat sama
+  sekali — bukan "N kali lebih longgar" seperti yang ditulis #430.
+
+  Yang membuatnya mahal, bukan sekadar berantakan: `verifyPasswordOrDummy`
+  menjalankan argon2id `m=64MB` bahkan saat identifier tidak resolve (Issue #147,
+  dan itu benar — ia yang menghentikan endpoint ini jadi oracle enumerasi). Tiap
+  request yang lolos berharga 64 MiB plus CPU-nya. Docblock limiternya sendiri
+  menyebut skenario itu sebagai hal yang ia ada untuk mencegahnya.
+
+  **Bukan** diperbaiki dengan memvalidasi header lebih awal: UUID acak adalah UUID
+  yang valid, dan memeriksa keberadaan tenant sebelum kerja password justru
+  memasang oracle enumerasi TENANT — persis selisih waktu yang desain dummy-hash
+  hilangkan untuk identitas. Yang mengikat adalah plafon yang kuncinya tidak bisa
+  dipilih: satu bucket per SUMBER (`clientIp` saja), diperiksa berdampingan dengan
+  bucket per-tenant yang sudah ada, **di dalam satu fungsi** supaya rute tidak bisa
+  mengambil separuhnya. Plafon sumber diperiksa lebih dulu: menghabiskan slot
+  per-tenant untuk request yang akan ditolak plafon sumber akan membiarkan lalu
+  lintas penyerang mengisi bucket tenant nyata — mengubah bypass menjadi DoS
+  terhadap pengguna tenant itu.
+
+  `AUTH_SOURCE_RATE_LIMIT_MAX` (default 60) wajib ≥ `AUTH_LOGIN_RATE_LIMIT_MAX`,
+  ditegakkan `config:validate`. Itulah yang membuat perubahan ini **terbukti inert
+  pada deployment satu tenant** — di sana bucket per-tenant selalu penuh lebih
+  dulu — dan karenanya bisa mendarat tanpa flag.
+
+  Rute ketujuh (`sso/[providerKey]/start.ts`) tidak ada di daftar issue-nya; test
+  strukturalnya yang menemukannya setelah enam pertama dikonversi tangan.
+
+- 497aaef: docs(state): putaran kelima 11 Agustus — Gelombang 4 selesai
+
+  `docs/PROJECT_STATE.md` §4 mencatat putaran ini: apa yang mendarat (ADR-0082,
+  #512, #513), empat tempat rencana program tidak diikuti beserta alasannya yang
+  diperiksa terhadap kode, dua cacat yang ditemukan dengan MENJALANKAN bukan
+  membaca, tujuh penolakan, dan satu batas gerbang yang wajib dibaca sebelum
+  config module berikutnya memakai pola `env: NodeJS.ProcessEnv = process.env`.
+
+  Daftar ini ada DI SINI karena aturan yang sama dengan empat putaran sebelumnya:
+  daftar yang tidak ditulis ke repo harus diturunkan ulang, dan menurunkan ulang
+  berharga satu audit penuh sementara menuliskannya berharga satu paragraf.
+  Penolakan ikut tertulis, karena penolakan yang tidak tercatat akan diusulkan
+  lagi.
+
+  `src/modules/identity-access/README.md` mendapat bagian Undangan. README modul
+  adalah dokumen current-state yang menjelaskan setiap fitur lain modul ini;
+  membiarkan permukaan sebesar ini tak tertulis di sana adalah bentuk penuaan yang
+  persis dikeluhkan ADR-0062 tentang skill — dengan bedanya README dibaca, bukan
+  diikuti.
+
+- 3a6f3c0: docs(state): putaran rekomendasi 8 Agustus 2026 dicatat sebagai titik-lanjut, bukan sebagai pesan commit
+
+  Putaran ini dimulai dengan **menurunkan ulang** daftar rekomendasi putaran
+  sebelumnya, karena daftar itu tidak pernah ditulis ke repo: lima PR yang mendarat
+  darinya (#411–#415) hanya bisa dibaca ulang dari pesan commit-nya, dan
+  scratchpad sesi yang memuat peringkatnya sudah hilang.
+
+  Menuliskan daftarnya di §4 adalah harga satu paragraf; menurunkannya ulang adalah
+  harga satu audit penuh (enam sumbu, verifikator skeptis, 24 temuan bertahan).
+
+  Dicatat: enam yang mendarat (R1 eskalasi `owner`, R2 36 test DB-gated
+  hijau-palsu, R4 `/news/**` di dokumen + surface cache inert, R5 aturan 5
+  `skills:check`, R6 gerbang cakupan layar admin) dengan nomor PR dan angka
+  hasilnya, empat yang tersisa (R3 layar admin melewati ABAC saat MEMBACA, R7
+  permukaan tanpa layar, R8 permission platform lewat editor role, R9 lima gerbang
+  buta, R10 status C7/RUM) dengan bukti ringkas masing-masing, dan **empat usulan
+  yang DITOLAK beserta alasannya** — karena penolakan yang tidak tertulis akan
+  diusulkan lagi enam bulan kemudian, aturan yang §9 dokumen standar sudah pakai
+  untuk barisnya sendiri.
+
+- 2e749fd: docs(reporting): descriptor berhenti menjanjikan "derived applications" — jalur itu dicabut ADR-0034
+
+  String `description` descriptor `reporting` berbunyi "Derived applications add
+  their own domain-specific reporting views (and may contribute their own
+  projection descriptors via `reportingProjections`) on top of this base."
+
+  [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+  **menghapus jalur aplikasi-turunan seluruhnya** — tidak ada lagi
+  `src/modules/application-registry.ts`, `extension:check`, namespace migrasi
+  `900+`, maupun manifest kompatibilitas turunan; `ModuleType` valid tinggal
+  `base | system | domain | integration`. `docs/PROJECT_STATE.md` §1 menyatakan
+  eksplisit bahwa dokumen yang masih menyebut jalur itu sebagai jalur aktif adalah
+  **usang**.
+
+  Ini bukan komentar: `description` adalah yang dibaca `listModules()` dan tampil
+  di layar Module Management, jadi operator membacanya sebagai penjelasan cara
+  memperluas sistem — ke arah yang tidak ada. Diganti dengan mekanisme yang
+  benar-benar berlaku: modul domain ditambahkan **langsung** di `src/modules/`.
+
+  **Temuan yang lebih besar dan SENGAJA tidak disapu di sini:** rujukan ke jalur
+  turunan yang sama masih ada di **24 berkas lain** di `src/` (~29 situs), semuanya
+  komentar kode — `identity-access/application/access-guard.ts`,
+  `workflow-approval/infrastructure/condition-action-registry.ts`,
+  `_shared/ports/business-scope-hierarchy-port.ts`, `sync-storage/domain/sync-conflict.ts`,
+  dan seterusnya. Semuanya menjelaskan **siapa yang menyediakan adapter/entri** di
+  sebuah seam ekstensi, jadi masing-masing butuh kalimat pengganti yang benar
+  menurut konteksnya, bukan `sed` seragam — dan penyapuan buta atas 25 berkas
+  adalah cara melahirkan 25 kalimat yang salah dengan percaya diri. Dikerjakan
+  sebagai unit sendiri, dengan hitungannya dicatat di sini supaya tidak hilang.
+
+- ac46b63: docs(src): 23 rujukan ke jalur aplikasi-turunan yang ADR-0034 hapus, ditulis ulang per konteks
+
+  [ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
+  menghapus jalur aplikasi-turunan seluruhnya — tidak ada lagi
+  `src/modules/application-registry.ts`, `extension:check`, namespace migrasi
+  `900+`, maupun manifest kompatibilitas turunan. `docs/PROJECT_STATE.md` §1
+  menyatakan eksplisit bahwa dokumen yang masih menyebutnya sebagai jalur aktif
+  adalah **usang**. Toh 29 situs di `src/` masih menyebutnya, dan hampir semuanya
+  menjawab pertanyaan yang paling sering ditanyakan pembaca sebuah seam: **siapa
+  yang menyediakan adapter/entri di sini?** — dengan jawaban yang tidak ada.
+
+  23 ditulis ulang menjadi mekanisme yang benar-benar berlaku: **modul domain yang
+  ditambahkan langsung di `src/modules/`**. Beberapa butuh kata yang berbeda karena
+  konteksnya memang berbeda, dan itulah alasan ini tidak dikerjakan dengan `sed`:
+
+  - `metrics-port.ts` / `prometheus-text-adapter.ts` — yang memasang adapter
+    observability adalah **deployment** lewat composition root, bukan modul.
+  - `family-contract.ts` — yang bisa dirusak perubahan MAJOR adalah **konsumen**
+    kontrak keluarga (mis. `ahliweb/awcms-astro`), bukan "aplikasi turunan".
+  - `logger.ts` baris kedua — "A derived app's sink" → "A registered sink":
+    kalimatnya tentang sink mana pun yang terdaftar, bukan tentang siapa
+    mendaftarkannya.
+  - `email-template-categories.ts` — namespace `derived.*` dan fungsi
+    `registerDerivedEmailTemplateCategory` adalah **identifier nyata di kode** dan
+    TIDAK diubah; hanya prosa di sekitarnya.
+
+  **Enam situs sengaja DIBIARKAN karena benar secara historis**, dan menghapusnya
+  justru akan menghilangkan catatan kenapa jalur itu tidak ada:
+
+  - `module-contract.ts` changelog `2.0.0` — ia menamai pencabutannya.
+  - `business-scope-hierarchy-port.ts` (3 situs) — mengutip judul issue #180 dan
+    menjelaskan bahwa resolver itu "permanently unfillable once ADR-0034 deleted
+    that pathway". Prosa itu sudah tepat.
+  - `email-template-categories.ts` — kutipan teks issue.
+  - Satu catatan penanda yang ditambahkan perubahan ini sendiri.
+
+  Nol perubahan perilaku: seluruhnya komentar dan satu baris JSDoc. Menyusul PR
+  sebelumnya yang memperbaiki string `description` descriptor `reporting` — satu
+  situs yang BUKAN komentar, karena `listModules()` membacanya dan ia tampil di
+  layar Module Management.
+
+- f9ae9c0: fix(identity-access): sensus principal menjawab kategori ketiganya — dan berhenti mengklaim sesuatu yang salah
+
+  `bun run identity:principals:preflight` adalah langkah pertama #430 dan
+  prasyarat Gelombang 7. Ia menghitung dua dari tiga kategori yang diminta
+  issue-nya: tabrakan di dalam satu tenant, dan identifier yang bukan email.
+  Kategori ketiga — **identitas yang tidak bisa dikirimi surat** — hilang.
+
+  Yang lebih penting: docblock-nya **mengklaim** kategori kedua sudah menjawab
+  kategori ketiga, dengan kalimat _"ia tidak akan pernah bisa menerima undangan
+  maupun reset password"_. Itu **tidak benar**.
+
+  Kedua predikatnya berbeda, dan berbeda di **dua arah**:
+
+  - `looksLikeEmail` (sensus) menuntut titik di domain dan menolak spasi;
+  - `isMailableLoginIdentifier` (yang benar-benar dipakai jalur reset password)
+    hanya menuntut `@` dengan bagian kiri dan kanan tak kosong.
+
+  Jadi `a@localhost` **bukan email** menurut sensus tetapi **bisa dikirimi surat**
+  menurut kode yang mengirimnya — dan sensus melaporkan satu himpunan sambil
+  menjelaskan himpunan lain. Itulah cara sebuah sensus menyesatkan migrasi yang ia
+  ada untuk menurunkan risikonya.
+
+  Perbaikannya **mengimpor** `isMailableLoginIdentifier`, bukan menyalin bentuknya.
+  Ejaan kedua untuk "bisa dikirimi surat apa tidak" adalah kelas cacat yang sudah
+  mahal di repo ini: sensus melaporkan satu himpunan, kode pengirim bertindak atas
+  himpunan lain, dan keduanya terlihat benar bila dilihat sendiri-sendiri.
+
+  Dibuktikan **merah** dengan mengganti impor itu kembali menjadi salinan:
+  `a@localhost` adalah kasus yang membedakan keduanya, dan tanpa impornya test itu
+  gagal.
+
+  Kedua temuan tetap **advisory** — `clear` tetap terikat hanya pada tabrakan
+  di dalam satu tenant. Sebuah advisory yang memblokir akan mengubah sensus
+  menjadi gerbang, dan sensus yang menolak selesai tidak memberi tahu apa pun
+  tentang sisa estate-nya.
+
+  Tidak menutup #430: itu soal **keying**, dan perbaikannya principal global di
+  Gelombang 7. Ini melengkapi langkah read-only yang issue-nya sebut sebagai
+  miliknya.
+
+- 3edcd7d: feat(identity): `identity:principals:preflight` — sensus read-only menjelang principal global
+
+  Prasyarat Gelombang 7 dari program model keanggotaan, dan sengaja mendarat
+  **berbulan-bulan** sebelum migrasinya.
+
+  `awcms_identities` UNIQUE pada `(tenant_id, login_identifier)`; sebuah principal
+  UNIQUE pada alamat ternormalisasi. Dua baris di **satu** tenant yang hanya beda
+  huruf besar-kecil atau spasi adalah **legal hari ini** dan **mustahil** sesudahnya
+  — dan perbaikannya tidak pernah berupa patch. Ia percakapan dengan pelanggan
+  tentang akun mana yang orangnya dan mana yang duplikat.
+
+  Percakapan itu tidak bisa terjadi di dalam jendela migrasi. Menjalankan sensus
+  ini lebih awal mengubah migrasi-yang-batal menjadi dukungan-pelanggan-terjadwal.
+
+  Normalisasinya **sengaja konservatif**: huruf kecil + trim, tidak lebih. Bukan
+  normalisasi yang diterapkan penyedia email — tanpa buang titik, tanpa buang
+  `+tag`, tanpa lipat Unicode. Masing-masing menggabungkan alamat yang di sebagian
+  penyedia adalah **orang yang berbeda**, dan penggabungan tak bisa dipulihkan
+  sementara laporan tabrakan bisa. Tugas sensus adalah menemukan apa yang akan
+  ditolak migrasinya, jadi ia menerapkan persis aturan itu dan tidak lebih.
+
+  Dua kelas temuan, dan hanya satu memblokir. **Tabrakan dalam satu tenant** →
+  memblokir. **Identifier bukan email** → advisory: ia tetap menjadi principal,
+  hanya tidak akan pernah bisa menerima undangan atau reset password.
+
+  Yang **tidak** dilaporkan sebagai masalah: alamat yang sama di **dua** tenant.
+  Itu justru yang dimungkinkan migrasinya — menandainya berarti melaporkan
+  fiturnya sebagai cacat.
+
+  Read-only, per-tenant, di role `awcms_app` biasa (`withTenantOrThrow`) — jadi
+  tanpa kredensial owner. Sound secara konstruksi untuk temuan yang memblokir:
+  tabrakan dalam-satu-tenant menurut definisinya ada di dalam satu tenant.
+
+  Keluar dengan kode 0 **meskipun tidak bersih**: ini sensus, bukan gerbang. Ia
+  melaporkan keadaan DATA, yang bukan regresi siapa pun dan bukan milik pipeline
+  mana pun; exit non-nol akan menyangkut sesuatu yang bukan tempatnya, atau
+  mengajari orang mengabaikannya. Migrasi Gelombang 7 yang menolak, dengan keras,
+  di titik ketika menolak adalah jawaban yang benar.
+
+- 26334bd: fix(seo): sitemap berhenti membuang senyap setiap URL setelah yang ke-200
+
+  Tenant dengan lebih dari 200 post kehilangan sisanya dari `/sitemap-{n}.xml` —
+  tanpa error di mana pun. Index tetap mengiklankan `ceil(count / 10 000)` anak,
+  tiap anak tetap balas `200 OK` dengan XML yang valid, dan satu-satunya gejala
+  adalah halaman yang tak pernah muncul di mesin pencari berminggu-minggu
+  kemudian.
+
+  Sebabnya dua angka yang tak pernah dipertemukan. `discovery-limits.ts`
+  menetapkan `SITEMAP_URLS_PER_PAGE = 10000` dan `buildSitemapPagePayload`
+  memintanya ke provider dalam **satu** panggilan; `blog-content`
+  (`seo-facts-port-adapter.ts`) menjepit `pageSize` ke 200. `listWindow` membaca
+  `page.items` sekali lalu berhenti.
+
+  **`pageSize` itu PERMINTAAN, bukan jaminan.** Itu tertulis di port sejak awal —
+  tiap provider boleh menjepitnya — dan halaman terjepit tidak bisa dibedakan dari
+  halaman yang memang habis, **kecuali** lewat `nextCursor`. Kode lama tidak
+  pernah melihat `nextCursor` di jalur ini, jadi 200 baris pertama tampak seperti
+  seluruh korpus.
+
+  Perbaikannya menyerang keduanya:
+
+  - `listProviderSlice` baru **memaging** `nextCursor` sampai jatah satu halaman
+    anak terpenuhi atau providernya habis. Cursor diperlakukan **opaque**:
+    dikembalikan apa adanya, tak pernah di-parse, di-encode ulang, apalagi
+    dilewatkan `Date` — cursor keyset di repo ini membawa `timestamptz`
+    presisi-penuh (mikrodetik) sementara `Date` hanya milidetik, jadi satu
+    round-trip saja melewatkan tiap baris di dalam mikrodetik yang terpotong.
+    Itu kelas cacat yang **sama persis** dengan yang sedang diperbaiki di sini,
+    cuma sumbernya lain.
+  - `SITEMAP_URLS_PER_PAGE` turun ke **1000** — disetel terhadap apa yang port
+    memang sanggup layani (5 permintaan × 200), bukan terhadap plafon protokol
+    50k. `SEO_FACTS_PROVIDER_PAGE_SIZE = 200` menamai ukuran yang provider hormati,
+    dan `SITEMAP_PROVIDER_REQUESTS_PER_PAGE = 50` membatasi jalannya cursor supaya
+    provider yang menjepit sangat rendah (atau yang mengembalikan cursor tanpa
+    henti) berharga sejumlah query tetap, bukan loop tak terbatas — pertahanan
+    amplifikasi ADR-0038 §7 tidak dikendurkan untuk menambal ini.
+  - `offset` kini hanya menempatkan permintaan **pertama** sebuah slice; sisanya
+    ditempatkan cursor sendirian. Mengirim keduanya akan melompat ganda pada
+    provider yang menghormati masing-masing secara independen — port memang
+    memenangkan `cursor`, tapi kebenaran satu slice tak boleh bergantung pada
+    tie-break itu.
+
+  Bonus yang ikut tertutup: window yang membentang **dua provider** dulu juga
+  memotong ekor provider pertama, karena `remaining` hanya berkurang sebanyak
+  halaman terjepit sebelum pindah ke provider berikutnya.
+
+  `BLOG_CONTENT_SEO_MAX_LIST_PAGE_SIZE` kini diekspor, jadi sisi konsumen bisa
+  meng-assert anggaran permintaannya terhadap **angka provider yang sebenarnya**,
+  bukan salinannya — menurunkan jepitan itu memerahkan test alih-alih diam-diam
+  memotong sitemap lagi.
+
+  Regresinya dibuktikan, bukan diklaim (`tests/seo-sitemap-window-paging.test.ts`,
+  korpus 201 dan 1201 entri): mengembalikan window satu-permintaan yang lama
+  membuatnya **MERAH** dengan `Expected: 201, Received: 200` — persis satu entri
+  yang hilang. Providernya palsu tapi jujur pada dua hal yang menentukan: ia
+  menjepit `pageSize`, dan ia mencari cursor lewat pencocokan string **persis**,
+  sehingga round-trip `Date` gagal berisik di situ alih-alih melewatkan baris
+  diam-diam.
+
+- f0abb53: fix(gerbang,docs): skill dan README modul berhenti menamai layar admin yang tak ada — dan satu keputusan yang bersandar pada layar fiktif dikoreksi
+
+  `skills:check` menggerbangi path `src/…`, ADR, dan target `bun run` — tetapi
+  **bukan** klaim yang paling sering dipakai pembaca untuk bertindak. Sebuah skill
+  jarang menulis "`src/pages/admin/site-search.astro` ada"; ia menulis "layarnya
+  `/admin/search`". Aturan **5** menutup itu: tiap URL `/admin/…` yang dikutip
+  wajib resolve ke halaman nyata.
+
+  Empat klaim yang sudah ter-ship, masing-masing gagal ke arah yang memakan waktu
+  orang:
+
+  - **`awcms-site-search`** mendaftar `/admin/search` di bawah judul
+    "**Yang BELUM ada (jangan klaim ada)**" — padahal `src/pages/admin/site-search.astro`
+    sudah mendarat. Salah dua kali: layarnya ada, dan alamatnya bukan itu. Skill
+    DIIKUTI, jadi ini menyuruh agen membangun ulang layar yang sudah bekerja.
+  - **`awcms-blog-content`** menyatakan `/admin/blog/widgets` dan `/admin/blog/ads`
+    "sudah ada sejak #543". Direktori `src/pages/admin/blog/` **tak pernah ada**;
+    widget hidup di `/admin/blog-presentation?section=widgets`, dan **iklan tidak
+    punya layar sama sekali**.
+  - **README `blog_content`** memuat peta 14 baris `/admin/blog/*` yang **satu**
+    entri-nya resolve. Blok itu sebenarnya sudah berlabel "(spesifikasi mini)"
+    dengan peringatan di atasnya — label yang bisa dibaca manusia dan tak terlihat
+    gerbang, jadi ia kini ditandai `<!-- aspirational:mulai -->`.
+  - **README `reporting`/`workflow-approval`** memuat paragraf yang justru
+    MENGOREKSI (`/admin/reporting/projections` dan `/admin/workflows` "never
+    existed here"). Kalimat semacam itu harus boleh menyebut path-nya, jadi ia
+    dipagari `<!-- historis:mulai -->` — konvensi yang sama yang
+    `tests/url-vocabulary-split.test.ts` pakai.
+
+  **Korpusnya mencakup `src/modules/<nama>/README.md`, dan itulah intinya.** README
+  modul lebih otoritatif daripada skill bagi siapa pun yang menyentuh modul itu,
+  dan ia tidak digerbangi sebagaimana descriptor digerbangi — asimetri yang sama
+  yang `tests/module-absence-claims.test.ts` harus tutup untuk klaim-absen.
+  Membatasi aturan ini ke `.claude/skills` berarti menggerbangi turunannya dan
+  membiarkan sumbernya.
+
+  **Temuan yang lebih besar dari rot dokumen, ditemukan sambil mengerjakan ini.**
+  Tiga tempat menyatakan layar `/admin/modules/blog_content` "sudah ada", dan satu
+  di antaranya memakai klaim itu untuk **membenarkan sebuah keputusan**: "visual
+  settings editor … sengaja tidak dibangun; layar generik (Module Management,
+  sudah ada) cukup". Diverifikasi: `src/pages/admin/modules.astro` hanya mendaftar
+  modul dan menyalakan/mematikannya — **nol editor setting**, dan tak ada rute
+  `/admin/modules/{key}`. Sementara itu `GET`/`PATCH
+/api/v1/tenant/modules/{moduleKey}/settings` **ada dan ter-guard**. Jadi setiap
+  setting modul di repo ini — bukan hanya milik `blog_content` — hari ini hanya
+  bisa diubah lewat `curl`, dan alasan tertulis untuk tidak membangun editornya
+  bersandar pada layar yang tak pernah ada. Teksnya dikoreksi; **layarnya sendiri
+  adalah gap permukaan kelas ADR-0051 yang berdiri sendiri** dan tidak dikerjakan
+  di sini.
+
+  Detail aturannya:
+
+  - Path ber-`...`, `*`, atau segmen `{param}`/`[param]` dilewati — itu pola,
+    bukan alamat. Query string dan fragment dipotong, karena
+    `/admin/blog-presentation?section=widgets` adalah alamat nyata.
+  - **Token awal-baris ikut dibaca**, bukan hanya yang berbacktick: peta rute
+    hidup di blok berpagar, dan instans terburuk dari cacat ini justru satu
+    blok ```txt yang tak satu pun entri-nya berbacktick.
+  - Skill aspirational dikecualikan dengan alasan yang sama seperti aturan 1:
+    subjeknya tidak ada, jadi layarnya juga tidak.
+  - Korpus kosong **memerahkan** gerbang alih-alih lolos hampa.
+
+  **Mutation-proven empat arah:** cacat asli `awcms-site-search` → MERAH; pagar
+  aspirational dilepas dari peta spesifikasi mini → MERAH; glob korpus diarahkan
+  ke nama yang tak ada → MERAH ("would pass vacuously"); layar palsu ditanam di
+  README modul lain → MERAH menyebut berkas dan path-nya.
+
+- d08e3c4: docs(state): putaran keempat 10 Agustus — Gelombang 3 selesai, tiga cacat hidup ditemukan sambil menutupnya
+
+  `docs/PROJECT_STATE.md` §4 mencatat putaran ini: apa yang mendarat (ADR-0079,
+  ADR-0080, ADR-0081), tiga tempat rencana program tidak diikuti beserta alasannya
+  yang diperiksa terhadap kode, sepuluh penolakan, dan batas yang wajib dibaca
+  sebelum permukaan penulis grant ber-scope dibangun.
+
+  Daftar ini ada DI SINI karena aturan yang sama dengan tiga putaran sebelumnya:
+  daftar yang tidak ditulis ke repo harus diturunkan ulang, dan menurunkan ulang
+  berharga satu audit penuh sementara menuliskannya berharga satu paragraf.
+  Penolakan ikut tertulis, karena penolakan yang tidak tercatat akan diusulkan
+  lagi.
+
+- c413ee0: docs(sync): outbox sisi server berhenti dijanjikan bekerja — dan keluar dari ledger utang ke daftar pengecualian ber-alasan
+
+  `awcms_sync_outbox` tidak ditulis apa pun: nol `INSERT` di kode aplikasi, di
+  trigger, dan di migrasi mana pun. `POST /api/v1/sync/pull`, satu-satunya
+  pembacanya, karena itu hanya bisa menjawab `events: []` — selamanya. Sebuah node
+  yang mengintegrasikan protokol ini menerima `200 OK` dengan `hasMore: false` dan
+  menyimpulkan server memang tak punya perubahan, bukan bahwa jalurnya tak pernah
+  tersambung. Kegagalan senyap dengan status sukses.
+
+  Sementara itu README modul menggambarkannya tanpa kualifikasi apa pun — _"local
+  events available to be pulled by other nodes"_ — dan mendaftarkan endpoint-nya
+  bersebelahan dengan saudaranya yang bekerja.
+
+  **Dinyatakan di tiga tempat yang benar-benar dibaca:** README modul (klaimnya
+  diperbaiki, dan §"Belum tersedia" mendapat entri pertamanya soal ini), deskripsi
+  tag OpenAPI — yang **ter-render ke `docs/awcms/api-reference.md`** — dan komentar
+  tabelnya.
+
+  Deskripsi operasi `/sync/pull` sendiri **tidak** diubah, dan alasannya ditulis di
+  tempat gantinya: `tests/fixtures/openapi-pre-migration-snapshot.openapi.yaml`
+  beku, dan `tests/openapi-bundle.test.ts` mewajibkan tiap path pra-migrasi
+  byte-identical. Deskripsi tag tidak ikut dibekukan (hanya nama tag yang
+  dibandingkan), jadi itulah permukaan yang tersedia — dan kebetulan permukaan
+  yang lebih baik, karena ia muncul di dokumen yang dibaca manusia.
+
+  **Tabelnya pindah dari `TABLES_PREDATING_THE_RULE` ke `BOUNDED_BY_DESIGN`.**
+  Ledger utang membawa tepat satu alasan — _"nobody asked the retention question of
+  these"_ — dan alasan itu **sudah tidak benar** untuk tabel ini: pertanyaannya
+  diajukan di #468 dan dijawab. Selama ia duduk di sana, sebuah tabel yang **tak
+  bisa** dideskripsikan terlihat persis seperti tabel yang **belum**, yaitu
+  kebingungan yang melahirkan #477 dan #479.
+
+  Entri ini juga yang pertama di `BOUNDED_BY_DESIGN` — daftar yang sengaja dimulai
+  kosong — dan satu-satunya yang premisnya **diperiksa mesin** alih-alih
+  diperdebatkan: `tests/object-queue-purge.test.ts` memindai tiap `.ts` dan `.sql`
+  di `src/` dan `sql/`, dan gagal begitu sebuah produsen muncul. Dibuktikan dengan
+  menanam `INSERT INTO awcms_sync_outbox` palsu → **merah**. Test yang sama kini
+  juga meng-assert entri pengecualiannya, sehingga keduanya bergerak bersama: hari
+  seseorang menyambungkan produsennya, satu run mengatakan sekaligus bahwa
+  klaimnya batal dan entri mana yang harus pergi.
+
+  **Yang TIDAK diputuskan:** apakah tabel dan endpoint-nya disambungkan atau
+  dipensiunkan. Itu keputusan produk, bukan teknis — repo ini sudah punya outbox
+  transaksional yang bekerja (`awcms_domain_events`, lengkap dengan dispatcher,
+  DLQ, dan replay), jadi pertanyaan pertamanya bukan "bagaimana mengisinya"
+  melainkan **apakah ia perlu ada**, dan yang kedua adalah event mana yang boleh
+  diterima sebuah node — pelebaran akses, bukan penyambungan kabel. Menghapusnya
+  juga bukan langkah bebas: snapshot kontrak beku mewajibkan tiap path pra-migrasi
+  tetap ADA, tanpa allow-list untuk penghapusan.
+
+  #477 tetap terbuka untuk keputusan itu, kini dengan pertanyaan yang sudah
+  dipersempit dan tanpa dokumen yang menjanjikan sesuatu yang tak ada.
+
+- e575ac4: fix(keamanan): permission ber-`scope: 'platform'` berhenti bisa dilekatkan ke role tenant biasa (R8)
+
+  `listPermissionCatalog` mengembalikan **seluruh** katalog global tanpa predikat
+  `scope`, jadi editor role menawarkan permission ber-`scope: "platform"`
+  (ADR-0053) kepada tenant mana pun, dan `grantPermissionToRole` menerimanya.
+
+  **Ini bukan privilege escalation, dan penting untuk mengatakannya.** Gerbang
+  platform di chokepoint selalu menolaknya saat runtime, dan ia memutuskan dari
+  deklarasi **sisi kode** — jadi tidak ada baris basis data yang bisa mengangkatnya.
+
+  Yang hilang adalah **redundansi**, dan **kejujuran**. Seorang administrator bisa
+  memberikan permission itu, melihatnya tercantum di role, lalu menyimpulkan bahwa
+  ia berlaku. Ia tidak. Grant yang **tampak diberikan** tetapi tidak akan pernah
+  berlaku adalah jawaban yang salah untuk "siapa bisa melakukan apa" — persis
+  jawaban yang harus dipercaya review akses berikutnya. ADR-0058 menghabiskan satu
+  dokumen penuh pada kelas ambiguitas itu.
+
+  **Nol migrasi.** Rancangan pertama memberi tiap role kolom `permission_scope`.
+  Itu pemisahan yang lebih halus — ia akan membedakan role di dalam tenant platform
+  yang boleh dan tidak boleh memegang permission platform — tetapi **bukan R8**, dan
+  ia menuntut migrasi, kolom baru, serta penegakannya sendiri.
+
+  Batasan yang R8 gambarkan lebih sederhana dan sudah diputuskan: permission
+  platform hanya boleh **dijalankan** oleh tenant platform. Jadi filter yang jujur
+  adalah _"apakah tenant yang bertindak adalah tenant platform"_ — tanpa perubahan
+  skema sama sekali, dan persis predikat yang sudah dipakai gerbang runtime. Kolom
+  per-role tetap tersedia untuk hari ketika least privilege **di dalam** tenant
+  platform menjadi pertanyaannya.
+
+  Dua sisi, dan yang kedua yang jadi kontrolnya:
+
+  - `listPermissionCatalog(tx, { includePlatformScoped })` — **wajib** dinyatakan,
+    bukan flag opsional ber-default permisif: pemanggil yang lupa mendapat compile
+    error, bukan picker yang diam-diam melebar.
+  - `grantPermissionToRole` memeriksa ulang di server dan menolak dengan
+    `409 PLATFORM_SCOPE_REQUIRED`. Menyaring dropdown menghentikan kecelakaan,
+    bukan permintaan yang ditulis tangan.
+
+  Permission id yang tidak dikenal **tidak** ditolak di sini — ia jatuh ke foreign
+  key yang melempar `PermissionNotFoundError`. Satu tempat memutuskan "apakah ini
+  ada", dan bukan fungsi ini.
+
+  Menutup PROJECT_STATE §4 **R8**.
+
+- 26334bd: fix(db): purge retensi undangan mendapat GRANT yang tak pernah dibuat `sql/106`
+
+  `identity-access/module.ts` mendaftarkan `awcms_invitations` sebagai deskriptor
+  `dataLifecycle` ber-`executionMode: 'generic'` (retensi 90 hari), sementara
+  `sql/106` membuat tabelnya dan memberi `awcms_worker` **nol** hak — satu-satunya
+  kemunculan kata GRANT di berkas itu adalah prosa. Deployment ini menjalankan
+  peran worker terpisah (`WORKER_DATABASE_URL` menunjuk `awcms_worker`,
+  `docs/awcms/environments.md`), jadi `sql/108` memberi `SELECT, DELETE`, dan
+  `WORKER_ROLE_GRANTS` diperbarui di perubahan yang sama supaya matriksnya tidak
+  menyimpang dari migrasinya.
+
+  **Kenapa ini bukan sekadar "purge menghapus nol baris".** `sql/091` mencatat
+  versi lunak dari kegagalan ini: DELETE yang hilang membuat purge berjalan,
+  melapor sukses, dan tidak menghapus apa pun. Di sini bahkan BACAnya hilang, dan
+  `archive-purge-job.ts` tidak punya satu pun blok `catch` — `permission denied`
+  yang pertama keluar dari loop tenant dan membatalkan SELURUH invocation,
+  sehingga setiap deskriptor sesudahnya tidak pernah dijangkau. Yang membuatnya
+  tidur hari ini hanyalah job-nya belum dijadwalkan; penjadwalan pertama adalah
+  saat ia ditemukan.
+
+  Verb-nya diturunkan dari mesinnya, bukan dari analogi: `SELECT` karena subquery
+  DELETE dan `RETURNING created_at`-nya sama-sama menuntutnya (dan
+  `planLifecycleDryRun` menghitung baris), `DELETE` karena purge menghapus. Tanpa
+  INSERT dan UPDATE — worker yang bisa menulis di sini bisa mengalamatkan tawaran
+  keanggotaan ke mailbox mana pun atau merotasi `token_hash` ke nilai pilihannya.
+  `awcms_invitation_policies` sengaja tidak diberi apa-apa: barisnya ikut induknya
+  lewat `ON DELETE CASCADE`, dan aksi referensial dijalankan dengan hak pemilik
+  constraint, bukan hak peran yang menghapus.
+
+  **Test yang MEMATOK cacat ini dibalik.** `tests/invitation-contract.test.ts`
+  menyatakan "no GRANT to awcms_worker or awcms_setup" di bawah komentar "neither
+  the worker nor the setup wizard touches these tables" — keliru secara faktual
+  sejak hari ia ditulis. Kini berkas itu menuntut grant-nya ADA (di `sql/108`,
+  karena migrasi terapan tidak boleh disunting), menuntut deskriptornya memang
+  `generic`/`hard_delete`, dan menuntut worker TIDAK mendapat INSERT/UPDATE.
+
+  **Plus: `bun run security:readiness` berhenti gagal pada deployment sehat.**
+  Detektor hardcoded-secret melaporkan **11 false positive** (exit 1) dalam tiga
+  bentuk — tipe union literal string, konstanta ber-akhiran
+  `_PREFIX`/`_HEADER`/`_ACTION` yang menamai label wire alih-alih memegang
+  kredensial, dan template literal ber-interpolasi. Ketiganya dikecualikan secara
+  sempit dan terpisah: union dikenali dari `|` + literal berikutnya (yang tidak
+  punya arti sebagai NILAI), dua lainnya menuntut NAMA dan NILAI sama-sama
+  cocok, mengikuti bentuk pengecualian `_ENV` yang sudah ada. Dibuktikan tetap
+  tajam dengan menanam kredensial sungguhan lalu mencabutnya: `sk_live_...`,
+  `AKIAIOSFODNN7EXAMPLE` di dalam backtick tanpa interpolasi, JWT di balik nama
+  ber-akhiran `_HEADER`, dan base64 di balik `_ACTION` semuanya tetap memerah.
+  Klaim komentar "no such case exists in this repo today" diperbaiki, karena
+  sebelas kasusnya ada.
+
 ## 7.0.1
 
 ### Patch Changes
