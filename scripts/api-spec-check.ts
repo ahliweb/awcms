@@ -97,7 +97,37 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   // separate, permissioned admin action. An already-registered address, an
   // already-pending request and a fresh one all return the identical 200, so it
   // is not an account-existence oracle.
-  "postAuthRegister"
+  "postAuthRegister",
+  // Invitations (ADR-0082, Gelombang 4 PR 4.2) — unauthenticated for the same
+  // structural reason self-registration is: the recipient has no account yet,
+  // which is what the invitation exists to change. `getAuthInvitationPreview`
+  // renders the page; `postAuthInvitationAccept` creates the membership.
+  //
+  // What keeps them safe is not authentication:
+  //
+  // Nobody reaches either without a 256-bit CSPRNG token that is stored only as
+  // a sha256 hash, is single-use, expires, and is ROTATED by every resend — so
+  // an invitation cannot be issued by anyone but a holder of
+  // `identity_access.invitations.create`, and a superseded link is dead.
+  //
+  // Both are tenant-bound and rate-limited through `checkAuthRateLimit`, whose
+  // SOURCE ceiling is keyed on something the caller cannot choose (#447), and
+  // the accept path is additionally Turnstile-gated with its OWN action so a
+  // token solved on the login form cannot be spent here.
+  //
+  // Neither is an oracle. Unknown, revoked, already-accepted, expired and
+  // wrong-tenant all answer one identical 404 — 404 rather than 410, because
+  // 410 would say the token was once valid. The preview returns the tenant name
+  // and the inviter's name and NEVER the invited address.
+  //
+  // Acceptance accepts no privilege field: what the invitee may hold was
+  // decided by the administrator who invited them and is read from
+  // `awcms_invitation_policies`. It grants no `is_system` role — checked at
+  // issue AND re-checked here — and it issues NO SESSION, so the tenant's MFA
+  // policy, its SSO-only policy and the login rate limit all still stand
+  // between the new account and a signed-in browser.
+  "getAuthInvitationPreview",
+  "postAuthInvitationAccept"
 ]);
 
 /**

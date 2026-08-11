@@ -78,6 +78,13 @@ Ketiga endpoint tanpa limiter mendapatkannya. Cakupannya kini: `login`,
 test yang juga menegakkan bahwa tak ada rute yang masih memakai limiter
 per-instans secara langsung.
 
+> **Diperbarui (ADR-0082, Gelombang 4 PR 4.2):** sebelas menjadi **tiga belas**.
+> `auth/invitations/{token}` dan `auth/invitations/{token}/accept` keduanya
+> tak-terautentikasi dan ber-token, dan yang kedua MENCETAK AKUN — permukaan
+> tulis tak-terautentikasi paling berkonsekuensi di modul ini. Angka itu hidup
+> di `tests/shared-rate-limit.test.ts`, bukan di `scripts/`, jadi ia yang paling
+> mudah terlupa; kalimat ini ada supaya prosanya tidak menua sendirian.
+
 ## Konsekuensi
 
 **Yang didapat.** Batas rate menjadi properti deployment, bukan properti satu

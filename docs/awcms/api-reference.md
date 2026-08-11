@@ -939,6 +939,62 @@ Returns what `evaluateAccess` would decide for a hypothetical subject/request/en
 | 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/auth/invitations/{token}` — Preview an invitation (public, token-bearing).
+
+- **operationId**: `getAuthInvitationPreview`
+- **Security**: none (public endpoint)
+
+Returns the tenant's name, the inviter's name, and the expiry — and **never the invited address**. Whoever legitimately holds this link read that address in their own mailbox; whoever holds a stolen one did not.
+Unknown, revoked, already-accepted, expired and belonging-to-another-tenant all answer one identical `404`. **404, not 410**: `410 Gone` would tell a token holder that the token was once valid, which is an oracle worth having if you are working through addresses you scraped. The real reason is written to the tenant's audit trail, never to the response.
+Rate-limited through the shared limiter's source ceiling before any database work.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID`  | header | no       | string        |             |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+| `token`             | path   | yes      | string        |             |
+
+**Responses**
+
+| Status | Description                                         | Schema                                 |
+| ------ | --------------------------------------------------- | -------------------------------------- |
+| 200    | The invitation is live and may be accepted.         | object                                 |
+| 400    | Validation error.                                   | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                 | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate limited (RATE_LIMITED). Carries `retry-after`. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/invitations/{token}/accept` — Accept an invitation, creating the membership (public, token-bearing).
+
+- **operationId**: `postAuthInvitationAccept`
+- **Security**: none (public endpoint)
+
+Creates the profile, identity and tenant user, and materializes the roles the invitation carried. Those roles are read from `awcms_invitation_policies` — **never** from this request body, which declares no privilege field at all. A role that has since become `is_system`, been soft-deleted, or left the catalogue refuses the whole acceptance rather than granting a subset.
+**No session is issued.** The invitee signs in at `/login` afterwards, so the tenant's MFA policy, its SSO-only policy, and the login rate limit all still stand between the new account and a signed-in browser.
+Every refusal — unknown, revoked, already accepted, expired, wrong tenant, or an address that acquired an account in the meantime — answers the same `404`.
+Turnstile-gated with its own action, so a token solved on any other form cannot be spent here.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description |
+| ------------------- | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID`  | header | no       | string        |             |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) |             |
+| `token`             | path   | yes      | string        |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                   | Schema                                 |
+| ------ | ------------------------------------------------------------- | -------------------------------------- |
+| 200    | The membership exists. Sign in at /login.                     | object                                 |
+| 400    | Validation error.                                             | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                           | [`ApiError`](#standard-error-envelope) |
+| 413    | The request body exceeded the size limit (PAYLOAD_TOO_LARGE). | [`ApiError`](#standard-error-envelope) |
+| 429    | Rate limited (RATE_LIMITED). Carries `retry-after`.           | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/auth/login` — Authenticate with a login identifier and password; issues a session token.
 
 - **operationId**: `postAuthLogin`

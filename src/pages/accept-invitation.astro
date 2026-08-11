@@ -1,0 +1,385 @@
+---
+/**
+ * Invitation acceptance page (ADR-0082, Gelombang 4 PR 4.2 of #423). Previews
+ * the invitation, then posts `{ password, displayName? }` plus the tenant
+ * header to `POST /api/v1/auth/invitations/{token}/accept`.
+ *
+ * ## Where the token and tenant come from
+ *
+ * `buildInvitationUrl` emails either the sealed `?p=<opaque>` shape (when
+ * `AUTH_URL_PARAM_ENCRYPTION_KEY` is set — token and tenant sealed together
+ * with AES-256-GCM) or the plain `?token=…&tenantId=…`. Unsealing happens
+ * SERVER-SIDE in this frontmatter; the key never reaches the browser. A `?p=`
+ * that fails to open yields no token and this page renders its invalid state
+ * rather than falling through to the plain branch — which is what would let a
+ * tampered link be retried as an empty one. `reset-password.astro` set that
+ * shape.
+ *
+ * The tenant travels in the link because both invitation endpoints are
+ * tenant-scoped under FORCE RLS and demand `X-AWCMS-Tenant-ID`.
+ *
+ * ## The preview is fetched by the BROWSER, not here
+ *
+ * This frontmatter opens no transaction. `.astro` files are the blind spot of
+ * every type-based gate in this repo (`tsc` cannot parse them), so the less
+ * database code lives in one the better — and the preview endpoint is
+ * rate-limited on its own terms, which an SSR call from this page would
+ * bypass by arriving from the server's own address.
+ *
+ * ## Generic failure, mirroring the endpoint
+ *
+ * The API answers one 404 for unknown, revoked, already-accepted, expired and
+ * wrong-tenant. This page shows one message for all of them; reconstructing a
+ * specific reason in the UI would rebuild the oracle the endpoint removed.
+ *
+ * ## Stable DOM contract (do not rename — E2E specs depend on these)
+ *
+ * `#invitation-form`, `#invitation-token`, `#invitation-tenant`,
+ * `#invitation-password`, `#invitation-confirm`, `#invitation-display-name`,
+ * `#invitation-submit`, `#invitation-error`, `#invitation-notice`,
+ * `#invitation-summary`.
+ */
+import "../styles/tokens.css";
+import "../styles/motion.css";
+import "../styles/auth.css";
+import { openUrlParams } from "../lib/security/secure-url-params";
+import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
+
+const sealed = Astro.url.searchParams.get("p")?.trim() ?? "";
+let token = "";
+let tenantId = "";
+
+if (sealed) {
+  const opened = openUrlParams(sealed);
+  token = opened?.token?.trim() ?? "";
+  tenantId = opened?.tenantId?.trim() ?? "";
+} else {
+  token = Astro.url.searchParams.get("token")?.trim() ?? "";
+  tenantId = Astro.url.searchParams.get("tenantId")?.trim() ?? "";
+}
+
+const hasToken = token.length > 0;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Accept your invitation · AWCMS</title>
+  </head>
+  <body class="auth-body">
+    <main class="auth">
+      <div class="auth-card">
+        <div class="auth-head">
+          <div class="auth-brand">
+            <span class="auth-mark" aria-hidden="true">A</span>
+            <span class="auth-wordmark">AWCMS</span>
+          </div>
+          <h1 class="auth-title">Accept your invitation</h1>
+          <p class="auth-subtitle" id="invitation-summary">
+            Choose a password to finish setting up your account.
+          </p>
+        </div>
+
+        {
+          !hasToken ? (
+            <>
+              <p class="auth-error" role="alert">
+                This invitation link is invalid or has expired.
+              </p>
+              <nav class="auth-links" aria-label="Account access">
+                <a href="/login">Back to sign in</a>
+              </nav>
+            </>
+          ) : (
+            <>
+              <form id="invitation-form" class="auth-form" novalidate>
+                <p
+                  id="invitation-error"
+                  class="auth-error"
+                  role="alert"
+                  hidden
+                />
+
+                <input
+                  id="invitation-token"
+                  name="token"
+                  type="hidden"
+                  value={token}
+                />
+
+                {tenantId ? (
+                  <input
+                    id="invitation-tenant"
+                    name="tenantId"
+                    type="hidden"
+                    value={tenantId}
+                  />
+                ) : (
+                  <div class="auth-field">
+                    <label for="invitation-tenant">Tenant ID</label>
+                    <input
+                      id="invitation-tenant"
+                      name="tenantId"
+                      type="text"
+                      required
+                      autocomplete="off"
+                      spellcheck={false}
+                    />
+                  </div>
+                )}
+
+                <div class="auth-field">
+                  <label for="invitation-display-name">Your name</label>
+                  <input
+                    id="invitation-display-name"
+                    name="displayName"
+                    type="text"
+                    autocomplete="name"
+                    maxlength={120}
+                  />
+                  <p class="auth-hint">
+                    Optional. Leave it blank to keep the name you were invited
+                    under.
+                  </p>
+                </div>
+
+                <div class="auth-field">
+                  <label for="invitation-password">Password</label>
+                  <div class="auth-password">
+                    <input
+                      id="invitation-password"
+                      name="password"
+                      type="password"
+                      required
+                      autocomplete="new-password"
+                      minlength={MIN_PASSWORD_LENGTH}
+                    />
+                    <button
+                      type="button"
+                      id="invitation-password-toggle"
+                      class="auth-password-toggle"
+                      aria-pressed="false"
+                      aria-label="Show password"
+                    >
+                      <span class="auth-password-toggle-label">Show</span>
+                    </button>
+                  </div>
+                  <p class="auth-hint">
+                    At least {MIN_PASSWORD_LENGTH} characters.
+                  </p>
+                </div>
+
+                <div class="auth-field">
+                  <label for="invitation-confirm">Confirm password</label>
+                  <input
+                    id="invitation-confirm"
+                    name="confirmPassword"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  id="invitation-submit"
+                  class="auth-submit"
+                >
+                  Accept invitation
+                </button>
+              </form>
+
+              <p
+                id="invitation-notice"
+                class="auth-notice"
+                role="status"
+                hidden
+              />
+
+              <nav
+                class="auth-links"
+                id="invitation-login-link"
+                aria-label="Account access"
+                hidden
+              >
+                <a href="/login">Sign in to your new account</a>
+              </nav>
+            </>
+          )
+        }
+
+        <p class="auth-foot">Secured workspace access · AWCMS</p>
+      </div>
+    </main>
+
+    <script>
+      // The import is deliberate — it forces Astro to bundle this script to an
+      // external file (an import-free script would be inlined, and inline
+      // scripts are blocked by this app's CSP). See admin-form-client.ts.
+      import { lockElement } from "../lib/ui/admin-form-client";
+      import { MIN_PASSWORD_LENGTH } from "../modules/identity-access/domain/password-reset-validation";
+
+      const form = document.getElementById(
+        "invitation-form"
+      ) as HTMLFormElement | null;
+      const errorBox = document.getElementById("invitation-error");
+      const noticeBox = document.getElementById("invitation-notice");
+      const summary = document.getElementById("invitation-summary");
+      const loginLink = document.getElementById("invitation-login-link");
+      const submitButton = document.getElementById(
+        "invitation-submit"
+      ) as HTMLButtonElement | null;
+      const passwordInput = document.getElementById(
+        "invitation-password"
+      ) as HTMLInputElement | null;
+      const passwordToggle = document.getElementById(
+        "invitation-password-toggle"
+      ) as HTMLButtonElement | null;
+      const passwordToggleLabel = passwordToggle?.querySelector(
+        ".auth-password-toggle-label"
+      );
+
+      const tokenField = document.getElementById(
+        "invitation-token"
+      ) as HTMLInputElement | null;
+      const tenantField = document.getElementById(
+        "invitation-tenant"
+      ) as HTMLInputElement | null;
+
+      const GENERIC_INVALID = "This invitation link is invalid or has expired.";
+
+      passwordToggle?.addEventListener("click", () => {
+        if (!passwordInput) return;
+        const show = passwordInput.type === "password";
+        passwordInput.type = show ? "text" : "password";
+        passwordToggle.setAttribute("aria-pressed", String(show));
+        passwordToggle.setAttribute(
+          "aria-label",
+          show ? "Hide password" : "Show password"
+        );
+        if (passwordToggleLabel) {
+          passwordToggleLabel.textContent = show ? "Hide" : "Show";
+        }
+      });
+
+      function reveal(element: HTMLElement | null, message: string): void {
+        if (!element) return;
+        element.textContent = message;
+        element.hidden = false;
+      }
+
+      // The preview is best-effort decoration: it names who invited you and to
+      // which workspace. A failure here is NOT reported as an error, because
+      // the accept call is the one that decides, and pre-announcing a refusal
+      // would turn this page into the status oracle the API refuses to be.
+      async function loadPreview(): Promise<void> {
+        const token = tokenField?.value ?? "";
+        const tenantId = tenantField?.value.trim() ?? "";
+        if (!token || !tenantId) return;
+
+        try {
+          const response = await fetch(
+            `/api/v1/auth/invitations/${encodeURIComponent(token)}`,
+            {
+              headers: { "X-AWCMS-Tenant-ID": tenantId },
+              credentials: "same-origin"
+            }
+          );
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload || payload.success !== true) return;
+
+          const { tenantName, inviterName } = payload.data ?? {};
+          if (!tenantName) return;
+
+          reveal(
+            summary,
+            inviterName
+              ? `${inviterName} invited you to ${tenantName}. Choose a password to finish setting up your account.`
+              : `You have been invited to ${tenantName}. Choose a password to finish setting up your account.`
+          );
+        } catch {
+          // Network failure: leave the default subtitle in place.
+        }
+      }
+
+      void loadPreview();
+
+      form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!submitButton || submitButton.disabled) return;
+        if (errorBox) errorBox.hidden = true;
+
+        const formData = new FormData(form);
+        const token = String(formData.get("token") ?? "");
+        const tenantId = String(formData.get("tenantId") ?? "").trim();
+        const password = String(formData.get("password") ?? "");
+        const confirmPassword = String(formData.get("confirmPassword") ?? "");
+        const displayName = String(formData.get("displayName") ?? "").trim();
+
+        // Client-side guards are UX only — the server re-validates the length,
+        // the token, and every role the invitation carries, and is the only
+        // authority on any of them.
+        if (password.length < MIN_PASSWORD_LENGTH) {
+          reveal(
+            errorBox,
+            `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
+          );
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          reveal(errorBox, "The two passwords do not match.");
+          return;
+        }
+
+        const unlock = lockElement(submitButton, "Please wait…");
+
+        try {
+          const response = await fetch(
+            `/api/v1/auth/invitations/${encodeURIComponent(token)}/accept`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-AWCMS-Tenant-ID": tenantId
+              },
+              credentials: "same-origin",
+              body: JSON.stringify(
+                displayName ? { password, displayName } : { password }
+              )
+            }
+          );
+
+          const payload = await response.json().catch(() => null);
+
+          if (!response.ok || !payload || payload.success !== true) {
+            // One generic message: the server refuses to say WHY an invitation
+            // was refused, and the UI must not invent a reason.
+            reveal(
+              errorBox,
+              response.status === 429
+                ? "Too many attempts. Please wait a few minutes and try again."
+                : GENERIC_INVALID
+            );
+            unlock();
+            return;
+          }
+
+          form.hidden = true;
+          reveal(
+            noticeBox,
+            "Your account is ready. Sign in with the password you just chose."
+          );
+          if (loginLink) loginLink.hidden = false;
+        } catch {
+          reveal(errorBox, "Network error. Please try again.");
+          unlock();
+        }
+      });
+    </script>
+  </body>
+</html>
