@@ -1,5 +1,196 @@
 # awcms
 
+## 8.1.0
+
+### Minor Changes
+
+- 1b283f7: feat(access): sebuah entitlement MENOLAK, ia tidak pernah memberi (ADR-0084, #423)
+
+  Gelombang 5 PR 5.1. Lima tabel (`sql/109`) plus satu cabang penolakan di
+  `authorizeInTransaction`: `403 ENTITLEMENT_REQUIRED`, `matchedPolicy:
+"entitlement_required"`, diputuskan **setelah** `module_disabled` dan **di atas**
+  `fetchGrantedPermissionKeys`.
+
+  Lapisan entitlement hanya bisa mengatakan TIDAK — setiap fungsi keputusan yang
+  diekspor bertipe `EntitlementDenial | null`, dan properti itu diperiksa mesin
+  oleh gerbang baru `access:entitlement:deny-only:check` (rantai 39 → 40) yang
+  lahir dengan **empat probe SINTETIS**, bukan dengan sebuah ledger yang alarmnya
+  mati begitu ledgernya kosong.
+
+  **Mendarat INERT, dan itu dibuktikan bukan diklaim.** Nol modul mendeklarasikan
+  `requiresEntitlement`, dan `resolveModuleAvailability` pada jalur null
+  mengeluarkan pernyataan SQL yang SAMA — dibandingkan sebagai teks di test.
+
+  Tiga pengecualian keras: tenant platform (sengaja TIDAK fail-closed), modul
+  `isCore` (deklarasinya tidak dihormati DAN memerahkan `modules:compose:check`),
+  dan deskriptor yang tidak mendeklarasikan apa pun.
+
+  Katalog plan GLOBAL dan tak bisa ditulis saat request: tak ada `tenant_id` di
+  sana untuk dipolisikan policy, jadi INSERT pada `awcms_plan_entitlements` akan
+  menjadi eskalasi yang tak satu pun policy RLS keberatan. Membuat/mengubah harga
+  plan adalah MIGRASI.
+
+  `MODULE_CONTRACT_VERSION` 3.0.0 → 3.1.0 (aditif murni), dipasangkan bump
+  `awcms-family-compatibility.yaml`. Urutan kelima gerbang struktural kini
+  ditegakkan pada level SOURCE oleh `tests/guard-structural-gate-order.test.ts`.
+
+- 0e1c844: feat(access): entitlement nyata pertama terpasang, dan ia menolak NOL tenant (ADR-0084, #423)
+
+  Gelombang 5 PR 5.4. `tenant_domain` mendeklarasikan `requiresEntitlement:
+"custom_domain"` — pelekatan nyata pertama di base ini.
+
+  **Rencana menulis PR ini sebagai "pelekatan entitlement pertama". Bentuk itu
+  salah, dan baru terlihat setelah 5.1–5.3 mendarat.** Memasang deklarasi tanpa
+  apa pun yang lain akan menolak modul itu dari SETIAP tenant di SETIAP instalasi
+  turunan: `resolveModuleAvailability` menuntut langganan ber-status entitling atau
+  grant langsung, dan **tak ada tenant yang punya baris langganan sama sekali**.
+
+  `sql/111` karena itu menaruh entitlement itu di plan **default**, dan
+  `resolveModuleAvailability` memperlakukan tenant TANPA baris langganan sebagai
+  berada di plan default itu — konvensi "baris yang hilang bukan sebuah keputusan"
+  yang sama persis dipakai `awcms_tenant_modules` sejak `sql/008`. Nol baris
+  tenant-scoped ditulis, jadi tak ada backfill lintas-tenant dan tak ada toggle
+  `NO FORCE`.
+
+  Bentuk itu sendiri hasil koreksi: versi pertama menulis langganan saat tenant
+  lahir, dan `modules:table-writes:check` menolaknya — `awcms_tenant_subscriptions`
+  menjadi tabel yang ditulis `tenant_admin` DAN `identity_access`, yaitu
+  shared-table write yang dilarang ADR-0013 §6. Menurunkan default-nya alih-alih
+  menuliskannya menyisakan tepat satu penulis dan menghapus seluruh backfill.
+  Fallback-nya sengaja TIDAK berlaku saat baris langganan ADA tetapi statusnya tak
+  memberi hak: kasus itu adalah lapse, dan jatuh kembali ke plan default akan
+  diam-diam membatalkannya.
+
+  Yang dibeli pelekatannya: cabang itu kini **BENAR-BENAR DIJALANKAN** terhadap
+  baris nyata alih-alih tidak pernah dijalankan sama sekali — sambil menolak nol
+  orang. Operator turunan yang ingin menjual tingkatan menulis plan yang lebih
+  sempit sendiri; template ini tidak menjual keputusan produk yang bukan miliknya.
+
+  **Kenapa `tenant_domain`.** Domain kustom adalah fitur tingkatan yang paling
+  lazim, dan ini pelekatan yang paling bersih secara mekanis: tak ada yang
+  bergantung padanya, dan seluruh permukaan TERJAGA-nya adalah MANAJEMEN domain.
+  Resolusi host untuk domain yang sudah dikonfigurasi adalah jalur baca publik yang
+  tak pernah mencapai chokepoint — jadi tenant tanpa entitlement tetap dilayani di
+  domain yang sudah ia punya; hanya menambah dan mengubahnya yang ditolak.
+  Kehilangan kemampuan menambah domain adalah plan wall; kehilangan domain yang
+  sudah dipakai adalah gangguan layanan, dan pelekatan ini tidak bisa
+  menyebabkannya. `site_search` dan `comments` ditolak justru karena alasan
+  sebaliknya: keduanya punya permukaan publik tak-terautentikasi yang melewati
+  chokepoint.
+
+  `409 ENTITLEMENT_REQUIRED` di endpoint enable adalah **SOPAN SANTUN, bukan
+  kontrolnya** — chokepoint tetap menolak entah endpoint ini dipanggil atau tidak.
+  Tanpanya, enable berhasil, entri navigasi muncul, dan setiap klik menjawab 403
+  tanpa menjelaskan kenapa tombol yang baru saja dipakai tidak melakukan apa pun.
+  409 bukan 403: pemanggil MEMILIKI otoritasnya (ia lolos guard) — yang ia tak
+  punya adalah prasyarat komersialnya.
+
+  Test "gelombang ini inert" DIGANTI, bukan dihapus: yang layak dijaga tak pernah
+  "inert" melainkan "nol orang ditolak" — dan itu kini di-assert terhadap TEKS
+  migrasinya, karena migrasi adalah satu-satunya hal yang benar-benar menulis baris
+  itu. Dibuktikan dengan memutasi `sql/111`: menghapus pemetaan plan memerahkannya.
+
+- 940fe6c: feat(access): grandfathering entitlement, dan laporan blast-radius yang wajib dijalankan LEBIH DULU (ADR-0084, #423)
+
+  Gelombang 5 PR 5.3. `bun run entitlements:backfill` (dry-run default, `--commit`
+  menulis, `--tenant <code>` untuk rollout bertahap) plus cek baru di
+  `bun run security:readiness`: _"N tenant akan mulai menerima 403
+  ENTITLEMENT_REQUIRED untuk X"_.
+
+  **Kenapa laporan itu ada di `security:readiness` dan bukan hanya di skripnya.**
+  Skripnya mencetak angka yang sama, tetapi ia perintah yang harus Anda tahu ada —
+  dan kesalahan yang ditangkap cek ini dibuat oleh orang yang tidak tahu.
+  Severity-nya `warning`, tak pernah `critical`: tenant yang akan ditolak adalah
+  fakta KOMERSIAL, dan gerbang kesiapan yang memblokir go-live karena seseorang
+  belum membayar adalah alat keamanan yang mengambil keputusan tagihan.
+
+  **Kenapa grandfathering boleh menjadi selimut di sini, padahal backfill
+  permission tidak boleh.** `owner-permission-backfill.ts` menolak memberikan ulang
+  apa pun yang LEBIH TUA dari peran owner, karena permission yang hilang bisa saja
+  DICABUT sengaja dan backfill tak bisa membedakannya dari "tak pernah diberikan".
+  Entitlement tak punya sejarah itu: skemanya mendarat KOSONG (`sql/109`), jadi
+  baris yang absen hanya bisa berarti "sebelum entitlement ada".
+
+  Asimetri itu KEDALUWARSA pada pencabutan pertama — dan di situlah aturan
+  `tenant_newer_than_entitlement` menarik garisnya: tenant yang lebih baru dari
+  baris katalog entitlement-nya DILAPORKAN, tak pernah diberikan ulang. Seri
+  dihitung sebagai "lebih baru": tidak memberi bisa diperbaiki manusia, memberi
+  diam-diam tidak.
+
+  Laporan blast-radius DITURUNKAN dari rencana backfill yang sama, bukan dari query
+  kedua yang ditulis agar mirip. Dua penurunan atas "siapa yang kekurangan ini"
+  adalah dua kesempatan menjawab berbeda, dan seluruh nilai laporan ini adalah ia
+  bisa dipercaya pada hari ia mengatakan nol.
+
+- f2d0c47: feat(access): tangga langganan hanya berjalan TURUN, dan tak pernah menyentuh `awcms_tenants` (ADR-0084, #423)
+
+  Gelombang 5 PR 5.2. `evaluateSubscriptionTransition(now, snapshot, policy)` —
+  murni, tanpa basis data, tanpa jamnya sendiri — plus job
+  `bun run identity-access:subscription-lifecycle` yang menerapkan apa pun yang
+  dikembalikannya dan tidak lebih.
+
+  **Hanya turun.** `past_due -> active` dan `trialing -> active` adalah peristiwa
+  PEMBAYARAN, bukan peristiwa jam, jadi keduanya sengaja tak-terwakilkan. Fungsi
+  yang bisa memulihkan layanan lewat timer adalah fungsi yang memulihkannya saat
+  timer-nya salah. Diuji sebagai pencarian menyeluruh: nol input yang bisa
+  dijangkau menghasilkan langkah ke atas.
+
+  **Idempoten.** Jangkarnya `current_period_end` — tanggal yang dimiliki SIKLUS
+  TAGIHAN — bukan "kapan baris ini masuk `past_due`". Job yang terlambat, atau
+  berjalan dua kali, karena itu tidak bisa memperpanjang tangga dengan menyatakan
+  ulang awalnya sendiri.
+
+  **Rencana TIDAK diikuti di satu tempat, dan alasannya sebuah HAK, bukan
+  preferensi.** Rencana menutup gelombang ini dengan `suspendTenant` (ADR-0073).
+  Itu menuntut `UPDATE` pada `awcms_tenants` untuk `awcms_worker`, sementara
+  `WORKER_ROLE_GRANTS` menuliskan aturan yang akan dilanggarnya — dan
+  `awcms_tenants` adalah tabel akar TANPA RLS, jadi tak ada policy di antara satu
+  UPDATE keliru dan setiap tenant di instalasi. Job tagihan yang memegang verba itu
+  berjarak satu kesalahan aritmetika dari menghentikan seluruh platform, tanpa
+  pengawasan, tengah malam.
+
+  Konsekuensinya tetap tiba lewat gerbang yang dibangun gelombang ini: `suspended`
+  dan `cancelled` di luar `ENTITLING_SUBSCRIPTION_STATUSES`, jadi plan berhenti
+  memberi dan setiap modul ber-entitlement menolak di chokepoint. Itu juga jawaban
+  yang PROPORSIONAL — tagihan tak terbayar merenggut fitur yang berhenti dibayar,
+  bukan situs publik, login, dan akses data pelanggan.
+
+  **Batas blast-radius.** Satu run yang akan memindahkan lebih dari
+  `MAX_ENTITLEMENT_LOSSES_PER_RUN` tenant KELUAR dari status ber-entitlement tidak
+  menerapkan satu pun, dan melaporkannya. Ia bukan rate limit melainkan detektor
+  "ini bug, bukan hari Selasa": atrisi nyata menetes karena periode tagihan
+  tersebar sepanjang bulan, sementara setiap mode kegagalan yang penting — backfill
+  buruk, kolom periode disetel massal, skew jam di host worker — tiba sebagai
+  tebing. Semua-atau-tidak-sama-sekali: menerapkan "25 pertama" dari sebuah cacat
+  tetaplah menerapkan cacat.
+
+  `sql/110` memberi worker persis SELECT dan UPDATE pada
+  `awcms_tenant_subscriptions`, dan tidak lebih.
+
+### Patch Changes
+
+- 981990b: docs(state): Gelombang 5 selesai — catat koreksi bentuk PR 5.4 yang KEDUA, dan apa yang tersisa
+
+  §4 sebelumnya menuliskan bentuk PR 5.4 yang benar setelah koreksi pertama.
+  Koreksi itu lalu ikut salah, dan `modules:table-writes:check` yang menemukannya:
+  menulis langganan saat tenant lahir membuat `awcms_tenant_subscriptions` ditulis
+  dua modul (ADR-0013 §6). Jawabannya menurunkan default-nya alih-alih
+  menuliskannya. Dokumen yang membiarkan resep lamanya berdiri adalah dokumen yang
+  percaya diri dan salah — persis kelas yang berkali-kali menggigit repo ini.
+
+  ADR-0084 ikut dikoreksi: ia menjanjikan `/admin/subscriptions` mendarat di PR
+  5.4, padahal layar itu dipisah dan belum dibangun.
+
+- 710ee89: docs(state): catat produksi v8.0.0 ditegakkan di `awcms.ahlikoding.com` dan staging dibongkar — termasuk jebakan healthcheck Postgres yang menunjuk database yang baru dihapus, dan dua sisa staging yang sengaja/terpaksa dipertahankan.
+- 1ced506: docs(state): catat putaran kedelapan 12 Agustus — Gelombang 5 tiga perempat selesai, dan PR 5.4 berubah bentuk
+
+  Empat tempat rencana tidak diikuti, dua cacat yang hanya bisa ditemukan dengan
+  MENJALANKAN, dan koreksi bentuk PR 5.4 yang baru terlihat setelah 5.1–5.3
+  mendarat: memasang entitlement pada modul base akan mencabut modul itu dari
+  setiap tenant di setiap instalasi turunan, karena tak ada tenant yang punya baris
+  langganan sama sekali. Urutan yang benar ditulis lengkap supaya tidak perlu
+  diturunkan ulang.
+
 ## 8.0.0
 
 ### Major Changes
