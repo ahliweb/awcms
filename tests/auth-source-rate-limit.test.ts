@@ -165,10 +165,14 @@ describe("no route can take half of it", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("the seven auth routes go through the paired helper", async () => {
+  test("the nine auth routes go through the paired helper", async () => {
     // Seven, not the six the issue listed. The structural test above found
     // `sso/[providerKey]/start.ts` after the first six were converted by hand —
     // which is the argument for having it, in one line.
+    //
+    // Nine since ADR-0082: the two invitation routes are tenant-header-bound
+    // and unauthenticated, which is exactly the shape #447 exploited, so they
+    // take the paired helper rather than `checkSharedRateLimit` directly.
     const routes = [
       "src/pages/api/v1/auth/login.ts",
       "src/pages/api/v1/auth/register.ts",
@@ -176,7 +180,9 @@ describe("no route can take half of it", () => {
       "src/pages/api/v1/auth/mfa/totp/verify.ts",
       "src/pages/api/v1/auth/password/forgot.ts",
       "src/pages/api/v1/auth/password/reset.ts",
-      "src/pages/api/v1/auth/sso/[providerKey]/start.ts"
+      "src/pages/api/v1/auth/sso/[providerKey]/start.ts",
+      "src/pages/api/v1/auth/invitations/[token].ts",
+      "src/pages/api/v1/auth/invitations/[token]/accept.ts"
     ];
 
     for (const route of routes) {

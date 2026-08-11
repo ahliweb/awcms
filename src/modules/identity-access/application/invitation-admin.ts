@@ -32,6 +32,7 @@ import {
   generateInviteToken,
   hashInviteToken
 } from "../../../lib/auth/invitation-token";
+import { sealUrlParams } from "../../../lib/security/secure-url-params";
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import {
   encodeKeysetCursor,
@@ -126,8 +127,30 @@ function maskAddress(value: string): string {
   return `${head}${"*".repeat(Math.max(local.length - 1, 1))}${domain}`;
 }
 
-function buildInvitationUrl(base: string, rawToken: string): string {
-  return `${base}?token=${encodeURIComponent(rawToken)}`;
+/**
+ * The emailed link.
+ *
+ * It carries the TENANT as well as the token, and that is not decoration: both
+ * public invitation endpoints are tenant-scoped under FORCE RLS and demand
+ * `X-AWCMS-Tenant-ID`, so a link without it produces a page that cannot make
+ * the call it exists to make. `requestPasswordReset` carries the tenant for the
+ * same reason.
+ *
+ * Sealed with AES-256-GCM into one opaque `?p=` when
+ * `AUTH_URL_PARAM_ENCRYPTION_KEY` is set, plain otherwise. The plain fallback
+ * is not a weakness: the token is already 256 bits of CSPRNG and a tenant id is
+ * not a secret.
+ */
+function buildInvitationUrl(
+  base: string,
+  rawToken: string,
+  tenantId: string
+): string {
+  const sealed = sealUrlParams({ token: rawToken, tenantId });
+
+  return sealed
+    ? `${base}?p=${sealed}`
+    : `${base}?token=${encodeURIComponent(rawToken)}&tenantId=${tenantId}`;
 }
 
 /**
@@ -170,7 +193,8 @@ async function deliverInvitation(
         tenantName: input.tenantName,
         invitationUrl: buildInvitationUrl(
           options.invitationUrlBase,
-          input.rawToken
+          input.rawToken,
+          tenantId
         ),
         expiresInHours: String(options.tokenTtlHours)
       },

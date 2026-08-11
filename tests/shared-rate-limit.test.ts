@@ -144,7 +144,12 @@ describe("every authentication surface is limited", () => {
     ["auth/session-handoff/issue.ts"],
     ["auth/session-handoff/redeem.ts"],
     ["auth/sso/[providerKey]/start.ts"],
-    ["auth/sso/[providerKey]/callback.ts"]
+    ["auth/sso/[providerKey]/callback.ts"],
+    // ADR-0082 — eleven became thirteen. Both are unauthenticated and
+    // token-bearing, and the second of them CREATES AN ACCOUNT, which makes it
+    // the most consequential unauthenticated write in this module.
+    ["auth/invitations/[token].ts"],
+    ["auth/invitations/[token]/accept.ts"]
   ])("%s calls the shared limiter", async (route) => {
     // ASVS V11.2 wants anti-automation across the WHOLE authentication surface,
     // not most of it. Three of these had none before ADR-0066.

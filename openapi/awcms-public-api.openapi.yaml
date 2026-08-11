@@ -1285,6 +1285,132 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/auth/invitations/{token}:
+    get:
+      operationId: getAuthInvitationPreview
+      tags:
+        - Identity & Access
+      summary: Preview an invitation (public, token-bearing).
+      security: []
+      description: |-
+        Returns the tenant's name, the inviter's name, and the expiry — and **never the invited address**. Whoever legitimately holds this link read that address in their own mailbox; whoever holds a stolen one did not.
+        Unknown, revoked, already-accepted, expired and belonging-to-another-tenant all answer one identical `404`. **404, not 410**: `410 Gone` would tell a token holder that the token was once valid, which is an oracle worth having if you are working through addresses you scraped. The real reason is written to the tenant's audit trail, never to the response.
+        Rate-limited through the shared limiter's source ceiling before any database work.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The invitation is live and may be accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InvitationPreview"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/invitations/{token}/accept:
+    post:
+      operationId: postAuthInvitationAccept
+      tags:
+        - Identity & Access
+      summary: Accept an invitation, creating the membership (public, token-bearing).
+      security: []
+      description: |-
+        Creates the profile, identity and tenant user, and materializes the roles the invitation carried. Those roles are read from `awcms_invitation_policies` — **never** from this request body, which declares no privilege field at all. A role that has since become `is_system`, been soft-deleted, or left the catalogue refuses the whole acceptance rather than granting a subset.
+        **No session is issued.** The invitee signs in at `/login` afterwards, so the tenant's MFA policy, its SSO-only policy, and the login rate limit all still stand between the new account and a signed-in browser.
+        Every refusal — unknown, revoked, already accepted, expired, wrong tenant, or an address that acquired an account in the meantime — answers the same `404`.
+        Turnstile-gated with its own action, so a token solved on any other form cannot be spent here.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  minLength: 8
+                displayName:
+                  type: string
+                  maxLength: 120
+                  description: Lets the invitee correct the name the inviter typed for them. Omitted, the inviter's version stands.
+                turnstileToken:
+                  type: string
+      responses:
+        "200":
+          description: The membership exists. Sign in at /login.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      accepted:
+                        type: boolean
+                        enum:
+                          - true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          description: The request body exceeded the size limit (PAYLOAD_TOO_LARGE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate limited (RATE_LIMITED). Carries `retry-after`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/login:
     post:
       operationId: postAuthLogin
@@ -18906,6 +19032,22 @@ components:
           type: array
           items:
             type: string
+    InvitationPreview:
+      type: object
+      description: Deliberately carries NO email address — see the operation description.
+      required:
+        - tenantName
+        - inviterName
+        - expiresAt
+      properties:
+        tenantName:
+          type: string
+        inviterName:
+          type: string
+          description: Empty when the inviter's account has since been deactivated, so the shape stays stable.
+        expiresAt:
+          type: string
+          format: date-time
     InvitationSummary:
       type: object
       required:

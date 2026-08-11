@@ -74,6 +74,18 @@ export const PASSWORD_RESET_TURNSTILE_ACTION = "password_reset";
  * any other form must not be spendable here.
  */
 export const REGISTER_TURNSTILE_ACTION = "register";
+/**
+ * Invitation acceptance (ADR-0082). Its own action for the same reason again,
+ * and here the stake is highest of the four: `POST /auth/invitations/{token}/accept`
+ * is unauthenticated and CREATES AN ACCOUNT, so a token solved on any other
+ * form must not be spendable against it.
+ *
+ * The preview (`GET`) takes no Turnstile token — it is a read that writes
+ * nothing, and demanding a challenge to look at the invitation you were sent
+ * would put a widget in front of the one screen that explains what the widget
+ * is for.
+ */
+export const INVITATION_ACCEPT_TURNSTILE_ACTION = "invitation_accept";
 
 /**
  * Env vars required only when `TURNSTILE_ENABLED=true` (validated by
