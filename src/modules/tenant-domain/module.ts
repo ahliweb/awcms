@@ -47,6 +47,28 @@ export const tenantDomainModule = defineModule({
   description:
     "Tenant domain/subdomain mapping for host-based public routing (ported from awcms-micro epic #555). Ships the awcms_tenant_domains schema (migration 046: hostname/normalized_hostname, domain_type subdomain|custom_domain, route_mode canonical|legacy_blog, status pending_verification|active|suspended|failed, verification_method dns_txt|dns_cname|file|manual, is_primary/redirect_to_primary, tenant-scoped RLS with FORCE), its permission catalog seed (migration 047: tenant_domain.domains.{read,create,update,delete,verify,set_primary}), the SECURITY DEFINER bootstrap host-lookup function (migration 048, EXECUTE restricted to awcms_app), the authenticated tenant-scoped management API (GET/POST /api/v1/tenant/domains, GET/PATCH/DELETE .../{id}, POST .../{id}/verify, POST .../{id}/set-primary), an admin screen (/admin/tenant/domains), the additive public host resolver (lib/tenant/public-host-tenant-resolver.ts — coexists with ADR-0009 path-based /blog/{tenantCode}, never regresses it), and the OPTIONAL Cloudflare DNS adapter (infrastructure/cloudflare-dns-adapter.ts, env-gated, absent-safe, not wired into any route). The host-resolved public content route family is NOT owned here — it landed in blog_content as /news/** (ADR-0059), and this module's public host resolver is what it resolves tenants with; src/middleware.ts is untouched by this module. This module never stores a DNS provider API token/credential in the database.",
   dependencies: ["tenant_admin", "identity_access"],
+  // ADR-0084, Gelombang 5 PR 5.4 — the first REAL entitlement attachment in this
+  // base, and the module chosen for it deliberately.
+  //
+  // A custom domain is the archetypal plan-tier feature, and this module is the
+  // cleanest attachment mechanically: nothing depends on it, and its whole
+  // GUARDED surface is domain MANAGEMENT. Host resolution for a domain already
+  // configured is a public read path that never reaches `authorizeInTransaction`,
+  // so an unentitled tenant keeps being served at the domains it already has —
+  // only adding and changing them is refused. Losing the ability to add a domain
+  // is a plan wall; losing the domain you already have would be an outage, and
+  // this attachment cannot cause one.
+  //
+  // `site_search` and `comments` were rejected for the opposite reason: both
+  // carry PUBLIC unauthenticated surfaces that bypass the chokepoint, so an
+  // entitlement on either would be enforced on half the module and silently
+  // ignored on the other half.
+  //
+  // This denies NOBODY as shipped: `sql/111` puts `custom_domain` in the DEFAULT
+  // plan, and a tenant with no subscription row is treated as being on that plan
+  // (the `awcms_tenant_modules` convention). What the attachment buys is that
+  // the branch now EXECUTES against real rows instead of never executing at all.
+  requiresEntitlement: "custom_domain",
   type: "domain",
   api: {
     openApiPath: "openapi/modules/tenant-domain.openapi.yaml",

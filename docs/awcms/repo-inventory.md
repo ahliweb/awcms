@@ -8,7 +8,7 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 110   |
+| Migrasi                            | 111   |
 | Tabel `awcms_*`                    | 140   |
 | Tabel dengan `FORCE` RLS           | 126   |
 | Tabel RLS-free (global, by design) | 14    |
@@ -157,6 +157,7 @@
 | 108 | `sql/108_awcms_identity_invitations_worker_grants.sql`             |
 | 109 | `sql/109_awcms_entitlement_schema.sql`                             |
 | 110 | `sql/110_awcms_subscription_lifecycle_worker_grants.sql`           |
+| 111 | `sql/111_awcms_entitlement_catalogue_and_subscriptions.sql`        |
 
 ### Tabel & Row-Level Security
 

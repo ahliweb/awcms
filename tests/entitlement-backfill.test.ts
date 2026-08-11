@@ -19,6 +19,7 @@ import {
   type EntitlementBackfillInput
 } from "../src/modules/identity-access/domain/entitlement-backfill";
 import { collectRequiredEntitlementKeys } from "../src/modules/identity-access/application/entitlement-backfill-job";
+import { listModules } from "../src/modules";
 
 const JAN = new Date("2026-01-01T00:00:00.000Z");
 const JUN = new Date("2026-06-01T00:00:00.000Z");
@@ -36,9 +37,26 @@ function input(
   };
 }
 
-describe("the wave shipped inert, so there is nothing to grandfather", () => {
-  test("no registered module requires an entitlement", () => {
-    expect(collectRequiredEntitlementKeys()).toEqual([]);
+describe("what the registry actually requires", () => {
+  test("the collector reads the SAME resolver the chokepoint uses", () => {
+    // Not a list of expected strings: the point is that the backfill and the
+    // guard can never disagree about which keys matter. A key the guard enforces
+    // but the backfill misses leaves tenants denied; a key the backfill
+    // grandfathers but the guard ignores writes rows nobody reads.
+    const fromCollector = collectRequiredEntitlementKeys();
+    const fromRegistry = [
+      ...new Set(
+        listModules()
+          .filter((module) => module.isCore !== true)
+          .map((module) => module.requiresEntitlement)
+          .filter((key): key is string => key !== undefined)
+      )
+    ].sort();
+
+    expect(fromCollector).toEqual(fromRegistry);
+    // Anti-vacuous: this assertion said nothing while the list was empty, which
+    // is exactly what it was before PR 5.4 attached the first one.
+    expect(fromCollector.length).toBeGreaterThan(0);
   });
 });
 

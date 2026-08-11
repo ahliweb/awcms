@@ -213,11 +213,29 @@ export type ModuleAvailability = {
  *
  * A tenant holds an entitlement when EITHER a direct grant in
  * `awcms_tenant_entitlements` is live (no expiry, or an expiry in the future),
- * OR its subscription sits in an entitling status and its plan contains the key.
- * Both halves are read at request time; nothing is materialized. A cached
- * effective set would mean a downgrade takes effect on the next refresh, and the
- * gap between those two moments is exactly when someone still reaches what they
- * stopped paying for.
+ * OR its EFFECTIVE plan contains the key. Both halves are read at request time;
+ * nothing is materialized. A cached effective set would mean a downgrade takes
+ * effect on the next refresh, and the gap between those two moments is exactly
+ * when someone still reaches what they stopped paying for.
+ *
+ * ## No subscription row means the DEFAULT plan (ADR-0084, PR 5.4)
+ *
+ * The same convention `awcms_tenant_modules` has used since `sql/008`: a missing
+ * row is not a decision, it is the absence of one, and the absence must read as
+ * the baseline the operator declared rather than as a refusal. An installation
+ * that never touches subscriptions therefore behaves exactly as it did before
+ * entitlements existed — which is the only acceptable default for a template.
+ *
+ * It also removed a defect the ownership gate caught: provisioning used to
+ * INSERT a subscription at tenant birth, making `awcms_tenant_subscriptions`
+ * a table written by BOTH `tenant_admin` and `identity_access` — an ADR-0013 §6
+ * shared-table write. Deriving the default instead of writing it leaves exactly
+ * one writer (the ladder job) and needs no cross-tenant backfill at all.
+ *
+ * The fallback is deliberately NOT applied when a subscription row EXISTS but is
+ * not in an entitling status. That case is a suspension, and falling back to the
+ * default plan there would quietly undo it — the `CASE ... THEN NULL` is what
+ * distinguishes "never subscribed" from "subscribed and lapsed".
  *
  * `now` is the request timestamp already threaded through the guard, not
  * `now()`: a CHECK or a comparison that mixes the application clock with the
@@ -250,15 +268,23 @@ export async function resolveModuleAvailability(
             AND (te.expires_at IS NULL OR te.expires_at > ${now})
         )
         OR EXISTS (
-          SELECT 1
-          FROM awcms_tenant_subscriptions ts
-          JOIN awcms_plan_entitlements pe ON pe.plan_code = ts.plan_code
-          WHERE ts.tenant_id = ${tenantId}
-            AND ts.status = ANY(${tx.array(
-              [...ENTITLING_SUBSCRIPTION_STATUSES],
-              "text"
-            )})
-            AND pe.entitlement_key = ${requiredEntitlementKey}
+          SELECT 1 FROM awcms_plan_entitlements pe
+          WHERE pe.entitlement_key = ${requiredEntitlementKey}
+            AND pe.plan_code = COALESCE(
+              (SELECT ts.plan_code FROM awcms_tenant_subscriptions ts
+                WHERE ts.tenant_id = ${tenantId}
+                  AND ts.status = ANY(${tx.array(
+                    [...ENTITLING_SUBSCRIPTION_STATUSES],
+                    "text"
+                  )})),
+              CASE
+                WHEN EXISTS (
+                  SELECT 1 FROM awcms_tenant_subscriptions existing
+                  WHERE existing.tenant_id = ${tenantId}
+                ) THEN NULL
+                ELSE (SELECT p.plan_code FROM awcms_plans p WHERE p.is_default)
+              END
+            )
         )
       ) AS entitlement_held
     FROM (SELECT 1) AS anchor
