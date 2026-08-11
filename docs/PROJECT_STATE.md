@@ -356,11 +356,11 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
-- **PUTARAN 12 Agustus 2026 (kedelapan) — GELOMBANG 5 (ENTITLEMENT/SaaS) TIGA
-  PEREMPAT SELESAI. Mesinnya berdiri, mendarat INERT, dan PR 5.4 berubah
-  bentuk.** [ADR-0084](adr/0084-an-entitlement-refuses-it-never-grants.md), tiga
-  PR: #517 (skema + cabang penolakan + gerbang deny-only), #518 (tangga
-  langganan + job), #519 (grandfathering + laporan blast-radius).
+- **PUTARAN 12 Agustus 2026 (kedelapan) — GELOMBANG 5 (ENTITLEMENT/SaaS) SELESAI. Mesinnya berdiri, dan entitlement nyata
+  pertama terpasang tanpa menolak satu tenant pun.**
+  [ADR-0084](adr/0084-an-entitlement-refuses-it-never-grants.md), empat PR:
+  #517 (skema + cabang penolakan + gerbang deny-only), #518 (tangga langganan +
+  job), #519 (grandfathering + laporan blast-radius), #521 (pelekatan pertama).
 
   **Sebuah entitlement MENOLAK, ia tidak pernah memberi.** Setiap fungsi
   keputusan yang diekspor `identity-access/domain/entitlement.ts` bertipe
@@ -417,36 +417,60 @@ ON TABLES TO awcms_app`, jadi tiga tabel katalog GLOBAL lahir dengan keempat
     error alih-alih dilonggarkan: meniru literalnya demi keseragaman dengan empat
     cabang lama justru akan MENGEMBALIKAN drift yang dihapus konstanta itu.
 
-  ### PR 5.4 BERUBAH BENTUK — baca ini sebelum mengerjakannya
+  ### PR 5.4 berubah bentuk DUA KALI, dan gerbang yang menemukan keduanya
 
-  Rencana menulis PR 5.4 sebagai "pelekatan entitlement nyata pertama pada satu
-  modul non-core". **Bentuk itu salah untuk repo ini, dan alasannya baru terlihat
-  setelah 5.1–5.3 mendarat.**
+  Rencana menulisnya sebagai "pelekatan entitlement nyata pertama pada satu modul
+  non-core". Bentuk itu salah, dan **koreksinya sendiri lalu ikut salah** —
+  keduanya dicatat karena keduanya adalah cara repo ini menemukan sesuatu.
 
-  Memasang `requiresEntitlement` pada mis. `site_search` membuat SETIAP tenant di
-  SETIAP instalasi turunan kehilangan modul itu, karena `resolveModuleAvailability`
-  menuntut langganan ber-status entitling ATAU grant langsung — dan **tak ada
-  tenant yang punya baris langganan sama sekali**: `createTenantWithOwner`
-  (`tenant-admin/application/platform-bootstrap.ts`) tidak membuatnya, dan tak ada
-  migrasi yang mem-backfill-nya. Template yang mengirimkan plan wall secara
-  default menjual keputusan produk yang bukan miliknya.
+  **Koreksi pertama (dari membaca kode).** Memasang `requiresEntitlement` tanpa
+  apa pun yang lain akan menolak modul itu dari SETIAP tenant di SETIAP instalasi
+  turunan: `resolveModuleAvailability` menuntut plan efektif yang memuat kuncinya,
+  dan **tak ada tenant yang punya baris langganan sama sekali**. Jawaban pertama:
+  `createTenantWithOwner` membuat langganan pada plan default, plus migrasi
+  backfill lintas-tenant.
 
-  Bentuk yang benar, dan urutannya mengikat:
+  **Koreksi kedua (dari `modules:table-writes:check`).** Jawaban itu membuat
+  `awcms_tenant_subscriptions` ditulis oleh `tenant_admin` DAN `identity_access`
+  — shared-table write yang dilarang ADR-0013 §6. Gerbangnya menolak, dan
+  penolakannya menunjuk ke desain yang lebih baik: **turunkan default-nya,
+  jangan tuliskan.** Tenant tanpa baris langganan diperlakukan berada di plan
+  `is_default` — konvensi "baris yang hilang bukan sebuah keputusan" yang sama
+  persis dipakai `awcms_tenant_modules` sejak `sql/008`.
 
-  1. `createTenantWithOwner` membuat langganan pada plan `is_default` (`base`,
-     diseed `sql/109`), plus migrasi yang mem-backfill tenant lama;
-  2. `awcms_plan_entitlements` memetakan `base` ke SETIAP entitlement yang
-     dideklarasikan, sehingga pelekatan pertama membuat cabangnya HIDUP tanpa
-     menolak siapa pun — operator turunan yang ingin menjual tingkatan menulis
-     plan yang lebih sempit sendiri;
-  3. baru kemudian satu modul non-core mendeklarasikan `requiresEntitlement`;
-  4. `bun run security:readiness` WAJIB melaporkan **nol** tenant tertolak
-     sebelum langkah 3 di-merge — itulah alasan laporan itu dibangun di 5.3.
+  Hasilnya: tepat SATU penulis tabel itu (job tangga langganan), nol backfill
+  lintas-tenant, nol toggle `NO FORCE`, dan satu konvensi baru diganti konvensi
+  yang sudah diajarkan repo ini. Fallback-nya sengaja TIDAK berlaku saat baris
+  langganan ADA tetapi statusnya tak memberi hak — kasus itu lapse, dan jatuh
+  kembali ke plan default akan diam-diam membatalkannya.
 
-  Ditambah yang memang ada di rencana: `409 ENTITLEMENT_REQUIRED` di endpoint
-  enable `module_management` (sopan santun, bukan kontrolnya) dan layar
-  `/admin/subscriptions` (menugaskan tenant ke plan; ia TIDAK PERNAH bisa
-  mengubah isi plan — katalog itu migration-only).
+  **Yang terpasang:** `tenant_domain` → `custom_domain`. Seluruh permukaan
+  TERJAGA-nya adalah manajemen domain; resolusi host untuk domain yang sudah
+  dikonfigurasi adalah jalur baca publik yang tak pernah mencapai chokepoint,
+  jadi tenant tanpa entitlement tetap dilayani di domain yang sudah ia punya.
+  Kehilangan kemampuan menambah domain adalah plan wall; kehilangan domain yang
+  sudah dipakai adalah gangguan layanan. `site_search` dan `comments` ditolak
+  justru karena keduanya punya permukaan publik tak-terautentikasi yang melewati
+  chokepoint — entitlement di sana akan ditegakkan pada separuh modul dan
+  diabaikan diam-diam pada separuh lain.
+
+  Test "gelombang ini inert" DIGANTI, bukan dihapus: yang layak dijaga tak pernah
+  "inert" melainkan **"nol orang ditolak"**, dan itu kini di-assert terhadap TEKS
+  migrasinya — dibuktikan dengan memutasi `sql/111`.
+
+  ### YANG TERSISA dari Gelombang 5: layar `/admin/subscriptions`
+
+  Sengaja DIPISAH dari #521 dan belum dibangun. Alasan pemisahannya mekanis dan
+  layak diketahui: permission baru wajib diklaim sebuah layar atau masuk ledger
+  (`admin:screen-coverage:check`), jadi permukaan admin dan permission-nya harus
+  mendarat bersama — sementara pelekatan entitlement tidak menambah permission
+  sama sekali dan karena itu bisa mendarat sendiri, lebih kecil dan lebih mudah
+  di-review.
+
+  Bentuknya: menugaskan tenant ke sebuah plan (`awcms_tenant_subscriptions`,
+  tenant-scoped, bisa ditulis). Ia **TIDAK PERNAH** bisa mengubah ISI sebuah plan
+  — katalog itu migration-only, dan itu properti ADR-0084 yang paling mudah
+  dirusak oleh layar admin yang "melengkapi" dirinya sendiri.
 
   ### Status gelombang
 
@@ -458,16 +482,16 @@ ON TABLES TO awcms_app`, jadi tiga tabel katalog GLOBAL lahir dengan keempat
   | 7         | belum — principal global; **#430 ditutup di sini (PR 7.2)**, tidak bisa mendahului `awcms_principals` |
   | 8         | belum — partner/EaaS + akses terdelegasi                                                              |
 
-  ### Yang menghalangi merge, dan bukan milik agen untuk diselesaikan
+  ### Catatan merge
 
-  Ketiga PR hijau penuh secara lokal (40 segmen) dan #517 hijau penuh di CI
-  termasuk suite integrasi ber-Postgres. **Ruleset `main` menuntut check
-  `GitGuardian Security Checks`, dan check itu tidak pernah melapor pada PR ini
-  sama sekali** — bukan gagal, tidak ada. Merge karena itu `BLOCKED`. Melewatinya
-  butuh `--admin`, yaitu menembus kontrol keamanan wajib, dan itu keputusan
-  pemilik repo. #518 dan #519 bertumpuk di atas #517: diff-nya memuat pendahulunya
-  sampai yang di bawah di-merge, dan base-nya sengaja `main` karena PR ber-base
-  cabang lain memicu NOL gerbang di repo ini.
+  Keempat PR di-merge berurutan dengan CI hijau penuh di tiap langkah (10/10
+  check, termasuk suite integrasi ber-Postgres). Dua hal yang memperlambatnya dan
+  layak diketahui berikutnya: **ruleset `main` memakai
+  `strict_required_status_checks_policy`**, jadi setiap PR harus di-rebase ke
+  `main` terbaru setelah pendahulunya merge (status `BEHIND` bukan kegagalan);
+  dan **squash-merge menulis ulang commit pendahulunya**, jadi `git rebase
+origin/main` pada PR bertumpuk akan konflik — yang benar
+  `git rebase --onto origin/main <tip-lama-pendahulu>`.
 
 - **PUTARAN 11 Agustus 2026 (ketujuh) — SATU ENVIRONMENT, PROFIL `staging`
   DIHAPUS, DAN AKAR BERHENTI 404.** Keputusan pemilik repo, mendarat sebagai

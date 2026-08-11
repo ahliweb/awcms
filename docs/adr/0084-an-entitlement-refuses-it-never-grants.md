@@ -1,8 +1,9 @@
 # ADR-0084 — Sebuah entitlement MENOLAK, ia tidak pernah memberi
 
 - **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 5 PR 5.1. Migrasi `sql/109` (skema + katalog
-  dasar). Gerbang baru `access:entitlement:deny-only:check` (rantai 39 → 40).
+- **Konteks:** Issue #423 Gelombang 5. Migrasi `sql/109` (skema + katalog dasar),
+  `sql/110` (hak worker), `sql/111` (entitlement nyata pertama). Gerbang baru
+  `access:entitlement:deny-only:check` (rantai 39 → 40).
 - **Membangun di atas:**
   [ADR-0053](0053-platform-scoped-permissions.md) (gerbang struktural yang tidak
   boleh bisa dilangkahi sebuah baris grant),
@@ -188,7 +189,24 @@ dihapus oleh sebuah baris.
   tidak punya urusan me-resolve-nya akan menyebarkan keputusan ini alih-alih
   memusatkannya — chokepoint yang mereka serahi ownership grant sudah
   memutuskannya.
-- PR 5.2 menambahkan `evaluateSubscriptionTransition`; PR 5.3 menambahkan
-  backfill grandfathering dan laporan **blast-radius** yang wajib dijalankan
-  SEBELUM sebuah deskriptor mendeklarasikan entitlement pertamanya; PR 5.4
-  memasang entitlement nyata pertama dan layar `/admin/subscriptions`.
+- PR 5.2 menambahkan `evaluateSubscriptionTransition` (dan TIDAK memanggil
+  `suspendTenant` — itu menuntut `UPDATE` pada tabel akar tanpa RLS untuk sebuah
+  cron role); PR 5.3 menambahkan backfill grandfathering dan laporan
+  **blast-radius** yang wajib dijalankan SEBELUM sebuah deskriptor
+  mendeklarasikan entitlement pertamanya; PR 5.4 memasang entitlement nyata
+  pertama (`tenant_domain` → `custom_domain`) dan menolak NOL tenant.
+
+- **Tenant tanpa baris langganan berada di plan `is_default`** (PR 5.4) —
+  konvensi "baris yang hilang bukan sebuah keputusan" yang dipakai
+  `awcms_tenant_modules` sejak `sql/008`. Ini menggantikan rancangan awal yang
+  MENULIS langganan saat tenant lahir: `modules:table-writes:check` menolaknya
+  karena membuat `awcms_tenant_subscriptions` ditulis dua modul (ADR-0013 §6).
+  Fallback-nya TIDAK berlaku saat baris langganan ADA tetapi statusnya tak
+  memberi hak — kasus itu lapse, dan jatuh kembali ke default akan diam-diam
+  membatalkannya.
+
+- Layar `/admin/subscriptions` **dipisah** dari PR 5.4 dan belum dibangun:
+  permission baru wajib diklaim sebuah layar (`admin:screen-coverage:check`),
+  jadi permukaan admin dan permission-nya mendarat bersama — sementara pelekatan
+  entitlement tidak menambah permission sama sekali. Saat ia dibangun, ia
+  menugaskan tenant ke sebuah plan dan TIDAK PERNAH bisa mengubah ISI plan.
