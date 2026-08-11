@@ -105,6 +105,11 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0078, and bounded by the table above rather than independently: append-only, at most three rows per policy (granted / revoked / expired), so its ceiling is a small multiple of a bound that is already human-authored. Given a retention policy it would be a grant PROVENANCE trail that forgets who widened someone's access, which is the one question the trail exists to answer — and its exact sibling `awcms_business_scope_assignment_events` has no retention either, so a rule applied here and not there would be a difference nobody could defend. Reviewed together with the live table on purpose: a table and its history treated differently is worse than either treatment."
   },
   {
+    table: "awcms_principals",
+    reason:
+      "ADR-0085. One row per HUMAN, and bounded by a table that already exists rather than by an argument of its own: a principal is created only when an identity is, and `sql/112` derives the whole population from `SELECT DISTINCT lower(btrim(login_identifier)) FROM awcms_identities`. It therefore cannot grow faster than `awcms_identities` — which sits on the predating ledger — and is strictly SMALLER, because one human in three tenants is three identities and one principal. An age-based purge would be catastrophic rather than merely wrong: deleting a principal deletes the credential a person logs in with across every tenant at once, and the recovery is a restore, which is exactly why `awcms_app` is denied DELETE on it entirely."
+  },
+  {
     table: "awcms_entitlements",
     reason:
       "ADR-0084. The catalogue of entitlement NAMES, written only by a migration — `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` denies `awcms_app` every write verb on it, so no request path can add a row at all. Its ceiling is the number of names an operator has authored, and the same argument the `awcms_permissions` row makes for itself: a catalogue that grows with deployments rather than with traffic."

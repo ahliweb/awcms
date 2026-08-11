@@ -192,7 +192,22 @@ describe("the real repository", () => {
       //
       // The bar for the NEXT raise is unchanged and now overdue: a genuinely
       // different argument, not a sixth table repeating this one.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(10);
+      // **11 since ADR-0085**, and this raise answers the bar the previous one
+      // set — "a genuinely different argument, not another table repeating the
+      // last one" — rather than sliding past it.
+      //
+      // Every prior entry argues from AUTHORSHIP: rows put there by a human or a
+      // migration, never accumulated by traffic. `awcms_principals` argues from
+      // DERIVATION instead: its population is a projection of `awcms_identities`
+      // (`SELECT DISTINCT lower(btrim(login_identifier))`, sql/112), so it cannot
+      // grow faster than a table that is already on the predating ledger, and is
+      // strictly smaller than it. That is a bound this list has not used before,
+      // and it is checkable by reading one migration.
+      //
+      // It is also the entry with the least room for doubt about the
+      // alternative: a descriptor here would delete the credential a person logs
+      // in with across every tenant at once.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(11);
     });
 
     test("every entry names a table that really exists in sql/", () => {
