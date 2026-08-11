@@ -588,6 +588,18 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   // would object. Creating or repricing a plan is a migration; assigning a
   // TENANT to a plan is a request-path write on `awcms_tenant_subscriptions`,
   // which is tenant-scoped, FORCE-RLS'd, and keeps all four verbs.
+  // Global credential store (ADR-0085, sql/112). The ONLY global table here that
+  // keeps write verbs, and the narrowing is the point: SELECT/INSERT/UPDATE are
+  // what login and credential promotion need; DELETE is withheld permanently.
+  //
+  // A principal is what a human's login depends on across every tenant. The
+  // runtime has no operation that should remove one, and recovery from a wrongly
+  // deleted row is a RESTORE rather than an INSERT — every
+  // `awcms_identities.principal_id` pointing at it would have to be re-derived.
+  //
+  // Three other controls stand in for the RLS this table does not have; see
+  // ADR-0085. The one with teeth in this file is right here.
+  awcms_principals: ["DELETE"],
   awcms_entitlements: ["INSERT", "UPDATE", "DELETE"],
   awcms_plans: ["INSERT", "UPDATE", "DELETE"],
   awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"]

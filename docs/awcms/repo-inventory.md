@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 111   |
-| Tabel `awcms_*`                    | 140   |
+| Migrasi                            | 112   |
+| Tabel `awcms_*`                    | 141   |
 | Tabel dengan `FORCE` RLS           | 126   |
-| Tabel RLS-free (global, by design) | 14    |
-| Berkas test                        | 356   |
+| Tabel RLS-free (global, by design) | 15    |
+| Berkas test                        | 357   |
 | Berkas route                       | 335   |
-| ADR                                | 85    |
+| ADR                                | 86    |
 
 ### Modul
 
@@ -158,6 +158,7 @@
 | 109 | `sql/109_awcms_entitlement_schema.sql`                             |
 | 110 | `sql/110_awcms_subscription_lifecycle_worker_grants.sql`           |
 | 111 | `sql/111_awcms_entitlement_catalogue_and_subscriptions.sql`        |
+| 112 | `sql/112_awcms_principals.sql`                                     |
 
 ### Tabel & Row-Level Security
 
@@ -240,6 +241,7 @@
 | `awcms_permissions`                      | `sql/005_awcms_abac_access_control_schema.sql`             | tidak | tidak |
 | `awcms_plan_entitlements`                | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
 | `awcms_plans`                            | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
+| `awcms_principals`                       | `sql/112_awcms_principals.sql`                             | tidak | tidak |
 | `awcms_profile_entity_links`             | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profile_identifiers`              | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profiles`                         | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
@@ -308,7 +310,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 302        |
+| `(root)`      | 303        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
