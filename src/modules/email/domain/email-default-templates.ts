@@ -34,6 +34,18 @@ export const DEFAULT_EMAIL_TEMPLATES: readonly DefaultEmailTemplate[] = [
     }
   },
   {
+    templateKey: "auth.invitation",
+    name: "Invitation to join",
+    subjectTemplate: {
+      en: "{{inviterName}} invited you to {{tenantName}}",
+      id: "{{inviterName}} mengundang Anda ke {{tenantName}}"
+    },
+    textBodyTemplate: {
+      en: "Hi {{inviteeName}},\n\n{{inviterName}} invited you to join {{tenantName}}. Click the link below to accept and choose a password. This link expires in {{expiresInHours}} hours.\n\n{{invitationUrl}}\n\nIf you were not expecting this, you can safely ignore this email — no account is created until the link is used.",
+      id: "Halo {{inviteeName}},\n\n{{inviterName}} mengundang Anda bergabung ke {{tenantName}}. Klik tautan di bawah untuk menerima dan memilih kata sandi. Tautan ini kedaluwarsa dalam {{expiresInHours}} jam.\n\n{{invitationUrl}}\n\nJika Anda tidak mengharapkan ini, abaikan saja email ini — tidak ada akun yang dibuat sampai tautannya dipakai."
+    }
+  },
+  {
     templateKey: "system.announcement",
     name: "System announcement",
     subjectTemplate: {

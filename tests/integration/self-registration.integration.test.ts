@@ -59,6 +59,16 @@ function stubPort(sent: Sent, enqueued = true): AuthNotificationPort {
     async enqueueAuthNotification(_tx, request) {
       sent.push(request);
       return { enqueued };
+    },
+    // Approval creates the account first and then mails it, so the recipient
+    // always has a tenant user by the time this port is called. Throwing keeps
+    // that ordering asserted: an approval that reached for the raw-address
+    // operation (ADR-0082's invitation path) would be mailing somebody it had
+    // not actually admitted.
+    async enqueueAuthAddressNotification() {
+      throw new Error(
+        "registration approval must address the account it just created"
+      );
     }
   };
 }

@@ -8375,6 +8375,225 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/invitations:
+    get:
+      operationId: listInvitations
+      tags:
+        - Identity & Access
+      summary: List this tenant's invitations (identity_access.invitations.read).
+      description: |-
+        Keyset-paginated, newest first. The invitee's address is MASKED: these rows are addresses of people who are not users here — often people who never will be — so the unmasked value has no reason to leave the database.
+        `roleCodes` is what the invitation carries, and it becomes a real grant only on acceptance. Nothing in this list confers access.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - accepted
+              - revoked
+              - expired
+        - name: cursor
+          in: query
+          required: false
+          description: An opaque cursor from a previous response's `nextCursor`. A cursor that does not decode is a 400, never a silent restart.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of invitations, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      invitations:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InvitationSummary"
+                      nextCursor:
+                        type: string
+                        nullable: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createInvitation
+      tags:
+        - Identity & Access
+      summary: Invite a person to this tenant (identity_access.invitations.create, audited).
+      description: |-
+        Issues an offer of membership and mails its link. No account exists until the link is used.
+        Inviting and GRANTING A ROLE are two authorities: a body naming `roleIds` additionally requires `identity_access.access_control.assign`, so an administrator holding only `invitations.create` can admit a person and nothing more. A role marked `is_system` is refused (409 ROLE_SYSTEM_PROTECTED), and unknown role ids refuse the whole invitation rather than granting a subset.
+        `skipEmailConfirmation` requires the PLATFORM-scoped `identity_access.invitations.configure`, unless the address already holds an active identity in this tenant — which is the same proof, already given. It removes the only evidence that the recipient controls that mailbox.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationInput"
+      responses:
+        "201":
+          description: The invitation was issued. `delivery` is `unavailable` when the tenant has no active `auth.invitation` template or the address is suppressed — the invitation still exists and can be resent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    $ref: "#/components/schemas/InvitationCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: The address already has an account (IDENTIFIER_TAKEN) or a pending invitation (INVITATION_ALREADY_PENDING); a named role is a system role (ROLE_SYSTEM_PROTECTED); or the Idempotency-Key was already used with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/invitations/{id}/resend:
+    post:
+      operationId: resendInvitation
+      tags:
+        - Identity & Access
+      summary: Resend an invitation, rotating its token (identity_access.invitations.create, audited).
+      description: |-
+        Guarded by `create`, not by an action of its own: resend MINTS A NEW TOKEN, which is exactly the authority `create` already names.
+        The previous link stops working immediately. Without rotation, "resend" would grow N live links from one invitation, and revoking it would mean revoking N secrets nobody counted.
+        Capped at five resends per invitation by a database CHECK; past that, revoke and issue a new one. No Idempotency-Key — replaying would have to return a token that has already been rotated away, or persist a plaintext token in the idempotency store.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: A fresh link was issued and the previous one is dead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      resendCount:
+                        type: integer
+                      delivery:
+                        type: string
+                        enum:
+                          - queued
+                          - unavailable
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The resend ceiling has been reached (INVITATION_RESEND_LIMIT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/invitations/{id}/revoke:
+    post:
+      operationId: revokeInvitation
+      tags:
+        - Identity & Access
+      summary: Revoke a pending invitation (identity_access.invitations.revoke, audited).
+      description: |-
+        Kills the link; keeps the row. The surviving row is what answers "who offered what, to whom, and what happened" — which is why this activity has no `delete`.
+        An invitation that is not pending and one that does not exist answer identically, so the response cannot be used to enumerate ids or to learn that a given invitation was already accepted.
+        No Idempotency-Key: the UPDATE carries `AND status = 'pending'`, so a double submit revokes once and the second call answers 404.
+      parameters:
+        - $ref: "#/components/parameters/CorrelationId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
+                  maxLength: 500
+      responses:
+        "200":
+          description: The invitation is revoked and its link is dead.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        enum:
+                          - revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/logs/audit:
     get:
       operationId: listAuditEvents
@@ -17930,6 +18149,30 @@ components:
           type: array
           items:
             type: object
+    CreateInvitationInput:
+      type: object
+      required:
+        - loginIdentifier
+        - displayName
+      properties:
+        loginIdentifier:
+          type: string
+          maxLength: 320
+          description: An email address. Stored trimmed and NEVER lowercased, matching every identifier lookup on the auth path.
+        displayName:
+          type: string
+          maxLength: 120
+        roleIds:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+          description: Absent or empty admits the person without granting anything. A non-empty list additionally requires identity_access.access_control.assign.
+        skipEmailConfirmation:
+          type: boolean
+          default: false
+          description: PLATFORM-scoped unless the address already holds an active identity in this tenant. Only the literal `true` opts in.
     CreateNewsMediaUploadSessionRequest:
       type: object
       required:
@@ -18644,6 +18887,66 @@ components:
         officialReferenceCaveat:
           type: string
           description: Must be surfaced wherever this dataset is shown to an operator — this is a community packaging of the decree, not an official Kemendagri API or export.
+    InvitationCreated:
+      type: object
+      required:
+        - id
+        - delivery
+        - roleCodes
+      properties:
+        id:
+          type: string
+          format: uuid
+        delivery:
+          type: string
+          enum:
+            - queued
+            - unavailable
+        roleCodes:
+          type: array
+          items:
+            type: string
+    InvitationSummary:
+      type: object
+      required:
+        - id
+        - loginIdentifierMasked
+        - displayName
+        - status
+        - resendCount
+        - expiresAt
+        - createdAt
+        - roleCodes
+      properties:
+        id:
+          type: string
+          format: uuid
+        loginIdentifierMasked:
+          type: string
+          description: The invitee's address, masked. The unmasked value is never returned by any surface.
+        displayName:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - revoked
+            - expired
+        skipEmailConfirmation:
+          type: boolean
+        resendCount:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        roleCodes:
+          type: array
+          items:
+            type: string
     IssueMachineCredentialRequest:
       type: object
       required:

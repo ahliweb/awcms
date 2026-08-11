@@ -21,7 +21,9 @@
  *   plus `userName` from the resolver.
  */
 import { enqueueAnnouncement } from "./announcement-directory";
+import { enqueueDirectAddressEmail } from "./direct-address-notification";
 import type {
+  AuthAddressNotificationRequest,
   AuthNotificationPort,
   AuthNotificationRequest,
   AuthNotificationResult
@@ -43,6 +45,27 @@ export function createEmailAuthNotificationAdapter(): AuthNotificationPort {
       );
 
       return { enqueued: (result?.recipientCount ?? 0) > 0 };
+    },
+
+    /**
+     * Delegates to `enqueueDirectAddressEmail` rather than `enqueueAnnouncement`
+     * — the latter resolves recipients through `awcms_tenant_users` and would
+     * return an empty list for every invitee, which is exactly the account
+     * assumption this operation exists to escape. Still enqueue-only: the
+     * dispatcher sends later, outside any transaction (ADR-0006).
+     */
+    async enqueueAuthAddressNotification(
+      tx: Bun.SQL,
+      request: AuthAddressNotificationRequest
+    ): Promise<AuthNotificationResult> {
+      return enqueueDirectAddressEmail(
+        tx,
+        request.tenantId,
+        request.templateKey,
+        request.recipientAddress,
+        request.variables,
+        request.correlationId ?? crypto.randomUUID()
+      );
     }
   };
 }

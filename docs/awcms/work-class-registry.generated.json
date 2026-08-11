@@ -602,6 +602,21 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/invitations/[id]/resend.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/invitations/[id]/revoke.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/invitations/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/logs/audit.ts",
       "workClass": "interactive",
       "source": "default"

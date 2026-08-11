@@ -1869,6 +1869,114 @@ Revokes a previously approved exception, ending the override early (immediately 
 | 404    | Resource not found.                                                                        | [`ApiError`](#standard-error-envelope) |
 | 409    | The exception is not approved, or the Idempotency-Key was reused with a different request. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/invitations` — List this tenant's invitations (identity_access.invitations.read).
+
+- **operationId**: `listInvitations`
+- **Security**: bearerAuth + tenantHeader
+
+Keyset-paginated, newest first. The invitee's address is MASKED: these rows are addresses of people who are not users here — often people who never will be — so the unmasked value has no reason to leave the database.
+`roleCodes` is what the invitation carries, and it becomes a real grant only on acceptance. Nothing in this list confers access.
+
+**Parameters**
+
+| Name               | In     | Required | Type                                              | Description                                                                                                               |
+| ------------------ | ------ | -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `X-Correlation-ID` | header | no       | string                                            |                                                                                                                           |
+| `status`           | query  | no       | enum(`pending`, `accepted`, `revoked`, `expired`) |                                                                                                                           |
+| `cursor`           | query  | no       | string                                            | An opaque cursor from a previous response's `nextCursor`. A cursor that does not decode is a 400, never a silent restart. |
+
+**Responses**
+
+| Status | Description                          | Schema                                 |
+| ------ | ------------------------------------ | -------------------------------------- |
+| 200    | A page of invitations, newest first. | object                                 |
+| 400    | Validation error.                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.          | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/invitations` — Invite a person to this tenant (identity_access.invitations.create, audited).
+
+- **operationId**: `createInvitation`
+- **Security**: bearerAuth + tenantHeader
+
+Issues an offer of membership and mails its link. No account exists until the link is used.
+Inviting and GRANTING A ROLE are two authorities: a body naming `roleIds` additionally requires `identity_access.access_control.assign`, so an administrator holding only `invitations.create` can admit a person and nothing more. A role marked `is_system` is refused (409 ROLE_SYSTEM_PROTECTED), and unknown role ids refuse the whole invitation rather than granting a subset.
+`skipEmailConfirmation` requires the PLATFORM-scoped `identity_access.invitations.configure`, unless the address already holds an active identity in this tenant — which is the same proof, already given. It removes the only evidence that the recipient controls that mailbox.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+| `Idempotency-Key`  | header | yes      | string |             |
+
+**Request body** (required): [`CreateInvitationInput`](#schema-createinvitationinput)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                                                                 | Schema                                 |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The invitation was issued. `delivery` is `unavailable` when the tenant has no active `auth.invitation` template or the address is suppressed — the invitation still exists and can be resent.                                                               | object                                 |
+| 400    | Validation error.                                                                                                                                                                                                                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                                                                 | [`ApiError`](#standard-error-envelope) |
+| 409    | The address already has an account (IDENTIFIER_TAKEN) or a pending invitation (INVITATION_ALREADY_PENDING); a named role is a system role (ROLE_SYSTEM_PROTECTED); or the Idempotency-Key was already used with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/invitations/{id}/resend` — Resend an invitation, rotating its token (identity_access.invitations.create, audited).
+
+- **operationId**: `resendInvitation`
+- **Security**: bearerAuth + tenantHeader
+
+Guarded by `create`, not by an action of its own: resend MINTS A NEW TOKEN, which is exactly the authority `create` already names.
+The previous link stops working immediately. Without rotation, "resend" would grow N live links from one invitation, and revoking it would mean revoking N secrets nobody counted.
+Capped at five resends per invitation by a database CHECK; past that, revoke and issue a new one. No Idempotency-Key — replaying would have to return a token that has already been rotated away, or persist a plaintext token in the idempotency store.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------- | -------------------------------------- |
+| 200    | A fresh link was issued and the previous one is dead.          | object                                 |
+| 400    | Validation error.                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The resend ceiling has been reached (INVITATION_RESEND_LIMIT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/invitations/{id}/revoke` — Revoke a pending invitation (identity_access.invitations.revoke, audited).
+
+- **operationId**: `revokeInvitation`
+- **Security**: bearerAuth + tenantHeader
+
+Kills the link; keeps the row. The surviving row is what answers "who offered what, to whom, and what happened" — which is why this activity has no `delete`.
+An invitation that is not pending and one that does not exist answer identically, so the response cannot be used to enumerate ids or to learn that a given invitation was already accepted.
+No Idempotency-Key: the UPDATE carries `AND status = 'pending'`, so a double submit revokes once and the second call answers 404.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `X-Correlation-ID` | header | no       | string        |             |
+| `id`               | path   | yes      | string (uuid) |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                     | Schema                                 |
+| ------ | ----------------------------------------------- | -------------------------------------- |
+| 200    | The invitation is revoked and its link is dead. | object                                 |
+| 400    | Validation error.                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                             | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/registration-requests` — Pending self-registration requests for this tenant.
 
 - **operationId**: `listRegistrationRequests`
@@ -8646,6 +8754,26 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
   "blockedTerms": ["string"],
   "turnstileEnabled": false,
   "notifyOnReply": false
+}
+```
+
+### Schema: CreateInvitationInput
+
+| Field                   | Type                   | Required | Nullable | Description                                                                                                                                |
+| ----------------------- | ---------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `loginIdentifier`       | string                 | yes      | no       | An email address. Stored trimmed and NEVER lowercased, matching every identifier lookup on the auth path.                                  |
+| `displayName`           | string                 | yes      | no       |                                                                                                                                            |
+| `roleIds`               | array of string (uuid) | no       | no       | Absent or empty admits the person without granting anything. A non-empty list additionally requires identity_access.access_control.assign. |
+| `skipEmailConfirmation` | boolean                | no       | no       | PLATFORM-scoped unless the address already holds an active identity in this tenant. Only the literal `true` opts in.                       |
+
+**Example**
+
+```json
+{
+  "loginIdentifier": "string",
+  "displayName": "string",
+  "roleIds": ["00000000-0000-0000-0000-000000000000"],
+  "skipEmailConfirmation": false
 }
 ```
 

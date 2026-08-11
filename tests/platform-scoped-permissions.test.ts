@@ -50,7 +50,13 @@ const EXPECTED_PLATFORM_KEYS = [
   // the same reasoning ADR-0054 §2 used for provisioning. Adding them here is
   // the deliberate edit this list exists to force.
   "tenant_admin.tenant_lifecycle.disable",
-  "tenant_admin.tenant_lifecycle.restore"
+  "tenant_admin.tenant_lifecycle.restore",
+  // ADR-0082 — `skip_email_confirmation` mints an account with no proof its
+  // holder controls the address. Held at tenant scope, any tenant admin could
+  // manufacture one for another company's address; after Gelombang 7 that
+  // object is a GLOBAL principal, which is the one place it matters. The
+  // deliberate edit, again.
+  "identity_access.invitations.configure"
 ];
 
 describe("platform-scoped permission declaration", () => {

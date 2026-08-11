@@ -26,10 +26,12 @@ export const identityAccessModule = defineModule({
       "/api/v1/identity",
       "/api/v1/registration-requests",
       "/api/v1/user-groups",
+      "/api/v1/invitations",
       "/login",
       "/forgot-password",
       "/reset-password",
-      "/register"
+      "/register",
+      "/accept-invitation"
     ]
   },
   // Issue #180 / ADR-0060 — the generic business-scope layer CONSUMES a
@@ -354,6 +356,53 @@ export const identityAccessModule = defineModule({
       action: "assign",
       description:
         "Add or remove a tenant user from a group — audited, and a grant in everything but name (membership confers every role the group holds)"
+    },
+    // Invitations (ADR-0082, sql/106/107). A separate activity from
+    // `registration_requests` because the two run in opposite directions:
+    // registration is PULL (a stranger asks to be admitted, an admin decides),
+    // an invitation is PUSH (an admin offers, a stranger decides). Both survive,
+    // and each keeps its own permissions and its own audit story.
+    //
+    // None of these decides which ROLES an invitation carries — that stays on
+    // `access_control.assign`, so an administrator holding only
+    // `invitations.create` can admit a person and nothing more. ADR-0081 drew
+    // that line for groups; it matters more here, because a grant carried by an
+    // invitation reaches someone who does not exist yet.
+    //
+    // No `update` and no `delete`: editing an invitation after it was sent
+    // would leave the link in someone's inbox describing something nobody
+    // reviewed, and deleting one destroys the only record that an offer was
+    // made. Revoke-and-reinvite is the operation, and it leaves two audit rows.
+    // Resend is guarded by `create` — it mints a fresh token, which is the
+    // authority `create` already names.
+    {
+      activityCode: "invitations",
+      action: "read",
+      description: "List this tenant's invitations and their status"
+    },
+    {
+      activityCode: "invitations",
+      action: "create",
+      description:
+        "Invite a person to this tenant, and resend an invitation — which rotates its token — audited"
+    },
+    {
+      activityCode: "invitations",
+      action: "revoke",
+      description:
+        "Revoke a pending invitation, killing its link immediately — audited"
+    },
+    // PLATFORM-scoped, and the only one this module declares. It gates
+    // `skip_email_confirmation`, which removes the sole proof that the person
+    // at the far end controls that mailbox. Held at tenant scope, any tenant
+    // admin could manufacture an unverified account for another company's
+    // address — and after Gelombang 7 that object is a GLOBAL principal, which
+    // is the one place it matters (the ADR-0053/ADR-0054 reasoning).
+    {
+      activityCode: "invitations",
+      action: "configure",
+      scope: "platform",
+      description: "PLATFORM: issue an invitation that skips email confirmation"
     }
   ],
   /**
@@ -460,6 +509,72 @@ export const identityAccessModule = defineModule({
       batchLimit: 5000,
       backupRestoreNotes:
         "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). A restored backup can revive already-reviewed rows — harmless: `status` is not `pending`, so they never re-enter the queue.",
+      executionMode: "generic"
+    },
+    /**
+     * `awcms_invitations` (sql/106) — ADR-0082. `generic` for the same reason
+     * the two above are: once an invitation is accepted, revoked, or aged out
+     * there is no module-owned sweep to delegate to.
+     *
+     * The window matches `awcms_registration_requests` (90d default, 7d floor)
+     * because the rows answer the same question from the other direction — who
+     * was offered membership, by whom, and what became of it — and the
+     * `invitation_accepted` audit row points AT this row. The floor exists so
+     * an investigation opened days after the fact still finds what its audit
+     * trail refers to.
+     *
+     * Two consequences of `generic` that are stated rather than discovered:
+     *
+     * A purge deletes by AGE alone, with no status predicate, so a 90-day-old
+     * row still marked `pending` goes too. That is correct — its link expired
+     * long before, and `evaluateInvitation` answers from `expires_at` rather
+     * than from the status value, so nothing was holding it open.
+     *
+     * And `awcms_invitation_policies` is removed WITH its parent, by the
+     * `ON DELETE CASCADE` in `sql/106`. Without that cascade this purge would
+     * abort on the child's foreign key and the retention would silently never
+     * run — a failure the descriptor's own validation cannot see, because it
+     * checks shape rather than executability.
+     */
+    {
+      key: "identity_access.invitations",
+      tableName: "awcms_invitations",
+      ownerModuleKey: "identity_access",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "operational_queue",
+      retentionMinDays: 7,
+      retentionMaxDays: 730,
+      defaultRetentionDays: 90,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per offer, issued only by a permission holder and capped at five resends per row — nowhere near the volume profile partitioning exists for."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "An accepted invitation's durable record is the audit event and the membership it produced, not this row. Archiving would preserve an address belonging to someone who may never have accepted, past the window this retention exists to close."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "`status` already records the outcome and there is nothing further to transition to; the row's only sensitive column is the invitee's address, which anonymization would empty rather than preserve. `token_hash` is a one-way sha256 of a value that is single-use and expired anyway."
+      },
+      legalHold: {
+        applicable: false,
+        precedence: "not_applicable"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_invitations_tenant_created_idx (sql/106) — the engine's own cursor path (WHERE tenant_id = ? AND created_at < ?), added by this table's migration for it rather than borrowed from the queue index, whose leading `status` column does not serve a cursor scan."
+        }
+      ],
+      batchLimit: 5000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore; no standalone archive artifact exists (archive.archivable is false above). Restoring an old backup can revive invitations that had already expired — they stay unusable, because `evaluateInvitation` decides against the clock rather than against the status value. A revived `accepted` row is likewise harmless: the membership it names either exists in the same backup or the row's foreign key would not have restored.",
       executionMode: "generic"
     },
     /**
