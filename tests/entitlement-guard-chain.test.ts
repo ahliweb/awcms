@@ -63,24 +63,61 @@ function descriptor(overrides: Partial<ModuleDescriptor>): ModuleDescriptor {
   };
 }
 
-describe("Gelombang 5 landed INERT", () => {
-  test("no module in the registry declares requiresEntitlement", () => {
+describe("the attachment denies NOBODY, and that is checked against the migration", () => {
+  test("exactly one module declares an entitlement, and it is the one PR 5.4 chose", () => {
+    // PR 5.1-5.3 shipped with this list EMPTY and a test asserting so. PR 5.4
+    // replaced that assertion rather than deleting it: "the wave is inert" was
+    // never the property worth protecting — "nobody is refused" is, and that
+    // survives the attachment only because of the two assertions below.
     const declaring = listModules()
       .filter((module) => module.requiresEntitlement !== undefined)
-      .map((module) => module.key);
+      .map((module) => `${module.key}:${module.requiresEntitlement}`);
 
-    expect(declaring).toEqual([]);
+    expect(declaring).toEqual(["tenant_domain:custom_domain"]);
   });
 
-  test("requiredEntitlementForModule returns null for every registered module", () => {
-    const modules = listModules();
-    // Guards the guard: if the registry were ever empty, the assertion below
-    // would hold vacuously and prove nothing.
-    expect(modules.length).toBeGreaterThan(20);
+  test("every declared entitlement is put in the DEFAULT plan by a migration", async () => {
+    // THE assertion that keeps the attachment safe. `resolveModuleAvailability`
+    // refuses a tenant that holds nothing, every tenant is on the default plan
+    // (sql/111 backfill + createTenantWithOwner), so a declared entitlement the
+    // default plan does NOT contain would refuse every tenant in every
+    // installation the moment it merged.
+    //
+    // Read from the migration TEXT rather than a constant, because the migration
+    // is the only thing that actually writes those rows — a constant would be a
+    // second statement of intent that a forgotten migration could contradict.
+    const migrations = new Bun.Glob("sql/*.sql");
+    let catalogue = "";
 
-    for (const module of modules) {
-      expect(requiredEntitlementForModule(module.key, modules)).toBeNull();
+    for await (const file of migrations.scan(".")) {
+      catalogue += await Bun.file(file).text();
     }
+
+    const declared = listModules()
+      .map((module) => module.requiresEntitlement)
+      .filter((key): key is string => key !== undefined);
+
+    // Anti-vacuous: if nothing is declared, the loop below proves nothing.
+    expect(declared.length).toBeGreaterThan(0);
+
+    for (const key of declared) {
+      // Present in the catalogue at all...
+      expect(catalogue).toContain(`'${key}'`);
+      // ...and mapped onto whichever plan is `is_default`.
+      expect(catalogue).toMatch(
+        new RegExp(
+          `INSERT INTO awcms_plan_entitlements[\\s\\S]{0,400}?'${key}'[\\s\\S]{0,200}?is_default`
+        )
+      );
+    }
+  });
+
+  test("no isCore module declares one — the runtime would ignore it anyway", () => {
+    const coreDeclaring = listModules().filter(
+      (module) => module.isCore === true && module.requiresEntitlement
+    );
+
+    expect(coreDeclaring).toEqual([]);
   });
 
   test("with no entitlement required, the availability query is the SAME statement as before the wave", async () => {

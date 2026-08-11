@@ -8,6 +8,7 @@ import {
   authorizeInTransaction,
   resolveAuthInputs
 } from "../../../../../../modules/identity-access/application/access-guard";
+import { checkModuleEntitlementForEnable } from "../../../../../../modules/identity-access/application/entitlement-lookup";
 import { recordAuditEvent } from "../../../../../../modules/logging/application/audit-log";
 import { enableTenantModule } from "../../../../../../modules/module-management/application/tenant-module-lifecycle";
 
@@ -58,6 +59,31 @@ export const POST: APIRoute = async ({ request, params, cookies, locals }) => {
 
     if (!auth.allowed) {
       return auth.denied;
+    }
+
+    // ADR-0084 — COURTESY, not the control.
+    //
+    // The control is the chokepoint: an unentitled tenant is refused on every
+    // one of that module's guarded endpoints whether or not it is enabled here,
+    // so nothing about this check is what keeps the plan wall standing. What it
+    // buys is an answer instead of a puzzle — without it, enabling succeeds, the
+    // navigation entry appears, and every click on it returns 403 with no
+    // explanation of why the toggle they just used did nothing.
+    //
+    // 409, not 403: the caller HAS the authority to enable modules (they passed
+    // the guard above). What they lack is the commercial precondition, and 409
+    // is the class that says "your request conflicts with the current state"
+    // rather than "you may not ask". `module_management` deliberately answers
+    // 409 for every rejection except MODULE_NOT_FOUND, and this joins them.
+    const entitlementCheck = await checkModuleEntitlementForEnable(
+      tx,
+      tenantId,
+      moduleKey,
+      now
+    );
+
+    if (entitlementCheck) {
+      return fail(409, "ENTITLEMENT_REQUIRED", entitlementCheck.reason);
     }
 
     const result = await enableTenantModule(
