@@ -144,6 +144,15 @@ export const identityAccessModule = defineModule({
       environmentNotes:
         "Database-only operation, no external network dependency. Safe to run alongside request traffic (bounded per-tenant passes, maintenance work class).",
       safeInOfflineLan: true
+    },
+    {
+      command: "bun run identity-access:subscription-lifecycle",
+      purpose:
+        "Walks each tenant's subscription one rung down the trialing -> active -> past_due -> grace -> suspended ladder when its own dates say so (ADR-0084), auditing every transition in that tenant's own trail. Never moves a subscription up — restoring service is a payment event, not a clock event — and never writes awcms_tenants: a run that would cost more than MAX_ENTITLEMENT_LOSSES_PER_RUN tenants their plan entitlements applies none of them and reports instead.",
+      recommendedSchedule: "Daily via cron/systemd timer.",
+      environmentNotes:
+        "Database-only operation, no external network dependency. Inert until an operator creates subscriptions: a tenant with no row is 'nothing to do', not a lapse. Run with --dry-run before the first real schedule.",
+      safeInOfflineLan: true
     }
   ],
   permissions: [

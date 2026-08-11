@@ -1209,6 +1209,14 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // which runs as `awcms_worker`, can actually delete. Without it the purge ran,
   // reported success, and removed nothing.
   awcms_abac_decision_logs: ["DELETE", "SELECT"],
+  // ADR-0084 (sql/110) — `identity-access:subscription-lifecycle` reads each
+  // tenant's subscription and moves it one rung down the ladder. SELECT and
+  // UPDATE only: INSERT would let a cron job put any tenant on any plan (the
+  // whole entitlement gate, granted to a timer), and DELETE would be a verb the
+  // job never issues over the only record of what a customer was paying for.
+  // `awcms_tenant_entitlements` and `awcms_tenants` are deliberately absent —
+  // see sql/110's header for why the second one is the load-bearing omission.
+  awcms_tenant_subscriptions: ["SELECT", "UPDATE"],
   // ADR-0074 (sql/093) — `push:dispatch` claims/updates queue rows and disables
   // dead subscriptions; `push:queue:purge` deletes terminal rows. The DELETE is
   // the one to notice: sql/091 records what its absence looks like — a purge

@@ -48,6 +48,7 @@
     "push:queue:purge": "bun scripts/push-queue-purge.ts",
     "push:vapid:generate": "bun scripts/push-vapid-generate.ts",
     "identity-access:business-scope:expiry": "bun scripts/identity-access-business-scope-expiry.ts",
+    "identity-access:subscription-lifecycle": "bun scripts/identity-access-subscription-lifecycle.ts",
     "identity:principals:preflight": "bun scripts/identity-access-principal-preflight.ts",
     "identity-access:permissions:backfill": "bun scripts/identity-access-owner-permission-backfill.ts",
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",

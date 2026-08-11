@@ -104,6 +104,7 @@ describe("fetchModuleJobs", () => {
         "bun run email:templates:seed-defaults",
         "bun run form-drafts:purge",
         "bun run identity-access:business-scope:expiry",
+        "bun run identity-access:subscription-lifecycle",
         "bun run idn-regions:activate",
         "bun run idn-regions:import",
         "bun run idn-regions:rollback",
