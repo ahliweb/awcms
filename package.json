@@ -51,6 +51,7 @@
     "identity-access:subscription-lifecycle": "bun scripts/identity-access-subscription-lifecycle.ts",
     "identity:principals:preflight": "bun scripts/identity-access-principal-preflight.ts",
     "identity-access:permissions:backfill": "bun scripts/identity-access-owner-permission-backfill.ts",
+    "entitlements:backfill": "bun scripts/identity-access-entitlement-backfill.ts",
     "blog:publish:scheduled": "bun scripts/blog-scheduled-publish.ts",
     "blog:ads:ingest": "bun scripts/blog-ads-ingest.ts",
     "blog:ads:drop-readiness": "bun scripts/blog-ads-drop-readiness.ts",

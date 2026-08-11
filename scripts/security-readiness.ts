@@ -49,6 +49,10 @@ import { withTenantOrThrow } from "../src/lib/database/tenant-context";
 import { hashPassword } from "../src/lib/auth/password";
 import { listModules } from "../src/modules";
 import {
+  collectRequiredEntitlementKeys,
+  runEntitlementBackfill
+} from "../src/modules/identity-access/application/entitlement-backfill-job";
+import {
   fetchEligibleBreakGlassIdentityIds,
   getTenantAuthPolicy
 } from "../src/modules/identity-access/application/tenant-auth-policy";
@@ -2659,6 +2663,87 @@ export async function checkResponseCompressionOwnership(
   };
 }
 
+/**
+ * ADR-0084 — who stops being served the moment an entitlement descriptor lands.
+ *
+ * Not a security control; a BLAST-RADIUS report, and it lives here because this
+ * is the command an operator already runs against a real database before a
+ * release. `bun run entitlements:backfill` prints the same numbers, but it is a
+ * command you have to know exists — and the mistake this catches is made by
+ * someone who does not.
+ *
+ * `warning`, never `critical`: a tenant that is about to be refused is a
+ * COMMERCIAL fact, and a readiness gate that blocks go-live because somebody has
+ * not paid would be a security tool making a billing decision. It reports and
+ * names; a human decides.
+ *
+ * PASSES LOUDLY when nothing is required, which is the state this base ships in.
+ * A silent pass here would be indistinguishable from a check that stopped
+ * looking — the exact failure this repo has recorded for coverage gates that go
+ * inert when their ledger empties.
+ */
+export async function checkEntitlementBlastRadius(): Promise<SecurityCheckResult> {
+  const name = "Entitlement blast radius is known before a descriptor lands";
+  const severity: CheckSeverity = "warning";
+
+  const requiredEntitlementKeys = collectRequiredEntitlementKeys();
+
+  if (requiredEntitlementKeys.length === 0) {
+    return {
+      name,
+      severity,
+      status: "pass",
+      evidence:
+        "No module declares `requiresEntitlement`, so no tenant can receive 403 ENTITLEMENT_REQUIRED (ADR-0084: the wave landed inert). The moment a descriptor declares one, this check reports exactly which tenants stop being served — run `bun run entitlements:backfill` BEFORE merging that descriptor, not after."
+    };
+  }
+
+  const sql = getDatabaseClient();
+
+  try {
+    const result = await runEntitlementBackfill(sql, {
+      commit: false,
+      now: new Date()
+    });
+
+    const denied = result.blastRadius.filter(
+      (entry) => entry.deniedTenantCount > 0
+    );
+
+    if (denied.length === 0) {
+      return {
+        name,
+        severity,
+        status: "pass",
+        evidence: `${requiredEntitlementKeys.length} entitlement(s) are required by the registry and every tenant holds all of them — no tenant would receive 403 ENTITLEMENT_REQUIRED.`
+      };
+    }
+
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Tenants would start receiving 403 ENTITLEMENT_REQUIRED: ${denied
+        .map(
+          (entry) =>
+            `${entry.entitlementKey} -> ${entry.deniedTenantCount} tenant(s) (${entry.deniedTenantCodes.slice(0, 10).join(", ")}${entry.deniedTenantCodes.length > 10 ? ", …" : ""})`
+        )
+        .join(
+          "; "
+        )}. Run \`bun run entitlements:backfill --commit\` to grandfather the tenants that predate each entitlement, or decide deliberately that these tenants are not entitled — this check reports, it does not decide.`
+    };
+  } catch (error) {
+    return {
+      name,
+      severity,
+      status: "fail",
+      evidence: `Could not compute the entitlement blast radius: ${errorMessage(error)}. A report that cannot run is not a report that found nothing.`
+    };
+  } finally {
+    await sql.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Out-of-scope items — printed as their own report section, never silently
 // dropped.
@@ -2806,7 +2891,8 @@ export async function runSecurityReadinessChecks(): Promise<
     checkTurnstileReady(),
     checkLoginRateLimitImplemented(),
     checkSecurityHeadersBuilt(),
-    await checkResponseCompressionOwnership()
+    await checkResponseCompressionOwnership(),
+    await checkEntitlementBlastRadius()
   ];
 }
 
