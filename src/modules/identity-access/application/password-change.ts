@@ -28,6 +28,7 @@
  * it keeps a stale-step-up refusal from also being an answer about whether the
  * submitted `currentPassword` was right.
  */
+import { setPrincipalCredential } from "./principal-store";
 import { hashPassword, verifyPassword } from "../../../lib/auth/password";
 import { getMfaStatus } from "./mfa";
 import { requireStepUp } from "./mfa-session-assurance";
@@ -97,10 +98,11 @@ export async function changeOwnPassword(
   }
 
   const identityRows = (await tx`
-    SELECT password_hash FROM awcms_identities
+    SELECT password_hash, principal_id FROM awcms_identities
     WHERE tenant_id = ${tenantId} AND id = ${identityId} AND status = 'active'
-  `) as { password_hash: string }[];
+  `) as { password_hash: string; principal_id: string | null }[];
   const passwordHash = identityRows[0]?.password_hash;
+  const principalId = identityRows[0]?.principal_id ?? null;
 
   // A live session whose identity is gone or deactivated: reported as
   // unauthenticated, not as a bad password. The session is what stopped being
@@ -111,14 +113,29 @@ export async function changeOwnPassword(
     return { outcome: "invalid_credentials" };
   }
 
+  const newPasswordHash = await hashPassword(input.newPassword);
+
   await tx`
     UPDATE awcms_identities
-    SET password_hash = ${await hashPassword(input.newPassword)},
+    SET password_hash = ${newPasswordHash},
         failed_login_count = 0,
         locked_until = NULL,
         updated_at = ${now}
     WHERE tenant_id = ${tenantId} AND id = ${identityId}
   `;
+
+  // ADR-0086 — same obligation as the reset path: the live credential and the
+  // live lockout are on the principal, and changing one without the other
+  // produces an account whose new password does not work.
+  //
+  // `principal_id` rides along on the SELECT that already ran rather than
+  // costing a second round trip. That is not only cheaper: a fresh query here
+  // was the first shape written, and it moved a test's revoked-session count
+  // from 2 to 0 — the extra statement shifted what the surrounding code saw.
+  // Reading the column that is already being fetched cannot do that.
+  if (principalId) {
+    await setPrincipalCredential(tx, principalId, newPasswordHash);
+  }
 
   const revocation = await revokeOtherOwnSessions(tx, tenantId, tokenHash, now);
 

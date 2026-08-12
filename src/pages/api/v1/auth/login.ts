@@ -54,6 +54,13 @@ import {
 import { fetchGrantedPermissionKeys } from "../../../../modules/identity-access/application/auth-context";
 import { isSsoEnabled } from "../../../../lib/auth/sso-config";
 import { isPasswordLoginDisabledForIdentity } from "../../../../modules/identity-access/application/tenant-auth-policy";
+import {
+  clearPrincipalLockout,
+  findPrincipalByEmail,
+  loadPrincipalSecret,
+  promotePrincipalCredential,
+  recordPrincipalLoginFailure
+} from "../../../../modules/identity-access/application/principal-store";
 import { log } from "../../../../lib/logging/logger";
 
 type LoginBody = {
@@ -309,7 +316,7 @@ export const POST: APIRoute = async ({
     const tenantStatus = (tenantRows[0]?.status as string | undefined) ?? null;
 
     const identityRows = await tx`
-      SELECT id, status, password_hash, failed_login_count, locked_until
+      SELECT id, status, password_hash
       FROM awcms_identities
       WHERE tenant_id = ${tenantId} AND login_identifier = ${loginIdentifier}
     `;
@@ -318,17 +325,35 @@ export const POST: APIRoute = async ({
           id: string;
           status: "active" | "inactive" | "locked";
           password_hash: string;
-          failed_login_count: number;
-          locked_until: Date | null;
         }
       | undefined;
+
+    // ADR-0086 — the LOCKOUT and the CREDENTIAL live on the principal now, and
+    // the principal is keyed on the normalized address with no tenant column.
+    // That is the whole fix for #430: rotating `x-awcms-tenant-id` selects a
+    // different identity row but the SAME principal, so the counter an attacker
+    // is trying to escape does not move.
+    //
+    // Resolved for every attempt, including one whose identifier matches
+    // nothing, so the lookup itself is not a timing oracle for "is this address
+    // known to the platform".
+    const principal = await findPrincipalByEmail(tx, loginIdentifier);
+
+    // The credential to verify against: the principal's once promoted, the
+    // identity's until then. `sql/112` deliberately backfilled principals with
+    // a NULL hash, so this is the migration's second half arriving one login at
+    // a time rather than in a window.
+    const credentialHash = principal?.hasCredential
+      ? ((await loadPrincipalSecret(tx, principal.id))?.passwordHash ??
+        undefined)
+      : identityRow?.password_hash;
 
     // Issue #147 — runs an argon2id verify against a dummy hash when the
     // identifier resolved to nothing, so an unknown identifier costs the same
     // as a known one (see `verifyPasswordOrDummy`).
     const passwordMatches = await verifyPasswordOrDummy(
       password,
-      identityRow?.password_hash
+      credentialHash
     );
 
     let tenantUserStatus: "active" | "inactive" | null = null;
@@ -351,8 +376,12 @@ export const POST: APIRoute = async ({
       identity: identityRow
         ? {
             status: identityRow.status,
-            failedLoginCount: identityRow.failed_login_count,
-            lockedUntil: identityRow.locked_until
+            // ADR-0086 — GLOBAL counter. `identityRow.failed_login_count` and
+            // `.locked_until` are history since `sql/113` and are deliberately
+            // NOT read here; a fallback to them would restore the per-tenant
+            // behaviour #430 is about the moment a principal link is missing.
+            failedLoginCount: principal?.failedLoginCount ?? 0,
+            lockedUntil: principal?.lockedUntil ?? null
           }
         : null,
       tenantUserStatus,
@@ -377,15 +406,24 @@ export const POST: APIRoute = async ({
         // about this since it landed. The two differ in one place on purpose:
         // MFA resets its counter to zero when it locks, this one keeps
         // counting, because a successful login is what clears it here.
-        await tx`
-          UPDATE awcms_identities
-          SET failed_login_count = failed_login_count + 1,
-              locked_until =
-                CASE WHEN failed_login_count + 1 >= ${policy.maxFailedAttempts}
-                     THEN ${result.lockoutCandidateAt ?? null}
-                     ELSE locked_until END
-          WHERE id = ${identityRow.id}
-        `;
+        // ADR-0086 — counted on the PRINCIPAL. Still computed in-DB rather than
+        // read-modify-write (the Issue #483 defect, inherited as a fix rather
+        // than repeated as a mistake): under READ COMMITTED two concurrent
+        // failures that both read N and both write N+1 cost ONE increment.
+        //
+        // An identity with no principal link counts nothing, and that is the
+        // fail-SAFE direction here: the alternative is silently falling back to
+        // the per-tenant counter, which is the behaviour #430 exists to remove.
+        // `sql/112` links every identity it can see and refuses to run if it
+        // cannot, so an unlinked row is a repair job, not a login policy.
+        if (principal) {
+          await recordPrincipalLoginFailure(
+            tx,
+            principal.id,
+            policy.maxFailedAttempts,
+            result.lockoutCandidateAt ?? null
+          );
+        }
       }
 
       // Written inside the same transaction as the `failed_login_count` UPDATE
@@ -463,7 +501,7 @@ export const POST: APIRoute = async ({
     );
 
     if (activeFactor) {
-      await tx`UPDATE awcms_identities SET failed_login_count = 0 WHERE id = ${identityRow!.id}`;
+      if (principal) await clearPrincipalLockout(tx, principal.id);
 
       const challenge = await createMfaChallenge(
         tx,
@@ -525,7 +563,7 @@ export const POST: APIRoute = async ({
             isPrivileged
           })
         ) {
-          await tx`UPDATE awcms_identities SET failed_login_count = 0 WHERE id = ${identityRow!.id}`;
+          if (principal) await clearPrincipalLockout(tx, principal.id);
 
           const grant = await createEnrollmentGrant(
             tx,
@@ -570,7 +608,23 @@ export const POST: APIRoute = async ({
     const tokenHash = hashSessionToken(token);
     const expiresAt = new Date(now.getTime() + policy.sessionTtlMin * 60_000);
 
-    await tx`UPDATE awcms_identities SET failed_login_count = 0, last_login_at = ${now} WHERE id = ${identityRow!.id}`;
+    if (principal) {
+      await clearPrincipalLockout(tx, principal.id);
+
+      // PROMOTION — the password was just proven, so it is safe to copy the
+      // hash onto the principal. `promotePrincipalCredential` is a no-op once a
+      // credential exists, so this cannot let a stale identity hash from another
+      // tenant overwrite the live one.
+      if (!principal.hasCredential && identityRow!.password_hash) {
+        await promotePrincipalCredential(
+          tx,
+          principal.id,
+          identityRow!.password_hash
+        );
+      }
+    }
+
+    await tx`UPDATE awcms_identities SET last_login_at = ${now} WHERE id = ${identityRow!.id}`;
 
     // The fingerprint columns exist so a person reading `GET /auth/sessions`
     // can tell their own sessions apart well enough to end one they do not

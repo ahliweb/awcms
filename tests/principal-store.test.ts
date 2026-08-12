@@ -90,8 +90,10 @@ describe("control 3 — password_hash never leaves the store", () => {
       expect(principal).not.toBeNull();
       expect(Object.keys(principal!).sort()).toEqual([
         "emailNormalized",
+        "failedLoginCount",
         "hasCredential",
-        "id"
+        "id",
+        "lockedUntil"
       ]);
       expect(JSON.stringify(principal)).not.toContain("argon2id");
       expect(principal!.hasCredential).toBe(true);
@@ -127,15 +129,42 @@ describe("control 3 — password_hash never leaves the store", () => {
     // ONE function legitimately produces three (row type, return annotation,
     // returned value). What matters is how many EXPORTED functions can hand a
     // caller the hash — a second one is a second escape route.
+    // RETURNING a hash is the escape route; ACCEPTING one is not — the caller
+    // already holds it, and `setPrincipalCredential` exists precisely so the
+    // reset path can hand one in. An assertion that could not tell those apart
+    // failed the moment PR 7.2 added the writers, which is how the distinction
+    // got made explicit rather than assumed.
     const exportsReturningHash = [
       ...code.matchAll(/export\s+async\s+function\s+(\w+)/g)
     ]
-      // The signature, not a brace-delimited body: `Promise<{ passwordHash … }>`
-      // means the first `{` after the name is INSIDE the return type, so a
-      // non-greedy match to `{` stops before the thing being looked for.
-      .filter((match) =>
-        code.slice(match.index!, match.index! + 300).includes("passwordHash")
-      )
+      .filter((match) => {
+        // Bounded at the NEXT `export`, not at a fixed offset. A fixed window
+        // reaches into the following function's parameter list and borrows ITS
+        // `passwordHash` — the identical window-bleed defect that made
+        // `identity:principal-access:check` pass an unkeyed scan, found twice in
+        // one PR because the shape is easy to write and invisible once written.
+        const nextExport = code.indexOf("\nexport ", match.index! + 1);
+        const signature = code.slice(
+          match.index!,
+          nextExport === -1 ? match.index! + 400 : nextExport
+        );
+        // Split at the return-type marker `):`. A return type here is
+        // `Promise<{ passwordHash … }>` — it CONTAINS braces, so a `[^{]+`
+        // capture stops before the very thing being looked for. Everything
+        // after the marker is the return type; everything before it is
+        // parameters.
+        const marker = signature.indexOf("):");
+        if (marker === -1) return false;
+
+        // The return type is the REST OF THAT LINE — prettier formats
+        // `): Promise<…> {` on one line. Reading further would reach the body,
+        // where `${passwordHash}` is interpolated into the UPDATE statements
+        // that legitimately ACCEPT a hash, and every writer would read as a
+        // leak. Third window-scoping bug in this PR, same shape as the other two.
+        const returnType = signature.slice(marker).split("\n")[0]!;
+
+        return returnType.includes("passwordHash");
+      })
       .map((match) => match[1]);
 
     expect(exportsReturningHash).toEqual(["loadPrincipalSecret"]);

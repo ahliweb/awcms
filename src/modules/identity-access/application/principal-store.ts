@@ -40,19 +40,31 @@ export type PrincipalIdentity = {
   emailNormalized: string;
   /** Whether a credential has been promoted yet (PR 7.2). Never the hash itself. */
   hasCredential: boolean;
+  /**
+   * The GLOBAL lockout state (ADR-0086, closing #430). Carried on the ordinary
+   * projection rather than behind a second read: the login path needs it on
+   * every attempt, and a separate call would be a second round trip plus a
+   * second chance to forget it.
+   */
+  failedLoginCount: number;
+  lockedUntil: Date | null;
 };
 
 type PrincipalRow = {
   id: string;
   email_normalized: string;
   password_hash: string | null;
+  failed_login_count: number;
+  locked_until: Date | null;
 };
 
 function toIdentity(row: PrincipalRow): PrincipalIdentity {
   return {
     id: row.id,
     emailNormalized: row.email_normalized,
-    hasCredential: row.password_hash !== null
+    hasCredential: row.password_hash !== null,
+    failedLoginCount: row.failed_login_count,
+    lockedUntil: row.locked_until
   };
 }
 
@@ -77,7 +89,7 @@ export async function findPrincipalByEmail(
   const normalized = normalizePrincipalEmail(email);
 
   const rows = (await tx`
-    SELECT id, email_normalized, password_hash
+    SELECT id, email_normalized, password_hash, failed_login_count, locked_until
     FROM awcms_principals
     WHERE email_normalized = ${normalized}
   `) as PrincipalRow[];
@@ -91,7 +103,7 @@ export async function findPrincipalById(
   principalId: string
 ): Promise<PrincipalIdentity | null> {
   const rows = (await tx`
-    SELECT id, email_normalized, password_hash
+    SELECT id, email_normalized, password_hash, failed_login_count, locked_until
     FROM awcms_principals
     WHERE id = ${principalId}
   `) as PrincipalRow[];
@@ -113,7 +125,7 @@ export async function loadPrincipalSecret(
   principalId: string
 ): Promise<{ passwordHash: string | null } | null> {
   const rows = (await tx`
-    SELECT id, email_normalized, password_hash
+    SELECT id, email_normalized, password_hash, failed_login_count, locked_until
     FROM awcms_principals
     WHERE id = ${principalId}
   `) as PrincipalRow[];
@@ -144,7 +156,7 @@ export async function ensurePrincipalForEmail(
   `;
 
   const rows = (await tx`
-    SELECT id, email_normalized, password_hash
+    SELECT id, email_normalized, password_hash, failed_login_count, locked_until
     FROM awcms_principals
     WHERE email_normalized = ${normalized}
   `) as PrincipalRow[];
@@ -161,4 +173,161 @@ export async function ensurePrincipalForEmail(
   }
 
   return toIdentity(row);
+}
+
+/**
+ * Records ONE failed login attempt against the human, and locks them out when
+ * the threshold is reached — ADR-0086, the fix for #430.
+ *
+ * ## Why this closes the finding
+ *
+ * The counter it touches lives on the PRINCIPAL, of which there is exactly one
+ * per human and which carries no tenant column. Rotating `x-awcms-tenant-id`
+ * therefore changes nothing about which row is incremented, whereas the
+ * per-identity counter it replaces gave an attacker a fresh one per tenant.
+ *
+ * ## Computed IN-DB, never read-modify-write
+ *
+ * Inherited from the identity counter Issue #483 fixed rather than repeated as a
+ * new mistake: under READ COMMITTED — what `sql.begin` gives — two concurrent
+ * failures that both SELECT N and both write N+1 cost ONE increment, so K
+ * parallel attempts cost one. The increment and the conditional lock are both
+ * expressions evaluated by PostgreSQL against the current row.
+ *
+ * The counter is NOT reset when the lock fires: a successful login is what
+ * clears it (`clearPrincipalLockout`). That is the identity counter's behaviour
+ * preserved exactly, and it differs from `mfa.ts` on purpose — the same
+ * asymmetry that file already documents.
+ */
+export async function recordPrincipalLoginFailure(
+  tx: Bun.SQL,
+  principalId: string,
+  maxFailedAttempts: number,
+  lockoutCandidateAt: Date | null
+): Promise<void> {
+  await tx`
+    UPDATE awcms_principals
+    SET failed_login_count = failed_login_count + 1,
+        locked_until =
+          CASE WHEN failed_login_count + 1 >= ${maxFailedAttempts}
+               THEN ${lockoutCandidateAt}
+               ELSE locked_until END,
+        updated_at = now()
+    WHERE id = ${principalId}
+  `;
+}
+
+/**
+ * Clears the global lockout — the ONLY way out of one, and therefore the
+ * function every recovery path must call.
+ *
+ * A successful login calls it, and so do password reset and password change.
+ * That last part is not optional: a global counter with a per-tenant reset would
+ * mean an attacker who locked `alice@corp.com` out of every tenant could not be
+ * undone by the reset link she was sent. Moving the writer without moving its
+ * recovery is the "writer moved, readers did not" defect this repo has already
+ * paid for once.
+ */
+export async function clearPrincipalLockout(
+  tx: Bun.SQL,
+  principalId: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_principals
+    SET failed_login_count = 0, locked_until = NULL, updated_at = now()
+    WHERE id = ${principalId}
+  `;
+}
+
+/**
+ * Writes the credential onto the principal the first time a password is proven
+ * against the identity's own hash — the PROMOTION `sql/112` was built to leave
+ * room for.
+ *
+ * `WHERE … AND password_hash IS NULL` makes it a one-way, idempotent step: once
+ * promoted, this can never overwrite a credential, so a stale identity hash
+ * (from a tenant whose row was not the one that changed) can never clobber the
+ * live one. Password CHANGE goes through its own writer, not this.
+ */
+export async function promotePrincipalCredential(
+  tx: Bun.SQL,
+  principalId: string,
+  passwordHash: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_principals
+    SET password_hash = ${passwordHash}, updated_at = now()
+    WHERE id = ${principalId} AND password_hash IS NULL
+  `;
+}
+
+/** Replaces the credential outright — password reset and password change. */
+export async function setPrincipalCredential(
+  tx: Bun.SQL,
+  principalId: string,
+  passwordHash: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_principals
+    SET password_hash = ${passwordHash},
+        failed_login_count = 0,
+        locked_until = NULL,
+        updated_at = now()
+    WHERE id = ${principalId}
+  `;
+}
+
+/**
+ * Clears the global lockout for whichever principal an IDENTITY belongs to.
+ *
+ * Exists because three success paths know an `identityId` and not an email:
+ * the SSO callback, MFA enrolment verification, and any future federated login.
+ * Each of them proves the human's identity by a route that never sees a
+ * password, and each therefore has the same obligation as `/auth/login` — a
+ * successful authentication clears the counter.
+ *
+ * Missing this is not cosmetic. A person locked out by password attempts who
+ * then signs in through their IdP would stay locked at the password path with
+ * no way to tell why, and the lever that used to clear it (the per-tenant
+ * counter) no longer decides anything.
+ *
+ * Reads `awcms_identities` rather than taking a principal id so the call sites
+ * stay one line and cannot pass the wrong id. The read is keyed on the identity
+ * primary key; the principal write is keyed on `id`, so both satisfy the
+ * read-shape invariant.
+ */
+export async function clearPrincipalLockoutForIdentity(
+  tx: Bun.SQL,
+  identityId: string
+): Promise<void> {
+  const rows = (await tx`
+    SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
+  `) as { principal_id: string | null }[];
+
+  const principalId = rows[0]?.principal_id ?? null;
+
+  if (principalId) await clearPrincipalLockout(tx, principalId);
+}
+
+/**
+ * Replaces the credential (and clears the lockout) for whichever principal an
+ * IDENTITY belongs to — the reset path's shape, which knows an identity id.
+ *
+ * A sibling of `clearPrincipalLockoutForIdentity` rather than a second spelling
+ * of it: reset must also write the new hash, and folding the two together would
+ * give the clearing helper an optional password parameter that most call sites
+ * pass `undefined` to. Both keep their reads keyed on the identity primary key.
+ */
+export async function setPrincipalCredentialForIdentity(
+  tx: Bun.SQL,
+  identityId: string,
+  passwordHash: string
+): Promise<void> {
+  const rows = (await tx`
+    SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
+  `) as { principal_id: string | null }[];
+
+  const principalId = rows[0]?.principal_id ?? null;
+
+  if (principalId) await setPrincipalCredential(tx, principalId, passwordHash);
 }

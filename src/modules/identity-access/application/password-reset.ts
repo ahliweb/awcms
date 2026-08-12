@@ -31,6 +31,7 @@
  * 3. **A non-mailable `login_identifier` is ineligible** rather than enqueued
  *    (`isMailableLoginIdentifier`).
  */
+import { setPrincipalCredentialForIdentity } from "./principal-store";
 import { hashPassword } from "../../../lib/auth/password";
 import {
   generateResetToken,
@@ -244,6 +245,18 @@ export async function completePasswordReset(
         locked_until = NULL, updated_at = ${now}
     WHERE tenant_id = ${tenantId} AND id = ${identity.id}
   `;
+
+  // ADR-0086 — the LIVE lockout is on the principal, so clearing only the
+  // identity's copy would leave the person locked out with a reset link that
+  // appeared to work. This is the half of "move the writer" that is easiest to
+  // forget and worst to forget: a global counter with a per-tenant reset means
+  // an attacker who locked `alice@corp.com` out of every tenant cannot be undone
+  // by the mail she was just sent.
+  //
+  // `setPrincipalCredential` also replaces the credential, so a reset performed
+  // in ONE tenant changes the password everywhere — which is what "one human,
+  // one credential" means, and why the reset mail says so.
+  await setPrincipalCredentialForIdentity(tx, identity.id, passwordHash);
 
   await tx`
     UPDATE awcms_password_reset_tokens
