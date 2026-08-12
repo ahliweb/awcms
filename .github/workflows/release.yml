@@ -153,6 +153,7 @@ jobs:
           tests/security-readiness-rls.test.ts
           tests/security-readiness-worker-setup-grants.test.ts
           tests/sync-hmac-versioned.test.ts
+          tests/tenant-selection-e2e.test.ts
           tests/turnstile-login-e2e.test.ts
           tests/workflow-approval-concurrency.test.ts
 

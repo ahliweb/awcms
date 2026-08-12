@@ -73,7 +73,13 @@ export async function resolveSessionAssurance(
  * step-up/last-auth stamps are set to `now`. Returns the raw token (caller sets
  * cookies). This is how the login MFA challenge completion mints its session.
  */
-export type SessionOriginAuth = "password" | "sso" | "handoff";
+/**
+ * The four values `awcms_sessions.origin_auth` may hold, matching `sql/115`'s
+ * CHECK exactly. `switch` is ADR-0088 and is produced by exactly one caller:
+ * `POST /api/v1/auth/session/switch`, which refuses `sso` and `handoff`
+ * sessions — so a `switch` session is password-rooted by construction.
+ */
+export type SessionOriginAuth = "password" | "sso" | "handoff" | "switch";
 
 /**
  * How a session came to exist, plus what it looked like when it did

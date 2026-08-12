@@ -278,6 +278,68 @@ export async function setPrincipalCredential(
 }
 
 /**
+ * Issues the ONE live tenant-selection token this human may hold (ADR-0088).
+ *
+ * Overwrites unconditionally, which is the behaviour and not a shortcut: a
+ * second tenantless login invalidates the first login's token, the same rule
+ * `deletePendingFactors` applies to a re-started MFA enrolment — only the most
+ * recently issued credential may be redeemed. Two tokens alive at once would be
+ * two chances for the one that was abandoned in a browser tab to be used.
+ *
+ * Takes the HASH, never the token: the plaintext exists only in the `409` body
+ * being written, and a store function that accepted it would be a second place
+ * for it to be logged.
+ */
+export async function issuePrincipalSelectionToken(
+  tx: Bun.SQL,
+  principalId: string,
+  tokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await tx`
+    UPDATE awcms_principals
+    SET selection_token_hash = ${tokenHash},
+        selection_token_expires_at = ${expiresAt},
+        updated_at = now()
+    WHERE id = ${principalId}
+  `;
+}
+
+/**
+ * Spends a tenant-selection token, returning the human it belonged to — or
+ * `null` for unknown, expired, and already-spent alike.
+ *
+ * Single use is enforced as a COMPARE-AND-SWAP, not a read-then-write: the
+ * predicate re-asserts the hash and the expiry inside the same statement that
+ * clears them, so two concurrent redemptions of the same token cannot both
+ * receive a session. A read-modify-write here would be the exact defect
+ * ADR-0027's auditor found in the MFA verify path (HIGH-1) and that `sql/024`
+ * pays a row lock to avoid — repeated in a place where the prize is a session
+ * in a tenant of the attacker's choosing.
+ *
+ * The expiry is compared in SQL against the caller's `now` rather than filtered
+ * in JS for the same reason: a token that expires between the read and the
+ * write must lose, and only the database can decide that atomically.
+ */
+export async function redeemPrincipalSelectionToken(
+  tx: Bun.SQL,
+  tokenHash: string,
+  now: Date
+): Promise<string | null> {
+  const rows = (await tx`
+    UPDATE awcms_principals
+    SET selection_token_hash = NULL,
+        selection_token_expires_at = NULL,
+        updated_at = now()
+    WHERE selection_token_hash = ${tokenHash}
+      AND selection_token_expires_at > ${now}
+    RETURNING id
+  `) as { id: string }[];
+
+  return rows[0]?.id ?? null;
+}
+
+/**
  * Which human an identity belongs to, or `null` when nothing has linked it yet.
  *
  * Reads `awcms_identities` — a tenant table under FORCE RLS, not a guarded

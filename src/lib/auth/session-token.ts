@@ -5,6 +5,11 @@ import {
   hashMachineCredentialToken,
   isMachineCredentialToken
 } from "./machine-credential-token";
+import {
+  PRINCIPAL_SELECTION_TOKEN_PREFIX,
+  hashPrincipalSelectionToken,
+  isPrincipalSelectionToken
+} from "./principal-selection-token";
 
 /** Opaque session tokens, not JWT — only the SHA-256 hash is ever persisted. */
 export function generateSessionToken(): string {
@@ -15,11 +20,31 @@ export function generateSessionToken(): string {
   // that silently cannot authenticate until it logs in again. Rerolling costs
   // nothing and removes the case entirely rather than reasoning about how
   // unlikely it is.
+  //
+  // ADR-0088 adds a THIRD namespace, and it is the one where the collision
+  // would be worst: a session token that happened to start with `awcmsp_`
+  // would hash into the selection namespace, and the guard refuses that kind
+  // OUTRIGHT — the person would hold a valid session row their every request
+  // is answered with 401. Both prefixes are therefore rerolled, and the loop is
+  // written over the LIST so a fourth kind cannot be added without landing
+  // here.
   for (;;) {
     const token = randomBytes(32).toString("base64url");
-    if (!token.startsWith(MACHINE_CREDENTIAL_TOKEN_PREFIX)) return token;
+
+    if (!RESERVED_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix))) {
+      return token;
+    }
   }
 }
+
+/**
+ * Prefixes a random session token must never begin with, because each is
+ * another bearer KIND's discriminator.
+ */
+const RESERVED_TOKEN_PREFIXES = [
+  MACHINE_CREDENTIAL_TOKEN_PREFIX,
+  PRINCIPAL_SELECTION_TOKEN_PREFIX
+] as const;
 
 /**
  * Hashes a BEARER token into its kind-tagged namespace (ADR-0049 §4).
@@ -27,6 +52,12 @@ export function generateSessionToken(): string {
  * - session token → `sha256:<hex>` (unchanged; every stored session hash keeps
  *   exactly the shape it has had since `sql/004`)
  * - machine credential → `mc-sha256:<hex>`
+ * - tenant-selection token → `pt-sha256:<hex>` (ADR-0088)
+ *
+ * The third kind is not a bearer that authorizes anything — it is the one the
+ * guard must REFUSE. Routing it through the same dispatcher is what makes the
+ * refusal reachable: the chokepoint sees a hash, and the namespace is the only
+ * thing that survives hashing to tell it what it is holding.
  *
  * The dispatch lives here rather than at the call sites because 183 route files
  * already call this function between `resolveAuthInputs` and
@@ -41,6 +72,10 @@ export function generateSessionToken(): string {
 export function hashSessionToken(token: string): string {
   if (isMachineCredentialToken(token)) {
     return hashMachineCredentialToken(token);
+  }
+
+  if (isPrincipalSelectionToken(token)) {
+    return hashPrincipalSelectionToken(token);
   }
 
   return `sha256:${createHash("sha256").update(token).digest("hex")}`;

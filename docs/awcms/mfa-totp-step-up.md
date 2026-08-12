@@ -85,6 +85,25 @@ Policy tenant (`awcms_tenant_mfa_policies`, default `optional`) benar-benar dite
 
 Bila policy mewajibkan MFA untuk seorang user yang password-nya valid tetapi **belum punya factor**, login **tidak** menerbitkan sesi penuh. Sebagai gantinya ia mengembalikan `401 MFA_ENROLLMENT_REQUIRED` + `mfaEnrollmentToken` (baris `awcms_mfa_challenges` `purpose='enrollment'`). Token itu **hanya** mengotorisasi `enroll/start`/`enroll/verify` (dikirim via header `X-AWCMS-MFA-Enrollment-Token`, bukan sesi umum); begitu enrollment selesai, grant dikonsumsi dan sesi `aal2` diterbitkan. Fail-closed tetapi **self-recoverable** — tak ada lockout admin. Enforcement digerbangi `isMfaFeatureEnabled()`: bila enrollment dimatikan, policy inert (mustahil membuat MFA yang diwajibkan).
 
+### 1.5b Masuk tenant lewat pemilihan atau perpindahan (ADR-0088)
+
+Sejak `sql/115` ada dua jalan lain masuk ke sebuah tenant: menukar token seleksi
+(`POST /api/v1/auth/session/tenant`, setelah login tanpa header tenant) dan
+berpindah (`POST /api/v1/auth/session/switch`). **Keduanya menjalankan gerbang
+policy di §1.5 secara utuh** lewat `evaluateTenantEntry` — `MFA_REQUIRED` +
+challenge bila orangnya punya faktor, `MFA_ENROLLMENT_REQUIRED` + grant bila
+tenant tujuan mewajibkan MFA dan ia belum punya.
+
+Itu bukan kehati-hatian berlebih: tanpa gerbang tersebut, seseorang yang login
+di tenant A yang longgar bisa berpindah ke tenant B yang mewajibkan MFA dan
+mendarat sebagai sesi `aal1` — perpindahan tenant menjadi **bypass MFA**, dan
+yang paling dirugikan justru tenant berpostur paling ketat. Sejak ADR-0087
+faktornya milik manusia, jadi authenticator yang sama memenuhi tuntutan tenant B
+tanpa enroll ulang.
+
+**Assurance tidak ikut berpindah**: sesi hasil pemilihan/perpindahan selalu lahir
+`aal1`, bahkan dari sesi `aal2`. Step-up adalah bukti segar untuk SATU tenant.
+
 ### 1.6 Lockout per-factor (F4)
 
 Selain rate limit per-sumber dan cap `failed_attempts` per-challenge, tiap factor punya `failed_verify_count`/`locked_until` kumulatif (independen source IP dan rotasi challenge, meniru lockout password). Setelah `AUTH_MFA_MAX_VERIFY_ATTEMPTS` verify gagal, factor terkunci `AUTH_MFA_LOCKOUT_MINUTES` menit; verify sukses mereset. Pada login challenge, factor terkunci kolaps ke `MFA_CHALLENGE_INVALID`; pada step-up, mengembalikan `MFA_LOCKED` (429).

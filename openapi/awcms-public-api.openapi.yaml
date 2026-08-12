@@ -2378,6 +2378,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/session/switch:
+    post:
+      operationId: postAuthSessionSwitch
+      tags:
+        - Identity & Access
+      summary: Move the current session to another tenant the same human belongs to.
+      description: "ADR-0088. Issues a session in the target tenant and revokes the source session — switching leaves, it does not accumulate. Sessions whose `origin_auth` is `sso` or `handoff` are refused: only a globally verified credential may cross a tenant boundary, otherwise a tenant IdP administrator could assert an address and switch into the tenant where that person really works. Assurance does not travel: the new session starts at `aal1` and the target tenant's MFA policy is applied afresh."
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The CURRENT tenant, i.e. the session being switched away from.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenantId
+              properties:
+                tenantId:
+                  type: string
+                  format: uuid
+                  description: The tenant to switch to.
+      responses:
+        "200":
+          description: Session issued in the target tenant; the source session is revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      tenantId:
+                        type: string
+                        format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "`SESSION_NOT_SWITCHABLE` (the session was not issued by a global credential), `TENANT_UNAVAILABLE`, or `PASSWORD_LOGIN_DISABLED`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: '`MEMBERSHIP_NOT_FOUND` — one shape for "you do not belong there", so this endpoint cannot be used to ask whether somebody belongs to a tenant the caller names.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/auth/session/tenant:
+    post:
+      operationId: postAuthSessionTenant
+      tags:
+        - Identity & Access
+      summary: Exchange a tenant-selection token for a session in a named tenant.
+      description: ADR-0088. Spends the single-use selection token returned by a `POST /api/v1/auth/login` that carried NO tenant header, and issues a session in the tenant named in the body. The token lives at most 120 seconds, is spent whether or not the exchange succeeds, and can never authenticate any other endpoint — the authorization chokepoint refuses its hash namespace outright. Every gate login applies once a tenant is known applies here too, including the target tenant's MFA policy.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - principalToken
+                - tenantId
+              properties:
+                principalToken:
+                  type: string
+                  description: The selection token from the 409 body.
+                tenantId:
+                  type: string
+                  format: uuid
+                  description: "The tenant to sign in to. Named by the caller: no membership list is disclosed, because reading one would require a cross-tenant scan that FORCE RLS refuses."
+      responses:
+        "200":
+          description: Session issued in the selected tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      tenantId:
+                        type: string
+                        format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: One shape for every refusal an attacker could probe — unknown, expired or already-spent token, no membership, inactive identity — plus the MFA continuations `MFA_REQUIRED` and `MFA_ENROLLMENT_REQUIRED`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: The tenant is suspended (`TENANT_UNAVAILABLE`) or disables password sign-in for this identity (`PASSWORD_LOGIN_DISABLED`). Reachable only with a genuine token, so it discloses nothing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many attempts from this source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/sessions:
     get:
       operationId: listOwnAuthSessions

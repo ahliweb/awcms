@@ -71,8 +71,13 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
     allowedFiles: [
       "src/modules/identity-access/application/principal-store.ts"
     ],
-    keyedPredicate: /\b(id|email_normalized)\s*=\s*\$\{/,
-    keyDescription: "`id = ${…}` or `email_normalized = ${…}`"
+    // `selection_token_hash` joined the list in ADR-0088, and it is a KEY in
+    // the same sense the other two are: `awcms_principals_selection_token_key`
+    // is unique, so the predicate binds to exactly one row. Widening this list
+    // is a review decision — it is written in that ADR, not slipped in.
+    keyedPredicate: /\b(id|email_normalized|selection_token_hash)\s*=\s*\$\{/,
+    keyDescription:
+      "`id = ${…}`, `email_normalized = ${…}`, or `selection_token_hash = ${…}`"
   },
   {
     table: "awcms_principal_mfa_factors",

@@ -13,8 +13,10 @@ import {
   ensurePrincipalForEmail,
   findPrincipalByEmail,
   findPrincipalById,
+  issuePrincipalSelectionToken,
   loadPrincipalSecret,
-  normalizePrincipalEmail
+  normalizePrincipalEmail,
+  redeemPrincipalSelectionToken
 } from "../src/modules/identity-access/application/principal-store";
 import { findPrincipalAccessViolations } from "../scripts/identity-principal-access-check";
 
@@ -267,5 +269,59 @@ describe("control 4 — the authorization boundary did not move", () => {
     ]) {
       expect(code).not.toContain(forbidden);
     }
+  });
+});
+
+describe("the tenant-selection token (ADR-0088)", () => {
+  test("issuing overwrites unconditionally — one live token per human", async () => {
+    // Deliberate: a second tenantless login invalidates the first login's
+    // token, the same rule `deletePendingFactors` applies to a restarted MFA
+    // enrolment. Two live tokens would be two chances for the one abandoned in
+    // a browser tab to be spent.
+    const { tx, statements } = recordingTx([]);
+
+    await issuePrincipalSelectionToken(
+      tx,
+      "p-1",
+      "pt-sha256:abc",
+      new Date("2026-08-12T10:02:00Z")
+    );
+
+    expect(statements[0]).toContain("selection_token_hash = ?");
+    expect(statements[0]).toContain("selection_token_expires_at = ?");
+    expect(statements[0]).toContain("WHERE id = ?");
+    // No `AND selection_token_hash IS NULL` — issuing REPLACES.
+    expect(statements[0]).not.toContain("IS NULL");
+  });
+
+  test("redeeming is a compare-and-swap, not a read-then-write", async () => {
+    // Two concurrent redemptions of the same token must not both win: the
+    // loser's UPDATE matches zero rows. A read-then-write here would hand two
+    // callers a session each, in a tenant of their choosing — the same defect
+    // class ADR-0027's auditor found in the MFA verify path.
+    const { tx, statements } = recordingTx([{ id: "p-1" }]);
+
+    const principalId = await redeemPrincipalSelectionToken(
+      tx,
+      "pt-sha256:abc",
+      new Date("2026-08-12T10:01:00Z")
+    );
+
+    expect(principalId).toBe("p-1");
+    expect(statements[0]).toContain("UPDATE awcms_principals");
+    expect(statements[0]).toContain("selection_token_hash = ?");
+    // The expiry is compared IN SQL: a token expiring between read and write
+    // must lose, and only the database can decide that atomically.
+    expect(statements[0]).toContain("selection_token_expires_at > ?");
+    expect(statements[0]).toContain("selection_token_hash = NULL");
+    expect(statements[0]).toContain("RETURNING id");
+  });
+
+  test("a spent, unknown, or expired token all return null", async () => {
+    const { tx } = recordingTx([]);
+
+    expect(
+      await redeemPrincipalSelectionToken(tx, "pt-sha256:gone", new Date())
+    ).toBeNull();
   });
 });
