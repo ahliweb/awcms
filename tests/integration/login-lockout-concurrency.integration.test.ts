@@ -91,13 +91,25 @@ function failedLogin(tenantId: string) {
   });
 }
 
+/**
+ * ADR-0086 — the live counter is on `awcms_principals`, keyed on the normalized
+ * address alone.
+ *
+ * `tenantId` is still taken, and deliberately IGNORED for the lookup: every
+ * caller here has one, and dropping the parameter would hide the very thing this
+ * file now demonstrates — that the row is found without it. The old version read
+ * `awcms_identities WHERE tenant_id = … AND login_identifier = …`, which is the
+ * per-tenant counter #430 is about, and this test kept passing against it until
+ * the counter moved. That is the "writer moved, readers did not" class, caught
+ * here by a suite that talks to a real PostgreSQL.
+ */
 async function readLockoutRow(
-  tenantId: string
+  _tenantId: string
 ): Promise<{ failed_login_count: number; locked_until: Date | null }> {
   const rows = (await getHandlerAdminSql()`
     SELECT failed_login_count, locked_until
-    FROM awcms_identities
-    WHERE tenant_id = ${tenantId} AND login_identifier = ${LOGIN_IDENTIFIER}
+    FROM awcms_principals
+    WHERE email_normalized = ${LOGIN_IDENTIFIER.trim().toLowerCase()}
   `) as { failed_login_count: number; locked_until: Date | null }[];
 
   expect(rows).toHaveLength(1);
