@@ -144,13 +144,21 @@ Kolom penting: `identifier_type`, `normalized_value`, `value_hash`, `masked_valu
 
 Constraint: unique `(tenant_id, identifier_type, value_hash)`.
 
+### `awcms_principals`
+
+**Terimplementasi** (`sql/112`, [ADR-0085](../adr/0085-one-human-one-credential-many-tenants.md)). Satu baris per **manusia**, ber-kunci alamat email ter-normalisasi. **GLOBAL — tanpa `tenant_id`, tanpa RLS**; yang menggantikan RLS adalah empat kontrol yang ditegakkan (hak DB dipersempit tanpa `DELETE`, invarian bentuk-baca lewat `bun run identity:principal-access:check`, `password_hash` tak pernah meninggalkan modul store, dan batas otorisasi yang tidak bergerak). Kalimat yang membuat ketiadaan RLS itu bisa dipertahankan: **principal adalah fakta AUTENTIKASI, tidak pernah fakta OTORISASI** — memegangnya tidak memberi apa pun, dan setiap permission tetap di-resolve lewat `awcms_tenant_users` di bawah FORCE RLS.
+
+Kolom penting: `email_normalized` (unik), `password_hash`, `failed_login_count`, `locked_until`.
+
 ### `awcms_identities`
 
-Login identity.
+Login identity **per tenant** (unik pada `(tenant_id, login_identifier)`).
 
-Kolom penting: `profile_id`, `login_identifier`, `password_hash`, `status`, `failed_login_count`, `locked_until`, `last_login_at`.
+Kolom penting: `profile_id`, `login_identifier`, `password_hash`, `status`, `principal_id` (nullable), `last_login_at`.
 
 Catatan: `password_hash` tidak pernah keluar response/API/log.
+
+**`failed_login_count` dan `locked_until` di tabel ini adalah SEJARAH, bukan kontrol** — sejak `sql/113` ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md)) keduanya berhenti memutuskan apa pun dan penghitung lockout yang berlaku ada di `awcms_principals`. Kolomnya dibiarkan terisi mengikuti preseden ADR-0079. Membacanya untuk mengambil keputusan login akan mengembalikan cacat #430: satu manusia anggota N tenant kembali punya N penghitung, dan nilai tenant bukan rahasia.
 
 ### `awcms_password_reset_tokens`
 

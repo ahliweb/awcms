@@ -200,6 +200,24 @@ token mentah sekali saja. Klien mengirim token lewat header
 dikirim lewat header `X-AWCMS-Tenant-ID` untuk endpoint non-cookie. Login
 punya pengerasan (rate limit, lockout, dummy-hash anti-enumerasi, redaksi IP)
 — lihat `src/modules/identity-access/README.md` §Audit & pengerasan login.
+
+**Kredensial dan lockout duduk di `awcms_principals`, bukan di identitas
+per-tenant.** Tabel itu (`sql/112`,
+[ADR-0085](adr/0085-one-human-one-credential-many-tenants.md)) GLOBAL dan tanpa
+RLS: satu baris per manusia, ber-kunci email ter-normalisasi, dan `awcms_identities`
+hanya mendapat `principal_id` nullable — nol foreign key yang bergerak, dan
+`resolveTenantContext`/`authorizeInTransaction` tidak pernah tahu principal ada.
+Ketiadaan RLS ditopang empat kontrol yang ditegakkan, salah satunya gerbang
+`bun run identity:principal-access:check` yang membatasi **call site** mana yang
+boleh menyebut tabel itu dan menuntut setiap query berkunci `id =` atau
+`email_normalized =`. Sejak `sql/113`
+([ADR-0086](adr/0086-the-lockout-counter-is-global.md), menutup #430) penghitung
+lockout ikut pindah ke sana; `awcms_identities.failed_login_count`/`locked_until`
+tinggal sejarah. Kelima jalur reset — login sukses, reset password, ganti
+password, callback SSO, verifikasi enrolment MFA — menyentuh penghitung
+principal, karena lockout global dengan pemulihan per-tenant lebih buruk daripada
+yang digantikannya.
+
 Di atas password, jalur auth kini punya: **MFA TOTP + recovery codes + session
 assurance (aal1/aal2) + step-up** (`sql/024`, route `/api/v1/auth/mfa/*`,
 enforcement digerakkan state enrollment DB — fail-closed), **OIDC/SSO

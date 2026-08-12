@@ -116,6 +116,11 @@ Semua diperiksa langsung terhadap kode pada 9 Agustus 2026.
 8. **Lockout login per-`(tenant, email)`.** Penyerang yang merotasi header
    `x-awcms-tenant-id` mendapat N × `AUTH_LOGIN_MAX_ATTEMPTS` terhadap manusia
    yang sama. Principal global **memperbaiki** ini, bukan membebaninya.
+   → **DITUTUP 12 Agustus 2026** oleh
+   [ADR-0086](../adr/0086-the-lockout-counter-is-global.md) (`sql/113`, #525);
+   [#430](https://github.com/ahliweb/awcms/issues/430) tertutup. Prasyaratnya,
+   `awcms_principals`, mendarat sehari yang sama lewat
+   [ADR-0085](../adr/0085-one-human-one-credential-many-tenants.md) (#524).
 9. **`policy-cache.ts` memanggil `parseAbacCondition(row.conditions)` tanpa
    argumen versi**, jadi baris ber-`dsl_version: 1` yang memakai atribut versi
    berikutnya akan lolos validasi. Ini wajib diperbaiki **sebelum** daftar

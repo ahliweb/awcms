@@ -356,6 +356,76 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 12 Agustus 2026 (kesembilan) — GELOMBANG 7 DIBUKA, #430 DITUTUP, dan
+  satu putaran konsistensi yang tidak menyentuh satu baris kode pun.**
+
+  **Dua PR mendarat.** [ADR-0085](adr/0085-one-human-one-credential-many-tenants.md)
+  (#524, PR 7.1, `sql/112`) mendaratkan `awcms_principals` — GLOBAL, tanpa RLS,
+  satu baris per manusia — beserta gerbang baru `identity:principal-access:check`
+  (**rantai 40 → 41**). [ADR-0086](adr/0086-the-lockout-counter-is-global.md)
+  (#525, PR 7.2, `sql/113`) memindahkan penghitung lockout ke sana dan
+  **menutup [#430](https://github.com/ahliweb/awcms/issues/430)**.
+
+  **Yang tersisa dari Gelombang 7:** PR 7.3 (MFA pindah ke principal) dan PR 7.4
+  (pemilihan + perpindahan tenant). Keduanya belum dimulai.
+
+  ### Putaran konsistensi: yang DIPERIKSA dan tidak ditemukan
+
+  Putaran ini dimulai dari permintaan "selesaikan semua masalah konflik", dan
+  separuh hasilnya adalah **ketiadaan temuan** — dicatat di sini karena putaran
+  berikutnya yang menurunkan ulang kesimpulan yang sama membayar audit penuh
+  untuk jawaban yang sudah diketahui.
+
+  - **Konflik git: NIHIL.** Working tree bersih, nol PR terbuka, dan repositori
+    di GitHub hanya punya **satu** branch: `main`.
+  - **Dan satu jebakan perkakas yang hampir menjadi temuan palsu.** Audit ini
+    mula-mula melaporkan **87 branch remote menumpuk**, lalu mengujinya satu per
+    satu dengan `git merge-tree` dan menyimpulkan "nol yang bentrok". Kedua
+    kalimat itu berdiri di atas premis yang salah: `git fetch` **tanpa
+    `--prune`** meninggalkan remote-tracking ref untuk branch yang sudah lama
+    dihapus GitHub saat merge, dan `git branch -r` menampilkannya persis seperti
+    branch hidup. Yang menumpuk adalah **ref basi di klon lokal**, bukan apa pun
+    di server — dibuktikan dengan `gh api repos/.../branches`, yang mengembalikan
+    `main` saja, dan dibersihkan `git fetch --prune`. Pelajarannya sejalan dengan
+    yang sudah tercatat berkali-kali di §6: **tanya sumbernya, jangan baca cache
+    lokalnya** — sebuah audit yang percaya diri bisa lahir utuh dari perkakas
+    yang kebetulan basi.
+  - **Rantai gerbang: hijau penuh** (41/41 + 3973 test, 0 gagal), CI dan CodeQL
+    hijau di `68c9c50`.
+  - **ADR-0086 tidak meninggalkan pembaca tertinggal.** Kelima jalur reset
+    lockout diperiksa satu per satu terhadap penghitung principal: login sukses,
+    reset password, ganti password, callback SSO, dan verifikasi enrolment MFA.
+    Satu jalur yang TAMPAK tertinggal — `mfa/totp/verify.ts` yang hanya menulis
+    `awcms_identities.failed_login_count` — ternyata benar: `login.ts` sudah
+    memanggil `clearPrincipalLockout` **saat password terbukti**, sebelum
+    challenge diterbitkan, sehingga kolom identitas di jalur itu memang tinggal
+    sejarah. Catatan ini ada supaya pembaca berikutnya tidak "memperbaikinya".
+  - **SoD tidak buta terhadap grant lewat user group.** `resolveOrdinaryRbacFacts`
+    membaca `activeRoleGrants`, dan fragmen itu meng-`UNION ALL` grant langsung
+    dengan grant turunan `awcms_user_groups` — jadi kekambuhan ADR-0079 yang
+    dulu membuat SoD melapor "tak ada konflik" tidak terjadi lagi lewat ADR-0081.
+
+  ### Yang DITEMUKAN: enam dokumen yang menjelaskan dunia yang tidak ada
+
+  Semuanya kelas yang sama — **penulisnya pindah, dokumennya tidak** — dan
+  semuanya tentang lockout yang sejak `sql/113` tidak lagi per-identitas:
+
+  | Dokumen                                    | Klaim yang sudah salah                                              |
+  | ------------------------------------------ | ------------------------------------------------------------------- |
+  | `standar-performa-dan-keamanan.md`         | A07/V2/V11 "lockout per-identitas"; **34 gerbang**; **69 ADR**      |
+  | `20_threat_model_security_architecture.md` | A07 "lockout per-identitas"                                         |
+  | `turnstile-bot-protection.md`              | "lockout per-identity"                                              |
+  | `18_configuration_env_reference.md`        | `AUTH_LOGIN_MAX_ATTEMPTS` "per identitas"                           |
+  | `04_erd_data_dictionary.md`                | `awcms_principals` tak ada; kolom lockout identitas masih "penting" |
+  | `ARCHITECTURE.md`                          | jalur auth tanpa principal sama sekali                              |
+
+  **Kenapa ini bukan kerapian.** `standar-performa-dan-keamanan.md` adalah
+  dokumen yang dipakai untuk menjawab auditor, dan barisnya berbunyi "Terpenuhi"
+  di sebelah deskripsi kontrol yang **lebih lemah** daripada yang sebenarnya
+  berjalan. Dokumen yang meremehkan kontrolnya sendiri akan dikoreksi ke arah
+  yang salah oleh orang berikutnya yang mempercayainya — persis mode kegagalan
+  yang sudah tercatat untuk skill basi.
+
 - **PUTARAN 12 Agustus 2026 (kedelapan) — GELOMBANG 5 (ENTITLEMENT/SaaS) SELESAI. Mesinnya berdiri, dan entitlement nyata
   pertama terpasang tanpa menolak satu tenant pun.**
   [ADR-0084](adr/0084-an-entitlement-refuses-it-never-grants.md), empat PR:
@@ -477,7 +547,7 @@ ON TABLES TO awcms_app`, jadi tiga tabel katalog GLOBAL lahir dengan keempat
   | Gelombang | Status                                                                                                |
   | --------- | ----------------------------------------------------------------------------------------------------- |
   | 0–4       | selesai                                                                                               |
-  | **5**     | **3/4 PR mendarat (#517, #518, #519); PR 5.4 tersisa, bentuknya dikoreksi di atas**                   |
+  | **5**     | **selesai — empat PR mendarat (#517, #518, #519, #521); sisa `/admin/subscriptions`, lihat di atas**  |
   | 6         | belum — metering & kuota (IaaS)                                                                       |
   | 7         | belum — principal global; **#430 ditutup di sini (PR 7.2)**, tidak bisa mendahului `awcms_principals` |
   | 8         | belum — partner/EaaS + akses terdelegasi                                                              |
