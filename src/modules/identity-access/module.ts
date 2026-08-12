@@ -597,6 +597,71 @@ export const identityAccessModule = defineModule({
       executionMode: "generic"
     },
     /**
+     * `awcms_delegated_access_grants` (sql/117) — ADR-0090.
+     *
+     * A descriptor rather than a `BOUNDED_BY_DESIGN` entry, and the difference
+     * is real: the two partner tables one migration earlier hold the PRESENT
+     * (one row per engagement, deleted when severed), while this table
+     * accumulates one row per support episode and keeps them after they end.
+     * That grows with how often a customer asks for help, which is traffic
+     * wearing a slower clock.
+     *
+     * 365 days, matching `awcms_abac_decision_logs` below rather than the 90 of
+     * the invitation tables above, and for the same reason that one is 365: this
+     * row is what a cross-organisation access question is answered FROM. "Who
+     * from our vendor could see our data last March, approved by whom, until
+     * when" is asked during an audit or a breach, both of which arrive late. An
+     * `audit_security`, not `operational_queue` — the rows are evidence, not a
+     * work queue, and legal hold overrides the purge for the same reason.
+     *
+     * `generic` is safe here in a way it is NOT for most tables in this list,
+     * and the reason is `revoked_at`: an age-only purge with no status predicate
+     * deletes live grants everywhere else, but a grant older than 365 days
+     * CANNOT be live — `sql/117` caps its TTL at 31. There is no live row old
+     * enough for the sweep to reach.
+     */
+    {
+      key: "identity_access.delegated_access_grants",
+      tableName: "awcms_delegated_access_grants",
+      ownerModuleKey: "identity_access",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      retentionClass: "audit_security",
+      retentionMinDays: 90,
+      retentionMaxDays: 2555,
+      defaultRetentionDays: 365,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per support episode granted to a partner — a volume set by how often customers ask for help, orders of magnitude below the decision-log and analytics tables partitioning exists for."
+      },
+      archive: {
+        archivable: false,
+        rationale:
+          "The row's evidentiary content is already duplicated into `awcms_audit_events` at approval and at revocation, and those carry their own retention. Archiving a second copy would extend the life of a partner's identity data past the window this retention exists to close."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "Nothing to anonymize that is not a foreign key the identity tables hold anyway, and no status to transition to — `revoked_at` already records the end of the reach. The membership the grant printed is deactivated at revocation, not at purge, so deleting the row removes a record rather than an access path."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_delegated_access_grants_tenant_created_idx (sql/117) — the engine's own cursor path (WHERE tenant_id = ? AND created_at < ?), added by this table's migration for it rather than reused from a lookup index that happens to fit."
+        }
+      ],
+      batchLimit: 1000,
+      backupRestoreNotes:
+        "Included in ordinary full-database backup/restore. Restoring an old backup CAN revive a revoked grant row, and that is inert: the reach it describes lived in `awcms_tenant_users`, whose row restores deactivated, and in sessions, which restore revoked and expired. A revived grant with a non-NULL `access_code_hash` is likewise dead — every redemption path re-checks `expires_at`, and `sql/117` caps it at 31 days.",
+      executionMode: "generic"
+    },
+    /**
      * `awcms_abac_decision_logs` (sql/005) — Issue #427, ADR-0072.
      *
      * The largest unbounded table in the repo, and the only one that grows with

@@ -1,4 +1,5 @@
 import type { TenantContext } from "../domain/access-control";
+import type { PrincipalKind } from "../domain/delegated-access";
 import { ENTITLING_SUBSCRIPTION_STATUSES } from "../domain/entitlement";
 import { activeRoleGrants } from "./grant-source";
 import { resolveActiveSession } from "./session-lookup";
@@ -59,14 +60,19 @@ export async function resolveTenantPrincipalForTenantUser(
   tenantUserId: string
 ): Promise<ResolvedTenantPrincipal | null> {
   const rows = (await tx`
-    SELECT tu.id, tu.identity_id, t.status AS tenant_status
+    SELECT tu.id, tu.identity_id, tu.principal_kind, t.status AS tenant_status
     FROM awcms_tenant_users tu
     JOIN awcms_identities i
       ON i.tenant_id = tu.tenant_id AND i.id = tu.identity_id
     JOIN awcms_tenants t ON t.id = tu.tenant_id
     WHERE tu.tenant_id = ${tenantId} AND tu.id = ${tenantUserId}
       AND tu.status = 'active' AND i.status = 'active'
-  `) as { id: string; identity_id: string; tenant_status: string }[];
+  `) as {
+    id: string;
+    identity_id: string;
+    principal_kind: PrincipalKind;
+    tenant_status: string;
+  }[];
 
   const tenantUser = rows[0];
   if (!tenantUser) return null;
@@ -83,7 +89,8 @@ export async function resolveTenantPrincipalForTenantUser(
       tenantId,
       tenantUserId: tenantUser.id,
       identityId: tenantUser.identity_id,
-      roles: roleRows.map((row) => row.role_code)
+      roles: roleRows.map((row) => row.role_code),
+      principalKind: tenantUser.principal_kind
     },
     tenantStatus: tenantUser.tenant_status
   };
@@ -121,13 +128,14 @@ export async function resolveTenantPrincipal(
   if (!session) return null;
 
   const tenantUserRows = await tx`
-    SELECT tu.id, t.status AS tenant_status
+    SELECT tu.id, tu.principal_kind, t.status AS tenant_status
     FROM awcms_tenant_users tu
     JOIN awcms_tenants t ON t.id = tu.tenant_id
     WHERE tu.tenant_id = ${tenantId} AND tu.identity_id = ${session.identity_id}
   `;
   const tenantUser = tenantUserRows[0] as
-    { id: string; tenant_status: string } | undefined;
+    | { id: string; principal_kind: PrincipalKind; tenant_status: string }
+    | undefined;
   if (!tenantUser) return null;
 
   const roleRows = await tx`
@@ -143,7 +151,8 @@ export async function resolveTenantPrincipal(
       tenantId,
       tenantUserId: tenantUser.id,
       identityId: session.identity_id,
-      roles
+      roles,
+      principalKind: tenantUser.principal_kind
     },
     tenantStatus: tenantUser.tenant_status
   };

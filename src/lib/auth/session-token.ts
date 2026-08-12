@@ -10,6 +10,11 @@ import {
   hashPrincipalSelectionToken,
   isPrincipalSelectionToken
 } from "./principal-selection-token";
+import {
+  DELEGATED_ACCESS_CODE_PREFIX,
+  hashDelegatedAccessCode,
+  isDelegatedAccessCode
+} from "./delegated-access-code";
 
 /** Opaque session tokens, not JWT — only the SHA-256 hash is ever persisted. */
 export function generateSessionToken(): string {
@@ -43,7 +48,8 @@ export function generateSessionToken(): string {
  */
 const RESERVED_TOKEN_PREFIXES = [
   MACHINE_CREDENTIAL_TOKEN_PREFIX,
-  PRINCIPAL_SELECTION_TOKEN_PREFIX
+  PRINCIPAL_SELECTION_TOKEN_PREFIX,
+  DELEGATED_ACCESS_CODE_PREFIX
 ] as const;
 
 /**
@@ -53,6 +59,7 @@ const RESERVED_TOKEN_PREFIXES = [
  *   exactly the shape it has had since `sql/004`)
  * - machine credential → `mc-sha256:<hex>`
  * - tenant-selection token → `pt-sha256:<hex>` (ADR-0088)
+ * - delegated-access code → `dg-sha256:<hex>` (ADR-0090)
  *
  * The third kind is not a bearer that authorizes anything — it is the one the
  * guard must REFUSE. Routing it through the same dispatcher is what makes the
@@ -76,6 +83,10 @@ export function hashSessionToken(token: string): string {
 
   if (isPrincipalSelectionToken(token)) {
     return hashPrincipalSelectionToken(token);
+  }
+
+  if (isDelegatedAccessCode(token)) {
+    return hashDelegatedAccessCode(token);
   }
 
   return `sha256:${createHash("sha256").update(token).digest("hex")}`;

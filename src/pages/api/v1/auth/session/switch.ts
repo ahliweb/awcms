@@ -13,7 +13,11 @@ import { resolveLoginPolicyConfig } from "../../../../../modules/identity-access
 import { evaluateTenantEntry } from "../../../../../modules/identity-access/application/tenant-entry";
 import { resolveAuthInputs } from "../../../../../modules/identity-access/application/access-guard";
 import { hashSessionToken } from "../../../../../lib/auth/session-token";
-import { createSessionWithAssurance } from "../../../../../modules/identity-access/application/mfa-session-assurance";
+import {
+  createSessionWithAssurance,
+  NON_SWITCHABLE_ORIGIN_AUTH,
+  type SessionOriginAuth
+} from "../../../../../modules/identity-access/application/mfa-session-assurance";
 import {
   SESSION_COOKIE_NAME,
   TENANT_COOKIE_NAME
@@ -146,7 +150,9 @@ export const POST: APIRoute = async ({
     return fail(401, "AUTH_REQUIRED", "Session is invalid or expired.");
   }
 
-  if (source.originAuth === "sso" || source.originAuth === "handoff") {
+  if (
+    NON_SWITCHABLE_ORIGIN_AUTH.includes(source.originAuth as SessionOriginAuth)
+  ) {
     log("warning", "auth.session_switch.refused_non_switchable", {
       moduleKey: "identity_access",
       tenantId: sourceTenantId,

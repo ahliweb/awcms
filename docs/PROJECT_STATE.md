@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **116** (`sql/001`–`116`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0089** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **117** (`sql/001`–`117`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0090** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -355,6 +355,41 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (ketiga belas) — PR 8.2 MENDARAT: akses terdelegasi
+  mencetak tenant user SUNGGUHAN, dan dua PR rencana bertemu kenyataan.**
+
+  [ADR-0090](adr/0090-delegated-access-prints-a-real-tenant-user.md)
+  (`sql/117`): grant yang ditebus menghasilkan baris `awcms_tenant_users` biasa
+  terikat role **pilihan pelanggan**, dengan tanggal mati — sehingga RLS,
+  decision log, audit, SoD, dan business-scope facts bekerja tanpa perubahan.
+  Yang menyeberangi batas antar-organisasi hanyalah kode penebusan berumur
+  pendek (`awcmsd_…`, hash `dg-sha256:`), preseden ADR-0050.
+
+  **Dua item PR sebelumnya ditutup di sini.** Role `support` yang PR 8.2
+  asumsikan ada memang tidak ada, dan setelah diperiksa ia juga tidak
+  seharusnya ada: menanamnya membuat platform memutuskan isi tenant orang lain,
+  membatalkan ADR-0089 dari sisi lain. Nilai `origin_auth` kelima (`delegated`)
+  mendarat, dan aturan non-switchable berhenti dieja inline di `switch.ts`
+  menjadi `NON_SWITCHABLE_ORIGIN_AUTH` — dua nilai masih boleh dieja, tiga
+  sudah menjadi tempat nilai keempat terlupakan.
+
+  **Temuan yang mengubah desain:** gerbang "aktor terdelegasi tidak menulis
+  otoritas" tidak boleh bersandar pada `awcms_sessions.origin_auth`, karena ada
+  DUA jalur ke chokepoint dan jalur tenant-user langsung akan tidak
+  tergerbangi — kelas ADR-0079. Jenisnya karena itu hidup sebagai
+  `awcms_tenant_users.principal_kind`, kolom yang kedua resolver sudah SELECT,
+  write-once sehingga tidak ada kewajiban penulis kedua.
+
+  Penebusan memakai `materializeMembership` (penulis keanggotaan ADR-0082),
+  bukan INSERT kelima — yang juga memberinya penolakan role sistem secara
+  gratis, sehingga `owner` tidak bisa didelegasikan. `bun run check` hijau,
+  `sql/117` diverifikasi 13/13 di Postgres nyata, dan **empat mutasi** memerahkan
+  test yang tepat (memindahkan gerbang ke bawah fetch, menghapus
+  `tu.principal_kind` dari satu resolver, menghapus `delegated` dari daftar
+  non-switchable, dan mencabut penolakan namespace kode di gerbang).
+
+  **Sisa Gelombang 8:** PR 8.3, 8.4, 8.5.
 
 - **PUTARAN 13 Agustus 2026 (kedua belas) — GELOMBANG 8 DIBUKA. PR 8.1 mendarat,
   dan kali ini asumsi lintas-tenant DIPERIKSA SEBELUM rencananya ditulis.**

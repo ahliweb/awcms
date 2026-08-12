@@ -54,6 +54,8 @@ import {
   parseMachineCredentialToken
 } from "../../../lib/auth/machine-credential-token";
 import { isPrincipalSelectionHash } from "../../../lib/auth/principal-selection-token";
+import { isDelegatedAccessCodeHash } from "../../../lib/auth/delegated-access-code";
+import { isDelegatedWriteForbidden } from "../domain/delegated-access";
 
 /**
  * Resolves the tenant id + bearer token an endpoint should authenticate with,
@@ -182,7 +184,16 @@ export async function authorizeInTransaction(
   // that this must not depend on storage. It also short-circuits before any
   // query, which is what makes "zero decision log rows" true by construction
   // rather than by inspection.
-  if (isPrincipalSelectionHash(tokenHash)) {
+  //
+  // ADR-0090 adds the second bearer kind that must never authorize, on the same
+  // argument: a delegated-access CODE is a redemption artefact handed between
+  // two organisations, and somebody will eventually paste one into an
+  // `Authorization` header. It buys a membership at exactly one endpoint and
+  // authenticates nothing anywhere else.
+  if (
+    isPrincipalSelectionHash(tokenHash) ||
+    isDelegatedAccessCodeHash(tokenHash)
+  ) {
     // Byte-identical to every other authentication failure below: a caller
     // must not learn that the token it holds is a REAL selection token.
     return {
@@ -427,6 +438,49 @@ export async function authorizeInTransaction(
         denied: fail(403, "ACCESS_DENIED", decision.reason)
       };
     }
+  }
+
+  // ADR-0090 — an actor who is in this tenant because a GRANT put them here may
+  // read `identity_access` and write nothing in it.
+  //
+  // The customer chooses the role a delegated actor holds, and that choice is
+  // the general control. It cannot bound this one thing: authority granted by a
+  // delegated actor OUTLIVES the grant. Revoke the grant, deactivate its tenant
+  // user, and the role row they handed to somebody else is still there —
+  // revocation stops being revocation. So the refusal is structural and sits
+  // with the other structural gates, above `fetchGrantedPermissionKeys`, where
+  // no grant row can influence it (cross-wave rule 1).
+  //
+  // Deny-only, and never the reverse: `isDelegatedWriteForbidden` returns
+  // `false` for every ordinary member, which leaves the decision exactly where
+  // it was.
+  if (
+    isDelegatedWriteForbidden({
+      principalKind: context.principalKind ?? "user",
+      moduleKey: guard.moduleKey,
+      action: guard.action
+    })
+  ) {
+    const decision = {
+      allowed: false,
+      reason:
+        "Delegated access may read identity and access data, but never change it.",
+      matchedPolicy: "delegated_access_forbidden"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "ACCESS_DENIED", decision.reason)
+    };
   }
 
   const accountPermissionKeys = await fetchGrantedPermissionKeys(

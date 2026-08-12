@@ -450,3 +450,29 @@ export async function linkIdentityToPrincipal(
 
   return principal.id;
 }
+
+/**
+ * The same link, for a caller that already KNOWS which principal — ADR-0090.
+ *
+ * `linkIdentityToPrincipal` above derives the principal from an address, which
+ * is right for every path where the address IS the claim being made. Delegated
+ * access is the one path where it is not: the human is identified by the
+ * credential they authenticated with in another tenant, and re-deriving them
+ * from a string this tenant supplied would let the tenant choose whose
+ * principal the membership attaches to.
+ *
+ * Fifth writer of `awcms_identities.principal_id`, and it keeps the same
+ * `principal_id IS NULL` predicate: linking is a one-way step, and a repointed
+ * identity is a person's account handed to someone else.
+ */
+export async function attachIdentityToPrincipal(
+  tx: Bun.SQL,
+  identityId: string,
+  principalId: string
+): Promise<void> {
+  await tx`
+    UPDATE awcms_identities
+    SET principal_id = ${principalId}
+    WHERE id = ${identityId} AND principal_id IS NULL
+  `;
+}

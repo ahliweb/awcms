@@ -17,6 +17,23 @@ export type TenantContext = {
    * additive: no existing call site sets it and every leaf referencing it is
    * simply false while unset. */
   defaultOfficeId?: string;
+  /**
+   * ADR-0090 — `awcms_tenant_users.principal_kind`, carried so the chokepoint
+   * can refuse a delegated actor without a second query.
+   *
+   * Optional, and absent reads as `"user"`. That is fail-OPEN for this one
+   * field, so it is only safe because of where the value comes from: BOTH
+   * context resolvers that feed the chokepoint select the column from the
+   * `awcms_tenant_users` row they already read, and
+   * `tests/delegated-access.test.ts` pins both of those SELECTs at source. Every
+   * other constructor of this type builds a context for an ordinary member and
+   * never reaches the chokepoint's delegated gate.
+   *
+   * A required field would instead have made ~30 call sites a compile error for
+   * a value they all mean the same way, and the usual outcome of that is 30
+   * hand-written `"user"` literals — 30 places for the wrong one to appear.
+   */
+  principalKind?: "user" | "delegated";
   correlationId?: string;
 };
 
