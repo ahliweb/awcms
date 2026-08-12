@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 116   |
-| Tabel `awcms_*`                    | 145   |
-| Tabel dengan `FORCE` RLS           | 128   |
+| Migrasi                            | 117   |
+| Tabel `awcms_*`                    | 146   |
+| Tabel dengan `FORCE` RLS           | 129   |
 | Tabel RLS-free (global, by design) | 17    |
-| Berkas test                        | 362   |
+| Berkas test                        | 363   |
 | Berkas route                       | 337   |
-| ADR                                | 90    |
+| ADR                                | 91    |
 
 ### Modul
 
@@ -163,6 +163,7 @@
 | 114 | `sql/114_awcms_principal_mfa.sql`                                  |
 | 115 | `sql/115_awcms_tenant_selection.sql`                               |
 | 116 | `sql/116_awcms_partners.sql`                                       |
+| 117 | `sql/117_awcms_delegated_access.sql`                               |
 
 ### Tabel & Row-Level Security
 
@@ -204,6 +205,7 @@
 | `awcms_data_lifecycle_cursors`           | `sql/055_awcms_data_lifecycle_schema.sql`                  | ya    | ya    |
 | `awcms_data_lifecycle_legal_holds`       | `sql/055_awcms_data_lifecycle_schema.sql`                  | ya    | ya    |
 | `awcms_data_lifecycle_runs`              | `sql/055_awcms_data_lifecycle_schema.sql`                  | ya    | ya    |
+| `awcms_delegated_access_grants`          | `sql/117_awcms_delegated_access.sql`                       | ya    | ya    |
 | `awcms_domain_event_activity_daily`      | `sql/009_awcms_domain_event_runtime_schema.sql`            | ya    | ya    |
 | `awcms_domain_event_consumer_effects`    | `sql/009_awcms_domain_event_runtime_schema.sql`            | ya    | ya    |
 | `awcms_domain_event_consumer_state`      | `sql/009_awcms_domain_event_runtime_schema.sql`            | ya    | ya    |
@@ -318,7 +320,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 308        |
+| `(root)`      | 309        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |

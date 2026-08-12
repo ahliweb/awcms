@@ -74,12 +74,37 @@ export async function resolveSessionAssurance(
  * cookies). This is how the login MFA challenge completion mints its session.
  */
 /**
- * The four values `awcms_sessions.origin_auth` may hold, matching `sql/115`'s
+ * The five values `awcms_sessions.origin_auth` may hold, matching `sql/117`'s
  * CHECK exactly. `switch` is ADR-0088 and is produced by exactly one caller:
- * `POST /api/v1/auth/session/switch`, which refuses `sso` and `handoff`
- * sessions — so a `switch` session is password-rooted by construction.
+ * `POST /api/v1/auth/session/switch`, which refuses every value in
+ * {@link NON_SWITCHABLE_ORIGIN_AUTH} — so a `switch` session is password-rooted
+ * by construction. `delegated` is ADR-0090.
  */
-export type SessionOriginAuth = "password" | "sso" | "handoff" | "switch";
+export type SessionOriginAuth =
+  "password" | "sso" | "handoff" | "switch" | "delegated";
+
+/**
+ * Sessions that may NOT move to another tenant, and the one place that answers
+ * it — `switch.ts` used to spell the list inline, which is fine for two values
+ * and quietly wrong the moment a third arrives somewhere else.
+ *
+ * What makes a switch safe is that the session's root is a GLOBAL credential no
+ * single tenant can issue. Each value here fails that test in its own way:
+ *
+ * - `sso` — tenant B's IdP administrator can assert `alice@corp.com`, an address
+ *   their own IdP is entitled to claim. Allowing the switch turns that into a
+ *   session in tenant A, where Alice actually works: a complete cross-tenant
+ *   takeover in which no single step breaks a rule (ADR-0088).
+ * - `handoff` — a BFF code minted under one tenant's authority (ADR-0050).
+ * - `delegated` — a session that exists because tenant C granted access to a
+ *   partner (ADR-0090). A grant FOR tenant C that can be walked into tenant D is
+ *   not a grant; it is an entry point.
+ */
+export const NON_SWITCHABLE_ORIGIN_AUTH: readonly SessionOriginAuth[] = [
+  "sso",
+  "handoff",
+  "delegated"
+];
 
 /**
  * How a session came to exist, plus what it looked like when it did

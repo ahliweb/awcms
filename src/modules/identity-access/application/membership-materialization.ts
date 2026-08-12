@@ -34,7 +34,13 @@
  * resolved before the first INSERT, so a rejected acceptance leaves nothing
  * behind but its audit row.
  */
-import { linkIdentityToPrincipal } from "./principal-store";
+import { randomBytes } from "node:crypto";
+
+import {
+  attachIdentityToPrincipal,
+  linkIdentityToPrincipal
+} from "./principal-store";
+import type { PrincipalKind } from "../domain/delegated-access";
 import { hashPassword } from "../../../lib/auth/password";
 import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
 import { grantRolePolicy } from "./access-policy-writer";
@@ -42,7 +48,25 @@ import { grantRolePolicy } from "./access-policy-writer";
 export type MaterializeMembershipInput = {
   loginIdentifier: string;
   displayName: string;
-  password: string;
+  /**
+   * Mints a fresh credential for a human who has none. Mutually exclusive with
+   * `existingPrincipalId`, and exactly one of the two is required.
+   */
+  password?: string;
+  /**
+   * ADR-0090 — the human ALREADY has a global credential and this membership is
+   * a second (or fifth) tenant for them, so no password is minted and the
+   * identity links straight to the principal they already are.
+   *
+   * The per-tenant `password_hash` column still has to hold something. It gets a
+   * hash of a secret nobody knows rather than an empty string: since ADR-0085
+   * authentication reads the PRINCIPAL, but a placeholder that is merely
+   * malformed depends on every future reader treating malformed as "no" — and a
+   * hash of 32 random bytes is a "no" no matter who reads it or how.
+   */
+  existingPrincipalId?: string;
+  /** ADR-0090. Defaults to `"user"`; `"delegated"` is the redemption path. */
+  principalKind?: PrincipalKind;
   /** Marks the profile `verified` — gated by the invitation's own `skip_email_confirmation`, which the platform permission guards at issue time. */
   emailVerified: boolean;
   roleIds: readonly string[];
@@ -114,12 +138,16 @@ export async function materializeMembership(
     emailVerified: input.emailVerified
   });
 
+  const passwordHash = await hashPassword(
+    input.password ?? randomBytes(32).toString("base64url")
+  );
+
   const identityRows = (await tx`
     INSERT INTO awcms_identities
       (tenant_id, profile_id, login_identifier, password_hash, status)
     VALUES
       (${tenantId}, ${profileId}, ${input.loginIdentifier},
-       ${await hashPassword(input.password)}, 'active')
+       ${passwordHash}, 'active')
     RETURNING id
   `) as { id: string }[];
 
@@ -127,11 +155,21 @@ export async function materializeMembership(
 
   // ADR-0086 — an identity with no principal counts NO failed logins, because
   // the lockout counter lives on the principal now. Every identity writer links.
-  await linkIdentityToPrincipal(tx, identityId, input.loginIdentifier);
+  //
+  // ADR-0090 — when the caller already knows WHICH principal, it says so instead
+  // of letting the address resolve one. The two are the same for an ordinary
+  // invitee; they differ for a delegated actor, whose principal is the identity
+  // of a human working out of ANOTHER tenant and must not be re-derived from a
+  // string this tenant supplied.
+  if (input.existingPrincipalId) {
+    await attachIdentityToPrincipal(tx, identityId, input.existingPrincipalId);
+  } else {
+    await linkIdentityToPrincipal(tx, identityId, input.loginIdentifier);
+  }
 
   const tenantUserRows = (await tx`
-    INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
-    VALUES (${tenantId}, ${identityId}, 'active')
+    INSERT INTO awcms_tenant_users (tenant_id, identity_id, status, principal_kind)
+    VALUES (${tenantId}, ${identityId}, 'active', ${input.principalKind ?? "user"})
     RETURNING id
   `) as { id: string }[];
 
