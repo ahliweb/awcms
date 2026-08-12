@@ -110,6 +110,16 @@ export const BOUNDED_BY_DESIGN: readonly {
       "ADR-0085. One row per HUMAN, and bounded by a table that already exists rather than by an argument of its own: a principal is created only when an identity is, and `sql/112` derives the whole population from `SELECT DISTINCT lower(btrim(login_identifier)) FROM awcms_identities`. It therefore cannot grow faster than `awcms_identities` — which sits on the predating ledger — and is strictly SMALLER, because one human in three tenants is three identities and one principal. An age-based purge would be catastrophic rather than merely wrong: deleting a principal deletes the credential a person logs in with across every tenant at once, and the recovery is a restore, which is exactly why `awcms_app` is denied DELETE on it entirely."
   },
   {
+    table: "awcms_principal_mfa_factors",
+    reason:
+      "ADR-0087. At most ONE live factor per human, by the partial unique index on `(principal_id, factor_type) WHERE status <> 'disabled'`, so the live population is bounded by `awcms_principals` — itself bounded by the row above. Disabled rows accumulate only when a person re-enrols or an admin resets them, which is a support event rather than traffic, and they are what the ADR keeps deliberately: `disabled_by_tenant_id` on a disabled row is the ONLY place that answers 'why did my MFA disappear', since FORCE RLS makes an audit row in the reached tenant impossible. An age-based purge would delete exactly that answer, and — worse — could delete a LIVE factor, silently turning off a person's second factor everywhere at once."
+  },
+  {
+    table: "awcms_principal_mfa_recovery_codes",
+    reason:
+      "ADR-0087, and bounded by the table above rather than independently: exactly `RECOVERY_CODE_COUNT` (10) rows are written per factor, and every path that issues a new set deletes the old one first (`disable`, `regenerate`, administrative reset). A spent code is UPDATEd with `used_at`, never appended to, so the ceiling is 10 x live factors and does not move with traffic. An age-based purge would delete unused codes from a live set — silently shrinking the recovery path of somebody who has not needed it yet, which is precisely the person it exists for."
+  },
+  {
     table: "awcms_entitlements",
     reason:
       "ADR-0084. The catalogue of entitlement NAMES, written only by a migration — `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` denies `awcms_app` every write verb on it, so no request path can add a row at all. Its ceiling is the number of names an operator has authored, and the same argument the `awcms_permissions` row makes for itself: a catalogue that grows with deployments rather than with traffic."

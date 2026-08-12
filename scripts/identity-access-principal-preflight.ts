@@ -29,6 +29,20 @@
  * That is sound for the blocking finding by construction: a within-tenant
  * collision is, by definition, inside one tenant. The cross-tenant counts are
  * aggregated across the loop.
+ *
+ * ## The `tenant_id` predicate is explicit, because RLS alone was not enough
+ *
+ * This shipped relying on RLS to scope each pass, and that is WRONG WHEN RUN AS
+ * THE OWNER: a superuser or the migration role bypasses RLS entirely, so every
+ * pass read every identity in the installation and re-tagged it with whichever
+ * tenant's turn it was. One human legitimately working in two tenants — the very
+ * case principals exist for — was then reported as TWO BLOCKING within-tenant
+ * collisions, telling an operator to decide which of two real accounts was a
+ * duplicate. The most dangerous shape a census can take: confidently wrong, in
+ * the direction of deleting something.
+ *
+ * Found while running the ADR-0087 sibling census against a seeded database, not
+ * by review — both scripts had the same defect and neither is visible in a diff.
  */
 import { getDatabaseClient } from "../src/lib/database/client";
 import { withTenantOrThrow } from "../src/lib/database/tenant-context";
@@ -53,6 +67,7 @@ async function main(): Promise<void> {
     const rows = await withTenantOrThrow(sql, tenant.id, async (tx) => {
       return (await tx`
         SELECT id, login_identifier FROM awcms_identities
+        WHERE tenant_id = ${tenant.id}
         ORDER BY login_identifier
       `) as IdentityRow[];
     });

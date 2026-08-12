@@ -12,11 +12,19 @@
  * Runs in the dedicated legacy `bun test <files>` step, separate from the
  * `tests/integration/` harness suite (they collide in one process).
  *
+ * ADR-0087 moved the factor and its recovery codes onto the PRINCIPAL, so what
+ * these tests assert about tenancy changed shape rather than strength. There is
+ * no longer an RLS policy on the factor table — the row is global on purpose,
+ * because one human has one authenticator — and the isolation that remains is
+ * the identity → principal hop being keyed on `(tenant_id, id)`. The tests
+ * below pin BOTH halves: the same human authenticating in two tenants with one
+ * enrolment, and an identity id from another tenant resolving to nothing.
+ *
  * MUTATION PROOF (repo security-readiness discipline): removing the replay CAS
- * predicate `AND last_used_step < ${matchedStep}` in
- * `consumeFactorCredential` makes "rejects a concurrent replay of one timestep"
- * go RED (both requests win). Removing the `tenant_id` predicate from
- * `findActiveMfaFactor` makes "cross-tenant read returns nothing" go RED.
+ * predicate `AND last_used_step < ${matchedStep}` in `advanceLastUsedStep` makes
+ * "rejects a concurrent replay of one timestep" go RED (both requests win).
+ * Removing the `tenant_id` predicate from `readPrincipalId` makes "an identity id
+ * from ANOTHER tenant resolves to no factor" go RED.
  *
  * No `mock.module` anywhere — it mutates the live module namespace in place and
  * leaks into every file that runs afterwards in the same process.
@@ -37,6 +45,8 @@ import {
   verifyStepUpFactor,
   verifyTotpEnrollment
 } from "../src/modules/identity-access/application/mfa";
+import { linkIdentityToPrincipal } from "../src/modules/identity-access/application/principal-store";
+import { GLOBAL_TABLE_FORBIDDEN_PRIVILEGES } from "../scripts/security-readiness";
 
 const DATABASE_URL =
   process.env.MFA_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -58,8 +68,24 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
   });
 
   afterAll(async () => {
+    // ADR-0087 — factors and recovery codes are GLOBAL now, so dropping a tenant
+    // no longer takes them with it. Worse for teardown: one principal can be
+    // shared by identities in SEVERAL of these tenants (the cross-tenant tests
+    // below create exactly that), so the principal rows can only be deleted once
+    // every tenant has released its identities. Collected during the loop,
+    // deleted after it.
+    const principalIds = new Set<string>();
+
     for (const tenantId of createdTenantIds) {
       await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+
+      const principals = (await sql`
+        SELECT DISTINCT principal_id FROM awcms_identities
+        WHERE tenant_id = ${tenantId} AND principal_id IS NOT NULL
+      `) as { principal_id: string }[];
+
+      for (const row of principals) principalIds.add(row.principal_id);
+
       await sql`DELETE FROM awcms_identity_mfa_recovery_codes WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_mfa_challenges WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_identity_mfa_factors WHERE tenant_id = ${tenantId}`;
@@ -69,6 +95,13 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
       await sql`DELETE FROM awcms_tenant_mfa_policies WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_tenants WHERE id = ${tenantId}`;
     }
+
+    for (const principalId of principalIds) {
+      await sql`DELETE FROM awcms_principal_mfa_recovery_codes WHERE principal_id = ${principalId}`;
+      await sql`DELETE FROM awcms_principal_mfa_factors WHERE principal_id = ${principalId}`;
+      await sql`DELETE FROM awcms_principals WHERE id = ${principalId}`;
+    }
+
     await sql.close({ timeout: 5 });
   });
 
@@ -85,7 +118,21 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     return tenantId;
   }
 
-  async function createIdentity(tenantId: string): Promise<string> {
+  /**
+   * Creates an identity and LINKS it to its principal, which is what the four
+   * real identity writers do (ADR-0085/0086). A helper that skipped the link
+   * would be testing an account shape production does not create — and since
+   * ADR-0087 an unlinked identity has no MFA at all, so the omission would look
+   * like a passing "no factor" assertion.
+   *
+   * `loginIdentifier` is explicit when a test needs the SAME human in two
+   * tenants: the principal is keyed on the normalized address, so sharing the
+   * address is what shares the human.
+   */
+  async function createIdentity(
+    tenantId: string,
+    loginIdentifier = `u-${Math.random().toString(36).slice(2)}@x.test`
+  ): Promise<string> {
     const profileRows = (await sql`
       INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
       VALUES (${tenantId}, 'person', 'MFA User')
@@ -93,10 +140,17 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     `) as { id: string }[];
     const idRows = (await sql`
       INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
-      VALUES (${tenantId}, ${profileRows[0]!.id}, ${`u-${Math.random().toString(36).slice(2)}`}, 'x')
+      VALUES (${tenantId}, ${profileRows[0]!.id}, ${loginIdentifier}, 'x')
       RETURNING id
     `) as { id: string }[];
-    return idRows[0]!.id;
+
+    const identityId = idRows[0]!.id;
+
+    await tx(tenantId, (t) =>
+      linkIdentityToPrincipal(t, identityId, loginIdentifier)
+    );
+
+    return identityId;
   }
 
   /** Runs `cb` in a transaction with the tenant GUC set (transaction-local). */
@@ -105,6 +159,18 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
       await t`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
       return cb(t);
     }) as Promise<T>;
+  }
+
+  /** The human behind an identity — the key every MFA row now hangs from. */
+  async function principalOf(identityId: string): Promise<string> {
+    const rows = (await sql`
+      SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
+    `) as { principal_id: string | null }[];
+
+    const principalId = rows[0]?.principal_id;
+    if (!principalId) throw new Error("identity has no principal");
+
+    return principalId;
   }
 
   /** Enrolls + activates a TOTP factor, returning the raw secret buffer. */
@@ -311,18 +377,34 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     const result = await tx(tenantId, (t) =>
       adminResetMfa(t, tenantId, identityId, new Date())
     );
-    expect(result).toEqual({ ok: true, hadFactor: true });
+    expect(result).toEqual({
+      ok: true,
+      hadFactor: true,
+      crossTenantReach: true
+    });
 
     const status = await tx(tenantId, (t) =>
       getMfaStatus(t, tenantId, identityId)
     );
     expect(status.enabled).toBe(false);
 
+    const principalId = await principalOf(identityId);
+
     const codes = (await sql`
-      SELECT count(*)::int AS n FROM awcms_identity_mfa_recovery_codes
-      WHERE tenant_id = ${tenantId} AND identity_id = ${identityId}
+      SELECT count(*)::int AS n FROM awcms_principal_mfa_recovery_codes
+      WHERE principal_id = ${principalId}
     `) as { n: number }[];
     expect(codes[0]!.n).toBe(0);
+
+    // ADR-0087's trace. It is the only artefact that survives on the side of the
+    // human who lost the factor, because FORCE RLS refuses an audit row carrying
+    // another tenant's id and enumerating the reached tenants would be a
+    // membership oracle.
+    const disabledBy = (await sql`
+      SELECT disabled_by_tenant_id FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${principalId} AND status = 'disabled'
+    `) as { disabled_by_tenant_id: string | null }[];
+    expect(disabledBy[0]!.disabled_by_tenant_id).toBe(tenantId);
 
     const missing = await tx(tenantId, (t) =>
       adminResetMfa(
@@ -372,7 +454,12 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     expect(wrongCode).toEqual({ ok: false, code: "MFA_CHALLENGE_INVALID" });
   });
 
-  test("new MFA tables have RLS ENABLE + FORCE", async () => {
+  test("the TENANT-scoped MFA tables have RLS ENABLE + FORCE", async () => {
+    // The two that ADR-0087 deliberately left behind, plus the two legacy tables
+    // kept as history. A challenge is ONE login attempt at ONE tenant (global
+    // would let tenant A's challenge become a session at tenant B) and a policy
+    // is a tenant's own product decision (global would hand one tenant authority
+    // over another's security posture).
     const rows = (await sql`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
@@ -394,23 +481,149 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     }
   });
 
-  test("application scoping denies cross-tenant factor reads", async () => {
+  test("the PRINCIPAL MFA tables are RLS-free on purpose, and declared as such", async () => {
+    // Not an omission — a factor belongs to a human, and there is no tenant
+    // column for a policy to compare against. The claim is asserted in both
+    // places at once so the two cannot drift: the database says no RLS, and
+    // `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` says an operator decided that. A table
+    // with neither would be caught by `checkRuntimeRoleGrants`' fail-closed
+    // branch; a table with only the declaration would be a comment.
+    const rows = (await sql`
+      SELECT relname, relrowsecurity
+      FROM pg_class
+      WHERE relname IN (
+        'awcms_principal_mfa_factors',
+        'awcms_principal_mfa_recovery_codes'
+      )
+    `) as { relname: string; relrowsecurity: boolean }[];
+
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expect(row.relrowsecurity).toBe(false);
+      expect(
+        Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES).includes(row.relname)
+      ).toBe(true);
+    }
+  });
+
+  test("ONE enrolment authenticates the same human in EVERY tenant", async () => {
+    // The feature ADR-0087 exists for, stated as a test rather than as prose.
+    // Before it, a person in three tenants carried three TOTP secrets because
+    // the product told them to; now the factor is theirs.
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const shared = `shared-${Math.random().toString(36).slice(2)}@x.test`;
+    const identityA = await createIdentity(tenantA, shared);
+    const identityB = await createIdentity(tenantB, shared);
+
+    const enrollAt = new Date("2026-07-19T10:00:00Z");
+    const secret = await enrollActive(tenantA, identityA, enrollAt);
+
+    // Enrolled in A only, yet tenant B already reports MFA on — because it is
+    // the same human, and the row is keyed on them.
+    const statusB = await tx(tenantB, (t) =>
+      getMfaStatus(t, tenantB, identityB)
+    );
+    expect(statusB.enabled).toBe(true);
+
+    // And it actually VERIFIES there: the secret enrolled in A satisfies a
+    // step-up in B.
+    const at = new Date(enrollAt.getTime() + 120_000);
+    const code = generateTotpCode(secret, at.getTime(), CODE_OPTS);
+    const stepUpB = await tx(tenantB, (t) =>
+      verifyStepUpFactor(t, tenantB, identityB, { code }, MFA_ENV, at)
+    );
+    expect(stepUpB).toEqual({ ok: true });
+
+    // A DIFFERENT human in the same tenant is unaffected — the factor is shared
+    // by person, not by tenant.
+    const strangerB = await createIdentity(tenantB);
+    const strangerStatus = await tx(tenantB, (t) =>
+      getMfaStatus(t, tenantB, strangerB)
+    );
+    expect(strangerStatus.enabled).toBe(false);
+  });
+
+  test("an identity id from ANOTHER tenant resolves to no factor", async () => {
+    // What replaces the old "RLS hides the factor row" proof. The row is global
+    // now, so the isolation lives in the identity → principal hop being keyed on
+    // `(tenant_id, id)`. Removing that predicate from `readPrincipalId` turns
+    // this red — which is the whole reason the predicate is written even though
+    // FORCE RLS would also cut it down under `withTenant`.
     const tenantA = await createTenant();
     const tenantB = await createTenant();
     const identityA = await createIdentity(tenantA);
     await enrollActive(tenantA, identityA, new Date("2026-07-19T10:00:00Z"));
 
-    // Tenant B cannot see tenant A's factor via the scoped lookup.
     const asB = await tx(tenantB, (t) =>
       findActiveMfaFactor(t, tenantB, identityA)
     );
     expect(asB).toBeNull();
 
-    // Sanity: tenant A does see it.
+    // Sanity: tenant A does see it, so the null above is not a blanket denial.
     const asA = await tx(tenantA, (t) =>
       findActiveMfaFactor(t, tenantA, identityA)
     );
     expect(asA).not.toBeNull();
+  });
+
+  test("an administrative reset in one tenant reaches the human's OTHER tenants", async () => {
+    // The consequence ADR-0087 declares rather than hides: this is the only
+    // place in the repo where a tenant admin's action changes state another
+    // tenant depends on. The test exists so the reach is a pinned property and
+    // not something a later refactor can quietly narrow back to one tenant —
+    // which would leave the person locked out where the admin could not reach.
+    const tenantA = await createTenant();
+    const tenantB = await createTenant();
+    const shared = `reset-${Math.random().toString(36).slice(2)}@x.test`;
+    const identityA = await createIdentity(tenantA, shared);
+    const identityB = await createIdentity(tenantB, shared);
+
+    await enrollActive(tenantB, identityB, new Date("2026-07-19T10:00:00Z"));
+
+    const result = await tx(tenantA, (t) =>
+      adminResetMfa(t, tenantA, identityA, new Date())
+    );
+    expect(result).toEqual({
+      ok: true,
+      hadFactor: true,
+      crossTenantReach: true
+    });
+
+    // Tenant B's user has lost the factor they enrolled in tenant B.
+    const statusB = await tx(tenantB, (t) =>
+      getMfaStatus(t, tenantB, identityB)
+    );
+    expect(statusB.enabled).toBe(false);
+
+    // And the row says who ordered it — the acting tenant, recorded on the
+    // human's side because no audit row can be written into tenant B's log.
+    const rows = (await sql`
+      SELECT disabled_by_tenant_id FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(identityA)}
+    `) as { disabled_by_tenant_id: string | null }[];
+    expect(rows[0]!.disabled_by_tenant_id).toBe(tenantA);
+  });
+
+  test("a self-service disable records NO ordering tenant", async () => {
+    // `disabled_by_tenant_id` answers "who took my MFA away". Stamping the
+    // tenant somebody happened to be signed into while disabling their own
+    // factor would read, months later, as an administrative reset that never
+    // happened.
+    const tenantId = await createTenant();
+    const identityId = await createIdentity(tenantId);
+    await enrollActive(tenantId, identityId, new Date("2026-07-19T10:00:00Z"));
+
+    const disabled = await tx(tenantId, (t) =>
+      disableMfa(t, tenantId, identityId, new Date())
+    );
+    expect(disabled.ok).toBe(true);
+
+    const rows = (await sql`
+      SELECT disabled_by_tenant_id FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(identityId)}
+    `) as { disabled_by_tenant_id: string | null }[];
+    expect(rows[0]!.disabled_by_tenant_id).toBeNull();
   });
 
   test("RLS FORCE denies cross-tenant reads for a non-superuser role", async () => {
@@ -435,14 +648,26 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
       const tenantA = await createTenant();
       const tenantB = await createTenant();
       const identityA = await createIdentity(tenantA);
-      await enrollActive(tenantA, identityA, new Date("2026-07-19T10:00:00Z"));
+      const at = new Date("2026-07-19T10:00:00Z");
+      await enrollActive(tenantA, identityA, at);
+
+      // The subject is the CHALLENGE, and since ADR-0087 it has to be. The
+      // factor row moved to a global table with no policy to prove, and running
+      // this probe against it would assert nothing while looking unchanged — the
+      // most expensive kind of green. The challenge is the MFA table that is
+      // still tenant-scoped, and the ADR's reason is exactly why it must stay
+      // that way: a challenge issued by tenant A becoming visible to tenant B is
+      // a challenge tenant B could exchange for a session.
+      await tx(tenantA, (t) =>
+        createMfaChallenge(t, tenantA, identityA, 300, at)
+      );
 
       // Control on the control: as awcms_app scoped to tenant A, the row IS
       // visible — so an empty result for tenant B below cannot be a false
       // positive from an unrelated cause (RLS blanket-denying everything).
       const visibleToA = (await appSql.begin(async (t) => {
         await t`SELECT set_config('app.current_tenant_id', ${tenantA}, true)`;
-        return t`SELECT id FROM awcms_identity_mfa_factors WHERE identity_id = ${identityA}`;
+        return t`SELECT id FROM awcms_mfa_challenges WHERE identity_id = ${identityA}`;
       })) as { id: string }[];
       expect(visibleToA.length).toBe(1);
 
@@ -451,7 +676,7 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
       // WHERE tenant_id clause. This is the strong RLS proof.
       const rows = (await appSql.begin(async (t) => {
         await t`SELECT set_config('app.current_tenant_id', ${tenantB}, true)`;
-        return t`SELECT id FROM awcms_identity_mfa_factors WHERE identity_id = ${identityA}`;
+        return t`SELECT id FROM awcms_mfa_challenges WHERE identity_id = ${identityA}`;
       })) as { id: string }[];
       expect(rows.length).toBe(0);
     } finally {
@@ -531,8 +756,8 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     expect(ok).toEqual({ ok: true });
 
     const row = (await sql`
-      SELECT failed_verify_count, locked_until FROM awcms_identity_mfa_factors
-      WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
+      SELECT failed_verify_count, locked_until FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(identityId)} AND status = 'active'
     `) as { failed_verify_count: number; locked_until: Date | null }[];
     expect(row[0]!.failed_verify_count).toBe(0);
     expect(row[0]!.locked_until).toBeNull();
@@ -586,8 +811,8 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
     expect(whileLocked).toEqual({ ok: false, code: "MFA_LOCKED" });
 
     const row = (await sql`
-      SELECT locked_until FROM awcms_identity_mfa_factors
-      WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
+      SELECT locked_until FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(identityId)} AND status = 'active'
     `) as { locked_until: Date | null }[];
     expect(row[0]!.locked_until).not.toBeNull();
     expect(new Date(row[0]!.locked_until!).getTime()).toBeGreaterThan(
@@ -604,9 +829,9 @@ describeOrSkip("MFA (real PostgreSQL)", () => {
 
     // Force the factor into a locked state directly.
     await sql`
-      UPDATE awcms_identity_mfa_factors
+      UPDATE awcms_principal_mfa_factors
       SET locked_until = ${new Date(at.getTime() + 60_000)}
-      WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
+      WHERE principal_id = ${await principalOf(identityId)} AND status = 'active'
     `;
 
     const c = await tx(tenantId, (t) =>

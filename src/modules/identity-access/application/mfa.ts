@@ -43,13 +43,82 @@ import {
   type MfaChallengeDenyReason
 } from "../domain/mfa-policy";
 import { resolveActiveSession } from "./session-lookup";
+import { linkIdentityToPrincipal } from "./principal-store";
+import * as factorStore from "./principal-mfa-store";
 
 const RECOVERY_CODE_COUNT = 10;
 
-async function insertRecoveryCodes(
+/**
+ * ADR-0087 — the identity → principal hop every function below makes.
+ *
+ * The MFA factor belongs to the HUMAN since `sql/114`, but this module's exported
+ * signatures deliberately still take `(tenantId, identityId)`: the HTTP surface is
+ * tenant-scoped by design — you act as a member of a tenant — and only the
+ * STORAGE went global. Keeping the seam here rather than in nine route files is
+ * what let PR 7.3 move the tables without touching a single endpoint.
+ *
+ * `null` means the identity has no principal yet, which for every READ path means
+ * exactly "no factor": a principal-scoped row cannot exist for a human the row
+ * cannot name. Enrollment is the one path that must not accept that answer, and
+ * it uses `requirePrincipalIdForEnrollment` instead.
+ *
+ * ## The tenant predicate stays, and it is not redundant
+ *
+ * `awcms_identities` is FORCE RLS, so under `withTenant` the `tenant_id =` clause
+ * below can never change a result. It is written anyway because THIS is the hop
+ * where a tenant-scoped id becomes the address of a GLOBAL row: every query that
+ * followed it used to carry `tenant_id` itself, and dropping the predicate here
+ * would move the whole module's tenant boundary onto a session GUC set by
+ * somebody else. `adminResetMfa` takes its identity id from a request body, and
+ * anything not routed through `withTenant` (a job, a test connecting as the
+ * migration owner) has no policy standing behind it at all.
+ */
+async function readPrincipalId(
   tx: Bun.SQL,
   tenantId: string,
-  identityId: string,
+  identityId: string
+): Promise<string | null> {
+  const rows = (await tx`
+    SELECT principal_id FROM awcms_identities
+    WHERE tenant_id = ${tenantId} AND id = ${identityId}
+  `) as { principal_id: string | null }[];
+
+  return rows[0]?.principal_id ?? null;
+}
+
+/**
+ * The enrollment path's variant: it LINKS an unlinked identity rather than
+ * failing.
+ *
+ * Every identity writer is supposed to call `linkIdentityToPrincipal` already
+ * (ADR-0085), so reaching the fallback means one of them was missed. Refusing to
+ * enrol would turn that omission into "this person can never turn on MFA", which
+ * is a security control silently withheld from exactly the accounts written by
+ * the path nobody audited. Linking here is idempotent and uses the same writer,
+ * so it converges on the row the missed caller should have made.
+ */
+async function requirePrincipalIdForEnrollment(
+  tx: Bun.SQL,
+  tenantId: string,
+  identityId: string
+): Promise<string | null> {
+  const existing = await readPrincipalId(tx, tenantId, identityId);
+  if (existing) return existing;
+
+  const rows = (await tx`
+    SELECT login_identifier FROM awcms_identities
+    WHERE tenant_id = ${tenantId} AND id = ${identityId}
+  `) as { login_identifier: string }[];
+
+  const loginIdentifier = rows[0]?.login_identifier;
+  if (!loginIdentifier) return null;
+
+  return linkIdentityToPrincipal(tx, identityId, loginIdentifier);
+}
+
+async function insertRecoveryCodes(
+  tx: Bun.SQL,
+  principalId: string,
   factorId: string
 ): Promise<string[]> {
   const rawCodes: string[] = [];
@@ -58,11 +127,12 @@ async function insertRecoveryCodes(
     const rawCode = generateRecoveryCode();
     rawCodes.push(rawCode);
 
-    await tx`
-      INSERT INTO awcms_identity_mfa_recovery_codes
-        (tenant_id, identity_id, factor_id, code_hash)
-      VALUES (${tenantId}, ${identityId}, ${factorId}, ${hashRecoveryCode(rawCode)})
-    `;
+    await factorStore.insertRecoveryCodeHash(
+      tx,
+      principalId,
+      factorId,
+      hashRecoveryCode(rawCode)
+    );
   }
 
   return rawCodes;
@@ -79,21 +149,22 @@ export async function getMfaStatus(
   tenantId: string,
   identityId: string
 ): Promise<MfaStatus> {
-  const rows = (await tx`
-    SELECT factor_type, activated_at
-    FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
-  `) as { factor_type: "totp"; activated_at: Date }[];
-  const row = rows[0];
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
 
-  if (!row) {
+  if (!principalId) return { enabled: false };
+
+  const factor = await factorStore.findActiveFactorSummary(tx, principalId);
+
+  if (!factor) {
     return { enabled: false };
   }
 
   return {
     enabled: true,
-    factorType: row.factor_type,
-    activatedAt: new Date(row.activated_at).toISOString()
+    factorType: factor.factorType,
+    activatedAt: factor.activatedAt
+      ? new Date(factor.activatedAt).toISOString()
+      : undefined
   };
 }
 
@@ -121,19 +192,24 @@ export async function startTotpEnrollment(
     return { ok: false, code: "MFA_MISCONFIGURED" };
   }
 
-  const activeRows = await tx`
-    SELECT id FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
-  `;
+  const principalId = await requirePrincipalIdForEnrollment(
+    tx,
+    tenantId,
+    identityId
+  );
 
-  if (activeRows.length > 0) {
+  // No identity row for this tenant+id. Reported as misconfigured rather than
+  // "already active": the caller proved a session or an enrollment grant to get
+  // here, so an absent identity is a server-side inconsistency, not a user error.
+  if (!principalId) {
+    return { ok: false, code: "MFA_MISCONFIGURED" };
+  }
+
+  if (await factorStore.findActiveFactorSummary(tx, principalId)) {
     return { ok: false, code: "MFA_ALREADY_ACTIVE" };
   }
 
-  await tx`
-    DELETE FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'pending'
-  `;
+  await factorStore.deletePendingFactors(tx, principalId);
 
   const secret = generateTotpSecret();
   const ciphertext = encryptMfaSecret(secret, key);
@@ -141,11 +217,7 @@ export async function startTotpEnrollment(
   const periodSec = resolveTotpPeriodSec(env);
   const issuer = resolveTotpIssuer(env);
 
-  await tx`
-    INSERT INTO awcms_identity_mfa_factors
-      (tenant_id, identity_id, factor_type, secret_ciphertext, status, created_at, updated_at)
-    VALUES (${tenantId}, ${identityId}, 'totp', ${ciphertext}, 'pending', ${now}, ${now})
-  `;
+  await factorStore.insertPendingFactor(tx, principalId, ciphertext, now);
 
   return {
     ok: true,
@@ -182,12 +254,13 @@ export async function verifyTotpEnrollment(
     return { ok: false, code: "MFA_MISCONFIGURED" };
   }
 
-  const rows = (await tx`
-    SELECT id, secret_ciphertext
-    FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'pending'
-  `) as { id: string; secret_ciphertext: string }[];
-  const row = rows[0];
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
+
+  if (!principalId) {
+    return { ok: false, code: "MFA_ENROLLMENT_NOT_FOUND" };
+  }
+
+  const row = await factorStore.findPendingFactor(tx, principalId);
 
   if (!row) {
     return { ok: false, code: "MFA_ENROLLMENT_NOT_FOUND" };
@@ -210,19 +283,9 @@ export async function verifyTotpEnrollment(
     return { ok: false, code: "MFA_INVALID_CODE" };
   }
 
-  await tx`
-    UPDATE awcms_identity_mfa_factors
-    SET status = 'active', activated_at = ${now}, updated_at = ${now},
-        last_used_step = ${matchedStep}
-    WHERE id = ${row.id}
-  `;
+  await factorStore.activateFactor(tx, row.id, matchedStep, now);
 
-  const recoveryCodes = await insertRecoveryCodes(
-    tx,
-    tenantId,
-    identityId,
-    row.id
-  );
+  const recoveryCodes = await insertRecoveryCodes(tx, principalId, row.id);
 
   return { ok: true, recoveryCodes };
 }
@@ -236,25 +299,23 @@ export async function disableMfa(
   identityId: string,
   now: Date
 ): Promise<DisableMfaResult> {
-  const rows = await tx`
-    SELECT id FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status IN ('active', 'pending')
-  `;
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
 
-  if (rows.length === 0) {
+  if (!principalId) {
     return { ok: false, code: "MFA_NOT_ACTIVE" };
   }
 
-  await tx`
-    UPDATE awcms_identity_mfa_factors
-    SET status = 'disabled', disabled_at = ${now}, updated_at = ${now}
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status IN ('active', 'pending')
-  `;
+  const live = await factorStore.findLiveFactorIds(tx, principalId);
 
-  await tx`
-    DELETE FROM awcms_identity_mfa_recovery_codes
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId}
-  `;
+  if (live.length === 0) {
+    return { ok: false, code: "MFA_NOT_ACTIVE" };
+  }
+
+  // `null`: nobody ordered this. Self-service disable is the person acting on
+  // their own factor, and stamping the tenant they happened to be signed into
+  // would read, later, like an administrative reset that never happened.
+  await factorStore.disableLiveFactors(tx, principalId, now, null);
+  await factorStore.deleteRecoveryCodesForPrincipal(tx, principalId);
 
   return { ok: true };
 }
@@ -267,52 +328,49 @@ export async function regenerateRecoveryCodes(
   tenantId: string,
   identityId: string
 ): Promise<RegenerateRecoveryCodesResult> {
-  const rows = (await tx`
-    SELECT id FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
-  `) as { id: string }[];
-  const row = rows[0];
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
 
-  if (!row) {
+  if (!principalId) {
     return { ok: false, code: "MFA_NOT_ACTIVE" };
   }
 
-  await tx`
-    DELETE FROM awcms_identity_mfa_recovery_codes
-    WHERE tenant_id = ${tenantId} AND factor_id = ${row.id}
-  `;
+  const factor = await factorStore.findActiveFactorSummary(tx, principalId);
 
-  const recoveryCodes = await insertRecoveryCodes(
-    tx,
-    tenantId,
-    identityId,
-    row.id
-  );
+  if (!factor) {
+    return { ok: false, code: "MFA_NOT_ACTIVE" };
+  }
+
+  await factorStore.deleteRecoveryCodesForFactor(tx, factor.id);
+
+  const recoveryCodes = await insertRecoveryCodes(tx, principalId, factor.id);
 
   return { ok: true, recoveryCodes };
 }
 
-export type ActiveMfaFactor = {
-  id: string;
-  secret_ciphertext: string;
-  last_used_step: number;
-  failed_verify_count: number;
-  locked_until: Date | null;
-};
+/**
+ * Re-exported so `login.ts` and the verify routes keep one name for the shape.
+ * Since ADR-0087 it is the PRINCIPAL's factor — the same human authenticates in
+ * every tenant they belong to with one enrolment.
+ */
+export type ActiveMfaFactor = factorStore.PrincipalFactor;
 
-/** Used by `login.ts` (and step-up) to fetch the identity's active factor, if any. */
+/**
+ * The active factor for whoever this identity is, or `null`.
+ *
+ * Still keyed by `(tenantId, identityId)` at this boundary even though the row it
+ * returns is principal-scoped: callers hold an identity, and resolving the human
+ * is this module's job rather than every route's.
+ */
 export async function findActiveMfaFactor(
   tx: Bun.SQL,
   tenantId: string,
   identityId: string
 ): Promise<ActiveMfaFactor | null> {
-  const rows = (await tx`
-    SELECT id, secret_ciphertext, last_used_step, failed_verify_count, locked_until
-    FROM awcms_identity_mfa_factors
-    WHERE tenant_id = ${tenantId} AND identity_id = ${identityId} AND status = 'active'
-  `) as ActiveMfaFactor[];
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
 
-  return rows[0] ?? null;
+  if (!principalId) return null;
+
+  return factorStore.findActiveFactor(tx, principalId);
 }
 
 export async function createMfaChallenge(
@@ -494,7 +552,7 @@ type ConsumeFactorResult = { matched: boolean; misconfigured: boolean };
  */
 async function consumeFactorCredential(
   tx: Bun.SQL,
-  tenantId: string,
+  principalId: string,
   factor: ActiveMfaFactor,
   credentials: FactorCredential,
   env: NodeJS.ProcessEnv,
@@ -521,14 +579,14 @@ async function consumeFactorCredential(
       );
 
       if (matchedStep !== null && matchedStep > factor.last_used_step) {
-        const advancedRows = (await tx`
-          UPDATE awcms_identity_mfa_factors
-          SET last_used_step = ${matchedStep}, updated_at = ${now}
-          WHERE id = ${factor.id} AND last_used_step < ${matchedStep}
-          RETURNING id
-        `) as { id: string }[];
+        const advanced = await factorStore.advanceLastUsedStep(
+          tx,
+          factor.id,
+          matchedStep,
+          now
+        );
 
-        return { matched: advancedRows.length > 0, misconfigured: false };
+        return { matched: advanced, misconfigured: false };
       }
 
       return { matched: false, misconfigured: false };
@@ -538,17 +596,15 @@ async function consumeFactorCredential(
   }
 
   if (credentials.recoveryCode) {
-    const hash = hashRecoveryCode(credentials.recoveryCode);
+    const consumed = await factorStore.consumeRecoveryCode(
+      tx,
+      principalId,
+      factor.id,
+      hashRecoveryCode(credentials.recoveryCode),
+      now
+    );
 
-    const consumedRows = (await tx`
-      UPDATE awcms_identity_mfa_recovery_codes
-      SET used_at = ${now}
-      WHERE tenant_id = ${tenantId} AND factor_id = ${factor.id}
-        AND code_hash = ${hash} AND used_at IS NULL
-      RETURNING id
-    `) as { id: string }[];
-
-    return { matched: consumedRows.length > 0, misconfigured: false };
+    return { matched: consumed, misconfigured: false };
   }
 
   return { matched: false, misconfigured: false };
@@ -570,7 +626,7 @@ export type FactorVerifyStatus =
  */
 async function verifyFactorWithLockout(
   tx: Bun.SQL,
-  tenantId: string,
+  principalId: string,
   factor: ActiveMfaFactor,
   credentials: FactorCredential,
   env: NodeJS.ProcessEnv,
@@ -584,13 +640,7 @@ async function verifyFactorWithLockout(
   // wrong-code verifies across DISTINCT challenges/IPs could lost-update so the
   // factor never reached the threshold — re-opening the exact cross-challenge/
   // cross-IP brute force this lockout exists to close (auditor HIGH-1 / F4).
-  const lockedRows = (await tx`
-    SELECT failed_verify_count, locked_until
-    FROM awcms_identity_mfa_factors
-    WHERE id = ${factor.id}
-    FOR UPDATE
-  `) as { failed_verify_count: number; locked_until: Date | null }[];
-  const current = lockedRows[0];
+  const current = await factorStore.lockFactorForVerify(tx, factor.id);
 
   if (
     current?.locked_until &&
@@ -601,7 +651,7 @@ async function verifyFactorWithLockout(
 
   const consumed = await consumeFactorCredential(
     tx,
-    tenantId,
+    principalId,
     factor,
     credentials,
     env,
@@ -615,11 +665,7 @@ async function verifyFactorWithLockout(
   }
 
   if (consumed.matched) {
-    await tx`
-      UPDATE awcms_identity_mfa_factors
-      SET failed_verify_count = 0, locked_until = NULL, updated_at = ${now}
-      WHERE id = ${factor.id}
-    `;
+    await factorStore.clearFactorFailures(tx, factor.id, now);
     return "matched";
   }
 
@@ -632,17 +678,13 @@ async function verifyFactorWithLockout(
   // read-modify-write), under the row lock held above — mirrors the replay/
   // recovery compare-and-swap. Once the (n+1)-th failure reaches the cap the
   // counter resets and the factor is locked for the cooldown window.
-  await tx`
-    UPDATE awcms_identity_mfa_factors
-    SET failed_verify_count =
-          CASE WHEN failed_verify_count + 1 >= ${maxAttempts} THEN 0
-               ELSE failed_verify_count + 1 END,
-        locked_until =
-          CASE WHEN failed_verify_count + 1 >= ${maxAttempts} THEN ${lockedUntil}
-               ELSE locked_until END,
-        updated_at = ${now}
-    WHERE id = ${factor.id}
-  `;
+  await factorStore.recordFactorVerifyFailure(
+    tx,
+    factor.id,
+    maxAttempts,
+    lockedUntil,
+    now
+  );
 
   return "failed";
 }
@@ -707,11 +749,17 @@ export async function verifyMfaChallenge(
     return { ok: false, code: "MFA_CHALLENGE_INVALID" };
   }
 
-  const factor = await findActiveMfaFactor(
+  // Resolved once and reused for the verification below, rather than calling
+  // `findActiveMfaFactor` and then resolving the human again for the credential
+  // consumption: two hops would be two chances to disagree about who this is.
+  const principalId = await readPrincipalId(
     tx,
     tenantId,
     challenge!.identity_id
   );
+  const factor = principalId
+    ? await factorStore.findActiveFactor(tx, principalId)
+    : null;
 
   if (!factor) {
     // MFA was disabled between login and challenge completion — burn the
@@ -724,7 +772,7 @@ export async function verifyMfaChallenge(
 
   const status = await verifyFactorWithLockout(
     tx,
-    tenantId,
+    principalId!,
     factor,
     credentials,
     env,
@@ -781,7 +829,10 @@ export async function verifyStepUpFactor(
   env: NodeJS.ProcessEnv,
   now: Date
 ): Promise<VerifyStepUpResult> {
-  const factor = await findActiveMfaFactor(tx, tenantId, identityId);
+  const principalId = await readPrincipalId(tx, tenantId, identityId);
+  const factor = principalId
+    ? await factorStore.findActiveFactor(tx, principalId)
+    : null;
 
   if (!factor) {
     return { ok: false, code: "MFA_NOT_ACTIVE" };
@@ -789,7 +840,7 @@ export async function verifyStepUpFactor(
 
   const status = await verifyFactorWithLockout(
     tx,
-    tenantId,
+    principalId!,
     factor,
     credentials,
     env,
@@ -810,17 +861,57 @@ export async function verifyStepUpFactor(
 }
 
 export type AdminResetMfaResult =
-  | { ok: true; hadFactor: boolean }
+  | {
+      ok: true;
+      hadFactor: boolean;
+      /**
+       * Whether this reset took away something whose effect leaves the acting
+       * tenant. True exactly when a factor was really revoked, because since
+       * ADR-0087 the revoked row IS the human's only authenticator.
+       *
+       * It is a statement about KIND, not a count, and deliberately not a list:
+       * enumerating the other tenants a person works in would be a cross-tenant
+       * membership oracle handed to whoever holds `mfa_admin.reset`. Whether
+       * other tenants exist is therefore left undetermined — the audit row says
+       * the action reached outside, never where to.
+       *
+       * Returned rather than audited here because writing an audit row is the
+       * route's job (this module takes no `correlationId`), and it is a separate
+       * field from `hadFactor` because knowing that a factor is principal-scoped
+       * is this module's knowledge, not the route's.
+       */
+      crossTenantReach: boolean;
+    }
   | { ok: false; code: "MFA_TARGET_NOT_FOUND" };
 
 /**
- * Administratively resets (disables) another identity's MFA factor and deletes
- * its recovery codes. High-risk: the route gates this on a dedicated
- * permission, demands a reason, and audits at `critical`. Self-reset is
- * forbidden at the route (an admin must use self-service disable behind their
- * own already-MFA'd session), so this never becomes a factor-bypass for the
- * caller. Returns `hadFactor: false` when the target had nothing active/pending
- * — the reset is still recorded, but the response tells the operator.
+ * Administratively resets (disables) another human's MFA factor and deletes
+ * their recovery codes.
+ *
+ * High-risk: the route gates this on a dedicated permission, demands a reason,
+ * and audits at `critical`. Self-reset is forbidden at the route (an admin must
+ * use self-service disable behind their own already-MFA'd session), so this never
+ * becomes a factor-bypass for the caller. Returns `hadFactor: false` when the
+ * target had nothing active/pending — the reset is still recorded, but the
+ * response tells the operator.
+ *
+ * ## Since ADR-0087 this reaches OUTSIDE the acting tenant
+ *
+ * The factor belongs to the human, so disabling it removes the second factor the
+ * same person uses in every other tenant they belong to. This is the only place
+ * in the repo where a tenant admin's action changes state another tenant depends
+ * on, and it is deliberate rather than incidental: an operator recovering a
+ * locked-out colleague must be able to actually recover them.
+ *
+ * What makes it defensible is that it cannot happen quietly — but the trace is
+ * `crossTenantReach` on the acting tenant's audit row plus `disabled_by_tenant_id`
+ * on the global factor row, NOT an audit row in each tenant reached. The first
+ * edition of ADR-0087 asked for the latter and it cannot be built: enumerating
+ * `awcms_identities WHERE principal_id = … AND tenant_id <> …` returns zero rows
+ * forever under FORCE RLS, so the code would be green and blind, and writing an
+ * audit row with another tenant's id is refused by that table's policy too. The
+ * only ways through are `SECURITY DEFINER` or a request-time `NO FORCE` toggle,
+ * and the list itself would be a cross-tenant membership oracle. See the ADR.
  */
 export async function adminResetMfa(
   tx: Bun.SQL,
@@ -837,20 +928,39 @@ export async function adminResetMfa(
     return { ok: false, code: "MFA_TARGET_NOT_FOUND" };
   }
 
-  const disabledRows = (await tx`
-    UPDATE awcms_identity_mfa_factors
-    SET status = 'disabled', disabled_at = ${now}, updated_at = ${now}
-    WHERE tenant_id = ${tenantId} AND identity_id = ${targetIdentityId}
-      AND status IN ('active', 'pending')
-    RETURNING id
-  `) as { id: string }[];
+  const principalId = await readPrincipalId(tx, tenantId, targetIdentityId);
 
-  await tx`
-    DELETE FROM awcms_identity_mfa_recovery_codes
-    WHERE tenant_id = ${tenantId} AND identity_id = ${targetIdentityId}
-  `;
+  // An unlinked identity cannot hold a principal-scoped factor, so there is
+  // nothing to disable and nothing to reach. Reported as a successful reset with
+  // `hadFactor: false` — the same answer the pre-ADR-0087 path gave for a target
+  // with no factor, so the route's contract does not change.
+  if (!principalId) {
+    return { ok: true, hadFactor: false, crossTenantReach: false };
+  }
 
-  return { ok: true, hadFactor: disabledRows.length > 0 };
+  // The acting tenant is stamped on the row itself. It is the one place the
+  // reach survives without a tenant writing into another tenant's log, and it is
+  // what answers "why did my MFA disappear" for the person who lost it.
+  const disabled = await factorStore.disableLiveFactors(
+    tx,
+    principalId,
+    now,
+    tenantId
+  );
+
+  await factorStore.deleteRecoveryCodesForPrincipal(tx, principalId);
+
+  const hadFactor = disabled.length > 0;
+
+  return {
+    ok: true,
+    hadFactor,
+    // Only claim reach when something was actually taken away. A reset against a
+    // target who had no factor changes nothing anywhere, and a `critical` audit
+    // row announcing cross-tenant reach for it would be noise that trains
+    // readers to ignore the signal.
+    crossTenantReach: hadFactor
+  };
 }
 
 export type { MfaChallengeDenyReason };

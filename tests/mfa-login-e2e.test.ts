@@ -38,6 +38,7 @@ import {
 } from "../src/lib/auth/totp";
 import { encryptMfaSecret } from "../src/lib/auth/mfa-secret-crypto";
 import { hashRecoveryCode } from "../src/lib/auth/mfa-recovery-code";
+import { linkIdentityToPrincipal } from "../src/modules/identity-access/application/principal-store";
 
 const DATABASE_URL =
   process.env.MFA_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -128,8 +129,21 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
+    // ADR-0087 — the factor rows are GLOBAL, so a tenant delete no longer takes
+    // them with it. Gathered per tenant, deleted after the loop: one principal
+    // can be shared by identities in more than one of these tenants.
+    const principalIds = new Set<string>();
+
     for (const tenantId of createdTenantIds) {
       await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+
+      const principals = (await sql`
+        SELECT DISTINCT principal_id FROM awcms_identities
+        WHERE tenant_id = ${tenantId} AND principal_id IS NOT NULL
+      `) as { principal_id: string }[];
+
+      for (const row of principals) principalIds.add(row.principal_id);
+
       await sql`DELETE FROM awcms_identity_mfa_recovery_codes WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_mfa_challenges WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_identity_mfa_factors WHERE tenant_id = ${tenantId}`;
@@ -149,6 +163,13 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       await sql`DELETE FROM awcms_profiles WHERE tenant_id = ${tenantId}`;
       await sql`DELETE FROM awcms_tenants WHERE id = ${tenantId}`;
     }
+
+    for (const principalId of principalIds) {
+      await sql`DELETE FROM awcms_principal_mfa_recovery_codes WHERE principal_id = ${principalId}`;
+      await sql`DELETE FROM awcms_principal_mfa_factors WHERE principal_id = ${principalId}`;
+      await sql`DELETE FROM awcms_principals WHERE id = ${principalId}`;
+    }
+
     await sql.close({ timeout: 5 });
   });
 
@@ -185,6 +206,12 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
       INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
       VALUES (${tenantId}, ${identity[0]!.id}, 'active') RETURNING id
     `) as { id: string }[];
+
+    // Linked, because the four real identity writers link (ADR-0085/0086) and
+    // since ADR-0087 an unlinked identity cannot hold a factor at all. A helper
+    // that skipped it would seed an account shape production never creates.
+    await linkIdentityToPrincipal(sql, identity[0]!.id, loginIdentifier);
+
     return {
       identityId: identity[0]!.id,
       tenantUserId: tu[0]!.id,
@@ -192,15 +219,26 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     };
   }
 
+  /** The human behind an identity — what every MFA row hangs from since sql/114. */
+  async function principalOf(identityId: string): Promise<string> {
+    const rows = (await sql`
+      SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
+    `) as { principal_id: string | null }[];
+
+    const principalId = rows[0]?.principal_id;
+    if (!principalId) throw new Error("identity has no principal");
+
+    return principalId;
+  }
+
   async function seedActiveFactor(
-    tenantId: string,
     identityId: string,
     secret: Buffer
   ): Promise<string> {
     const rows = (await sql`
-      INSERT INTO awcms_identity_mfa_factors
-        (tenant_id, identity_id, factor_type, secret_ciphertext, status, last_used_step, activated_at)
-      VALUES (${tenantId}, ${identityId}, 'totp', ${encryptMfaSecret(secret, ENC_KEY)}, 'active', -1, now())
+      INSERT INTO awcms_principal_mfa_factors
+        (principal_id, factor_type, secret_ciphertext, status, last_used_step, activated_at)
+      VALUES (${await principalOf(identityId)}, 'totp', ${encryptMfaSecret(secret, ENC_KEY)}, 'active', -1, now())
       RETURNING id
     `) as { id: string }[];
     return rows[0]!.id;
@@ -295,21 +333,22 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     const tenantId = await createTenant();
     const admin = await seedUser(tenantId);
     const secret = generateTotpSecret();
-    await seedActiveFactor(tenantId, admin.identityId, secret);
+    await seedActiveFactor(admin.identityId, secret);
     await grantPermission(tenantId, admin.tenantUserId, "mfa_admin", "reset");
     // Seed a recovery code for step-up (not timestep-bound, avoids collision).
+    const adminPrincipal = await principalOf(admin.identityId);
     const factorRows = (await sql`
-      SELECT id FROM awcms_identity_mfa_factors
-      WHERE tenant_id = ${tenantId} AND identity_id = ${admin.identityId}
+      SELECT id FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${adminPrincipal}
     `) as { id: string }[];
     await sql`
-      INSERT INTO awcms_identity_mfa_recovery_codes (tenant_id, identity_id, factor_id, code_hash)
-      VALUES (${tenantId}, ${admin.identityId}, ${factorRows[0]!.id}, ${hashRecoveryCode("RECOVERY1")})
+      INSERT INTO awcms_principal_mfa_recovery_codes (principal_id, factor_id, code_hash)
+      VALUES (${adminPrincipal}, ${factorRows[0]!.id}, ${hashRecoveryCode("RECOVERY1")})
     `;
 
     // A target user with MFA to be reset.
     const target = await seedUser(tenantId);
-    await seedActiveFactor(tenantId, target.identityId, generateTotpSecret());
+    await seedActiveFactor(target.identityId, generateTotpSecret());
 
     // 1. Admin logs in with password -> MFA challenge.
     const login = await callRoute(loginPOST, {
@@ -371,16 +410,33 @@ describeOrSkip("MFA login flow (real PostgreSQL, route-level)", () => {
     expect(reset.body.data.reset).toBe(true);
 
     const status = (await sql`
-      SELECT status FROM awcms_identity_mfa_factors
-      WHERE tenant_id = ${tenantId} AND identity_id = ${target.identityId}
-    `) as { status: string }[];
+      SELECT status, disabled_by_tenant_id FROM awcms_principal_mfa_factors
+      WHERE principal_id = ${await principalOf(target.identityId)}
+    `) as { status: string; disabled_by_tenant_id: string | null }[];
     expect(status[0]!.status).toBe("disabled");
+    expect(status[0]!.disabled_by_tenant_id).toBe(tenantId);
+
+    // ADR-0087's disclosure, asserted through the ROUTE rather than the module:
+    // the reach must be recorded, and the audit row is where it is recorded. The
+    // ADR makes that a condition of the reach being permitted at all, so a route
+    // that dropped the attribute would be a route doing something it is not
+    // allowed to do — invisibly, since the reset itself would still work.
+    const audit = (await sql`
+      SELECT attributes FROM awcms_audit_events
+      WHERE tenant_id = ${tenantId} AND action = 'mfa_admin_reset'
+    `) as { attributes: Record<string, unknown> }[];
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.attributes.crossTenantReach).toBe(true);
+    expect(audit[0]!.attributes.hadFactor).toBe(true);
+    // What it must NOT carry: the tenants reached. That list is a cross-tenant
+    // membership oracle, and the ADR refuses to build it.
+    expect(JSON.stringify(audit[0]!.attributes)).not.toContain("reachedTenant");
   });
 
   test("F9: MFA enrollment is not an enumeration oracle (wrong password vs unknown identifier are identical)", async () => {
     const tenantId = await createTenant();
     const user = await seedUser(tenantId);
-    await seedActiveFactor(tenantId, user.identityId, generateTotpSecret());
+    await seedActiveFactor(user.identityId, generateTotpSecret());
 
     // Known identity WITH an active factor, WRONG password.
     const knownWrong = await callRoute(loginPOST, {

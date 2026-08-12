@@ -150,6 +150,28 @@ Constraint: unique `(tenant_id, identifier_type, value_hash)`.
 
 Kolom penting: `email_normalized` (unik), `password_hash`, `failed_login_count`, `locked_until`.
 
+### `awcms_principal_mfa_factors`
+
+**Terimplementasi** (`sql/114`, [ADR-0087](../adr/0087-mfa-moves-to-the-principal.md)). Faktor MFA milik **manusia**, bukan identitas per-tenant: satu enrolment mengautentikasi setiap tenant yang ia ikuti. **GLOBAL — tanpa `tenant_id`, tanpa RLS**, berdiri di atas empat kontrol pengganti yang sama dengan `awcms_principals`. Enkripsi secret tidak berubah dari `sql/024`.
+
+Kolom penting: `principal_id`, `factor_type`, `secret_ciphertext`, `status` (`pending`/`active`/`disabled`), `last_used_step` (penjaga replay, juga penyeleksi backfill), `failed_verify_count`, `locked_until`, `disabled_by_tenant_id`.
+
+Constraint: unique parsial `(principal_id, factor_type) WHERE status <> 'disabled'` — **satu faktor hidup per manusia**. Melonggarkannya berarti satu tebakan kode diuji terhadap N secret sekaligus dan `failed_verify_count` tersebar di N baris.
+
+`disabled_by_tenant_id` mencatat tenant yang **memerintahkan** reset administratif (NULL untuk `disable` mandiri). Ia ada karena ADR-0087 menolak menulis baris audit ke setiap tenant terjangkau: FORCE RLS membuat `INSERT` ber-`tenant_id` lain ditolak policy, dan mengenumerasi tenant terjangkau adalah **oracle keanggotaan lintas-tenant**. Tanpa FK — ia menyebut tenant yang pemilik barisnya mungkin sudah tidak ikuti lagi, dan cascade tidak boleh menulis ulang sejarah MFA.
+
+### `awcms_principal_mfa_recovery_codes`
+
+**Terimplementasi** (`sql/114`, ADR-0087). Backup code sekali-pakai milik principal, konstruksi sha256 yang sama dengan `sql/024`. Kolom penting: `principal_id`, `factor_id` (cascade dari faktor), `code_hash`, `used_at`.
+
+Constraint: unique `(principal_id, code_hash)` — **bukan** `code_hash` global, karena tabrakan 40-bit antara dua manusia yang tak berhubungan akan muncul sebagai 23505 → 500, dan error itu sendiri sinyal lintas-akun yang samar.
+
+### `awcms_identity_mfa_factors` / `awcms_identity_mfa_recovery_codes`
+
+**DI-SUPERSEDE** oleh kedua tabel di atas (`sql/114`, ADR-0087). Dipertahankan **terisi sebagai sejarah** mengikuti preseden ADR-0079, dan hak `awcms_app` diturunkan ke `SELECT` saja (`RETIRED_TENANT_TABLE_PRIVILEGES`). Penurunan hak itu yang membuat supersession-nya nyata: tabel faktor lama yang masih bisa DITULIS adalah tempat kedua untuk meng-enroll faktor, dan satu manusia dengan dua faktor kedua yang hanya salah satunya diperiksa login lebih buruk daripada salah satu tabel saja.
+
+`awcms_mfa_challenges` dan `awcms_tenant_mfa_policies` **tidak** ikut pindah dan tetap tenant-scoped di bawah FORCE RLS: sebuah challenge adalah satu percobaan login di satu tenant (global akan membuatnya bisa ditukar menjadi sesi di tenant lain), dan sebuah policy adalah keputusan produk sebuah tenant (global akan memberi satu tenant kuasa atas postur keamanan tenant lain).
+
 ### `awcms_identities`
 
 Login identity **per tenant** (unik pada `(tenant_id, login_identifier)`).

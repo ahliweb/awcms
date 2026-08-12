@@ -207,7 +207,40 @@ describe("the real repository", () => {
       // It is also the entry with the least room for doubt about the
       // alternative: a descriptor here would delete the credential a person logs
       // in with across every tenant at once.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(11);
+      //
+      // **13 since ADR-0087**, and the bar again: is this a third argument, or
+      // the first two with new table names?
+      //
+      // It is a third, and the difference is WHERE the bound is enforced.
+      // Authorship (entries 1-10) and derivation (entry 11) are both arguments
+      // about who writes the rows. `awcms_principal_mfa_factors` is bounded by
+      // the SCHEMA: a partial unique index on `(principal_id, factor_type) WHERE
+      // status <> 'disabled'` means the database REFUSES a second live row for a
+      // human, whoever writes it and however often. `awcms_user_group_members`
+      // cites a unique index too, but as a product of two human-authored sets —
+      // here the index alone caps the live population at one per person.
+      //
+      // The honest half: DISABLED rows are not capped by that index, and they
+      // accumulate on re-enrolment and administrative reset. That part is the
+      // authorship argument, and it is why this is a hybrid rather than a clean
+      // third class — support events, not traffic.
+      //
+      // `awcms_principal_mfa_recovery_codes` is bounded by an application
+      // CONSTANT (`RECOVERY_CODE_COUNT = 10`) with delete-then-insert on every
+      // path that issues a set, so its ceiling is ten times a table that is
+      // itself capped one line up. Spending a code UPDATEs it; nothing appends.
+      //
+      // And the alternative is the same shape as ADR-0085's: `executionMode:
+      // 'generic'` is age-only with no status predicate — the only two modes are
+      // `generic` and `delegated`, and there is no owner mechanism to delegate to
+      // — so a descriptor here would delete LIVE factors, switching off a
+      // person's second factor in every tenant at once, and delete precisely the
+      // disabled rows whose `disabled_by_tenant_id` is the only answer ADR-0087
+      // leaves to "why did my MFA disappear".
+      //
+      // The bar for the next raise is unchanged: a fourth argument, not a
+      // fourteenth table repeating one of these three.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(13);
     });
 
     test("every entry names a table that really exists in sql/", () => {

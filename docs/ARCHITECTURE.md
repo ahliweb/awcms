@@ -17,7 +17,7 @@ Sebagai template yang di-ship, base menyediakan **modul fondasi reusable + kontr
 modul domain ERP (finance, inventory, procurement, manufacturing, hr-payroll, dst.)
 **ditambahkan langsung di `src/modules/` template ini** saat dipakai, bukan di repo
 ekstensi/turunan terpisah (jalur aplikasi-turunan DIHAPUS — lihat §Komposisi modul di
-bawah). Repo ini punya **22 modul terdaftar**, migration `sql/001`-`sql/113`, RLS
+bawah). Repo ini punya **22 modul terdaftar**, migration `sql/001`-`sql/114`, RLS
 `FORCE` di seluruh tabel tenant-scoped, pemisahan role database, dan admin UI read+write
 (Issue #166, #171). Dokumen ini menjelaskan apa yang **ada di kode saat ini**. Untuk detail
 per modul, lihat `README.md` masing-masing di `src/modules/<module>/`.
@@ -216,7 +216,19 @@ lockout ikut pindah ke sana; `awcms_identities.failed_login_count`/`locked_until
 tinggal sejarah. Kelima jalur reset — login sukses, reset password, ganti
 password, callback SSO, verifikasi enrolment MFA — menyentuh penghitung
 principal, karena lockout global dengan pemulihan per-tenant lebih buruk daripada
-yang digantikannya.
+yang digantikannya. Sejak `sql/114`
+([ADR-0087](adr/0087-mfa-moves-to-the-principal.md)) **faktor MFA dan recovery
+code ikut menjadi milik manusia** (`awcms_principal_mfa_factors`,
+`awcms_principal_mfa_recovery_codes` — GLOBAL, tanpa RLS, memakai keempat kontrol
+yang sama; gerbangnya kini menjaga tiga tabel dengan allow-list terpisah per
+tabel). Enkripsi `sql/024` tidak berubah. Yang **tidak** ikut pindah:
+`awcms_mfa_challenges` (satu percobaan login di satu tenant) dan
+`awcms_tenant_mfa_policies` (keputusan produk sebuah tenant) — faktornya milik
+manusia, kewajibannya milik tenant. Konsekuensinya dinyatakan: **reset MFA
+administratif kini menjangkau keluar tenant yang bertindak**, dicatat sebagai
+`crossTenantReach` pada baris audit `critical` dan `disabled_by_tenant_id` pada
+baris faktornya — bukan sebagai daftar tenant, yang akan menjadi oracle
+keanggotaan lintas-tenant.
 
 Di atas password, jalur auth kini punya: **MFA TOTP + recovery codes + session
 assurance (aal1/aal2) + step-up** (`sql/024`, route `/api/v1/auth/mfa/*`,

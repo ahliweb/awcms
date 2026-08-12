@@ -39,10 +39,16 @@ const CURRENT = "correct horse battery";
 const NEXT = "staple correct horse";
 
 /**
- * Query 1 resolves the session, 2 reads MFA factors (none), 3 probes the
- * tenant's auth policy (absent = password login allowed), 4 reads the stored
- * hash. `extra` continues from there: the identity UPDATE, then the two queries
- * `revokeOtherOwnSessions` issues.
+ * Query 1 resolves the session, 2 resolves the identity's PRINCIPAL (ADR-0087 —
+ * the MFA factor belongs to the human, so every status read hops there first),
+ * 3 reads that human's factors (none), 4 probes the tenant's auth policy
+ * (absent = password login allowed), 5 reads the stored hash. `extra` continues
+ * from there: the identity UPDATE, then the two queries `revokeOtherOwnSessions`
+ * issues.
+ *
+ * The staging is positional, so it is also an assertion about the query SEQUENCE
+ * — which is why ADR-0087 adding a hop showed up here as a failure rather than
+ * as a silent shift in what each staged row answers.
  */
 function stageThrough(
   passwordHash: string,
@@ -50,6 +56,7 @@ function stageThrough(
 ): unknown[][] {
   return [
     [{ identity_id: "identity-7" }],
+    [{ principal_id: "human-7" }],
     [],
     [],
     [{ password_hash: passwordHash }],
@@ -141,7 +148,9 @@ describe("step-up is asked for only when there is a factor to ask for", () => {
   test("a caller WITH a factor and a stale step-up is refused, and nothing is written", async () => {
     const { tx, calls } = recordingTx([
       [{ identity_id: "identity-7" }],
-      [{ factor_type: "totp", activated_at: NOW }],
+      // ADR-0087 — the identity → principal hop, then the human's factor.
+      [{ principal_id: "human-7" }],
+      [{ id: "factor-1", factor_type: "totp", activated_at: NOW }],
       // `resolveSessionAssurance` finds no live stepped-up session row.
       []
     ]);

@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 113   |
-| Tabel `awcms_*`                    | 141   |
+| Migrasi                            | 114   |
+| Tabel `awcms_*`                    | 143   |
 | Tabel dengan `FORCE` RLS           | 126   |
-| Tabel RLS-free (global, by design) | 15    |
-| Berkas test                        | 358   |
+| Tabel RLS-free (global, by design) | 17    |
+| Berkas test                        | 360   |
 | Berkas route                       | 335   |
-| ADR                                | 87    |
+| ADR                                | 88    |
 
 ### Modul
 
@@ -160,6 +160,7 @@
 | 111 | `sql/111_awcms_entitlement_catalogue_and_subscriptions.sql`        |
 | 112 | `sql/112_awcms_principals.sql`                                     |
 | 113 | `sql/113_awcms_principal_lockout.sql`                              |
+| 114 | `sql/114_awcms_principal_mfa.sql`                                  |
 
 ### Tabel & Row-Level Security
 
@@ -242,6 +243,8 @@
 | `awcms_permissions`                      | `sql/005_awcms_abac_access_control_schema.sql`             | tidak | tidak |
 | `awcms_plan_entitlements`                | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
 | `awcms_plans`                            | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
+| `awcms_principal_mfa_factors`            | `sql/114_awcms_principal_mfa.sql`                          | tidak | tidak |
+| `awcms_principal_mfa_recovery_codes`     | `sql/114_awcms_principal_mfa.sql`                          | tidak | tidak |
 | `awcms_principals`                       | `sql/112_awcms_principals.sql`                             | tidak | tidak |
 | `awcms_profile_entity_links`             | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profile_identifiers`              | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
@@ -311,7 +314,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 304        |
+| `(root)`      | 306        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
