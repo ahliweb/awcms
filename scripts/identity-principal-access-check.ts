@@ -1,28 +1,40 @@
 #!/usr/bin/env bun
 /**
- * `bun run identity:principal-access:check` — ADR-0085, Gelombang 7 PR 7.1 of
- * Issue #423.
+ * `bun run identity:principal-access:check` — ADR-0085 (Gelombang 7 PR 7.1) and
+ * ADR-0087 (PR 7.3) of Issue #423.
  *
- * `awcms_principals` is GLOBAL and has no RLS. This gate is control 2 of the
- * four that stand in its place, and the distinction it draws is the point:
+ * The principal tables are GLOBAL and have no RLS. This gate is control 2 of the
+ * four that stand in their place, and the distinction it draws is the point:
  *
  *   **RLS bounds which ROWS a query may see. This bounds which CALL SITES may
  *   issue one at all.**
  *
  * Two rules, both structural:
  *
- * 1. **Only allow-listed files may name the table.** A credential store with
- *    readers scattered across the codebase has no boundary to reason about, and
- *    "who can read password hashes" stops being answerable by reading one file.
- * 2. **Every query in those files is KEYED.** `id =` or `email_normalized =`,
- *    never an unbounded scan and never `LIKE`. A credential table that can be
- *    scanned is an enumeration endpoint one refactor away — and unlike a tenant
- *    table, no RLS policy is there to cut the result down.
+ * 1. **Only allow-listed files may name a guarded table.** A credential store
+ *    with readers scattered across the codebase has no boundary to reason about,
+ *    and "who can read password hashes" stops being answerable by reading one
+ *    file.
+ * 2. **Every query in those files is KEYED** — never an unbounded scan and never
+ *    `LIKE`. A table that can be scanned is an enumeration endpoint one refactor
+ *    away, and unlike a tenant table no RLS policy is there to cut the result
+ *    down. For `awcms_principals` that means the credential itself; for the MFA
+ *    tables it means a targeting list of who does and does not hold a second
+ *    factor.
+ *
+ * ## One gate, three tables, SEPARATE allow-lists
+ *
+ * ADR-0087 widened this from one table to three, and deliberately did NOT widen
+ * it into one shared permission. Each table names the files that may touch it,
+ * so `principal-mfa-store.ts` is not thereby allowed to read `password_hash`
+ * and `principal-store.ts` is not allowed to reach into factors. A single fused
+ * list would have made "the identity-access module" the boundary, which is not a
+ * boundary at all.
  *
  * ## Why it carries synthetic probes
  *
  * Gelombang 1 recorded the failure this avoids: a checker proven only by "it
- * found nothing" is proven by nothing. The allow-list here is one file and
+ * found nothing" is proven by nothing. The allow-lists here are one file each and
  * should stay that way for a long time, so the detector would otherwise spend
  * years never firing — and a matcher that silently stopped matching would look
  * identical. The probes below are DEFECTIVE ON PURPOSE and must all be rejected.
@@ -32,41 +44,69 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const TABLE = "awcms_principals";
+type GuardedTable = {
+  readonly table: string;
+  /**
+   * The files permitted to name this table.
+   *
+   * `sql/` is excluded from the scan entirely — migrations are where the tables
+   * are defined, and a gate that forbade naming them there would forbid its own
+   * subject.
+   *
+   * Adding an entry is a REVIEW DECISION about widening a credential boundary,
+   * and it should be argued in the PR that does it. It is not a list to append
+   * to because a query was convenient somewhere else: the store modules expose
+   * functions, and a new reader calls one.
+   */
+  readonly allowedFiles: readonly string[];
+  /** A predicate binding the statement to a single row. */
+  readonly keyedPredicate: RegExp;
+  /** Rendered into the failure message so the fix is stated, not guessed. */
+  readonly keyDescription: string;
+};
 
-/**
- * The files permitted to name the table.
- *
- * `sql/` is excluded from the scan entirely — migrations are where the table is
- * defined, and a gate that forbade naming it there would forbid its own subject.
- *
- * Adding an entry is a REVIEW DECISION about widening a credential boundary, and
- * it should be argued in the PR that does it. It is not a list to append to
- * because a query was convenient somewhere else: the store module exposes
- * functions, and a new reader calls one.
- */
-const ALLOWED_FILES: readonly string[] = [
-  "src/modules/identity-access/application/principal-store.ts"
+const GUARDED_TABLES: readonly GuardedTable[] = [
+  {
+    table: "awcms_principals",
+    allowedFiles: [
+      "src/modules/identity-access/application/principal-store.ts"
+    ],
+    keyedPredicate: /\b(id|email_normalized)\s*=\s*\$\{/,
+    keyDescription: "`id = ${…}` or `email_normalized = ${…}`"
+  },
+  {
+    table: "awcms_principal_mfa_factors",
+    allowedFiles: [
+      "src/modules/identity-access/application/principal-mfa-store.ts"
+    ],
+    keyedPredicate: /\b(id|principal_id)\s*=\s*\$\{/,
+    keyDescription: "`id = ${…}` or `principal_id = ${…}`"
+  },
+  {
+    table: "awcms_principal_mfa_recovery_codes",
+    allowedFiles: [
+      "src/modules/identity-access/application/principal-mfa-store.ts"
+    ],
+    // `factor_id =` binds to one factor's code set, which is the natural unit
+    // for delete-on-regenerate. It is still a key: it cannot address rows
+    // belonging to a factor the caller did not already resolve.
+    keyedPredicate: /\b(id|principal_id|factor_id)\s*=\s*\$\{/,
+    keyDescription: "`id = ${…}`, `principal_id = ${…}`, or `factor_id = ${…}`"
+  }
 ];
 
 /**
- * This gate itself, which necessarily names the table in its own constants and
+ * This gate itself, which necessarily names the tables in its own constants and
  * probes. Excluded for the same reason `sql/` is: a check that forbade naming
  * its subject would forbid its own source. Kept as a named constant rather than
- * an inline `!==` so the exemption is visible next to the list it qualifies.
+ * an inline `!==` so the exemption is visible next to the lists it qualifies.
  */
 const SELF = "scripts/identity-principal-access-check.ts";
 
 const SOURCE_ROOTS = ["src", "scripts"];
 const SOURCE_EXTENSIONS = [".ts", ".astro"];
 
-/**
- * A keyed predicate on the principal table. Both forms bind to a single row:
- * the primary key, or the unique normalized address.
- */
-const KEYED_PREDICATE = /\b(id|email_normalized)\s*=\s*\$\{/;
-
-/** Shapes that must never appear in a query against this table. */
+/** Shapes that must never appear in a query against a guarded table. */
 const FORBIDDEN_SHAPES: readonly { pattern: RegExp; why: string }[] = [
   {
     pattern: /\bLIKE\b|\bILIKE\b|~\*|\bSIMILAR\s+TO\b/i,
@@ -106,24 +146,26 @@ export type PrincipalAccessFinding = { file: string; problem: string };
  * Matching the clause keyword needs no lexing at all. A privilege-map key
  * (`awcms_principals: ["DELETE"]`) and a sentence about the table are not
  * preceded by `FROM`; a query always is.
+ *
+ * Built per call rather than hoisted: a `g`-flagged regex carries `lastIndex`,
+ * and three tables sharing one object is how a scan silently skips a hit.
  */
-const TABLE_IN_CLAUSE = new RegExp(
-  `\\b(?:FROM|INTO|UPDATE|JOIN)\\s+${TABLE}\\b`,
-  "gi"
-);
+function tableInClause(table: string): RegExp {
+  return new RegExp(`\\b(?:FROM|INTO|UPDATE|JOIN)\\s+${table}\\b`, "gi");
+}
 
 /**
  * Hard bound on how far the statement window may reach in either direction.
  *
  * The window normally stops at the enclosing template literal's delimiter (see
- * `principalQueries`); this is the backstop for source that has none.
+ * `tableQueries`); this is the backstop for source that has none.
  *
  * A window that is merely "±400 characters" is NOT sufficient, and the reason is
- * worth keeping: this file's own store module holds several small queries a few
- * lines apart, so a fixed window around one of them reaches into its neighbours
- * and finds THEIR `WHERE id = ${…}`. The gate then passes an unkeyed scan
- * because the function below it happened to be keyed — green, and wrong. Found
- * by mutating the store and watching the detector stay silent.
+ * worth keeping: the store modules hold several small queries a few lines apart,
+ * so a fixed window around one of them reaches into its neighbours and finds
+ * THEIR `WHERE id = ${…}`. The gate then passes an unkeyed scan because the
+ * function below it happened to be keyed — green, and wrong. Found by mutating
+ * the store and watching the detector stay silent.
  */
 const STATEMENT_WINDOW = 400;
 
@@ -132,17 +174,19 @@ function stripComments(source: string): string {
 }
 
 /** Does this file issue a query against the table at all? */
-function mentionsTableInSql(source: string): boolean {
-  TABLE_IN_CLAUSE.lastIndex = 0;
-  return TABLE_IN_CLAUSE.test(stripComments(source));
+function mentionsTableInSql(source: string, table: string): boolean {
+  return tableInClause(table).test(stripComments(source));
 }
 
 /** One bounded window per clause-keyword hit, with the verb governing it. */
-function principalQueries(source: string): { sql: string; verb: string }[] {
+function tableQueries(
+  source: string,
+  table: string
+): { sql: string; verb: string }[] {
   const code = stripComments(source);
   const blocks: { sql: string; verb: string }[] = [];
 
-  for (const match of code.matchAll(TABLE_IN_CLAUSE)) {
+  for (const match of code.matchAll(tableInClause(table))) {
     const at = match.index!;
 
     // Stop at the enclosing template literal's delimiters. Within ONE statement
@@ -176,65 +220,76 @@ function principalQueries(source: string): { sql: string; verb: string }[] {
 export function findPrincipalAccessViolations(
   file: string,
   source: string,
-  allowed: readonly string[] = ALLOWED_FILES
+  tables: readonly GuardedTable[] = GUARDED_TABLES
 ): PrincipalAccessFinding[] {
   const findings: PrincipalAccessFinding[] = [];
 
   if (file === SELF) return findings;
-  if (!source.includes(TABLE)) return findings;
-  if (!allowed.includes(file) && !mentionsTableInSql(source)) return findings;
 
-  if (!allowed.includes(file)) {
-    findings.push({
-      file,
-      problem:
-        `names \`${TABLE}\` but is not in ALLOWED_FILES. The credential store is ` +
-        "GLOBAL and RLS-free; the only thing bounding who may read it is this " +
-        "list. Call a function in `principal-store.ts` instead, or argue the " +
-        "widening in the PR that adds the entry."
-    });
+  for (const guarded of tables) {
+    const { table, allowedFiles, keyedPredicate, keyDescription } = guarded;
 
-    return findings;
-  }
+    // Substring containment is safe across these three names because no guarded
+    // table name is a prefix of another followed by a word character
+    // (`awcms_principals` vs `awcms_principal_mfa_*` diverge at the `s`).
+    if (!source.includes(table)) continue;
 
-  const queries = principalQueries(source);
+    const isAllowed = allowedFiles.includes(file);
 
-  if (queries.length === 0) {
-    findings.push({
-      file,
-      problem:
-        `is allow-listed for \`${TABLE}\` but contains no query against it. ` +
-        "Either the reads moved and the entry is stale, or this detector stopped " +
-        "recognising them — both are failures, and they are indistinguishable " +
-        "from here."
-    });
+    if (!isAllowed) {
+      if (!mentionsTableInSql(source, table)) continue;
 
-    return findings;
-  }
-
-  for (const { sql: query, verb } of queries) {
-    const oneLine = query.replace(/\s+/g, " ").trim();
-
-    // INSERT is exempt from the keyed rule and cannot meaningfully satisfy it:
-    // it has no WHERE, and it writes exactly the row it names. The unique index
-    // on `email_normalized` is what bounds it. Every other verb reads or
-    // rewrites rows it SELECTED, and those must bind to one.
-    if (verb !== "INSERT" && !KEYED_PREDICATE.test(query)) {
       findings.push({
         file,
         problem:
-          `issues an UNKEYED query against \`${TABLE}\`: "${oneLine.slice(0, 120)}". ` +
-          "Every read must bind to one row via `id = ${…}` or " +
-          "`email_normalized = ${…}` — RLS is not there to cut the result down."
+          `names \`${table}\` but is not in its allow-list. The principal tables ` +
+          "are GLOBAL and RLS-free; the only thing bounding who may read them is " +
+          "that list. Call a function in the owning store module instead, or " +
+          "argue the widening in the PR that adds the entry."
       });
+
+      continue;
     }
 
-    for (const shape of FORBIDDEN_SHAPES) {
-      if (shape.pattern.test(query)) {
+    const queries = tableQueries(source, table);
+
+    if (queries.length === 0) {
+      findings.push({
+        file,
+        problem:
+          `is allow-listed for \`${table}\` but contains no query against it. ` +
+          "Either the reads moved and the entry is stale, or this detector stopped " +
+          "recognising them — both are failures, and they are indistinguishable " +
+          "from here."
+      });
+
+      continue;
+    }
+
+    for (const { sql: query, verb } of queries) {
+      const oneLine = query.replace(/\s+/g, " ").trim();
+
+      // INSERT is exempt from the keyed rule and cannot meaningfully satisfy it:
+      // it has no WHERE, and it writes exactly the row it names. The unique
+      // indexes are what bound it. Every other verb reads or rewrites rows it
+      // SELECTED, and those must bind.
+      if (verb !== "INSERT" && !keyedPredicate.test(query)) {
         findings.push({
           file,
-          problem: `uses a forbidden shape against \`${TABLE}\` — ${shape.why}: "${oneLine.slice(0, 120)}".`
+          problem:
+            `issues an UNKEYED query against \`${table}\`: "${oneLine.slice(0, 120)}". ` +
+            `Every read must bind via ${keyDescription} — RLS is not there to cut ` +
+            "the result down."
         });
+      }
+
+      for (const shape of FORBIDDEN_SHAPES) {
+        if (shape.pattern.test(query)) {
+          findings.push({
+            file,
+            problem: `uses a forbidden shape against \`${table}\` — ${shape.why}: "${oneLine.slice(0, 120)}".`
+          });
+        }
       }
     }
   }
@@ -242,35 +297,64 @@ export function findPrincipalAccessViolations(
   return findings;
 }
 
+const CREDENTIAL_STORE = GUARDED_TABLES[0]!.allowedFiles[0]!;
+const MFA_STORE = GUARDED_TABLES[1]!.allowedFiles[0]!;
+
 const PROBES: readonly { name: string; file: string; source: string }[] = [
   {
-    name: "an unlisted file reading the table",
+    name: "an unlisted file reading the credential table",
     file: "src/pages/api/v1/whatever.ts",
     source:
       "const rows = await tx`SELECT id FROM awcms_principals WHERE id = ${x}`;"
   },
   {
-    name: "an unbounded scan inside the store",
-    file: ALLOWED_FILES[0]!,
+    name: "an unbounded scan inside the credential store",
+    file: CREDENTIAL_STORE,
     source:
       "const rows = await tx`SELECT id, email_normalized FROM awcms_principals ORDER BY created_at`;"
   },
   {
-    name: "a LIKE search inside the store",
-    file: ALLOWED_FILES[0]!,
+    name: "a LIKE search inside the credential store",
+    file: CREDENTIAL_STORE,
     source:
       "const rows = await tx`SELECT id FROM awcms_principals WHERE email_normalized LIKE ${q} AND id = ${x}`;"
   },
   {
-    name: "a paginated read inside the store",
-    file: ALLOWED_FILES[0]!,
+    name: "a paginated read inside the credential store",
+    file: CREDENTIAL_STORE,
     source:
       "const rows = await tx`SELECT id FROM awcms_principals WHERE id = ${x} LIMIT 50`;"
   },
   {
-    name: "an allow-listed file that no longer queries the table at all",
-    file: ALLOWED_FILES[0]!,
+    name: "an allow-listed file that no longer queries its table at all",
+    file: CREDENTIAL_STORE,
     source: "// awcms_principals is described here but never queried"
+  },
+  {
+    name: "an unlisted file reading the MFA factor table",
+    file: "src/pages/api/v1/auth/mfa/whatever.ts",
+    source:
+      "const rows = await tx`SELECT id FROM awcms_principal_mfa_factors WHERE principal_id = ${p}`;"
+  },
+  {
+    name: "an unbounded scan of MFA factors inside the MFA store",
+    file: MFA_STORE,
+    source:
+      "const rows = await tx`SELECT id FROM awcms_principal_mfa_factors WHERE status = 'active'`;"
+  },
+  {
+    name: "an unbounded scan of recovery codes inside the MFA store",
+    file: MFA_STORE,
+    source:
+      "const rows = await tx`SELECT code_hash FROM awcms_principal_mfa_recovery_codes WHERE used_at IS NULL`;"
+  },
+  {
+    // The boundary ADR-0087 refused to fuse: the MFA store is not thereby
+    // allowed to read credentials.
+    name: "the MFA store reaching into the credential table",
+    file: MFA_STORE,
+    source:
+      "const rows = await tx`SELECT password_hash FROM awcms_principals WHERE id = ${x}`;"
   }
 ];
 
@@ -303,22 +387,33 @@ function main(): void {
   const files: string[] = [];
   for (const root of SOURCE_ROOTS) collectSourceFiles(root, files);
 
-  let allowedSeen = 0;
+  const seenPerTable = new Map<string, number>();
 
   for (const file of files) {
     const source = readFileSync(file, "utf8");
 
-    if (ALLOWED_FILES.includes(file)) allowedSeen += 1;
+    for (const guarded of GUARDED_TABLES) {
+      if (guarded.allowedFiles.includes(file)) {
+        seenPerTable.set(
+          guarded.table,
+          (seenPerTable.get(guarded.table) ?? 0) + 1
+        );
+      }
+    }
 
     for (const finding of findPrincipalAccessViolations(file, source)) {
       failures.push(`  ${finding.file} — ${finding.problem}`);
     }
   }
 
-  if (allowedSeen !== ALLOWED_FILES.length) {
-    failures.push(
-      `  ALLOWED_FILES names ${ALLOWED_FILES.length} file(s) but ${allowedSeen} were found on disk. A dead entry is itself a failure: it means the gate is guarding a file nobody has.`
-    );
+  for (const guarded of GUARDED_TABLES) {
+    const seen = seenPerTable.get(guarded.table) ?? 0;
+
+    if (seen !== guarded.allowedFiles.length) {
+      failures.push(
+        `  \`${guarded.table}\` allow-lists ${guarded.allowedFiles.length} file(s) but ${seen} were found on disk. A dead entry is itself a failure: it means the gate is guarding a file nobody has.`
+      );
+    }
   }
 
   if (failures.length > 0) {
@@ -327,10 +422,16 @@ function main(): void {
     process.exit(1);
   }
 
+  const tableCount = GUARDED_TABLES.length;
+  const allowedCount = GUARDED_TABLES.reduce(
+    (total, guarded) => total + guarded.allowedFiles.length,
+    0
+  );
+
   console.log(
     `identity:principal-access:check OK — ${files.length} source file(s) scanned; ` +
-      `only ${ALLOWED_FILES.length} may name \`${TABLE}\`, every query there is keyed, ` +
-      `${PROBES.length} synthetic probe(s) still rejected.`
+      `${tableCount} GLOBAL principal table(s) guarded by ${allowedCount} allow-listed ` +
+      `file(s), every query keyed, ${PROBES.length} synthetic probe(s) still rejected.`
   );
 }
 

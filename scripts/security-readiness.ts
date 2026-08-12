@@ -610,6 +610,23 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   // Three other controls stand in for the RLS this table does not have; see
   // ADR-0085. The one with teeth in this file is right here.
   awcms_principals: ["DELETE"],
+  // Global MFA factor and recovery codes (ADR-0087, sql/114). Global for the
+  // same reason the credential above is: the second factor authenticates a
+  // HUMAN, and a person with identities in three tenants has one authenticator,
+  // not three. The four controls standing in for RLS are ADR-0085's, reused.
+  //
+  // DELETE is granted here where it is withheld one line up, and the difference
+  // is reasoned rather than inherited. A principal is what a human's whole login
+  // rests on and recovery from a wrongly deleted one is a RESTORE. A recovery
+  // code is the opposite: deleting one is what `disable`, `regenerate`, and
+  // administrative reset have done since ADR-0027, and a missing row means "that
+  // code is spent", not "this human cannot log in". The factor table keeps
+  // DELETE because enrolment discards a superseded PENDING factor — a secret
+  // that was displayed as a QR and never confirmed, which is the one row here
+  // that should leave no trace. A CONFIRMED factor is never deleted; it is
+  // disabled, which is why `disabled_by_tenant_id` can answer "who reset me".
+  awcms_principal_mfa_factors: [],
+  awcms_principal_mfa_recovery_codes: [],
   awcms_entitlements: ["INSERT", "UPDATE", "DELETE"],
   awcms_plans: ["INSERT", "UPDATE", "DELETE"],
   awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"]
@@ -646,7 +663,16 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // an investigator can still answer "who held what in March"; every write is
   // revoked, because a row that can be added or edited is not history, and a row
   // that cannot be revoked must not be one the runtime can create.
-  awcms_access_assignments: ["SELECT"]
+  awcms_access_assignments: ["SELECT"],
+  // ADR-0087 / `sql/114`. The tenant-scoped MFA factor and its recovery codes,
+  // superseded by the principal-scoped pair. Retained populated as history (the
+  // ADR-0079 disposition) and narrowed to SELECT, which is the part that makes
+  // the supersession real rather than nominal: a legacy table the runtime can
+  // still WRITE is a second place a factor can be enrolled, and the day some
+  // path writes there again is the day one human has two second factors and only
+  // one of them is the one login checks.
+  awcms_identity_mfa_factors: ["SELECT"],
+  awcms_identity_mfa_recovery_codes: ["SELECT"]
 };
 
 type RlsRow = {

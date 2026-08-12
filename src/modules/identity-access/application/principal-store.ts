@@ -278,6 +278,35 @@ export async function setPrincipalCredential(
 }
 
 /**
+ * Which human an identity belongs to, or `null` when nothing has linked it yet.
+ *
+ * Reads `awcms_identities` — a tenant table under FORCE RLS, not a guarded
+ * principal table — so this is an ordinary keyed read and not a widening of the
+ * credential boundary.
+ *
+ * Module-private, and keyed on the identity PRIMARY KEY alone: both callers below
+ * are reached from a path that has just authenticated the human it is acting for.
+ * A caller holding an identity id it did NOT resolve itself — the MFA module,
+ * whose administrative reset takes one from a request body — must not reuse this
+ * shape; `mfa.ts` keys its own hop on `(tenant_id, id)` for that reason.
+ *
+ * `null` is a real answer, not an error. ADR-0085 refused `principal_id NOT NULL`
+ * precisely so an identity written by a path not yet taught about principals is
+ * visibly unlinked rather than a 500 — callers decide what an unlinked identity
+ * means for them.
+ */
+async function resolvePrincipalIdForIdentity(
+  tx: Bun.SQL,
+  identityId: string
+): Promise<string | null> {
+  const rows = (await tx`
+    SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
+  `) as { principal_id: string | null }[];
+
+  return rows[0]?.principal_id ?? null;
+}
+
+/**
  * Clears the global lockout for whichever principal an IDENTITY belongs to.
  *
  * Exists because three success paths know an `identityId` and not an email:
@@ -300,11 +329,7 @@ export async function clearPrincipalLockoutForIdentity(
   tx: Bun.SQL,
   identityId: string
 ): Promise<void> {
-  const rows = (await tx`
-    SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
-  `) as { principal_id: string | null }[];
-
-  const principalId = rows[0]?.principal_id ?? null;
+  const principalId = await resolvePrincipalIdForIdentity(tx, identityId);
 
   if (principalId) await clearPrincipalLockout(tx, principalId);
 }
@@ -323,11 +348,7 @@ export async function setPrincipalCredentialForIdentity(
   identityId: string,
   passwordHash: string
 ): Promise<void> {
-  const rows = (await tx`
-    SELECT principal_id FROM awcms_identities WHERE id = ${identityId}
-  `) as { principal_id: string | null }[];
-
-  const principalId = rows[0]?.principal_id ?? null;
+  const principalId = await resolvePrincipalIdForIdentity(tx, identityId);
 
   if (principalId) await setPrincipalCredential(tx, principalId, passwordHash);
 }

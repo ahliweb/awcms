@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **113** (`sql/001`–`113`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0086** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **114** (`sql/001`–`114`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0087** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -356,6 +356,58 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 12 Agustus 2026 (kesepuluh) — PR 7.3 MENDARAT: MFA pindah ke
+  principal, dan sebuah kewajiban yang DITULIS RENCANA ternyata tak bisa
+  dibangun.**
+
+  [ADR-0087](adr/0087-mfa-moves-to-the-principal.md) (`sql/114`): faktor MFA dan
+  recovery code menjadi milik **manusia** —
+  `awcms_principal_mfa_factors`/`awcms_principal_mfa_recovery_codes`, GLOBAL
+  tanpa RLS, memakai ulang keempat kontrol ADR-0085. Enkripsi `sql/024` tidak
+  disentuh. `awcms_mfa_challenges` dan `awcms_tenant_mfa_policies` **tidak** ikut
+  pindah, masing-masing dengan serangan konkret sebagai alasannya. Permukaan HTTP
+  tidak berubah satu berkas pun.
+
+  **Temuan putaran ini — "diaudit di log kedua tenant" MUSTAHIL, dan juga tidak
+  seharusnya.** Rencana Gelombang 7 memintanya dan edisi pertama ADR-0087
+  menyalinnya. Basis data membantah: `awcms_identities` FORCE RLS membuat
+  `WHERE principal_id = … AND tenant_id <> …` mengembalikan **nol baris
+  selamanya** — kode itu akan hijau di 41 gerbang sambil tak pernah menemukan
+  apa pun — dan `awcms_audit_events` menolak `INSERT` ber-`tenant_id` lain.
+  Yang lebih penting: daftar tenant lain tempat sebuah alamat punya identitas
+  adalah **oracle keanggotaan lintas-tenant**, diserahkan kepada pemegang
+  `mfa_admin.reset` lewat endpoint yang tugasnya memulihkan orang. Diganti
+  `crossTenantReach` di baris audit + `disabled_by_tenant_id` di baris global:
+  menyatakan BAHWA ia menjangkau keluar, bukan ke mana. **Pelajarannya sejalan
+  dengan §6: periksa policy-nya, jangan percayai rencananya.**
+
+  **Temuan kedua, dan ia hanya muncul karena skripnya DIJALANKAN.** Kedua sensus
+  preflight — yang baru DAN `identity:principals:preflight` yang sudah mendarat
+  di PR 7.1 — mengulang tenant di dalam `withTenantOrThrow` dan bersandar pada
+  RLS untuk memotong barisnya. Superuser dan role migrasi **melewati RLS
+  sepenuhnya**, dan menjalankan skrip ops sebagai owner adalah setup lumrah:
+  setiap iterasi membaca seluruh baris instalasi lalu menandainya dengan tenant
+  yang sedang giliran. Sensus MFA melipatgandakan hitungannya (dua faktor
+  dilaporkan empat, tenant salah); yang lebih buruk sensus principal —
+  **satu manusia yang sah bekerja di dua tenant dilaporkan sebagai DUA tabrakan
+  MEMBLOKIR**, menyuruh operator memutuskan akun nyata mana yang duplikat, tepat
+  pada kasus yang menjadi alasan principal ada. Keduanya kini ber-predikat
+  `tenant_id` eksplisit, dengan regresi berbasis source yang mutasinya
+  memerahkan. Pelajaran §6 yang berulang: **jalankan, jangan dibaca** — tak satu
+  pun dari keduanya terlihat di diff.
+
+  Perkakas baru: `bun run identity:mfa-collisions:preflight` (READ-ONLY, sensus
+  siapa kehilangan authenticator sebelum jendela deploy). Gerbang
+  `identity:principal-access:check` kini menjaga **tiga** tabel dengan allow-list
+  **terpisah per tabel** — rantai tetap **41**, tidak bertambah.
+  `BOUNDED_BY_DESIGN` 11 → 13 dengan argumen kelas ketiga (bound ditegakkan
+  SKEMA, bukan authorship/derivasi).
+
+  **Yang tersisa dari Gelombang 7:** PR 7.4 (pemilihan + perpindahan tenant).
+  Belum dimulai. Larangan yang PR 7.4 warisi dari ADR-0087 dan tidak boleh
+  dilonggarkan: **challenge tenant A tidak boleh bisa ditukar menjadi sesi di
+  tenant B.**
+
 - **PUTARAN 12 Agustus 2026 (kesembilan) — GELOMBANG 7 DIBUKA, #430 DITUTUP, dan
   satu putaran konsistensi yang tidak menyentuh satu baris kode pun.**
 
@@ -366,8 +418,9 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   (#525, PR 7.2, `sql/113`) memindahkan penghitung lockout ke sana dan
   **menutup [#430](https://github.com/ahliweb/awcms/issues/430)**.
 
-  **Yang tersisa dari Gelombang 7:** PR 7.3 (MFA pindah ke principal) dan PR 7.4
-  (pemilihan + perpindahan tenant). Keduanya belum dimulai.
+  **Yang tersisa dari Gelombang 7** (saat putaran itu ditulis): PR 7.3 (MFA
+  pindah ke principal) dan PR 7.4 (pemilihan + perpindahan tenant). PR 7.3 sejak
+  itu mendarat — lihat putaran kesepuluh di atas.
 
   ### Putaran konsistensi: yang DIPERIKSA dan tidak ditemukan
 

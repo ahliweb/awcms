@@ -211,3 +211,45 @@ describe("not_mailable is a DIFFERENT question from non_email_identifier (#430)"
     expect(census(["operator", "a@localhost"]).clear).toBe(true);
   });
 });
+
+describe("both per-tenant censuses scope their reads EXPLICITLY, not via RLS alone", () => {
+  // A defect both preflight scripts shipped with, found by RUNNING them against
+  // a seeded database rather than by reading them — and invisible in a diff.
+  //
+  // Each loops over tenants inside `withTenantOrThrow` and relied on RLS to cut
+  // the rows down. A superuser or the migration role BYPASSES RLS entirely, and
+  // running ops scripts as the owner is an ordinary setup — so every pass read
+  // every row in the installation and re-tagged it with whichever tenant's turn
+  // it was.
+  //
+  // The consequences were not symmetric, and the worse one is the older script:
+  //
+  // - `identity:mfa-collisions:preflight` multiplied its counts (two seeded
+  //   factors reported as four) and named the wrong tenants.
+  // - `identity:principals:preflight` reported ONE human working legitimately in
+  //   two tenants as TWO BLOCKING within-tenant collisions — telling an operator
+  //   to decide which of two REAL accounts was a duplicate. A census that is
+  //   confidently wrong in the direction of deletion is worse than none, and
+  //   this one was wrong about the exact case principals exist for.
+  //
+  // Source-based on purpose: the behaviour needs a database with two tenants and
+  // an owner connection, which the default suite has neither of — and a
+  // behavioural test that skips is not a regression test. Mutation-proved:
+  // deleting either predicate reddens this.
+  const SCRIPTS = [
+    "scripts/identity-access-principal-preflight.ts",
+    "scripts/identity-mfa-collisions-preflight.ts"
+  ];
+
+  for (const script of SCRIPTS) {
+    test(`${script} binds its per-tenant read to \`tenant_id\``, async () => {
+      const source = (await Bun.file(script).text())
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/^\s*\/\/.*$/gm, " ");
+
+      const inLoop = source.slice(source.indexOf("withTenantOrThrow"));
+
+      expect(inLoop).toContain("tenant_id = ${tenant.id}");
+    });
+  }
+});

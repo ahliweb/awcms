@@ -27,6 +27,13 @@ type AdminResetBody = { identityId?: unknown; reason?: unknown };
  * refuses self-reset: an admin cannot clear their OWN factor through this
  * privileged path (that would be a factor bypass) — they must use self-service
  * `disable` behind their own already-MFA'd session.
+ *
+ * Since ADR-0087 the factor belongs to the HUMAN, so this reset removes the
+ * authenticator the same person uses in every tenant they belong to. No new
+ * permission gates that widening — the ADR's argument is that an operator who may
+ * take away a colleague's second factor may take away *the* second factor, and
+ * the same step-up + reason + `critical` audit already stand in front of it. What
+ * the widening does add is the `crossTenantReach` attribute below.
  */
 export const POST: APIRoute = async ({ request, cookies, locals }) => {
   const { tenantId, token } = resolveAuthInputs(request, cookies);
@@ -95,8 +102,19 @@ export const POST: APIRoute = async ({ request, cookies, locals }) => {
       resourceType: "identity",
       resourceId: targetIdentityId,
       severity: "critical",
-      message: "MFA administratively reset for another user.",
-      attributes: { reason, hadFactor: result.hadFactor },
+      message: result.crossTenantReach
+        ? "MFA administratively reset for another user; the factor is the human's own, so this reset also removed it wherever else they use it."
+        : "MFA administratively reset for another user.",
+      // `crossTenantReach` is the whole ADR-0087 disclosure and must not be
+      // dropped: it is what turns "the only tenant action that leaves its
+      // tenant" from a side effect into a recorded decision. It says THAT the
+      // reset reached outside, never WHERE — the list of a person's other
+      // tenants is a membership oracle the ADR refuses to build.
+      attributes: {
+        reason,
+        hadFactor: result.hadFactor,
+        crossTenantReach: result.crossTenantReach
+      },
       correlationId: locals.correlationId
     });
 

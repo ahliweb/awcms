@@ -50,6 +50,8 @@ Kolom kanan = yang benar-benar ada di repo ini. **Selalu pakai kolom kanan.**
 | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | `auth-security-status.ts`            | tidak ada padanan; postur dirakit langsung di `src/pages/admin/security.astro`       |
 | migration `036`                      | `sql/024` (MFA), `sql/025`+`sql/026` (OIDC/SSO + seed permission)                    |
+| `awcms_identity_mfa_factors`         | `awcms_principal_mfa_factors` sejak `sql/114` (ADR-0087) — lihat catatan di bawah    |
+| `awcms_identity_mfa_recovery_codes`  | `awcms_principal_mfa_recovery_codes` sejak `sql/114` (ADR-0087)                      |
 | `/api/v1/identity/sso/providers`     | `/api/v1/auth/sso-providers` (+ `/[id]`)                                             |
 | `/api/v1/identity/sso/policy`        | `/api/v1/auth/sso-policy` (`PATCH`)                                                  |
 | `/api/v1/auth/providers/google/*`    | **tidak ada** — awcms hanya punya OIDC generik `/api/v1/auth/sso/[providerKey]/*`    |
@@ -60,6 +62,22 @@ Yang **memang ada** dengan nama sama: `src/lib/auth/online-security-config.ts`,
 `src/lib/security/turnstile.ts`, `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE`,
 `isFullOnlineSecurityActive`, `checkOnlineAuthSecurityReady`,
 `awcms_auth_providers`, `awcms_tenant_auth_policies`.
+
+**Perubahan yang membuat sebagian alasan-desain di bawah tidak lagi berlaku apa
+adanya — [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md),
+`sql/114`.** Faktor MFA dan recovery code kini milik **manusia**
+(`awcms_principal_mfa_factors` / `awcms_principal_mfa_recovery_codes`, ber-kunci
+`principal_id`, GLOBAL dan tanpa RLS), bukan identitas per-tenant. Yang **tetap
+benar** di badan skill: replay guard `last_used_step` wajib compare-and-swap
+atomik, konsumsi recovery code wajib `... AND used_at IS NULL RETURNING`, reset
+password bukan bypass MFA, dan re-enroll ditolak selagi faktor aktif — mekanisme
+`sql/024` dipakai ulang utuh, hanya barisnya yang pindah. Yang **tidak lagi
+benar**: nama tabelnya, klaim bahwa tabel MFA tenant-scoped di bawah FORCE RLS
+(kedua tabel principal sengaja tanpa RLS; penggantinya empat kontrol ADR-0085
+plus gerbang `bun run identity:principal-access:check`), dan asumsi bahwa reset
+administratif berhenti di batas tenant — **ia kini menjangkau keluar**, dicatat
+sebagai `crossTenantReach` di audit dan `disabled_by_tenant_id` di barisnya.
+Sebelum menyentuh MFA, baca `docs/awcms/mfa-totp-step-up.md` lebih dulu.
 
 Fitur auth yang ada di awcms tapi **tidak** dibahas dokumen ini sama sekali
 (jangan simpulkan "belum ada" dari kebisuannya): password reset lewat email
