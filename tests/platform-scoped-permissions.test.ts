@@ -204,3 +204,68 @@ describe("the chokepoint enforces it", () => {
     expect(gateAt).toBeLessThan(fetchAt);
   });
 });
+
+/**
+ * ADR-0089, Gelombang 8 PR 8.1 — the union has exactly two members, and a third
+ * one is the specific proposal this block exists to refuse.
+ *
+ * `partner` is the value somebody will propose, because it reads as the obvious
+ * way to say "this permission is a partner's". It is not: `scope` governs who
+ * may HOLD a permission, partnership governs WHICH OBJECTS it touches. Merging
+ * them yields a permission correctly held and executed against the WRONG
+ * TENANT — and no RLS policy objects, because the actor really is authenticated
+ * somewhere. Reach is modelled as DATA instead (`awcms_partners`,
+ * `awcms_partner_managed_tenants`, `sql/116`).
+ *
+ * Source-pinned because the union is a TYPE: it does not exist at runtime, so
+ * there is no value any behavioural test could inspect. Paired with an
+ * existence assertion so a rename cannot make it pass vacuously — the
+ * cross-wave rule the programme wrote after ADR-0063, where a mutation that
+ * moved the RBAC check above the ABAC block left every test green.
+ */
+describe("the scope union refuses a third member (ADR-0089)", () => {
+  const CONTRACT = "src/modules/_shared/module-contract.ts";
+
+  test("`ModulePermissionScope` is exactly `tenant | platform`", async () => {
+    const source = await readFile(CONTRACT, "utf8");
+
+    const declaration = source.match(
+      /export type ModulePermissionScope =([^;]*);/
+    );
+
+    // Rename-proof: if the type is renamed or removed, this fails LOUDLY rather
+    // than matching nothing and asserting nothing.
+    const union = declaration?.[1];
+    if (union === undefined) {
+      throw new Error(
+        `\`export type ModulePermissionScope\` not found in ${CONTRACT} — renamed or removed, and every assertion below would have passed vacuously.`
+      );
+    }
+
+    const members = union
+      .split("|")
+      .map((member) => member.trim().replace(/^"|"$/g, ""))
+      .filter((member) => member.length > 0);
+
+    expect(members).toEqual(["tenant", "platform"]);
+  });
+
+  test("no descriptor in any module declares a scope outside the union", () => {
+    // The type protects the source; this protects against a descriptor that
+    // reached the registry through a cast, a JSON import, or a module written
+    // before the union narrowed.
+    const declared = new Set<string>();
+
+    for (const module of listModules()) {
+      for (const permission of module.permissions ?? []) {
+        if (permission.scope) declared.add(permission.scope);
+      }
+    }
+
+    const unexpected = [...declared]
+      .filter((scope) => scope !== "tenant" && scope !== "platform")
+      .sort();
+
+    expect(unexpected).toEqual([]);
+  });
+});

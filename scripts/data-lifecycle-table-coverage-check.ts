@@ -148,6 +148,16 @@ export const BOUNDED_BY_DESIGN: readonly {
     table: "awcms_invitation_policies",
     reason:
       "ADR-0082, and bounded by its PARENT rather than independently — the strongest form of that claim in this list, because the binding is a database constraint rather than an argument: the `ON DELETE CASCADE` in `sql/106` means these rows are removed exactly when `awcms_invitations` is purged, and that table carries a real `dataLifecycle` descriptor (90d default, 7d floor). A descriptor of its own would be actively wrong — `executionMode: 'generic'` deletes purely by age, so it would strip the roles off a still-pending invitation and produce an acceptance that silently grants nothing. Its own ceiling is bounded twice over anyway: at most one row per (invitation, role, scope) by unique index, and at most 20 roles per invitation by `MAX_INVITATION_ROLE_COUNT`."
+  },
+  {
+    table: "awcms_partners",
+    reason:
+      "ADR-0089, and this entry repeats the AUTHORSHIP argument rather than inventing a fourth one — said plainly because the alternative is dressing a correct repeat up as a novelty. A row is written by the PLATFORM operator registering a commercial partner, never by traffic, and `awcms_partners_partner_tenant_key` is a GLOBAL unique index, so the ceiling is the number of tenants an operator has chosen to make partners: strictly fewer than the tenant count, which is itself platform-authored (ADR-0054). The reason a descriptor is not merely unnecessary but WRONG is the one this list keeps rediscovering: `executionMode: 'generic'` deletes purely by age with no status predicate, so it would deregister live partners — and every `awcms_partner_managed_tenants` row naming them is FK-bound, so the delete would either fail or, if someone 'fixed' it with a cascade, silently sever every customer engagement in the installation."
+  },
+  {
+    table: "awcms_partner_managed_tenants",
+    reason:
+      "ADR-0089, and bounded by the table above rather than independently — the `awcms_user_group_members` shape, one entry class rather than a new one. At most one row per (tenant, partner) by unique index, and the partner side is FK-bound to a registry that is itself operator-authored, so the ceiling is tenants x registered partners with both factors human-authored. It is not a log: severing an engagement is a DELETE (ADR-0089 chose hard delete precisely so no dead mapping can be resurrected by a bug), so the table holds the present, and 'who reached into this tenant last March' is answered by `awcms_audit_events` with its own retention. An age-based purge would delete LIVE engagements, which for the partner surface PR 8.4 builds means access disappearing mid-support-case with no revocation anybody performed."
   }
 ];
 

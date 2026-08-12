@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 115   |
-| Tabel `awcms_*`                    | 143   |
-| Tabel dengan `FORCE` RLS           | 126   |
+| Migrasi                            | 116   |
+| Tabel `awcms_*`                    | 145   |
+| Tabel dengan `FORCE` RLS           | 128   |
 | Tabel RLS-free (global, by design) | 17    |
 | Berkas test                        | 362   |
 | Berkas route                       | 337   |
-| ADR                                | 89    |
+| ADR                                | 90    |
 
 ### Modul
 
@@ -162,6 +162,7 @@
 | 113 | `sql/113_awcms_principal_lockout.sql`                              |
 | 114 | `sql/114_awcms_principal_mfa.sql`                                  |
 | 115 | `sql/115_awcms_tenant_selection.sql`                               |
+| 116 | `sql/116_awcms_partners.sql`                                       |
 
 ### Tabel & Row-Level Security
 
@@ -240,6 +241,8 @@
 | `awcms_object_sync_queue`                | `sql/012_awcms_object_sync_queue_schema.sql`               | ya    | ya    |
 | `awcms_offices`                          | `sql/002_awcms_tenant_office_schema.sql`                   | ya    | ya    |
 | `awcms_oidc_auth_requests`               | `sql/025_awcms_oidc_sso_schema.sql`                        | ya    | ya    |
+| `awcms_partner_managed_tenants`          | `sql/116_awcms_partners.sql`                               | ya    | ya    |
+| `awcms_partners`                         | `sql/116_awcms_partners.sql`                               | ya    | ya    |
 | `awcms_password_reset_tokens`            | `sql/073_awcms_identity_password_reset_schema.sql`         | ya    | ya    |
 | `awcms_permissions`                      | `sql/005_awcms_abac_access_control_schema.sql`             | tidak | tidak |
 | `awcms_plan_entitlements`                | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
