@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **115** (`sql/001`–`115`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0088** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **116** (`sql/001`–`116`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0089** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -355,6 +355,72 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua belas) — GELOMBANG 8 DIBUKA. PR 8.1 mendarat,
+  dan kali ini asumsi lintas-tenant DIPERIKSA SEBELUM rencananya ditulis.**
+
+  [ADR-0089](adr/0089-a-partner-is-an-ordinary-tenant.md) (`sql/116`):
+  `ModulePermissionScope` tetap `tenant | platform`, **tidak ada nilai
+  `partner`**, dan jangkauan kemitraan dimodelkan sebagai DATA —
+  `awcms_partners` + `awcms_partner_managed_tenants`, keduanya mendarat inert.
+  Kalimat yang dijaga verbatim: _`scope` mengatur siapa yang boleh MEMEGANG
+  sebuah permission; kemitraan mengatur OBJEK MANA yang disentuhnya._
+
+  **Pemeriksaan yang dilakukan lebih dulu, dan enam hal yang ditemukannya.**
+  Dua gelombang terakhir rencananya keliru dengan cara yang sama, jadi rencana
+  Gelombang 8 (ditulis 9 Agustus, tiga hari dan dua ADR sebelum yang benar-benar
+  mendarat) diperiksa terhadap kode nyata sebelum satu baris ditulis:
+
+  1. **Sisi kepemilikan baris pemetaan tidak terjawab.** Rencana menetapkan
+     baris grant ber-RLS pada tenant TARGET, tetapi tidak menetapkan apa pun
+     untuk pemetaan partner→tenant, yang punya masalah persis sama. Dijawab di
+     ADR-0089: TARGET, dengan pandangan partner lewat `SECURITY DEFINER` saat
+     PR 8.4 memberinya pemanggil.
+  2. **Registri partner TIDAK BISA berbentuk "satu baris di tenant partner".**
+     Di bawah FORCE RLS tenant platform tak dapat menyisipkan baris ber-`tenant_id`
+     tenant lain. Barisnya milik platform dan MENYEBUT tenant lain.
+  3. **`sql/048` lebih besar dari kutipannya.** "Preseden fungsi `SECURITY
+DEFINER` sempit" benar, tetapi `sql/048` sendiri mendokumentasikan bahwa di
+     postur repo ini definer TIDAK mem-bypass RLS — perlu role pemilik NOLOGIN,
+     policy baca eksplisit, daftar kolom tetap, dan `EXECUTE` terkunci. Siapa pun
+     yang menulisnya di PR 8.4 harus membaca empat bagian itu, bukan satu.
+  4. **Aturan non-switchable yang mendarat berbasis `origin_auth`, bukan kolom
+     `switchable`** seperti yang rencana 8.2 tulis. Sesi turunan grant menuntut
+     nilai `origin_auth` KELIMA (`delegated`) di CHECK `sql/115` — satu ALTER,
+     tetapi ia harus ada di rencana 8.2 dan sekarang tercatat.
+  5. **`actor_tenant_id` sudah ada** di `awcms_tenant_status_transitions`
+     (`sql/092`, ADR-0054) — preseden bentuk dan FK untuk PR 8.3 yang rencananya
+     tidak menyebut.
+  6. **Role `support` yang diasumsikan PR 8.2 TIDAK ADA.** Role adalah baris
+     per-tenant di `awcms_roles`; menyeragamkannya menuntut seed **plus
+     backfill**, karena seed migration hanya menjangkau tenant yang dibuat
+     SETELAHNYA dan tenant lama akan diam-diam 403.
+
+  Urutan langkah chokepoint (aturan lintas-gelombang 1 & 2) diverifikasi masih
+  utuh setelah PR 7.4 menyisipkan penolakan token seleksi di puncak: seleksi →
+  machine → `tenant_suspended` → `module_disabled` → entitlement →
+  `platform_scope_required` → `fetchGrantedPermissionKeys` →
+  `narrowPermissionKeys` → `ownershipGrant`.
+
+  **Satu kenaikan plafon yang perlu dilihat pemilik repo:**
+  `BOUNDED_BY_DESIGN` naik **13 → 15**, dan kenaikan ini **tidak memenuhi bar
+  yang ditulis PR 7.3** ("argumen keempat, bukan tabel keempat belas yang
+  mengulang salah satu dari tiga"). Kedua tabel partner mengulang argumen
+  KEPENGARANGAN, dan itu dinyatakan apa adanya alih-alih didandani sebagai
+  kelas baru. Alasan menaikkannya tetap: bar itu ada untuk mencegah tabel yang
+  tumbuh mengikuti TRAFIK diparkir di sana, dan tak satu pun dari keduanya
+  begitu — sementara membacanya harfiah memaksa salah satu dari dua hasil yang
+  lebih buruk (novelty palsu, atau deskriptor `generic` yang akan menghapus
+  partner hidup). Bar-nya diganti yang lebih tajam: **kenaikan berikutnya wajib
+  membawa argumen keempat ATAU memendekkan daftar di tempat lain.**
+
+  Rantai tetap **41 gerbang**. Tidak ada gerbang ke-42 untuk union dua-nilai —
+  penolakan `partner` hidup di `tests/platform-scoped-permissions.test.ts`,
+  dibuktikan memerah oleh tiga mutasi (menambah `partner`, mengganti nama tipe,
+  menghapus entri registry).
+
+  **Sisa Gelombang 8:** PR 8.2 (ADR akses terdelegasi), 8.3 (atribusi dua sisi),
+  8.4 (permukaan `/api/v1/partner/**`), 8.5 (kelas tulis machine credential).
 
 - **PUTARAN 12 Agustus 2026 (kesebelas) — GELOMBANG 7 SELESAI. PR 7.4 mendarat,
   dan rencananya salah untuk KEDUA kalinya dengan cara yang sama.**
