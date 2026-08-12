@@ -190,3 +190,45 @@ describe("every success path clears the GLOBAL counter, not just /auth/login", (
     }
   });
 });
+
+describe("a new identity is born WITH a principal", () => {
+  // The defect the DB-gated suite found, and the one no pure gate could:
+  // `sql/112` backfilled the identities that existed WHEN IT RAN, and nothing
+  // taught the writers to create one afterwards. Every account created after the
+  // migration landed with `principal_id = NULL` — and since the counter lives on
+  // the principal, a null link means failed attempts count NOTHING.
+  //
+  // A brute-force control silently switched off for exactly the accounts nobody
+  // has audited yet. The code was correct in isolation and the tables were
+  // correct in isolation; only asking a real database for the row found it.
+  const IDENTITY_WRITERS = [
+    "src/modules/tenant-admin/application/platform-bootstrap.ts",
+    "src/modules/identity-access/application/membership-materialization.ts",
+    "src/modules/identity-access/application/self-registration.ts",
+    "src/modules/identity-access/application/tenant-sso.ts"
+  ];
+
+  test("every file that INSERTs an identity also links a principal", async () => {
+    for (const path of IDENTITY_WRITERS) {
+      const source = await code(path);
+
+      expect(source).toContain("INSERT INTO awcms_identities");
+      expect(source).toContain("linkIdentityToPrincipal(");
+    }
+  });
+
+  test("and the list is DERIVED, so a fifth writer cannot be forgotten", async () => {
+    // The assertion above is only as good as its list. This one rebuilds the
+    // list from the repository, so a new writer joins it whether or not anybody
+    // remembered to add it here.
+    const found: string[] = [];
+
+    for (const path of new Bun.Glob("src/**/*.ts").scanSync(".")) {
+      if ((await code(path)).includes("INSERT INTO awcms_identities")) {
+        found.push(path);
+      }
+    }
+
+    expect(found.sort()).toEqual([...IDENTITY_WRITERS].sort());
+  });
+});

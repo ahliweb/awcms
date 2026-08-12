@@ -1,4 +1,5 @@
 import { assertUuid } from "../../../lib/database/tenant-context";
+import { linkIdentityToPrincipal } from "../../identity-access/application/principal-store";
 import { hashPassword } from "../../../lib/auth/password";
 import type { SetupInitializeInput } from "../domain/setup-validation";
 
@@ -89,6 +90,10 @@ export async function createTenantWithOwner(
     RETURNING id
   `;
   const identityId = identityRows[0]!.id as string;
+
+  // ADR-0086 — an identity with no principal counts NO failed logins, because
+  // the lockout counter lives on the principal now. Every identity writer links.
+  await linkIdentityToPrincipal(tx, identityId, input.ownerLoginIdentifier);
 
   const tenantUserRows = await tx`
     INSERT INTO awcms_tenant_users (tenant_id, identity_id)

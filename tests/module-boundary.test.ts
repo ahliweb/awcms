@@ -127,6 +127,25 @@ const DOCUMENTED_EXCEPTIONS: {
       "the registry is a static array read at publish time from inside " +
       "`appendDomainEvent`, so a port would relocate the concrete import rather " +
       "than remove it. Revisit if consumer registration ever becomes lazy."
+  },
+  {
+    from: "tenant_admin",
+    to: "identity_access",
+    reason:
+      "ADR-0086. `platform-bootstrap.ts` already INSERTs into " +
+      "`awcms_identities` — it is the recorded owner-exception for that table in " +
+      "`modules:table-writes:check` — and since the lockout counter moved onto " +
+      "`awcms_principals`, an identity created without a principal link counts " +
+      "NO failed logins. Linking is therefore part of creating the identity, not " +
+      "a separate concern that could run afterwards: the gap between the two " +
+      "would be an account with the brute-force control switched off. It cannot " +
+      "be a `dependencies` edge (`identity_access` already declares " +
+      "`tenant_admin`, so the reverse is a cycle), and a capability port would " +
+      "relocate the concrete import rather than remove it — the principal store " +
+      "is the ONLY file permitted to name that table by " +
+      "`identity:principal-access:check`, so a port adapter would have to live " +
+      "there anyway and be called from here just the same. Revisit if tenant " +
+      "bootstrap ever stops writing identity rows itself."
   }
 ];
 

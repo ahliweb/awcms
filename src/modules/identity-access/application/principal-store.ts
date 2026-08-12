@@ -331,3 +331,39 @@ export async function setPrincipalCredentialForIdentity(
 
   if (principalId) await setPrincipalCredential(tx, principalId, passwordHash);
 }
+
+/**
+ * Links a NEWLY CREATED identity to its principal, creating the principal when
+ * this is the first tenant that address has ever appeared in.
+ *
+ * ## Why every identity writer must call this
+ *
+ * `sql/112` backfilled the identities that existed WHEN IT RAN. Nothing made the
+ * writers create one afterwards, so every account created after the migration
+ * landed with `principal_id = NULL` — and since ADR-0086 the lockout counter
+ * lives on the principal, a null link means failed attempts count NOTHING.
+ *
+ * That is a brute-force control silently switched off for exactly the accounts
+ * nobody has audited yet, and no pure gate can see it: the code is correct in
+ * isolation and the tables are correct in isolation. The DB-gated suite found it
+ * by looking for the row and getting none.
+ *
+ * There are four writers (tenant bootstrap, invitation acceptance,
+ * self-registration approval, SSO just-in-time provisioning) and they all call
+ * this, so the next one has one obvious thing to copy.
+ */
+export async function linkIdentityToPrincipal(
+  tx: Bun.SQL,
+  identityId: string,
+  loginIdentifier: string
+): Promise<string> {
+  const principal = await ensurePrincipalForEmail(tx, loginIdentifier);
+
+  await tx`
+    UPDATE awcms_identities
+    SET principal_id = ${principal.id}
+    WHERE id = ${identityId} AND principal_id IS NULL
+  `;
+
+  return principal.id;
+}

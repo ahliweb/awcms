@@ -43,6 +43,7 @@
  * the recovery is ordinary — the applicant uses `/forgot-password`, or the
  * admin fixes the template and re-triggers it.
  */
+import { linkIdentityToPrincipal } from "./principal-store";
 import { generateResetToken } from "../../../lib/auth/reset-token";
 import { hashPassword } from "../../../lib/auth/password";
 import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
@@ -313,6 +314,10 @@ export async function approveRegistrationRequest(
     RETURNING id
   `) as { id: string }[];
   const identityId = identityRows[0]!.id;
+
+  // ADR-0086 — an identity with no principal counts NO failed logins, because
+  // the lockout counter lives on the principal now. Every identity writer links.
+  await linkIdentityToPrincipal(tx, identityId, request.login_identifier);
 
   const tenantUserRows = (await tx`
     INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
