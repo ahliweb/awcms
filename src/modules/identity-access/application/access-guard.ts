@@ -53,6 +53,7 @@ import {
   isMachineCredentialToken,
   parseMachineCredentialToken
 } from "../../../lib/auth/machine-credential-token";
+import { isPrincipalSelectionHash } from "../../../lib/auth/principal-selection-token";
 
 /**
  * Resolves the tenant id + bearer token an endpoint should authenticate with,
@@ -165,6 +166,31 @@ export async function authorizeInTransaction(
     ownershipGrant?: OwnershipGrant;
   }
 ): Promise<AuthorizeResult> {
+  // ADR-0088 — THE invariant of Gelombang 7 PR 7.4, and the reason it is the
+  // very first statement in this function.
+  //
+  // A tenant-selection token proves a human authenticated with the GLOBAL
+  // credential and has not yet chosen a tenant. It is the only bearer in this
+  // system that is bound to no tenant at all, so a path that let one authorize
+  // anything would be authorizing against a tenant nobody selected — and
+  // `resolveTenantContext` would happily supply whichever tenant the caller
+  // named in the header.
+  //
+  // Refused HERE rather than trusted to fail downstream. A selection hash would
+  // in fact find no session row today, so the 401 would happen anyway — but
+  // that is an accident of where the token is stored, and the whole point is
+  // that this must not depend on storage. It also short-circuits before any
+  // query, which is what makes "zero decision log rows" true by construction
+  // rather than by inspection.
+  if (isPrincipalSelectionHash(tokenHash)) {
+    // Byte-identical to every other authentication failure below: a caller
+    // must not learn that the token it holds is a REAL selection token.
+    return {
+      allowed: false,
+      denied: fail(401, "AUTH_REQUIRED", "Session is invalid or expired.")
+    };
+  }
+
   // ADR-0049 — the bearer's KIND is carried by the hash namespace, so exactly
   // one table is consulted and neither kind is ever searched in the other's.
   // Everything after this block is identical for both: a machine credential

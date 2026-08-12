@@ -25,6 +25,17 @@ const ALLOWED_PUBLIC_OPERATIONS = new Set([
   "postSetupInitialize",
   "postAuthLogin",
   "postAuthMfaVerify",
+  // ADR-0088 — the second half of a tenantless login. It carries no session
+  // BECAUSE no tenant has been chosen yet, which is the same reason
+  // `postAuthMfaVerify` above is public: both are authenticated by possession
+  // of a short-lived, single-use token minted by a login that already proved a
+  // credential. The bearer it accepts is deliberately NOT a session token, and
+  // the authorization chokepoint refuses that bearer kind outright — so listing
+  // it here widens nothing a session could reach.
+  //
+  // `postAuthSessionSwitch` is NOT listed: it requires a live session and is
+  // authenticated like any other authorized surface.
+  "postAuthSessionTenant",
   // Issue #185 — the OIDC SSO entry points are unauthenticated by design: a
   // fresh browser navigation carries no session yet, and the callback is the
   // IdP's own redirect target. Both are still tenant-bound (via `state`) and

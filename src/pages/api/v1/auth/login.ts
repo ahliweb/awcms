@@ -57,11 +57,36 @@ import { isPasswordLoginDisabledForIdentity } from "../../../../modules/identity
 import {
   clearPrincipalLockout,
   findPrincipalByEmail,
+  issuePrincipalSelectionToken,
   loadPrincipalSecret,
   promotePrincipalCredential,
   recordPrincipalLoginFailure
 } from "../../../../modules/identity-access/application/principal-store";
+import {
+  generatePrincipalSelectionToken,
+  hashPrincipalSelectionToken
+} from "../../../../lib/auth/principal-selection-token";
 import { log } from "../../../../lib/logging/logger";
+
+/**
+ * ADR-0088 — the selection token's whole life, in seconds.
+ *
+ * Deliberately not configurable. Every other TTL here is an operator dial
+ * because deployments genuinely differ; this one is a security parameter with
+ * no legitimate reason to be longer, and an env var would exist only to be
+ * raised. It has to outlast a human choosing from a list and nothing else.
+ */
+const SELECTION_TOKEN_TTL_SEC = 120;
+
+/**
+ * The per-tenant rate-limit bucket for attempts that name NO tenant.
+ *
+ * A literal, not a tenant id: `checkAuthRateLimit` keys its second bucket by
+ * tenant, and there is no tenant here. Every tenantless attempt therefore
+ * shares one bucket — see the note at the call site for why sharing is the
+ * conservative direction.
+ */
+const TENANTLESS_RATE_LIMIT_KEY = "tenantless";
 
 type LoginBody = {
   loginIdentifier?: unknown;
@@ -226,6 +251,197 @@ async function recordLoginFailureOutOfBand(
   }
 }
 
+/**
+ * Login with NO tenant header — ADR-0088. Verifies the human against the GLOBAL
+ * credential and answers `409 MEMBERSHIP_SELECTION_REQUIRED` with a
+ * selection token, never a session.
+ *
+ * ## Why it does not open a tenant transaction
+ *
+ * There is no tenant to open one for; that is the entire premise. Everything it
+ * touches is `awcms_principals`, which is GLOBAL and RLS-free by design
+ * (ADR-0085), so a plain transaction is both sufficient and honest — the same
+ * shape `POST /api/v1/setup/initialize` uses for the other pre-tenant flow in
+ * this repo.
+ *
+ * ## Why nothing here writes an audit row
+ *
+ * `awcms_audit_events` is tenant-scoped under FORCE RLS. An attempt that names
+ * no tenant has nowhere to be audited, and inventing a tenant to file it under
+ * would be a lie in the one table that must not contain any. Attempts are
+ * therefore recorded in the STRUCTURED LOG, and the tenant-visible audit
+ * happens where a tenant is finally named — `POST /auth/session/tenant` writes
+ * `session_tenant_selected` into the tenant that was entered.
+ *
+ * The consequence is stated rather than hidden: a brute-force run against the
+ * tenantless endpoint is visible to operators reading logs, not to a tenant
+ * reading its own audit trail. What protects the account is the same GLOBAL
+ * lockout counter (ADR-0086) the tenant-scoped path uses — the counter is
+ * shared, so attempts here and there add up.
+ */
+async function handleTenantlessLogin(
+  request: Request,
+  clientAddress: string,
+  locals: App.Locals
+): Promise<Response> {
+  const policy = resolveLoginPolicyConfig();
+  const clientIp = resolveClientIp(request, clientAddress);
+
+  // The per-tenant bucket has no tenant to key on, so every tenantless attempt
+  // shares ONE bucket. That is deliberately stricter than the per-tenant path:
+  // this endpoint answers for every human in the installation at once, so a
+  // shared ceiling is the conservative choice, and the per-source bucket
+  // `checkAuthRateLimit` checks first is unaffected either way.
+  const rateLimit = await checkAuthRateLimit({
+    clientIp,
+    tenantId: TENANTLESS_RATE_LIMIT_KEY,
+    scope: "login-tenantless",
+    config: {
+      maxAttempts: policy.rateLimitMaxAttempts,
+      windowMs: policy.rateLimitWindowSec * 1000
+    }
+  });
+
+  if (!rateLimit.allowed) {
+    return fail(
+      429,
+      "RATE_LIMITED",
+      "Too many login attempts from this source. Try again later.",
+      {},
+      undefined,
+      { "retry-after": String(rateLimit.retryAfterSec) }
+    );
+  }
+
+  const bodyRead = await readJsonBody<LoginBody>(request);
+  if (bodyRead.tooLarge) return bodyTooLargeResponse(bodyRead.limitBytes);
+
+  const body = bodyRead.value;
+
+  if (
+    !body ||
+    typeof body.loginIdentifier !== "string" ||
+    typeof body.password !== "string"
+  ) {
+    return fail(
+      400,
+      "VALIDATION_ERROR",
+      "loginIdentifier and password are required."
+    );
+  }
+
+  const turnstileResult = await enforceTurnstileIfRequired(
+    body.turnstileToken,
+    clientIp,
+    { action: LOGIN_TURNSTILE_ACTION }
+  );
+
+  if (!turnstileResult.ok) {
+    return fail(
+      400,
+      turnstileResult.code,
+      turnstileResult.code === "TURNSTILE_REQUIRED"
+        ? "Turnstile verification token is required."
+        : "Turnstile verification failed."
+    );
+  }
+
+  const sql = getDatabaseClient();
+  const now = new Date();
+
+  /** ONE response for every failure — unknown, wrong, locked, unpromoted. */
+  const denied = () => fail(401, "INVALID_CREDENTIALS", "Invalid credentials.");
+
+  return sql.begin(async (tx) => {
+    const principal = await findPrincipalByEmail(
+      tx,
+      body.loginIdentifier as string
+    );
+
+    // A human whose credential was never promoted (`sql/112` left it NULL until
+    // the first successful login) cannot be verified here, because there is no
+    // tenant identity to fall back on. Refused as "invalid credentials" rather
+    // than explained: "this account has never signed in" is an enumeration
+    // oracle. Recovery needs nothing new — one login WITH a tenant header
+    // promotes the credential, and this path works from then on.
+    const secret = principal?.hasCredential
+      ? await loadPrincipalSecret(tx, principal.id)
+      : null;
+
+    // Always spend the argon2id cost, even with no principal, so an unknown
+    // address is not distinguishable by response time.
+    const passwordMatches = await verifyPasswordOrDummy(
+      body.password as string,
+      secret?.passwordHash ?? undefined
+    );
+
+    const lockedOut =
+      principal?.lockedUntil !== null &&
+      principal?.lockedUntil !== undefined &&
+      new Date(principal.lockedUntil).getTime() > now.getTime();
+
+    if (!principal || lockedOut || !passwordMatches) {
+      if (principal && !lockedOut && !passwordMatches) {
+        await recordPrincipalLoginFailure(
+          tx,
+          principal.id,
+          policy.maxFailedAttempts,
+          new Date(now.getTime() + policy.lockoutMinutes * 60_000)
+        );
+      }
+
+      log("info", "auth.login.tenantless_failed", {
+        moduleKey: "identity_access",
+        correlationId: locals.correlationId,
+        reason: !principal
+          ? "unknown_principal"
+          : lockedOut
+            ? "locked"
+            : "invalid_password"
+      });
+
+      return denied();
+    }
+
+    await clearPrincipalLockout(tx, principal.id);
+
+    const selectionToken = generatePrincipalSelectionToken();
+    const expiresAt = new Date(now.getTime() + SELECTION_TOKEN_TTL_SEC * 1000);
+
+    await issuePrincipalSelectionToken(
+      tx,
+      principal.id,
+      hashPrincipalSelectionToken(selectionToken),
+      expiresAt
+    );
+
+    log("info", "auth.login.tenant_selection_required", {
+      moduleKey: "identity_access",
+      correlationId: locals.correlationId
+    });
+
+    // 409, not 401: the credential was ACCEPTED. A 401 would tell an honest
+    // client to re-prompt for a password it already got right, and would be
+    // indistinguishable from the failure above for anyone reading logs.
+    //
+    // No membership list travels with it. Reading one would need a
+    // cross-tenant scan of `awcms_identities`, which FORCE RLS returns zero
+    // rows for, and the global projection that would make it possible is the
+    // cross-tenant membership directory ADR-0087 refused. The caller names the
+    // tenant it wants.
+    return fail(
+      409,
+      "MEMBERSHIP_SELECTION_REQUIRED",
+      "Credentials accepted. Select the tenant to sign in to.",
+      {},
+      {
+        principalToken: selectionToken,
+        expiresAt: expiresAt.toISOString()
+      }
+    );
+  }) as Promise<Response>;
+}
+
 export const POST: APIRoute = async ({
   request,
   cookies,
@@ -234,8 +450,15 @@ export const POST: APIRoute = async ({
 }) => {
   const tenantId = request.headers.get("x-awcms-tenant-id");
 
+  // ADR-0088 — no tenant header is no longer a malformed request. Since the
+  // credential became global (ADR-0085/0086) a password can be verified without
+  // knowing which tenant the person means, so this branch verifies the human
+  // and hands back a SELECTION token instead of a session. It lives in its own
+  // handler because almost nothing below applies: there is no tenant to scope a
+  // transaction to, no identity row to fall back on, and no MFA policy to
+  // consult until a tenant is named.
   if (!tenantId) {
-    return fail(400, "TENANT_REQUIRED", "Tenant header is required.");
+    return handleTenantlessLogin(request, clientAddress, locals);
   }
 
   const policy = resolveLoginPolicyConfig();

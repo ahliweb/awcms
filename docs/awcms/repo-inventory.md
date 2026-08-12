@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 114   |
+| Migrasi                            | 115   |
 | Tabel `awcms_*`                    | 143   |
 | Tabel dengan `FORCE` RLS           | 126   |
 | Tabel RLS-free (global, by design) | 17    |
-| Berkas test                        | 360   |
-| Berkas route                       | 335   |
-| ADR                                | 88    |
+| Berkas test                        | 362   |
+| Berkas route                       | 337   |
+| ADR                                | 89    |
 
 ### Modul
 
@@ -161,6 +161,7 @@
 | 112 | `sql/112_awcms_principals.sql`                                     |
 | 113 | `sql/113_awcms_principal_lockout.sql`                              |
 | 114 | `sql/114_awcms_principal_mfa.sql`                                  |
+| 115 | `sql/115_awcms_tenant_selection.sql`                               |
 
 ### Tabel & Row-Level Security
 
@@ -314,7 +315,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 306        |
+| `(root)`      | 308        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
@@ -323,7 +324,7 @@
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 277    |
+| `/api/v1/**`    | 279    |
 | `/admin/**`     | 34     |
 | publik / anonim | 24     |
 

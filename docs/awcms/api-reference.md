@@ -1399,6 +1399,51 @@ The minted session inherits the assurance level the original login REACHED and n
 | 200    | A session token for the human who authenticated.                                                    | object                                 |
 | 401    | The handoff could not be completed (`HANDOFF_REJECTED`) — one answer for every cause, deliberately. | [`ApiError`](#standard-error-envelope) |
 
+### `POST /api/v1/auth/session/switch` — Move the current session to another tenant the same human belongs to.
+
+- **operationId**: `postAuthSessionSwitch`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0088. Issues a session in the target tenant and revokes the source session — switching leaves, it does not accumulate. Sessions whose `origin_auth` is `sso` or `handoff` are refused: only a globally verified credential may cross a tenant boundary, otherwise a tenant IdP administrator could assert an address and switch into the tenant where that person really works. Assurance does not travel: the new session starts at `aal1` and the target tenant's MFA policy is applied afresh.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description                                                    |
+| ------------------- | ------ | -------- | ------------- | -------------------------------------------------------------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) | The CURRENT tenant, i.e. the session being switched away from. |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                                                     | Schema                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Session issued in the target tenant; the source session is revoked.                                                                                             | object                                 |
+| 400    | Validation error.                                                                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | `SESSION_NOT_SWITCHABLE` (the session was not issued by a global credential), `TENANT_UNAVAILABLE`, or `PASSWORD_LOGIN_DISABLED`.                               | [`ApiError`](#standard-error-envelope) |
+| 404    | `MEMBERSHIP_NOT_FOUND` — one shape for "you do not belong there", so this endpoint cannot be used to ask whether somebody belongs to a tenant the caller names. | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many attempts from this source.                                                                                                                             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/session/tenant` — Exchange a tenant-selection token for a session in a named tenant.
+
+- **operationId**: `postAuthSessionTenant`
+- **Security**: none (public endpoint)
+
+ADR-0088. Spends the single-use selection token returned by a `POST /api/v1/auth/login` that carried NO tenant header, and issues a session in the tenant named in the body. The token lives at most 120 seconds, is spent whether or not the exchange succeeds, and can never authenticate any other endpoint — the authorization chokepoint refuses its hash namespace outright. Every gate login applies once a tenant is known applies here too, including the target tenant's MFA policy.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Session issued in the selected tenant.                                                                                                                                                                     | object                                 |
+| 400    | Validation error.                                                                                                                                                                                          | [`ApiError`](#standard-error-envelope) |
+| 401    | One shape for every refusal an attacker could probe — unknown, expired or already-spent token, no membership, inactive identity — plus the MFA continuations `MFA_REQUIRED` and `MFA_ENROLLMENT_REQUIRED`. | [`ApiError`](#standard-error-envelope) |
+| 403    | The tenant is suspended (`TENANT_UNAVAILABLE`) or disables password sign-in for this identity (`PASSWORD_LOGIN_DISABLED`). Reachable only with a genuine token, so it discloses nothing.                   | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many attempts from this source.                                                                                                                                                                        | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/auth/sessions` — List the caller's own live sessions (self-service, no permission).
 
 - **operationId**: `listOwnAuthSessions`

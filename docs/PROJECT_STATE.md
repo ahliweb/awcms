@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **114** (`sql/001`–`114`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0087** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **115** (`sql/001`–`115`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0088** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-12).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -355,6 +355,42 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 12 Agustus 2026 (kesebelas) — GELOMBANG 7 SELESAI. PR 7.4 mendarat,
+  dan rencananya salah untuk KEDUA kalinya dengan cara yang sama.**
+
+  [ADR-0088](adr/0088-tenant-selection-and-switching.md) (`sql/115`): login tanpa
+  header tenant → `409 MEMBERSHIP_SELECTION_REQUIRED` + token seleksi (≤120
+  detik, sekali pakai, **dua kolom di `awcms_principals`** — bukan tabel kelima
+  yang tumbuh mengikuti trafik), ditukar di `POST /auth/session/tenant`;
+  `POST /auth/session/switch` memindahkan sesi hidup.
+
+  **Invarian yang dijaga: token seleksi tidak pernah mengautentikasi
+  `authorizeInTransaction`** — namespace hash `pt-sha256:` ditolak di pernyataan
+  PERTAMA gerbang, tanpa satu query pun, sehingga "nol baris decision log" benar
+  secara konstruksi. Test-nya memakai transaksi yang menggagalkan test bila
+  gerbang menyentuh DB sama sekali.
+
+  **Temuan: rencana mengasumsikan pembacaan lintas-tenant yang FORCE RLS larang
+  — lagi.** ADR-0087 sudah menolak "baris audit di setiap tenant terjangkau";
+  PR 7.4 seharusnya membawa daftar keanggotaan di respons 409, dan komentar
+  index PR 7.1 sendiri menulis bahwa `awcms_identities (principal_id)` melayani
+  query itu. Diukur pada basis data nyata: **1 baris di dalam konteks tenant,
+  NOL tanpa konteks.** Proyeksi keanggotaan global akan membuatnya mungkin dan
+  ditolak — ia direktori keanggotaan lintas-tenant yang ADR-0087 tolak dalam
+  wujud lain. **Pemanggil menyebut tenantnya**, dan itu pilihan pemilik repo,
+  bukan default yang tak dipikirkan.
+
+  Aturan non-switchable (`sso`/`handoff` tidak boleh berpindah) menutup
+  pengambilalihan lintas-tenant yang setiap langkahnya sah. Gerbang MFA tenant
+  tujuan berlaku di kedua jalur — tanpa itu perpindahan tenant adalah bypass
+  MFA. Rantai tetap **41**; suite DB-gated bertambah satu berkas (terdaftar di
+  kedua workflow). Koreksi searah: `standar-performa-dan-keamanan.md` menyebut
+  "18 berkas rute" ber-rate-limit; nyatanya **26**, sudah basi enam berkas
+  sebelum PR ini menambah dua.
+
+  **Gelombang 7 TUTUP.** Berikutnya Gelombang 8 (partner/EaaS + akses
+  terdelegasi), yang belum dimulai.
 
 - **PUTARAN 12 Agustus 2026 (kesepuluh) — PR 7.3 MENDARAT: MFA pindah ke
   principal, dan sebuah kewajiban yang DITULIS RENCANA ternyata tak bisa
