@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { clearPrincipalLockoutForIdentity } from "../../../../../../../modules/identity-access/application/principal-store";
 import { fail, ok } from "../../../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../../../lib/database/client";
 import { withTenant } from "../../../../../../../lib/database/tenant-context";
@@ -135,9 +136,14 @@ export const POST: APIRoute = async ({
 
       await tx`
         UPDATE awcms_identities
-        SET failed_login_count = 0, last_login_at = ${now}
+        SET last_login_at = ${now}
         WHERE id = ${auth.identityId}
       `;
+
+      // ADR-0086 — same obligation as the SSO callback: completing enrolment is
+      // a successful authentication, and the counter it must clear is the global
+      // one.
+      await clearPrincipalLockoutForIdentity(tx, auth.identityId);
 
       const created = await createSessionWithAssurance(tx, {
         tenantId,

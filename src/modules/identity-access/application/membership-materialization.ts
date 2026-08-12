@@ -34,6 +34,7 @@
  * resolved before the first INSERT, so a rejected acceptance leaves nothing
  * behind but its audit row.
  */
+import { linkIdentityToPrincipal } from "./principal-store";
 import { hashPassword } from "../../../lib/auth/password";
 import { createPersonProfileForIdentity } from "../../profile-identity/application/person-profile";
 import { grantRolePolicy } from "./access-policy-writer";
@@ -123,6 +124,10 @@ export async function materializeMembership(
   `) as { id: string }[];
 
   const identityId = identityRows[0]!.id;
+
+  // ADR-0086 — an identity with no principal counts NO failed logins, because
+  // the lockout counter lives on the principal now. Every identity writer links.
+  await linkIdentityToPrincipal(tx, identityId, input.loginIdentifier);
 
   const tenantUserRows = (await tx`
     INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)

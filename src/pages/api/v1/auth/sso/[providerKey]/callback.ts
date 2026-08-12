@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 
+import { clearPrincipalLockoutForIdentity } from "../../../../../../modules/identity-access/application/principal-store";
 import { fail } from "../../../../../../modules/_shared/api-response";
 import { getDatabaseClient } from "../../../../../../lib/database/client";
 import {
@@ -175,9 +176,15 @@ export const GET: APIRoute = async ({
   const mintResult = await withTenant(sql, result.tenantId, async (tx) => {
     await tx`
       UPDATE awcms_identities
-      SET failed_login_count = 0, last_login_at = ${now}
+      SET last_login_at = ${now}
       WHERE id = ${result.identityId}
     `;
+
+    // ADR-0086 — the LIVE lockout is global now, so proving identity through the
+    // IdP has to clear it. Without this a person locked out by password attempts
+    // would sign in via SSO successfully and stay locked at the password path,
+    // with the lever that used to release them no longer deciding anything.
+    await clearPrincipalLockoutForIdentity(tx, result.identityId);
 
     const created = await createSessionWithAssurance(tx, {
       tenantId: result.tenantId,

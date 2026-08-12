@@ -460,8 +460,18 @@ export async function checkLoginLockoutImplemented(): Promise<SecurityCheckResul
 
   // The mechanism half: the increment must be an expression over the COLUMN,
   // evaluated by PostgreSQL. A parameterised absolute value is the defect.
+  //
+  // ADR-0086 moved the counter off `awcms_identities` and onto
+  // `awcms_principals`, so the writer moved with it — this check follows it
+  // rather than keeping a green result about a mechanism that no longer decides
+  // anything. That failure mode is not hypothetical: this check kept passing
+  // against the old route until its own test went red, which is exactly the
+  // "writer moved, readers did not" class it was meant to be immune to.
   const route = await readFile(
-    path.join(process.cwd(), "src/pages/api/v1/auth/login.ts"),
+    path.join(
+      process.cwd(),
+      "src/modules/identity-access/application/principal-store.ts"
+    ),
     "utf8"
   );
   const incrementsInDb =

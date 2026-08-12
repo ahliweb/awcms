@@ -79,15 +79,23 @@ describe("evaluateLoginAttempt", () => {
 
   test("the route's SQL uses the same threshold this module states", () => {
     // `shouldLockAccount` is the readable statement of the rule; the comparison
-    // that actually runs is in the route's UPDATE. Pinned here so the two
-    // cannot drift into saying different things — a `>` where the policy says
-    // `>=` would give every account one extra attempt, silently.
-    const route = readFileSync("src/pages/api/v1/auth/login.ts", "utf8");
+    // that actually runs is in the UPDATE. Pinned here so the two cannot drift
+    // into saying different things — a `>` where the policy says `>=` would give
+    // every account one extra attempt, silently.
+    //
+    // ADR-0086 moved that UPDATE out of the route and onto the principal store,
+    // so this follows it. Pinning the route would have kept passing against a
+    // statement that no longer runs — the failure mode this whole test exists to
+    // prevent, one level up.
+    const writer = readFileSync(
+      "src/modules/identity-access/application/principal-store.ts",
+      "utf8"
+    );
 
     expect(shouldLockAccount(5, 5)).toBe(true);
-    expect(route).toContain("failed_login_count = failed_login_count + 1");
-    expect(route).toMatch(
-      /CASE WHEN failed_login_count \+ 1 >= \$\{policy\.maxFailedAttempts\}/
+    expect(writer).toContain("failed_login_count = failed_login_count + 1");
+    expect(writer).toMatch(
+      /CASE WHEN failed_login_count \+ 1 >= \$\{maxFailedAttempts\}/
     );
   });
 

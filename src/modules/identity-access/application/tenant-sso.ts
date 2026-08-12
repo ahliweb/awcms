@@ -21,6 +21,7 @@
  * (ADR-0006). `completeTenantSsoCallback` spans several short transactions with
  * network calls in between, never one long transaction around a provider call.
  */
+import { linkIdentityToPrincipal } from "./principal-store";
 import {
   findJwk,
   isAllowedJwtAlgorithm,
@@ -502,6 +503,10 @@ export async function jitProvisionIdentity(
     RETURNING id
   `) as { id: string }[];
   const identityId = identityRows[0]!.id;
+
+  // ADR-0086 — an identity with no principal counts NO failed logins, because
+  // the lockout counter lives on the principal now. Every identity writer links.
+  await linkIdentityToPrincipal(tx, identityId, input.email);
 
   await tx`
     INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
