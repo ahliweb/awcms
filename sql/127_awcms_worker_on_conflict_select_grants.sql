@@ -1,0 +1,60 @@
+-- `ON CONFLICT` needs SELECT, and four worker tables never had it.
+--
+-- Found by ACTUALLY SENDING an email in production, not by reading anything:
+-- `bun run email:dispatch` claimed one message, called Mailketing (the mail was
+-- delivered), then died recording the attempt —
+--
+--   email:dispatch FAILED — permission denied for table awcms_email_delivery_attempts
+--
+-- The failure is worse than a plain error because the provider call sits
+-- OUTSIDE the transaction that records the attempt: the message stays `sending`
+-- and the lease-expiry re-claim sends it AGAIN. An under-grant here is a
+-- duplicate-delivery loop, not a stalled queue.
+--
+-- ## Why INSERT was not enough
+--
+-- `awcms_worker` held exactly `INSERT` (`sql/022`) and `DELETE` (`sql/095`) on
+-- `awcms_email_delivery_attempts`, and the statement is:
+--
+--   INSERT INTO awcms_email_delivery_attempts (…) VALUES (…)
+--   ON CONFLICT ON CONSTRAINT awcms_email_delivery_attempts_unique_attempt
+--   DO NOTHING
+--
+-- PostgreSQL requires **SELECT** on a table whose `ON CONFLICT` arbiter it must
+-- consult — the conflict check is a read. `INSERT` alone is therefore the right
+-- privilege for a plain INSERT and the WRONG one for this statement, which is a
+-- distinction no amount of reading the grant list reveals: the list said
+-- "the worker inserts here", and it does.
+--
+-- ## Why three more tables are in this migration
+--
+-- Once the shape was known it was cheap to ask which OTHER worker tables carry
+-- `INSERT` without `SELECT` and are written with `ON CONFLICT`. Three did, each
+-- one an identical latent failure waiting for its first real workload:
+--
+-- - `awcms_domain_event_activity_daily` — `ON CONFLICT (tenant_id,
+--   activity_date, event_type) DO UPDATE` (domain-event dispatch roll-up).
+-- - `awcms_reporting_projection_state` — `ON CONFLICT (tenant_id,
+--   projection_key) DO UPDATE` (projection refresh bookkeeping).
+-- - `awcms_workflow_task_assignments` — `ON CONFLICT DO NOTHING` (escalation
+--   re-assignment).
+--
+-- `awcms_business_scope_assignment_events` also holds INSERT-without-SELECT and
+-- is deliberately NOT granted here: its writes are plain INSERTs with no
+-- `ON CONFLICT`, so SELECT would be an unearned widening of a role whose whole
+-- point is least privilege.
+--
+-- ## Why this was not caught by a gate
+--
+-- `WORKER_ROLE_GRANTS` (`scripts/security-readiness.ts`) is drift-tested
+-- two-way against the migrations — and both sides said `INSERT, DELETE`, so
+-- both sides were consistent and both were wrong. The matrix answers "do the
+-- grants match what we wrote down", never "can the statements the code actually
+-- issues execute". That gap is the same one recorded for the privilege matrix
+-- in `docs/PROJECT_STATE.md` §4; this migration does not close it, it pays one
+-- more instance of it.
+
+GRANT SELECT ON awcms_email_delivery_attempts TO awcms_worker;
+GRANT SELECT ON awcms_domain_event_activity_daily TO awcms_worker;
+GRANT SELECT ON awcms_reporting_projection_state TO awcms_worker;
+GRANT SELECT ON awcms_workflow_task_assignments TO awcms_worker;

@@ -8,7 +8,7 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 126   |
+| Migrasi                            | 127   |
 | Tabel `awcms_*`                    | 147   |
 | Tabel dengan `FORCE` RLS           | 130   |
 | Tabel RLS-free (global, by design) | 17    |
@@ -173,6 +173,7 @@
 | 124 | `sql/124_awcms_partner_suspension.sql`                             |
 | 125 | `sql/125_awcms_subject_requests.sql`                               |
 | 126 | `sql/126_awcms_subject_request_permissions.sql`                    |
+| 127 | `sql/127_awcms_worker_on_conflict_select_grants.sql`               |
 
 ### Tabel & Row-Level Security
 

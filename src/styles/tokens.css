@@ -257,3 +257,23 @@ a {
   white-space: nowrap;
   border: 0;
 }
+
+/**
+ * `hidden` must beat layout, everywhere.
+ *
+ * The UA stylesheet's `[hidden] { display: none }` is an ATTRIBUTE rule, so any
+ * class rule that sets `display` outranks it and the element stays visible with
+ * `hidden` set. That is not hypothetical: `.auth-form { display: flex }` meant
+ * `form.hidden = true` did nothing on the reset-password, forgot-password,
+ * register and accept-invitation success paths — the form stayed on screen,
+ * still carrying its disabled "Please wait…" submit button, directly beneath
+ * the "your password has been changed" notice. Every one of those pages was
+ * written correctly; the stylesheet silently vetoed them.
+ *
+ * `!important` is the point rather than a shortcut: `hidden` is a statement
+ * that the element is not relevant, and no layout rule should be able to
+ * overrule it. Anything that needs to stay laid out must not use `hidden`.
+ */
+[hidden] {
+  display: none !important;
+}

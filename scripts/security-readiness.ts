@@ -1255,23 +1255,31 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // more, which was right; the purge is a second worker entrypoint with a
   // different job, so it needs the verb the first one was deliberately denied.
   awcms_email_messages: ["SELECT", "UPDATE", "DELETE"],
-  awcms_email_delivery_attempts: ["INSERT", "DELETE"],
+  // SELECT added by `sql/127`: the insert carries `ON CONFLICT ON CONSTRAINT
+  // …_unique_attempt DO NOTHING`, and PostgreSQL reads the arbiter to decide a
+  // conflict — so INSERT alone raises `permission denied`. Proven in production
+  // by an email that WAS delivered and then failed to be recorded.
+  awcms_email_delivery_attempts: ["INSERT", "DELETE", "SELECT"],
   awcms_email_templates: ["SELECT"],
   awcms_email_suppression_list: ["SELECT"],
   awcms_workflow_tasks: ["SELECT", "UPDATE"],
   awcms_workflow_instances: ["SELECT"],
   awcms_workflow_definitions: ["SELECT"],
-  awcms_workflow_task_assignments: ["INSERT"],
+  // SELECT added by `sql/127` — same `ON CONFLICT` arbiter read as
+  // `awcms_email_delivery_attempts` above (`ON CONFLICT DO NOTHING`).
+  awcms_workflow_task_assignments: ["INSERT", "SELECT"],
   awcms_domain_events: ["SELECT", "INSERT"],
   // DELETE added by `sql/097` (Issue #468) for
   // `bun run domain-events:deliveries:purge`.
   awcms_domain_event_deliveries: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   awcms_domain_event_consumer_state: ["SELECT"],
   awcms_domain_event_consumer_effects: ["SELECT", "INSERT"],
-  awcms_domain_event_activity_daily: ["INSERT", "UPDATE"],
+  // SELECT added by `sql/127` — `ON CONFLICT (…) DO UPDATE` reads the arbiter.
+  awcms_domain_event_activity_daily: ["INSERT", "UPDATE", "SELECT"],
   awcms_reporting_projection_cursors: ["SELECT", "INSERT", "UPDATE"],
   awcms_reporting_projection_metrics: ["SELECT", "INSERT", "UPDATE"],
-  awcms_reporting_projection_state: ["INSERT", "UPDATE"],
+  // SELECT added by `sql/127` — `ON CONFLICT (…) DO UPDATE` reads the arbiter.
+  awcms_reporting_projection_state: ["INSERT", "UPDATE", "SELECT"],
   awcms_reporting_rebuild_runs: ["SELECT", "UPDATE"],
   awcms_reporting_scheduled_exports: ["SELECT"],
   awcms_reporting_export_runs: ["SELECT", "INSERT"],
