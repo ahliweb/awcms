@@ -137,6 +137,16 @@ export const identityAccessModule = defineModule({
       path: "/admin/security",
       order: 24,
       requiredPermission: "identity_access.sso_policy.read"
+    },
+    // ADR-0089/0090. Its own key, not the shared `access_control.read`: who
+    // from OUTSIDE the organisation can reach this tenant is a different
+    // question from the RBAC catalogue, and an operator who should see one need
+    // not see the other.
+    {
+      labelKey: "admin.layout.nav_partners",
+      path: "/admin/partners",
+      order: 26,
+      requiredPermission: "identity_access.partner_access.read"
     }
   ],
   jobs: [

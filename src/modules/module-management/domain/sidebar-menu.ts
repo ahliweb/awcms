@@ -205,6 +205,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_user_groups": "User groups",
   "admin.layout.nav_registrations": "Registration requests",
   "admin.layout.nav_security": "Authentication & security",
+  "admin.layout.nav_partners": "Partner access",
   "admin.layout.nav_seo": "SEO & distribution"
 };
 
