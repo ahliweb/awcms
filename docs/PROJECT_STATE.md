@@ -366,18 +366,21 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   yang mengikat; `CONTRIBUTING.md` dan §"Alur kerja wajib" di `AGENTS.md`
   keduanya kini menyatakan diri sebagai **langkah 10–12 saja**.
 
-  **KEPUTUSAN YANG MENUNGGU PEMILIK REPO — langkah 13 (Deploy Staging)
-  bertentangan dengan [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md)**,
-  yang menyatakan template ini men-deploy ke SATU environment: produksi. Langkah
-  14 (UAT internal) bergantung padanya. Dokumen alur menuliskannya sebagai
-  **konflik terbuka**, bukan sebagai langkah yang seolah berjalan. Tiga jalan
-  keluarnya, dan semuanya keputusan pemilik repo: (a) hidupkan staging lewat ADR
-  yang men-supersede ADR-0083; (b) tandai 13–14 tidak berlaku untuk repo ini,
-  dengan CI + preflight produksi sebagai penggantinya; (c) tulis alurnya sebagai
-  standar KELUARGA, dengan ADR-0083 sebagai penyimpangan ber-alasan khusus repo
-  ini.
+  **KEPUTUSAN PEMILIK REPO, DIAMBIL 13 Agustus 2026: ADR-0083 TETAP.** Langkah 13
+  (Deploy Staging) dan 14 (UAT internal) ditandai **TIDAK BERLAKU untuk repo
+  ini** — keputusan, bukan celah. Penggantinya dinyatakan di dokumen alur
+  (basis data ephemeral CI, E2E Playwright, `security:readiness`, preflight
+  produksi), **dan begitu pula harganya**: pengujian manusia terhadap data mirip
+  produksi, dan verifikasi perilaku Cloudflare/Varnish/Traefik di luar jalur
+  produksi. Keduanya alasan sah untuk meninjau ulang ADR-0083 kelak; keduanya
+  bukan sesuatu yang hilang tanpa disadari.
 
-  **Tiga celah lain, tidak bertentangan dengan apa pun — murni belum ada:**
+  Dokumen alur karena itu membedakan **celah** dari **keputusan** di tabel
+  ringkasannya — mencampurnya adalah bagaimana pekerjaan yang belum dikerjakan
+  memperoleh rupa penilaian.
+
+  **Tiga celah yang tersisa — murni belum ada, dan sedang dikerjakan
+  berikutnya:**
   privacy analysis/DPIA (langkah 3), Definition of Ready umum (langkah 9 — yang
   ada hanya admission checklist untuk modul baru), dan post-release review
   per-RILIS (langkah 18 — §4 ini adalah yang terdekat, tetapi ia terikat putaran

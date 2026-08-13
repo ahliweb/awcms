@@ -18,13 +18,19 @@ dan perubahan lapisan fondasi menempuh 1→12 penuh plus ADR. Kedua, **celah
 ditulis sebagai celah**: dokumen proses yang menyamarkan langkah yang tidak
 punya artefak adalah dokumen yang dipercaya lebih dari yang pantas.
 
-SATU KONFLIK TERBUKA, DAN IA KEPUTUSAN PEMILIK REPO. Langkah 13 (Deploy
-Staging) bertentangan dengan ADR-0083, yang menyatakan template ini men-deploy
-ke SATU environment: produksi. Langkah 14 (UAT internal) bergantung padanya.
-Dokumen menuliskannya sebagai konflik terbuka alih-alih memilih diam-diam salah
-satu sisinya.
+DUA LANGKAH SENGAJA TIDAK ADA, DAN ITU KEPUTUSAN — BUKAN CELAH. Langkah 13
+(Deploy Staging) dan 14 (UAT internal) ditandai TIDAK BERLAKU untuk repo ini:
+ADR-0083 tetap berlaku, template ini men-deploy ke satu environment. Dokumen
+menyatakan apa yang menggantikan peran staging (basis data ephemeral CI, E2E
+Playwright, `security:readiness`, preflight produksi) DAN apa yang tidak
+tergantikan olehnya — pengujian manusia terhadap data mirip produksi, dan
+verifikasi Cloudflare/Varnish/Traefik di luar jalur produksi. Yang kedua adalah
+harga keputusan ini, dicatat supaya tidak hilang tanpa disadari.
 
-TIGA CELAH LAIN yang tidak bertentangan dengan apa pun: privacy analysis/DPIA,
+Tabel ringkasannya karena itu membedakan CELAH dari KEPUTUSAN. Mencampurnya
+adalah bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
+
+TIGA CELAH YANG TERSISA: privacy analysis/DPIA,
 Definition of Ready umum (yang ada hanya admission checklist untuk modul baru),
 dan post-release review per-rilis. Langkah 9 punya bukti biayanya sendiri di
 repo ini — dua gelombang berturut-turut menulis rencana yang mengasumsikan

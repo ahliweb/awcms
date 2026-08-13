@@ -29,8 +29,8 @@ flowchart TD
   S9 --> S10[10 Issue GitHub Atomic]
   S10 --> S11[11 Implementasi + Test Otomatis]
   S11 --> S12[12 PR + Review + CI]
-  S12 --> S13[13 Deploy Staging]
-  S13 --> S14[14 UAT Internal]
+  S12 --> S13[13 Deploy Staging - TIDAK BERLAKU ADR-0083]
+  S13 --> S14[14 UAT Internal - TIDAK BERLAKU]
   S14 --> S15[15 Release Readiness / Go-No-Go]
   S15 --> S16[16 Deploy Produksi]
   S16 --> S17[17 Validasi Produksi]
@@ -238,30 +238,48 @@ CodeQL, GitGuardian, dan changeset wajib untuk perubahan perilaku.
 menjalankan **NOL** gerbang, sementara `gh pr checks` tetap tampak hijau karena
 GitGuardian lulus sendirian.
 
-## 13. Deploy Staging
+## 13. Deploy Staging — **TIDAK BERLAKU untuk repo ini**
 
-> **KONFLIK TERBUKA — dibaca sebagai keputusan yang belum diambil, bukan sebagai
-> langkah yang sudah berjalan.**
+> **Keputusan, bukan celah** (13 Agustus 2026).
+> [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) tetap
+> berlaku: template ini men-deploy ke **SATU** environment, produksi.
 
-[ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md) menyatakan
-template ini men-deploy ke **SATU** environment: produksi. Langkah ini karena itu
-**tidak punya environment** di repo ini hari ini, dan
-[`environments.md`](environments.md) adalah current-state yang otoritatif.
+Langkah ini ada di alur generik dan **sengaja dilewati di sini**. Pemilik repo
+diminta memilih antara menghidupkan staging (men-supersede ADR-0083) dan
+mempertahankan satu environment, dan memilih yang kedua.
 
-Yang berdiri di tempatnya sekarang: basis data ephemeral CI + E2E Playwright
-(langkah 12) dan preflight produksi (langkah 15). Yang **tidak** tergantikan
-olehnya: pengujian manusia terhadap data yang mirip produksi.
+**Yang menggantikannya, dinyatakan supaya tidak perlu diterka:**
 
-Menghidupkan staging adalah keputusan tingkat ADR — men-supersede ADR-0083 —
-dan bukan sesuatu yang bisa diputuskan sebuah dokumen proses.
+| Peran staging                        | Yang mengisinya di sini                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| skema diterapkan dari nol            | basis data ephemeral CI (langkah 12)                                              |
+| jalur request diuji ujung ke ujung   | E2E Playwright + suite DB-gated (langkah 12)                                      |
+| verifikasi terhadap basis data nyata | `bun run security:readiness` (langkah 15)                                         |
+| kesiapan sebelum rilis               | [`production-preflight-runbook.md`](production-preflight-runbook.md) (langkah 15) |
 
-## 14. UAT Internal / Pengujian Manusia
+**Dan yang TIDAK tergantikan olehnya, dicatat apa adanya:** pengujian manusia
+terhadap data yang mirip produksi, dan verifikasi perilaku pihak ketiga
+(Cloudflare, Varnish, Traefik) di luar jalur produksi. Keduanya adalah harga
+dari keputusan ini, bukan sesuatu yang hilang tanpa disadari — dan keduanya
+alasan sah untuk meninjau ulang ADR-0083 kelak.
+
+Menghidupkannya kembali tetap keputusan tingkat ADR, bukan sesuatu yang bisa
+dibalik dokumen proses.
+
+## 14. UAT Internal / Pengujian Manusia — **TIDAK BERLAKU untuk repo ini**
 
 **Menjawab:** apakah yang dibangun benar-benar menyelesaikan pekerjaan
 penggunanya.
 
-**BELUM ADA artefaknya.** Celah ketiga. Ia bergantung pada langkah 13, jadi
-selama konflik di atas belum diputuskan, langkah ini tidak punya tempat berdiri.
+Ia bergantung pada langkah 13, dan langkah 13 adalah keputusan untuk tidak ada.
+Jadi ini bukan celah yang menunggu diisi; ia konsekuensi yang sudah diputuskan.
+
+Yang paling mendekati perannya adalah verifikasi produksi (langkah 17), dengan
+perbedaan yang harus dibaca jujur: **ia berjalan SESUDAH rilis, bukan
+sebelumnya.** Untuk perubahan yang mempengaruhi jalur yang dilihat pelanggan,
+itu berarti biaya kesalahan dibayar di produksi — dan bila ongkos itu terasa
+terlalu mahal untuk sebuah perubahan tertentu, jawabannya adalah meninjau
+ADR-0083 untuk perubahan itu, bukan melewatkan langkah 17.
 
 ## 15. Release Readiness / Go–No-Go
 
@@ -319,15 +337,16 @@ satu audit penuh; menuliskannya memakan satu paragraf.
 
 ---
 
-## Ringkasan celah
+## Ringkasan celah, dan dua langkah yang sengaja tidak ada
 
-Empat hal di alur ini belum punya artefak, dan satu bertentangan dengan ADR yang
-berlaku. Daftar ini ada di sini supaya tidak perlu diturunkan ulang:
+Daftar ini ada di sini supaya tidak perlu diturunkan ulang. Perhatikan kolom
+terakhir: **celah dan keputusan bukan hal yang sama**, dan mencampurnya adalah
+bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
 
-| Langkah | Celah                         | Sifat                                            |
+| Langkah | Hal                           | Sifat                                            |
 | ------- | ----------------------------- | ------------------------------------------------ |
-| 3       | Privacy analysis / DPIA       | belum ada                                        |
-| 9       | Definition of Ready umum      | belum ada (admission checklist hanya modul baru) |
-| 13      | Deploy staging                | **bertentangan dengan ADR-0083**                 |
-| 14      | UAT internal                  | belum ada; bergantung pada 13                    |
-| 18      | Post-release review per rilis | ada tetapi terikat putaran kerja, bukan rilis    |
+| 3       | Privacy analysis / DPIA       | **celah** — belum ada                            |
+| 9       | Definition of Ready umum      | **celah** — admission checklist hanya modul baru |
+| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment       |
+| 14      | UAT internal                  | **keputusan** — konsekuensi langkah 13           |
+| 18      | Post-release review per rilis | **celah** — ada, tetapi terikat putaran kerja    |
