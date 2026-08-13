@@ -31,6 +31,24 @@
  * feature bought this weight, and was it re-measured (`du -sb dist/client`)
  * rather than bumped until green?
  *
+ * ## The first time that question was asked, the answer was no (Issue #552)
+ *
+ * On 2026-08-13 five admin screens landed in one day and the total reached
+ * 176,670 B — 3,330 B of headroom, about two more screens. The budget had done
+ * exactly what it exists to do, and the tempting fix was to raise it.
+ *
+ * It was not raised. The measurement said why: per-page script chunks were
+ * 98,379 B across 43 files sharing 1,039 B between them, because every screen
+ * hand-wrote the same lock/send/reload/report lifecycle. Moving that lifecycle
+ * into `src/lib/ui/admin-form-client.ts` and converting all 36 screens took the
+ * total to 153,970 B — 26,030 B of headroom, from a change that shipped no
+ * less behaviour. A raise would have bought the same headroom by deleting the
+ * question.
+ *
+ * That is the precedent this constant is meant to force, and it is recorded
+ * here rather than in a commit message because the next person to hit the
+ * ceiling reads this file, not the log.
+ *
  * ## Why nothing is excluded
  *
  * Every byte in `dist/client` today is app shell (JS + CSS). Content images

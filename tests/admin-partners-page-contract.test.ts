@@ -120,12 +120,15 @@ describe("the two properties the surface exists to keep", () => {
     const page = await readFile(PAGE, "utf8");
 
     const approveBlock = page.slice(
-      page.indexOf('getElementById("approve-grant-form")'),
-      page.indexOf('document.addEventListener("click"')
+      page.indexOf('onSubmit("approve-grant-form"'),
+      page.indexOf('onAction(".js-sever-engagement"')
     );
 
     // It reads the response body instead. A reload here spends a grant that
-    // then has to be revoked and re-approved.
+    // then has to be revoked and re-approved. The length assertion pairs with
+    // the `not.toContain` so a marker that stopped matching cannot pass it
+    // vacuously.
+    expect(approveBlock.length).toBeGreaterThan(200);
     expect(approveBlock).toContain("sendJsonForData");
     expect(approveBlock).toContain("accessCode");
     expect(approveBlock).not.toContain("window.location.reload()");

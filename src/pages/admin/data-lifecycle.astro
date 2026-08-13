@@ -739,60 +739,28 @@ const hasTenantWideHold = holds.some(
 
 <script>
   // Bound unconditionally: every control only renders when its permission gate
-  // passed server-side, so `getElementById`/`querySelectorAll` find nothing for
-  // a viewer who lacks it and no listener binds. Astro hoists this script at
-  // build time, so a conditional wrapper would be meaningless.
+  // passed server-side, so the lookups find nothing for a viewer who lacks it
+  // and no listener fires. Astro hoists this script at build time, so a
+  // conditional wrapper would be meaningless.
   //
   // The import is deliberate and load-bearing for CSP: an import-free script is
   // INLINED by Astro, and inline scripts are blocked by this app's
   // `default-src 'self'` policy. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    blankToNull,
+    field,
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onSubmitAll,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("data-lifecycle-action-error");
-
-  function showError(element: HTMLElement | null, message: string): void {
-    const target = element ?? actionError;
-    if (!target) return;
-    target.textContent = message;
-    target.hidden = false;
-  }
-
-  /**
-   * The dry-run response body is the point of the request, and `sendJson`
-   * deliberately discards it (it returns `{ ok, errorCode }` only), so this one
-   * call reads the payload itself. Every value it renders goes out through
-   * `textContent` — never `innerHTML`.
-   *
-   * No `Idempotency-Key`: the endpoint requires none because it mutates
-   * nothing, not even a run row. Sending one would imply a replay contract this
-   * endpoint does not have.
-   */
-  async function requestPlan(body: unknown): Promise<{
-    ok: boolean;
-    errorCode: string | null;
-    plan: Record<string, unknown> | null;
-  }> {
-    try {
-      const response = await fetch("/api/v1/data-lifecycle/dry-run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(body)
-      });
-      const payload = (await response.json().catch(() => null)) as {
-        success?: boolean;
-        data?: { plan?: Record<string, unknown> };
-        error?: { code?: string };
-      } | null;
-
-      if (response.ok && payload?.success === true) {
-        return { ok: true, errorCode: null, plan: payload.data?.plan ?? null };
-      }
-      return { ok: false, errorCode: payload?.error?.code ?? null, plan: null };
-    } catch {
-      return { ok: false, errorCode: "NETWORK_ERROR", plan: null };
-    }
-  }
+  const actionError = messageBox("data-lifecycle-action-error");
+  const planError = messageBox("data-lifecycle-plan-error");
+  const holdError = messageBox("data-lifecycle-hold-error");
 
   function setPlanField(id: string, value: unknown): void {
     const element = document.getElementById(id);
@@ -803,51 +771,55 @@ const hasTenantWideHold = holds.some(
         : "—";
   }
 
-  const planForm = document.getElementById(
-    "data-lifecycle-plan-form"
-  ) as HTMLFormElement | null;
-  const planError = document.getElementById("data-lifecycle-plan-error");
-  const planSubmit = document.getElementById(
-    "data-lifecycle-plan-submit"
-  ) as HTMLButtonElement | null;
   const planResult = document.getElementById("data-lifecycle-plan-result");
 
-  planForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!planSubmit || planSubmit.disabled) return;
-    const unlock = lockElement(planSubmit, "Planning…");
-    if (planError) planError.hidden = true;
+  /**
+   * The dry run is the one control here that is NOT `mutateAndReload`: its
+   * response BODY is the point, and there is nothing to reload because it
+   * mutates nothing — not even a run row. That is also why it sends no
+   * `Idempotency-Key`: the endpoint requires none, and sending one would imply
+   * a replay contract it does not have. Every value rendered goes out through
+   * `textContent`, never `innerHTML`.
+   */
+  onSubmit("data-lifecycle-plan-form", async ({ data, submit }) => {
+    if (!submit) return;
+    planError.clear();
+    const unlock = lockElement(submit, "Planning…");
 
-    const formData = new FormData(planForm);
-    const override = String(formData.get("retentionDaysOverride") ?? "").trim();
+    const override = field(data, "retentionDaysOverride");
 
-    const result = await requestPlan({
-      descriptorKey: String(formData.get("descriptorKey") ?? ""),
-      // Omitted rather than sent as null when blank: the endpoint reads it as
-      // "override present" only for a number, and the descriptor default is
-      // what an empty field means.
-      ...(override === "" ? {} : { retentionDaysOverride: Number(override) })
-    });
+    const result = await sendJsonForData<{ plan?: Record<string, unknown> }>(
+      "POST",
+      "/api/v1/data-lifecycle/dry-run",
+      {
+        descriptorKey: field(data, "descriptorKey"),
+        // Omitted rather than sent as null when blank: the endpoint reads it as
+        // "override present" only for a number, and the descriptor default is
+        // what an empty field means.
+        ...(override === "" ? {} : { retentionDaysOverride: Number(override) })
+      }
+    );
 
-    if (result.ok && result.plan) {
-      const cutoff = result.plan.cutoffAt;
+    const plan = result.data?.plan;
+
+    if (result.ok && plan) {
+      const cutoff = plan.cutoffAt;
       setPlanField(
         "plan-result-cutoff",
         typeof cutoff === "string" ? cutoff.replace("T", " ").slice(0, 16) : "—"
       );
-      setPlanField("plan-result-eligible", result.plan.eligibleCount);
-      setPlanField("plan-result-held", result.plan.heldCount);
-      setPlanField("plan-result-archived", result.plan.archivedCount);
-      setPlanField("plan-result-purgeable", result.plan.purgeableCount);
-      setPlanField("plan-result-blocked", result.plan.blockedCount);
+      setPlanField("plan-result-eligible", plan.eligibleCount);
+      setPlanField("plan-result-held", plan.heldCount);
+      setPlanField("plan-result-archived", plan.archivedCount);
+      setPlanField("plan-result-purgeable", plan.purgeableCount);
+      setPlanField("plan-result-blocked", plan.blockedCount);
       if (planResult) planResult.hidden = false;
       unlock();
       return;
     }
 
     if (planResult) planResult.hidden = true;
-    showError(
-      planError,
+    planError.show(
       result.errorCode === "NOT_FOUND"
         ? "That table is not a registered lifecycle descriptor."
         : result.errorCode === "VALIDATION_ERROR"
@@ -857,99 +829,67 @@ const hasTenantWideHold = holds.some(
     unlock();
   });
 
-  const holdForm = document.getElementById(
-    "data-lifecycle-hold-form"
-  ) as HTMLFormElement | null;
-  const holdError = document.getElementById("data-lifecycle-hold-error");
-  const holdSubmit = document.getElementById(
-    "data-lifecycle-hold-submit"
-  ) as HTMLButtonElement | null;
+  onSubmit("data-lifecycle-hold-form", async ({ data, submit }) => {
+    const endsAt = field(data, "endsAt");
 
-  holdForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!holdSubmit || holdSubmit.disabled) return;
-    const unlock = lockElement(holdSubmit, "Placing…");
-    if (holdError) holdError.hidden = true;
-
-    const formData = new FormData(holdForm);
-    const descriptorKey = String(formData.get("descriptorKey") ?? "").trim();
-    const endsAt = String(formData.get("endsAt") ?? "").trim();
-
-    const result = await sendJson(
-      "POST",
-      "/api/v1/data-lifecycle/legal-holds",
-      {
-        // Empty means a TENANT-WIDE hold, which the API models as null — not as
-        // an empty string, which fails the descriptor-key grammar.
-        descriptorKey: descriptorKey === "" ? null : descriptorKey,
-        scopeDescription: String(formData.get("scopeDescription") ?? ""),
-        reason: String(formData.get("reason") ?? ""),
-        authorityReference: String(formData.get("authorityReference") ?? ""),
-        endsAt: endsAt === "" ? null : new Date(endsAt).toISOString()
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
+    await mutateAndReload(
+      submit,
+      holdError,
+      () =>
+        sendJson(
+          "POST",
+          "/api/v1/data-lifecycle/legal-holds",
+          {
+            // Empty means a TENANT-WIDE hold, which the API models as null —
+            // not as an empty string, which fails the descriptor-key grammar.
+            descriptorKey: blankToNull(field(data, "descriptorKey")),
+            scopeDescription: String(data.get("scopeDescription") ?? ""),
+            reason: String(data.get("reason") ?? ""),
+            authorityReference: String(data.get("authorityReference") ?? ""),
+            endsAt: endsAt === "" ? null : new Date(endsAt).toISOString()
+          },
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      (errorCode) =>
+        errorCode === "VALIDATION_ERROR"
+          ? "Check the scope, reason and authority reference, then try again."
+          : "Could not place the hold. Please try again.",
+      "Placing…"
     );
+  });
 
-    if (result.ok) {
-      window.location.reload();
+  // One release form per hold, so this is delegated rather than bound by id.
+  onSubmitAll("form[data-release-form]", async ({ form, data, submit }) => {
+    const holdId = form.dataset.holdId;
+    if (!holdId) return;
+
+    // Releasing ends the protection a hold exists to provide, and the action is
+    // audited `critical` — confirm before it goes out.
+    if (
+      !window.confirm(
+        "Release this legal hold? Ordinary retention and purge resume for what it covered."
+      )
+    ) {
       return;
     }
 
-    showError(
-      holdError,
-      result.errorCode === "VALIDATION_ERROR"
-        ? "Check the scope, reason and authority reference, then try again."
-        : "Could not place the hold. Please try again."
-    );
-    unlock();
-  });
-
-  document
-    .querySelectorAll<HTMLFormElement>("form[data-release-form]")
-    .forEach((form) => {
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const submit = form.querySelector(
-          'button[type="submit"]'
-        ) as HTMLButtonElement | null;
-        const holdId = form.dataset.holdId;
-        if (!submit || submit.disabled || !holdId) return;
-
-        // Releasing ends the protection a hold exists to provide, and the
-        // action is audited `critical` — confirm before it goes out.
-        if (
-          !window.confirm(
-            "Release this legal hold? Ordinary retention and purge resume for what it covered."
-          )
-        ) {
-          return;
-        }
-
-        const unlock = lockElement(submit, "Releasing…");
-        if (actionError) actionError.hidden = true;
-
-        const formData = new FormData(form);
-        const result = await sendJson(
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/data-lifecycle/legal-holds/${encodeURIComponent(holdId)}/release`,
-          { releaseReason: String(formData.get("releaseReason") ?? "") },
+          { releaseReason: String(data.get("releaseReason") ?? "") },
           { "Idempotency-Key": crypto.randomUUID() }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showError(
-          actionError,
-          result.errorCode === "VALIDATION_ERROR"
-            ? "The release reason must be at least ten characters."
-            : result.errorCode === "ALREADY_RELEASED"
-              ? "That hold has already been released."
-              : "Could not release the hold. Please try again."
-        );
-        unlock();
-      });
-    });
+        ),
+      (errorCode) =>
+        errorCode === "VALIDATION_ERROR"
+          ? "The release reason must be at least ten characters."
+          : errorCode === "ALREADY_RELEASED"
+            ? "That hold has already been released."
+            : "Could not release the hold. Please try again.",
+      "Releasing…"
+    );
+  });
 </script>

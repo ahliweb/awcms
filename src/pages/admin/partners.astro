@@ -356,160 +356,107 @@ const maxExpiry = new Date(
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
   import {
+    field,
     lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
     sendJson,
     sendJsonForData
   } from "../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("partners-action-error");
+  const actionError = messageBox("partners-action-error");
   const codeBox = document.getElementById("partners-access-code");
 
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
-
-  function clearError(): void {
-    if (errorBox) errorBox.hidden = true;
-  }
-
-  document
-    .getElementById("engage-partner-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearError();
-
-      const input = document.getElementById(
-        "engage-partner-tenant-id"
-      ) as HTMLInputElement | null;
-      const button = document.getElementById(
-        "engage-partner-submit"
-      ) as HTMLButtonElement | null;
-      if (!input || !button) return;
-
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJson(
-        "POST",
-        "/api/v1/access/partner-engagements",
-        {
-          partnerTenantId: input.value.trim()
-        }
-      );
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "CONFLICT"
+  onSubmit("engage-partner-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/access/partner-engagements", {
+          partnerTenantId: field(data, "partnerTenantId")
+        }),
+      (errorCode) =>
+        errorCode === "CONFLICT"
           ? "That partner is already engaged for this tenant."
-          : result.errorCode === "NOT_FOUND"
+          : errorCode === "NOT_FOUND"
             ? "No such partner. Check the tenant id with them — it is not something this page can look up."
             : "Could not engage that partner. Please try again."
-      );
-      unlock();
-    });
+    );
+  });
 
-  document
-    .getElementById("approve-grant-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearError();
+  // NOT `mutateAndReload`: the response carries a single-use access code that
+  // is readable exactly once, and reloading would spend a grant that then has
+  // to be revoked.
+  onSubmit("approve-grant-form", async ({ data, submit }) => {
+    if (!submit) return;
 
-      const form = event.currentTarget as HTMLFormElement;
-      const button = document.getElementById(
-        "approve-grant-submit"
-      ) as HTMLButtonElement | null;
-      if (!button) return;
+    const expiresAt = field(data, "expiresAt");
+    actionError.clear();
+    const unlock = lockElement(submit, "Please wait…");
 
-      const data = new FormData(form);
-      const expiresAt = String(data.get("expiresAt") ?? "");
-
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJsonForData<{ accessCode?: string }>(
-        "POST",
-        "/api/v1/access/delegated-grants",
-        {
-          partnerTenantId: String(data.get("partnerTenantId") ?? ""),
-          roleId: String(data.get("roleId") ?? ""),
-          purpose: String(data.get("purpose") ?? ""),
-          // A `date` input gives midnight LOCAL; send the end of that day in
-          // UTC so "until the 20th" does not silently mean "until the 19th
-          // evening" for anyone east of Greenwich.
-          expiresAt: expiresAt ? `${expiresAt}T23:59:00.000Z` : ""
-        }
-      );
-
-      if (result.ok && result.data?.accessCode) {
-        // NOT a reload. This is the only time the code is readable, and
-        // reloading would spend a grant that then has to be revoked.
-        if (codeBox) {
-          codeBox.textContent = `Access code (shown once — copy it now): ${result.data.accessCode}`;
-          codeBox.hidden = false;
-        }
-        unlock();
-        return;
+    const result = await sendJsonForData<{ accessCode?: string }>(
+      "POST",
+      "/api/v1/access/delegated-grants",
+      {
+        partnerTenantId: field(data, "partnerTenantId"),
+        roleId: field(data, "roleId"),
+        purpose: field(data, "purpose"),
+        // A `date` input gives midnight LOCAL; send the end of that day in
+        // UTC so "until the 20th" does not silently mean "until the 19th
+        // evening" for anyone east of Greenwich.
+        expiresAt: expiresAt ? `${expiresAt}T23:59:00.000Z` : ""
       }
+    );
 
-      showError(
-        result.errorCode === "NOT_FOUND"
-          ? "That partner is no longer engaged, or that role no longer exists here."
-          : result.errorCode === "VALIDATION_ERROR"
-            ? "Check the date and the reason — access cannot start in the past or run past the maximum."
-            : "Could not approve access. Please try again."
-      );
+    if (result.ok && result.data?.accessCode) {
+      if (codeBox) {
+        codeBox.textContent = `Access code (shown once — copy it now): ${result.data.accessCode}`;
+        codeBox.hidden = false;
+      }
       unlock();
-    });
-
-  document.addEventListener("click", (event) => {
-    const target = (event.target as HTMLElement | null)?.closest("button");
-    if (!(target instanceof HTMLButtonElement)) return;
-
-    if (target.classList.contains("js-sever-engagement")) {
-      const engagementId = target.dataset.engagementId;
-      if (!engagementId) return;
-
-      void (async () => {
-        clearError();
-        const unlock = lockElement(target, "Please wait…");
-        const result = await sendJson(
-          "DELETE",
-          `/api/v1/access/partner-engagements/${engagementId}`
-        );
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showError("Could not sever that partnership. Please try again.");
-        unlock();
-      })();
       return;
     }
 
-    if (target.classList.contains("js-revoke-grant")) {
-      const grantId = target.dataset.grantId;
-      if (!grantId) return;
+    actionError.show(
+      result.errorCode === "NOT_FOUND"
+        ? "That partner is no longer engaged, or that role no longer exists here."
+        : result.errorCode === "VALIDATION_ERROR"
+          ? "Check the date and the reason — access cannot start in the past or run past the maximum."
+          : "Could not approve access. Please try again."
+    );
+    unlock();
+  });
 
-      void (async () => {
-        clearError();
-        const unlock = lockElement(target, "Please wait…");
-        const result = await sendJson(
+  onAction(".js-sever-engagement", async (button) => {
+    const engagementId = button.dataset.engagementId;
+    if (!engagementId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "DELETE",
-          `/api/v1/access/delegated-grants/${grantId}`
-        );
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showError(
-          result.errorCode === "NOT_FOUND"
-            ? "That access was already revoked or has expired."
-            : "Could not revoke that access. Please try again."
-        );
-        unlock();
-      })();
-    }
+          `/api/v1/access/partner-engagements/${engagementId}`
+        ),
+      "Could not sever that partnership. Please try again."
+    );
+  });
+
+  onAction(".js-revoke-grant", async (button) => {
+    const grantId = button.dataset.grantId;
+    if (!grantId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("DELETE", `/api/v1/access/delegated-grants/${grantId}`),
+      (errorCode) =>
+        errorCode === "NOT_FOUND"
+          ? "That access was already revoked or has expired."
+          : "Could not revoke that access. Please try again."
+    );
   });
 </script>

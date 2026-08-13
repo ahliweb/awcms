@@ -923,65 +923,46 @@ const editingWidget =
   // The import is load-bearing for CSP, not just DRY: Astro inlines a hoisted
   // script with no imports, and this app's CSP has no 'unsafe-inline', so an
   // inlined script is blocked and the page's behaviour dies silently.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("presentation-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("presentation-action-error");
 
   // No idempotency helper: none of these endpoints reads the header.
 
   /** Templates, menus and widgets all soft-delete one way — no restore exists. */
-  document
-    .querySelectorAll<HTMLButtonElement>(".presentation-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const entity = button.dataset.entity;
-        const id = button.dataset.entityId;
-        if (!entity || !id) return;
+  onAction(".presentation-delete-btn", async (button) => {
+    const entity = button.dataset.entity;
+    const id = button.dataset.entityId;
+    if (!entity || !id) return;
 
-        const name = button.dataset.entityName ?? "this item";
-        if (
-          !window.confirm(
-            `Delete "${name}"? This cannot be undone from the admin — there is ` +
-              `no restore for blog presentation records.`
-          )
-        ) {
-          return;
-        }
+    const name = button.dataset.entityName ?? "this item";
+    if (
+      !window.confirm(
+        `Delete "${name}"? This cannot be undone from the admin — there is ` +
+          `no restore for blog presentation records.`
+      )
+    ) {
+      return;
+    }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
-        const result = await sendJson(
-          "DELETE",
-          `/api/v1/blog/${entity}/${id}`,
-          {
-            reason: "Deleted from the blog presentation console."
-          }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not delete it. Please try again.");
-        unlock();
-      });
-    });
-
-  function showFormError(elementId: string, message: string): void {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    element.textContent = message;
-    element.hidden = false;
-  }
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("DELETE", `/api/v1/blog/${entity}/${id}`, {
+          reason: "Deleted from the blog presentation console."
+        }),
+      "Could not delete it. Please try again.",
+      "Deleting…"
+    );
+  });
 
   /**
    * One create-or-update submit path per entity. `id` empty means create.
@@ -993,73 +974,55 @@ const editingWidget =
   function wireForm(
     formId: string,
     idFieldId: string,
-    submitId: string,
     errorId: string,
     collection: string,
     build: (data: FormData, isCreate: boolean) => Record<string, unknown>,
     conflictMessage: string
   ): void {
-    const form = document.getElementById(formId) as HTMLFormElement | null;
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const submit = document.getElementById(
-        submitId
-      ) as HTMLButtonElement | null;
+    const box = messageBox(errorId);
+
+    onSubmit(formId, async ({ data, submit }) => {
       const idField = document.getElementById(
         idFieldId
       ) as HTMLInputElement | null;
-      if (!submit || submit.disabled) return;
-
       const id = idField?.value ?? "";
       const isCreate = id === "";
-      const data = new FormData(form);
-      const errorElement = document.getElementById(errorId);
-      if (errorElement) errorElement.hidden = true;
-      const unlock = lockElement(submit, isCreate ? "Creating…" : "Saving…");
 
-      const result = isCreate
-        ? await sendJson(
-            "POST",
-            `/api/v1/blog/${collection}`,
-            build(data, true)
-          )
-        : await sendJson(
-            "PATCH",
-            `/api/v1/blog/${collection}/${id}`,
-            build(data, false)
-          );
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showFormError(
-        errorId,
-        result.errorCode === "CONFLICT"
-          ? conflictMessage
-          : "Could not save. Check the fields and try again."
+      await mutateAndReload(
+        submit,
+        box,
+        () =>
+          isCreate
+            ? sendJson("POST", `/api/v1/blog/${collection}`, build(data, true))
+            : sendJson(
+                "PATCH",
+                `/api/v1/blog/${collection}/${id}`,
+                build(data, false)
+              ),
+        (errorCode) =>
+          errorCode === "CONFLICT"
+            ? conflictMessage
+            : "Could not save. Check the fields and try again.",
+        isCreate ? "Creating…" : "Saving…"
       );
-      unlock();
     });
   }
 
   wireForm(
     "template-form",
     "template-id",
-    "template-submit",
     "template-error",
     "templates",
     (data, isCreate) => {
       const body: Record<string, unknown> = {
-        name: String(data.get("name") ?? "").trim(),
+        name: field(data, "name"),
         layoutJson: {
           columns: Number(data.get("columns") ?? 1),
           sidebarPosition: String(data.get("sidebarPosition") ?? "none")
         },
         isActive: data.get("isActive") !== null
       };
-      if (isCreate) body.key = String(data.get("key") ?? "").trim();
+      if (isCreate) body.key = field(data, "key");
       return body;
     },
     "A template with that key already exists."
@@ -1068,14 +1031,11 @@ const editingWidget =
   wireForm(
     "menu-form",
     "menu-id",
-    "menu-submit",
     "menu-error",
     "menus",
     (data, isCreate) => {
-      const body: Record<string, unknown> = {
-        name: String(data.get("name") ?? "").trim()
-      };
-      if (isCreate) body.key = String(data.get("key") ?? "").trim();
+      const body: Record<string, unknown> = { name: field(data, "name") };
+      if (isCreate) body.key = field(data, "key");
       // `items` is deliberately never sent: the PATCH replaces the whole list,
       // so omitting the key is the only way to leave existing items intact.
       return body;
@@ -1086,46 +1046,31 @@ const editingWidget =
   wireForm(
     "widget-form",
     "widget-id",
-    "widget-submit",
     "widget-error",
     "widgets",
     (data) => ({
       position: String(data.get("position") ?? "sidebar"),
-      title: String(data.get("title") ?? "").trim(),
-      bodyText: String(data.get("bodyText") ?? "").trim(),
+      title: field(data, "title"),
+      bodyText: field(data, "bodyText"),
       sortOrder: Number(data.get("sortOrder") ?? 0),
       isActive: data.get("isActive") !== null
     }),
     "A widget with those details already exists."
   );
 
-  const themeForm = document.getElementById(
-    "theme-form"
-  ) as HTMLFormElement | null;
+  const themeError = messageBox("theme-error");
 
-  themeForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "theme-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(themeForm);
-    const errorElement = document.getElementById("theme-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Saving…");
-
-    // PATCH, not POST: the theme is one row per tenant, upserted.
-    const result = await sendJson("PATCH", "/api/v1/blog/theme", {
-      mode: String(data.get("mode") ?? "system")
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showFormError("theme-error", "Could not save the theme. Please try again.");
-    unlock();
+  onSubmit("theme-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      themeError,
+      () =>
+        // PATCH, not POST: the theme is one row per tenant, upserted.
+        sendJson("PATCH", "/api/v1/blog/theme", {
+          mode: String(data.get("mode") ?? "system")
+        }),
+      "Could not save the theme. Please try again.",
+      "Saving…"
+    );
   });
 </script>

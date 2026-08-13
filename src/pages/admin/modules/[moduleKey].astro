@@ -206,70 +206,53 @@ function pretty(value: Record<string, unknown>): string {
   // Bundled unconditionally (Astro hoists every `<script>` at build time). The
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
-  import { lockElement, sendJson } from "../../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("module-settings-action-error");
+  const errorBox = messageBox("module-settings-action-error");
 
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
+  onSubmit("module-settings-form", async ({ data, submit }) => {
+    // Parsed here so a typo is a message next to the field rather than a 400
+    // from a round trip. The endpoint validates it again regardless — this is
+    // for the operator, not for the server.
+    let patch: unknown;
+    try {
+      patch = JSON.parse(String(data.get("patch") ?? ""));
+    } catch {
+      errorBox.show("That is not valid JSON. Check for a trailing comma.");
+      return;
+    }
 
-  document
-    .getElementById("module-settings-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (errorBox) errorBox.hidden = true;
+    if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+      errorBox.show("Settings must be a JSON object, not an array or a value.");
+      return;
+    }
 
-      const textarea = document.getElementById(
-        "module-settings-patch"
-      ) as HTMLTextAreaElement | null;
-      const button = document.getElementById(
-        "module-settings-submit"
-      ) as HTMLButtonElement | null;
-      if (!textarea || !button) return;
+    const moduleKey = window.location.pathname.split("/").pop() ?? "";
 
-      // Parsed here so a typo is a message next to the field rather than a 400
-      // from a round trip. The endpoint validates it again regardless — this is
-      // for the operator, not for the server.
-      let patch: unknown;
-      try {
-        patch = JSON.parse(textarea.value);
-      } catch {
-        showError("That is not valid JSON. Check for a trailing comma.");
-        return;
-      }
-
-      if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
-        showError("Settings must be a JSON object, not an array or a value.");
-        return;
-      }
-
-      const moduleKey = window.location.pathname.split("/").pop() ?? "";
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJson(
-        "PATCH",
-        `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/settings`,
-        patch
-      );
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "SETTINGS_SENSITIVE_KEY_REJECTED"
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson(
+          "PATCH",
+          `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/settings`,
+          patch
+        ),
+      (errorCode) =>
+        errorCode === "SETTINGS_SENSITIVE_KEY_REJECTED"
           ? "One of those keys looks like a secret. Provider credentials belong in an environment variable, not in tenant settings."
-          : result.errorCode === "SETTINGS_SECRET_SHAPED_VALUE_REJECTED"
+          : errorCode === "SETTINGS_SECRET_SHAPED_VALUE_REJECTED"
             ? "One of those values looks like a credential, whatever the field is called. Put it in an environment variable instead."
-            : result.errorCode === "RESOURCE_NOT_FOUND"
+            : errorCode === "RESOURCE_NOT_FOUND"
               ? "No module is registered under that key."
-              : result.errorCode === "VALIDATION_ERROR"
+              : errorCode === "VALIDATION_ERROR"
                 ? "The endpoint refused that patch. Settings must be a JSON object."
                 : "Could not apply those changes. Please try again."
-      );
-      unlock();
-    });
+    );
+  });
 </script>

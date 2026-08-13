@@ -267,64 +267,61 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    blankToNull,
+    field,
+    lockElement,
+    messageBox,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "blog-settings-form"
-  ) as HTMLFormElement | null;
-  const errorBox = document.getElementById("settings-error");
-  const okBox = document.getElementById("settings-ok");
+  const errorBox = messageBox("settings-error");
+  const okBox = messageBox("settings-ok");
 
-  function show(element: HTMLElement | null, message?: string): void {
-    if (!element) return;
-    if (message !== undefined) element.textContent = message;
-    element.hidden = false;
-  }
-
-  function hide(element: HTMLElement | null): void {
-    if (element) element.hidden = true;
-  }
-
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    hide(errorBox);
-    hide(okBox);
-
-    const data = new FormData(form);
-    const text = (name: string): string => String(data.get(name) ?? "").trim();
+  // NOT `mutateAndReload`: saving settings confirms in place rather than
+  // reloading, so the operator can see that the values they just typed are the
+  // values now stored.
+  onSubmit("blog-settings-form", async ({ data, submit }) => {
+    errorBox.clear();
+    okBox.clear();
 
     // Empty optional text fields are sent as `null`, not `""`. The endpoint
     // treats `null` as "clear it" and `""` as a validation error on the
     // non-empty fields — sending `""` would surface as a rejection the
     // operator cannot interpret from a blank box they never typed in.
-    const optional = (name: string): string | null => text(name) || null;
+    const optional = (name: string): string | null =>
+      blankToNull(field(data, name));
 
     const body = {
-      blogTitle: text("blogTitle"),
+      blogTitle: field(data, "blogTitle"),
       blogDescription: optional("blogDescription"),
-      postsPerPage: Number(text("postsPerPage")),
-      defaultLocale: text("defaultLocale"),
-      defaultVisibility: text("defaultVisibility"),
+      postsPerPage: Number(field(data, "postsPerPage")),
+      defaultLocale: field(data, "defaultLocale"),
+      defaultVisibility: field(data, "defaultVisibility"),
       rssEnabled: data.get("rssEnabled") !== null,
       sitemapEnabled: data.get("sitemapEnabled") !== null,
       seoDefaultTitle: optional("seoDefaultTitle"),
       seoDefaultDescription: optional("seoDefaultDescription")
     };
 
-    const button = document.getElementById(
-      "blog-settings-save"
-    ) as HTMLButtonElement | null;
-    const unlock = lockElement(button);
+    // `lockElement` used to be called with no busy label here, which set the
+    // button's text to the string "undefined" for the duration of the save,
+    // and threw outright when the button was absent.
+    const unlock = submit ? lockElement(submit, "Saving…") : () => {};
 
     try {
       const result = await sendJson("PATCH", "/api/v1/blog/settings", body);
 
       if (!result.ok) {
-        show(errorBox, result.message ?? "Gagal menyimpan pengaturan.");
+        // Generic copy only. This used to read `result.message`, a property
+        // `sendJson` has never returned — so the fallback below was the only
+        // message that could ever appear.
+        errorBox.show("Gagal menyimpan pengaturan. Silakan coba lagi.");
         return;
       }
 
-      show(okBox);
+      okBox.show("Tersimpan.");
     } finally {
       unlock();
     }

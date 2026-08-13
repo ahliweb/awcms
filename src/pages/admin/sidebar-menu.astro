@@ -297,29 +297,24 @@ const typeOptions = [
 <script>
   // Bundled unconditionally (Astro hoists every `<script>` at build time), and
   // harmless without the configure permission: the buttons only render when
-  // `canConfigure`, so the listeners never bind. The import is deliberate — it
-  // forces Astro to emit this EXTERNAL, and an inline script would be blocked
-  // by this app's CSP. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  // `canConfigure`, so the delegated listeners match nothing. The import is
+  // deliberate — it forces Astro to emit this EXTERNAL, and an inline script
+  // would be blocked by this app's CSP. See admin-form-client.ts.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "sidebar-form"
-  ) as HTMLFormElement | null;
-  const errorBox = document.getElementById("sidebar-error");
-  const saveButton = document.getElementById(
-    "sidebar-save"
-  ) as HTMLButtonElement | null;
-  const resetButton = document.getElementById(
-    "sidebar-reset"
-  ) as HTMLButtonElement | null;
-
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
+  const errorBox = messageBox("sidebar-error");
 
   function collect() {
+    const form = document.getElementById(
+      "sidebar-form"
+    ) as HTMLFormElement | null;
+
     const items = [...(form?.querySelectorAll("tr[data-entry-key]") ?? [])].map(
       (row) => ({
         entryKey: row.getAttribute("data-entry-key") ?? "",
@@ -367,52 +362,26 @@ const typeOptions = [
     return { types, items };
   }
 
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!saveButton || saveButton.disabled) return;
-    const unlock = lockElement(saveButton, "Saving…");
-
-    if (errorBox) errorBox.hidden = true;
-
-    const result = await sendJson(
-      "PUT",
-      "/api/v1/tenant/navigation/sidebar",
-      collect()
-    );
-
-    unlock();
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showError(
-      result.errorCode === "ACCESS_DENIED"
-        ? "You do not have permission to change the sidebar arrangement."
-        : "Could not save the sidebar arrangement."
+  onSubmit("sidebar-form", async ({ submit }) => {
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () => sendJson("PUT", "/api/v1/tenant/navigation/sidebar", collect()),
+      (errorCode) =>
+        errorCode === "ACCESS_DENIED"
+          ? "You do not have permission to change the sidebar arrangement."
+          : "Could not save the sidebar arrangement.",
+      "Saving…"
     );
   });
 
-  resetButton?.addEventListener("click", async () => {
-    if (resetButton.disabled) return;
-    const unlock = lockElement(resetButton, "Resetting…");
-
-    if (errorBox) errorBox.hidden = true;
-
-    const result = await sendJson(
-      "DELETE",
-      "/api/v1/tenant/navigation/sidebar"
+  onAction("#sidebar-reset", async (button) => {
+    await mutateAndReload(
+      button,
+      errorBox,
+      () => sendJson("DELETE", "/api/v1/tenant/navigation/sidebar"),
+      "Could not reset the sidebar arrangement.",
+      "Resetting…"
     );
-
-    unlock();
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showError("Could not reset the sidebar arrangement.");
   });
 </script>

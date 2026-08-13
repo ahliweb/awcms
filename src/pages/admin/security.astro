@@ -538,39 +538,23 @@ const mfaContradiction =
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it — an import-free script would inline and
   // be blocked. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  function reveal(id: string, message: string): void {
-    const box = document.getElementById(id);
-    if (!box) return;
-    box.textContent = message;
-    box.hidden = false;
-  }
-
-  function hide(id: string): void {
-    const box = document.getElementById(id);
-    if (box) box.hidden = true;
-  }
+  const policyError = messageBox("security-policy-error");
+  const mfaError = messageBox("security-mfa-error");
 
   function checked(form: HTMLFormElement, name: string): boolean {
     const input = form.elements.namedItem(name);
     return input instanceof HTMLInputElement ? input.checked : false;
   }
 
-  const policyForm = document.getElementById(
-    "security-policy-form"
-  ) as HTMLFormElement | null;
-
-  policyForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const submit = document.getElementById(
-      "security-policy-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-    hide("security-policy-error");
-
-    const domainsField = policyForm.elements.namedItem("allowedEmailDomains");
+  onSubmit("security-policy-form", async ({ form, submit }) => {
+    const domainsField = form.elements.namedItem("allowedEmailDomains");
     const allowedEmailDomains =
       domainsField instanceof HTMLInputElement
         ? domainsField.value
@@ -580,73 +564,50 @@ const mfaContradiction =
         : [];
 
     const breakGlassIdentityIds = Array.from(
-      policyForm.querySelectorAll<HTMLInputElement>(
+      form.querySelectorAll<HTMLInputElement>(
         'input[name="breakGlassIdentityIds"]:checked'
       )
     ).map((input) => input.value);
 
-    const unlock = lockElement(submit, "Please wait…");
-    const result = await sendJson("PATCH", "/api/v1/auth/sso-policy", {
-      passwordLoginEnabled: checked(policyForm, "passwordLoginEnabled"),
-      ssoEnabled: checked(policyForm, "ssoEnabled"),
-      ssoRequired: checked(policyForm, "ssoRequired"),
-      autoLinkVerifiedEmail: checked(policyForm, "autoLinkVerifiedEmail"),
-      jitProvisioningEnabled: checked(policyForm, "jitProvisioningEnabled"),
-      allowedEmailDomains,
-      breakGlassIdentityIds
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // BREAK_GLASS_REQUIRED is surfaced specifically, and that is deliberate:
-    // this caller is already an authenticated admin holding `sso_policy.update`,
-    // so it leaks nothing they cannot read directly — and a generic "could not
-    // save" would leave them re-trying the one change the server will never
-    // accept without telling them what to fix.
-    reveal(
-      "security-policy-error",
-      result.errorCode === "BREAK_GLASS_REQUIRED"
-        ? "Refused: this would leave the tenant with no active break-glass account able to sign in with a password. Select at least one active account first."
-        : "Could not save the authentication policy. Please try again."
+    await mutateAndReload(
+      submit,
+      policyError,
+      () =>
+        sendJson("PATCH", "/api/v1/auth/sso-policy", {
+          passwordLoginEnabled: checked(form, "passwordLoginEnabled"),
+          ssoEnabled: checked(form, "ssoEnabled"),
+          ssoRequired: checked(form, "ssoRequired"),
+          autoLinkVerifiedEmail: checked(form, "autoLinkVerifiedEmail"),
+          jitProvisioningEnabled: checked(form, "jitProvisioningEnabled"),
+          allowedEmailDomains,
+          breakGlassIdentityIds
+        }),
+      // BREAK_GLASS_REQUIRED is surfaced specifically, and that is deliberate:
+      // this caller is already an authenticated admin holding
+      // `sso_policy.update`, so it leaks nothing they cannot read directly —
+      // and a generic "could not save" would leave them re-trying the one
+      // change the server will never accept without telling them what to fix.
+      (errorCode) =>
+        errorCode === "BREAK_GLASS_REQUIRED"
+          ? "Refused: this would leave the tenant with no active break-glass account able to sign in with a password. Select at least one active account first."
+          : "Could not save the authentication policy. Please try again."
     );
-    unlock();
   });
 
-  const mfaForm = document.getElementById(
-    "security-mfa-form"
-  ) as HTMLFormElement | null;
-
-  mfaForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const submit = document.getElementById(
-      "security-mfa-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-    hide("security-mfa-error");
-
-    const selected = mfaForm.querySelector<HTMLInputElement>(
+  onSubmit("security-mfa-form", async ({ form, submit }) => {
+    const selected = form.querySelector<HTMLInputElement>(
       'input[name="enforcementLevel"]:checked'
     );
     if (!selected) return;
 
-    const unlock = lockElement(submit, "Please wait…");
-    const result = await sendJson("PUT", "/api/v1/auth/mfa/policy", {
-      enforcementLevel: selected.value
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    reveal(
-      "security-mfa-error",
+    await mutateAndReload(
+      submit,
+      mfaError,
+      () =>
+        sendJson("PUT", "/api/v1/auth/mfa/policy", {
+          enforcementLevel: selected.value
+        }),
       "Could not save the MFA policy. Please try again."
     );
-    unlock();
   });
 </script>

@@ -335,143 +335,125 @@ function isPending(invitation: InvitationView): boolean {
   // Bundled unconditionally (Astro hoists every `<script>` at build time). The
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
-  import { lockElement, sendJsonForData } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    lockElement,
+    messageBox,
+    onAction,
+    onSubmit,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("invitations-action-error");
-  const noticeBox = document.getElementById("invitations-notice");
-
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
+  const actionError = messageBox("invitations-action-error");
+  const noticeBox = messageBox("invitations-notice");
 
   function clearBoxes(): void {
-    if (errorBox) errorBox.hidden = true;
-    if (noticeBox) noticeBox.hidden = true;
+    actionError.clear();
+    noticeBox.clear();
   }
 
-  document
-    .getElementById("create-invitation-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearBoxes();
+  // NOT `mutateAndReload`: `delivery: "unavailable"` is a SUCCESS that must not
+  // reload, because the invitation exists and no mail was queued. Reloading it
+  // away would report success for something nobody received, and no endpoint
+  // can hand over the link afterwards.
+  onSubmit("create-invitation-form", async ({ data, submit }) => {
+    if (!submit) return;
+    clearBoxes();
 
-      const form = event.currentTarget as HTMLFormElement;
-      const button = document.getElementById(
-        "create-invitation-submit"
-      ) as HTMLButtonElement | null;
-      if (!button) return;
+    const rolesSelect = document.getElementById(
+      "create-invitation-roles"
+    ) as HTMLSelectElement | null;
 
-      const data = new FormData(form);
-      const rolesSelect = document.getElementById(
-        "create-invitation-roles"
-      ) as HTMLSelectElement | null;
+    const unlock = lockElement(submit, "Please wait…");
+    const result = await sendJsonForData<{ delivery?: string }>(
+      "POST",
+      "/api/v1/invitations",
+      {
+        loginIdentifier: field(data, "loginIdentifier"),
+        displayName: field(data, "displayName"),
+        roleIds: rolesSelect
+          ? [...rolesSelect.selectedOptions].map((option) => option.value)
+          : [],
+        skipEmailConfirmation: data.get("skipEmailConfirmation") === "on"
+      },
+      // REQUIRED by the endpoint — it answers 400 without one. A fresh id per
+      // submit, so a retry after a network error replays rather than invites
+      // twice.
+      { "Idempotency-Key": crypto.randomUUID() }
+    );
 
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJsonForData<{ delivery?: string }>(
-        "POST",
-        "/api/v1/invitations",
-        {
-          loginIdentifier: String(data.get("loginIdentifier") ?? "").trim(),
-          displayName: String(data.get("displayName") ?? "").trim(),
-          roleIds: rolesSelect
-            ? [...rolesSelect.selectedOptions].map((option) => option.value)
-            : [],
-          skipEmailConfirmation: data.get("skipEmailConfirmation") === "on"
-        },
-        // REQUIRED by the endpoint — it answers 400 without one. A fresh id per
-        // submit, so a retry after a network error replays rather than invites
-        // twice.
-        { "Idempotency-Key": crypto.randomUUID() }
-      );
-
-      // The invitation exists either way. Saying "sent" when nothing was sent
-      // would leave somebody waiting for mail that was never queued, and no
-      // endpoint can hand over the link afterwards.
-      if (result.ok && result.data?.delivery === "unavailable") {
-        if (noticeBox) {
-          noticeBox.textContent =
-            "Invitation created, but NOT sent — email delivery is not configured for this tenant. There is no way to retrieve the link, so configure delivery and invite again.";
-          noticeBox.hidden = false;
-        }
-        unlock();
-        return;
-      }
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "IDENTIFIER_TAKEN"
-          ? "That address already has an account in this tenant."
-          : result.errorCode === "INVITATION_ALREADY_PENDING"
-            ? "That address already has a pending invitation. Resend it instead."
-            : result.errorCode === "ROLE_SYSTEM_PROTECTED"
-              ? "A system role cannot be granted through an invitation."
-              : result.errorCode === "UNKNOWN_ROLE"
-                ? "One of those roles no longer exists here."
-                : result.errorCode === "ACCESS_DENIED"
-                  ? "You may not invite with those roles, or skip confirmation for that address."
-                  : "Could not send that invitation. Please try again."
+    if (result.ok && result.data?.delivery === "unavailable") {
+      noticeBox.show(
+        "Invitation created, but NOT sent — email delivery is not configured for this tenant. There is no way to retrieve the link, so configure delivery and invite again."
       );
       unlock();
-    });
+      return;
+    }
 
-  document.addEventListener("click", (event) => {
-    const target = (event.target as HTMLElement | null)?.closest("button");
-    if (!(target instanceof HTMLButtonElement)) return;
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
 
-    const invitationId = target.dataset.invitationId;
+    actionError.show(
+      result.errorCode === "IDENTIFIER_TAKEN"
+        ? "That address already has an account in this tenant."
+        : result.errorCode === "INVITATION_ALREADY_PENDING"
+          ? "That address already has a pending invitation. Resend it instead."
+          : result.errorCode === "ROLE_SYSTEM_PROTECTED"
+            ? "A system role cannot be granted through an invitation."
+            : result.errorCode === "UNKNOWN_ROLE"
+              ? "One of those roles no longer exists here."
+              : result.errorCode === "ACCESS_DENIED"
+                ? "You may not invite with those roles, or skip confirmation for that address."
+                : "Could not send that invitation. Please try again."
+    );
+    unlock();
+  });
+
+  onAction(".js-resend-invitation, .js-revoke-invitation", async (button) => {
+    const invitationId = button.dataset.invitationId;
     if (!invitationId) return;
 
-    const resending = target.classList.contains("js-resend-invitation");
-    const revoking = target.classList.contains("js-revoke-invitation");
-    if (!resending && !revoking) return;
+    const resending = button.classList.contains("js-resend-invitation");
 
-    void (async () => {
-      clearBoxes();
-      const unlock = lockElement(target, "Please wait…");
-      // NO `Idempotency-Key` on either, and that is the endpoints' decision
-      // rather than an omission. `resend` documents refusing it: replaying one
-      // would have to return a token it has already rotated away, or persist
-      // the plaintext in `awcms_idempotency_keys`. It is bounded another way —
-      // the UPDATE carries `resend_count < 5`, matching the database CHECK.
-      const result = await sendJsonForData<{ delivery?: string }>(
-        "POST",
-        resending
-          ? `/api/v1/invitations/${invitationId}/resend`
-          : `/api/v1/invitations/${invitationId}/revoke`,
-        {}
-      );
+    clearBoxes();
+    const unlock = lockElement(button, "Please wait…");
+    // NO `Idempotency-Key` on either, and that is the endpoints' decision
+    // rather than an omission. `resend` documents refusing it: replaying one
+    // would have to return a token it has already rotated away, or persist
+    // the plaintext in `awcms_idempotency_keys`. It is bounded another way —
+    // the UPDATE carries `resend_count < 5`, matching the database CHECK.
+    const result = await sendJsonForData<{ delivery?: string }>(
+      "POST",
+      resending
+        ? `/api/v1/invitations/${invitationId}/resend`
+        : `/api/v1/invitations/${invitationId}/revoke`,
+      {}
+    );
 
-      if (result.ok && resending && result.data?.delivery === "unavailable") {
-        if (noticeBox) {
-          noticeBox.textContent =
-            "Nothing was sent — email delivery is not configured for this tenant.";
-          noticeBox.hidden = false;
-        }
-        unlock();
-        return;
-      }
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "RESOURCE_NOT_FOUND"
-          ? "That invitation is no longer pending."
-          : result.errorCode === "INVITATION_RESEND_LIMIT"
-            ? "This invitation has been resent the maximum number of times. Revoke it and issue a new one."
-            : resending
-              ? "Could not resend that invitation. Please try again."
-              : "Could not revoke that invitation. Please try again."
+    if (result.ok && resending && result.data?.delivery === "unavailable") {
+      noticeBox.show(
+        "Nothing was sent — email delivery is not configured for this tenant."
       );
       unlock();
-    })();
+      return;
+    }
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "RESOURCE_NOT_FOUND"
+        ? "That invitation is no longer pending."
+        : result.errorCode === "INVITATION_RESEND_LIMIT"
+          ? "This invitation has been resent the maximum number of times. Revoke it and issue a new one."
+          : resending
+            ? "Could not resend that invitation. Please try again."
+            : "Could not revoke that invitation. Please try again."
+    );
+    unlock();
   });
 </script>

@@ -337,12 +337,14 @@ describe("/admin/seo writes only through the guarded endpoints", () => {
     );
 
     // The validate dry run writes nothing and the endpoint asks for no key, so
-    // it must not mint one.
+    // it must not mint one. Bounded by the NEXT call site so the slice is the
+    // dry run alone — an empty or runaway slice would pass vacuously, which is
+    // what the length assertion below rules out.
     const validateCall = page.slice(
       page.indexOf('fetch("/api/v1/seo/redirects/validate"'),
-      page.indexOf("const createForm")
+      page.indexOf('onSubmit("redirect-create-form"')
     );
-    expect(validateCall.length).toBeGreaterThan(0);
+    expect(validateCall.length).toBeGreaterThan(200);
     expect(validateCall).not.toContain("Idempotency-Key");
   });
 });

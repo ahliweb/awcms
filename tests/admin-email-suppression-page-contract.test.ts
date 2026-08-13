@@ -79,9 +79,10 @@ describe("the two properties this screen exists to keep", () => {
     const page = await readFile(PAGE, "utf8");
 
     const addBlock = page.slice(
-      page.indexOf('getElementById("add-suppression-form")'),
-      page.indexOf('document.addEventListener("click"')
+      page.indexOf('onSubmit("add-suppression-form"'),
+      page.indexOf('onAction(".js-remove-suppression"')
     );
+    expect(addBlock.length).toBeGreaterThan(200);
 
     // The check and the add are one request. A page that reloaded here would
     // answer the operator's question by discarding it — and the list is masked

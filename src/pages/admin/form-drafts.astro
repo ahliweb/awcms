@@ -337,53 +337,43 @@ const columnCount = canDelete ? 7 : 6;
   // no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   // Bundled unconditionally (Astro hoists at build time): for a viewer without
-  // `draft.delete` no button renders, so the listener never binds.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  // `draft.delete` no button renders, so the listener matches nothing.
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("draft-action-error");
+  const actionError = messageBox("draft-action-error");
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  onAction(".draft-delete-btn", async (button) => {
+    const id = button.dataset.draftId;
+    if (!id) return;
+    const label = button.dataset.draftLabel ?? "this draft";
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".draft-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.draftId;
-        if (!id) return;
-        const label = button.dataset.draftLabel ?? "this draft";
+    // Destructive and not undoable from this screen — confirm first.
+    if (
+      !window.confirm(
+        `Delete the ${label} draft? Any progress it holds is discarded.`
+      )
+    ) {
+      return;
+    }
 
-        // Destructive and not undoable from this screen — confirm first.
-        if (
-          !window.confirm(
-            `Delete the ${label} draft? Any progress it holds is discarded.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // `DELETE /api/v1/form-drafts/{id}` takes an optional `reason` and is
         // idempotent by construction (`deleted_at IS NULL` guard), so it needs
         // no `Idempotency-Key`.
-        const result = await sendJson("DELETE", `/api/v1/form-drafts/${id}`, {
+        sendJson("DELETE", `/api/v1/form-drafts/${id}`, {
           reason: "Deleted from the admin form drafts screen."
-        });
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        // Generic copy only — never surface internal detail (Issue #540).
-        showActionError("Could not delete the draft. Please try again.");
-        unlock();
-      });
-    });
+        }),
+      // Generic copy only — never surface internal detail (Issue #540).
+      "Could not delete the draft. Please try again.",
+      "Deleting…"
+    );
+  });
 </script>

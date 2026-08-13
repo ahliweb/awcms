@@ -299,160 +299,101 @@ function statusVariant(status: string): string {
   // The import forces Astro to bundle this EXTERNAL (an import-free script is
   // inlined, and inline scripts are blocked by the middleware CSP). See
   // admin-form-client.ts.
-  import { lockElement, sendJson } from "../../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "domain-create-form"
-  ) as HTMLFormElement | null;
-  const createError = document.getElementById("domain-create-error");
-  const submitButton = document.getElementById(
-    "domain-create-submit"
-  ) as HTMLButtonElement | null;
+  const createError = messageBox("domain-create-error");
+  const actionError = messageBox("domain-action-error");
 
-  function showCreateError(message: string): void {
-    if (!createError) return;
-    createError.textContent = message;
-    createError.hidden = false;
+  /** The two high-risk transitions require the header; a fresh key per click. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
   }
 
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!submitButton || submitButton.disabled) return;
-    const unlock = lockElement(submitButton, "Please wait…");
-    if (createError) createError.hidden = true;
-
-    const formData = new FormData(form);
-    const hostname = String(formData.get("hostname") ?? "").trim();
-    const domainType = String(formData.get("domainType") ?? "").trim();
-    const routeMode = String(formData.get("routeMode") ?? "").trim();
-    const verificationMethodRaw = String(
-      formData.get("verificationMethod") ?? ""
-    ).trim();
+  onSubmit("domain-create-form", async ({ data, submit }) => {
+    const verificationMethod = field(data, "verificationMethod");
 
     const payload: Record<string, unknown> = {
-      hostname,
-      domainType,
-      routeMode
+      hostname: field(data, "hostname"),
+      domainType: field(data, "domainType"),
+      routeMode: field(data, "routeMode")
     };
-    if (verificationMethodRaw) {
-      payload.verificationMethod = verificationMethodRaw;
-    }
+    if (verificationMethod) payload.verificationMethod = verificationMethod;
 
-    const result = await sendJson("POST", "/api/v1/tenant/domains", payload);
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showCreateError(
-      result.errorCode === "HOSTNAME_CONFLICT"
-        ? "That hostname is already mapped. Choose another."
-        : "Could not add the domain. Check the hostname and try again."
+    await mutateAndReload(
+      submit,
+      createError,
+      () => sendJson("POST", "/api/v1/tenant/domains", payload),
+      (errorCode) =>
+        errorCode === "HOSTNAME_CONFLICT"
+          ? "That hostname is already mapped. Choose another."
+          : "Could not add the domain. Check the hostname and try again."
     );
-    unlock();
   });
 
-  const actionError = document.getElementById("domain-action-error");
+  onAction(".domain-verify-btn", async (button) => {
+    const id = button.dataset.domainId;
+    if (!id) return;
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
-
-  function clearActionError(): void {
-    if (actionError) actionError.hidden = true;
-  }
-
-  // Verify (high-risk — carries a fresh Idempotency-Key per click).
-  document
-    .querySelectorAll<HTMLButtonElement>(".domain-verify-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.domainId;
-        if (!id) return;
-        clearActionError();
-        const unlock = lockElement(button, "Verifying…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/tenant/domains/${id}/verify`,
           undefined,
-          { "Idempotency-Key": crypto.randomUUID() }
-        );
+          idempotency()
+        ),
+      "Could not verify the domain. Set a verification method first, then retry.",
+      "Verifying…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError(
-          "Could not verify the domain. Set a verification method first, then retry."
-        );
-        unlock();
-      });
-    });
+  onAction(".domain-primary-btn", async (button) => {
+    const id = button.dataset.domainId;
+    if (!id) return;
 
-  // Set primary (high-risk — carries a fresh Idempotency-Key per click).
-  document
-    .querySelectorAll<HTMLButtonElement>(".domain-primary-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.domainId;
-        if (!id) return;
-        clearActionError();
-        const unlock = lockElement(button, "Setting…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/tenant/domains/${id}/set-primary`,
           undefined,
-          { "Idempotency-Key": crypto.randomUUID() }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError(
-          "Could not set the domain as primary. Only a verified domain can be primary."
-        );
-        unlock();
-      });
-    });
+          idempotency()
+        ),
+      "Could not set the domain as primary. Only a verified domain can be primary.",
+      "Setting…"
+    );
+  });
 
   // Delete: reason-required soft delete after an explicit confirm.
-  document
-    .querySelectorAll<HTMLButtonElement>(".domain-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.domainId;
-        if (!id) return;
-        const host = button.dataset.domainHost ?? "this domain";
-        const reason = window.prompt(
-          `Delete ${host}? Enter a reason (the hostname becomes reusable):`
-        );
-        if (reason === null || reason.trim().length === 0) {
-          return;
-        }
-        clearActionError();
-        const unlock = lockElement(button, "Deleting…");
+  onAction(".domain-delete-btn", async (button) => {
+    const id = button.dataset.domainId;
+    if (!id) return;
+    const host = button.dataset.domainHost ?? "this domain";
+    const reason = window.prompt(
+      `Delete ${host}? Enter a reason (the hostname becomes reusable):`
+    );
+    if (reason === null || reason.trim().length === 0) return;
 
-        const result = await sendJson(
-          "DELETE",
-          `/api/v1/tenant/domains/${id}`,
-          { reason: reason.trim() }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError("Could not delete the domain. Please try again.");
-        unlock();
-      });
-    });
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("DELETE", `/api/v1/tenant/domains/${id}`, {
+          reason: reason.trim()
+        }),
+      "Could not delete the domain. Please try again.",
+      "Deleting…"
+    );
+  });
 </script>

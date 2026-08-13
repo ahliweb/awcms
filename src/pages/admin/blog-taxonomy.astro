@@ -511,120 +511,87 @@ const hasFilter = typeFilter !== undefined;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    blankToNull,
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("taxonomy-action-error");
+  const actionError = messageBox("taxonomy-action-error");
+  const editError = messageBox("term-edit-error");
+  const createError = messageBox("term-create-error");
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const CONFLICT = "A term of this type already exists with that slug.";
 
   // NOTE: no `idempotency()` helper on this screen, unlike `/admin/blog-pages`.
   // None of the three term endpoints reads `Idempotency-Key`, and sending one
   // would imply a replay contract they never offered.
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".term-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const termId = button.dataset.termId;
-        if (!termId) return;
+  onAction(".term-delete-btn", async (button) => {
+    const termId = button.dataset.termId;
+    if (!termId) return;
 
-        // States the finality, because it IS final: there is no restore route
-        // and no `taxonomies.restore` permission to build one against. Copy
-        // that promised "recoverable" is exactly what made #351 hard to spot.
-        const name = button.dataset.termName ?? "this term";
-        if (
-          !window.confirm(
-            `Delete "${name}"? This cannot be undone from the admin — there is ` +
-              `no restore for taxonomy terms. Posts keep their other terms.`
-          )
-        ) {
-          return;
-        }
+    // States the finality, because it IS final: there is no restore route
+    // and no `taxonomies.restore` permission to build one against. Copy
+    // that promised "recoverable" is exactly what made #351 hard to spot.
+    const name = button.dataset.termName ?? "this term";
+    if (
+      !window.confirm(
+        `Delete "${name}"? This cannot be undone from the admin — there is ` +
+          `no restore for taxonomy terms. Posts keep their other terms.`
+      )
+    ) {
+      return;
+    }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // `reason` is required by the endpoint, same convention as posts and
         // pages. The screen supplies a constant rather than prompting: the
         // operator already confirmed, and a second modal to type prose is
         // friction that produces "asdf" in the audit trail.
-        const result = await sendJson(
-          "DELETE",
-          `/api/v1/blog/terms/${termId}`,
-          {
-            reason: "Deleted from the blog taxonomy console."
-          }
-        );
+        sendJson("DELETE", `/api/v1/blog/terms/${termId}`, {
+          reason: "Deleted from the blog taxonomy console."
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not delete the term. Please try again.",
+      "Deleting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        // Generic copy only — never surface internal detail.
-        showActionError("Could not delete the term. Please try again.");
-        unlock();
-      });
-    });
-
-  const editForm = document.getElementById(
-    "term-edit-form"
-  ) as HTMLFormElement | null;
-
-  editForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "term-edit-submit"
-    ) as HTMLButtonElement | null;
+  onSubmit("term-edit-form", async ({ data, submit }) => {
     const idField = document.getElementById(
       "edit-term-id"
     ) as HTMLInputElement | null;
-    if (!submit || submit.disabled || !idField) return;
+    if (!idField) return;
 
-    const data = new FormData(editForm);
-    const errorElement = document.getElementById("term-edit-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Saving…");
-
-    const description = String(data.get("description") ?? "").trim();
-
-    // PATCH is a partial update, and `taxonomyType`/`parentId` are deliberately
-    // NOT sent: the form does not offer them, so it must not assert them.
-    const result = await sendJson(
-      "PATCH",
-      `/api/v1/blog/terms/${idField.value}`,
-      {
-        name: String(data.get("name") ?? "").trim(),
-        slug: String(data.get("slug") ?? "").trim(),
-        // Explicit `null` rather than omitted: clearing a description is a real
-        // edit, and omitting the key would silently keep the old one.
-        description: description === "" ? null : description
-      }
+    await mutateAndReload(
+      submit,
+      editError,
+      () =>
+        // PATCH is a partial update, and `taxonomyType`/`parentId` are
+        // deliberately NOT sent: the form does not offer them, so it must not
+        // assert them.
+        sendJson("PATCH", `/api/v1/blog/terms/${idField.value}`, {
+          name: field(data, "name"),
+          slug: field(data, "slug"),
+          // Explicit `null` rather than omitted: clearing a description is a
+          // real edit, and omitting the key would silently keep the old one.
+          description: blankToNull(field(data, "description"))
+        }),
+      (errorCode) =>
+        errorCode === "CONFLICT"
+          ? CONFLICT
+          : "Could not save the term. Check the name and slug, then try again.",
+      "Saving…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    if (errorElement) {
-      errorElement.textContent =
-        result.errorCode === "CONFLICT"
-          ? "A term of this type already exists with that slug."
-          : "Could not save the term. Check the name and slug, then try again.";
-      errorElement.hidden = false;
-    }
-    unlock();
   });
-
-  const createForm = document.getElementById(
-    "term-create-form"
-  ) as HTMLFormElement | null;
 
   const createType = document.getElementById(
     "create-taxonomy-type"
@@ -648,44 +615,28 @@ const hasFilter = typeFilter !== undefined;
   createType?.addEventListener("change", syncParentAvailability);
   syncParentAvailability();
 
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "term-create-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(createForm);
-    const errorElement = document.getElementById("term-create-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Creating…");
-
+  onSubmit("term-create-form", async ({ data, submit }) => {
     const taxonomyType = String(data.get("taxonomyType") ?? "category");
-    const parentId = String(data.get("parentId") ?? "").trim();
-    const description = String(data.get("description") ?? "").trim();
+    const parentId = field(data, "parentId");
 
-    const result = await sendJson("POST", "/api/v1/blog/terms", {
-      taxonomyType,
-      name: String(data.get("name") ?? "").trim(),
-      slug: String(data.get("slug") ?? "").trim(),
-      // `null`, never "": the validator treats a parent as absent-or-uuid, and
-      // a tag must send `null` outright.
-      parentId: taxonomyType === "tag" || parentId === "" ? null : parentId,
-      description: description === "" ? null : description
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    if (errorElement) {
-      errorElement.textContent =
-        result.errorCode === "CONFLICT"
-          ? "A term of this type already exists with that slug."
-          : "Could not create the term. Check the name and slug, then try again.";
-      errorElement.hidden = false;
-    }
-    unlock();
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson("POST", "/api/v1/blog/terms", {
+          taxonomyType,
+          name: field(data, "name"),
+          slug: field(data, "slug"),
+          // `null`, never "": the validator treats a parent as absent-or-uuid,
+          // and a tag must send `null` outright.
+          parentId: taxonomyType === "tag" ? null : blankToNull(parentId),
+          description: blankToNull(field(data, "description"))
+        }),
+      (errorCode) =>
+        errorCode === "CONFLICT"
+          ? CONFLICT
+          : "Could not create the term. Check the name and slug, then try again.",
+      "Creating…"
+    );
   });
 </script>

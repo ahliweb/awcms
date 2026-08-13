@@ -234,99 +234,77 @@ const reasons = [...SUPPRESSION_REASONS];
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
   import {
+    field,
     lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
     sendJson,
     sendJsonForData
   } from "../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("email-suppression-action-error");
-  const noticeBox = document.getElementById("email-suppression-notice");
-
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
+  const actionError = messageBox("email-suppression-action-error");
+  const noticeBox = messageBox("email-suppression-notice");
 
   function clearBoxes(): void {
-    if (errorBox) errorBox.hidden = true;
-    if (noticeBox) noticeBox.hidden = true;
+    actionError.clear();
+    noticeBox.clear();
   }
 
-  document
-    .getElementById("add-suppression-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearBoxes();
+  // NOT `mutateAndReload`: the endpoint answers 200 with `alreadySuppressed`
+  // rather than 409, so the CHECK and the ADD are the same request — and
+  // reloading on that answer would throw away the only thing the operator
+  // asked for. The list is masked and unsearchable, so this is the only way to
+  // ask "is this address suppressed?".
+  onSubmit("add-suppression-form", async ({ data, submit }) => {
+    if (!submit) return;
+    clearBoxes();
 
-      const form = event.currentTarget as HTMLFormElement;
-      const button = document.getElementById(
-        "add-suppression-submit"
-      ) as HTMLButtonElement | null;
-      if (!button) return;
-
-      const data = new FormData(form);
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJsonForData<{ alreadySuppressed?: boolean }>(
-        "POST",
-        "/api/v1/email/suppressions",
-        {
-          recipient: String(data.get("recipient") ?? "").trim(),
-          reason: String(data.get("reason") ?? "")
-        }
-      );
-
-      // The endpoint answers 200 with `alreadySuppressed` rather than 409, so
-      // the CHECK and the ADD are the same request. Reloading on that answer
-      // would throw away the only thing the operator asked for.
-      if (result.ok && result.data?.alreadySuppressed) {
-        if (noticeBox) {
-          noticeBox.textContent =
-            "That address is already suppressed — nothing was changed. It is in the list below, masked.";
-          noticeBox.hidden = false;
-        }
-        unlock();
-        return;
+    const unlock = lockElement(submit, "Please wait…");
+    const result = await sendJsonForData<{ alreadySuppressed?: boolean }>(
+      "POST",
+      "/api/v1/email/suppressions",
+      {
+        recipient: field(data, "recipient"),
+        reason: String(data.get("reason") ?? "")
       }
+    );
 
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "VALIDATION_ERROR"
-          ? "Check the address and the reason."
-          : "Could not suppress that address. Please try again."
+    if (result.ok && result.data?.alreadySuppressed) {
+      noticeBox.show(
+        "That address is already suppressed — nothing was changed. It is in the list below, masked."
       );
       unlock();
-    });
+      return;
+    }
 
-  document.addEventListener("click", (event) => {
-    const target = (event.target as HTMLElement | null)?.closest("button");
-    if (!(target instanceof HTMLButtonElement)) return;
-    if (!target.classList.contains("js-remove-suppression")) return;
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
 
-    const suppressionId = target.dataset.suppressionId;
+    actionError.show(
+      result.errorCode === "VALIDATION_ERROR"
+        ? "Check the address and the reason."
+        : "Could not suppress that address. Please try again."
+    );
+    unlock();
+  });
+
+  onAction(".js-remove-suppression", async (button) => {
+    const suppressionId = button.dataset.suppressionId;
     if (!suppressionId) return;
 
-    void (async () => {
-      clearBoxes();
-      const unlock = lockElement(target, "Please wait…");
-      const result = await sendJson(
-        "DELETE",
-        `/api/v1/email/suppressions/${suppressionId}`
-      );
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-      showError(
-        result.errorCode === "RESOURCE_NOT_FOUND"
+    noticeBox.clear();
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("DELETE", `/api/v1/email/suppressions/${suppressionId}`),
+      (errorCode) =>
+        errorCode === "RESOURCE_NOT_FOUND"
           ? "That entry was already removed."
           : "Could not remove that entry. Please try again."
-      );
-      unlock();
-    })();
+    );
   });
 </script>

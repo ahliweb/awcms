@@ -104,9 +104,10 @@ describe("the three properties this screen has to get right", () => {
     const page = await readFile(PAGE, "utf8");
 
     const createBlock = page.slice(
-      page.indexOf('getElementById("create-invitation-form")'),
-      page.indexOf('document.addEventListener("click"')
+      page.indexOf('onSubmit("create-invitation-form"'),
+      page.indexOf('onAction(\n      ".js-resend-invitation')
     );
+    expect(createBlock.length).toBeGreaterThan(200);
 
     expect(createBlock).toContain('delivery === "unavailable"');
     expect(createBlock).toContain("NOT sent");

@@ -254,133 +254,91 @@ const canUpdate = canConfigure;
   // bundle this script EXTERNAL — an import-free script would be inlined, and
   // inline scripts are blocked by this app's CSP. See admin-form-client.ts.
   import {
-    lockElement,
-    postJson,
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
 
-  const createForm = document.getElementById(
-    "policy-create-form"
-  ) as HTMLFormElement | null;
-  const createError = document.getElementById("policy-create-error");
-  const createSubmit = document.getElementById(
-    "policy-create-submit"
-  ) as HTMLButtonElement | null;
-  const updateError = document.getElementById("policy-update-error");
-
-  function show(box: HTMLElement | null, message: string): void {
-    if (!box) return;
-    box.textContent = message;
-    box.hidden = false;
-  }
+  const createError = messageBox("policy-create-error");
+  const updateError = messageBox("policy-update-error");
 
   // --- Create ---------------------------------------------------------------
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!createSubmit || createSubmit.disabled) return;
-    const unlock = lockElement(createSubmit, "Please wait…");
-    if (createError) createError.hidden = true;
+  onSubmit("policy-create-form", async ({ data, submit }) => {
+    const description = field(data, "description");
 
-    const formData = new FormData(createForm);
-    const policyCode = String(formData.get("policyCode") ?? "").trim();
-    const effect = String(formData.get("effect") ?? "").trim();
-    const description = String(formData.get("description") ?? "").trim();
-
-    const result = await postJson("/api/v1/abac/policies", {
-      policyCode,
-      effect,
-      // Empty string clears / omits the description; the endpoint normalises
-      // it to null.
-      description: description.length > 0 ? description : null
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // Generic message only — never surface internal detail (Issue #540).
-    show(
+    await mutateAndReload(
+      submit,
       createError,
+      () =>
+        sendJson("POST", "/api/v1/abac/policies", {
+          policyCode: field(data, "policyCode"),
+          effect: field(data, "effect"),
+          // Empty string clears / omits the description; the endpoint
+          // normalises it to null.
+          description: description.length > 0 ? description : null
+        }),
+      // Generic message only — never surface internal detail (Issue #540).
       "Could not create the policy. Check the code is unique and try again."
     );
-    unlock();
   });
 
   // --- Edit effect / description --------------------------------------------
-  for (const button of document.querySelectorAll<HTMLButtonElement>(
-    "button.policy-edit"
-  )) {
-    button.addEventListener("click", async () => {
-      if (button.disabled) return;
-      const policyId = button.dataset.policyId;
-      if (!policyId) return;
+  onAction("button.policy-edit", async (button) => {
+    const policyId = button.dataset.policyId;
+    if (!policyId) return;
 
-      const currentEffect = button.dataset.effect ?? "allow";
-      const nextEffect = window.prompt(
-        `Effect for "${button.dataset.policyCode}" (allow or deny):`,
-        currentEffect
-      );
-      if (nextEffect === null) return; // cancelled
-      const effect = nextEffect.trim();
-      if (effect !== "allow" && effect !== "deny") {
-        show(updateError, "Effect must be exactly 'allow' or 'deny'.");
-        return;
-      }
+    const nextEffect = window.prompt(
+      `Effect for "${button.dataset.policyCode}" (allow or deny):`,
+      button.dataset.effect ?? "allow"
+    );
+    if (nextEffect === null) return; // cancelled
+    const effect = nextEffect.trim();
+    if (effect !== "allow" && effect !== "deny") {
+      updateError.show("Effect must be exactly 'allow' or 'deny'.");
+      return;
+    }
 
-      const nextDescription = window.prompt(
-        "Description (leave blank to clear):",
-        button.dataset.description ?? ""
-      );
-      if (nextDescription === null) return; // cancelled
+    const nextDescription = window.prompt(
+      "Description (leave blank to clear):",
+      button.dataset.description ?? ""
+    );
+    if (nextDescription === null) return; // cancelled
 
-      const unlock = lockElement(button, "Please wait…");
-      if (updateError) updateError.hidden = true;
-
-      const result = await sendJson(
-        "PATCH",
-        `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
-        {
-          effect,
-          description:
-            nextDescription.trim().length > 0 ? nextDescription.trim() : null
-        }
-      );
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-      show(updateError, "Could not update the policy. Please try again.");
-      unlock();
-    });
-  }
+    await mutateAndReload(
+      button,
+      updateError,
+      () =>
+        sendJson(
+          "PATCH",
+          `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
+          {
+            effect,
+            description:
+              nextDescription.trim().length > 0 ? nextDescription.trim() : null
+          }
+        ),
+      "Could not update the policy. Please try again."
+    );
+  });
 
   // --- Enable / disable toggle ----------------------------------------------
-  for (const button of document.querySelectorAll<HTMLButtonElement>(
-    "button.policy-toggle"
-  )) {
-    button.addEventListener("click", async () => {
-      if (button.disabled) return;
-      const policyId = button.dataset.policyId;
-      if (!policyId) return;
+  onAction("button.policy-toggle", async (button) => {
+    const policyId = button.dataset.policyId;
+    if (!policyId) return;
 
-      const currentlyActive = button.dataset.active === "true";
-      const unlock = lockElement(button, "Please wait…");
-      if (updateError) updateError.hidden = true;
-
-      const result = await sendJson(
-        "PATCH",
-        `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
-        { isActive: !currentlyActive }
-      );
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-      show(updateError, "Could not change the policy state. Please try again.");
-      unlock();
-    });
-  }
+    await mutateAndReload(
+      button,
+      updateError,
+      () =>
+        sendJson(
+          "PATCH",
+          `/api/v1/abac/policies/${encodeURIComponent(policyId)}`,
+          { isActive: button.dataset.active !== "true" }
+        ),
+      "Could not change the policy state. Please try again."
+    );
+  });
 </script>

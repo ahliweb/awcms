@@ -841,15 +841,17 @@ const selectedTask = selectedInstanceId
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("approvals-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("approvals-action-error");
+  const createError = messageBox("delegation-create-error");
 
   /** Every mutation below requires the header; a fresh value per click is also what makes a deliberate second action run instead of replaying the first. */
   function idempotency(): Record<string, string> {
@@ -861,7 +863,7 @@ const selectedTask = selectedInstanceId
     if (reason === null) return null;
     const trimmed = reason.trim();
     if (trimmed === "") {
-      showActionError(
+      actionError.show(
         "A reason is required — it is recorded in the audit trail."
       );
       return null;
@@ -869,234 +871,171 @@ const selectedTask = selectedInstanceId
     return trimmed;
   }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".task-decide-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const taskId = button.dataset.taskId;
-        const decision = button.dataset.decision;
-        if (!taskId || !decision) return;
+  onAction(".task-decide-btn", async (button) => {
+    const taskId = button.dataset.taskId;
+    const decision = button.dataset.decision;
+    if (!taskId || !decision) return;
 
-        const reason = askReason(
-          `Reason for this ${decision} (recorded against the task):`
-        );
-        if (reason === null) return;
+    const reason = askReason(
+      `Reason for this ${decision} (recorded against the task):`
+    );
+    if (reason === null) return;
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Submitting…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/workflows/tasks/${taskId}/decisions`,
           { decision, reason },
           idempotency()
-        );
+        ),
+      // Generic copy only — never surface internal detail. `ACCESS_DENIED`
+      // here most often means the caller is not an eligible decider for THIS
+      // task (assignment/delegation), which is a narrower rule than the
+      // permission, so it is worth distinguishing.
+      (errorCode) =>
+        errorCode === "ACCESS_DENIED"
+          ? "You are not an eligible decider for this task."
+          : "Could not record the decision. Please try again.",
+      "Submitting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".task-reassign-btn", async (button) => {
+    const taskId = button.dataset.taskId;
+    if (!taskId) return;
 
-        // Generic copy only — never surface internal detail. `ACCESS_DENIED`
-        // here most often means the caller is not an eligible decider for THIS
-        // task (assignment/delegation), which is a narrower rule than the
-        // permission, so it is worth distinguishing.
-        showActionError(
-          result.errorCode === "ACCESS_DENIED"
-            ? "You are not an eligible decider for this task."
-            : "Could not record the decision. Please try again."
-        );
-        unlock();
-      });
-    });
+    const toTenantUserId = window.prompt(
+      "Reassign to which tenant user id? (find it on /admin/users)"
+    );
+    if (toTenantUserId === null || toTenantUserId.trim() === "") return;
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".task-reassign-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const taskId = button.dataset.taskId;
-        if (!taskId) return;
+    const reason = askReason("Reason for the reassignment:");
+    if (reason === null) return;
 
-        const toTenantUserId = window.prompt(
-          "Reassign to which tenant user id? (find it on /admin/users)"
-        );
-        if (toTenantUserId === null || toTenantUserId.trim() === "") return;
-
-        const reason = askReason("Reason for the reassignment:");
-        if (reason === null) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Reassigning…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/workflows/tasks/${taskId}/reassign`,
           { toTenantUserId: toTenantUserId.trim(), reason },
           idempotency()
-        );
+        ),
+      "Could not reassign the task. Please try again.",
+      "Reassigning…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".task-force-btn", async (button) => {
+    const taskId = button.dataset.taskId;
+    if (!taskId) return;
 
-        showActionError("Could not reassign the task. Please try again.");
-        unlock();
-      });
-    });
+    const decision = window.prompt(
+      'Force which decision — type "approve" or "reject"?'
+    );
+    if (decision !== "approve" && decision !== "reject") return;
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".task-force-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const taskId = button.dataset.taskId;
-        if (!taskId) return;
+    // An administrative override decides on someone else's behalf and is
+    // recorded as such. Confirm before asking for the reason.
+    if (
+      !window.confirm(
+        `Force-${decision} this task? This overrides the assigned deciders and is recorded as an administrative override.`
+      )
+    ) {
+      return;
+    }
 
-        const decision = window.prompt(
-          'Force which decision — type "approve" or "reject"?'
-        );
-        if (decision !== "approve" && decision !== "reject") return;
+    const reason = askReason("Reason for the override:");
+    if (reason === null) return;
 
-        // An administrative override decides on someone else's behalf and is
-        // recorded as such. Confirm before asking for the reason.
-        if (
-          !window.confirm(
-            `Force-${decision} this task? This overrides the assigned deciders and is recorded as an administrative override.`
-          )
-        ) {
-          return;
-        }
-
-        const reason = askReason("Reason for the override:");
-        if (reason === null) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Overriding…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/workflows/tasks/${taskId}/force-decision`,
           { decision, reason },
           idempotency()
-        );
+        ),
+      "Could not force the decision. Please try again.",
+      "Overriding…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".instance-cancel-btn", async (button) => {
+    const instanceId = button.dataset.instanceId;
+    if (!instanceId) return;
 
-        showActionError("Could not force the decision. Please try again.");
-        unlock();
-      });
-    });
+    if (
+      !window.confirm(
+        "Cancel this workflow instance? Its pending tasks are cancelled with it and it cannot be resumed."
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".instance-cancel-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const instanceId = button.dataset.instanceId;
-        if (!instanceId) return;
+    const reason = askReason("Reason for cancelling the instance:");
+    if (reason === null) return;
 
-        if (
-          !window.confirm(
-            "Cancel this workflow instance? Its pending tasks are cancelled with it and it cannot be resumed."
-          )
-        ) {
-          return;
-        }
-
-        const reason = askReason("Reason for cancelling the instance:");
-        if (reason === null) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Cancelling…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/workflows/instances/${instanceId}/cancel`,
           { reason },
           idempotency()
-        );
+        ),
+      "Could not cancel the instance. Please try again.",
+      "Cancelling…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".delegation-revoke-btn", async (button) => {
+    const id = button.dataset.delegationId;
+    if (!id) return;
 
-        showActionError("Could not cancel the instance. Please try again.");
-        unlock();
-      });
-    });
+    if (
+      !window.confirm(
+        "Revoke this delegation? The delegate stops being eligible immediately."
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".delegation-revoke-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.delegationId;
-        if (!id) return;
-
-        if (
-          !window.confirm(
-            "Revoke this delegation? The delegate stops being eligible immediately."
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Revoking…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // `reason` is optional on this endpoint, unlike the others.
-        const result = await sendJson(
+        sendJson(
           "POST",
           `/api/v1/workflows/delegations/${id}/revoke`,
           { reason: "Revoked from the admin approvals screen." },
           idempotency()
-        );
+        ),
+      "Could not revoke the delegation. Please try again.",
+      "Revoking…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not revoke the delegation. Please try again.");
-        unlock();
-      });
-    });
-
-  const delegationForm = document.getElementById(
-    "delegation-create-form"
-  ) as HTMLFormElement | null;
-
-  delegationForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "delegation-create-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(delegationForm);
-    const errorElement = document.getElementById("delegation-create-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Creating…");
-
-    const workflowKey = String(data.get("workflowKey") ?? "").trim();
-    const resourceType = String(data.get("resourceType") ?? "").trim();
-    const effectiveTo = String(data.get("effectiveTo") ?? "").trim();
+  onSubmit("delegation-create-form", async ({ data, submit }) => {
+    const workflowKey = field(data, "workflowKey");
+    const resourceType = field(data, "resourceType");
+    const effectiveTo = field(data, "effectiveTo");
 
     // Blank optional fields are OMITTED rather than sent as "": the validator
     // rejects a non-string/non-ISO value, and an empty string is not "no
     // scope", it is an invalid scope.
     const body: Record<string, unknown> = {
-      delegateTenantUserId: String(
-        data.get("delegateTenantUserId") ?? ""
-      ).trim(),
-      reason: String(data.get("reason") ?? "").trim()
+      delegateTenantUserId: field(data, "delegateTenantUserId"),
+      reason: field(data, "reason")
     };
     if (workflowKey !== "") body.workflowKey = workflowKey;
     if (resourceType !== "") body.resourceType = resourceType;
@@ -1105,23 +1044,13 @@ const selectedTask = selectedInstanceId
     if (effectiveTo !== "")
       body.effectiveTo = new Date(effectiveTo).toISOString();
 
-    const result = await sendJson(
-      "POST",
-      "/api/v1/workflows/delegations",
-      body,
-      idempotency()
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson("POST", "/api/v1/workflows/delegations", body, idempotency()),
+      "Could not create the delegation. Please check the tenant user id and try again.",
+      "Creating…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    if (errorElement) {
-      errorElement.textContent =
-        "Could not create the delegation. Please check the tenant user id and try again.";
-      errorElement.hidden = false;
-    }
-    unlock();
   });
 </script>

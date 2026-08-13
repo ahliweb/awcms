@@ -514,7 +514,11 @@ const messageColumns = canCancel ? 8 : 7;
   // and nothing binds. The import forces Astro to bundle this EXTERNAL — an
   // import-free script would be inlined, and inline scripts are blocked by this
   // app's CSP.
-  import { sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
   import {
     disablePushOnThisDevice,
     enablePushOnThisDevice,
@@ -522,7 +526,7 @@ const messageColumns = canCancel ? 8 : 7;
     PUSH_SERVICE_WORKER_PATH
   } from "../../lib/ui/push-subscription-client";
 
-  const errorBox = document.getElementById("push-notifications-action-error");
+  const errorBox = messageBox("push-notifications-action-error");
   const devicePanel = document.getElementById("push-notifications-device");
   const stateLine = document.getElementById("push-device-state");
   const enableButton = document.getElementById(
@@ -534,12 +538,6 @@ const messageColumns = canCancel ? 8 : 7;
   const testButton = document.getElementById(
     "push-test-button"
   ) as HTMLButtonElement | null;
-
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
 
   function setState(message: string): void {
     if (stateLine) stateLine.textContent = message;
@@ -612,12 +610,12 @@ const messageColumns = canCancel ? 8 : 7;
 
   enableButton?.addEventListener("click", async () => {
     if (!devicePanel) return;
-    if (errorBox) errorBox.hidden = true;
+    errorBox.clear();
 
     const key = devicePanel.dataset.applicationServerKey ?? "";
 
     if (key === "") {
-      showError("No VAPID public key is configured on this deployment.");
+      errorBox.show("No VAPID public key is configured on this deployment.");
       return;
     }
 
@@ -628,7 +626,7 @@ const messageColumns = canCancel ? 8 : 7;
       const outcome = await enablePushOnThisDevice(key);
 
       if (!outcome.ok) {
-        showError(outcome.reason);
+        errorBox.show(outcome.reason);
         setState("Notifications are off on this device.");
         return;
       }
@@ -643,7 +641,7 @@ const messageColumns = canCancel ? 8 : 7;
     const subscriptionId = disableButton.dataset.subscriptionId ?? "";
 
     if (subscriptionId === "") return;
-    if (errorBox) errorBox.hidden = true;
+    errorBox.clear();
 
     disableButton.disabled = true;
 
@@ -651,7 +649,7 @@ const messageColumns = canCancel ? 8 : 7;
       const outcome = await disablePushOnThisDevice(subscriptionId);
 
       if (!outcome.ok) {
-        showError(outcome.reason ?? "The device could not be revoked.");
+        errorBox.show(outcome.reason ?? "The device could not be revoked.");
         return;
       }
 
@@ -662,14 +660,14 @@ const messageColumns = canCancel ? 8 : 7;
   });
 
   testButton?.addEventListener("click", async () => {
-    if (errorBox) errorBox.hidden = true;
+    errorBox.clear();
     testButton.disabled = true;
 
     try {
       const result = await sendJson("POST", "/api/v1/push/test");
 
       if (!result.ok) {
-        showError(
+        errorBox.show(
           result.errorCode === "NO_ACTIVE_SUBSCRIPTION"
             ? "You have no active device. Enable notifications above first."
             : result.errorCode === "PUSH_DISABLED"
@@ -687,35 +685,30 @@ const messageColumns = canCancel ? 8 : 7;
     }
   });
 
-  for (const button of document.querySelectorAll<HTMLButtonElement>(
-    "button.push-cancel"
-  )) {
-    button.addEventListener("click", async () => {
-      const messageId = button.dataset.messageId;
+  onAction("button.push-cancel", async (button) => {
+    const messageId = button.dataset.messageId;
+    if (!messageId) return;
 
-      if (!messageId) return;
-      if (errorBox) errorBox.hidden = true;
+    errorBox.clear();
+    button.disabled = true;
 
-      button.disabled = true;
+    const result = await sendJson(
+      "POST",
+      `/api/v1/push/messages/${encodeURIComponent(messageId)}/cancel`
+    );
 
-      const result = await sendJson(
-        "POST",
-        `/api/v1/push/messages/${encodeURIComponent(messageId)}/cancel`
+    if (!result.ok) {
+      button.disabled = false;
+      errorBox.show(
+        result.errorCode === "PUSH_MESSAGE_NOT_CANCELLABLE"
+          ? "That message is no longer waiting in the queue — it was already sent, failed, or is being sent right now."
+          : "The message could not be cancelled."
       );
+      return;
+    }
 
-      if (!result.ok) {
-        button.disabled = false;
-        showError(
-          result.errorCode === "PUSH_MESSAGE_NOT_CANCELLABLE"
-            ? "That message is no longer waiting in the queue — it was already sent, failed, or is being sent right now."
-            : "The message could not be cancelled."
-        );
-        return;
-      }
-
-      window.location.reload();
-    });
-  }
+    window.location.reload();
+  });
 
   void refreshDeviceState();
 
@@ -782,7 +775,7 @@ const messageColumns = canCancel ? 8 : 7;
     source.addEventListener("authorization-revoked", () => {
       source.close();
       if (liveBadge) liveBadge.hidden = true;
-      showError(
+      errorBox.show(
         "Your access to the push console was revoked. Reload the page to see what you can still view."
       );
     });

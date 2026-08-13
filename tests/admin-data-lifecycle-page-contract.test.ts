@@ -22,6 +22,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "bun:test";
 
+import { stripComments } from "../scripts/access-chokepoint-check";
 import { listModules } from "../src/modules";
 
 const PAGE = "src/pages/admin/data-lifecycle.astro";
@@ -169,14 +170,19 @@ describe("/admin/data-lifecycle permission gates", () => {
 
     // The dry-run endpoint requires no key BECAUSE it mutates nothing — not
     // even a run row. Sending one would imply a replay contract it does not
-    // have. Scoped to the request that names that URL so adding the header
-    // there turns this red while the two legitimate ones stay untouched.
-    const dryRunCall = page.slice(
-      page.indexOf('"/api/v1/data-lifecycle/dry-run"')
+    // have. Scoped to the submit handler that names that URL, so adding the
+    // header there turns this red while the two legitimate ones stay
+    // untouched — and comments are stripped first, because the handler
+    // EXPLAINS in prose that it sends no key.
+    const dryRunCall = stripComments(
+      page.slice(
+        page.indexOf('onSubmit("data-lifecycle-plan-form"'),
+        page.indexOf('onSubmit("data-lifecycle-hold-form"')
+      )
     );
-    const dryRunOptions = dryRunCall.slice(0, dryRunCall.indexOf("});"));
-    expect(dryRunOptions).toContain('method: "POST"');
-    expect(dryRunOptions).not.toContain("Idempotency-Key");
+    expect(dryRunCall.length).toBeGreaterThan(200);
+    expect(dryRunCall).toContain('"/api/v1/data-lifecycle/dry-run"');
+    expect(dryRunCall).not.toContain("Idempotency-Key");
   });
 
   test("the sidebar entry points at this page and is gated on a real permission", () => {

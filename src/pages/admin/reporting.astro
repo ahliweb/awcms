@@ -966,259 +966,175 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
   // Bundled unconditionally (Astro hoists at build time): a viewer without a
   // given permission renders no control, so its listener never binds.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("reporting-action-error");
+  const actionError = messageBox("reporting-action-error");
+  const createError = messageBox("export-create-error");
+  const triggerError = messageBox("export-trigger-error");
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
+  /** Fresh per call: reusing one would replay the first response. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
   }
 
-  function showFormError(id: string, message: string): void {
-    const element = document.getElementById(id);
-    if (!element) return;
-    element.textContent = message;
-    element.hidden = false;
-  }
+  onAction(".projection-rebuild-btn", async (button) => {
+    const key = button.dataset.projectionKey;
+    if (!key) return;
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".projection-rebuild-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const key = button.dataset.projectionKey;
-        if (!key) return;
+    const reasonInput = document.querySelector<HTMLInputElement>(
+      `.projection-rebuild-reason[data-projection-key="${key}"]`
+    );
+    const reason = reasonInput?.value.trim() ?? "";
+    if (reason === "") {
+      actionError.show(
+        "A rebuild needs a reason — it is recorded in the audit trail."
+      );
+      reasonInput?.focus();
+      return;
+    }
 
-        const reasonInput = document.querySelector<HTMLInputElement>(
-          `.projection-rebuild-reason[data-projection-key="${key}"]`
-        );
-        const reason = reasonInput?.value.trim() ?? "";
-        if (reason === "") {
-          showActionError(
-            "A rebuild needs a reason — it is recorded in the audit trail."
-          );
-          reasonInput?.focus();
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Starting…");
-
-        // A fresh key per click: without one the endpoint answers
-        // `IDEMPOTENCY_REQUIRED`, and reusing one would replay the first
-        // response instead of starting the rebuild the operator just asked
-        // for.
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // Without a key the endpoint answers `IDEMPOTENCY_REQUIRED`.
+        sendJson(
           "POST",
           `/api/v1/reports/projections/${key}/rebuild`,
           { reason },
-          { "Idempotency-Key": crypto.randomUUID() }
-        );
+          idempotency()
+        ),
+      // Generic copy only — never surface internal detail.
+      "Could not start the rebuild. Please try again.",
+      "Starting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".projection-rebuild-cancel-btn", async (button) => {
+    const key = button.dataset.projectionKey;
+    if (!key) return;
 
-        // Generic copy only — never surface internal detail.
-        showActionError("Could not start the rebuild. Please try again.");
-        unlock();
-      });
-    });
+    if (
+      !window.confirm(
+        `Cancel the running rebuild of ${key}? Its progress so far is kept, but the read model stays partial until a rebuild completes.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".projection-rebuild-cancel-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const key = button.dataset.projectionKey;
-        if (!key) return;
-
-        if (
-          !window.confirm(
-            `Cancel the running rebuild of ${key}? Its progress so far is kept, but the read model stays partial until a rebuild completes.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Cancelling…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Bodyless — the endpoint derives everything from the path.
-        const result = await sendJson(
+        sendJson(
           "POST",
           `/api/v1/reports/projections/${key}/rebuild/cancel`,
           undefined,
-          { "Idempotency-Key": crypto.randomUUID() }
-        );
+          idempotency()
+        ),
+      "Could not cancel the rebuild. Please try again.",
+      "Cancelling…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".projection-reconcile-btn", async (button) => {
+    const key = button.dataset.projectionKey;
+    if (!key) return;
 
-        showActionError("Could not cancel the rebuild. Please try again.");
-        unlock();
-      });
-    });
-
-  document
-    .querySelectorAll<HTMLButtonElement>(".projection-reconcile-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const key = button.dataset.projectionKey;
-        if (!key) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Reconciling…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // No `Idempotency-Key`: this endpoint mutates no business state — it
         // appends a comparison snapshot — so it requires none, and sending
         // one would imply a replay contract it does not have.
-        const result = await sendJson(
-          "POST",
-          `/api/v1/reports/projections/${key}/reconcile`
-        );
+        sendJson("POST", `/api/v1/reports/projections/${key}/reconcile`),
+      "Could not reconcile the projection. Please try again.",
+      "Reconciling…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".export-disable-btn", async (button) => {
+    const id = button.dataset.exportId;
+    if (!id) return;
+    const label = button.dataset.exportLabel ?? "this schedule";
 
-        showActionError(
-          "Could not reconcile the projection. Please try again."
-        );
-        unlock();
-      });
-    });
+    // Retiring is not undoable from this screen — there is no re-enable.
+    if (
+      !window.confirm(
+        `Disable the ${label} export schedule? It is retired, not paused — re-enabling means creating a new schedule.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".export-disable-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.exportId;
-        if (!id) return;
-        const label = button.dataset.exportLabel ?? "this schedule";
-
-        // Retiring is not undoable from this screen — there is no re-enable.
-        if (
-          !window.confirm(
-            `Disable the ${label} export schedule? It is retired, not paused — re-enabling means creating a new schedule.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Disabling…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/reports/exports/${id}/disable`,
           { reason: "Disabled from the admin reporting operations screen." },
-          { "Idempotency-Key": crypto.randomUUID() }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not disable the schedule. Please try again.");
-        unlock();
-      });
-    });
-
-  const createForm = document.getElementById(
-    "export-create-form"
-  ) as HTMLFormElement | null;
-
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "export-create-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(createForm);
-    const interval = Number(data.get("scheduleIntervalMinutes"));
-    if (!Number.isInteger(interval)) {
-      showFormError(
-        "export-create-error",
-        "Interval must be a whole number of minutes."
-      );
-      return;
-    }
-
-    const errorElement = document.getElementById("export-create-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Creating…");
-
-    // `filter` is deliberately omitted: the endpoint rejects a non-empty one
-    // because generated exports do not consult it yet.
-    const result = await sendJson(
-      "POST",
-      "/api/v1/reports/exports",
-      {
-        projectionKey: String(data.get("projectionKey") ?? ""),
-        format: String(data.get("format") ?? ""),
-        scheduleIntervalMinutes: interval
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
+          idempotency()
+        ),
+      "Could not disable the schedule. Please try again.",
+      "Disabling…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showFormError(
-      "export-create-error",
-      "Could not create the schedule. Please try again."
-    );
-    unlock();
   });
 
-  const triggerForm = document.getElementById(
-    "export-trigger-form"
-  ) as HTMLFormElement | null;
-
-  triggerForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "export-trigger-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(triggerForm);
-    const errorElement = document.getElementById("export-trigger-error");
-    if (errorElement) errorElement.hidden = true;
-    const unlock = lockElement(submit, "Generating…");
-
-    const result = await sendJson(
-      "POST",
-      "/api/v1/reports/exports/trigger",
-      {
-        projectionKey: String(data.get("projectionKey") ?? ""),
-        format: String(data.get("format") ?? "")
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
-    );
-
-    if (result.ok) {
-      window.location.reload();
+  onSubmit("export-create-form", async ({ data, submit }) => {
+    const interval = Number(data.get("scheduleIntervalMinutes"));
+    if (!Number.isInteger(interval)) {
+      createError.show("Interval must be a whole number of minutes.");
       return;
     }
 
-    showFormError(
-      "export-trigger-error",
-      "Could not generate the export. Please try again."
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        // `filter` is deliberately omitted: the endpoint rejects a non-empty
+        // one because generated exports do not consult it yet.
+        sendJson(
+          "POST",
+          "/api/v1/reports/exports",
+          {
+            projectionKey: field(data, "projectionKey"),
+            format: field(data, "format"),
+            scheduleIntervalMinutes: interval
+          },
+          idempotency()
+        ),
+      "Could not create the schedule. Please try again.",
+      "Creating…"
     );
-    unlock();
+  });
+
+  onSubmit("export-trigger-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      triggerError,
+      () =>
+        sendJson(
+          "POST",
+          "/api/v1/reports/exports/trigger",
+          {
+            projectionKey: field(data, "projectionKey"),
+            format: field(data, "format")
+          },
+          idempotency()
+        ),
+      "Could not generate the export. Please try again.",
+      "Generating…"
+    );
   });
 </script>

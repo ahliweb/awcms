@@ -977,17 +977,23 @@ const selectedPost = selectedPostId
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
   import {
-    describeRejectedFields,
-    sendJsonWithFieldErrors
-  } from "../../lib/ui/admin-field-errors-client";
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
   import {
     buildContentJsonFromBodyText,
     buildContentTextFromBodyText
   } from "../../lib/ui/blog-body-editor";
 
-  const actionError = document.getElementById("blog-action-error");
+  const actionError = messageBox("blog-action-error");
+  const createError = messageBox("post-create-error");
+  const editError = messageBox("post-edit-error");
 
   /**
    * API field -> the control the operator can actually fix. `contentJson` and
@@ -1003,18 +1009,6 @@ const selectedPost = selectedPostId
     contentJson: "Body",
     contentText: "Body"
   };
-
-  function showFormError(element: HTMLElement | null, message: string): void {
-    if (!element) return;
-    element.textContent = message;
-    element.hidden = false;
-  }
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
 
   /** Publish/schedule/archive/restore/purge/revision-restore all require the header. */
   function idempotency(): Record<string, string> {
@@ -1033,42 +1027,35 @@ const selectedPost = selectedPostId
       failure: string;
     }
   ): void {
-    document.querySelectorAll<HTMLButtonElement>(selector).forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const postId = button.dataset.postId;
-        if (!postId) return;
+    onAction(selector, async (button) => {
+      const postId = button.dataset.postId;
+      if (!postId) return;
 
-        const confirmText = options.confirm?.(button) ?? null;
-        if (confirmText !== null && !window.confirm(confirmText)) return;
+      const confirmText = options.confirm?.(button) ?? null;
+      if (confirmText !== null && !window.confirm(confirmText)) return;
 
-        let body: unknown;
-        if (options.body) {
-          const value = options.body(button);
-          // `null` means the operator cancelled a prompt — not an empty body.
-          if (value === null) return;
-          body = value;
-        }
+      let body: unknown;
+      if (options.body) {
+        const value = options.body(button);
+        // `null` means the operator cancelled a prompt — not an empty body.
+        if (value === null) return;
+        body = value;
+      }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, busyLabel);
-
-        const result = await sendJson(
-          "POST",
-          url(postId),
-          body,
-          options.idempotent === false ? undefined : idempotency()
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
+      await mutateAndReload(
+        button,
+        actionError,
+        () =>
+          sendJson(
+            "POST",
+            url(postId),
+            body,
+            options.idempotent === false ? undefined : idempotency()
+          ),
         // Generic copy only — never surface internal detail.
-        showActionError(options.failure);
-        unlock();
-      });
+        options.failure,
+        busyLabel
+      );
     });
   }
 
@@ -1141,93 +1128,61 @@ const selectedPost = selectedPostId
     }
   );
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".post-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const postId = button.dataset.postId;
-        if (!postId) return;
-        const title = button.dataset.postTitle ?? "this post";
+  onAction(".post-delete-btn", async (button) => {
+    const postId = button.dataset.postId;
+    if (!postId) return;
+    const title = button.dataset.postTitle ?? "this post";
 
-        if (
-          !window.confirm(
-            `Delete "${title}"? It is soft-deleted — recoverable until it is purged.`
-          )
-        ) {
-          return;
-        }
+    if (
+      !window.confirm(
+        `Delete "${title}"? It is soft-deleted — recoverable until it is purged.`
+      )
+    ) {
+      return;
+    }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Soft delete needs no key: the endpoint's `deleted_at IS NULL` guard
         // makes a repeat a no-op rather than a second deletion.
-        const result = await sendJson("DELETE", `/api/v1/blog/posts/${postId}`);
+        sendJson("DELETE", `/api/v1/blog/posts/${postId}`),
+      "Could not delete the post. Please try again.",
+      "Deleting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".revision-restore-btn", async (button) => {
+    const postId = button.dataset.postId;
+    const revisionId = button.dataset.revisionId;
+    if (!postId || !revisionId) return;
+    const number = button.dataset.revisionNumber ?? "?";
 
-        showActionError("Could not delete the post. Please try again.");
-        unlock();
-      });
-    });
+    if (
+      !window.confirm(
+        `Restore revision ${number}? The post's current content is replaced by this revision's, and the replacement is itself recorded as a new revision.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".revision-restore-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const postId = button.dataset.postId;
-        const revisionId = button.dataset.revisionId;
-        if (!postId || !revisionId) return;
-        const number = button.dataset.revisionNumber ?? "?";
-
-        if (
-          !window.confirm(
-            `Restore revision ${number}? The post's current content is replaced by this revision's, and the replacement is itself recorded as a new revision.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Restoring…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/blog/posts/${postId}/revisions/${revisionId}/restore`,
           undefined,
           idempotency()
-        );
+        ),
+      "Could not restore the revision. Please try again.",
+      "Restoring…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not restore the revision. Please try again.");
-        unlock();
-      });
-    });
-
-  const createForm = document.getElementById(
-    "post-create-form"
-  ) as HTMLFormElement | null;
-
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "post-create-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(createForm);
-    const errorElement = document.getElementById("post-create-error");
-    if (errorElement) errorElement.hidden = true;
-
+  onSubmit("post-create-form", async ({ data, submit }) => {
     const bodyText = String(data.get("body") ?? "");
     const contentText = buildContentTextFromBodyText(bodyText);
 
@@ -1235,20 +1190,17 @@ const selectedPost = selectedPostId
     // textarea holding only whitespace and the validator does not — this is
     // the one rejection the form can name before the round trip.
     if (contentText === "") {
-      showFormError(
-        errorElement,
+      createError.show(
         "The body cannot be empty — write at least one paragraph."
       );
       return;
     }
 
-    const unlock = lockElement(submit, "Creating…");
-
-    const excerpt = String(data.get("excerpt") ?? "").trim();
+    const excerpt = field(data, "excerpt");
     const body: Record<string, unknown> = {
-      title: String(data.get("title") ?? "").trim(),
-      slug: String(data.get("slug") ?? "").trim(),
-      locale: String(data.get("locale") ?? "").trim() || "id",
+      title: field(data, "title"),
+      slug: field(data, "slug"),
+      locale: field(data, "locale") || "id",
       visibility: String(data.get("visibility") ?? "public"),
       // `{ blocks: [...] }` — the shape `content-block-rendering.ts` defines
       // and every reader of `content_json` expects. This used to be `{}` with
@@ -1264,56 +1216,35 @@ const selectedPost = selectedPostId
     // No `Idempotency-Key`: `POST /api/v1/blog/posts` requires none by
     // documented design — a retry that duplicates a create is caught by the
     // `(tenant_id, locale, slug)` partial unique index instead.
-    const result = await sendJsonWithFieldErrors(
+    await submitWithFieldErrors(
+      submit,
+      createError,
       "POST",
       "/api/v1/blog/posts",
-      body
+      body,
+      {
+        labels: FIELD_LABELS,
+        busyLabel: "Creating…",
+        conflict: "A post with that slug and locale already exists.",
+        failure: "Could not create the draft. Please try again."
+      }
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // The rejected FIELD, not a guess at it. The old copy named the title and
-    // the slug for what was always a `contentText` rejection — advice pointing
-    // at the two fields that were correct.
-    showFormError(
-      errorElement,
-      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
-        ? "A post with that slug and locale already exists."
-        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
-            "Could not create the draft. Please try again.")
-    );
-    unlock();
   });
 
-  const editForm = document.getElementById(
-    "post-edit-form"
-  ) as HTMLFormElement | null;
-
-  editForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "post-edit-submit"
-    ) as HTMLButtonElement | null;
+  onSubmit("post-edit-form", async ({ data, submit }) => {
     const idField = document.getElementById(
       "edit-post-id"
     ) as HTMLInputElement | null;
-    if (!submit || submit.disabled || !idField) return;
-
-    const data = new FormData(editForm);
-    const errorElement = document.getElementById("post-edit-error");
-    if (errorElement) errorElement.hidden = true;
+    if (!idField) return;
 
     // PATCH is a partial update, and this screen sends only what it owns.
     const body: Record<string, unknown> = {
-      title: String(data.get("title") ?? "").trim(),
-      slug: String(data.get("slug") ?? "").trim(),
+      title: field(data, "title"),
+      slug: field(data, "slug"),
       visibility: String(data.get("visibility") ?? "public"),
       // `null` clears it — the API distinguishes that from absent, which is
       // "leave the excerpt alone".
-      excerpt: String(data.get("excerpt") ?? "").trim() || null
+      excerpt: field(data, "excerpt") || null
     };
 
     // Absent when the stored document holds blocks this editor cannot
@@ -1324,8 +1255,7 @@ const selectedPost = selectedPostId
       const contentText = buildContentTextFromBodyText(bodyText);
 
       if (contentText === "") {
-        showFormError(
-          errorElement,
+        editError.show(
           "The body cannot be empty — write at least one paragraph."
         );
         return;
@@ -1335,28 +1265,20 @@ const selectedPost = selectedPostId
       body.contentText = contentText;
     }
 
-    const unlock = lockElement(submit, "Saving…");
-
     // No `Idempotency-Key`: `PATCH /api/v1/blog/posts/{id}` requires none —
     // a same-body retry converges to the same end state.
-    const result = await sendJsonWithFieldErrors(
+    await submitWithFieldErrors(
+      submit,
+      editError,
       "PATCH",
       `/api/v1/blog/posts/${idField.value}`,
-      body
+      body,
+      {
+        labels: FIELD_LABELS,
+        busyLabel: "Saving…",
+        conflict: "A post with that slug and locale already exists.",
+        failure: "Could not save the post. Please try again."
+      }
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showFormError(
-      errorElement,
-      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
-        ? "A post with that slug and locale already exists."
-        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
-            "Could not save the post. Please try again.")
-    );
-    unlock();
   });
 </script>

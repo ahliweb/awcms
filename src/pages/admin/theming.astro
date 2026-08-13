@@ -667,82 +667,45 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
 
 <script>
   // Bound unconditionally: every control only renders when the matching
-  // permission gate passed server-side, so `getElementById` returns null for a
-  // viewer who lacks it and the listener never binds. Astro hoists this script at
-  // build time, so a conditional wrapper would be meaningless.
+  // permission gate passed server-side, so the lookup returns null for a
+  // viewer who lacks it and the listener never fires. Astro hoists this script
+  // at build time, so a conditional wrapper would be meaningless.
   //
   // The import is deliberate and load-bearing for CSP: an import-free script is
   // INLINED by Astro, and inline scripts are blocked by this app's
   // `default-src 'self'` policy. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("theming-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
-
-  function clearActionError(): void {
-    if (actionError) actionError.hidden = true;
-  }
+  const actionError = messageBox("theming-action-error");
+  const draftError = messageBox("theming-draft-error");
 
   /**
-   * Same cookie-auth conventions as `sendJson` (`credentials: "same-origin"`,
-   * JSON body, envelope check, never throws) but it also hands back the response
-   * DATA. Deliberately local rather than a widening of the shared helper:
-   * `sendJson`'s narrow `{ ok, errorCode }` return is the Issue #540 guard that
-   * stops a dozen other call sites from accidentally rendering internal detail,
-   * and only THIS screen has two calls whose whole point is the server-computed
-   * body — `validate`'s field-level `errors[]` and `preview`'s one-time
-   * `previewUrl`.
+   * `validate` and `preview` are the two calls on this screen whose whole point
+   * is the server-computed BODY — `validate`'s field-level `errors[]` and
+   * `preview`'s one-time `previewUrl` — so they use `sendJsonForData` rather
+   * than `sendJson`, whose narrow `{ ok, errorCode }` is the Issue #540 guard
+   * that stops a dozen other call sites rendering internal detail.
    *
    * `validate` is genuinely read-only. `preview` is NOT — it mints a
    * short-lived session token and is audited under `preview.create`; it is
    * routed here only because that token is returned exactly ONCE and would be
-   * lost if the page reloaded. It is not idempotency-keyed, which matches the
-   * endpoint's own contract. Neither call mutates theme state, which is the
+   * lost if the page reloaded. Neither mutates theme state, which is the
    * property that matters: the four lifecycle mutations (draft, publish,
-   * rollback, retire) all still go through the shared `sendJson`.
+   * rollback, retire) all still go through `sendJson`.
    *
    * Both responses are rendered via `textContent` or, for the preview link, a
    * path validated against the expected `/theming/preview/` prefix before it is
    * ever assigned to `href` — never `innerHTML`.
    */
-  async function requestJson(
-    url: string,
-    body: unknown
-  ): Promise<{
-    ok: boolean;
-    errorCode: string | null;
-    data: Record<string, unknown> | null;
-  }> {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(body)
-      });
-      const payload = (await response.json().catch(() => null)) as {
-        success?: boolean;
-        data?: Record<string, unknown>;
-        error?: { code?: string };
-      } | null;
-
-      if (response.ok && payload?.success === true) {
-        return { ok: true, errorCode: null, data: payload.data ?? null };
-      }
-      return {
-        ok: false,
-        errorCode: payload?.error?.code ?? null,
-        data: null
-      };
-    } catch {
-      return { ok: false, errorCode: "NETWORK_ERROR", data: null };
-    }
-  }
+  type ThemingData = Record<string, unknown>;
 
   /**
    * Read the descriptor-driven form back into the `{ themeKey, ...config }` body
@@ -762,26 +725,26 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
       .querySelectorAll<HTMLInputElement | HTMLSelectElement>(
         "[data-token-key]"
       )
-      .forEach((field) => {
-        const key = field.dataset.tokenKey;
-        const value = field.value.trim();
+      .forEach((entry) => {
+        const key = entry.dataset.tokenKey;
+        const value = entry.value.trim();
         if (key && value !== "") tokenOverrides[key] = value;
       });
 
     const slotSelections: Record<string, string> = {};
     form
       .querySelectorAll<HTMLSelectElement>("[data-slot-key]")
-      .forEach((field) => {
-        const key = field.dataset.slotKey;
-        if (key) slotSelections[key] = field.value;
+      .forEach((entry) => {
+        const key = entry.dataset.slotKey;
+        if (key) slotSelections[key] = entry.value;
       });
 
     const assetRefs: Record<string, string> = {};
     form
       .querySelectorAll<HTMLInputElement>("[data-asset-key]")
-      .forEach((field) => {
-        const key = field.dataset.assetKey;
-        const value = field.value.trim();
+      .forEach((entry) => {
+        const key = entry.dataset.assetKey;
+        const value = entry.value.trim();
         if (key && value !== "") assetRefs[key] = value;
       });
 
@@ -822,24 +785,24 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   });
 
   // --- validate: read-only dry run, NO Idempotency-Key ---
-  const validateButton = document.getElementById(
-    "theming-validate"
-  ) as HTMLButtonElement | null;
   const validateResult = document.getElementById("theming-validate-result");
   const validateSummary = document.getElementById("theming-validate-summary");
   const validateErrors = document.getElementById("theming-validate-errors");
 
-  validateButton?.addEventListener("click", async () => {
-    if (validateButton.disabled) return;
+  onAction("#theming-validate", async (button) => {
     const config = collectConfig();
     if (!config) return;
-    clearActionError();
-    const unlock = lockElement(validateButton, "Validating…");
+    actionError.clear();
+    const unlock = lockElement(button, "Validating…");
 
     // No `Idempotency-Key` here on purpose: `POST /api/v1/theming/validate`
     // writes nothing and requires no key, and sending one would imply a stored
     // response for an action that has none.
-    const result = await requestJson("/api/v1/theming/validate", config);
+    const result = await sendJsonForData<ThemingData>(
+      "POST",
+      "/api/v1/theming/validate",
+      config
+    );
 
     if (validateErrors) validateErrors.textContent = "";
 
@@ -875,63 +838,47 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   });
 
   // --- save draft: high-risk write, FRESH Idempotency-Key per click ---
-  const draftForm = document.getElementById(
-    "theming-draft-form"
-  ) as HTMLFormElement | null;
-  const draftSubmit = document.getElementById(
-    "theming-draft-submit"
-  ) as HTMLButtonElement | null;
-  const draftError = document.getElementById("theming-draft-error");
-
-  draftForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!draftSubmit || draftSubmit.disabled) return;
+  onSubmit("theming-draft-form", async ({ submit }) => {
     const config = collectConfig();
     if (!config) return;
-    if (draftError) draftError.hidden = true;
-    const unlock = lockElement(draftSubmit, "Saving…");
 
-    const result = await sendJson("PUT", "/api/v1/theming/draft", config, {
-      "Idempotency-Key": crypto.randomUUID()
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    if (draftError) {
+    await mutateAndReload(
+      submit,
+      draftError,
+      () =>
+        sendJson("PUT", "/api/v1/theming/draft", config, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
       // Generic copy only — never surface internal detail. VALIDATION_ERROR is
       // worth distinguishing because it is the caller's own input, and the
       // Validate button explains exactly which field.
-      draftError.textContent =
-        result.errorCode === "VALIDATION_ERROR"
+      (errorCode) =>
+        errorCode === "VALIDATION_ERROR"
           ? "Some values are not accepted by this theme. Use Validate to see which."
-          : "Could not save the draft. Please try again.";
-      draftError.hidden = false;
-    }
-    unlock();
+          : "Could not save the draft. Please try again.",
+      "Saving…"
+    );
   });
 
   // --- preview: needs the response body, so it must NOT reload the page ---
-  const previewButton = document.getElementById(
-    "theming-preview"
-  ) as HTMLButtonElement | null;
   const previewResult = document.getElementById("theming-preview-result");
   const previewLink = document.getElementById(
     "theming-preview-link"
   ) as HTMLAnchorElement | null;
   const previewExpiry = document.getElementById("theming-preview-expiry");
 
-  previewButton?.addEventListener("click", async () => {
-    if (previewButton.disabled) return;
-    clearActionError();
-    const unlock = lockElement(previewButton, "Creating…");
+  onAction("#theming-preview", async (button) => {
+    actionError.clear();
+    const unlock = lockElement(button, "Creating…");
 
     // Preview is not idempotency-keyed server-side: each session is a distinct,
     // disposable token, and the raw token comes back exactly ONCE — so this is
     // the one action that shows its result instead of reloading it away.
-    const result = await requestJson("/api/v1/theming/preview", {});
+    const result = await sendJsonForData<ThemingData>(
+      "POST",
+      "/api/v1/theming/preview",
+      {}
+    );
 
     const previewUrl =
       typeof result.data?.previewUrl === "string" ? result.data.previewUrl : "";
@@ -958,7 +905,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
       return;
     }
 
-    showActionError(
+    actionError.show(
       result.errorCode === "NO_DRAFT"
         ? "There is no saved draft to preview. Save the draft first."
         : "Could not create a preview link. Please try again."
@@ -978,28 +925,19 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     busyLabel: string,
     failureMessage: string
   ): Promise<void> {
-    if (button.disabled) return;
-    clearActionError();
-    const unlock = lockElement(button, busyLabel);
-
-    const result = await sendJson("POST", url, body, {
-      "Idempotency-Key": crypto.randomUUID()
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showActionError(failureMessage);
-    unlock();
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", url, body, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      failureMessage,
+      busyLabel
+    );
   }
 
-  const publishButton = document.getElementById(
-    "theming-publish"
-  ) as HTMLButtonElement | null;
-
-  publishButton?.addEventListener("click", () => {
+  onAction("#theming-publish", async (button) => {
     // Destructive in the sense that matters: it changes what every visitor sees,
     // and the version it creates can never be edited afterwards.
     if (
@@ -1009,8 +947,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     ) {
       return;
     }
-    void runLifecycleAction(
-      publishButton,
+    await runLifecycleAction(
+      button,
       "/api/v1/theming/publish",
       undefined,
       "Publishing…",
@@ -1018,11 +956,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     );
   });
 
-  const retireButton = document.getElementById(
-    "theming-retire"
-  ) as HTMLButtonElement | null;
-
-  retireButton?.addEventListener("click", () => {
+  onAction("#theming-retire", async (button) => {
     if (
       !window.confirm(
         "Retire the live theme? The site falls back to the default theme until you publish or roll back."
@@ -1030,8 +964,8 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     ) {
       return;
     }
-    void runLifecycleAction(
-      retireButton,
+    await runLifecycleAction(
+      button,
       "/api/v1/theming/retire",
       undefined,
       "Retiring…",
@@ -1039,29 +973,25 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     );
   });
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".theming-rollback-btn")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        const versionId = button.dataset.versionId;
-        if (!versionId) return;
-        const label = button.dataset.versionNumber
-          ? `version ${button.dataset.versionNumber}`
-          : "this version";
-        if (
-          !window.confirm(
-            `Roll the live theme back to ${label}? It becomes the live look immediately.`
-          )
-        ) {
-          return;
-        }
-        void runLifecycleAction(
-          button,
-          "/api/v1/theming/rollback",
-          { versionId },
-          "Rolling back…",
-          "Could not roll back to that version. Please try again."
-        );
-      });
-    });
+  onAction(".theming-rollback-btn", async (button) => {
+    const versionId = button.dataset.versionId;
+    if (!versionId) return;
+    const label = button.dataset.versionNumber
+      ? `version ${button.dataset.versionNumber}`
+      : "this version";
+    if (
+      !window.confirm(
+        `Roll the live theme back to ${label}? It becomes the live look immediately.`
+      )
+    ) {
+      return;
+    }
+    await runLifecycleAction(
+      button,
+      "/api/v1/theming/rollback",
+      { versionId },
+      "Rolling back…",
+      "Could not roll back to that version. Please try again."
+    );
+  });
 </script>

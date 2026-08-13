@@ -214,9 +214,16 @@ describe("/admin/reporting permission gates", () => {
     // would render controls that always fail. A per-click `crypto.randomUUID()`
     // is also what makes a deliberate second action actually run, instead of
     // replaying the first one's stored response.
-    expect(
-      page.match(/"Idempotency-Key": crypto\.randomUUID\(\)/g)
-    ).toHaveLength(5);
+    //
+    // Counted as CALL SITES of the page's `idempotency()` helper rather than
+    // as literal headers (#552 moved the literal into the helper). The
+    // freshness property survives the move — the helper calls `randomUUID`
+    // per invocation — and the assertion below holds it to that, so a helper
+    // that hoisted one key into a constant turns this red.
+    expect(page).toContain(
+      'return { "Idempotency-Key": crypto.randomUUID() };'
+    );
+    expect(page.match(/\bidempotency\(\)\n?\s*\)/g)).toHaveLength(5);
 
     // Reconcile requires no key BECAUSE it mutates no business state — it only
     // appends a comparison snapshot. Scoped to the request that names that URL

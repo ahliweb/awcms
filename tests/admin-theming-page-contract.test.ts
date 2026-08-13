@@ -22,6 +22,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, test } from "bun:test";
 
+import { stripComments } from "../scripts/access-chokepoint-check";
 import { listModules } from "../src/modules";
 
 const PAGE = "src/pages/admin/theming.astro";
@@ -196,15 +197,21 @@ describe("/admin/theming permission gates", () => {
     expect(page).toContain("async function runLifecycleAction(");
 
     // Validate is a read-only dry run on an endpoint that requires no key. It
-    // goes through the local `requestJson`, which sends only `Content-Type` —
-    // asserted structurally so a later edit cannot slip a key in.
-    const requestJsonBody = page.slice(
-      page.indexOf("async function requestJson("),
-      page.indexOf("function collectConfig()")
+    // goes through the shared `sendJsonForData`, which sends only
+    // `Content-Type` — asserted structurally so a later edit cannot slip a key
+    // in. Bounded by the next control so the slice is the validate call alone.
+    // Comments stripped FIRST: the block explains in prose why it sends no
+    // key, and a raw `toContain` would read that explanation as the thing it
+    // forbids — the vacuity this repo has been bitten by before.
+    const validateCall = stripComments(
+      page.slice(
+        page.indexOf('onAction("#theming-validate"'),
+        page.indexOf('onSubmit("theming-draft-form"')
+      )
     );
-    expect(requestJsonBody.length).toBeGreaterThan(200);
-    expect(requestJsonBody).not.toContain("Idempotency-Key");
-    expect(page).toContain('requestJson("/api/v1/theming/validate", config)');
+    expect(validateCall.length).toBeGreaterThan(200);
+    expect(validateCall).not.toContain("Idempotency-Key");
+    expect(validateCall).toContain('"/api/v1/theming/validate"');
   });
 
   test("the sidebar entry points at this page and is gated on a real permission", async () => {
