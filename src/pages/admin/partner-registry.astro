@@ -1,0 +1,288 @@
+---
+/**
+ * Partner registry — ADR-0089, Issue #540. PLATFORM-scoped.
+ *
+ * The registry gained a writer in #538 and had no page. This is that page, and
+ * the most important thing about it is where it is NOT: `/admin/partners` is
+ * the CUSTOMER's view of who reaches its own tenant, and putting the registry
+ * there would put the platform's list of every partnership in front of every
+ * customer — the cross-tenant directory ADR-0089 refused as a table, rebuilt as
+ * a screen.
+ *
+ * ## Two independent things keep this platform-only, and both are load-bearing
+ *
+ * FORCE RLS puts every row under the platform tenant, so no customer session
+ * can read one even holding a grant. The chokepoint refuses a platform-scoped
+ * permission unless the acting tenant IS the platform tenant. Neither is a
+ * backstop for the other, and the nav link is gated on the platform permission
+ * itself for the reason `/admin/tenants` records: there is no tenant-readable
+ * half of this screen, so an ordinary tenant has nothing here to see.
+ *
+ * ## Registering asks for a UUID, and the page says why
+ *
+ * The tenant being named must already exist — this does not provision one. And
+ * there is no picker, for the same reason `/admin/partners` has none: a
+ * selectable list of every tenant is the directory the design declines to hand
+ * out. The platform operator has `/admin/tenants` if they need to look one up,
+ * which is exactly the permission boundary that should decide it.
+ *
+ * ## No delete, and it is a decision
+ *
+ * `awcms_partners.partner_tenant_id` is the target of foreign keys from
+ * engagements and from delegated grants that `sql/120` deliberately made
+ * OUTLIVE their engagement. A delete would fail as soon as one partnership had
+ * ever existed, and `ON DELETE CASCADE` would silently cut every partnership on
+ * the installation. Retirement is a `status` change — and `status` is pinned by
+ * `sql/116` until something reads suspension (#543).
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import {
+  listPartners,
+  type PartnerSummary
+} from "../../modules/identity-access/application/partner-registry-store";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "partner_registry",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // `ssr.tenantId` IS the platform tenant here: the chokepoint above refused
+    // the request otherwise, so there is no second resolution and no chance of
+    // the two disagreeing.
+    partners: await listPartners(tx, ssr.tenantId),
+    canCreate: await can({
+      moduleKey: "identity_access",
+      activityCode: "partner_registry",
+      action: "create"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/partner-registry.astro: failed to load the partner registry",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const partners: PartnerSummary[] =
+  screen.state === "allowed" ? screen.data.partners : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+---
+
+<AdminLayout title="Partner registry">
+  <header class="page-header fade-in-up">
+    <h1 id="partner-registry-heading">Partner registry</h1>
+    <p class="page-description">
+      Which tenants on this deployment may be engaged as partners. A row here
+      grants nothing — it is the precondition a customer's engagement checks.
+      Whether a partner actually reaches a customer is that customer's decision,
+      taken on their own Partner access screen.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="partner-registry-denied">
+        You do not have permission to view the partner registry. It is
+        platform-scoped: only the platform tenant can reach it.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="partner-registry-load-error">
+        Could not load the partner registry. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        <p
+          id="partner-registry-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+
+        {canCreate && (
+          <section
+            class="fade-in-up"
+            aria-labelledby="partner-registry-add-heading"
+          >
+            <h2 id="partner-registry-add-heading">Register a partner</h2>
+
+            <form id="register-partner-form" class="admin-form">
+              <p class="page-description">
+                The tenant must already exist — this does not create one. There
+                is no picker on purpose: a selectable list of every tenant is
+                the directory this design declines to hand out. Look the id up
+                on the Tenants screen if you need it.
+              </p>
+
+              <label for="register-partner-tenant-id">Partner tenant id</label>
+              <input
+                id="register-partner-tenant-id"
+                name="partnerTenantId"
+                type="text"
+                required
+                autocomplete="off"
+                placeholder="00000000-0000-0000-0000-000000000000"
+              />
+
+              <label for="register-partner-code">Partner code</label>
+              <input
+                id="register-partner-code"
+                name="partnerCode"
+                type="text"
+                required
+                maxlength="64"
+                pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?"
+                placeholder="acme-digital"
+              />
+              <p class="page-description">
+                Lower-case letters, digits and hyphens, unique across the
+                deployment. Case matters to the index and not to a human, so a
+                stray capital would make a second partner that reads like the
+                first one.
+              </p>
+
+              <label for="register-partner-name">Display name</label>
+              <input
+                id="register-partner-name"
+                name="displayName"
+                type="text"
+                required
+                maxlength="160"
+              />
+
+              <button id="register-partner-submit" type="submit">
+                Register partner
+              </button>
+            </form>
+          </section>
+        )}
+
+        <section
+          class="fade-in-up"
+          aria-labelledby="partner-registry-list-heading"
+        >
+          <h2 id="partner-registry-list-heading">Registered partners</h2>
+
+          {partners.length === 0 ? (
+            <div class="empty-state">
+              <p id="partner-registry-empty">
+                No tenant on this deployment is registered as a partner. Nobody
+                can be engaged until one is.
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Partner code</th>
+                    <th scope="col">Display name</th>
+                    <th scope="col">Tenant</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Registered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {partners.map((partner) => (
+                    <tr>
+                      <th scope="row" data-label="Partner code">
+                        {partner.partnerCode}
+                      </th>
+                      <td data-label="Display name">{partner.displayName}</td>
+                      <td data-label="Tenant">
+                        {partner.tenantName} ({partner.tenantCode})
+                      </td>
+                      <td data-label="Status">{partner.status}</td>
+                      <td data-label="Registered">
+                        {partner.registeredAt.toISOString().slice(0, 10)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p class="page-description">
+            There is no way to remove a partner here, and that is deliberate:
+            engagements and delegated grants reference these rows, and grants
+            are built to outlive the partnership that produced them. Retiring a
+            partner will be a status change once something reads suspension.
+          </p>
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("partner-registry-action-error");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  document
+    .getElementById("register-partner-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (errorBox) errorBox.hidden = true;
+
+      const form = event.currentTarget as HTMLFormElement;
+      const button = document.getElementById(
+        "register-partner-submit"
+      ) as HTMLButtonElement | null;
+      if (!button) return;
+
+      const data = new FormData(form);
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJson("POST", "/api/v1/partners", {
+        partnerTenantId: String(data.get("partnerTenantId") ?? "").trim(),
+        partnerCode: String(data.get("partnerCode") ?? "").trim(),
+        displayName: String(data.get("displayName") ?? "").trim()
+      });
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "TENANT_NOT_FOUND"
+          ? "No tenant on this deployment has that id. It must already exist — this screen does not create one."
+          : result.errorCode === "CONFLICT"
+            ? "That tenant is already a partner, that code is taken, or you named the platform tenant itself."
+            : result.errorCode === "VALIDATION_FAILED"
+              ? "Check the id, the code and the name. The code is lower-case letters, digits and hyphens."
+              : "Could not register that partner. Please try again."
+      );
+      unlock();
+    });
+</script>

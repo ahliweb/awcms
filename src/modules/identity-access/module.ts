@@ -177,6 +177,19 @@ export const identityAccessModule = defineModule({
       path: "/admin/invitations",
       order: 28,
       requiredPermission: "identity_access.invitations.read"
+    },
+    // ADR-0089, #540. PLATFORM-scoped, and the link is gated on the platform
+    // permission ITSELF for the reason `/admin/tenants` records: unlike
+    // `/admin/idn-regions` there is no tenant-readable half of this screen, so
+    // an ordinary tenant has nothing here to see. It is deliberately NOT a
+    // section of `/admin/partners` — that page is the CUSTOMER's view of who
+    // reaches its own tenant, and the registry there would put the platform's
+    // list of every partnership in front of every customer.
+    {
+      labelKey: "admin.layout.nav_partner_registry",
+      path: "/admin/partner-registry",
+      order: 35,
+      requiredPermission: "identity_access.partner_registry.read"
     }
   ],
   jobs: [
