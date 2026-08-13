@@ -1,0 +1,515 @@
+---
+/**
+ * Partner access — ADR-0089/0090/0091, Gelombang 8 of Issue #423.
+ *
+ * The screen the wave shipped without, and the reason it mattered: revocation
+ * is the control a customer reaches for when something is wrong, and until this
+ * page existed it was a `DELETE` against the API — which works, and which
+ * nobody under pressure remembers.
+ *
+ * Every action posts to the real endpoints, so the ABAC guards, the audit rows
+ * and the session-killing all live there. The permission checks below decide
+ * what to RENDER, never what is allowed.
+ *
+ * ## Why engaging a partner asks for a UUID
+ *
+ * There is no partner picker, and there is not meant to be. ADR-0089 refused a
+ * readable directory of the platform's partners — a caller who could enumerate
+ * them would hold exactly the cross-tenant artefact the whole wave declined to
+ * build. The partner tells the customer their tenant id out of band, once. The
+ * page says so rather than leaving an unexplained UUID field.
+ *
+ * ## The access code is shown once, here, and never fetched again
+ *
+ * The approval response is the ONLY place the code exists in readable form.
+ * This screen therefore reads the response body (`sendJsonForData`) instead of
+ * reloading, and keeps the code on screen until the operator dismisses it. A
+ * reload after approval would be a lost credential and a grant to revoke.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { listRoles } from "../../modules/identity-access/application/access-directory";
+import {
+  listPartnerEngagements,
+  type PartnerEngagement
+} from "../../modules/identity-access/application/partner-engagement-store";
+import {
+  listDelegatedGrants,
+  type DelegatedGrantSummary
+} from "../../modules/identity-access/application/delegated-access-store";
+import { DELEGATED_ACCESS_MAX_TTL_DAYS } from "../../modules/identity-access/domain/delegated-access";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "partner_access",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time — concurrent queries on a
+    // single transaction connection leak it.
+    const engagements = await listPartnerEngagements(tx, ssr.tenantId);
+    const grants = await listDelegatedGrants(tx, ssr.tenantId);
+
+    const canConfigure = await can({
+      moduleKey: "identity_access",
+      activityCode: "partner_access",
+      action: "configure"
+    });
+    const canAssign = await can({
+      moduleKey: "identity_access",
+      activityCode: "partner_access",
+      action: "assign"
+    });
+
+    // System roles are dropped because redemption refuses them
+    // (`materializeMembership`). Offering `owner` here would present a control
+    // that fails in the operator's face at the far end of an out-of-band code
+    // handover — the worst possible moment to discover it.
+    const roles = canAssign
+      ? (await listRoles(tx, ssr.tenantId))
+          .filter((role) => !role.isSystem)
+          .map((role) => ({ id: role.id, roleCode: role.roleCode }))
+      : [];
+
+    return { engagements, grants, roles, canConfigure, canAssign };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/partners.astro: failed to load partner access",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const engagements: PartnerEngagement[] =
+  screen.state === "allowed" ? screen.data.engagements : [];
+const grants: DelegatedGrantSummary[] =
+  screen.state === "allowed" ? screen.data.grants : [];
+const roles: { id: string; roleCode: string }[] =
+  screen.state === "allowed" ? screen.data.roles : [];
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+const canAssign = screen.state === "allowed" && screen.data.canAssign;
+
+const partnerNames = new Map(
+  engagements.map((entry) => [entry.partnerTenantId, entry.partnerTenantName])
+);
+
+/** Live, expired, revoked — computed here so the table says it in one word. */
+function grantState(grant: DelegatedGrantSummary): string {
+  if (grant.revokedAt) return "Revoked";
+  if (grant.expiresAt.getTime() <= Date.now()) return "Expired";
+  return grant.redeemedAt ? "Active" : "Awaiting redemption";
+}
+
+function isLive(grant: DelegatedGrantSummary): boolean {
+  return !grant.revokedAt && grant.expiresAt.getTime() > Date.now();
+}
+
+const maxExpiry = new Date(
+  Date.now() + DELEGATED_ACCESS_MAX_TTL_DAYS * 24 * 60 * 60 * 1000
+)
+  .toISOString()
+  .slice(0, 10);
+---
+
+<AdminLayout title="Partner access">
+  <header class="page-header fade-in-up">
+    <h1 id="partners-heading">Partner access</h1>
+    <p class="page-description">
+      Who from outside this organisation can reach this tenant, and until when.
+      Severing a partnership revokes every grant under it — memberships
+      deactivated, sessions killed — in one step.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="partners-denied">
+        You do not have permission to view partner access.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="partners-load-error">
+        Could not load partner access. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        <p
+          id="partners-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+
+        <section
+          class="fade-in-up"
+          aria-labelledby="partners-engagements-heading"
+        >
+          <h2 id="partners-engagements-heading">Partnerships</h2>
+
+          {canConfigure && (
+            <form id="engage-partner-form" class="admin-form">
+              <p class="page-description">
+                There is no partner directory to pick from, on purpose: a list
+                of every partnership on this platform is exactly the
+                cross-tenant artefact this design refuses to build. Ask your
+                partner for their tenant id.
+              </p>
+              <label for="engage-partner-tenant-id">Partner tenant id</label>
+              <input
+                id="engage-partner-tenant-id"
+                name="partnerTenantId"
+                type="text"
+                required
+                autocomplete="off"
+                placeholder="00000000-0000-0000-0000-000000000000"
+              />
+              <button type="submit" id="engage-partner-submit">
+                Engage partner
+              </button>
+            </form>
+          )}
+
+          {engagements.length === 0 ? (
+            <div class="empty-state" id="partners-engagements-empty">
+              <p class="empty-state-title">Nobody from outside</p>
+              <p class="empty-state-text">No partner reaches this tenant.</p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Partner</th>
+                    <th scope="col">Tenant id</th>
+                    <th scope="col">Engaged</th>
+                    {canConfigure && <th scope="col">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {engagements.map((entry) => (
+                    <tr>
+                      <th scope="row" data-label="Partner">
+                        {entry.partnerTenantName}
+                      </th>
+                      <td data-label="Tenant id">
+                        <code class="cell-code">{entry.partnerTenantId}</code>
+                      </td>
+                      <td data-label="Engaged">
+                        {entry.engagedAt.toISOString().slice(0, 10)}
+                      </td>
+                      {canConfigure && (
+                        <td data-label="Actions">
+                          <button
+                            type="button"
+                            class="js-sever-engagement"
+                            data-engagement-id={entry.id}
+                          >
+                            Sever
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section class="fade-in-up" aria-labelledby="partners-grants-heading">
+          <h2 id="partners-grants-heading">Delegated access</h2>
+
+          <div
+            id="partners-access-code"
+            class="state-notice"
+            role="alert"
+            hidden
+          />
+
+          {canAssign && engagements.length > 0 && roles.length > 0 && (
+            <form id="approve-grant-form" class="admin-form">
+              <p class="page-description">
+                The code appears once, on this page, and cannot be read again.
+                Hand it to your partner out of band. Access lasts at most{" "}
+                {DELEGATED_ACCESS_MAX_TTL_DAYS} days.
+              </p>
+
+              <label for="approve-partner">Partner</label>
+              <select id="approve-partner" name="partnerTenantId" required>
+                {engagements.map((entry) => (
+                  <option value={entry.partnerTenantId}>
+                    {entry.partnerTenantName}
+                  </option>
+                ))}
+              </select>
+
+              <label for="approve-role">Role they will hold</label>
+              <select id="approve-role" name="roleId" required>
+                {roles.map((role) => (
+                  <option value={role.id}>{role.roleCode}</option>
+                ))}
+              </select>
+
+              <label for="approve-purpose">Why</label>
+              <input
+                id="approve-purpose"
+                name="purpose"
+                type="text"
+                required
+                maxlength="500"
+                placeholder="Incident 4711 — checkout errors"
+              />
+
+              <label for="approve-expires">Until</label>
+              <input
+                id="approve-expires"
+                name="expiresAt"
+                type="date"
+                required
+                max={maxExpiry}
+              />
+
+              <button type="submit" id="approve-grant-submit">
+                Approve access
+              </button>
+            </form>
+          )}
+
+          {grants.length === 0 ? (
+            <div class="empty-state" id="partners-grants-empty">
+              <p class="empty-state-title">No access granted</p>
+              <p class="empty-state-text">
+                Nobody outside this organisation has been given a way in.
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Partner</th>
+                    <th scope="col">Why</th>
+                    <th scope="col">Until</th>
+                    <th scope="col">State</th>
+                    {canAssign && <th scope="col">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {grants.map((grant) => (
+                    <tr>
+                      <th scope="row" data-label="Partner">
+                        {partnerNames.get(grant.partnerTenantId) ??
+                          grant.partnerTenantId}
+                      </th>
+                      <td data-label="Why">{grant.purpose}</td>
+                      <td data-label="Until">
+                        {grant.expiresAt.toISOString().slice(0, 10)}
+                      </td>
+                      <td data-label="State">{grantState(grant)}</td>
+                      {canAssign && (
+                        <td data-label="Actions">
+                          {isLive(grant) ? (
+                            <button
+                              type="button"
+                              class="js-revoke-grant"
+                              data-grant-id={grant.id}
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <span class="cell-muted">—</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    lockElement,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("partners-action-error");
+  const codeBox = document.getElementById("partners-access-code");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function clearError(): void {
+    if (errorBox) errorBox.hidden = true;
+  }
+
+  document
+    .getElementById("engage-partner-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+
+      const input = document.getElementById(
+        "engage-partner-tenant-id"
+      ) as HTMLInputElement | null;
+      const button = document.getElementById(
+        "engage-partner-submit"
+      ) as HTMLButtonElement | null;
+      if (!input || !button) return;
+
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJson(
+        "POST",
+        "/api/v1/access/partner-engagements",
+        {
+          partnerTenantId: input.value.trim()
+        }
+      );
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "CONFLICT"
+          ? "That partner is already engaged for this tenant."
+          : result.errorCode === "NOT_FOUND"
+            ? "No such partner. Check the tenant id with them — it is not something this page can look up."
+            : "Could not engage that partner. Please try again."
+      );
+      unlock();
+    });
+
+  document
+    .getElementById("approve-grant-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+
+      const form = event.currentTarget as HTMLFormElement;
+      const button = document.getElementById(
+        "approve-grant-submit"
+      ) as HTMLButtonElement | null;
+      if (!button) return;
+
+      const data = new FormData(form);
+      const expiresAt = String(data.get("expiresAt") ?? "");
+
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJsonForData<{ accessCode?: string }>(
+        "POST",
+        "/api/v1/access/delegated-grants",
+        {
+          partnerTenantId: String(data.get("partnerTenantId") ?? ""),
+          roleId: String(data.get("roleId") ?? ""),
+          purpose: String(data.get("purpose") ?? ""),
+          // A `date` input gives midnight LOCAL; send the end of that day in
+          // UTC so "until the 20th" does not silently mean "until the 19th
+          // evening" for anyone east of Greenwich.
+          expiresAt: expiresAt ? `${expiresAt}T23:59:00.000Z` : ""
+        }
+      );
+
+      if (result.ok && result.data?.accessCode) {
+        // NOT a reload. This is the only time the code is readable, and
+        // reloading would spend a grant that then has to be revoked.
+        if (codeBox) {
+          codeBox.textContent = `Access code (shown once — copy it now): ${result.data.accessCode}`;
+          codeBox.hidden = false;
+        }
+        unlock();
+        return;
+      }
+
+      showError(
+        result.errorCode === "NOT_FOUND"
+          ? "That partner is no longer engaged, or that role no longer exists here."
+          : result.errorCode === "VALIDATION_ERROR"
+            ? "Check the date and the reason — access cannot start in the past or run past the maximum."
+            : "Could not approve access. Please try again."
+      );
+      unlock();
+    });
+
+  document.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest("button");
+    if (!(target instanceof HTMLButtonElement)) return;
+
+    if (target.classList.contains("js-sever-engagement")) {
+      const engagementId = target.dataset.engagementId;
+      if (!engagementId) return;
+
+      void (async () => {
+        clearError();
+        const unlock = lockElement(target, "Please wait…");
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/access/partner-engagements/${engagementId}`
+        );
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showError("Could not sever that partnership. Please try again.");
+        unlock();
+      })();
+      return;
+    }
+
+    if (target.classList.contains("js-revoke-grant")) {
+      const grantId = target.dataset.grantId;
+      if (!grantId) return;
+
+      void (async () => {
+        clearError();
+        const unlock = lockElement(target, "Please wait…");
+        const result = await sendJson(
+          "DELETE",
+          `/api/v1/access/delegated-grants/${grantId}`
+        );
+        if (result.ok) {
+          window.location.reload();
+          return;
+        }
+        showError(
+          result.errorCode === "NOT_FOUND"
+            ? "That access was already revoked or has expired."
+            : "Could not revoke that access. Please try again."
+        );
+        unlock();
+      })();
+    }
+  });
+</script>

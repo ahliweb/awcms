@@ -97,3 +97,58 @@ export async function postJson(
 ): Promise<{ ok: boolean; errorCode: string | null }> {
   return sendJson("POST", url, body);
 }
+
+/**
+ * As {@link sendJson}, but ALSO returns the response `data` — for the one class
+ * of endpoint whose whole point is what it hands back.
+ *
+ * ## Why this is separate, and should stay rare
+ *
+ * `sendJson`'s narrow `{ ok, errorCode }` shape is deliberate (Issue #540):
+ * callers show a generic message keyed off `errorCode` and can never
+ * accidentally paint internal detail onto the page. Widening it for everyone
+ * would remove that property from 30-odd call sites to serve two.
+ *
+ * The exception exists for responses like the delegated-access approval, which
+ * returns a single-use code that appears EXACTLY ONCE and cannot be re-read.
+ * Discarding it would mean the operator has to revoke the grant and approve a
+ * new one — a worse outcome than the narrow shape protects against.
+ *
+ * The error half stays narrow: on failure this returns `data: null` and the
+ * same `errorCode`, so a failed call still cannot leak anything.
+ */
+export async function sendJsonForData<TData>(
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  url: string,
+  body?: unknown,
+  extraHeaders?: Record<string, string>
+): Promise<{ ok: boolean; errorCode: string | null; data: TData | null }> {
+  try {
+    const hasBody = body !== undefined;
+    const headers: Record<string, string> = { ...extraHeaders };
+    if (hasBody) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    const response = await fetch(url, {
+      method,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      body: hasBody ? JSON.stringify(body) : undefined,
+      credentials: "same-origin"
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      data?: TData;
+      error?: { code?: string };
+    } | null;
+
+    if (response.ok && payload?.success === true) {
+      return { ok: true, errorCode: null, data: payload.data ?? null };
+    }
+
+    return { ok: false, errorCode: payload?.error?.code ?? null, data: null };
+  } catch {
+    return { ok: false, errorCode: "NETWORK_ERROR", data: null };
+  }
+}

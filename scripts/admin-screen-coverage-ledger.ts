@@ -118,22 +118,5 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "visitor_analytics.events.read",
   "visitor_analytics.retention.purge",
   "visitor_analytics.settings.read",
-  "visitor_analytics.settings.update",
-
-  // identity_access — partner access (3), Gelombang 8 PR 8.4 of #423.
-  //
-  // The endpoints landed with their permissions and no screen, which is exactly
-  // the case this ledger is for. Naming it plainly rather than reaching for
-  // `DELIBERATELY_UNSCREENED`: an operator absolutely SHOULD drive this from a
-  // page — approving a partner's access to your own tenant, and revoking it, is
-  // about as far from a machine-only operation as this repo has.
-  //
-  // One of the three carries more weight than an ordinary missing screen.
-  // Revocation is the control a customer reaches for when something is wrong,
-  // and today it is an API call. Until the screen exists, the runbook is
-  // `DELETE /api/v1/access/delegated-grants/{id}` — which works, and which
-  // nobody under pressure will remember.
-  "identity_access.partner_access.read",
-  "identity_access.partner_access.configure",
-  "identity_access.partner_access.assign"
+  "visitor_analytics.settings.update"
 ];

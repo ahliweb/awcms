@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **121** (`sql/001`–`121`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **35** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **48** (26.424 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,27 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedelapan belas) — layar `/admin/partners`:
+  pencabutan akses partner berhenti menjadi panggilan API.**
+
+  Menutup tiga entri terakhir `partner_access` di `NOT_YET_SCREENED` (62 → 59).
+  Yang mendorongnya bukan kelengkapan melainkan satu kalimat dari putaran
+  sebelumnya: pencabutan adalah kontrol yang dicari pelanggan ketika ada yang
+  salah, dan sampai halaman ini ada ia adalah `DELETE` yang tidak akan diingat
+  siapa pun di bawah tekanan.
+
+  **Tidak ada partner picker**, dan halamannya mengatakan kenapa — sebuah
+  `<select>` berisi partner adalah direktori lintas-tenant yang ADR-0089 tolak
+  sebagai tabel, dibangun ulang di UI. **Halaman ini juga tidak reload setelah
+  menyetujui**: respons persetujuan adalah satu-satunya tempat kode terbaca, dan
+  reload berarti kredensial hilang plus grant yang harus dicabut.
+
+  **Jebakan yang ditemukan saat menulis test kontraknya, dan layak diingat:**
+  asersi `not.toContain('action: "revoke"')` atas seluruh berkas rute GAGAL pada
+  kode yang BENAR, karena rutenya juga menulis baris audit ber-`action:
+"revoke"`. Action audit ≠ action guard; test yang mencampurnya memerah pada
+  kode yang benar.
 
 - **PUTARAN 13 Agustus 2026 (ketujuh belas) — ALUR PENGEMBANGAN PUNYA DOKUMEN
   KANONIK, dan satu langkahnya BERTENTANGAN dengan ADR yang berlaku.**
