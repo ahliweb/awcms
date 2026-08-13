@@ -133,6 +133,35 @@ export function isIpInAnyCidr(ip: string, cidrs: readonly string[]): boolean {
   return false;
 }
 
+/**
+ * Whether a string is an IP literal or a CIDR the matcher above can actually
+ * read — the ISSUANCE-time counterpart to `isIpInAnyCidr`, and deliberately a
+ * different question.
+ *
+ * At enforcement time an unreadable entry narrows to nothing, because a row the
+ * parser cannot read must never widen anything. At issuance time that same
+ * silence is the defect: an operator who typed `10.0.0.0/33` would be handed a
+ * credential that READS as IP-bound and is bound to nothing it can ever match,
+ * and would find out at the first request rather than at the form. Refusing
+ * here is the only moment where the typo is still cheap.
+ */
+export function isValidIpCidr(value: string): boolean {
+  const slash = value.indexOf("/");
+  const base = parseIpBytes(slash === -1 ? value : value.slice(0, slash));
+
+  if (!base) return false;
+  if (slash === -1) return true;
+
+  // A digits-only suffix, checked before `Number`: `Number("")` is 0 and
+  // `Number(" 8")` is 8, so `10.0.0.0/` and `10.0.0.0/ 8` would both slip
+  // through a bare numeric parse — the first as a prefix length of ZERO, which
+  // is every address on the internet.
+  const suffix = value.slice(slash + 1);
+  if (!/^\d{1,3}$/.test(suffix)) return false;
+
+  return Number(suffix) <= base.length * 8;
+}
+
 function sharesPrefix(a: Uint8Array, b: Uint8Array, bits: number): boolean {
   const fullBytes = Math.floor(bits / 8);
 
@@ -201,6 +230,13 @@ const PERMISSION_KEY_PATTERN =
 const NAME_MAX_LENGTH = 120;
 const ALLOWED_KEYS_MAX = 50;
 
+/**
+ * An allow-list is a thing an incident responder has to read out loud. Fifty
+ * permission keys is already a lot; fifty networks is a list nobody audits, and
+ * a write credential whose binding cannot be audited is not really bound.
+ */
+const ALLOWED_CIDRS_MAX = 20;
+
 export type MachineCredentialValidationError = {
   field: string;
   message: string;
@@ -210,6 +246,14 @@ export type IssueMachineCredentialInput = {
   name: string;
   tenantUserId: string;
   allowedPermissionKeys: string[];
+  /**
+   * ADR-0092. Empty on every credential ADR-0049 could issue, and empty is what
+   * an absent field means — the read-only class stays the default, never a
+   * thing the caller has to remember to ask for.
+   */
+  allowedWriteActions: AccessAction[];
+  /** Non-empty if and only if `allowedWriteActions` is (`sql/121` CHECK). */
+  allowedIpCidrs: string[];
   expiresAt: Date;
 };
 
@@ -286,6 +330,120 @@ export function validateIssueMachineCredentialInput(
     }
   }
 
+  // ADR-0092 — the write class. Absent means empty, and empty means the
+  // read-only credential ADR-0049 shipped: opening this class must not change
+  // what a request that does not mention it gets.
+  const rawWriteActions = input.allowedWriteActions ?? [];
+  const allowedWriteActions: AccessAction[] = [];
+  if (!Array.isArray(rawWriteActions)) {
+    errors.push({
+      field: "allowedWriteActions",
+      message: "allowedWriteActions must be an array of actions."
+    });
+  } else {
+    for (const action of rawWriteActions) {
+      if (
+        typeof action === "string" &&
+        isMachineCredentialAllowedAction(action as AccessAction)
+      ) {
+        // Named separately from the generic refusal below because it is the
+        // mistake an operator is most likely to make, and "read is not allowed"
+        // is a confusing thing to be told about a credential that can read.
+        errors.push({
+          field: "allowedWriteActions",
+          message:
+            "read is implicit — every credential may read whatever its allowedPermissionKeys name."
+        });
+        continue;
+      }
+
+      if (
+        typeof action !== "string" ||
+        !MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS.has(action as AccessAction)
+      ) {
+        errors.push({
+          field: "allowedWriteActions",
+          message: `Not a write action a machine credential may hold: ${
+            typeof action === "string" ? action : typeof action
+          }. Allowed: ${[...MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS].join(", ")}.`
+        });
+        continue;
+      }
+
+      const writeAction = action as AccessAction;
+      if (!allowedWriteActions.includes(writeAction))
+        allowedWriteActions.push(writeAction);
+    }
+  }
+
+  // Derived from what was ASKED FOR, not from what survived parsing.
+  //
+  // Deriving it from `allowedWriteActions` reads more natural and is wrong: a
+  // request naming `delete` with a perfectly good CIDR would end up with an
+  // EMPTY parsed list, be reclassified as read-only, and then be told its CIDR
+  // is the problem. One mistake, two errors, and the second one contradicts
+  // what the operator plainly asked for.
+  const writeClassRequested =
+    Array.isArray(rawWriteActions) && rawWriteActions.length > 0;
+
+  const rawCidrs = input.allowedIpCidrs ?? [];
+  const allowedIpCidrs: string[] = [];
+  if (!Array.isArray(rawCidrs)) {
+    errors.push({
+      field: "allowedIpCidrs",
+      message: "allowedIpCidrs must be an array of IP addresses or CIDR blocks."
+    });
+  } else if (!writeClassRequested && rawCidrs.length > 0) {
+    // The direction nothing else enforces. `isMachineCredentialWriteRefused`
+    // answers `false` for `read` BEFORE it looks at the CIDR list, so a
+    // read-only credential carrying networks is not restricted to them — it is
+    // a control that READS as enforced and is not. Refused rather than silently
+    // dropped: dropping it still leaves an operator believing they bound it.
+    //
+    // Reported INSTEAD OF per-entry parse errors, not in addition: "that is not
+    // a CIDR" is noise next to "this field does nothing here".
+    errors.push({
+      field: "allowedIpCidrs",
+      message:
+        "allowedIpCidrs is only enforced for credentials that can write; a read-only credential is not restricted by it."
+    });
+  } else if (rawCidrs.length > ALLOWED_CIDRS_MAX) {
+    errors.push({
+      field: "allowedIpCidrs",
+      message: `allowedIpCidrs must contain at most ${ALLOWED_CIDRS_MAX} entries.`
+    });
+  } else if (writeClassRequested && rawCidrs.length === 0) {
+    // Mirrors the `sql/121` CHECK rather than trusting it. A 422 naming the
+    // field is what an operator can act on; a 23514 is a stack trace.
+    errors.push({
+      field: "allowedIpCidrs",
+      message:
+        "A credential that can write must name at least one IP address or CIDR block."
+    });
+  } else {
+    for (const entry of rawCidrs) {
+      const trimmed = typeof entry === "string" ? entry.trim() : "";
+
+      if (!isValidIpCidr(trimmed)) {
+        errors.push({
+          field: "allowedIpCidrs",
+          message: `Not an IP address or CIDR block: ${
+            typeof entry === "string" ? entry : typeof entry
+          }.`
+        });
+        continue;
+      }
+
+      // Stored trimmed, because the matcher is what has to agree with this
+      // string later and it does not trim the prefix length.
+      if (!allowedIpCidrs.includes(trimmed)) allowedIpCidrs.push(trimmed);
+    }
+  }
+
+  const maxLifetimeDays = writeClassRequested
+    ? MACHINE_CREDENTIAL_WRITE_MAX_LIFETIME_DAYS
+    : MACHINE_CREDENTIAL_MAX_LIFETIME_DAYS;
+
   const expiresAtRaw = input.expiresAt;
   let expiresAt: Date | null = null;
   if (typeof expiresAtRaw !== "string") {
@@ -307,11 +465,13 @@ export function validateIssueMachineCredentialInput(
       });
     } else if (
       parsed.getTime() - now.getTime() >
-      MACHINE_CREDENTIAL_MAX_LIFETIME_DAYS * 24 * 60 * 60 * 1000
+      maxLifetimeDays * 24 * 60 * 60 * 1000
     ) {
       errors.push({
         field: "expiresAt",
-        message: `expiresAt must be at most ${MACHINE_CREDENTIAL_MAX_LIFETIME_DAYS} days away.`
+        message: writeClassRequested
+          ? `expiresAt must be at most ${maxLifetimeDays} days away for a credential that can write.`
+          : `expiresAt must be at most ${maxLifetimeDays} days away.`
       });
     } else {
       expiresAt = parsed;
@@ -328,6 +488,8 @@ export function validateIssueMachineCredentialInput(
       name: rawName,
       tenantUserId,
       allowedPermissionKeys,
+      allowedWriteActions,
+      allowedIpCidrs,
       expiresAt
     }
   };

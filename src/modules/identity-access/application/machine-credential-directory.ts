@@ -38,6 +38,14 @@ export type MachineCredentialSummary = {
   name: string;
   tenantUserId: string;
   allowedPermissionKeys: string[];
+  /**
+   * ADR-0092. Empty on every credential issued before the write class existed,
+   * and on every read-only one issued since. Projected rather than reduced to a
+   * boolean because the operational question during an incident is not "can
+   * this write" but "what can it write, and from where".
+   */
+  allowedWriteActions: string[];
+  allowedIpCidrs: string[];
   expiresAt: Date;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
@@ -52,6 +60,8 @@ type MachineCredentialRow = {
   name: string;
   tenant_user_id: string;
   allowed_permission_keys: string[];
+  allowed_write_actions: string[];
+  allowed_ip_cidrs: string[];
   expires_at: Date;
   last_used_at: Date | null;
   revoked_at: Date | null;
@@ -68,6 +78,8 @@ function toSummary(
     name: row.name,
     tenantUserId: row.tenant_user_id,
     allowedPermissionKeys: row.allowed_permission_keys,
+    allowedWriteActions: row.allowed_write_actions,
+    allowedIpCidrs: row.allowed_ip_cidrs,
     expiresAt: row.expires_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -90,7 +102,8 @@ export async function listMachineCredentials(
   // it is not — but because an endpoint that hands out per-credential secret
   // material is one refactor away from handing out something that is.
   const rows = (await tx`
-    SELECT id, name, tenant_user_id, allowed_permission_keys, expires_at,
+    SELECT id, name, tenant_user_id, allowed_permission_keys,
+           allowed_write_actions, allowed_ip_cidrs, expires_at,
            last_used_at, revoked_at, created_by_tenant_user_id, created_at
     FROM awcms_machine_credentials
     WHERE tenant_id = ${tenantId}
@@ -132,14 +145,21 @@ export async function issueMachineCredential(
   const rows = (await tx`
     INSERT INTO awcms_machine_credentials
       (tenant_id, tenant_user_id, name, token_hash, allowed_permission_keys,
+       allowed_write_actions, allowed_ip_cidrs,
        expires_at, created_by_tenant_user_id)
     VALUES (
       ${tenantId}, ${input.tenantUserId}, ${input.name},
       ${hashMachineCredentialToken(token)},
       ${toPostgresTextArray(input.allowedPermissionKeys)}::text[],
+      -- Both rendered, never omitted. sql/121 defaults them to the empty
+      -- array, so a write class that forgot one column would land as a
+      -- read-only credential and look like it worked.
+      ${toPostgresTextArray(input.allowedWriteActions)}::text[],
+      ${toPostgresTextArray(input.allowedIpCidrs)}::text[],
       ${input.expiresAt}, ${actorTenantUserId}
     )
-    RETURNING id, name, tenant_user_id, allowed_permission_keys, expires_at,
+    RETURNING id, name, tenant_user_id, allowed_permission_keys,
+              allowed_write_actions, allowed_ip_cidrs, expires_at,
               last_used_at, revoked_at, created_by_tenant_user_id, created_at
   `) as MachineCredentialRow[];
 
@@ -177,7 +197,8 @@ export async function revokeMachineCredential(
         revoked_by_tenant_user_id = ${actorTenantUserId},
         updated_at = now()
     WHERE tenant_id = ${tenantId} AND id = ${credentialId} AND revoked_at IS NULL
-    RETURNING id, name, tenant_user_id, allowed_permission_keys, expires_at,
+    RETURNING id, name, tenant_user_id, allowed_permission_keys,
+              allowed_write_actions, allowed_ip_cidrs, expires_at,
               last_used_at, revoked_at, created_by_tenant_user_id, created_at
   `) as MachineCredentialRow[];
 

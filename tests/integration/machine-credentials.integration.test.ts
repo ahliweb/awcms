@@ -49,6 +49,7 @@ import {
   hashMachineCredentialToken
 } from "../../src/lib/auth/machine-credential-token";
 import { authorizeInTransaction } from "../../src/modules/identity-access/application/access-guard";
+import type { AccessAction } from "../../src/modules/identity-access/domain/access-control";
 import {
   issueMachineCredential,
   listMachineCredentials,
@@ -156,7 +157,13 @@ async function seedFixtures(): Promise<void> {
 /** Issues a credential through the real service and returns its plaintext token. */
 async function issue(
   allowedPermissionKeys: string[],
-  expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+  expiresAt = new Date(Date.now() + 60 * 60 * 1000),
+  // ADR-0092. Defaulted to the read-only class so every pre-existing caller
+  // below keeps issuing exactly what it issued before the write class existed.
+  writeClass: {
+    allowedWriteActions?: AccessAction[];
+    allowedIpCidrs?: string[];
+  } = {}
 ): Promise<{ token: string; id: string }> {
   const runtime = getRuntimeSql();
 
@@ -169,6 +176,8 @@ async function issue(
         name: "build feed",
         tenantUserId: SERVICE_USER_A,
         allowedPermissionKeys,
+        allowedWriteActions: writeClass.allowedWriteActions ?? [],
+        allowedIpCidrs: writeClass.allowedIpCidrs ?? [],
         expiresAt
       },
       new Date()
@@ -563,6 +572,112 @@ suite("machine credentials + session introspection (ADR-0049)", () => {
     expect(JSON.stringify(items)).not.toContain("mc-sha256:");
     expect(Object.keys(items[0]!)).not.toContain("tokenHash");
     expect(items[0]!.status).toBe("active");
+  });
+
+  // ADR-0092 — the write class, issued through the real service rather than by
+  // hand. `sql/121` landed with no writer at all; these are the first rows in
+  // this repo that reach those two columns through a code path.
+
+  test("the write class round-trips both columns, and the read class stays empty", async () => {
+    await issue(["blog_content.posts.update"], undefined, {
+      allowedWriteActions: ["update"],
+      allowedIpCidrs: ["203.0.113.0/24"]
+    });
+    await issue(["blog_content.posts.read"]);
+
+    const items = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+      listMachineCredentials(tx, TENANT_A, new Date())
+    );
+
+    // Newest first, so the read-only one issued second comes back first.
+    expect(items).toHaveLength(2);
+    expect(items[0]!.allowedWriteActions).toEqual([]);
+    expect(items[0]!.allowedIpCidrs).toEqual([]);
+    expect(items[1]!.allowedWriteActions).toEqual(["update"]);
+    expect(items[1]!.allowedIpCidrs).toEqual(["203.0.113.0/24"]);
+  });
+
+  test("a write credential authorises `update` from inside its allow-list and not outside", async () => {
+    // The whole point of the surface, proven through `authorizeInTransaction`
+    // rather than through the row: a credential is only worth issuing if the
+    // chokepoint agrees with what was written. `update` rather than `create`
+    // because it is what the service account actually holds here — a guard the
+    // account cannot satisfy would answer 403 for a reason that has nothing to
+    // do with the write class, and pass for the wrong reason if it broke.
+    const { token } = await issue(["blog_content.posts.update"], undefined, {
+      allowedWriteActions: ["update"],
+      allowedIpCidrs: ["203.0.113.0/24"]
+    });
+
+    const inside = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        UPDATE_GUARD,
+        { clientIp: "203.0.113.9" }
+      )
+    );
+    const outside = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        UPDATE_GUARD,
+        { clientIp: "198.51.100.7" }
+      )
+    );
+    // A route that never learned to pass the address must not silently exempt
+    // itself — the refusal that is easiest to leave out.
+    const unknown = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
+      authorizeInTransaction(
+        tx,
+        TENANT_A,
+        hashSessionToken(token),
+        new Date(),
+        UPDATE_GUARD
+      )
+    );
+
+    expect(inside.allowed).toBe(true);
+    expect(outside.allowed).toBe(false);
+    expect(unknown.allowed).toBe(false);
+  });
+
+  test("the database refuses the two shapes the validator also refuses", async () => {
+    const admin = getAdminSql();
+    const row = (
+      name: string,
+      writeActions: string[],
+      cidrs: string[],
+      expiry: string
+    ) => admin`
+      INSERT INTO awcms_machine_credentials
+        (tenant_id, tenant_user_id, name, token_hash, allowed_permission_keys,
+         allowed_write_actions, allowed_ip_cidrs, expires_at,
+         created_by_tenant_user_id)
+      VALUES (
+        ${TENANT_A}, ${SERVICE_USER_A}, ${name},
+        ${hashMachineCredentialToken(generateMachineCredentialToken(TENANT_A))},
+        ${toPostgresTextArray(["blog_content.posts.update"])}::text[],
+        ${toPostgresTextArray(writeActions)}::text[],
+        ${toPostgresTextArray(cidrs)}::text[],
+        now() + ${expiry}::interval, ${HUMAN_USER_A}
+      )
+    `;
+
+    // Asserted against the DATABASE, not the validator: a second writer is how
+    // a rule enforced only in TypeScript disappears.
+    await assertRejected(
+      row("unbound writer", ["update"], [], "7 days"),
+      "a write credential with no IP binding"
+    );
+    await assertRejected(
+      row("long-lived writer", ["update"], ["203.0.113.0/24"], "60 days"),
+      "a write credential outliving the 31-day ceiling"
+    );
   });
 
   test("the database refuses an empty allow-list and a session-shaped hash", async () => {

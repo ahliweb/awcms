@@ -1,0 +1,46 @@
+-- Permission catalog seed for the machine-credential WRITE class (ADR-0092),
+-- wiring up the `machine_credentials_write` entry declared in
+-- `identity-access/module.ts`.
+--
+-- `sql/121` opened the class in the schema and the chokepoint; nothing could
+-- issue one. This migration seeds the key that the issuance route gates on when
+-- a request names `allowedWriteActions`.
+--
+-- Same shape/limitation as every prior permission-seed migration here (see
+-- `sql/083`): this extends the GLOBAL catalog only. An existing tenant's `owner`
+-- role does NOT retroactively gain it — only tenants created after this
+-- migration runs get it via `POST /api/v1/setup/initialize`. Backfilling live
+-- tenants stays a deployment step, not a migration side effect.
+--
+-- ## Why a NEW activity rather than a fourth action on `machine_credentials`
+--
+-- Because the alternative widens grants that nobody edited. Every role holding
+-- `machine_credentials.create` today can mint a credential that READS; folding
+-- the write class into that same action would hand all of them the ability to
+-- mint one that CHANGES data, on the day this deploys, with nothing in any diff
+-- to review and nothing in any audit trail to notice. The program this belongs
+-- to (Issue #423) is built on the opposite rule: no change may leave the tree
+-- with authorization looser than it found it.
+--
+-- Default-deny does the rest. Until an operator grants this key on purpose, the
+-- issuance route answers 403 for every write request and behaves exactly as it
+-- did before `sql/121` — which is the state every existing installation stays
+-- in until somebody decides otherwise.
+--
+-- ## Why there is no `read` and no `revoke` here
+--
+-- Issuance is a SUPERSET: a write credential also carries permission keys, so
+-- holding this key already implies being able to mint a read-only one. A `read`
+-- twin would list the same rows `machine_credentials.read` already lists.
+--
+-- `revoke` does NOT split, and that is a decision rather than an omission:
+-- during an incident, whoever can kill a leaked credential must be able to kill
+-- every class of it. A revoke permission that stops at the read class is a
+-- containment tool that fails on exactly the credentials worth containing.
+--
+-- `create` is a HIGH-RISK action, so this key additionally passes the SoD
+-- chokepoint in `authorizeInTransaction` — no extra wiring needed.
+INSERT INTO awcms_permissions (module_key, activity_code, action, description)
+VALUES
+  ('identity_access', 'machine_credentials_write', 'create', 'Issue a WRITE-capable machine credential (create/update only, IP-bound, at most 30 days) — audited')
+ON CONFLICT (module_key, activity_code, action) DO NOTHING;

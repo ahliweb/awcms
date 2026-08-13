@@ -107,7 +107,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **121** (`sql/001`–`121`)                                                               | `ls sql/`                                                                               |
+| Migrasi                            | **122** (`sql/001`–`122`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **35** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **48** (26.424 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
@@ -355,6 +355,48 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh) — KREDENSIAL MESIN KELAS-TULIS BISA
+  DITERBITKAN, dan izinnya sendiri.**
+
+  Menutup sisa #423 nomor 1. `sql/122` + dua field opsional pada
+  `POST /api/v1/access/machine-credentials`; tanpa ADR baru, karena ADR-0092
+  §Konsekuensi sudah menamai permukaan ini sebagai pekerjaan lanjutan, bukan
+  keputusan yang belum diambil.
+
+  **Izinnya BARU, dan itu seluruh keputusannya.** Bentuk yang jelas adalah
+  menerima `allowedWriteActions` pada `machine_credentials.create` yang sudah
+  ada. Salahnya hanya terlihat kalau ditanyakan dari sisi grant: setiap peran
+  yang hari ini memegang `create` akan MENDAPAT hak mencetak kredensial yang
+  mengubah data pada hari rilis — pelebaran tanpa satu grant pun disunting, tanpa
+  satu baris di diff untuk di-review. Jadi kelas tulis mendapat aktivitas ketiga,
+  `machine_credentials_write.create`. `revoke` sengaja TIDAK ikut dipecah: saat
+  insiden, siapa pun yang bisa membunuh kredensial bocor harus bisa membunuh
+  setiap kelasnya.
+
+  **CIDR pada kredensial BACA ditolak, dan tidak ada apa pun selain validator itu
+  yang menjaga arah tersebut.** `isMachineCredentialWriteRefused` menjawab "tidak
+  ditolak" untuk `read` SEBELUM menyentuh daftar CIDR — basis data mengizinkan
+  baris seperti itu dan gerbang runtime tidak peduli, sehingga operator akan
+  mengira ia mengikat sesuatu yang tidak pernah dikonsultasi.
+
+  **Jebakan gerbang yang layak diingat, dan biayanya nyata:**
+  `access:permissions:enforcement:check` membaca guard sebagai **literal objek
+  ber-tiga-kunci**. Percobaan pertama menulis guard-nya sebagai satu literal
+  dengan ternary pada `activityCode`, dan gerbangnya melaporkan **kedua** izin
+  "enforced by nothing" — termasuk yang sudah ditegakkan sebelum PR ini. Bentuk
+  yang benar adalah dua literal UTUH di kedua cabang; melebarkan gerbangnya agar
+  muat pada preferensi penulisan adalah pertukaran yang salah arah.
+
+  **Satu cacat ditemukan oleh test-nya sendiri:** kelas tulis awalnya diturunkan
+  dari aksi yang LOLOS parse, bukan yang DIMINTA, sehingga permintaan ber-`delete`
+  dengan CIDR benar dikembalikan sebagai read-only lalu dimarahi soal CIDR-nya.
+  Satu kesalahan, dua pesan, dan yang kedua membantah permintaannya.
+
+  Kontrak konsumen ADR-0065 **diregenerasi dengan sengaja** — diff-nya prosa plus
+  dua properti OPSIONAL, nol rename, nol penghapusan, nol field menjadi wajib.
+  Teks "read-only" di kontrak sudah menjadi klaim palsu sejak ADR-0092 mendarat;
+  itu ikut dibetulkan di sini. `NOT_YET_SCREENED` 59 → 60.
 
 - **PUTARAN 13 Agustus 2026 (kesembilan belas) — TIGA CELAH ALUR DITUTUP.**
 
