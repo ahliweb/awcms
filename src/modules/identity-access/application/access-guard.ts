@@ -45,7 +45,7 @@ import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
 import { resolveActiveMachineCredential } from "./machine-credential-lookup";
 import {
-  isMachineCredentialAllowedAction,
+  isMachineCredentialWriteRefused,
   narrowPermissionKeys
 } from "../domain/machine-credential";
 import {
@@ -166,6 +166,17 @@ export async function authorizeInTransaction(
     hierarchyPort?: BusinessScopeHierarchyPort;
     sodRules?: readonly SoDRuleDescriptor[];
     ownershipGrant?: OwnershipGrant;
+    /**
+     * ADR-0092 — the caller's resolved address, used ONLY to decide whether a
+     * write-class machine credential may act from here.
+     *
+     * Absent is a DENY for that class and nothing else. A route that has not
+     * been taught to pass this would otherwise silently switch the IP condition
+     * off for every credential it serves, which is a control that reads as
+     * enforced and is not. `defineTenantRoute` fills it in for every route it
+     * owns, so the omission can only happen in a hand-written one.
+     */
+    clientIp?: string;
   }
 ): Promise<AuthorizeResult> {
   // ADR-0088 — THE invariant of Gelombang 7 PR 7.4, and the reason it is the
@@ -274,14 +285,39 @@ export async function authorizeInTransaction(
     };
   }
 
-  // READ-ONLY, decided before any permission is looked up and independent of
-  // what the service account holds (ADR-0049 §3). A leaked build token cannot
-  // mutate anything even if it was pointed at an `owner`.
-  if (machine && !isMachineCredentialAllowedAction(guard.action)) {
+  // READ-ONLY BY DEFAULT, decided before any permission is looked up and
+  // independent of what the service account holds (ADR-0049 §3). A leaked build
+  // token cannot mutate anything even if it was pointed at an `owner`.
+  //
+  // ADR-0092 opens a second class: a credential may ALSO hold write actions,
+  // and only those named by BOTH the code ceiling and its own column — plus a
+  // client IP inside its allow-list. `isMachineCredentialWriteRefused` is
+  // deny-only and answers `false` for every ordinary read, so this gate is
+  // exactly as strict as it was for every credential issued before the class
+  // existed.
+  //
+  // Two sentinels, not one. `machine_credential_readonly` is kept VERBATIM
+  // because it is in decision-log history and in ADR-0049; recycling it for the
+  // write refusal would rewrite the past for every consumer of that log.
+  if (
+    machine &&
+    isMachineCredentialWriteRefused({
+      action: guard.action,
+      allowedWriteActions: machine.allowedWriteActions,
+      allowedIpCidrs: machine.allowedIpCidrs,
+      clientIp: options?.clientIp
+    })
+  ) {
+    const writeClass = machine.allowedWriteActions.length > 0;
+
     const decision = {
       allowed: false,
-      reason: "Machine credentials may only perform read-only actions.",
-      matchedPolicy: "machine_credential_readonly"
+      reason: writeClass
+        ? "This machine credential may not perform that action from this address."
+        : "Machine credentials may only perform read-only actions.",
+      matchedPolicy: writeClass
+        ? "machine_credential_write_forbidden"
+        : "machine_credential_readonly"
     };
 
     await recordDecisionLog(
