@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **35** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **48** (26.424 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **36** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **49** (26.999 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,40 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh dua) — EPIC #423 DITUTUP, BACKLOGNYA
+  PINDAH KE ISSUE, dan layar `/admin/machine-credentials` mendarat.**
+
+  **#423 ditutup.** Kriteria yang issue itu tulis sendiri ("TERBUKA sampai
+  Gelombang 8") terpenuhi, dan ketiga tindak lanjut Gelombang 8 tertutup (#535,
+  #537, #538). Epic yang tetap terbuka sesudah cakupannya habis berhenti berarti
+  apa-apa.
+
+  **Sisanya menjadi delapan issue** (#539–#546), bukan prosa di §4 ini. Alasannya
+  mekanis: repo ini akan punya NOL issue terbuka sementara backlog nyatanya hidup
+  sebagai paragraf yang harus dibaca seluruhnya untuk tahu apa yang tersisa. §4
+  tetap tempat KEPUTUSAN dan penolakan ditulis; issue adalah yang bisa di-assign
+  dan ditutup satu per satu.
+
+  **Layar kredensial mesin (#539) menutup 4 kunci, 62 → 58.** Argumennya sama
+  dengan `/admin/partners`: pencabutan adalah kontrol yang dicari saat token
+  bocor, dan sampai halaman ini ada ia `POST` yang tak akan diingat siapa pun di
+  bawah tekanan. #537 mempertajamnya — sampai sekarang tak ada tempat untuk
+  melihat kredensial mana yang bisa MENULIS.
+
+  **Dua izin, satu form, dan itu bukan kosmetik.** Kalau halaman menurunkan
+  fieldset tulis dari `machine_credentials.create`, pemisahan yang ADR-0092 buat
+  justru untuk mencegah pelebaran grant dibatalkan lagi — kali ini di UI, tempat
+  tak ada gerbang yang melihatnya. Checkbox aksinya **diturunkan** dari
+  `MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS`, karena sepasang checkbox tulis
+  tangan tetap benar hari ini dan tertinggal diam-diam saat plafonnya dilebarkan.
+
+  **Pelajaran test yang berlaku untuk setiap layar berikutnya:** asersi sumber
+  yang terikat INDENTASI memerah pada kode yang benar begitu formatter memindah
+  satu baris. Dua asersi di sini tentang ADJACENCY (verb di sebelah URL-nya,
+  ternary yang menguji daftar tulis) dinormalisasi whitespace-nya lebih dulu.
+  Kegagalan sekerabat sudah tercatat di putaran kedelapan belas — di sana
+  penyebabnya mencampur action audit dengan action guard.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh satu) — REGISTRI PARTNER PUNYA PENULIS.**
 

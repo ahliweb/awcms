@@ -155,6 +155,17 @@ export const identityAccessModule = defineModule({
       path: "/admin/partners",
       order: 26,
       requiredPermission: "identity_access.partner_access.read"
+    },
+    // ADR-0049/0092, #539. Gated on `machine_credentials.read`, which seeds its
+    // own `read` — a caller who may see WHICH non-human bearers exist need not
+    // also be handed the RBAC catalogue, and the reverse is more important:
+    // this page can mint one, so it must not appear for everybody who can edit
+    // a role.
+    {
+      labelKey: "admin.layout.nav_machine_credentials",
+      path: "/admin/machine-credentials",
+      order: 27,
+      requiredPermission: "identity_access.machine_credentials.read"
     }
   ],
   jobs: [

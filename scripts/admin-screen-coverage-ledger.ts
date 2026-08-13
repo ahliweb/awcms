@@ -67,7 +67,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (22)
+  // identity_access (18)
   //
   // The four `invitations.*` keys are ADR-0082's, and they land here on the
   // same terms `tenant_admin.tenant_lifecycle.*` did: the surface exists and is
@@ -88,14 +88,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "identity_access.business_scope_exceptions.read",
   "identity_access.business_scope_exceptions.reject",
   "identity_access.business_scope_exceptions.revoke",
-  "identity_access.machine_credentials.create",
-  "identity_access.machine_credentials.read",
-  "identity_access.machine_credentials.revoke",
-  // ADR-0092. Joins its three siblings rather than being screened alone: there
-  // is no machine-credential page at all, and a screen that can mint the WRITE
-  // class while the read class stays an API call would be the wrong one to
-  // build first.
-  "identity_access.machine_credentials_write.create",
   // ADR-0089. The PLATFORM half of partnership, and its screen is not
   // `/admin/partners` — that page is the CUSTOMER's view of who reaches its own
   // tenant, and putting a registry there would put the platform's list of every
