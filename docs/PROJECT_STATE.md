@@ -395,6 +395,16 @@ PRIVILEGES`), jadi GRANT yang "tidak menyebut" DELETE **tidak menahan apa
   dan menolak mode penghapusan yang menuntut privilege yang dicabut. Pesannya
   memperingatkan agar tidak "memperbaikinya" dengan memberi privilege kembali.
 
+  **Dan memperbaiki temuan 2 memerahkan gerbang KETIGA, yang juga benar.**
+  `checkRuntimeRoleGrants` menuntut tiap tabel ber-privilege lebih sempit dari
+  default DIDEKLARASIKAN, dua arah — "narrowed on purpose" harus bisa dibedakan
+  dari "rusak", dan hanya manusia yang bisa memberi bedanya. Jadi
+  `awcms_subject_requests` masuk `RETIRED_TENANT_TABLE_PRIVILEGES` sebagai
+  entri jenis KEDUA: bukan tabel pensiun ber-`SELECT` saja, melainkan ledger
+  hidup yang menahan tepat satu verb. Dokumentasi konstantanya dilebarkan
+  supaya namanya berhenti menggambarkan hanya separuh isinya, alih-alih
+  menyelundupkan entri yang tidak cocok dengan deskripsinya sendiri.
+
 - **PUTARAN 13 Agustus 2026 (kedua puluh delapan) — PERMUKAAN HAK SUBJEK DATA
   (#557 SELESAI), dan empat lapis yang masing-masing menangkap kegagalan
   berbeda.**
