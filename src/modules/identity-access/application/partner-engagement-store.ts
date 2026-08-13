@@ -55,7 +55,10 @@ export async function listPartnerEngagements(
 
 export type EngagePartnerResult =
   | { ok: true; engagement: PartnerEngagement }
-  | { ok: false; code: "NOT_A_PARTNER" | "SELF" | "ALREADY_ENGAGED" };
+  | {
+      ok: false;
+      code: "NOT_A_PARTNER" | "SELF" | "ALREADY_ENGAGED" | "PARTNER_SUSPENDED";
+    };
 
 /**
  * Pelanggan menyewa partner untuk tenantnya sendiri.
@@ -87,12 +90,42 @@ export async function engagePartner(
 
   if (existing.length > 0) return { ok: false, code: "ALREADY_ENGAGED" };
 
+  // ADR-0093 — a suspended partner cannot be engaged. The predicate is INSIDE
+  // the statement rather than a SELECT before it: the platform can suspend a
+  // partner between two statements, and a check that precedes the INSERT is a
+  // TOCTOU (the reasoning `sql/120` records for the engagement predicate on
+  // the grant path). The registry is FORCE-RLS and platform-owned, so this
+  // reads through `sql/124`'s narrow SECURITY DEFINER function; `NULL` (no
+  // registry row) fails the comparison, which is the fail-closed direction.
+  //
+  // Zero rows therefore means one of two things, and the caller distinguishes
+  // them: the FK already refuses an unregistered tenant outright, so a row
+  // that survives the FK and produces nothing here was suspended.
   const rows = (await tx`
     INSERT INTO awcms_partner_managed_tenants
       (tenant_id, partner_tenant_id, engaged_by_tenant_user_id)
-    VALUES (${tenantId}, ${partnerTenantId}, ${engagedByTenantUserId})
+    SELECT ${tenantId}, ${partnerTenantId}, ${engagedByTenantUserId}
+    WHERE awcms_partner_registry_status(${partnerTenantId}) = 'active'
     RETURNING id, partner_tenant_id, engaged_at
   `) as { id: string; partner_tenant_id: string; engaged_at: string }[];
+
+  if (!rows[0]) {
+    // Zero rows means the predicate refused, and there are TWO reasons it
+    // could have. Distinguished by a SECOND read — which is not a second gate:
+    // the write has already refused, and this only chooses the sentence. A
+    // TOCTOU on a message is harmless, while collapsing the two answers is not:
+    // a tenant that is not registered at all must stay indistinguishable from
+    // one that does not exist (the 404 `awcms_partner_managed_tenants`' foreign
+    // key used to produce, and which a test pins), or the registry becomes
+    // enumerable one guess at a time.
+    const status = (await tx`
+      SELECT awcms_partner_registry_status(${partnerTenantId}) AS status
+    `) as { status: string | null }[];
+
+    return status[0]?.status === "suspended"
+      ? { ok: false, code: "PARTNER_SUSPENDED" }
+      : { ok: false, code: "NOT_A_PARTNER" };
+  }
 
   const named = (await tx`
     SELECT tenant_code, tenant_name FROM awcms_tenants WHERE id = ${partnerTenantId}

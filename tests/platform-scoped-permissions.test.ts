@@ -64,7 +64,12 @@ const EXPECTED_PLATFORM_KEYS = [
   // directory the same ADR refused as a table — rebuilt as a permission. The
   // deliberate edit, again.
   "identity_access.partner_registry.read",
-  "identity_access.partner_registry.create"
+  "identity_access.partner_registry.create",
+  // ADR-0093 — suspending and reinstating a partner. Platform for the same
+  // reason as the two above, and SEPARATE from each other because stopping a
+  // partner reaching in and letting them back are two authorities.
+  "identity_access.partner_registry.disable",
+  "identity_access.partner_registry.restore"
 ];
 
 describe("platform-scoped permission declaration", () => {

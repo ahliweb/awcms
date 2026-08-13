@@ -1,4 +1,5 @@
 import type { RegisterPartnerInput } from "../domain/partner-registration";
+import type { PartnerStatus } from "../domain/partner-suspension";
 
 /**
  * The ONLY writer of `awcms_partners` (ADR-0089). Reads and writes live here
@@ -161,4 +162,74 @@ export async function registerPartner(
   if (!row) throw new Error("Partner insert returned no readable row.");
 
   return { outcome: "registered", partner: toSummary(row) };
+}
+
+export type SetPartnerStatusResult =
+  | { outcome: "changed"; partner: PartnerSummary }
+  | { outcome: "unchanged"; partner: PartnerSummary }
+  | { outcome: "not_found" };
+
+/**
+ * Suspend or reinstate a registered partner — ADR-0093, Issue #543.
+ *
+ * ## It writes ONE column, and that is the whole design
+ *
+ * No grant is revoked, no engagement is severed, nothing cascades. `sql/120`
+ * made a grant outlive its engagement deliberately: "who could see our data,
+ * and until when" has to stay answerable AFTER the vendor is dismissed. A
+ * suspension that deleted grants would destroy the record exactly when it is
+ * most wanted, and it would make reinstatement a rebuild rather than a flip.
+ *
+ * Effectiveness is COMPUTED, not stored — the chokepoint reads this status per
+ * request through `sql/124`'s narrow SECURITY DEFINER function. So there is no
+ * second copy to drift, and reinstating restores every surviving grant's reach
+ * without anybody rewriting a row.
+ *
+ * ## `unchanged` is a distinct outcome, not a failure
+ *
+ * Suspending an already-suspended partner is not an error and must not read as
+ * one: the operator's intent is satisfied. It is reported separately so the
+ * caller can skip writing an audit row that claims a transition nobody made.
+ */
+export async function setPartnerStatus(
+  tx: Bun.SQL,
+  platformTenantId: string,
+  partnerTenantId: string,
+  status: PartnerStatus
+): Promise<SetPartnerStatusResult> {
+  const before = (await tx`
+    SELECT p.id, p.partner_tenant_id, p.partner_code, p.display_name,
+           p.status, p.registered_at, t.tenant_code, t.tenant_name
+    FROM awcms_partners p
+    JOIN awcms_tenants t ON t.id = p.partner_tenant_id
+    WHERE p.tenant_id = ${platformTenantId}
+      AND p.partner_tenant_id = ${partnerTenantId}
+  `) as PartnerRow[];
+
+  const current = before[0];
+  if (!current) return { outcome: "not_found" };
+
+  if (current.status === status) {
+    return { outcome: "unchanged", partner: toSummary(current) };
+  }
+
+  // Guarded by the status it read, so two concurrent operators produce one
+  // transition and one audit row rather than two of each.
+  const updated = (await tx`
+    UPDATE awcms_partners
+    SET status = ${status}
+    WHERE tenant_id = ${platformTenantId}
+      AND partner_tenant_id = ${partnerTenantId}
+      AND status = ${current.status}
+    RETURNING id
+  `) as { id: string }[];
+
+  if (!updated[0]) {
+    return { outcome: "unchanged", partner: toSummary(current) };
+  }
+
+  return {
+    outcome: "changed",
+    partner: toSummary({ ...current, status })
+  };
 }

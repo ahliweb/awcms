@@ -122,11 +122,41 @@ describe("what the screen deliberately cannot do", () => {
     expect(page).toContain('id="register-partner-tenant-id"');
   });
 
-  test("`status` is never submitted — it is pinned until something reads it", async () => {
+  test("REGISTERING never submits a status — the row starts active by default", async () => {
     const page = await readFile(PAGE, "utf8");
 
-    const submitBlock = page.slice(page.indexOf('sendJson("POST"'));
-    expect(submitBlock).not.toContain("status");
+    // Scoped to the register call alone. `status` is now a real, writable
+    // value (ADR-0093), but it is not part of registration: a form that could
+    // register a partner already suspended would be composing two decisions
+    // gated on two different permissions as one request.
+    const registerCall = page.slice(
+      page.indexOf('sendJson("POST", "/api/v1/partners"'),
+      page.indexOf("function wireStatus(")
+    );
+
+    expect(registerCall.length).toBeGreaterThan(100);
+    expect(registerCall).not.toContain("status");
+  });
+
+  test("suspending and reinstating are gated SEPARATELY, and named as such", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // Two authorities, two permissions, two buttons. One control doing both
+    // would hand whoever can stop a partner the power to start one again.
+    expect(page).toContain('action: "disable"');
+    expect(page).toContain('action: "restore"');
+    expect(page).toContain("canSuspend");
+    expect(page).toContain("canReinstate");
+  });
+
+  test("and the screen says plainly that suspension deletes nothing", async () => {
+    const page = await readFile(PAGE, "utf8");
+
+    // `sql/120` made a grant outlive its engagement so that "who could see our
+    // data, and until when" stays answerable afterwards. An operator pressing
+    // Suspend must not believe they are erasing that record.
+    expect(page).toContain("No grant is deleted");
+    expect(page).toContain("every grant row");
   });
 });
 

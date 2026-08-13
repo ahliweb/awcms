@@ -32,8 +32,12 @@
  * engagements and from delegated grants that `sql/120` deliberately made
  * OUTLIVE their engagement. A delete would fail as soon as one partnership had
  * ever existed, and `ON DELETE CASCADE` would silently cut every partnership on
- * the installation. Retirement is a `status` change — and `status` is pinned by
- * `sql/116` until something reads suspension (#543).
+ * the installation.
+ *
+ * Retirement is a `status` change, and as of ADR-0093 that change is real:
+ * suspending stops every delegated actor the partner placed, in every customer
+ * tenant, at their next request — and touches no grant row, because a grant is
+ * the record of who could see what, not the permission itself.
  */
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
@@ -63,6 +67,16 @@ const screen = await loadAdminScreen({
       moduleKey: "identity_access",
       activityCode: "partner_registry",
       action: "create"
+    }),
+    canSuspend: await can({
+      moduleKey: "identity_access",
+      activityCode: "partner_registry",
+      action: "disable"
+    }),
+    canReinstate: await can({
+      moduleKey: "identity_access",
+      activityCode: "partner_registry",
+      action: "restore"
     })
   }),
   onError: (error) => {
@@ -79,6 +93,10 @@ const loadError = screen.state === "error";
 const partners: PartnerSummary[] =
   screen.state === "allowed" ? screen.data.partners : [];
 const canCreate = screen.state === "allowed" && screen.data.canCreate;
+// Two permissions, because they are two authorities: an operator who may stop
+// a partner reaching in need not also be the one who lets them back.
+const canSuspend = screen.state === "allowed" && screen.data.canSuspend;
+const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
 ---
 
 <AdminLayout title="Partner registry">
@@ -200,6 +218,7 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
                     <th scope="col">Tenant</th>
                     <th scope="col">Status</th>
                     <th scope="col">Registered</th>
+                    {(canSuspend || canReinstate) && <th scope="col">Reach</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -216,6 +235,30 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
                       <td data-label="Registered">
                         {partner.registeredAt.toISOString().slice(0, 10)}
                       </td>
+                      {(canSuspend || canReinstate) && (
+                        <td data-label="Reach">
+                          {partner.status === "active" && canSuspend && (
+                            <button
+                              type="button"
+                              class="btn-inline btn-inline--danger js-suspend-partner"
+                              data-partner-tenant-id={partner.partnerTenantId}
+                              data-partner-code={partner.partnerCode}
+                            >
+                              Suspend
+                            </button>
+                          )}
+                          {partner.status === "suspended" && canReinstate && (
+                            <button
+                              type="button"
+                              class="module-toggle js-reinstate-partner"
+                              data-partner-tenant-id={partner.partnerTenantId}
+                              data-partner-code={partner.partnerCode}
+                            >
+                              Reinstate
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -224,10 +267,14 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           )}
 
           <p class="page-description">
-            There is no way to remove a partner here, and that is deliberate:
+            There is no way to REMOVE a partner here, and that is deliberate:
             engagements and delegated grants reference these rows, and grants
-            are built to outlive the partnership that produced them. Retiring a
-            partner will be a status change once something reads suspension.
+            are built to outlive the partnership that produced them. Suspending
+            is the retirement path, and it removes nothing — every grant row
+            survives as the record of who could reach which customer and until
+            when. What stops is the reach: each delegated actor the partner
+            placed is refused at their next request, in every customer tenant,
+            and reinstating restores all of it without anybody rewriting a row.
           </p>
         </section>
       </>
@@ -243,6 +290,7 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
     field,
     messageBox,
     mutateAndReload,
+    onAction,
     onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
@@ -269,4 +317,58 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
               : "Could not register that partner. Please try again."
     );
   });
+
+  /** Suspend and reinstate differ only in the value they send and what they warn about. */
+  function wireStatus(
+    action: "suspend" | "reinstate",
+    status: "suspended" | "active",
+    confirmFor: (code: string) => string,
+    busyLabel: string,
+    failure: string
+  ): void {
+    onAction(`.js-${action}-partner`, async (button) => {
+      const partnerTenantId = button.dataset.partnerTenantId;
+      if (!partnerTenantId) return;
+
+      if (
+        !window.confirm(
+          confirmFor(button.dataset.partnerCode ?? "this partner")
+        )
+      )
+        return;
+
+      await mutateAndReload(
+        button,
+        errorBox,
+        () =>
+          sendJson(
+            "PATCH",
+            `/api/v1/partners/${encodeURIComponent(partnerTenantId)}/status`,
+            { status }
+          ),
+        (errorCode) =>
+          errorCode === "NOT_FOUND"
+            ? "That partner is no longer registered. Reload the page."
+            : failure,
+        busyLabel
+      );
+    });
+  }
+
+  wireStatus(
+    "suspend",
+    "suspended",
+    (code) =>
+      `Suspend ${code}? Every delegated actor it placed stops being served at their next request, in every customer tenant. No grant is deleted — reinstating restores all of it.`,
+    "Suspending…",
+    "Could not suspend that partner. Please try again."
+  );
+
+  wireStatus(
+    "reinstate",
+    "active",
+    (code) => `Reinstate ${code}? Its surviving grants start applying again.`,
+    "Reinstating…",
+    "Could not reinstate that partner. Please try again."
+  );
 </script>

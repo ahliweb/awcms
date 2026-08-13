@@ -2317,6 +2317,85 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/partners/{partnerTenantId}/status:
+    patch:
+      operationId: setPartnerRegistryStatus
+      tags:
+        - Identity & Access
+      summary: Suspend or reinstate a registered partner (PLATFORM-scoped, audited).
+      description: >-
+        Writes one column. Suspending stops every delegated actor the partner
+        placed from being served, in every customer tenant, at their next
+        request — enforced at the authorization chokepoint, not by a job, so
+        there is no window.
+
+
+        It revokes NOTHING. No grant row is touched and no engagement is
+        severed: a grant is the record of who could see a customer's data and
+        until when, and that has to stay answerable after a partner is
+        suspended. Effectiveness is computed per request, so reinstating
+        restores every surviving grant's reach without rewriting a row.
+
+
+        Two permissions, both PLATFORM-scoped, because they are two
+        authorities: `identity_access.partner_registry.disable` to suspend and
+        `identity_access.partner_registry.restore` to reinstate. Setting the
+        status it already has succeeds with `changed: false` and writes no
+        audit row.
+      parameters:
+        - name: partnerTenantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - suspended
+      responses:
+        "200":
+          description: The partner, and whether this request changed anything.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      partner:
+                        $ref: "#/components/schemas/RegisteredPartner"
+                      changed:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: >-
+            `status` was absent or not one of the two values the CHECK
+            constraint allows (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/identity/business-scope/exceptions/{id}/approve:
     post:
       operationId: approveSoDConflictException
@@ -6117,9 +6196,13 @@ components:
           type: string
         status:
           type: string
-          description: Pinned to `active` by `sql/116` until something reads suspension.
+          description: >-
+            ADR-0093. `suspended` stops every delegated actor this partner
+            placed from being served, in every customer tenant, at their next
+            request — and touches no grant row.
           enum:
             - active
+            - suspended
         registeredAt:
           type: string
           format: date-time

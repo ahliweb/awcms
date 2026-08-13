@@ -1,5 +1,6 @@
 import type { TenantContext } from "../domain/access-control";
 import type { PrincipalKind } from "../domain/delegated-access";
+import type { PartnerRegistryStatus } from "../domain/partner-suspension";
 import { ENTITLING_SUBSCRIPTION_STATUSES } from "../domain/entitlement";
 import { activeRoleGrants } from "./grant-source";
 import { resolveActiveSession } from "./session-lookup";
@@ -67,6 +68,48 @@ async function resolveDelegatedGrantId(
   `) as { id: string }[];
 
   return rows[0]?.id;
+}
+
+/**
+ * The registry status of the partner behind a delegated actor — ADR-0093.
+ *
+ * A SEPARATE call from `resolveDelegatedGrantId`, and deliberately so: that one
+ * resolves an ATTRIBUTION and is documented as fail-quiet, because nothing is
+ * permitted or refused because of it. This one IS an authorization input, and
+ * mixing the two would give a fail-quiet resolver a decision to make.
+ *
+ * `awcms_partners` belongs to the PLATFORM tenant and is `FORCE ROW LEVEL
+ * SECURITY`; this runs in the CUSTOMER's transaction and cannot read it. The
+ * narrow `SECURITY DEFINER` function from `sql/124` answers the one question —
+ * a `text`, never a row — with the four `sql/048` safeguards and the same
+ * memberless NOLOGIN owner `sql/119` created.
+ *
+ * Returns `null` for a non-delegated actor (nothing to ask about) and for a
+ * partner with no registry row. The caller must treat the SECOND `null` as
+ * suspended; `isDelegatedPartnerRefused` does, and only ever looks at the
+ * status for a delegated principal, so the two `null`s cannot be confused into
+ * refusing an ordinary member.
+ */
+export async function resolveDelegatedPartnerRegistryStatus(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  principalKind: PrincipalKind
+): Promise<PartnerRegistryStatus> {
+  if (principalKind !== "delegated") return null;
+
+  const rows = (await tx`
+    SELECT awcms_partner_registry_status(g.partner_tenant_id) AS status
+    FROM awcms_delegated_access_grants g
+    WHERE g.tenant_id = ${tenantId}
+      AND g.granted_tenant_user_id = ${tenantUserId}
+      AND g.revoked_at IS NULL
+    LIMIT 1
+  `) as { status: string | null }[];
+
+  const status = rows[0]?.status ?? null;
+
+  return status === "active" || status === "suspended" ? status : null;
 }
 
 export async function resolveTenantContextForTenantUser(

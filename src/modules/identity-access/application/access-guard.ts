@@ -36,10 +36,12 @@ import {
 import { listModules } from "../../index";
 import {
   fetchGrantedPermissionKeys,
+  resolveDelegatedPartnerRegistryStatus,
   resolveModuleAvailability,
   resolveTenantPrincipal,
   resolveTenantPrincipalForTenantUser
 } from "./auth-context";
+import { isDelegatedPartnerRefused } from "../domain/partner-suspension";
 import { recordDecisionLog } from "./decision-log";
 import { loadActivePolicies } from "./policy-cache";
 import { extractBearerToken } from "./session-lookup";
@@ -522,6 +524,59 @@ export async function authorizeInTransaction(
     return {
       allowed: false,
       denied: fail(403, "ACCESS_DENIED", decision.reason)
+    };
+  }
+
+  // ADR-0093 — a SUSPENDED partner stops reaching in, immediately.
+  //
+  // Same shape and same reasoning as the tenant-suspension gate above: a
+  // suspension enforced by a job leaves a window, and the window is exactly
+  // when it matters. The difference is only WHOSE state is read — the partner
+  // registry row behind the grant that put this actor here.
+  //
+  // Structural, and above `fetchGrantedPermissionKeys`, so no grant row can
+  // influence it. Nothing is revoked: `sql/120` made grants outlive their
+  // engagement on purpose, because "who could see our data, and until when"
+  // has to stay answerable AFTER the vendor is dismissed. The row stays; the
+  // access it confers stops, and reinstating the partner restores it without
+  // anybody rewriting anything.
+  //
+  // The read costs one query, and only for a delegated actor — a support
+  // episode, not the hot path. `resolveDelegatedPartnerRegistryStatus` returns
+  // `null` for every ordinary member, and `isDelegatedPartnerRefused` answers
+  // `false` for them before it looks at the status at all.
+  const partnerRegistryStatus = await resolveDelegatedPartnerRegistryStatus(
+    tx,
+    tenantId,
+    context.tenantUserId,
+    context.principalKind ?? "user"
+  );
+
+  if (
+    isDelegatedPartnerRefused({
+      principalKind: context.principalKind ?? "user",
+      partnerRegistryStatus
+    })
+  ) {
+    const decision = {
+      allowed: false,
+      reason: "The partner that granted this access is suspended.",
+      matchedPolicy: "partner_suspended"
+    };
+
+    await recordDecisionLog(
+      tx,
+      tenantId,
+      context.tenantUserId,
+      guard,
+      decision,
+      machine?.id,
+      context.delegatedGrantId
+    );
+
+    return {
+      allowed: false,
+      denied: fail(403, "PARTNER_SUSPENDED", decision.reason)
     };
   }
 

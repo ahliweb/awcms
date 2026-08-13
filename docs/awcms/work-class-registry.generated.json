@@ -767,6 +767,11 @@
       "source": "factory"
     },
     {
+      "path": "src/pages/api/v1/partners/[partnerTenantId]/status.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/partners/index.ts",
       "workClass": "interactive",
       "source": "factory"
