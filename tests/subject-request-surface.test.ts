@@ -172,14 +172,15 @@ describe("maker/checker is enforced by the SCHEMA, not only by the guard", () =>
     expect(MIGRATION).toContain("awcms_subject_requests_export_is_immediate");
   });
 
-  test("the accountability record cannot be deleted by the app role", () => {
-    // The row proving an erasure happened must not be removable by the same
-    // person who can run one.
-    expect(MIGRATION).toMatch(
-      /GRANT SELECT, INSERT, UPDATE ON awcms_subject_requests TO awcms_app/
-    );
-    expect(MIGRATION).not.toMatch(
-      /GRANT[^;]*DELETE[^;]*awcms_subject_requests/
+  test("the accountability record's DELETE is REVOKED, not merely un-granted", () => {
+    // `sql/019` grants all four privileges over the whole schema, so a GRANT
+    // that omits DELETE withholds nothing — it re-grants what the table already
+    // had while reading like a control. Caught by querying a real database:
+    // `awcms_app` held DELETE on this table despite the comment saying it did
+    // not. The property itself is proved in
+    // `tests/integration/subject-requests.integration.test.ts`.
+    expect(MIGRATION).toContain(
+      "REVOKE DELETE ON awcms_subject_requests FROM awcms_app"
     );
   });
 

@@ -177,6 +177,101 @@ export function parseTableColumns(
   return columns;
 }
 
+/** The runtime role every erasure statement executes as. */
+const APP_ROLE = "awcms_app";
+
+/** What each erasure mode needs `awcms_app` to be allowed to do. */
+const ERASURE_REQUIRES: Readonly<Record<string, string | null>> = {
+  hard_delete: "DELETE",
+  anonymize: "UPDATE",
+  status_transition_then_purge: "UPDATE",
+  // Neither writes anything, so neither needs a privilege.
+  severed_with_subject_row: null,
+  retain_under_obligation: null
+};
+
+/**
+ * Replay every `GRANT`/`REVOKE` naming `awcms_app`, in migration order, to
+ * learn what the runtime role may actually do to each table.
+ *
+ * ## Why this is worth a parser
+ *
+ * Found by RUNNING the erasure, not by reading it. Two descriptors declared
+ * `hard_delete` on `awcms_identity_mfa_factors` and its recovery-code sibling —
+ * tables ADR-0087 (`sql/114`) deliberately retired to read-only history,
+ * revoking INSERT/UPDATE/DELETE from `awcms_app` and asserting it "in BOTH
+ * directions". The descriptors looked perfectly reasonable, every pure gate was
+ * green, and the failure would have been a `42501` in production, mid-erasure,
+ * AFTER the request was claimed and its status already moved.
+ *
+ * The tempting fix — grant the privilege back — would have quietly undone the
+ * control ADR-0087 exists to impose. So the schema is right and the descriptor
+ * has to yield, which is only obvious once the two are compared. This compares
+ * them.
+ */
+export function parseAppRolePrivileges(
+  files: readonly { name: string; sql: string }[]
+): Map<string, Set<string>> {
+  const privileges = new Map<string, Set<string>>();
+  const ALL = ["SELECT", "INSERT", "UPDATE", "DELETE"];
+
+  const expand = (list: string): string[] => {
+    const upper = list.toUpperCase();
+    return /\bALL\b/.test(upper)
+      ? ALL
+      : ALL.filter((privilege) => upper.includes(privilege));
+  };
+
+  // Every table STARTS from the blanket grant, and that is the whole subtlety.
+  // `sql/019` hands `awcms_app` all four privileges over the entire schema —
+  // once via `ON ALL TABLES`, and thereafter via `ALTER DEFAULT PRIVILEGES` —
+  // so a per-table `GRANT` that merely omits `DELETE` withholds NOTHING; it
+  // re-grants what the table already had while reading like a control. Only an
+  // explicit `REVOKE` takes a privilege away. Starting from the empty set would
+  // model the opposite and make this gate answer backwards for every table.
+  const effective = (table: string): Set<string> => {
+    const existing = privileges.get(table);
+
+    if (existing) {
+      return existing;
+    }
+
+    const fresh = new Set(ALL);
+    privileges.set(table, fresh);
+    return fresh;
+  };
+
+  for (const file of files) {
+    // `GRANT <privs> ON <table> TO <role>` / `REVOKE <privs> ON <table> FROM
+    // <role>`. Only single-table statements naming the app role; anything else
+    // (schema grants, other roles) is not this gate's business.
+    for (const match of file.sql.matchAll(
+      /\b(GRANT|REVOKE)\s+([A-Za-z, \n\r]+?)\s+ON\s+(awcms_[a-z0-9_]+)\s+(?:TO|FROM)\s+([a-z_][a-z0-9_]*)/gi
+    )) {
+      const [, verb, list, table, role] = match;
+
+      if (role!.toLowerCase() !== APP_ROLE) {
+        continue;
+      }
+
+      const key = table!.toLowerCase();
+      const current = effective(key);
+
+      for (const privilege of expand(list!)) {
+        if (verb!.toUpperCase() === "GRANT") {
+          current.add(privilege);
+        } else {
+          current.delete(privilege);
+        }
+      }
+
+      privileges.set(key, current);
+    }
+  }
+
+  return privileges;
+}
+
 export type SubjectRegistryProblem = { key: string; message: string };
 
 export type SubjectRegistryInput = {
@@ -187,6 +282,8 @@ export type SubjectRegistryInput = {
   }[];
   columns: TableColumns;
   foreignKeys: ForeignKeyTargets;
+  /** Net `awcms_app` privileges per table — see `parseAppRolePrivileges`. */
+  appRolePrivileges: ReadonlyMap<string, ReadonlySet<string>>;
 };
 
 /** The whole check, as a function, so a test can run it against planted input. */
@@ -429,6 +526,31 @@ export function findSubjectRegistryProblems(
       );
     }
 
+    // The erasure mode must be within what the RUNTIME ROLE may do. Compared
+    // against the migrations rather than trusted, because the failure is a
+    // `42501` in production, mid-erasure, after the request has been claimed —
+    // and because the tempting fix (grant the privilege) can silently undo a
+    // control an ADR imposed on purpose.
+    const required = ERASURE_REQUIRES[descriptor.erasure];
+    // Absent means "no migration ever said anything about this table", which
+    // under `sql/019`'s blanket grant means it has everything — NOT that the
+    // check should be skipped.
+    const granted =
+      input.appRolePrivileges.get(descriptor.tableName) ??
+      new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
+
+    if (required && !granted.has(required)) {
+      report(
+        `\`${key}\` menjawab \`erasure: "${descriptor.erasure}"\`, yang menuntut ` +
+          `${required} pada \`${descriptor.tableName}\` — tetapi migrasi MENCABUTNYA dari ` +
+          `\`${APP_ROLE}\` (sisa: ${[...granted].sort().join(", ") || "tak ada"}). ` +
+          "Penghapusan akan gagal 42501 di TENGAH transaksi, setelah permintaannya " +
+          "diklaim. Perhatikan: memberikan kembali privilege-nya mungkin membatalkan " +
+          "kontrol yang sengaja dipasang sebuah ADR — periksa migrasinya dulu, dan " +
+          "biasanya deskriptor inilah yang harus mengalah."
+      );
+    }
+
     if (descriptor.erasure === "severed_with_subject_row" && !severanceHolds) {
       report(
         `\`${key}\` menjawab \`severed_with_subject_row\`, tetapi tidak ada deskriptor ` +
@@ -460,7 +582,8 @@ function main(): void {
   const problems = findSubjectRegistryProblems({
     modules,
     columns: parseTableColumns(migrations),
-    foreignKeys: parseForeignKeyTargets(migrations)
+    foreignKeys: parseForeignKeyTargets(migrations),
+    appRolePrivileges: parseAppRolePrivileges(migrations)
   });
   const total = modules.reduce(
     (sum, module) => sum + module.subjectData.length,

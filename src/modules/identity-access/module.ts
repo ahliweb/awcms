@@ -1028,11 +1028,20 @@ export const identityAccessModule = defineModule({
       ownerModuleKey: "identity_access",
       subjectColumns: [{ column: "identity_id", references: "identity" }],
       exportable: true,
-      // Per-tenant factors, unlike their ADR-0087 principal-scoped siblings
-      // above — this table is inside the tenant, so a tenant CAN answer for it.
-      erasure: "hard_delete",
+      // NOT `hard_delete`, and the correction is worth the comment: ADR-0087 /
+      // `sql/114` RETIRED this table to read-only history and revoked
+      // INSERT/UPDATE/DELETE from `awcms_app`, asserting it in BOTH directions
+      // — "regaining INSERT fails as loudly as losing SELECT". An erasure that
+      // tried to delete here would take a 42501 mid-transaction, after the
+      // request had already been claimed, and granting the privilege back to
+      // fix it would undo the control ADR-0087 exists to impose.
+      //
+      // Severance is also the truthful answer: the rows reach the person only
+      // through `identity_id`, so anonymising the identity makes this history
+      // resolve to nobody without anything being written.
+      erasure: "severed_with_subject_row",
       rationale:
-        "Which second factors this person enrolled in THIS tenant, and when. That an authenticator exists is theirs to know; the shared secret is not, and never leaves.",
+        "Which second factors this person enrolled in THIS tenant before ADR-0087 moved MFA to the principal. Read-only history since `sql/114`: exported because knowing an authenticator was enrolled in their name is theirs to know, and written by nothing because the runtime may not write it at all. The shared secret never leaves.",
       redactedColumns: ["secret_ciphertext"]
     },
     {
@@ -1044,9 +1053,12 @@ export const identityAccessModule = defineModule({
       // and an export that carried them would be a privacy right handing out a
       // way past the second factor it belongs to.
       exportable: true,
-      erasure: "hard_delete",
+      // Retired read-only alongside the factor table above (ADR-0087,
+      // `sql/114`) — same reasoning, and the codes are inert anyway: nothing
+      // verifies against this table any more.
+      erasure: "severed_with_subject_row",
       rationale:
-        "Recovery codes for the factors above — exported as the FACT of them (issued, used, unused) with the code itself redacted, and deleted outright on erasure since a live code outlasting the person is a standing bypass.",
+        "Recovery codes for the retired per-tenant factors above — exported as the FACT of them (issued, used, unused) with the code itself redacted. Nothing is written: `sql/114` made this history, and no login path consults it, so a surviving row is a record rather than a bypass.",
       redactedColumns: ["code_hash"]
     },
 

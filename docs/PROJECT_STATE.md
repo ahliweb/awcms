@@ -356,6 +356,45 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 13 Agustus 2026 (kedua puluh sembilan) — MENJALANKANNYA menemukan
+  TIGA cacat yang 41 gerbang tidak lihat.**
+
+  Seluruh test permukaan #557 murni: rencananya murni, gerbang registry-nya
+  murni, kontrak layarnya teks. Tak satu pun mengeksekusi satu statement, dan
+  eksekutornya tidak lain adalah statement. `bun run check` hijau tanpa
+  menyentuhnya. Satu test integrasi terhadap PostgreSQL nyata menemukan tiga hal
+  — dan **dua di antaranya adalah cacat produksi**, bukan cacat test.
+
+  1. **`hard_delete` pada tabel yang privilege-nya DICABUT.** Dua deskriptor MFA
+     per-tenant menjanjikan penghapusan; ADR-0087/`sql/114` sengaja
+     memensiunkannya jadi read-only dan mencabut INSERT/UPDATE/DELETE dari
+     `awcms_app`. Penghapusan akan gagal `42501` di tengah transaksi, SETELAH
+     permintaannya diklaim. Yang menggoda — memberikan privilege-nya kembali —
+     justru akan membatalkan kontrol yang ADR itu pasang; jadi **deskriptornya
+     yang mengalah**, ke `severed_with_subject_row`, yang kebetulan juga jawaban
+     paling jujur untuk tabel yang runtime-nya tak boleh menulis.
+
+  2. **Komentar migrasi yang berbohong tentang kontrolnya sendiri.** `sql/125`
+     menulis "tanpa DELETE, dan itu keputusan" lalu hanya
+     `GRANT SELECT, INSERT, UPDATE`. Tetapi `sql/019` memberi `awcms_app`
+     keempat privilege atas SELURUH schema (`ON ALL TABLES` + `ALTER DEFAULT
+PRIVILEGES`), jadi GRANT yang "tidak menyebut" DELETE **tidak menahan apa
+     pun** — ia memberikan lagi apa yang sudah ada. Ditutup dengan `REVOKE`
+     eksplisit. Pelajaran yang bisa dipindah: di schema ber-blanket-grant, satu-
+     satunya cara menahan privilege adalah MENCABUTNYA, dan GRANT yang selektif
+     terbaca seperti kontrol sambil tidak menjadi kontrol.
+
+  3. **Jebakan binding Bun.SQL untuk jsonb** (cacat TEST, bukan produksi):
+     `${JSON.stringify(arr)}::jsonb` menyimpan jsonb **string**, bukan array —
+     `jsonb_typeof` menjawab `string` dan setiap uji containment jadi false.
+     `${arr}::jsonb` (yang dipakai produksi) menyimpan array. Fixture pertama
+     memakai bentuk pertama dan membuat eksekutor yang BENAR tampak rusak.
+
+  Temuan 1 dan 2 kini digerbangi: `subject-data:registry:check` memutar ulang
+  setiap `GRANT`/`REVOKE` atas `awcms_app` dari `sql/`, mulai dari blanket grant,
+  dan menolak mode penghapusan yang menuntut privilege yang dicabut. Pesannya
+  memperingatkan agar tidak "memperbaikinya" dengan memberi privilege kembali.
+
 - **PUTARAN 13 Agustus 2026 (kedua puluh delapan) — PERMUKAAN HAK SUBJEK DATA
   (#557 SELESAI), dan empat lapis yang masing-masing menangkap kegagalan
   berbeda.**

@@ -124,7 +124,16 @@ CREATE POLICY awcms_subject_requests_tenant_isolation
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
   WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
 
-GRANT SELECT, INSERT, UPDATE ON awcms_subject_requests TO awcms_app;
 -- Tanpa DELETE, dan itu keputusan: catatan bahwa sebuah penghapusan diminta,
 -- disetujui, dan dijalankan adalah bukti yang paling tidak boleh bisa
 -- dihilangkan oleh orang yang sama yang bisa menjalankan penghapusan.
+--
+-- REVOKE, bukan sekadar GRANT yang menghilangkan DELETE. `sql/019` memberi
+-- `awcms_app` keempat privilege atas SELURUH tabel di schema — sekali lewat
+-- `ON ALL TABLES` dan seterusnya lewat `ALTER DEFAULT PRIVILEGES` — jadi tabel
+-- ini sudah memilikinya sejak dibuat. GRANT yang "tidak menyebut" DELETE
+-- karena itu tidak menahan apa pun: ia hanya memberikan lagi apa yang sudah
+-- ada, sementara komentar di atasnya membaca seperti kontrol yang ditegakkan.
+-- Preseden pencabutan eksplisit: `sql/112` dan `sql/114`.
+GRANT SELECT, INSERT, UPDATE ON awcms_subject_requests TO awcms_app;
+REVOKE DELETE ON awcms_subject_requests FROM awcms_app;
