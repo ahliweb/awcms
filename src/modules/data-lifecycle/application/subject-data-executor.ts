@@ -311,6 +311,12 @@ export async function runSubjectErasure(
       // The row's own lifecycle already models its ending — `revoked_at` on a
       // machine credential. Flipping it is the erasure; ordinary retention
       // carries it the rest of the way.
+      //
+      // The column is HARD-CODED, which is a coupling neither side shows:
+      // the descriptor says "flip a status" without saying which.
+      // `subject-data:registry:check` refuses this erasure mode for a table
+      // without `revoked_at`, so a mismatch is a CI failure rather than a throw
+      // in the middle of an erasure whose request has already been claimed.
       const rows = (await tx.unsafe(
         `UPDATE ${table} SET revoked_at = now() ` +
           `WHERE ${tenantColumn} = $1::uuid AND ${predicate.sql} AND revoked_at IS NULL RETURNING 1`,

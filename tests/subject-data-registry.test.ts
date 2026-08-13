@@ -275,6 +275,44 @@ describe("`unreachableBySubject` is enforced in BOTH directions", () => {
   });
 });
 
+describe("`status_transition_then_purge` names a column the executor writes", () => {
+  test("refused when the table has no `revoked_at`", () => {
+    // The coupling is invisible from both sides: the descriptor says "flip a
+    // status" without saying which, and the executor writes one hard-coded
+    // column. Without this the mismatch surfaces mid-erasure, after the
+    // request has already been claimed.
+    const problems = run([
+      { ...VALID, erasure: "status_transition_then_purge" }
+    ]);
+
+    expect(problems.join(" ")).toContain("revoked_at");
+  });
+
+  test("accepted when it does", () => {
+    const columns = new Map(COLUMNS);
+    columns.set(
+      "awcms_things",
+      new Set([...COLUMNS.get("awcms_things")!, "revoked_at"])
+    );
+
+    const problems = findSubjectRegistryProblems({
+      modules: [
+        {
+          key: "m",
+          subjectData: [
+            SEVERANCE_ANCHOR,
+            { ...VALID, erasure: "status_transition_then_purge" }
+          ]
+        }
+      ],
+      columns,
+      foreignKeys: FOREIGN_KEYS
+    });
+
+    expect(problems).toEqual([]);
+  });
+});
+
 describe("the severance chain is checked, not assumed", () => {
   test("`severed_with_subject_row` is refused when nothing anonymises identities", () => {
     // The dependency runs the wrong way for review to catch: change

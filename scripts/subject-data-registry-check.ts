@@ -42,6 +42,18 @@ const MIGRATIONS_DIR = "sql";
  */
 const SEVERANCE_ANCHOR_TABLE = "awcms_identities";
 
+/**
+ * The single column `runSubjectErasure` writes for a
+ * `status_transition_then_purge` descriptor.
+ *
+ * Named here rather than left implicit in the executor, because the coupling is
+ * invisible from both sides: the descriptor says "flip a status" without saying
+ * WHICH, and the executor writes one hard-coded column. A future descriptor
+ * choosing that mode on a table without this column would fail in the middle of
+ * an erasure, after the request had already been claimed.
+ */
+const STATUS_TRANSITION_COLUMN = "revoked_at";
+
 export type TableColumns = ReadonlyMap<string, ReadonlySet<string>>;
 
 /** `"<table>.<column>"` -> the table its foreign key points at. */
@@ -395,6 +407,25 @@ export function findSubjectRegistryProblems(
       report(
         `\`${key}\` global TAPI menjanjikan \`erasure: "${descriptor.erasure}"\`. ` +
           "Satu tenant tidak boleh menghancurkan baris yang direntang tenant lain."
+      );
+    }
+
+    // `status_transition_then_purge` is not free-form: the executor writes
+    // exactly one column, `revoked_at`. Today one descriptor uses it
+    // (`identity_access.machine_credentials`) and that table has the column, so
+    // nothing is broken — but the coupling is invisible from either side, and
+    // the next descriptor to pick this mode on a table without `revoked_at`
+    // would fail at runtime, mid-erasure, with the request already claimed.
+    // Checked here so that becomes a CI failure instead.
+    if (
+      descriptor.erasure === "status_transition_then_purge" &&
+      !columns.has(STATUS_TRANSITION_COLUMN)
+    ) {
+      report(
+        `\`${key}\` menjawab \`status_transition_then_purge\` tetapi ` +
+          `\`${descriptor.tableName}\` tidak punya kolom \`${STATUS_TRANSITION_COLUMN}\`. ` +
+          "Eksekutor penghapusan menulis TEPAT kolom itu, jadi deskriptor ini akan " +
+          "gagal saat runtime di tengah penghapusan — setelah permintaannya diklaim."
       );
     }
 
