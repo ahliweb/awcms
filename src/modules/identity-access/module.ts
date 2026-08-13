@@ -178,6 +178,19 @@ export const identityAccessModule = defineModule({
       order: 28,
       requiredPermission: "identity_access.invitations.read"
     },
+    // ADR-0060/ADR-0081, #545. Gated on `business_scope_assignments.read`, the
+    // first of the page's three any-of entry keys — a link needs ONE key that
+    // implies something to see, and the assignment register is the panel an
+    // operator reaching this screen almost always wants. A holder of only
+    // `business_scope_conflicts.read` still reaches the page by URL and sees
+    // its own panel; the link is the coarser gate, the same shape
+    // `/admin/security` records for `mfa_admin`.
+    {
+      labelKey: "admin.layout.nav_business_scope",
+      path: "/admin/business-scope",
+      order: 29,
+      requiredPermission: "identity_access.business_scope_assignments.read"
+    },
     // ADR-0089, #540. PLATFORM-scoped, and the link is gated on the platform
     // permission ITSELF for the reason `/admin/tenants` records: unlike
     // `/admin/idn-regions` there is no tenant-readable half of this screen, so

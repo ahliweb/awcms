@@ -11,11 +11,22 @@
  * describe: a bounded-lifetime, scope-bound, audited, revocable authorization
  * to proceed despite a detected conflict. Approve requires a DEDICATED
  * permission (`rule.exceptionPolicy.requiresApprovalPermission`, gated at the
- * route) AND a DIFFERENT approver than the requester — re-checked from the DB
- * row itself, NEVER trusted from the request body (issue #181: "Exception
- * tidak boleh self-approved"; "Creator tidak dapat menjadi approver pada
- * resource yang sama kecuali override tersanksi"). Approve/revoke are audited
- * `critical` (high audit severity).
+ * route) AND an approver who is neither the requester NOR the subject —
+ * re-checked from the DB row itself, NEVER trusted from the request body
+ * (issue #181: "Exception tidak boleh self-approved"; "Creator tidak dapat
+ * menjadi approver pada resource yang sama kecuali override tersanksi").
+ * Approve/revoke are audited `critical` (high audit severity).
+ *
+ * ## The first half of that sentence was FALSE until #545
+ *
+ * "gated at the route" described a gate that did not exist. The approve route
+ * asked the chokepoint for the fixed `business_scope_exceptions.approve` and
+ * nothing ever read `requiresApprovalPermission` — the registry validated the
+ * field's SHAPE and no code its MEANING. Today's single rule happens to name
+ * exactly the fixed key, so the two coincided and nothing looked wrong; the
+ * first module to declare a rule approvable only by, say, a finance controller
+ * would have had that requirement silently ignored. The route now enforces it,
+ * and this comment describes what the code does.
  */
 import { recordAuditEvent } from "../../logging/application/audit-log";
 import { recordCounter } from "../../../lib/observability/metrics-port";
@@ -489,4 +500,30 @@ export async function findValidSoDConflictException(
   );
 
   return validByRuleKey.get(ruleKey) ?? null;
+}
+
+/**
+ * The `rule_key` of one exception, for a caller that must decide something
+ * about the RULE before acting on the row — today, the approve route, which
+ * has to know which rule an exception belongs to in order to ask the
+ * chokepoint about that rule's `requiresApprovalPermission`.
+ *
+ * `null` for a row this tenant does not have. The caller must not turn that
+ * into its own 404: the decide functions below already answer `not_found` for
+ * the same condition, and a second, earlier not-found answer on a different
+ * code path is how two callers end up disagreeing about what a missing row
+ * means.
+ */
+export async function findSoDConflictExceptionRuleKey(
+  tx: Bun.SQL,
+  tenantId: string,
+  exceptionId: string
+): Promise<string | null> {
+  const rows = (await tx`
+    SELECT rule_key
+    FROM awcms_sod_conflict_exceptions
+    WHERE tenant_id = ${tenantId} AND id = ${exceptionId}
+  `) as { rule_key: string }[];
+
+  return rows[0]?.rule_key ?? null;
 }

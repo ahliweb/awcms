@@ -2039,7 +2039,11 @@ Requests a bounded-lifetime, scope-bound exception to a registered SoD rule (`st
 - **operationId**: `approveSoDConflictException`
 - **Security**: bearerAuth + tenantHeader
 
-Approves a pending exception (the sanctioned administrative override). Self-approval is denied (re-checked from the DB row). Gated on the dedicated `identity_access.business_scope_exceptions.approve` permission. Requires `Idempotency-Key`; audited at `critical` severity.
+Approves a pending exception (the sanctioned administrative override). Self-approval is denied on BOTH independence axes, re-checked from the DB row: the approver may be neither the requester nor the subject.
+
+TWO permissions are checked. Every approval needs the dedicated `identity_access.business_scope_exceptions.approve`. A rule may also name its own checker in `SoDRuleDescriptor.exceptionPolicy.requiresApprovalPermission`, and when that differs from the dedicated key the caller must hold it too (403 `ACCESS_DENIED`). An exception whose rule no installed module declares any more cannot be approved at all (403 `SOD_RULE_UNKNOWN`); rejecting and revoking it stay available.
+
+Requires `Idempotency-Key`; audited at `critical` severity.
 
 **Parameters**
 
