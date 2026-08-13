@@ -189,6 +189,14 @@ export type PendingErasureClaim =
  * `requested_by <> checker` is in the predicate as well as in the table's CHECK
  * constraint. The constraint is the guarantee; this is what turns a violated
  * guarantee into a 409 the operator can read instead of a 500.
+ *
+ * `completed_at` uses a SQL `CASE WHEN` rather than a JS ternary that would
+ * interpolate a SQL FRAGMENT on one branch and a bound `NULL` on the other.
+ * Nothing else in this repo mixes those two, and no test exercises this
+ * statement against a real database — "it read fine in the diff" is exactly how
+ * four defects once passed thirty-seven gates here. It also keeps `now()` as
+ * the DATABASE's clock (the transaction's start instant), which is what every
+ * other timestamp on the row uses.
  */
 export async function claimPendingErasure(
   tx: Bun.SQL,
@@ -203,7 +211,7 @@ export async function claimPendingErasure(
         decided_by = ${checkerTenantUserId},
         decided_at = now(),
         decision_reason = ${decision.reason},
-        completed_at = ${decision.approved ? tx.unsafe("now()") : null},
+        completed_at = CASE WHEN ${decision.approved}::boolean THEN now() ELSE NULL END,
         updated_at = now()
     WHERE tenant_id = ${tenantId}
       AND id = ${requestId}

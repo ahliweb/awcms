@@ -55,6 +55,10 @@ export type ColumnType = { column: string; dataType: string };
  * Not from `sql/` — a server must not parse migrations at runtime, and the
  * catalogue is the only source that cannot disagree with the database it is
  * about to write to. One query for every table in the plan, not one per table.
+ *
+ * `= ANY(sql.array(...))` rather than `IN ${sql(...)}`: this repo binds list
+ * parameters exactly one way, and a bare interpolated array arrives as a
+ * comma-joined STRING (a 22P02 at runtime, invisible in review).
  */
 export async function loadColumnTypes(
   tx: Bun.SQL,
@@ -70,7 +74,7 @@ export async function loadColumnTypes(
     SELECT table_name, column_name, data_type
     FROM information_schema.columns
     WHERE table_schema = current_schema()
-      AND table_name IN ${tx(tableNames.map(assertSafeIdentifier))}
+      AND table_name = ANY(${tx.array(tableNames.map(assertSafeIdentifier), "text")})
     ORDER BY table_name, ordinal_position
   `) as { table_name: string; column_name: string; data_type: string }[];
 
