@@ -101,6 +101,18 @@ bun run db:pool:health    # pool sehat terhadap DB target
 > di `scripts/README.md` §Ditunda — jalankan langkah-langkahnya sendiri
 > (perintah di atas, plus `bun run check` yang sudah memuat test + build).
 
+> **Image runtime TIDAK BISA menjalankan job apa pun — rebuild image job tiap
+> deploy.** `Dockerfile.production`'s stage `runtime` hanya menyalin `dist/`,
+> `node_modules/`, `package.json`. Ke-29 job yang didaftarkan modul berbentuk
+> `bun run <target>` dan **semuanya** keluar `error: Script not found` di sana;
+> tidak ada penjadwal in-process sebagai jalur kedua. Deployment yang berjalan
+> memakai image kedua `awcms-jobs:<versi>` (dibangun dari `scripts/` + `src/` +
+> `sql/`) yang dipanggil `/home/admin1/awcms-jobs/run-job.sh <target>` dari
+> cron. **Image itu di-tag per versi dan tidak ikut ter-rebuild oleh deploy
+> app** — melewatkan langkah ini berarti cron menjalankan kode rilis LAMA
+> terhadap skema BARU, diam-diam. Detail + utang yang tersisa:
+> `docs/PROJECT_STATE.md` §4.
+
 **Setelah deploy rilis yang menambah modul/permission BARU, jalankan
 backfill permission:**
 

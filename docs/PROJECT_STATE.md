@@ -356,6 +356,46 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PEMBLOKIR OPERASIONAL — image produksi TIDAK BISA menjalankan satu pun dari
+  29 job terdaftar. Ditemukan 14 Agustus 2026 saat men-deploy v9.0.0.**
+
+  `Dockerfile.production`'s stage `runtime` hanya menyalin `dist/`,
+  `node_modules/`, dan `package.json`. Tidak ada `scripts/`, tidak ada `src/`.
+  Setiap job yang didaftarkan modul lewat `ModuleDescriptor.jobs` berbentuk
+  `bun run <target>`, dan **tiap satu dari 29 target itu keluar dengan
+  `error: Script not found` di dalam container produksi** — `email:dispatch`,
+  `logs:audit:purge`, `blog:publish:scheduled`, `domain-events:dispatch`,
+  `push:dispatch`, `data-lifecycle:archive-purge`, semuanya.
+
+  Aplikasi juga TIDAK punya penjadwal in-process (nol `setInterval`/cron di
+  `standalone-entry.ts` maupun `middleware.ts`), jadi tidak ada jalur kedua.
+
+  **Kenapa ini tidak pernah terlihat:** registry job hanya memverifikasi bahwa
+  `command` menunjuk target yang ada di `package.json` — sebuah fakta tentang
+  REPO, bukan tentang image yang berjalan. Gerbangnya benar dan hijau; yang
+  tidak ada adalah pertanyaan "apakah target itu bisa dieksekusi di tempat ia
+  seharusnya berjalan". Registry yang lengkap membuat 29 job terlihat
+  terpasang, sementara nol di antaranya bisa jalan.
+
+  **Konsekuensi yang sudah terjadi:** retensi audit tidak pernah dieksekusi,
+  outbox domain-event tidak pernah dikirim, post terjadwal tidak pernah terbit
+  — semuanya diam, tanpa error, karena tidak ada yang memanggilnya.
+
+  **Mitigasi yang dipasang hari ini (host, BUKAN di repo):** image kedua
+  `awcms-jobs:<versi>` dibangun dari sumber yang sama (`scripts/` + `src/` +
+  `sql/`), plus `/home/admin1/awcms-jobs/run-job.sh` yang membaca env dari
+  container app yang SEDANG berjalan (nama container berubah tiap deploy, jadi
+  ia di-resolve bukan di-hardcode) dan menjalankan target apa pun di jaringan
+  `coolify`. Cron pertama yang memakainya: `*/5` `email:dispatch`.
+
+  **Utang yang tersisa, dan ini milik REPO bukan host:** image job dibangun
+  tangan dan **di-tag per versi — ia akan basi diam-diam pada rilis berikutnya**
+  (cron akan menjalankan kode v9.0.0 terhadap skema v9.1.0). Perbaikan yang
+  benar adalah stage `jobs` di `Dockerfile.production` yang diterbitkan bersama
+  image runtime oleh `release.yml`, sehingga versi job dan versi app tidak bisa
+  menyimpang. Sampai itu ada, **rebuild `awcms-jobs` setiap kali deploy** —
+  langkah ini sekarang tertulis di skill `awcms-deploy`.
+
 - **PUTARAN 14 Agustus 2026 (ketiga puluh) — rilis v9.0.0, dan empat dokumen
   yang menua ke arah yang SALAH.**
 
