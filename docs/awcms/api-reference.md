@@ -2238,6 +2238,44 @@ ADR-0089. Served by a narrow SECURITY DEFINER function (`sql/119`), because the 
 | 401    | Missing or invalid session.       | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.       | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/partners` — PLATFORM: the partner registry.
+
+- **operationId**: `listRegisteredPartners`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089. Lists every partner registered on the deployment, and is PLATFORM-scoped for exactly that reason: a tenant-scoped version of this read is the cross-tenant directory the same ADR refused as a table. Reachable only when the acting tenant IS the platform tenant, and every row carries the platform tenant's `tenant_id` so FORCE RLS hides them from any other session even if a grant row existed. Both mechanisms are load-bearing; neither is a backstop for the other.
+
+**Responses**
+
+| Status | Description                             | Schema                                 |
+| ------ | --------------------------------------- | -------------------------------------- |
+| 200    | The registry, newest first (limit 200). | object                                 |
+| 401    | Missing or invalid session.             | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.             | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/partners` — PLATFORM: register an existing tenant as a partner (audit-logged).
+
+- **operationId**: `registerPartner`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089. Declares who may BE a partner — the platform's half of a split this ADR keeps apart from the customer's `partner_access.configure` ("which partners reach MY tenant"). No single actor holds both.
+It creates nothing but a row. A partner is an ordinary tenant: the one named here must already exist, this does not provision it, and the row grants nothing. It is the PRECONDITION a customer's engagement checks through a foreign key, and `activeRoleGrants` never reads it.
+`status` is not accepted — `sql/116` pins it to `active` until something reads suspension. There is no DELETE: the row is the target of foreign keys from engagements and from delegated grants that deliberately outlive them, so retirement will be a status change, not a removal.
+Not idempotency-keyed: both natural keys are globally unique, so a duplicate submit is a 409 naming which one was taken rather than a second row.
+
+**Request body** (required): [`RegisterPartnerRequest`](#schema-registerpartnerrequest)
+
+**Responses**
+
+| Status | Description                                                                                                | Schema                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The registered partner.                                                                                    | object                                 |
+| 401    | Missing or invalid session.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                | [`ApiError`](#standard-error-envelope) |
+| 404    | No such tenant on this deployment (TENANT_NOT_FOUND).                                                      | [`ApiError`](#standard-error-envelope) |
+| 409    | The tenant is already a partner, the partnerCode is taken, or the platform tenant named itself (CONFLICT). | [`ApiError`](#standard-error-envelope) |
+| 422    | The registration failed validation (VALIDATION_FAILED); `error.details` lists every offending field.       | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/registration-requests` — Pending self-registration requests for this tenant.
 
 - **operationId**: `listRegistrationRequests`
@@ -9394,6 +9432,24 @@ Enum values: `web_push`, `fcm`.
   "clientSecret": "string",
   "code": "string",
   "redirectUri": "string"
+}
+```
+
+### Schema: RegisterPartnerRequest
+
+| Field             | Type          | Required | Nullable | Description                                                                                                                                                                                                                                                                               |
+| ----------------- | ------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `partnerTenantId` | string (uuid) | yes      | no       | An EXISTING tenant on this deployment, and not the platform tenant itself. The platform learns this id out of band — there is no picker and there is not meant to be.                                                                                                                     |
+| `partnerCode`     | string        | yes      | no       | Lower-case letters, digits and hyphens; starts and ends with a letter or digit. Globally unique. The format is enforced in the application rather than by a CHECK because the uniqueness index is global: a stray capital produces a second row that reads like the first one to a human. |
+| `displayName`     | string        | yes      | no       |                                                                                                                                                                                                                                                                                           |
+
+**Example**
+
+```json
+{
+  "partnerTenantId": "00000000-0000-0000-0000-000000000000",
+  "partnerCode": "string",
+  "displayName": "string"
 }
 ```
 

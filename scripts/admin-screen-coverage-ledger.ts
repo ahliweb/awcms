@@ -67,7 +67,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (20)
+  // identity_access (22)
   //
   // The four `invitations.*` keys are ADR-0082's, and they land here on the
   // same terms `tenant_admin.tenant_lifecycle.*` did: the surface exists and is
@@ -96,6 +96,14 @@ export const NOT_YET_SCREENED: readonly string[] = [
   // class while the read class stays an API call would be the wrong one to
   // build first.
   "identity_access.machine_credentials_write.create",
+  // ADR-0089. The PLATFORM half of partnership, and its screen is not
+  // `/admin/partners` — that page is the CUSTOMER's view of who reaches its own
+  // tenant, and putting a registry there would put the platform's list of every
+  // partnership in front of every customer. Its home is a platform screen
+  // alongside `/admin/tenants`, and that is its own change; the API landing
+  // first is the ordering ADR-0056 used for `media_library`.
+  "identity_access.partner_registry.create",
+  "identity_access.partner_registry.read",
   "identity_access.sso_providers.create",
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",

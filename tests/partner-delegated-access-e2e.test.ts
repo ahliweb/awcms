@@ -36,6 +36,11 @@ import {
 } from "../src/pages/api/v1/access/partner-engagements/index";
 import { DELETE as severDELETE } from "../src/pages/api/v1/access/partner-engagements/[id]";
 import {
+  listPartners,
+  registerPartner
+} from "../src/modules/identity-access/application/partner-registry-store";
+import { withTenantOrThrow } from "../src/lib/database/tenant-context";
+import {
   GET as listGrantsGET,
   POST as approvePOST
 } from "../src/pages/api/v1/access/delegated-grants/index";
@@ -112,6 +117,7 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
   let customerTenantId = "";
   let otherCustomerTenantId = "";
 
+  let partnerCode = "";
   let customerAdmin = { tenantUserId: "", token: "" };
   let partnerStaff = { tenantUserId: "", token: "", principalId: "" };
   let supportRoleId = "";
@@ -133,15 +139,78 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     ownerRoleId = await createRole(customerTenantId, "sysrole", true);
     foreignRoleId = await createRole(otherCustomerTenantId, "support", false);
 
-    // The platform registers the partner. There is no request path for this
-    // yet — the plan places partner registration behind a platform-scoped
-    // surface that does not exist — so the test writes the row the way an
-    // operator migration would.
-    await sql`SELECT set_config('app.current_tenant_id', ${platformTenantId}, false)`;
-    await sql`
-      INSERT INTO awcms_partners (tenant_id, partner_tenant_id, partner_code, display_name)
-      VALUES (${platformTenantId}, ${partnerTenantId}, ${`px-${Date.now()}`}, 'Partner X')
-    `;
+    // The platform registers the partner — through the REGISTRY WRITER, not by
+    // hand. Until `sql/123` there was no writer at all and this block wrote the
+    // row the way an operator migration would; the whole arc below now starts
+    // from the same code path a platform admin drives.
+    //
+    // The application function rather than the HTTP route on purpose: the route
+    // is platform-SCOPE gated, and satisfying that here would mean repointing
+    // `PLATFORM_TENANT_ID` for a process this suite shares with every other
+    // file. The gate itself is proven where it lives.
+    //
+    // Through `withTenantOrThrow`, not a bare `set_config` on the pool: the
+    // writer issues three statements, and `set_config(..., false)` is
+    // SESSION-scoped — on a pooled client the second statement can land on a
+    // connection that never saw it. The existing one-statement writes here got
+    // away with it; three would not, reliably.
+    partnerCode = `px-${platformTenantId.slice(0, 8)}`;
+    const registered = await withTenantOrThrow(sql, platformTenantId, (tx) =>
+      registerPartner(tx, platformTenantId, {
+        partnerTenantId,
+        partnerCode,
+        displayName: "Partner X"
+      })
+    );
+
+    if (registered.outcome !== "registered") {
+      throw new Error(`partner registration failed: ${registered.outcome}`);
+    }
+  });
+
+  test("the registry writer refuses the three things the schema also refuses", async () => {
+    // Both global unique indexes, told apart — the reason the writer uses
+    // `ON CONFLICT DO NOTHING` plus a disambiguating read instead of catching a
+    // 23505 whose SQLSTATE this driver puts somewhere other than `code`.
+    const sameTenant = await withTenantOrThrow(sql, platformTenantId, (tx) =>
+      registerPartner(tx, platformTenantId, {
+        partnerTenantId,
+        partnerCode: `${partnerCode}-other`,
+        displayName: "Partner X again"
+      })
+    );
+    const sameCode = await withTenantOrThrow(sql, platformTenantId, (tx) =>
+      registerPartner(tx, platformTenantId, {
+        partnerTenantId: customerTenantId,
+        partnerCode,
+        displayName: "Someone else"
+      })
+    );
+    const itself = await withTenantOrThrow(sql, platformTenantId, (tx) =>
+      registerPartner(tx, platformTenantId, {
+        partnerTenantId: platformTenantId,
+        partnerCode: `${partnerCode}-self`,
+        displayName: "The platform"
+      })
+    );
+
+    expect(sameTenant.outcome).toBe("already_registered");
+    expect(sameCode.outcome).toBe("code_taken");
+    expect(itself.outcome).toBe("self");
+  });
+
+  test("the registry lists what it wrote, with the partner tenant's own name", async () => {
+    const items = await withTenantOrThrow(sql, platformTenantId, (tx) =>
+      listPartners(tx, platformTenantId)
+    );
+    const entry = items.find((row) => row.partnerCode === partnerCode);
+
+    expect(entry).toBeDefined();
+    expect(entry!.partnerTenantId).toBe(partnerTenantId);
+    // Joined from `awcms_tenants`, never denormalised — so the registry cannot
+    // hold a stale copy of a tenant's name.
+    expect(entry!.tenantCode.length).toBeGreaterThan(0);
+    expect(entry!.status).toBe("active");
   });
 
   afterAll(async () => {

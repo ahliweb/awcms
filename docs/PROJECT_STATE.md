@@ -107,7 +107,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **122** (`sql/001`–`122`)                                                               | `ls sql/`                                                                               |
+| Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **35** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **48** (26.424 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
@@ -355,6 +355,45 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh satu) — REGISTRI PARTNER PUNYA PENULIS.**
+
+  Menutup sisa #423 nomor 3. `sql/123` + `GET`/`POST /api/v1/partners`; tanpa
+  ADR baru — ADR-0089 sudah menamai permukaan ini, dan `sql/116` sengaja
+  mengirim tabelnya tanpa penulis. Bukti bahwa itu terasa: suite E2E Gelombang 8
+  menuliskan barisnya sendiri, dengan komentar "belum ada jalur request untuk
+  ini". Komentar itu kini hilang, dan alurnya dimulai dari penulis yang sama.
+
+  **Kedua izinnya ber-scope platform, dan `read` bukan kelalaian.** `create`
+  menyatakan siapa yang BOLEH MENJADI partner — paruh platform dari pemisahan
+  yang ADR-0089 jaga terhadap `partner_access.configure` milik pelanggan. `read`
+  mendaftar SELURUH partner, dan versi tenant-scoped-nya adalah direktori
+  lintas-tenant yang ADR yang sama tolak sebagai tabel, dibangun ulang sebagai
+  permission.
+
+  **Tidak ada `DELETE`, dan itu keputusan.** Barisnya target FK dari
+  keterlibatan DAN dari grant terdelegasi yang `sql/120` buat sengaja hidup
+  lebih lama darinya; DELETE gagal begitu satu kemitraan pernah ada, dan
+  `ON DELETE CASCADE` memutus setiap kemitraan di instalasi. Pensiun adalah
+  perubahan `status` — dan `status` tetap dipatok, jadi permukaan ini tidak
+  menerimanya sama sekali.
+
+  **Konflik diselesaikan tanpa membaca SQLSTATE.** Kedua kunci naturalnya punya
+  index unik GLOBAL, jadi membedakan kedua 23505-nya lewat error driver berarti
+  membaca SQLSTATE dari tempat yang di repo ini bukan `error.code`.
+  `ON CONFLICT DO NOTHING` plus satu pembacaan penentu menghindari pertanyaannya
+  — dan itu pula alasan rute ini tidak ber-`Idempotency-Key`.
+
+  **Jebakan yang ditemukan saat menyambungkan E2E:** `set_config` bersifat
+  SESSION-scoped, jadi pada klien ber-pool pernyataan kedua bisa mendarat di
+  koneksi yang tak pernah melihatnya. Tulisan satu-pernyataan yang ada di suite
+  itu selamat karena kebetulan; tiga pernyataan tidak akan. Pemanggilannya
+  dibungkus `withTenantOrThrow`.
+
+  `NOT_YET_SCREENED` 60 → 62. Layarnya BUKAN `/admin/partners` — halaman itu
+  pandangan PELANGGAN atas siapa yang menjangkau tenant-nya sendiri, dan menaruh
+  registri di sana menaruh daftar setiap kemitraan platform di depan setiap
+  pelanggan.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh) — KREDENSIAL MESIN KELAS-TULIS BISA
   DITERBITKAN, dan izinnya sendiri.**

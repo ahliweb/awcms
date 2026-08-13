@@ -27,9 +27,17 @@ export const identityAccessModule = defineModule({
       "/api/v1/registration-requests",
       "/api/v1/user-groups",
       "/api/v1/invitations",
-      // ADR-0089 PR 8.4 — the partner's own view of its book. It reads nothing
-      // of any customer's data; acting inside a customer tenant happens through
-      // the delegated membership, under that tenant's own chokepoint.
+      // ADR-0089 — TWO partner surfaces, and this one prefix covers both
+      // because `resolveOwner` matches by prefix. Named here so the second one
+      // is a stated claim rather than a coincidence of spelling:
+      //
+      //   `/api/v1/partner/**`  — the partner's own view of its book. It reads
+      //     nothing of any customer's data; acting inside a customer tenant
+      //     happens through the delegated membership, under that tenant's own
+      //     chokepoint.
+      //   `/api/v1/partners`    — the platform's REGISTRY of who may be a
+      //     partner at all. Platform-scoped, and deliberately unreadable by any
+      //     customer: ADR-0089 refused a tenant-readable partner directory.
       "/api/v1/partner",
       "/login",
       "/forgot-password",
@@ -485,6 +493,32 @@ export const identityAccessModule = defineModule({
       action: "assign",
       description:
         "Approve delegated access for a partner at a chosen role, and revoke it — audited"
+    },
+    // The partner REGISTRY (ADR-0089, sql/116 + sql/123) — a different activity
+    // from `partner_access` above, and a different SCOPE, because they answer
+    // the two questions ADR-0089 kept apart on purpose.
+    //
+    // `partner_access.*` is tenant-scoped and answers "which partners reach MY
+    // tenant" — written by the customer. These two answer "who may be a partner
+    // at all" — written by the platform, and never by a customer. Folding them
+    // together would give one actor both halves, which is the merge the whole
+    // ADR exists to prevent.
+    //
+    // `read` is platform-scoped for the same reason `tenant_provisioning.read`
+    // is: it lists EVERY partner. A tenant-scoped read here would be the
+    // cross-tenant directory ADR-0089 refused, rebuilt as a permission.
+    {
+      activityCode: "partner_registry",
+      action: "read",
+      scope: "platform",
+      description: "PLATFORM: list every partner registered on the deployment"
+    },
+    {
+      activityCode: "partner_registry",
+      action: "create",
+      scope: "platform",
+      description:
+        "PLATFORM: register an existing tenant as a partner — audited. Grants nothing; it is the precondition a customer's engagement checks"
     }
   ],
   /**

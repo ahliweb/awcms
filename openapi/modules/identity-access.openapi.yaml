@@ -4859,6 +4859,113 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/partners:
+    get:
+      operationId: listRegisteredPartners
+      tags:
+        - Identity & Access
+      summary: "PLATFORM: the partner registry."
+      description: >-
+        ADR-0089. Lists every partner registered on the deployment, and is
+        PLATFORM-scoped for exactly that reason: a tenant-scoped version of this
+        read is the cross-tenant directory the same ADR refused as a table.
+        Reachable only when the acting tenant IS the platform tenant, and every
+        row carries the platform tenant's `tenant_id` so FORCE RLS hides them
+        from any other session even if a grant row existed. Both mechanisms are
+        load-bearing; neither is a backstop for the other.
+      responses:
+        "200":
+          description: The registry, newest first (limit 200).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/RegisteredPartner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: registerPartner
+      tags:
+        - Identity & Access
+      summary: "PLATFORM: register an existing tenant as a partner (audit-logged)."
+      description: >-
+        ADR-0089. Declares who may BE a partner — the platform's half of a split
+        this ADR keeps apart from the customer's `partner_access.configure`
+        ("which partners reach MY tenant"). No single actor holds both.
+
+        It creates nothing but a row. A partner is an ordinary tenant: the one
+        named here must already exist, this does not provision it, and the row
+        grants nothing. It is the PRECONDITION a customer's engagement checks
+        through a foreign key, and `activeRoleGrants` never reads it.
+
+        `status` is not accepted — `sql/116` pins it to `active` until something
+        reads suspension. There is no DELETE: the row is the target of foreign
+        keys from engagements and from delegated grants that deliberately
+        outlive them, so retirement will be a status change, not a removal.
+
+        Not idempotency-keyed: both natural keys are globally unique, so a
+        duplicate submit is a 409 naming which one was taken rather than a
+        second row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterPartnerRequest"
+      responses:
+        "201":
+          description: The registered partner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      partner:
+                        $ref: "#/components/schemas/RegisteredPartner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such tenant on this deployment (TENANT_NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: >-
+            The tenant is already a partner, the partnerCode is taken, or the
+            platform tenant named itself (CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: The registration failed validation (VALIDATION_FAILED); `error.details` lists every offending field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/partner/tenants:
     get:
       operationId: listManagedTenants
@@ -5977,6 +6084,63 @@ components:
           type: string
           format: uuid
           nullable: true
+    RegisteredPartner:
+      type: object
+      description: >-
+        A row of the platform's partner registry (ADR-0089). `tenantCode` and
+        `tenantName` come from `awcms_tenants` through a join rather than being
+        denormalised here, so the registry can never hold a stale copy of a
+        tenant's name.
+      properties:
+        id:
+          type: string
+          format: uuid
+        partnerTenantId:
+          type: string
+          format: uuid
+          description: The tenant that IS the partner. It already existed; this row did not create it.
+        partnerCode:
+          type: string
+        displayName:
+          type: string
+        status:
+          type: string
+          description: Pinned to `active` by `sql/116` until something reads suspension.
+          enum:
+            - active
+        registeredAt:
+          type: string
+          format: date-time
+        tenantCode:
+          type: string
+        tenantName:
+          type: string
+    RegisterPartnerRequest:
+      type: object
+      required:
+        - partnerTenantId
+        - partnerCode
+        - displayName
+      properties:
+        partnerTenantId:
+          type: string
+          format: uuid
+          description: >-
+            An EXISTING tenant on this deployment, and not the platform tenant
+            itself. The platform learns this id out of band — there is no picker
+            and there is not meant to be.
+        partnerCode:
+          type: string
+          maxLength: 64
+          description: >-
+            Lower-case letters, digits and hyphens; starts and ends with a
+            letter or digit. Globally unique. The format is enforced in the
+            application rather than by a CHECK because the uniqueness index is
+            global: a stray capital produces a second row that reads like the
+            first one to a human.
+        displayName:
+          type: string
+          maxLength: 160
     ManagedTenant:
       type: object
       description: >-
