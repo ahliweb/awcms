@@ -11,8 +11,20 @@ Ikuti `docs/awcms/07_sprint_testing_production_readiness.md` dan `docs/awcms/12_
 
 ```bash
 bun install
-bun run production:preflight
+bun run config:validate     # aturan env + aturan silang produksi
+bun run check               # rantai lengkap: lint, docs, kontrak, typecheck, test, build
+bun run db:pool:health      # terhadap DB target
+bun run security:readiness  # GATE go-live — exit non-zero bila ada `critical`
 ```
+
+> **`bun run production:preflight` TIDAK ADA — jangan menjalankannya.** Ia
+> gagal dengan `error: Script not found`. Orkestrator ber-stage yang
+> dijelaskan doc 07 §Preflight tidak pernah diimplementasikan di repo ini
+> (doc 07 sendiri mengatakannya, dan `scripts/README.md` §Ditunda
+> mendaftarkannya sebagai target tertunda) — begitu pula stage
+> `database:capacity`-nya. Perintah di atas adalah langkah-langkah NYATA
+> yang menggantikannya; `security:readiness` adalah satu-satunya yang
+> benar-benar memblokir go-live dengan exit code.
 
 > **KOREKSI 4 Agustus 2026 — dua klaim di paragraf ini tidak berlaku di repo
 > ini.** Registry config yang dulu disebut di sini (di bawah src/lib/config/)
@@ -107,6 +119,10 @@ seremonial: ia satu-satunya yang berdiri di depan migrasi produksi.
 **Database:** versi sesuai target · PostgreSQL tidak public · least-privilege user · backup aktif · restore tested · index utama ada · partial index soft delete ada bila relevan · pool sehat · slow query monitoring.
 
 **Security:** no hardcoded secret · `.env` aman & tidak dikomit · password hash modern · login lockout · RLS aktif · ABAC aktif · audit aktif · restore/purge berizin dan diaudit · tax data masked · CRM opt-out respected · AI read-only · sync HMAC bila hybrid · error tanpa stack trace · **no critical finding**.
+
+**Privacy / hak subjek data (ADR-0094):** `bun run subject-data:coverage:check` 0 tabel berutang · `bun run subject-data:registry:check` hijau · permission ekspor dan penghapusan terpisah, dan **tidak ada satu principal pun memegang `subject_erasure.create` DAN `.approve`** (konflik SoD `critical` — periksa di tenant produksi, bukan hanya di kode) · `awcms_subject_requests` tidak punya DELETE untuk `awcms_app` (`REVOKE` eksplisit `sql/125`, terdaftar di `RETIRED_TENANT_TABLE_PRIVILEGES`).
+
+**Permission tenant lama:** setelah rilis yang menambah permission baru, `bun run identity-access:permissions:backfill` sudah dijalankan dan diverifikasi dengan membuka layar terkait sebagai owner tenant LAMA — seed migration hanya menjangkau tenant yang dibuat sesudahnya, dan kegagalannya berupa 403 senyap.
 
 **Runtime platform:** backend, script, test, migration, build, dan preflight berjalan dengan Bun. Tidak ada `node`, `npm`, `npx`, `pnpm`, `yarn`, adapter server Node.js, atau dependency yang memaksa runtime Node.js kecuali pengecualian tertulis sudah disetujui dan dicatat di docs/audit.
 

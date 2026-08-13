@@ -1,5 +1,1426 @@
 # awcms
 
+## 9.0.0
+
+### Major Changes
+
+- 47c0a66: feat(privacy): ledger subjek data mencapai NOL, dan empat jawaban yang ternyata belum punya kosakata (ADR-0094 gelombang 2, #557)
+
+  #542 mendaratkan fondasinya dan menyisakan **139 tabel di ledger utang**. #557 menulis
+  prasyaratnya sendiri dengan jujur: endpoint ekspor yang mendarat di atas ledger itu akan
+  menjawab dengan 3 tabel dan **diam untuk 139 sisanya** — laporan yang ditandatangani dan
+  tidak lengkap, yang lebih buruk daripada tidak ada laporan. PR ini membayar utang itu
+  sampai habis: **139 → 0**, 139 deskriptor + 7 penolakan beralasan menutup 146 tabel.
+
+  Kelengkapan kini sifat yang DIPAKSA skema, bukan yang diklaim sebuah PR.
+
+  **EMPAT KALI menuliskan deskriptor menemukan bahwa jawabannya tidak bisa dinyatakan.**
+  Ini bagian yang paling berharga, dan tak satu pun terlihat sebelum mencoba menjawab
+  seluruh 139:
+
+  1. **`severed_with_subject_row`** — jawaban jujur ~90 tabel. Mereka hanya membawa id
+     subjek sebagai STEMPEL (`created_by`, `deleted_by`, `actor_tenant_user_id`), dan
+     menganonimkan `awcms_identities` sudah membuat semuanya tak teresolusi. Tanpa anggota
+     union ini, satu-satunya jawaban yang tersedia adalah `anonymize` — dan eksekutor yang
+     patuh akan **menulis ulang stempelnya**, menghancurkan catatan tenant tentang siapa
+     menghapus sebuah halaman demi memutus tautan yang sudah putus. Penghapusan akan
+     merusak sesuatu di sembilan puluh tempat dan menyebutnya kepatuhan.
+
+  2. **`references: "profile"`** — `awcms_profiles` adalah tabel PERTAMA yang issue-nya
+     sebut, dan **tidak satu pun** dari dua id yang ada muncul padanya: tautannya berjalan
+     ke arah sebaliknya, dari `awcms_identities.profile_id`. Dengan dua id, nama dan detail
+     kontak orangnya benar-benar tak terjangkau.
+
+  3. **`unreachableBySubject`** — `awcms_comments_reports` menyimpan HASH alamat pelapor
+     dan tidak lebih, dengan sengaja, supaya moderator tidak bisa melihat siapa melaporkan
+     siapa. `NO_SUBJECT_DATA` untuknya adalah dusta; sebuah kolom subjek adalah fiksi.
+     Satu-satunya jawaban tersisa adalah array kosong — yang **dijatuhkan perencana
+     diam-diam**, sehingga tabelnya hilang dari setiap ekspor tanpa apa pun mencatat bahwa
+     ia pernah dipertimbangkan.
+
+  4. **`tenantColumn: null` yang eksplisit** — sebelumnya "absen" berarti DUA hal sekaligus,
+     "pakai `tenant_id`" DAN "tabel global", kontradiksi yang perencana selesaikan dengan
+     diam-diam mengikat `tenant_id`. Kini global dinyatakan sengaja, dan tabel global
+     (`awcms_principals` dan satelit MFA-nya, ADR-0087) **DINAMAI** di
+     `SubjectPlan.unansweredEntries` alih-alih hilang: laporan yang sekadar menghilangkan
+     `awcms_principals` tak bisa dibedakan dari laporan yang ditulis sebelum tabel itu ada.
+
+  **GERBANG BARU: `subject-data:registry:check`.** `subject-data:coverage:check` bertanya
+  apakah tiap tabel MENJAWAB; yang ini bertanya apakah jawabannya BENAR — dan ia menemukan
+  **tujuh cacat pada deskriptor PR ini sendiri** sebelum satu pun di-review. Semuanya satu
+  string yang tampak masuk akal, semuanya gagal DIAM-DIAM: lima kolom redaksi salah nama
+  (redaksi yang salah nama tidak meredaksi apa pun dan tampak persis seperti yang bekerja),
+  dan dua `references` yang mengaku `identity` padahal foreign key-nya menunjuk
+  `awcms_principals`. Gerbangnya meresolusi tiap deskriptor terhadap `sql/`: kolom subjek
+  ada, kolom redaksi ada, `references` cocok dengan foreign key NYATA di mana ada,
+  `tenantColumn: null` dibuktikan (tabelnya benar-benar tanpa `tenant_id`), dan
+  `severed_with_subject_row` DITOLAK bila tak ada deskriptor yang meng-`anonymize`
+  `awcms_identities` — rantai yang, kalau putus, membuat sembilan puluh deskriptor
+  diam-diam berarti tidak melakukan apa-apa tanpa satu pun suntingan di dekat tabel yang
+  rusak.
+
+  **Satu ketegangan antar-gerbang diselesaikan SEMPIT, bukan dengan pelonggaran.**
+  `awcms_access_assignments` DIPENSIUNKAN ADR-0079, dan `access:grant-readers:check`
+  melarang berkas mana pun menyebutnya — "seluruh proteksinya", kata dokumennya. Tetapi
+  barisnya masih ada dan masih menyatakan peran apa yang pernah dipegang seseorang, jadi
+  dengan ledger di nol ia WAJIB menjawab. Menambahkan `module.ts` ke `GRANT_READERS` akan
+  membuat gerbang berhenti mengawasi seluruh berkas itu — persis proteksi yang dimaksud.
+  Jadi izinnya dikunci pada BENTUK penyebutan: namanya hanya boleh muncul sebagai nilai
+  `tableName:` sebuah deskriptor. Pembaca yang menyimpang menulis
+  `FROM awcms_access_assignments` di dalam template literal dan tidak bisa memenuhinya —
+  diuji dengan menanam justru pembacaan itu, termasuk kasus di mana satu deskriptor sah dan
+  satu pembacaan hidup berdampingan di berkas yang sama.
+
+  **MAJOR** — `MODULE_CONTRACT_VERSION` 3.2.0 → 4.0.0. Union `SubjectDataErasure` melebar
+  (konsumen yang penting adalah `switch` exhaustive, dan justru itu maksudnya: masing-masing
+  harus MEMUTUSKAN artinya, bukan jatuh ke `default`) dan `tenantColumn` berganti tipe. Tak
+  ada field `ModuleDescriptor` yang dihapus; seluruh deskriptor gelombang 1 tetap sah tanpa
+  perubahan.
+
+  Ledger `TABLES_PREDATING_THE_SUBJECT_RULE` DIPERTAHANKAN sebagai array kosong, bukan
+  dihapus: bentuk gerbangnyalah yang menegakkan jaminannya, dan menghapus ekspornya akan
+  menghilangkan tempat di mana regresi harus dituliskan.
+
+### Minor Changes
+
+- d7beac7: feat(admin): layar Business scope — dan izin checker yang selama ini dideklarasikan tanpa pernah dibaca (#545)
+
+  Sembilan izin punya endpoint dan tidak punya halaman. Ledger menamai celahnya dengan
+  tepat: "penugasan plus alur maker/checker untuk pengecualian **tanpa inbox bagi
+  checker-nya**". Alur maker/checker tanpa tempat bagi checker melihat apa yang menunggu
+  bukan alur; ia dua endpoint yang kebetulan berpasangan, dan sampai hari ini siapa pun
+  yang harus menyetujui pengecualian SoD harus diberi tahu lewat jalur di luar sistem.
+
+  **INBOX-NYA DI SINI, BUKAN DI `/admin/approvals`, dan itulah keputusannya.**
+  `/admin/approvals` adalah permukaan keputusan MILIK `workflow_approval`, dan
+  pengecualian SoD sama sekali tidak berjalan di mesin itu: tabelnya sendiri, mesin
+  statusnya sendiri (`pending/approved/rejected/expired/revoked`), izinnya sendiri,
+  nama field alasannya sendiri. Merender keduanya di sana akan menaruh sumber data kedua
+  yang tak berhubungan pada halaman yang seluruh kosakatanya — task, instance, quorum,
+  delegation — tidak menggambarkan satu pun darinya, dan menggerbangi dua keluarga izin
+  yang tak berkaitan pada satu layar. Alternatif yang MEMANG membenarkan penyatuan adalah
+  mem-port pengecualian SoD ke mesin workflow: itu perubahan fondasi dengan ADR-nya
+  sendiri, dan akan membuat `identity_access` bergantung pada `workflow` — sisi yang tidak
+  dimiliki DAG modul hari ini. Sementara itu baris pending adalah baris yang layar ini
+  sudah daftarkan: inbox-nya adalah partisi dari daftar itu plus dua tombol.
+
+  **IZIN CHECKER YANG DIDEKLARASIKAN DAN TIDAK PERNAH DIBACA.**
+  `SoDRuleDescriptor.exceptionPolicy.requiresApprovalPermission` disebut kontrak modul
+  sebagai "kunci izin yang harus dipegang tenant user BERBEDA untuk menyetujui pengecualian
+  atas aturan INI". Gerbang registry menolak aturan yang tidak menyertakannya.
+  `sod-exception-service.ts` menulis dalam prosa bahwa ia "digerbangi di route".
+
+  Tidak ada kode yang membacanya. Route approve menanyakan chokepoint untuk
+  `identity_access.business_scope_exceptions.approve` yang tetap, lalu berhenti — dan satu
+  aturan yang dikirim base ini kebetulan menamai persis kunci itu, sehingga keduanya
+  berimpit dan celahnya tak terlihat. Modul pertama yang mendeklarasikan aturan yang hanya
+  boleh disetujui, katakanlah, seorang controller keuangan akan mendapati syarat itu
+  diabaikan diam-diam sementara TIGA artefak menyatakan sebaliknya. Route kini
+  menegakkannya lewat `resolveSoDApprovalAuthority` yang murni, dengan urutan yang satu-
+  satunya aman: gerbang tetap DULU (penelepon tanpa hak tidak boleh belajar aturan mana
+  yang dimiliki sebuah id), baru rule dibaca dan kunci miliknya ditanyakan bila berbeda.
+  Aturan yang tidak dikenal registry **MENOLAK** — pengecualian yang tak bisa dijelaskan
+  tak bisa direview, dan ia toh sudah inert karena evaluator mencari pengecualian lewat
+  rule key. Menolak dan mencabut tetap tersedia. Nol perubahan perilaku hari ini: satu
+  aturan yang ada menamai kunci yang sama.
+
+  **APPROVE DISEMBUNYIKAN DI DUA SUMBU, BUKAN SATU.** `approveSoDConflictException` menolak
+  saat approver adalah requester DAN saat approver adalah SUBJEK. Layar yang memeriksa satu
+  sumbu akan merender tombol Approve yang selalu menjawab 403 bagi orang yang paling
+  termotivasi menekannya.
+
+  **PICKER ATURAN DITURUNKAN dari registry hidup**, dan hanya dari aturan yang
+  `exceptionPolicy.allowed`-nya true — daftar tulis-tangan akan terlihat lengkap di base
+  dengan satu aturan lalu diam-diam melewatkan apa pun yang disumbang modul domain. Plafon
+  `maxDurationDays` per-aturan menyempitkan field tanggal saat aturan dipilih, pola yang
+  sama dengan plafon aksi tulis di `/admin/machine-credentials`.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Empat mutasi memerahkan
+  test yang tepat: mengembalikan cacat aslinya (gerbang kedua dihapus) memerahkan 3 test,
+  aturan tak dikenal yang jatuh ke `base_only` memerahkan 1, layar yang hanya memeriksa
+  sumbu requester memerahkan 1, dan rule key yang ditulis tangan di picker memerahkan 2.
+
+  `NOT_YET_SCREENED` **menyusut 47 → 38**. Aset klien 154,0 → 157,5 kB dari plafon 180 kB —
+  layar terbesar sejauh ini, dan ia muat karena #552 mendarat lebih dulu.
+
+- 79fd72f: feat(admin): layar Email suppression — alamat yang diam-diam berhenti menerima surat kini bisa dilihat (#544)
+
+  Ledger cakupan layar menamai kelompok ini sendiri sebagai salah satu dari dua yang
+  **bukan kosmetik**: sebuah alamat yang di-suppress diam-diam berhenti menerima surat,
+  **termasuk reset password**, dan tidak ada yang bisa mendaftar atau membersihkannya
+  dari sebuah halaman.
+
+  Itu mode kegagalan dukungan yang lengkap: orang tidak bisa masuk, meminta reset,
+  tidak menerima apa-apa, dan tidak seorang pun di sisi operator punya cara melihat
+  kenapa. Diagnosisnya sampai sekarang adalah query SQL yang harus diketahui
+  keberadaannya.
+
+  `alreadySuppressed` ADALAH JAWABAN, BUKAN ERROR — dan itu yang membentuk halamannya.
+  Daftar suppression hanya menyimpan alamat ter-MASK (tak pernah yang mentah) dan
+  dibatasi 100 baris, jadi "apakah alamat INI di-suppress?" tidak bisa dijawab dengan
+  membaca tabelnya. Endpoint-nya menjawab 200 ber-`alreadySuppressed` alih-alih 409,
+  sehingga satu request melayani "tambahkan" DAN "sudah ada belum". Halaman ini
+  memunculkan jawaban itu sebagai pemeriksaan yang memang ia lakukan; me-reload di
+  cabang itu akan membuang satu-satunya hal yang ditanyakan operator. Bukan
+  pengungkapan baru — itu yang selalu dibalas `POST` — tetapi membiarkannya tanpa label
+  membuat pertanyaan dukungan paling umum tampak tak terjawab.
+
+  SELECT ALASANNYA DITURUNKAN, bukan disalin. `SUPPRESSION_REASONS` kini diekspor dari
+  domain dan `KNOWN_REASONS` diturunkan darinya, sehingga hanya ada SATU tempat untuk
+  disunting. Salinan empat nilai di halaman akan tetap benar hari ini dan tertinggal
+  diam-diam pada hari nilai kelima ditambahkan — form menawarkan empat dari lima, tanpa
+  apa pun memerah.
+
+  Layar tersendiri, bukan bagian dari `/admin/email-templates`: orang yang menjangkau
+  ini sedang menjawab "kenapa surat kami tidak sampai", bukan menyunting teks — dan
+  kontrol yang tidak bisa DITEMUKAN sama saja dengan yang tidak ada.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Empat mutasi
+  memerahkan test yang tepat: cabang `alreadySuppressed` diganti reload, satu `<option>`
+  ditulis tangan alih-alih diturunkan, daftar alasan domain dikosongkan (membuktikan
+  asersi "diturunkan" tidak hampa), dan satu kunci ditinggal di ledger.
+
+  `NOT_YET_SCREENED` **menyusut 58 → 55**.
+
+- d460e37: feat(admin): layar Invitations — undangan berhenti menjadi kumpulan endpoint (#541)
+
+  Permukaannya mendarat lengkap di Gelombang 4 (ADR-0082) dan tanpa halaman. Empat
+  kuncinya duduk di `NOT_YET_SCREENED` dengan alasan yang ledger itu tulis sendiri:
+  endpoint-nya ADA dan ditegakkan, yang hilang halamannya.
+
+  MEMBUAT SATU UNDANGAN MENJALANKAN SAMPAI TIGA GERBANG, dan formnya mengatakan yang
+  mana. `invitations.create`, lalu `access_control.assign` begitu peran disebut, lalu
+  `invitations.configure` ber-scope platform untuk `skipEmailConfirmation` pada alamat
+  tanpa akun terbukti. Masing-masing otorisasi penuh dengan baris decision log sendiri.
+  Form yang menggerbangi semuanya pada `create` saja menawarkan dua kontrol yang 403
+  saat submit; yang ini menyembunyikan pemilih peran dan kotak skip-confirmation
+  kecuali kuncinya sendiri dipegang.
+
+  `delivery: "unavailable"` DITAMPILKAN, TIDAK DITELAN — dan ini temuan, bukan sekadar
+  penanganan error. Respons pembuatan menyebut apakah surelnya DIANTREKAN, dan tidak
+  ada endpoint yang mengembalikan tautan undangan. Jadi undangan yang dibuat saat
+  pengiriman email belum dikonfigurasi itu ADA, VALID, dan tidak bisa diserahkan kepada
+  siapa pun — mengirim ulang gagal dengan cara yang sama. Halaman ini melaporkannya apa
+  adanya alih-alih menampilkan sukses yang bukan sukses. Membuat tautannya bisa diambil
+  adalah keputusan tentang di mana token undangan boleh muncul, dan itu bukan keputusan
+  layar ini.
+
+  `Idempotency-Key` DIKIRIM TEPAT SEKALI. Endpoint pembuatan MEWAJIBKANNYA (400 tanpa
+  itu); `resend` justru MENOLAKNYA, dan dokumentasinya menjelaskan kenapa: memutar ulang
+  sebuah resend harus mengembalikan token yang sudah dirotasinya pergi, atau
+  mempersistenkan plaintext-nya di `awcms_idempotency_keys`. Ia dibatasi dengan cara
+  lain — UPDATE-nya membawa `resend_count < 5`, sama dengan CHECK basis datanya.
+
+  Role sistem tidak ditawarkan: `createInvitation` menolaknya, dan mengetahuinya setelah
+  menyusun seluruh undangan adalah saat terburuk untuk mengetahuinya.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Lima mutasi memerahkan
+  test yang tepat: `Idempotency-Key` ikut dikirim pada resend, `delivery: unavailable`
+  di-reload menjadi sukses palsu, gerbang kedua tidak diperiksa halaman, role sistem
+  ikut ditawarkan, dan satu kunci ditinggal di ledger.
+
+  `NOT_YET_SCREENED` **menyusut 55 → 51**.
+
+- 766bcb0: feat(admin): layar Machine credentials — mencabut token bocor berhenti menjadi panggilan API (#539)
+
+  Permukaannya ada sejak `sql/082` dan tidak pernah punya halaman. Alasan membangunnya
+  adalah kalimat yang sama yang menutup `/admin/partners`: **pencabutan adalah kontrol
+  yang dicari orang ketika sebuah token bocor, dan sampai halaman ini ada ia adalah
+  `POST` yang tidak akan diingat siapa pun di bawah tekanan.** #537 mempertajamnya
+  dengan membuka kelas yang bisa MENGUBAH data — dan sampai sekarang tidak ada tempat
+  untuk melihat kredensial mana yang bisa.
+
+  DUA IZIN, SATU FORM, DAN ITU BUKAN KOSMETIK. `machine_credentials.create` mencetak
+  kelas baca; `machine_credentials_write.create` mencetak kelas tulis. Fieldset tulis
+  hanya dirender bagi pemegang kunci kedua. Kalau halaman ini menurunkan keduanya dari
+  satu izin, pemisahan yang ADR-0092 buat justru untuk mencegah pelebaran grant akan
+  dibatalkan lagi — kali ini di UI, di mana tak ada gerbang yang melihatnya.
+
+  CHECKBOX AKSI TULISNYA DITURUNKAN dari `MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS`,
+  bukan ditulis tangan. Sepasang checkbox `create`/`update` yang ditulis tangan akan
+  tetap benar hari ini dan diam-diam tertinggal pada hari sebuah ADR melebarkan plafon
+  itu — form yang tertinggal dari konstanta, tanpa apa pun memerah.
+
+  TOKENNYA TAMPIL SEKALI, dan halaman ini karena itu **tidak reload** sesudah
+  menerbitkan — respons penerbitan adalah satu-satunya tempat plaintext-nya ada, dan
+  reload mencetak kredensial yang tak bisa dipakai siapa pun lalu harus dicabut. Sama
+  persis bentuk `/admin/partners` untuk kode akses.
+
+  CIDR HANYA DIKIRIM BERSAMA KELAS TULIS. API menolak `allowedIpCidrs` pada kredensial
+  baca karena gerbangnya tak pernah mengkonsultasinya di sana; halaman yang selalu
+  mengirim field itu akan mengubah penolakan jujur tersebut menjadi 422 pada setiap
+  penerbitan baca. Plafon kadaluwarsa ikut menyempit ke 30 hari begitu satu aksi tulis
+  dicentang — ditegakkan server, ditampilkan di sini supaya batasnya terlihat saat
+  memilih, bukan sesudah form terisi.
+
+  DAFTAR IZINNYA ADALAH SELURUH KATALOG, dan halamannya mengatakan artinya.
+  `allowedPermissionKeys` MENYEMPITKAN: himpunan efektifnya adalah irisan dengan yang
+  dipegang akun layanan, jadi menyebut kunci yang tak dipegang akun tidak memberi
+  apa-apa. Menampilkan hanya kunci milik akun butuh endpoint per-akun yang tidak ada;
+  menyiratkan bahwa daftar itu sebuah pemberian jauh lebih buruk.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Lima mutasi memerahkan
+  test yang tepat: penerbitan me-reload (token hilang), fieldset tulis digerbangi izin
+  baca, checkbox ditulis tangan alih-alih diturunkan, CIDR selalu dikirim, dan satu
+  kunci ditinggal di ledger padahal layarnya ada. Dua asersi sumber sengaja dibuat
+  tahan-whitespace — asersi yang terikat indentasi memerah pada kode yang benar begitu
+  formatter memindahkan satu baris, kegagalan yang `/admin/partners` sudah catat sekali.
+
+  `NOT_YET_SCREENED` **menyusut 62 → 58**, dan itulah gunanya angka itu.
+
+- 81c714d: feat(admin): editor settings modul — dan tautan yang selama ini menuju 404 (#546)
+
+  Tiga dokumen menyatakan panel settings generik `/admin/modules/{key}` sudah ada. Ia
+  tidak pernah ada: `/admin/modules` hanya mendaftar modul dan menyalakan/mematikannya,
+  tidak ada rute `[moduleKey]` sama sekali, dan `/admin/blog-settings` me-render
+  **tautan hidup** langsung ke 404. Salah satu dokumen memakai klaim itu untuk
+  membenarkan tidak membangun editor — begitulah pernyataan palsu tentang sebuah
+  kontrol menjadi alasan untuk tidak memilikinya.
+
+  MEMBANGUN YANG DIKLAIM DOKUMEN ADALAH KOREKSINYA. Menghapus kalimatnya akan
+  meninggalkan gap-nya dan kehilangan catatannya; membangun halamannya membuat ketiga
+  kalimat itu benar sekaligus. `/admin/modules` kini menautkan setiap barisnya ke sana —
+  digerbangi izin `settings` sendiri, bukan izin toggle, karena mematikan modul dan
+  menulis ulang konfigurasinya adalah dua otoritas berbeda.
+
+  INI KOTAK PATCH, BUKAN EDITOR DOKUMEN, dan itu bukan penyederhanaan. `updateModuleSettings`
+  menggabungkan secara dangkal — `{ ...before, ...patch }` — dan kontraknya tidak punya
+  konvensi penghapusan sama sekali: tak ada `null`-berarti-hapus, tak ada mode replace.
+  Textarea yang menyajikan override sebagai dokumen akan membiarkan operator menghapus
+  satu kunci, submit, lalu melihatnya kembali. Halaman ini meminta kunci yang mau
+  DISETEL dan menyatakan terus terang bahwa meninggalkan kunci tidak menghapusnya.
+  Memberi API jalur penghapusan adalah keputusan tersendiri tentang apa arti `null`, dan
+  bukan sesuatu yang boleh dikarang sebuah layar.
+
+  TIGA BLOK JSON, karena nilai efektif adalah HASIL HITUNG. Default datang dari
+  deskriptor modul (kode, bukan basis data), override adalah baris tenant, dan
+  `effective` adalah gabungan dangkal yang benar-benar dibaca sistem. Menampilkan
+  override saja menyembunyikan nilai yang berlaku; menampilkan `effective` saja
+  menyembunyikan paruh mana yang bisa diubah operator.
+
+  Kedua penolakan rahasia dimunculkan terpisah: kunci ber-nama rahasia DAN nilai
+  ber-bentuk kredensial di bawah nama polos adalah dua pemeriksaan berbeda di
+  validator, dan yang kedua satu-satunya yang menangkap token yang ditempel ke field
+  bernama `publicLabel`.
+
+  SATU GERBANG DIPERLUAS, dan itu bukan pelonggaran. `admin-navigation-registry`
+  menuntut setiap halaman admin punya entri sidebar, yang meng-encode "terjangkau"
+  sebagai "terjangkau dari sidebar" — proxy yang benar untuk setiap halaman statis dan
+  sekadar salah untuk rute ber-PARAMETER: sidebar tidak bisa memuat `[moduleKey]`.
+  Gerbang itu belum pernah bertemu bentuk ini. Propertinya dipertahankan dan proxy-nya
+  diganti: halaman dinamis wajib punya halaman INDUK (tempat orang menjangkaunya) dan
+  DILARANG punya entri sidebar. Dua mutasi membuktikannya menggigit — menghapus
+  `/admin/modules` membuat editornya yatim, dan memberi halaman dinamis entri sidebar
+  memerahkannya.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Lima mutasi memerahkan
+  test yang tepat: link digerbangi izin toggle, form mengirim `PUT`, peringatan
+  "tidak menghapus" dihapus, satu dari dua penolakan rahasia tak ditangani, dan satu
+  kunci ditinggal di ledger.
+
+  `NOT_YET_SCREENED` **menyusut 49 → 47**.
+
+- 6d39c33: feat(admin): layar Partner access — pencabutan berhenti menjadi panggilan API
+
+  `/admin/partners`, menutup tiga entri terakhir `partner_access` di
+  `NOT_YET_SCREENED`. Alasannya bukan kelengkapan: **pencabutan adalah kontrol
+  yang dicari pelanggan ketika ada yang salah**, dan sampai halaman ini ada ia
+  adalah `DELETE` ke API — yang bekerja, dan yang tidak akan diingat siapa pun di
+  bawah tekanan.
+
+  Empat aksi, tiga permission, dan pemasangannya sengaja: menyewa dan memutus
+  sama-sama `configure`; menyetujui dan mencabut sama-sama `assign`. Memisahkan
+  salah satunya menghasilkan kombinasi yang tidak boleh ada — seseorang yang bisa
+  memasukkan partner dan tidak bisa mengeluarkannya.
+
+  TIDAK ADA PARTNER PICKER, DAN HALAMANNYA MENGATAKAN KENAPA. Sebuah `<select>`
+  berisi partner akan menjadi direktori kemitraan lintas-tenant yang ADR-0089
+  tolak sebagai tabel, dibangun ulang di UI. Pelanggan mengetikkan tenant id yang
+  partnernya berikan di luar jalur — dan halaman menjelaskan itu alih-alih
+  meninggalkan kolom UUID tanpa keterangan.
+
+  KODE AKSES DITAMPILKAN SEKALI DAN HALAMANNYA TIDAK RELOAD. Ini satu-satunya
+  layar admin yang membaca body respons alih-alih memuat ulang, karena respons
+  persetujuan adalah satu-satunya tempat kode itu terbaca. Reload sesudah
+  menyetujui berarti kredensial hilang dan grant yang harus dicabut lalu
+  disetujui ulang. `sendJsonForData` ditambahkan untuk itu, dengan setengah
+  error-nya tetap sempit: gagal berarti `data: null` dan `errorCode` yang sama,
+  sehingga panggilan yang gagal tetap tidak bisa membocorkan apa pun.
+
+  Role sistem disaring dari picker karena penebusan menolaknya
+  (`materializeMembership`). Menawarkan `owner` akan gagal di ujung jauh
+  penyerahan kode di luar jalur — momen terburuk untuk mengetahuinya.
+
+  Test kontrak halamannya menemukan satu jebakan saat ditulis: asersi
+  `not.toContain('action: "revoke"')` atas seluruh berkas GAGAL pada kode yang
+  benar, karena rutenya juga menulis baris audit ber-`action: "revoke"`. **Action
+  audit dan action guard adalah dua hal berbeda di repo ini** — permukaan restore
+  office membuat pembedaan yang sama — dan test yang mencampurnya memerah pada
+  kode yang benar, yang lebih buruk daripada tidak menguji. Asersinya kini membaca
+  konstanta guard saja.
+
+  `NOT_YET_SCREENED` menyusut dari 62 ke 59, dan itulah gunanya ia satu arah.
+
+- ad14e60: feat(admin): layar Partner registry — PLATFORM, dan sengaja bukan di /admin/partners (#540)
+
+  Registri mendapat penulis di #538 dan tidak punya halaman. Ini halamannya, dan hal
+  terpenting tentangnya adalah di mana ia TIDAK berada.
+
+  `/admin/partners` adalah pandangan PELANGGAN atas siapa yang menjangkau tenant-nya
+  sendiri. Menaruh registri di sana menaruh daftar setiap kemitraan platform di depan
+  setiap pelanggan — direktori lintas-tenant yang ADR-0089 tolak sebagai tabel,
+  dibangun ulang sebagai layar. Test kontraknya menegakkan pemisahan itu dari KEDUA
+  arah: halaman pelanggan tidak boleh menyebut `partner_registry`, dan halaman registri
+  tidak boleh menyebut `partner_access`.
+
+  DUA MEKANISME MENJAGANYA TETAP PLATFORM-ONLY, dan keduanya menanggung beban. FORCE
+  RLS menaruh setiap baris di tenant platform, jadi sesi pelanggan mana pun tak bisa
+  membacanya bahkan sambil memegang grant. Chokepoint menolak izin ber-scope platform
+  kecuali tenant yang bertindak MEMANG tenant platform. Tak satu pun cadangan bagi yang
+  lain, dan link nav-nya digerbangi izin platform itu sendiri dengan alasan yang
+  `/admin/tenants` catat: tidak ada paruh screen ini yang bisa dibaca tenant biasa, jadi
+  link ber-gerbang kunci pelanggan hanya akan menaruh entri sidebar yang selalu 403.
+
+  TIDAK ADA PICKER TENANT, dan halamannya mengatakan kenapa: daftar tenant yang bisa
+  dipilih adalah direktori yang desain ini menolak menyerahkannya. `/admin/tenants` ada
+  untuk operator platform yang perlu mencarinya — dan itulah batas izin yang seharusnya
+  memutuskan, bukan sebuah `<select>`.
+
+  TIDAK ADA DELETE, dan itu keputusan. Barisnya target FK dari keterlibatan dan dari
+  grant terdelegasi yang `sql/120` sengaja buat hidup lebih lama darinya. `status` juga
+  tidak pernah dikirim form ini: ia dipatok `sql/116` sampai ada yang MEMBACA suspensi
+  (#543).
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Lima mutasi memerahkan
+  test yang tepat: registri diselipkan ke layar pelanggan, izinnya dijadikan
+  tenant-scoped, link nav digerbangi kunci pelanggan, form ikut mengirim `status`, dan
+  satu kunci ditinggal di ledger.
+
+  `NOT_YET_SCREENED` **menyusut 51 → 49**.
+
+- e355991: feat(auth): akses terdelegasi mencetak tenant user SUNGGUHAN (ADR-0090, #423)
+
+  Gelombang 8 PR 8.2, `sql/117`. Grant yang ditebus **tidak menghasilkan aktor
+  jenis baru**. Ia menghasilkan baris `awcms_tenant_users` biasa di tenant target,
+  terikat role yang DIPILIH PELANGGAN, dengan tanggal mati.
+
+  ITULAH SELURUH IDENYA: RLS, decision log, audit, SoD, dan business-scope facts
+  bekerja TANPA SATU PUN PERUBAHAN, karena aktornya memang benar-benar tenant user
+  di sana. Alternatifnya — "aktor partner" yang bukan tenant user — menuntut setiap
+  pembaca otorisasi di repo ini belajar bentuk kedua, dan yang lupa belajar akan
+  gagal TERBUKA. Yang menyeberangi batas antar-organisasi hanyalah kode penebusan
+  berumur pendek (`awcmsd_…`, hash `dg-sha256:`), preseden ADR-0050: bukan
+  kredensial hidup, bukan pembacaan lintas-tenant.
+
+  RENCANA MEMINTA ROLE `support` YANG DITANAM PLATFORM, DAN ITU DITOLAK. Role di
+  repo ini adalah baris PER-TENANT dan satu-satunya yang ditanam adalah `owner`,
+  jadi menanam `support` menuntut seed migration PLUS backfill — seed hanya
+  menjangkau tenant yang dibuat sesudahnya, dan tenant lama akan diam-diam 403.
+  Tetapi keberatan sebenarnya bukan mekanis: ia membuat PLATFORM MEMUTUSKAN APA
+  YANG BOLEH DISENTUH PARTNER DI DALAM TENANT ORANG LAIN, membatalkan ADR-0089
+  dari sisi lain. Pelanggan memilih role yang sudah ada; `materializeMembership`
+  menolak role `is_system`, jadi `owner` bukan pilihan.
+
+  SATU HAL YANG PILIHAN ROLE TIDAK BISA BATASI: otoritas access-control. Aktor
+  terdelegasi yang boleh memberi role menciptakan kuasa yang HIDUP MELEWATI
+  GRANTNYA SENDIRI — cabut grantnya, matikan tenant usernya, dan baris yang ia
+  berikan kepada orang lain tetap ada. Pencabutan berhenti menjadi pencabutan, dan
+  tidak ada gerbang yang akan menyebutkannya karena setiap langkahnya sah.
+  Chokepoint menolak deny-only di atas `fetchGrantedPermissionKeys`: di modul
+  `identity_access`, aktor terdelegasi hanya MEMBACA. Satu kalimat, bukan daftar
+  aksi — daftar aksi menua diam-diam setiap kali modul itu menumbuhkan aktivitas
+  baru, dan yang menua adalah lubang.
+
+  `principal_kind` HIDUP DI `awcms_tenant_users`, BUKAN DI SESI. Ada DUA jalur ke
+  chokepoint — lewat sesi dan lewat tenant user langsung — dan menyandarkan
+  gerbangnya pada `awcms_sessions.origin_auth` akan membuat jalur kedua TIDAK
+  TERGERBANGI, kelas "penulis pindah, pembacanya tidak" yang menghasilkan
+  ADR-0079. Kolomnya ada di baris yang KEDUA resolver sudah SELECT, jadi gerbangnya
+  gratis dan tidak bisa dilewati; ia write-once, jadi tidak ada kewajiban penulis
+  kedua yang bisa hanyut.
+
+  Kode penebusan bergabung dengan token seleksi ADR-0088 sebagai bearer kedua yang
+  gerbang TOLAK di pernyataan pertama, karena seseorang akan menempelkannya ke
+  header `Authorization` dan "hash itu toh tidak cocok dengan baris sesi mana pun"
+  adalah kebetulan penyimpanan, bukan kontrol. Prefiksnya juga masuk
+  `RESERVED_TOKEN_PREFIXES`.
+
+  Pencabutan dan kedaluwarsa menonaktifkan keanggotaan DAN mencabut sesinya di
+  transaksi yang sama. `setTenantUserStatus` sengaja tidak dipakai: aturan "admin
+  sistem terakhir" dan "tidak boleh menonaktifkan diri sendiri" di sana adalah
+  kontrol untuk ANGGOTA, dan sebuah keanggotaan terdelegasi tidak boleh bisa
+  memblokir pencabutannya sendiri. Sesi `delegated` tidak boleh berpindah tenant —
+  grant untuk tenant C yang bisa dibawa ke tenant D bukan grant, ia pintu masuk —
+  dan aturan non-switchable berhenti dieja inline menjadi
+  `NON_SWITCHABLE_ORIGIN_AUTH`.
+
+  Penebusan memakai `materializeMembership` (ADR-0082) alih-alih menjadi penulis
+  keanggotaan KELIMA, yang juga memberinya penolakan role sistem secara gratis.
+  `attachIdentityToPrincipal` ditambahkan bersamanya: alamat manusia dibaca dari
+  baris principal GLOBAL, tidak pernah diturunkan dari string yang dipasok tenant
+  target — kalau tidak, tenant bisa memilih principal SIAPA yang keanggotaannya
+  menempel.
+
+  TTL dibatasi 30 hari di aplikasi dan 31 di basis data. Selisih satu hari
+  disengaja: `created_at` DEFAULT `now()` adalah instant MULAI TRANSAKSI sementara
+  `expires_at` dihitung jam aplikasi yang selalu belakangan, jadi CHECK "tepat 30
+  hari" akan menolak baris yang benar-benar normal. Karena TTL-nya terbatas,
+  deskriptor retensi 365 hari aman memakai `executionMode: 'generic'` — tidak ada
+  grant hidup yang cukup tua untuk dijangkau sapuan berbasis umur. Ini
+  satu-satunya deskriptor di modul ini yang bisa mengatakan itu.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. 117 migrasi di-apply dari nol pada Postgres 16
+  nyata; 13 asersi membuktikan setiap constraint MENOLAK (TTL, pasangan
+  penebusan, kemitraan yang tak ada, role tenant lain, kode kembar, aktor tanpa
+  waktu, nilai `principal_kind` ketiga) dan RLS-nya mengisolasi. Empat mutasi
+  memerahkan test yang tepat: memindahkan gerbang ke bawah `fetchGrantedPermissionKeys`,
+  menghapus `tu.principal_kind` dari satu resolver, menghapus `delegated` dari
+  daftar non-switchable, dan mencabut penolakan namespace kode di gerbang.
+
+  Mendarat INERT — belum ada rute yang memanggilnya. Permukaannya PR 8.4, dan PR
+  itu tidak akan juga menambahkan model datanya.
+
+- 68c9c50: feat(auth): penghitung lockout menjadi GLOBAL — menutup #430 (ADR-0086, #423)
+
+  Gelombang 7 PR 7.2. Penghitung pindah dari `awcms_identities` (UNIQUE per
+  `(tenant_id, login_identifier)`) ke `awcms_principals`, yang punya tepat satu
+  baris per manusia dan tak punya kolom tenant untuk dirotasi.
+
+  Merotasi `x-awcms-tenant-id` kini memilih identitas berbeda tetapi principal yang
+  SAMA. Properti yang menutup temuan itu: baris yang di-increment wajib dipilih
+  oleh sesuatu yang tidak bisa divariasikan penyerang.
+
+  LIMA jalur pemulihan ikut pindah di PR yang sama — login sukses, reset password,
+  ganti password, SSO callback, dan verifikasi enrolment MFA. Dua terakhir
+  ditemukan dengan grep: keduanya hanya membersihkan salinan tenant-scoped,
+  sehingga orang yang terkunci akan masuk lewat IdP dengan sukses dan TETAP
+  TERKUNCI di jalur password. Lockout global dengan reset per-tenant bukan setengah
+  perbaikan melainkan lebih buruk dari yang digantikannya.
+
+  Backfill mengambil `MAX()`: mengambil `0` akan melepaskan setiap lockout yang
+  sedang berlaku pada saat deploy.
+
+- 26e3a86: feat(auth): kredensial mesin boleh MENULIS, dan plafonnya tetap di kode (ADR-0092, #423)
+
+  Gelombang 8 PR 8.5, `sql/121` — **PR terakhir program #423**.
+
+  ADR-0049 mengirim kredensial mesin yang hanya bisa membaca, ditahan satu
+  kalimat: `MACHINE_CREDENTIAL_ALLOWED_ACTIONS` memuat tepat satu nilai. PR ini
+  membuka kelas kedua dan menjaga kalimat itu tetap yang memutuskan.
+
+  AKSI EFEKTIFNYA ADALAH `MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS` ∩
+  `allowed_write_actions`, DAN URUTAN ITU BUKAN GAYA PENULISAN. Kalau daftar
+  aksinya menjadi kolom MURNI, satu restore backup, satu INSERT tangan, atau satu
+  jalur provisioning yang kehilangan `WHERE` bisa mencetak kredensial tulis
+  se-katalog — dengan SETIAP GERBANG DI REPO INI HIJAU, karena tidak satu pun
+  gerbang membaca isi baris. Plafonnya karena itu tinggal di tempat yang hanya
+  berubah lewat commit yang di-review; kolomnya daftar penyempit, bukan sumber
+  kebenaran.
+
+  ISINYA `create` DAN `update`, DAN SIFATNYA DIHITUNG BUKAN DINYATAKAN:
+  `WRITE_ALLOWED ∩ HIGH_RISK_ACTIONS = ∅` diuji dari KONSTANTA HIDUP. Daftar
+  literal "yang high-risk" akan menyimpang pada hari seseorang menambah aksi
+  high-risk baru, dan menyimpang DIAM-DIAM. Menurunkannya tidak bisa. Menambah
+  anggota ke plafon adalah ADR, dengan alasan yang sama ADR-0049 nyatakan untuk
+  himpunan baca: setiap penambahan adalah kelas baru hal yang bisa dilakukan token
+  curian, dan ia tak terlihat di diff endpoint yang tiba-tiba menerimanya.
+
+  KETIADAAN IP ADALAH DENY, DAN ITU BAGIAN YANG PALING MUDAH DILUPAKAN. Kredensial
+  tulis wajib terikat CIDR (CHECK basis data), dan gerbangnya menolak ketika
+  `clientIp` tidak tersedia. Tanpa itu, setiap rute yang belum meneruskan alamat
+  pemanggil DIAM-DIAM MEMATIKAN KONDISINYA — kontrol yang terbaca sebagai
+  ditegakkan dan sebenarnya tidak, kelas yang sudah dua kali muncul di gelombang
+  ini. Gagal tertutup membuat rute seperti itu menjawab 403, yang adalah laporan
+  bug alih-alih pelanggaran. `defineTenantRoute` mengisinya di KEDUA jalurnya,
+  termasuk SSE — tempat ia diresolusi sekali saat stream dibuka, karena satu
+  koneksi panjang punya satu peer dan menurunkannya ulang tiap tick hanya
+  mengundang keduanya berbeda pendapat.
+
+  Parser CIDR-nya ditulis tanpa dependensi (IPv4 + IPv6, termasuk bentuk
+  terkompresi) dan MENYEMPIT SAAT RAGU: CIDR yang tidak bisa di-parse tidak cocok
+  dengan apa pun alih-alih cocok dengan segalanya, dan arah itu diuji.
+
+  30 HARI, BUKAN 365. Kredensial baca boleh hidup setahun; kredensial tulis bisa
+  mengubah data, dan waktu sampai seseorang menyadari ia bocor diukur dalam
+  minggu. CHECK basis datanya 31 hari karena `created_at` DEFAULT `now()` adalah
+  instant MULAI TRANSAKSI — jebakan yang sama yang `sql/117` dokumentasikan.
+
+  DUA SENTINEL, DAN YANG LAMA VERBATIM. `machine_credential_readonly` ada di
+  sejarah decision log dan di ADR-0049; mendaur ulangnya untuk penolakan tulis
+  akan menulis ulang masa lalu bagi setiap konsumen log. Kelas tulis mendapat
+  `machine_credential_write_forbidden`.
+
+  Setiap kredensial yang ada TETAP BACA-SAJA: kedua kolom kosong, dan cabang
+  pertama setiap CHECK benar untuk baris kosong — tidak ada backfill, tidak ada
+  validasi yang bisa gagal saat migrasi.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. 121 migrasi dari nol pada Postgres 16 nyata; 7
+  asersi membuktikan setiap CHECK MENOLAK, termasuk promosi kredensial baca lama
+  menjadi tulis tanpa CIDR. Tiga mutasi memerahkan test yang tepat: memasukkan
+  aksi high-risk ke plafon, menghapus penolakan `clientIp` yang absen, dan membuat
+  parser CIDR melebar saat ragu.
+
+  Tidak ada permukaan penerbitan untuk kelas tulis di PR ini — kolomnya ada,
+  gerbangnya menegakkannya, dan yang bisa menuliskannya belum ada.
+
+- d1a7be7: feat(auth): kredensial mesin kelas-tulis bisa DITERBITKAN — dan izinnya sendiri (ADR-0092, #423)
+
+  `sql/121` membuka kelas tulis di skema dan di chokepoint, lalu sengaja berhenti:
+  kolomnya ada, gerbangnya menegakkannya, dan tidak ada rute yang bisa menerbitkan
+  satu pun. Ini menutup celah itu — tercatat sebagai sisa #423 nomor 1 di
+  `docs/PROJECT_STATE.md` §4.
+
+  IZINNYA BARU, DAN ITU SELURUH KEPUTUSANNYA. Bentuk yang jelas adalah menerima
+  `allowedWriteActions` pada `machine_credentials.create` yang sudah ada. Bentuk itu
+  salah, dan salahnya hanya terlihat kalau ditanyakan dari sisi grant: setiap peran
+  yang hari ini memegang `create` akan MENDAPAT hak mencetak kredensial yang mengubah
+  data pada hari rilis — pelebaran tanpa satu grant pun disunting, tanpa satu baris pun
+  di diff untuk di-review, dan tanpa apa pun di jejak audit yang menandainya. Program
+  #423 dibangun di atas aturan sebaliknya. Jadi kelas tulis mendapat aktivitas ketiga,
+  `machine_credentials_write.create` (`sql/122`), dan default-deny menahan sisanya:
+  sampai seseorang memberikannya dengan sengaja, rute itu menjawab 403 untuk setiap
+  permintaan tulis dan berperilaku persis seperti sebelum `sql/121`.
+
+  `revoke` TIDAK ikut dipecah, dan itu keputusan: saat insiden, siapa pun yang bisa
+  membunuh kredensial bocor harus bisa membunuh SETIAP kelasnya. Izin cabut yang
+  berhenti di kelas baca adalah alat penahanan yang gagal justru pada kredensial yang
+  paling perlu ditahan.
+
+  CIDR PADA KREDENSIAL BACA DITOLAK, dan arah ini tidak dijaga apa pun selain validator
+  ini. `isMachineCredentialWriteRefused` menjawab "tidak ditolak" untuk `read` SEBELUM
+  ia menyentuh daftar CIDR — jadi menyimpan jaringan pada kredensial baca menggambarkan
+  ikatan yang tidak pernah dikonsultasi. Basis data mengizinkannya, gerbang runtime
+  tidak peduli, dan operator akan mengira ia mengikatnya. Ditolak, bukan dibuang
+  diam-diam: membuangnya meninggalkan keyakinan yang sama.
+
+  CIDR YANG TIDAK BISA DI-PARSE DITOLAK DI PENERBITAN, meski penegakan sudah aman
+  terhadapnya. Keduanya sengaja menjawab pertanyaan berbeda: saat request, entri tak
+  terbaca MENYEMPIT ke nol; saat penerbitan, penyempitan diam itu justru cacatnya —
+  `10.0.0.0/33` menghasilkan kredensial yang terbaca terikat dan tidak pernah bisa
+  lolos. `10.0.0.0/` ikut ditolak karena `Number("")` adalah 0, dan prefix nol adalah
+  seluruh internet.
+
+  SATU CACAT DITEMUKAN OLEH TEST-NYA SENDIRI. Kelas tulis awalnya diturunkan dari aksi
+  yang LOLOS parse, bukan yang DIMINTA. Akibatnya permintaan ber-`delete` dengan CIDR
+  yang benar dikembalikan sebagai read-only, lalu dimarahi soal CIDR-nya — satu
+  kesalahan, dua pesan, dan yang kedua membantah apa yang jelas-jelas diminta.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. Tiga mutasi memerahkan test yang tepat: menghapus
+  kolom dari satu dari TIGA daftar proyeksi (1 merah), menyamakan kedua cabang guard
+  menjadi `machine_credentials` (4 merah), dan menghapus penolakan CIDR-pada-kelas-baca
+  (6 merah). Kontrak konsumen ADR-0065 diregenerasi dengan sengaja — diff-nya hanya
+  prosa plus dua properti OPSIONAL, nol rename, nol penghapusan, nol field menjadi
+  wajib, sehingga build `awcms-astro` tidak bisa pecah karenanya.
+
+  `NOT_YET_SCREENED` tumbuh 59 → 60. Kredensial mesin belum punya layar sama sekali,
+  dan layar yang bisa mencetak kelas TULIS sementara kelas baca tetap panggilan API
+  adalah layar yang salah untuk dibangun lebih dulu.
+
+- 4084336: feat(auth): MFA pindah ke principal — satu manusia, satu authenticator (ADR-0087, #423)
+
+  Gelombang 7 PR 7.3, `sql/114`. Faktor MFA dan recovery code berhenti menjadi milik
+  identitas per-tenant dan menjadi milik MANUSIA: `awcms_principal_mfa_factors` dan
+  `awcms_principal_mfa_recovery_codes`, GLOBAL tanpa RLS, ber-kunci `principal_id`.
+  Enkripsi `sql/024` dipakai apa adanya — yang pindah KEPEMILIKAN, bukan kriptografi.
+  Permukaan HTTP tidak berubah satu berkas pun: seam-nya ada di `application/mfa.ts`,
+  yang tetap ber-parameter `(tenantId, identityId)` karena Anda bertindak sebagai
+  anggota sebuah tenant; hanya penyimpanannya yang global.
+
+  YANG SENGAJA TIDAK IKUT PINDAH, dan alasannya bukan kehati-hatian melainkan
+  serangan yang konkret. `awcms_mfa_challenges` tetap tenant-scoped karena challenge
+  global bisa ditukar menjadi sesi di tenant yang bukan penerbitnya — persis yang
+  PR 7.4 harus larang. `awcms_tenant_mfa_policies` tetap tenant-scoped karena policy
+  global memberi satu tenant kuasa atas postur keamanan tenant lain. Faktornya milik
+  manusia; kewajibannya milik tenant.
+
+  RENCANANYA MEMINTA BARIS AUDIT DI SETIAP TENANT TERJANGKAU, DAN PENOLAKANNYA ADALAH
+  TEMUAN PR INI. Edisi pertama ADR-0087 menyalin rencana itu dengan kalimat percaya
+  diri bahwa penulisan lintas-tenant "tidak melanggar RLS karena melewati port audit".
+  Basis data membantahnya: `awcms_identities` FORCE RLS, jadi
+  `WHERE principal_id = … AND tenant_id <> …` mengembalikan NOL BARIS SELAMANYA —
+  kode yang mengenumerasi tenant terjangkau akan hijau di 41 gerbang dan diam-diam
+  tidak pernah menemukan apa pun — dan `awcms_audit_events` menolak INSERT
+  ber-`tenant_id` lain. Satu-satunya jalan adalah `SECURITY DEFINER` lintas-tenant
+  (yang ADR-0086 sudah tolak untuk kerabat masalah ini) atau toggle `NO FORCE` saat
+  request. DAN SEANDAINYA BISA PUN IA TIDAK SEHARUSNYA: daftar tenant lain tempat
+  sebuah alamat punya identitas adalah ORACLE KEANGGOTAAN LINTAS-TENANT, diserahkan
+  kepada pemegang `mfa_admin.reset` lewat endpoint yang tugasnya memulihkan orang.
+  Penggantinya menyatakan JANGKAUAN, bukan DAFTAR: `crossTenantReach: true` pada baris
+  audit `critical` tenant yang bertindak, plus `disabled_by_tenant_id` pada baris
+  faktor yang GLOBAL — satu-satunya jejak yang bertahan di sisi manusia yang
+  kehilangan faktornya, dan satu-satunya yang bisa menjawab "kenapa MFA saya hilang".
+
+  KONSEKUENSI YANG DINYATAKAN, BUKAN DISEMBUNYIKAN: reset administratif oleh admin
+  tenant A kini mencabut authenticator yang dipakai orang itu di tenant B. Ini
+  SATU-SATUNYA tempat di repo tempat tindakan admin tenant mengubah state yang
+  disandari tenant lain, dan ia diperlakukan sebagai pengecualian yang disengaja —
+  tetap `identity_access.mfa_admin.reset` (tanpa permission baru), tetap step-up
+  segar, tetap `reason` wajib, tetap audit `critical`.
+
+  LOCKOUT PER-FAKTOR IKUT MENJADI GLOBAL, dengan ketiga tuas pemulihannya di PR yang
+  sama seperti yang ADR-0086 tuntut: recovery code, `disable` mandiri + enroll ulang,
+  dan reset administratif. Sebelumnya lockout faktor di tenant A tidak bisa dibatalkan
+  admin tenant B; sesudahnya pemulihannya justru lebih baik dari sebelumnya.
+
+  BACKFILL MEMPERTAHANKAN AUTHENTICATOR YANG BENAR-BENAR ADA DI TANGAN ORANGNYA:
+  `ORDER BY last_used_step DESC, activated_at DESC` — nomor langkah TOTP sebanding
+  lintas faktor, jadi yang tertinggi adalah aplikasi di ponsel yang orang itu masih
+  pegang. "Terbaru dibuat" akan memilih enrolment di perangkat yang sejak itu hilang.
+  Migrasi TIDAK menolak jalan pada tabrakan (berbeda dari `sql/112`): dua faktor di
+  dua tenant adalah satu orang dalam keadaan yang dibuat produk ini sendiri, dan
+  memblokir deploy untuk keadaan yang sah adalah gerbang yang salah sasaran. Yang
+  dipakai sebagai gantinya perintah baru `bun run identity:mfa-collisions:preflight`,
+  yang melaporkan setiap manusia terdampak SEBELUM jendela deploy — plus satu kelas
+  temuan yang tidak diminta rencana: faktor hidup pada identitas TANPA principal,
+  yang tidak ikut pindah sama sekali dan karena itu memblokir.
+
+  GERBANG `identity:principal-access:check` KINI MENJAGA TIGA TABEL DENGAN ALLOW-LIST
+  TERPISAH PER TABEL, bukan satu daftar gabungan — supaya `principal-mfa-store.ts`
+  tidak diberi izin membaca `password_hash` dan `principal-store.ts` tidak diberi izin
+  menyentuh faktor. Satu daftar gabungan akan menjadikan "modul identity-access"
+  sebagai batasnya, yang bukan batas sama sekali. Empat mutasi nyata memerahkannya.
+
+  Tabel `awcms_identity_mfa_*` lama dipertahankan TERISI sebagai sejarah (preseden
+  ADR-0079) dan diturunkan ke `SELECT` lewat `RETIRED_TENANT_TABLE_PRIVILEGES` —
+  penurunan hak itu yang membuat supersession-nya nyata: tabel faktor lama yang masih
+  bisa DITULIS adalah tempat kedua untuk meng-enroll, dan satu manusia dengan dua
+  faktor kedua yang hanya salah satunya diperiksa login lebih buruk dari salah satu
+  tabel saja.
+
+  `BOUNDED_BY_DESIGN` 11 → 13, dan raise-nya menjawab bar yang dipasang raise
+  sebelumnya: argumennya bukan AUTHORSHIP (entri 1–10) maupun DERIVASI (entri 11)
+  melainkan SKEMA — index unik parsial `(principal_id, factor_type) WHERE status <>
+'disabled'` membuat basis data MENOLAK baris hidup kedua untuk seorang manusia,
+  siapa pun penulisnya.
+
+  DUA SENSUS PREFLIGHT DIPERBAIKI, DAN CACATNYA HANYA TERLIHAT KARENA DIJALANKAN.
+  Keduanya mengulang tenant di dalam `withTenantOrThrow` lalu bersandar pada RLS
+  untuk memotong barisnya. Superuser dan role migrasi MELEWATI RLS sepenuhnya, dan
+  menjalankan skrip ops sebagai owner adalah setup lumrah — jadi setiap iterasi
+  membaca seluruh instalasi dan menandainya dengan tenant yang sedang giliran.
+  Sensus MFA yang baru melipatgandakan hitungannya (dua faktor di-seed dilaporkan
+  empat, dengan tenant yang salah). Yang lebih buruk sensus principal PR 7.1 yang
+  sudah mendarat: satu manusia yang sah bekerja di dua tenant dilaporkan sebagai
+  DUA tabrakan MEMBLOKIR — menyuruh operator memutuskan akun NYATA mana yang
+  duplikat, persis pada kasus yang menjadi alasan principal ada. Keduanya kini
+  ber-predikat `tenant_id` eksplisit; regresinya berbasis source karena
+  perilakunya menuntut dua tenant dan koneksi owner yang tak dimiliki suite
+  default, dan test yang skip bukan regression test.
+
+- 44f4f2e: feat(auth): partner adalah tenant biasa — jangkauan adalah DATA, bukan permission (ADR-0089, #423)
+
+  Gelombang 8 PR 8.1, `sql/116` — PR pertama gelombang terakhir.
+  `ModulePermissionScope` tetap `tenant | platform`. **Tidak ada nilai `partner`,
+  sekarang maupun nanti**, dan penolakannya kini digerbangi alih-alih sekadar
+  dicatat. Sebagai gantinya dua tabel yang mendarat INERT: `awcms_partners` dan
+  `awcms_partner_managed_tenants`.
+
+  KALIMAT YANG DIJAGA VERBATIM, KARENA ORANG BERIKUTNYA AKAN MENGUSULKANNYA LAGI:
+  `scope` mengatur siapa yang boleh MEMEGANG sebuah permission; kemitraan mengatur
+  OBJEK MANA yang disentuhnya. Menyatukan keduanya menghasilkan permission yang
+  dipegang dengan benar dan dijalankan terhadap TENANT YANG SALAH — dan tidak satu
+  pun policy RLS akan keberatan, karena aktornya memang terautentikasi secara sah
+  di suatu tempat. Itu bukan kegagalan yang berbunyi; itu kegagalan yang lolos
+  setiap gerbang. Siapa yang boleh MENJADI partner dijawab permission
+  ber-`scope: "platform"` yang sudah ada (ADR-0053); tenant mana yang DIJANGKAU
+  dijawab sebaris data di tenant target. Tidak ada aktor yang bisa melakukan
+  keduanya, dan itulah seluruh keamanan model ini.
+
+  SISI MANA YANG MEMILIKI TIAP BARIS ADALAH PERTANYAAN PERTAMA, DAN RENCANA
+  GELOMBANG INI HANYA MENJAWABNYA UNTUK TABEL GRANT. Di bawah FORCE RLS sebuah
+  baris hanya punya SATU `tenant_id` yang policy-nya kenali, jadi relasi antar-dua
+  tenant harus memilih sisi — dan memilih salah menghasilkan tabel yang hijau di
+  setiap gerbang dan tak terbaca oleh pihak yang justru harus membacanya.
+  `awcms_partner_managed_tenants` memilih tenant TARGET: pelanggan wajib bisa
+  melihat dan mencabut setiap jangkauan ke tenantnya tanpa meminta izin siapa pun.
+  Pandangan partner atas bukunya sendiri adalah kenyamanan, bukan kontrol, dan
+  dilayani fungsi `SECURITY DEFINER` sempit SAAT PR 8.4 MEMBERINYA PEMANGGIL —
+  fungsi definer tanpa pemanggil adalah permukaan serang tanpa manfaat. Bentuk
+  ketiga, satu baris di tiap sisi, ditolak: setiap pencabutan harus menemukan
+  keduanya dan kegagalannya senyap serta permanen, kelas yang sama dengan proyeksi
+  keanggotaan yang ditolak ADR-0088.
+
+  `awcms_partners` MEMILIH TENANT PLATFORM, DAN ITU DIPAKSA — BUKAN DIPILIH.
+  Bentuk yang wajar dibayangkan lebih dulu, satu baris ber-`tenant_id` tenant
+  partner itu sendiri, TIDAK BISA DITULIS SIAPA PUN: tenant platform yang
+  bertindak sebagai dirinya sendiri tidak dapat menyisipkan baris ber-`tenant_id`
+  tenant lain, dan satu-satunya sisa jalur adalah pendaftaran-mandiri kemitraan
+  komersial. Jadi barisnya milik platform dan MENYEBUT tenant lain — bentuk
+  `awcms_tenant_status_transitions` (`sql/092`) sejak ADR-0054.
+
+  FK MENEGAKKAN APA YANG `SELECT` TIDAK BOLEH MELIHAT. Pemeriksaan foreign key
+  MELEWATI RLS, jadi pelanggan dapat menamai partner yang barisnya tidak akan
+  pernah bisa ia baca: basis data menolak tenant yang bukan partner terdaftar
+  tanpa memberi siapa pun kemampuan mengenumerasi daftar partner. Bahwa FK
+  melewati RLS biasanya BAHAYA di repo ini — ia yang menuntut FK komposit pada
+  tabel office (#149) — dan perbedaannya ditulis supaya tidak "diperbaiki" oleh
+  orang yang mengenali polanya tetapi bukan alasannya.
+
+  PELANGGAN YANG MEMULAI, SELALU: tidak ada satu pun penulisan lintas-tenant di
+  model ini. Arah sebaliknya sengaja tidak dibangun, dan bila kelak dibutuhkan
+  bentuknya sudah ada di ADR-0082 — yang menyeberangi batas adalah token, bukan
+  pembacaan maupun penulisan.
+
+  `status` DIPATOK SATU NILAI oleh CHECK, preseden `awcms_invitation_policies.scope_type`
+  (`sql/106`): kolomnya ada supaya pelebaran kelak satu DROP/ADD CONSTRAINT, dan
+  CHECK-nya ada karena partner yang BISA di-suspend sebelum ada yang MEMBACA
+  suspensi adalah kontrol yang terbaca sebagai ditegakkan padahal tidak.
+
+  Keduanya inert dan harus tetap begitu sampai 8.4: `activeRoleGrants` (ADR-0079)
+  tidak membacanya dan TIDAK BOLEH diajari, keduanya bukan `GRANT_TABLES`, dan
+  pembaca PR 8.4 hanya boleh MENYEMPITKAN — pemetaan adalah prasyarat, bukan
+  pemberian, dan tidak pernah menghasilkan `allowed: true`.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `sql/116` di-apply dari nol pada Postgres 16
+  nyata dan keempat constraint-nya dibuktikan MENOLAK, bukan sekadar ada. Tiga
+  mutasi memerahkan test yang tepat: menambahkan `partner` ke union, mengganti
+  nama tipenya (membuktikan asersi source tidak hampa), dan menghapus entri
+  registry.
+
+  Satu hal yang perlu dilihat reviewer: `BOUNDED_BY_DESIGN` naik 13 → 15, dan
+  kenaikan ini TIDAK memenuhi bar yang ditulis PR 7.3 ("argumen keempat, bukan
+  tabel keempat belas yang mengulang salah satu dari tiga"). Kedua tabel mengulang
+  argumen KEPENGARANGAN, dan itu dinyatakan apa adanya. Bar itu ada untuk mencegah
+  tabel yang tumbuh mengikuti TRAFIK diparkir di sana; membacanya harfiah di sini
+  memaksa novelty palsu atau deskriptor `generic` yang akan menghapus partner
+  hidup dan memutus setiap keterlibatan pelanggan. Bar-nya diganti yang lebih
+  tajam: kenaikan berikutnya wajib membawa argumen keempat ATAU memendekkan daftar
+  di tempat lain.
+
+- 258a874: feat(auth): registri partner punya penulis — `GET`/`POST /api/v1/partners` (ADR-0089, #423)
+
+  `sql/116` mengirim `awcms_partners` tanpa penulis: satu-satunya cara membuat baris
+  partner adalah operator dengan prompt psql, dan suite E2E gelombang itu
+  menuliskannya sendiri dengan komentar "belum ada jalur request untuk ini". Ini
+  menutup sisa #423 nomor 3.
+
+  KEDUANYA BER-SCOPE PLATFORM, DAN `read` BUKAN KELALAIAN. `create` menyatakan siapa
+  yang BOLEH MENJADI partner — paruh platform dari pemisahan yang ADR-0089 jaga
+  terhadap `partner_access.configure` milik pelanggan ("partner mana yang menjangkau
+  tenant SAYA"). Tidak ada satu aktor pun yang memegang keduanya. `read` mendaftar
+  SELURUH partner, dan versi tenant-scoped-nya adalah persis direktori lintas-tenant
+  yang ADR yang sama tolak sebagai tabel — dibangun ulang sebagai permission. Dua
+  mekanisme independen menjaganya: RLS menaruh setiap baris di tenant platform, dan
+  chokepoint menolak permission ber-scope platform kecuali tenant yang bertindak
+  MEMANG tenant platform.
+
+  TIDAK ADA `DELETE`, DAN ITU KEPUTUSAN. `awcms_partners.partner_tenant_id` adalah
+  target FK dari keterlibatan DAN dari grant terdelegasi yang `sql/120` buat sengaja
+  HIDUP LEBIH LAMA dari kemitraannya. DELETE akan gagal begitu satu kemitraan pernah
+  ada, dan "memperbaikinya" dengan `ON DELETE CASCADE` memutus setiap kemitraan di
+  instalasi. Pensiun adalah perubahan `status`, dan `status` dipatok `sql/116` sampai
+  ada yang MEMBACA suspensi — jadi permukaan ini juga tidak menerima `status` sama
+  sekali. Field yang diterima API lalu ditolak basis data lebih buruk daripada tidak
+  ada field; field yang diterima dan disimpan sementara tak ada yang membacanya lebih
+  buruk lagi.
+
+  KONFLIK DISELESAIKAN TANPA MEMBACA SQLSTATE. Kedua kunci naturalnya punya index unik
+  GLOBAL, jadi pendaftaran ganda bisa kalah pada salah satu dari dua index — dan
+  membedakannya lewat error driver berarti membaca SQLSTATE dari tempat yang di repo
+  ini bukan `error.code`. `ON CONFLICT DO NOTHING` menghindari pertanyaannya dan
+  menjaga transaksi tetap bisa dipakai untuk satu pembacaan yang memberi tahu kunci
+  MANA yang terpakai. Karena itu juga tidak ber-`Idempotency-Key`: submit ganda adalah
+  409, bukan baris kedua, jadi tidak ada hasil untuk diputar ulang.
+
+  `partnerCode` divalidasi di aplikasi meski `sql/116` tidak memberinya CHECK, dan
+  alasannya index uniknya global tanpa normalisasi apa pun: `Acme-Digital` dan
+  `acme-digital` adalah dua partner bagi Postgres dan satu partner bagi manusia yang
+  membaca daftarnya.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau (41 segmen). Empat
+  mutasi memerahkan test yang tepat: INSERT ikut menulis `status`, seed grant berjalan
+  di atas `awcms_tenants` alih-alih `awcms_setup_state` (cacat asli yang ADR-0053
+  tutup), `partnerCode` menerima huruf besar, dan pendaftaran diri sendiri diloloskan.
+  Suite E2E partner kini MEMULAI seluruh alurnya dari penulis ini alih-alih dari INSERT
+  tangan — lewat `withTenantOrThrow`, karena `set_config` bersifat per-koneksi dan tiga
+  pernyataan pada pool tidak akan selamat seperti satu pernyataan selamat.
+
+  `NOT_YET_SCREENED` tumbuh 60 → 62. Layarnya BUKAN `/admin/partners`: halaman itu
+  adalah pandangan PELANGGAN atas siapa yang menjangkau tenant-nya sendiri, dan
+  menaruh registri di sana menaruh daftar setiap kemitraan platform di depan setiap
+  pelanggan.
+
+- d2c39d4: feat(auth): permukaan kemitraan — pelanggan menyewa, partner menebus, keduanya tergerbangi (#423, ADR-0089/0090/0091)
+
+  Gelombang 8 PR 8.4, `sql/119` + `sql/120`. Enam endpoint yang menghidupkan tiga
+  PR sebelumnya, plus satu koreksi terhadap PR 8.2 yang ditemukan E2E.
+
+  CAKUPANNYA LEBIH LEBAR DARI YANG RENCANA SEBUT, DAN ITU KEPUTUSAN. Rencana
+  Gelombang 8 hanya menyebut `/api/v1/partner/tenants/**`. Mengirim sisi partner
+  sendirian akan menghasilkan permukaan di atas data yang tidak ada satu pun jalur
+  request bisa membuatnya — inert karena kelalaian, bukan karena desain. Sisi
+  pelanggan (menyewa, memutus, menyetujui, mencabut) ikut mendarat.
+
+  FUNGSI SECURITY DEFINER-nya DIUKUR, BUKAN DIASUMSIKAN. `sql/048` sendiri
+  mendokumentasikan bahwa di postur repo ini definer TIDAK mem-bypass RLS, jadi
+  "fungsinya ada" tidak membuktikan apa pun. Diuji sebagai `awcms_app` terhadap
+  Postgres nyata: fungsinya mengembalikan buku partner, SELECT langsung dari kursi
+  yang sama tetap NOL baris, pemiliknya NOLOGIN NOSUPERUSER NOBYPASSRLS tanpa
+  anggota, dan EXECUTE dicabut dari PUBLIC. Parameternya diisi dari KONTEKS TENANT
+  pemanggil, tidak pernah dari input — fungsi yang menyerahkan penyaringan ke
+  TypeScript adalah direktori kemitraan lintas-tenant dengan satu `WHERE` yang bisa
+  dilupakan.
+
+  KOREKSI TERHADAP `sql/117`, DITEMUKAN E2E DAN BUKAN REVIEW. FK komposit
+  grant→kemitraan terbaca benar di setiap pembacaan, dan salah begitu urutan
+  lengkapnya dijalankan: sekali satu grant pernah dibuat, MEMUTUS KEMITRAAN GAGAL
+  SELAMANYA, karena grant yang sudah dicabut tetap mereferensi baris pemetaan dan
+  pencabutan sengaja tidak menghapusnya — ia catatan retensi 365 hari. Pelanggan
+  yang paling butuh memutus, yang partnernya pernah benar-benar masuk, adalah
+  satu-satunya yang tidak bisa. `sql/120` memindahkan FK-nya ke registri partner:
+  grant adalah SEJARAH, kemitraan adalah keadaan sekarang. Invarian "tidak ada
+  grant tanpa kemitraan hidup" tetap ditegakkan basis data SAAT PENULISAN lewat
+  `INSERT … SELECT … WHERE EXISTS` — predikat di dalam statement yang sama, bukan
+  pemeriksaan yang mendahuluinya, karena yang kedua adalah TOCTOU.
+
+  TIGA AKSI PERMISSION, BUKAN LIMA. `read`, `configure`, `assign`. Menyewa dan
+  memutus adalah dua arah dari satu authority, dan memisahkannya menjadi
+  `create`/`delete` menghasilkan kombinasi yang tidak boleh ada: seseorang yang
+  bisa memasukkan partner dan tidak bisa mengeluarkannya. Persetujuan digerbangi
+  `assign` karena yang ia kerjakan adalah MEMBERI ROLE kepada orang luar —
+  authority yang sudah punya nama (ADR-0081, diulang ADR-0082). Ketiganya `tenant`
+  scope: kemitraan adalah keputusan pelanggan tentang tenantnya sendiri, dan
+  `platform` justru akan memindahkannya ke operator.
+
+  PENEBUSAN MENGEMBALIKAN KEANGGOTAAN, BUKAN SESI. Login biasa atau
+  `POST /auth/session/switch` bekerja sesudahnya, karena sesudahnya mereka memang
+  anggota. Menerbitkan sesi di sini berarti menyalin ulang kebijakan masuk tenant
+  tujuan — auth policy, MFA policy, serviceability — dan salinan kedua adalah
+  tempat gerbang MFA diam-diam terlewat. Kode penebusan tidak mengautentikasi apa
+  pun: yang membuktikan penebusnya adalah sesi hidup di tenantnya sendiri dan
+  principal GLOBAL di baliknya.
+
+  Kode akses dikembalikan TEPAT SEKALI. `GET` daftar grant bahkan tidak
+  men-SELECT kolom hash-nya, sehingga tidak ada kesalahan serialisasi yang bisa
+  membocorkannya. `purpose` wajib dan tidak pernah di-default — "kenapa vendor ini
+  punya akses" adalah pertanyaan pertama sebuah audit, dan jawaban kosong yang
+  dipasok sistem terbaca sebagai jawaban. Setiap penolakan penebusan menjawab 404
+  yang sama: pemegang kode tidak boleh belajar apakah kodenya nyata.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. 120 migrasi dari nol pada Postgres 16 nyata; 8
+  asersi pada fungsi definer-nya; suite E2E route-level baru (18 test, terdaftar di
+  kedua workflow) menempuh seluruh busurnya — menyewa, menyetujui, menebus,
+  mencabut, memutus — dan membuktikan bahwa pencabutan benar-benar mematikan sesi
+  hidup, bahwa role sistem tidak bisa didelegasikan, dan bahwa kode yang sama tidak
+  bisa ditebus dua kali.
+
+- 96b1816: feat(auth): partner yang di-suspend BERHENTI menjangkau, dan grant-nya tetap ada (ADR-0093, #543)
+
+  `sql/116` menulis syaratnya sendiri di header berkasnya: pelebaran CHECK `status` mendarat
+  di PR yang **SAMA** dengan pembacanya, atau tidak sama sekali. Mengirim partner yang BISA
+  di-suspend sebelum ada yang MEMBACA suspensi adalah kontrol yang terbaca sebagai
+  ditegakkan padahal tidak. Jadi pertanyaannya bukan "tambah kolom" melainkan **apa arti
+  partner tersuspensi** — tiga keputusan, dan ADR-0093 menjawab ketiganya.
+
+  **(1) SUSPENSI MENGHENTIKAN JANGKAUAN YANG SEDANG BERJALAN**, bukan hanya menolak
+  keterlibatan baru. Preseden menunjuk dua arah dan perbedaannya adalah alasannya: ADR-0084
+  (entitlement MENOLAK, tak pernah mencabut) adalah gerbang KOMERSIAL, sementara ini
+  tindakan terhadap pihak yang jangkauannya ke data pelanggan justru sedang ingin
+  dihentikan — kelas ADR-0073, yang sudah mencatat kegagalannya: "pelanggan kehilangan apa
+  yang dilihat pengunjungnya dan tetap memegang apa yang bisa mengubah datanya". Karena itu
+  penegakannya di **chokepoint, bukan job**: job meninggalkan jendela, dan jendelanya persis
+  saat yang penting.
+
+  **(2) GRANT YANG HIDUP TIDAK IKUT MATI.** `sql/120` sengaja membuatnya hidup lebih lama
+  dari kemitraannya, karena "siapa yang pernah bisa melihat data kami, dan sampai kapan"
+  harus tetap terjawab SESUDAH vendornya diberhentikan. Suspensi membuat grant **tidak
+  berlaku, bukan tidak ada**: keberlakuan DIHITUNG per-request, jadi tidak ada dua tempat
+  yang bisa menyimpang, dan memulihkan partner memulihkan jangkauannya tanpa ada yang
+  menulis ulang satu baris pun. Sebuah test membuktikan hitungan grant TIDAK berubah saat
+  suspensi.
+
+  **(3) SESI TERDELEGASI YANG BERJALAN IKUT BERHENTI**, konsekuensi langsung dari (1) —
+  tidak ada yang perlu memutus sesi, setiap keputusan yang dimintanya ditolak.
+
+  **CHOKEPOINT TIDAK BISA MEMBACA REGISTRI SECARA LANGSUNG**, dan itu pertanyaan pertama
+  Definition of Ready. `awcms_partners` milik tenant PLATFORM dan ber-FORCE RLS; chokepoint
+  berjalan di tenant PELANGGAN. Rencana yang mengandaikan sebaliknya sudah salah sebelum
+  ditulis — jebakan yang memakan ADR-0087 dan ADR-0088 berturut-turut. Pembacaannya lewat
+  fungsi SECURITY DEFINER sempit `sql/124` yang mengembalikan **teks, bukan baris**, dengan
+  keempat pengaman `sql/048` dan pemilik memberless yang sama dari `sql/119`. Denormalisasi
+  ke baris pelanggan ditolak (menuntut job, membawa balik jendelanya, dan dua salinan yang
+  bisa menyimpang); mencabut FORCE RLS ditolak.
+
+  **TIGA PEMBACA, dan yang kedua serta ketiga DI DALAM STATEMENT:** chokepoint (403
+  `PARTNER_SUSPENDED`), penyewaan kemitraan, dan predikat `EXISTS` di dalam INSERT grant.
+  Di dalam statement, bukan mendahuluinya, dengan alasan yang `sql/120` sudah tulis:
+  pemeriksaan TypeScript sebelum INSERT adalah TOCTOU, dan platform bisa memenangi balapan
+  itu dengan men-suspend di antara dua statement. Predikatnya memaksa INSERT penyewaan
+  berubah dari `VALUES` menjadi `INSERT … SELECT`, karena `VALUES` tidak bisa membawa
+  predikat — dan itu justru buktinya.
+
+  **`NULL` BERARTI MENOLAK.** Tidak ada baris registri diperlakukan sama dengan tersuspensi.
+  Itu tak terjangkau hari ini — FK `sql/120` menuntut partner terdaftar selama ada grant —
+  dan justru karena tak terjangkau, fail-closed tidak bisa mematahkan apa pun yang berjalan.
+
+  **DUA PERMISSION, bukan satu:** `partner_registry.disable` dan `.restore`, keduanya
+  PLATFORM. Menghentikan partner menjangkau dan mengizinkannya kembali adalah dua otoritas,
+  dan yang satu tidak menyiratkan yang lain. Layar `/admin/partner-registry` mendapat kedua
+  tombolnya, digerbangi terpisah.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Tiga mutasi memerahkan test
+  yang tepat: `NULL` yang jatuh ke "izinkan", pemeriksaan status yang pindah ke DEPAN INSERT
+  (TOCTOU-nya), dan gerbang chokepoint yang pindah ke BAWAH pengambilan grant. Empat test
+  E2E baru berjalan terhadap Postgres nyata di CI: CHECK dibuktikan **MENOLAK** nilai
+  ketiga, pelanggan dibuktikan tidak bisa SELECT registri sementara fungsinya menjawab,
+  suspensi dibuktikan tidak menyentuh satu baris grant pun, dan penyewaan partner
+  tersuspensi dibuktikan 409.
+
+- eb9b357: feat(auth): satu manusia, satu kredensial, banyak tenant (ADR-0085, #423)
+
+  Gelombang 7 PR 7.1. `awcms_principals` — GLOBAL, tanpa RLS, satu baris per
+  manusia. `awcms_identities` mempertahankan setiap baris, setiap `id`, dan
+  kedelapan foreign key masuknya persis di tempatnya; ia hanya mendapat satu kolom
+  `principal_id` nullable. Penurunan MAKNA, bukan pemindahan data.
+
+  **Principal adalah fakta AUTENTIKASI, tidak pernah fakta OTORISASI.** Memegangnya
+  tidak memberi apa pun; setiap permission tetap di-resolve lewat
+  `awcms_tenant_users` di bawah FORCE RLS. Empat kontrol menggantikan RLS, dan
+  keempatnya ditegakkan: hak dipersempit (tidak pernah DELETE), invarian bentuk-baca
+  lewat gerbang baru `identity:principal-access:check` (rantai 40 → 41),
+  `password_hash` yang dijaga TIPE agar tak meninggalkan modul store, dan batas
+  otorisasi yang di-assert tidak bergerak.
+
+  Backfill-nya tidak memindahkan satu rahasia pun: `password_hash` dibiarkan NULL
+  dan kredensial dipromosikan saat login sukses pertama (PR 7.2). Sampai itu
+  terjadi, principal adalah cangkang kosong — sehingga backfill yang salah tidak
+  bisa mengunci siapa pun.
+
+  `sql/112` MENOLAK berjalan bila ada tabrakan identifier dalam satu tenant.
+
+  **#430 belum ditutup PR ini** — penghitung lockout masih per-`(tenant, email)`.
+
+- ad7a0dc: feat(privacy): tiap tabel menjawab pertanyaan subjek data, dan gerbangnya menolak diam (ADR-0094, #542)
+
+  `privacy-analysis.md` §4 menempatkan ekspor per-subjek dan penghapusan per-subjek di kolom
+  **celah**, bukan pengurangan cakupan. Celahnya bukan "belum ada yang menulis endpoint" —
+  melainkan bahwa **tidak ada yang tahu tabel mana** yang harus dijangkau sebuah jawaban.
+  Seorang subjek menyebar ke sembilan modul dengan pemilik tabel berbeda, dan daftar tabel
+  tulis-tangan di satu modul akan menyimpang DIAM-DIAM pada modul berikutnya yang mendarat:
+  kelas cacat yang persis melahirkan `data-lifecycle:table-coverage:check` (#437).
+
+  Jadi bentuknya sama dengan yang sudah terbukti: **tiap tabel menjawab pertanyaannya
+  sendiri, dan sebuah gerbang membuat "tidak menjawab" mustahil.**
+
+  **SUBJEKNYA TENANT USER, DIJAWAB PER TENANT** — bukan `awcms_principals` yang global. Ini
+  pertanyaan pertama Definition of Ready, dan repo sudah membayarnya **dua kali**: ADR-0087
+  dan ADR-0088 sama-sama merencanakan pembacaan lintas-tenant yang FORCE RLS larang, dan
+  keduanya baru ketahuan saat implementasi. Ekspor satu principal di seluruh tenant adalah
+  rencana yang sama untuk ketiga kalinya. Dan RLS di sini bukan hambatan yang harus
+  disiasati — ia memodelkan hal yang benar: tiap tenant adalah **pengendali data terpisah**,
+  dan satu pengendali tidak boleh menyerahkan data yang dipegang pengendali lain.
+  Konsekuensinya dinyatakan terus terang di dokumen privasi: tidak ada satu tombol
+  "lupakan saya di mana-mana", dan tidak boleh ada yang berpura-pura ada.
+
+  **PENGHAPUSAN MENGANONIMKAN SECARA DEFAULT.** Baris audit yang merujuk seorang aktor
+  adalah foreign key, dan menghapusnya menghapus bukti bahwa sesuatu pernah terjadi —
+  termasuk bukti bahwa penghapusannya sendiri terjadi. Kosakatanya dipakai ulang dari
+  `LifecycleDeletionMode`, ditambah `retain_under_obligation`: "hapus segalanya" bukan yang
+  dikatakan hukum, dan deskriptor yang berpura-pura begitu berbohong pada operator yang
+  memercayainya. Arah kesalahannya asimetris, dan defaultnya mengikuti arah itu.
+
+  **DUA IDENTIFIER, dan itu bukan detail.** Sebuah baris menjangkau orangnya lewat
+  `tenant_user_id` ATAU lewat `identity_id` — `awcms_sessions` yang kedua,
+  `awcms_audit_events` yang pertama. Perencana yang mengandaikan satu jenis akan mengikat
+  nilai yang salah ke separuh skema dan mengembalikan **nol baris, diam-diam** — kegagalan
+  terburuk yang mungkin untuk fitur ini. Deskriptor menyatakan yang mana.
+
+  **GERBANGNYA MENDARAT SEBELUM ENDPOINT-NYA, dan urutannya bukan kenyamanan.** Endpoint
+  yang mendarat lebih dulu akan mengekspor tabel yang kebetulan diingat penulisnya dan diam
+  untuk sisanya — laporan lengkap yang tidak lengkap lebih buruk daripada tidak ada
+  laporan, karena ia **ditandatangani**. `subject-data:coverage:check` menuntut tiap tabel
+  `awcms_*` menjawab lewat salah satu dari tiga: deskriptor `subjectData` milik modulnya,
+  penolakan beralasan di `NO_SUBJECT_DATA`, atau ledger hanya-menyusut untuk tabel yang
+  mendahului aturannya. Hari ini: **146 tabel — 3 berdeskriptor, 4 ditolak beralasan, 139
+  masih berutang**, dan angka terakhir itu dicetak setiap run supaya utangnya tetap
+  terlihat alih-alih menjadi latar.
+
+  Yang **TIDAK** mendarat, dan dinyatakan di ADR-nya: endpoint ekspor, endpoint
+  penghapusan, layar admin, izin + migrasi seed, dan eksekutornya.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau (43 segmen). Gerbang barunya
+  dibuktikan MEMERAH pada tiga mutasi: tabel baru yang tidak menjawab apa pun, tabel
+  berdeskriptor yang ditinggal di ledger (utang yang berbohong), dan tabel hantu di ledger.
+  Tujuh belas test menahan perencananya, termasuk yang membuktikan `awcms_principals` tidak
+  muncul di rencana mana pun.
+
+- 571b4e0: feat(privacy): hak subjek data punya PERMUKAAN — ekspor yang menyatakan cakupannya, dan penghapusan yang tak bisa disetujui pemintanya (ADR-0094, #557)
+
+  ADR-0094 mendaratkan fondasi dan gelombang 2 (#558) membawa ledger utang ke NOL.
+  Yang tersisa adalah yang issue ini namai: **permukaannya**. Empat rute, empat izin,
+  satu tabel, satu aturan SoD, satu layar.
+
+  ## Ekspor: sebuah PENGUNGKAPAN, dan laporannya menyatakan cakupannya sendiri
+
+  `POST /subject-requests/export` merakit jawaban dari registry `subjectData` —
+  bukan dari daftar tabel tulis-tangan, yang justru kelas cacat yang melahirkan
+  seluruh mekanisme ini. Ia diaudit `subject_data.disclosed` pada `critical`, bukan
+  sebagai pembacaan, karena ADR-0094 Keputusan 3 menulis alasannya: siapa pun yang
+  bisa mengekspor subjek mana pun bisa mengeksfiltrasi seluruh basis pengguna satu
+  permintaan pada satu waktu. Pembacaan yang tak meninggalkan jejak membuat kalimat
+  itu tak bisa diperiksa, jadi satu baris `awcms_subject_requests` mendarat di
+  transaksi yang sama.
+
+  **Responsnya membawa `unanswered`**: tiap tabel yang rencananya sengaja TIDAK
+  jangkau — global (ADR-0094 Keputusan 1) atau tak punya kolom yang bisa dicocokkan
+  — beserta alasan yang ditulis modul pemiliknya. Laporan subjek yang tidak lengkap
+  DAN tidak mengatakannya lebih buruk daripada tidak ada laporan, karena ia
+  ditandatangani.
+
+  ## Penghapusan: maker/checker, dan lapisan yang tidak bisa dibalap
+
+  `POST .../erase` MEREKAM dan tidak menghapus apa pun; `POST .../{id}/decide`
+  menyetujui (dan menjalankan) atau menolak. Empat lapis, dan tiap lapis menangkap
+  kegagalan yang tidak ditangkap lapis lain:
+
+  1. **Dua izin terpisah** — `subject_erasure.create` vs `.approve`. Maker dan
+     checker yang berbagi satu kunci bukan maker/checker sama sekali.
+  2. **Aturan SoD `critical`** — memegang keduanya adalah konflik. `exceptionPolicy`
+     sengaja `allowed: true` dengan 7 hari (bukan 14 seperti legal hold, dan bukan
+     `false`): aturan yang melarang pengecualian tidak punya baris tertunda untuk
+     dilihat checker, jadi satu-satunya jalan keluar saat insiden adalah perubahan
+     grant di luar sistem yang tak seorang pun review.
+  3. **CHECK constraint `decided_by <> requested_by`** — invarian per-baris yang
+     ditegakkan di JS bisa dibalap, dan repo ini sudah membayar pelajaran itu
+     (lockout login dulu read-modify-write, K percobaan paralel = 1 increment).
+  4. **Klaim bersyarat satu UPDATE** — `status = 'pending_approval'` ada di `WHERE`,
+     jadi approval kedua yang tiba bersamaan tidak cocok satu baris pun dan tidak
+     pernah sampai ke penulisan. Baca-lalu-tulis akan menjalankan penghapusan yang
+     tak bisa dibalik DUA KALI.
+
+  **Eksekutornya menulis ke ~7 tabel, bukan ~100.** `erasureTargets` menjatuhkan
+  setiap deskriptor `severed_with_subject_row` — itulah gunanya anggota union yang
+  gelombang 2 tambahkan. Eksekutor yang mengulang `plan.entries` akan menulis ulang
+  sembilan puluh kolom stempel dan menghancurkan catatan tenant tentang siapa
+  menghapus sebuah halaman, demi memutus tautan yang sudah tak teresolusi.
+
+  Kolom yang tipenya tidak bisa memuat sentinel TIDAK diam-diam dilewati: ia
+  dilaporkan di respons DAN di baris audit, karena kolom yang gagal ditulis adalah
+  justru hal yang paling ingin ditemukan reviewer kepatuhan nanti.
+
+  ## Tabel barunya menjawab pertanyaannya sendiri
+
+  `awcms_subject_requests` mendapat deskriptor `subjectData` DAN `dataLifecycle`,
+  karena kedua gerbang menuntutnya untuk tabel baru — modul ini memakan makanannya
+  sendiri. Jawaban penghapusannya `retain_under_obligation`, dan itu satu-satunya
+  yang tidak melumpuhkan diri sendiri: baris yang membuktikan sebuah penghapusan
+  terjadi harus hidup lebih lama daripada penghapusan itu. Retensinya
+  `audit_security` dengan LANTAI 730 hari, bukan `operational_queue` seperti tabel
+  lain modul ini.
+
+  ## Layar, dan tiga gerbang yang terpisah
+
+  `/admin/subject-requests`. Bacanya digerbangi `subject_request.read` yang
+  mengungkapkan NOL data subjek — supaya petugas perlindungan data bisa memantau
+  antrean tanpa memegang otoritas mengekspor atau menghapus siapa pun. Ekspor,
+  minta-hapus, dan putuskan masing-masing memeriksa kuncinya SENDIRI: menurunkan
+  ketiganya dari gerbang baca akan menawarkan operator tombol yang 403 saat submit
+  — jebakan latent-authz yang sudah tercatat dua kali di repo ini. Karena kedua
+  paruh penghapusan adalah konflik SoD, di tenant yang dikonfigurasi benar TIDAK
+  ADA yang melihat form permintaan dan tombol keputusan sekaligus; halamannya
+  dibangun untuk itu sebagai keadaan normal.
+
+  Hasil ekspor dirender ke halaman dan tidak ke mana pun lagi — tanpa unduhan,
+  tanpa berkas server. Memberinya URL akan memberinya umur di luar sesi yang
+  diizinkan dan diaudit.
+
+- 408c1f4: feat(auth): memilih tenant, dan berpindah antar tenant, tanpa pernah bisa mengotorisasi (ADR-0088, #423)
+
+  Gelombang 7 PR 7.4, `sql/115` — PR terakhir gelombang ini. Login tanpa
+  `x-awcms-tenant-id` berhenti menjadi `400 TENANT_REQUIRED` dan menjadi
+  `409 MEMBERSHIP_SELECTION_REQUIRED` ber-token seleksi (≤120 detik, sekali pakai),
+  ditukar di `POST /api/v1/auth/session/tenant` menjadi sesi pada tenant yang DISEBUT
+  PEMANGGIL. `POST /api/v1/auth/session/switch` memindahkan sesi hidup.
+
+  INVARIAN PALING BERBAHAYA DI SELURUH PROGRAM #423, DAN IA DITEGAKKAN DI PERNYATAAN
+  PERTAMA GERBANG: token seleksi tidak boleh pernah mengautentikasi
+  `authorizeInTransaction`. Jenis bearer dibawa namespace hash (`pt-sha256:`, meniru
+  ADR-0049 persis), diperiksa sebelum apa pun, 401 keras tanpa satu query pun —
+  sehingga "nol baris decision log" benar secara konstruksi, bukan secara inspeksi.
+  Ditolak DI SANA meski hash itu toh tidak akan cocok dengan baris sesi mana pun,
+  karena kecocokan itu kebetulan penyimpanan dan invarian ini tidak boleh bergantung
+  padanya. Test-nya memakai transaksi palsu yang MENGGAGALKAN test bila gerbang
+  menyentuh basis data sama sekali; memindahkan penolakan ke bawah lookup sesi
+  memerahkan empat test sekaligus.
+
+  `409` TIDAK MEMBAWA DAFTAR KEANGGOTAAN, DAN ITU KEPUTUSAN. Rencana Gelombang 7 —
+  dan komentar index PR 7.1 sendiri — mengasumsikan `awcms_identities (principal_id)`
+  bisa menjawab "setiap keanggotaan manusia ini". DIUKUR terhadap basis data nyata
+  berisi satu manusia di dua tenant: 1 baris di dalam konteks tenant, dan NOL tanpa
+  konteks. Tabelnya FORCE RLS. Ini kelas temuan yang sama dengan baris audit
+  lintas-tenant yang ditolak ADR-0087 — dua PR berturut-turut rencananya
+  mengasumsikan pembacaan yang policy-nya larang. Proyeksi keanggotaan global akan
+  membuatnya mungkin dan DITOLAK: ia harfiah direktori keanggotaan lintas-tenant yang
+  ADR-0087 tolak dalam wujud lain, ia menciptakan kewajiban penulis baru yang
+  kegagalannya senyap dan permanen, dan ia menambah tabel global keempat. Pemanggil
+  menyebut tenantnya sendiri.
+
+  TOKEN SELEKSI HIDUP SEBAGAI DUA KOLOM DI `awcms_principals`, BUKAN TABEL KELIMA.
+  Satu baris per PERCOBAAN login tanpa-tenant akan tumbuh mengikuti trafik dan
+  menuntut deskriptor retensi, job purge, hak `DELETE` worker, dan entri gerbang —
+  untuk baris berumur 120 detik. Satu token hidup per manusia; menerbitkan yang baru
+  menimpa yang lama. Penebusan adalah compare-and-swap: predikat menegaskan ulang
+  hash DAN kedaluwarsa di dalam statement yang menghapusnya, jadi dua penebusan
+  konkuren tidak bisa dua-duanya menang.
+
+  MENUKAR TOKEN ADALAH LOGIN YANG SETENGAH SELESAI, BUKAN PENYERAHAN KUNCI.
+  `evaluateTenantEntry` — dipakai bersama, bukan disalin — menerapkan ulang
+  serviceability (ADR-0073), keanggotaan, kebijakan auth tenant tujuan, dan terutama
+  kebijakan MFA tenant tujuan. Melewatkan yang terakhir membuat perpindahan tenant
+  menjadi bypass MFA ke dalam tenant yang justru mewajibkannya. Assurance tidak ikut
+  berpindah: sesi baru selalu `aal1`, kalau tidak step-up tenant A memuaskan tuntutan
+  tenant B.
+
+  ATURAN NON-SWITCHABLE MENUTUP PENGAMBILALIHAN YANG SETIAP LANGKAHNYA SAH: sesi
+  ber-`origin_auth` `sso` atau `handoff` tidak boleh berpindah. Tanpa itu,
+  administrator IdP tenant B meng-assert `alice@corp.com` — alamat yang boleh diklaim
+  IdP-nya sendiri — menerima sesi B yang sah, lalu berpindah ke tenant A tempat Alice
+  sebenarnya bekerja. Yang membuat perpindahan aman hanyalah kredensial GLOBAL, yang
+  tak satu tenant pun bisa menerbitkan. Sesi hasil perpindahan membawa nilai
+  `origin_auth` keempat `switch` — nilai yang `sql/100` cadangkan dan sengaja tidak
+  tambahkan ke CHECK sampai ada yang bisa memproduksinya.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `sql/115` di-apply dari nol pada Postgres 16
+  nyata; CHECK pemasangan kolom dan index uniknya dibuktikan MENOLAK, bukan sekadar
+  ada. Suite baru `tests/tenant-selection-e2e.test.ts` (15 test, route-level, terdaftar
+  di kedua workflow) hijau, dan tiga mutasi nyata memerahkan test yang tepat:
+  menghapus aturan non-switchable, menghapus predikat kedaluwarsa, dan memindahkan
+  penolakan gerbang ke bawah.
+
+  Satu koreksi dokumen di luar cakupan tetapi searah: `standar-performa-dan-keamanan.md`
+  mengklaim `checkSharedRateLimit` dipakai di "18 berkas rute". Hitungan nyata 26 —
+  sudah basi enam berkas SEBELUM PR ini menambah dua. Dokumen yang dipakai menjawab
+  auditor tidak boleh meremehkan kontrolnya sendiri.
+
+- d9e8a36: feat(logging): atribusi dua sisi, dan catatan kelahiran yang akhirnya bisa ditulis (ADR-0091, #423)
+
+  Gelombang 8 PR 8.3, `sql/118`.
+
+  KEPUTUSAN ADR-0090 YANG MEMBUAT SEGALANYA BEKERJA TANPA PERUBAHAN JUGA MEMBUAT
+  SATU HAL BERHENTI BEKERJA. Aktor terdelegasi adalah tenant user sungguhan —
+  itulah yang membuat RLS, SoD, dan business-scope facts tidak perlu diubah — dan
+  akibatnya `actor_tenant_user_id` pada baris audit menunjuk keanggotaan yang
+  sempurna biasa. Tidak ada apa pun padanya yang mengatakan orang di baliknya
+  bekerja untuk organisasi lain, sehingga pertanyaan "apa saja yang dilakukan
+  vendor kami di dalam sistem kami" tidak punya query: setiap barisnya tampak
+  seperti baris karyawan. Tiga kolom menutupnya —
+  `awcms_audit_events.actor_tenant_id`, `awcms_audit_events.delegated_grant_id`,
+  dan `awcms_abac_decision_logs.delegated_grant_id`.
+
+  NULL BERARTI "DARI DALAM", BUKAN "TIDAK DIKETAHUI". Menulis `actor_tenant_id`
+  pada setiap baris akan menduplikasi `tenant_id` pada 99,9% baris, dan kolom yang
+  hampir selalu sama dengan tetangganya berhenti dibaca — yang justru saat itulah
+  satu baris tempat ia berbeda lewat tanpa terlihat. Bentuknya bukan penemuan
+  baru: `awcms_tenant_status_transitions.actor_tenant_id` (`sql/092`) memakainya
+  sejak ADR-0054. TIDAK ADA BACKFILL, dan itu keputusan: baris lama ditulis
+  sebelum akses terdelegasi ada, jadi NULL pada semuanya sudah BENAR, dan
+  mengisinya dengan `tenant_id` akan mengubah setiap baris lama menjadi klaim yang
+  kebetulan benar sekaligus menghapus perbedaan yang menjadi seluruh guna kolom
+  ini.
+
+  FK GRANT-NYA KOMPOSIT, DAN ITU BUKAN GAYA. FK sederhana pada `id` saja melewati
+  RLS — seperti setiap FK — dan akan menerima id grant milik tenant lain: sebuah
+  baris audit yang menyebut grant yang tidak pernah menjangkau tenant ini.
+  Tuntutan yang sama menghasilkan FK komposit office di #149. CHECK pasangannya
+  menutup setengah-jawaban: sebuah baris tidak boleh menyebut grant tanpa menyebut
+  tenant asalnya.
+
+  DECISION LOG SENGAJA TIDAK MENDAPAT `actor_tenant_id`. Ia ditulis chokepoint
+  pada jalur panas SETIAP request atas tabel terbesar di repo ini (ADR-0072), dan
+  tenant asal dapat diturunkan dari grant lewat satu join yang hanya dijalankan
+  investigasi. Menyimpan keduanya berarti menulis dua kolom per request untuk
+  menghindari satu join yang dijalankan beberapa kali setahun. Alasan yang sama
+  membuat ketiga index-nya PARSIAL: kolomnya NULL pada hampir setiap baris.
+
+  GRANT ID DIRESOLUSI QUERY KEDUA, BUKAN JOIN. `resolveDelegatedGrantId` berhenti
+  lebih awal bila `principal_kind` bukan `delegated`; menjoinkan tabel grant ke
+  query autentikasi akan membuat setiap request BIASA membayar index probe supaya
+  request yang jarang menghemat satu round trip. Resolusinya fail-quiet, dan itu
+  aman justru karena sifat kolomnya: id grant adalah ATRIBUSI, bukan input
+  otorisasi. Tidak ada yang diizinkan atau ditolak karenanya, jadi yang hilang
+  bila ia tidak ketemu adalah satu kolom pada baris audit — tidak pernah sebuah
+  keputusan.
+
+  TINDAK LANJUT TERBUKA ADR-0054 DITUTUP: "tenant yang dibuat tidak melihat
+  catatan kelahirannya sendiri". Ia terbuka karena TAMPAK mustahil, dan tampak
+  mustahil karena alasan yang benar — `awcms_audit_events` FORCE RLS, jadi tenant
+  platform tidak bisa menyisipkan baris ber-`tenant_id` tenant lain, dinding yang
+  sama yang menjatuhkan rencana ADR-0087 dan ADR-0088. Yang membuatnya bisa adalah
+  sesuatu yang sudah ada dan tidak diperhatikan siapa pun: `createTenantWithOwner`
+  SUDAH BERDIRI di dalam konteks tenant baru — ia `SET LOCAL` di awal dan
+  memulihkannya di akhir. Barisnya ditulis dari DALAM, di jendela yang sudah ada,
+  tanpa satu pun penulisan lintas-tenant. Yang membedakan kasus ini dari tiga PR
+  sebelumnya bukan aturan baru melainkan DI MANA kodenya kebetulan berdiri, dan
+  itulah kenapa ia masuk ADR alih-alih commit diam-diam. `actor_tenant_user_id`
+  operator sengaja tidak ikut menyeberang: ia uuid buram yang pelanggan tidak bisa
+  resolusi (RLS menghalangi mereka membaca `awcms_tenant_users` platform)
+  sekaligus tetap identifier yang diserahkan ke pihak ketiga.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. 118 migrasi dari nol pada Postgres 16 nyata; 10
+  asersi, termasuk satu yang benar-benar MEM-PROVISION tenant lalu membaca log
+  tenant itu sendiri dan menemukan tepat satu baris `create` ber-`actor_tenant_id`
+  platform dan `actor_tenant_user_id` NULL. Dua mutasi memerahkan test yang tepat:
+  menghilangkan atribusi dari satu panggilan `recordDecisionLog`, dan memindahkan
+  catatan kelahiran ke SESUDAH pemulihan konteks tenant.
+
+  Inert bagi deployment yang belum memakai akses terdelegasi: NULL di mana-mana,
+  tidak ada perilaku yang berubah, dan satu baris audit baru saat provisioning.
+
+### Patch Changes
+
+- 27c0397: perf(admin): plafon aset TIDAK dinaikkan — biaya per layar yang diturunkan (#552)
+
+  Lima layar admin mendarat dalam satu hari dan `build:asset-budget:check` sampai di
+  176.670 B dari 180.000 B: sisa **3.330 B**, kira-kira dua layar lagi. Anggaran itu
+  melakukan persis tugasnya, dan perbaikan yang menggoda adalah menaikkannya.
+
+  IA TIDAK DINAIKKAN. Pengukurannya menjelaskan kenapa: potongan skrip per-halaman
+  berjumlah 98.379 B — **56% dari seluruh yang diunduh browser** — tersebar di 43
+  berkas yang hanya berbagi 1.039 B. Tiap layar menulis tangan sembilan pernyataan yang
+  sama: baca kotak pesan, jaga klik-ganda, kunci tombol, bersihkan kotak, kirim, reload
+  bila sukses, kalau tidak petakan kode error jadi kalimat lalu buka kunci. Sembilan
+  puluh dua titik reload bukan keluhan DRY — itu byte yang sama dikirim sembilan puluh
+  dua kali, dan sembilan puluh dua tempat perilaku saat gagal bisa menyimpang diam-diam.
+
+  `admin-form-client.ts` kini memiliki SIKLUS HIDUPNYA dan menyisakan bagi halaman dua
+  hal yang memang miliknya: apa yang dikirim, dan apa yang dikatakan saat gagal —
+  `messageBox`, `onSubmit`/`onSubmitAll`, `onAction`, `mutateAndReload`, plus `field`,
+  `inputValue`, `blankToNull`. Ke-36 layar dikonversi. Totalnya **176.670 → 153.970 B**;
+  sisa headroom **3.330 → 26.030 B**, dari perubahan yang tidak mengirim perilaku lebih
+  sedikit. Menaikkan plafon akan membeli headroom yang sama dengan cara menghapus
+  pertanyaannya. Presedennya ditulis di `scripts/client-asset-budget.ts`, bukan di pesan
+  commit, karena orang berikutnya yang mentok membaca berkas itu.
+
+  DUA CACAT NYATA IKUT KETEMU, dan keduanya berasal dari satu titik buta: `tsc` tidak
+  bisa mem-parse `.astro` sama sekali, dan `astro build` memakai esbuild yang membuang
+  tipe tanpa memeriksanya. Jadi seluruh perilaku klien di 40-an layar admin selama ini
+  dikirim TANPA typecheck:
+
+  - `/admin/comments` dan `/admin/blog-settings` memanggil `lockElement(button)` tanpa
+    `busyLabel` yang wajib, sehingga setiap tombol moderasi menampilkan literal
+    `"undefined"` selama requestnya berjalan — dan di `/admin/blog-settings` panggilan
+    yang sama MELEMPAR ketika tombolnya tidak ada, karena `button` bertipe `| null`.
+  - `/admin/blog-settings` merender `result.message ?? "…"`, properti yang tidak pernah
+    dikembalikan `sendJson`, sehingga fallback-nya satu-satunya pesan yang bisa muncul.
+
+  Maka gerbangnya ikut mendarat: **`check:astro-scripts:check`** mengekstrak tiap blok
+  `<script>` ke berkas `.ts` bersebelahan (direktori yang sama, supaya impor relatifnya
+  resolve persis seperti halamannya), menjalankan `tsc`, lalu menghapusnya di `finally`.
+  Berkas sisa dari run yang terputus MEMBUAT GERBANG GAGAL alih-alih ditimpa diam-diam —
+  berkas itu gitignored, jadi alternatifnya adalah berkas yang tak terlihat git dan
+  salah.
+
+  DIVERIFIKASI DENGAN MENJALANKAN. `bun run check` penuh hijau. Gerbang barunya
+  dibuktikan MEMERAH dengan mengembalikan kedua cacat aslinya, satu per satu. Enam test
+  kontrak halaman ikut diperbarui karena bentuk sumbernya berubah — propertinya
+  dipertahankan, bukan dilemahkan: hitungan `Idempotency-Key` kini menghitung titik
+  panggil helper (dan tetap menuntut kunci baru per panggilan), tiap potongan sumber
+  dapat asersi panjang supaya penanda yang berhenti cocok tidak lolos secara hampa, dan
+  dua asersi membuang komentar dulu karena bloknya MENJELASKAN dalam prosa hal yang
+  justru dilarangnya. Dua mutasi lagi membuktikan asersi "tidak boleh reload" masih
+  menggigit: undangan yang me-reload `delivery: "unavailable"`, dan penerbitan kredensial
+  yang me-reload tokennya.
+
+- 40b6663: docs: alur pengembangan punya dokumen kanonik, dan sejarah pindah keluar dari README
+
+  `docs/awcms/alur-pengembangan.md` — 18 langkah dari Master Blueprint sampai
+  post-release review, tiap langkah dipetakan ke artefak NYATA di repo ini dan
+  gerbang yang menegakkannya. Ia menggantikan `alur-pengembangan-mini-first.md`
+  (sudah dicabut ADR-0055) dan menjadi dokumen yang mengikat; `CONTRIBUTING.md`
+  dan §"Alur kerja wajib" `AGENTS.md` keduanya kini menyatakan diri sebagai
+  **langkah 10–12 saja**.
+
+  DUA HAL YANG MEMBUATNYA BUKAN SEKADAR DIAGRAM. Pertama, tabel **kelas
+  perubahan**: tidak setiap perubahan menempuh 18 langkah, dan yang menentukan
+  bukan selera — perbaikan bug tanpa perubahan kontrak menempuh 10→12, modul baru
+  dan perubahan lapisan fondasi menempuh 1→12 penuh plus ADR. Kedua, **celah
+  ditulis sebagai celah**: dokumen proses yang menyamarkan langkah yang tidak
+  punya artefak adalah dokumen yang dipercaya lebih dari yang pantas.
+
+  DUA LANGKAH SENGAJA TIDAK ADA, DAN ITU KEPUTUSAN — BUKAN CELAH. Langkah 13
+  (Deploy Staging) dan 14 (UAT internal) ditandai TIDAK BERLAKU untuk repo ini:
+  ADR-0083 tetap berlaku, template ini men-deploy ke satu environment. Dokumen
+  menyatakan apa yang menggantikan peran staging (basis data ephemeral CI, E2E
+  Playwright, `security:readiness`, preflight produksi) DAN apa yang tidak
+  tergantikan olehnya — pengujian manusia terhadap data mirip produksi, dan
+  verifikasi Cloudflare/Varnish/Traefik di luar jalur produksi. Yang kedua adalah
+  harga keputusan ini, dicatat supaya tidak hilang tanpa disadari.
+
+  Tabel ringkasannya karena itu membedakan CELAH dari KEPUTUSAN. Mencampurnya
+  adalah bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
+
+  TIGA CELAH YANG TERSISA: privacy analysis/DPIA,
+  Definition of Ready umum (yang ada hanya admission checklist untuk modul baru),
+  dan post-release review per-rilis. Langkah 9 punya bukti biayanya sendiri di
+  repo ini — dua gelombang berturut-turut menulis rencana yang mengasumsikan
+  pembacaan lintas-tenant yang FORCE RLS larang, dan keduanya baru ketahuan saat
+  implementasi.
+
+  Sejarah repo pindah dari `README.md` ke `docs/awcms/sejarah-repo.md`: README
+  seharusnya menjawab "ini apa, sekarang", dan sejarah yang menumpuk di bagian
+  depan pelan-pelan mengubur jawaban itu.
+
+  Ketiga agen di `.claude/agents/` menunjuk dokumen alur. Reviewer diminta
+  menentukan KELAS perubahan lebih dulu — menuntut ADR pada perbaikan bug
+  memboroskan waktu orang, dan melewatkannya pada perubahan fondasi meloloskan
+  keputusan yang tak pernah ditulis. Auditor diingatkan pada aturan yang berlaku
+  untuk setiap temuannya: sebuah kontrol belum terbukti sampai ia dibuktikan
+  GAGAL pada kondisi yang seharusnya.
+
+- a562072: docs: tiga celah alur ditutup — analisis privasi, Definition of Ready, review pasca-rilis
+
+  Ketiganya ditulis sebagai celah di dokumen alur satu putaran lalu. Ini yang
+  menutupnya, dan masing-masing dibentuk supaya tidak menjadi upacara.
+
+  ANALISIS PRIVASI (langkah 3) — `docs/awcms/privacy-analysis.md`. Ia menyatakan
+  data pribadi apa yang dipegang TEMPLATE ini, diturunkan dari skema nyata, dan
+  untuk setiap klaim menunjuk ke tempat yang DIGERBANGI alih-alih mengulanginya.
+  Ia sengaja TIDAK menyalin angka retensi per tabel: salinan itu basi pada hari
+  pertama seseorang mengubah deskriptornya, dan angka basi di dokumen privasi
+  lebih berbahaya daripada tidak ada angka.
+
+  Dua hal yang membuatnya jujur. Pertama, ia menyatakan apa yang HANYA BISA
+  DIJAWAB OPERATOR — dasar hukum, DPO, perjanjian pemroses, transfer
+  lintas-yurisdiksi — alih-alih berpura-pura menjawabnya; template yang
+  berpura-pura memberi operator rasa aman yang tidak dibelinya apa pun. Kedua, ia
+  mencatat celah nyata yang tersisa: **tidak ada alur ekspor atau penghapusan per
+  subjek data**. Operator yang tunduk pada rezim yang menuntutnya harus
+  membangunnya, dan mengetahuinya di awal jauh lebih murah daripada menemukannya
+  saat permintaan pertama datang.
+
+  DEFINITION OF READY (langkah 9) — `docs/awcms/templates/definition-of-ready.md`.
+  Pertanyaan PERTAMANYA adalah "apakah policy mengizinkan setiap pembacaan dan
+  penulisan yang rencana ini butuhkan", dan ia ada di urutan pertama karena repo
+  ini membayarnya dua kali: ADR-0087 dan ADR-0088 sama-sama menulis rencana yang
+  mengasumsikan pembacaan lintas-tenant yang FORCE RLS larang, dan keduanya baru
+  ketahuan saat implementasi. Cara memverifikasinya ditulis di sebelahnya:
+  jalankan query-nya sebagai `awcms_app` di konteks tenant nyata — nol baris
+  adalah jawaban, bukan kegagalan setup.
+
+  Daftar itu juga menyatakan dua hal yang BUKAN bagiannya: estimasi, dan desain
+  lengkap. Langkah 9 menanyakan apakah rencananya bisa dikerjakan, bukan menuntut
+  jawaban akhir untuk pertanyaan yang paling murah dijawab dengan menulis kode.
+
+  REVIEW PASCA-RILIS (langkah 18) — `docs/awcms/post-release-reviews.md` plus
+  templatnya, dan satu bagian baru di `release-process.md` yang menyebut kapan ia
+  ditulis. Ia register KEDUA, dan pembedaannya disengaja: PROJECT_STATE §4 terikat
+  putaran kerja dan mencatat keputusan; ini terikat rilis dan mencatat apa yang
+  terjadi ketika rilis itu bertemu produksi.
+
+  RILIS YANG MULUS TETAP MENDAPAT ENTRI. Register yang hanya memuat insiden
+  mengajarkan pembacanya bahwa rilis biasanya bermasalah, dan menghapus
+  satu-satunya garis dasar yang membuat rilis buruk terlihat buruk.
+
+  Satu baris templatnya menanggung beban khusus di repo ini: "yang pertama kali
+  terlihat di produksi dan TIDAK terlihat di CI". Di situlah harga keputusan
+  ADR-0083 — tidak ada staging — dibayar, dan mengumpulkannya rilis demi rilis
+  adalah satu-satunya cara mengetahui apakah harganya masih pantas. Registernya
+  mendarat KOSONG dan mengatakannya; mengisinya mundur dari ingatan akan menjadi
+  kebalikan dari gunanya.
+
+  Tabel status di dokumen alur kini menandai 3, 9, dan 18 sebagai ditutup, dan
+  tetap membedakan CELAH dari KEPUTUSAN (13 dan 14).
+
 ## 8.1.0
 
 ### Minor Changes

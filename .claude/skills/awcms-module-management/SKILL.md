@@ -396,7 +396,10 @@ referensi dipertahankan untuk `descriptor-sync`).
 - **Fixture test**: `tests/fixtures/example-domain-modules/` (contoh modul domain
   untuk menguji enforcement base #180 business-scope + #181 SoD + komposisi #178),
   BUKAN "derived application".
-- **`MODULE_CONTRACT_VERSION` = 2.5.0** per 2026-08-05. ADR-0034 menaikkannya ke
+- **`MODULE_CONTRACT_VERSION` = 4.0.0** per 2026-08-13 (jangan kutip angka dari
+  dokumen mana pun — sumbernya konstanta di
+  `src/modules/_shared/module-contract.ts`, yang juga memuat riwayat lengkap
+  beserta alasan tiap kenaikan). ADR-0034 menaikkannya ke
   **2.0.0** (breaking: tipe `ApplicationModuleRegistry`/`ModuleMigrationNamespace`
   dihapus). Tiga MINOR pertama sesudahnya adalah seam **descriptor-list** yang
   ditemukan agregator lewat `listModules()` — bukan capability `provides`, karena
@@ -410,6 +413,20 @@ referensi dipertahankan untuk `descriptor-sync`).
     descriptor-list, melainkan field aditif pada descriptor permission; absen
     berarti `"tenant"`. (Riwayat di `src/modules/_shared/module-contract.ts`
     melompat dari 2.3.0 ke 2.5.0 — tidak ada entri 2.4.0.)
+  - **3.0.0** (ADR-0083) — MAJOR: member `"staging"` DIHAPUS dari union
+    `ModuleDeploymentProfile`. Union terbit yang menyempit = penarikan
+    kapabilitas, bukan "sinkronisasi dokumentasi".
+  - **3.1.0** `requiresEntitlement` (ADR-0084) — aditif; absen berarti tidak
+    ada prasyarat komersial.
+  - **3.2.0** `subjectData` (ADR-0094, #542) — seam descriptor-list keempat:
+    apa yang tiap tabel simpan tentang seseorang.
+  - **4.0.0** (ADR-0094 gelombang 2, #557) — MAJOR karena dua alasan yang
+    keduanya soal MAKNA, bukan ukuran: `SubjectDataErasure` MELEBAR dengan
+    `"severed_with_subject_row"` (union yang melebar itu breaking di sini
+    justru karena konsumennya adalah `switch` ekshaustif — intinya supaya
+    mereka MEMUTUSKAN, bukan jatuh ke `default`), dan `tenantColumn` diketik
+    ulang `string | null` sehingga `null` menyatakan "global" alih-alih
+    absennya berarti dua hal sekaligus.
 
   Setiap kenaikan **wajib** ikut memperbarui pin
   `contracts.moduleDescriptorContractVersion` di `awcms-family-compatibility.yaml`

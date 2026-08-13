@@ -32,17 +32,17 @@ AWCMS **was** rebuilt on top of the [AWCMS-Mini](https://github.com/ahliweb/awcm
 
 Every version the manifest declares is checked by the gate against the real source (mismatch → CI red). "Family-owned" contracts have no standalone constant; their number is pinned to `FAMILY_OWNED_CONTRACT_VERSIONS` and given teeth by a semantic contract test.
 
-| Contract                      | Value   | Pinned to                                                               |
-| ----------------------------- | ------- | ----------------------------------------------------------------------- |
-| module descriptor contract    | `1.3.0` | `MODULE_CONTRACT_VERSION` (`module-contract.ts`)                        |
-| capability contract           | `1.0.0` | `CAPABILITY_CONTRACT_VERSIONS` (per capability key)                     |
-| REST API contract             | `0.1.0` | `info.version` of `openapi/awcms-public-api.openapi.yaml`               |
-| event API contract            | `0.1.0` | `info.version` of `asyncapi/awcms-domain-events.asyncapi.yaml`          |
-| response/error envelope       | `1.0.0` | family-owned; envelope test over `_shared/api-response.ts`              |
-| tenant-context/RLS            | `1.0.0` | family-owned; fail-closed test under `FORCE RLS`                        |
-| audit/redaction               | `1.0.0` | family-owned; redaction test over `_shared/redaction.ts`                |
-| idempotency                   | `1.0.0` | family-owned; test over `_shared/idempotency.ts`                        |
-| migration checksum (`sha256`) | `1.0.0` | family-owned; `validateAppliedChecksums` test (`scripts/db-migrate.ts`) |
+| Contract                      | Value   | Pinned to                                                                                                                                                          |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| module descriptor contract    | `4.0.0` | `MODULE_CONTRACT_VERSION` (`module-contract.ts`)                                                                                                                   |
+| capability contract           | per key | `CAPABILITY_CONTRACT_VERSIONS` (per capability key; `seo_facts` is `1.1.0`, the others `1.0.0` — read `capabilityContractVersions` in the manifest, not this cell) |
+| REST API contract             | `0.1.0` | `info.version` of `openapi/awcms-public-api.openapi.yaml`                                                                                                          |
+| event API contract            | `0.1.0` | `info.version` of `asyncapi/awcms-domain-events.asyncapi.yaml`                                                                                                     |
+| response/error envelope       | `1.0.0` | family-owned; envelope test over `_shared/api-response.ts`                                                                                                         |
+| tenant-context/RLS            | `1.0.0` | family-owned; fail-closed test under `FORCE RLS`                                                                                                                   |
+| audit/redaction               | `1.0.0` | family-owned; redaction test over `_shared/redaction.ts`                                                                                                           |
+| idempotency                   | `1.0.0` | family-owned; test over `_shared/idempotency.ts`                                                                                                                   |
+| migration checksum (`sha256`) | `1.0.0` | family-owned; `validateAppliedChecksums` test (`scripts/db-migrate.ts`)                                                                                            |
 
 ## 4. Validated stack versions + compatibility matrix
 
