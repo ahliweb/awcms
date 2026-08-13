@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **117** (`sql/001`–`117`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0090** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **118** (`sql/001`–`118`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0091** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -355,6 +355,36 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (keempat belas) — PR 8.3 MENDARAT, dan sebuah
+  "tidak bisa dilakukan" berumur dua ADR ternyata BISA.**
+
+  [ADR-0091](adr/0091-two-sided-attribution.md) (`sql/118`): tiga kolom membuat
+  tindakan orang luar bisa dibedakan dari tindakan karyawan —
+  `awcms_audit_events.actor_tenant_id`, `delegated_grant_id` pada audit, dan
+  `delegated_grant_id` pada decision log. `NULL` berarti "dari dalam", bukan
+  "tidak diketahui"; tidak ada backfill, karena baris lama memang benar NULL.
+
+  **Tindak lanjut terbuka ADR-0054 tertutup**: "tenant yang dibuat tidak melihat
+  catatan kelahirannya sendiri". Ia terbuka karena tampak mustahil dengan alasan
+  yang BENAR — `awcms_audit_events` FORCE RLS, dinding yang sama yang
+  menjatuhkan rencana ADR-0087 dan ADR-0088. Yang membuatnya bisa:
+  `createTenantWithOwner` **sudah berdiri di dalam konteks tenant baru**. Yang
+  membedakan kasus ini bukan aturan baru melainkan **di mana kodenya kebetulan
+  berdiri** — dan pelajaran itu layak dibaca siapa pun yang berikutnya
+  menyimpulkan "tidak bisa menulis lintas tenant".
+
+  Keputusan performa yang perlu dilihat: decision log **tidak** mendapat
+  `actor_tenant_id` (dua kolom per request pada tabel terbesar, demi satu join
+  yang hanya dijalankan investigasi), ketiga index-nya **parsial**, dan grant id
+  diresolusi **query kedua** yang berhenti lebih awal untuk anggota biasa —
+  bukan join ke query autentikasi yang dibayar setiap request.
+
+  Diverifikasi 10/10 di Postgres nyata, termasuk satu asersi yang benar-benar
+  mem-provision tenant lalu membaca lognya sendiri. Dua mutasi memerahkan test
+  yang tepat.
+
+  **Sisa Gelombang 8:** PR 8.4, 8.5.
 
 - **PUTARAN 13 Agustus 2026 (ketiga belas) — PR 8.2 MENDARAT: akses terdelegasi
   mencetak tenant user SUNGGUHAN, dan dua PR rencana bertemu kenyataan.**

@@ -38,6 +38,37 @@ export type ResolvedTenantPrincipal = {
  * months — so both statuses are required here. Being stricter can only deny;
  * it can never grant something the session path would refuse.
  */
+/**
+ * The live delegated-access grant behind a delegated membership — ADR-0091.
+ *
+ * A SECOND query rather than a join on the query above, and the reason is where
+ * the cost lands. The auth query runs for EVERY request; a delegated actor is a
+ * support episode. Joining the grant table there would make every ordinary
+ * request pay an index probe so that a rare one can skip a round trip.
+ *
+ * Returns `undefined` for anything that is not a live grant, which is
+ * fail-quiet by design: the id is an ATTRIBUTION, not an authorization input.
+ * Nothing is permitted or refused because of it, so a missing one costs a
+ * column in an audit row and never a decision.
+ */
+async function resolveDelegatedGrantId(
+  tx: Bun.SQL,
+  tenantId: string,
+  tenantUserId: string,
+  principalKind: PrincipalKind
+): Promise<string | undefined> {
+  if (principalKind !== "delegated") return undefined;
+
+  const rows = (await tx`
+    SELECT id FROM awcms_delegated_access_grants
+    WHERE tenant_id = ${tenantId}
+      AND granted_tenant_user_id = ${tenantUserId}
+      AND revoked_at IS NULL
+  `) as { id: string }[];
+
+  return rows[0]?.id;
+}
+
 export async function resolveTenantContextForTenantUser(
   tx: Bun.SQL,
   tenantId: string,
@@ -90,7 +121,13 @@ export async function resolveTenantPrincipalForTenantUser(
       tenantUserId: tenantUser.id,
       identityId: tenantUser.identity_id,
       roles: roleRows.map((row) => row.role_code),
-      principalKind: tenantUser.principal_kind
+      principalKind: tenantUser.principal_kind,
+      delegatedGrantId: await resolveDelegatedGrantId(
+        tx,
+        tenantId,
+        tenantUser.id,
+        tenantUser.principal_kind
+      )
     },
     tenantStatus: tenantUser.tenant_status
   };
@@ -152,7 +189,13 @@ export async function resolveTenantPrincipal(
       tenantUserId: tenantUser.id,
       identityId: session.identity_id,
       roles,
-      principalKind: tenantUser.principal_kind
+      principalKind: tenantUser.principal_kind,
+      delegatedGrantId: await resolveDelegatedGrantId(
+        tx,
+        tenantId,
+        tenantUser.id,
+        tenantUser.principal_kind
+      )
     },
     tenantStatus: tenantUser.tenant_status
   };

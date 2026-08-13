@@ -3,6 +3,22 @@ import { redactSensitiveAttributes } from "../../_shared/redaction";
 export type AuditEventInput = {
   tenantId: string;
   actorTenantUserId?: string;
+  /**
+   * ADR-0091 — the tenant the ACTOR belongs to, set only when it differs from
+   * `tenantId`.
+   *
+   * Absent is the ordinary case and means "the actor is one of ours", not "we
+   * do not know". Writing it on every row would duplicate `tenantId` on 99.9%
+   * of them, and a column that almost always equals its neighbour stops being
+   * read — which is precisely when the one row where it differs goes unnoticed.
+   */
+  actorTenantId?: string;
+  /**
+   * ADR-0091 — the delegated-access grant (ADR-0090) that made this action
+   * possible. Paired with `actorTenantId` by a CHECK in `sql/118`: a row may not
+   * claim to be under a grant without saying whose.
+   */
+  delegatedGrantId?: string;
   moduleKey: string;
   action: string;
   resourceType: string;
@@ -41,10 +57,13 @@ export async function recordAuditEvent(
 
   await tx`
     INSERT INTO awcms_audit_events
-      (tenant_id, actor_tenant_user_id, module_key, action, resource_type, resource_id,
+      (tenant_id, actor_tenant_user_id, actor_tenant_id, delegated_grant_id,
+       module_key, action, resource_type, resource_id,
        severity, message, attributes, correlation_id)
     VALUES (
-      ${input.tenantId}, ${input.actorTenantUserId ?? null}, ${input.moduleKey}, ${input.action},
+      ${input.tenantId}, ${input.actorTenantUserId ?? null},
+      ${input.actorTenantId ?? null}, ${input.delegatedGrantId ?? null},
+      ${input.moduleKey}, ${input.action},
       ${input.resourceType}, ${input.resourceId ?? null}, ${input.severity ?? "info"},
       ${input.message}, ${redactedAttributes ?? null}, ${input.correlationId ?? null}
     )
