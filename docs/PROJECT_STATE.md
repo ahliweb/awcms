@@ -388,13 +388,30 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   ia di-resolve bukan di-hardcode) dan menjalankan target apa pun di jaringan
   `coolify`. Cron pertama yang memakainya: `*/5` `email:dispatch`.
 
-  **Utang yang tersisa, dan ini milik REPO bukan host:** image job dibangun
-  tangan dan **di-tag per versi — ia akan basi diam-diam pada rilis berikutnya**
-  (cron akan menjalankan kode v9.0.0 terhadap skema v9.1.0). Perbaikan yang
-  benar adalah stage `jobs` di `Dockerfile.production` yang diterbitkan bersama
-  image runtime oleh `release.yml`, sehingga versi job dan versi app tidak bisa
-  menyimpang. Sampai itu ada, **rebuild `awcms-jobs` setiap kali deploy** —
-  langkah ini sekarang tertulis di skill `awcms-deploy`.
+  **KOREKSI beberapa jam kemudian — mode gagalnya lebih buruk dari dugaan
+  awal, dan lebih mudah dilihat.** Catatan ini semula memperingatkan image job
+  akan "basi diam-diam". Yang sebenarnya terjadi: **Coolify mem-prune image
+  yang tidak dipakai container mana pun setiap kali aplikasi di-deploy, dan
+  `awcms-jobs` persis seperti itu — jadi ia DIHAPUS pada tiap deploy.**
+  Terbukti pada redeploy pertama sesudahnya: `pull access denied for
+awcms-jobs, repository does not exist`. Jadi bukan hasil basi yang
+  menyesatkan, melainkan cron yang mati keras — lebih berisik, dan itu
+  keberuntungan.
+
+  Konteks build-nya (direktori biasa di `/home/admin1/awcms-jobs/`) selamat
+  dari prune, jadi `run-job.sh` kini **membangun ulang image sendiri saat
+  hilang** alih-alih bergantung pada seseorang yang ingat. Rebuild ~55 detik,
+  dan cron `*/5` menyerapnya tanpa terlihat.
+
+  **Utang yang tersisa, dan ini milik REPO bukan host:** konteks build itu
+  SNAPSHOT sumber — ia tidak mengikuti rilis. Auto-rebuild memperbaiki
+  penghapusan, BUKAN keusangan: setelah rilis berikutnya, cron akan
+  membangun ulang **kode versi lama** terhadap skema baru, dan kali ini
+  benar-benar diam-diam. Perbaikan yang benar adalah stage `jobs` di
+  `Dockerfile.production` yang diterbitkan `release.yml` bersama image
+  runtime, sehingga versi job dan versi app tidak BISA menyimpang. Sampai itu
+  ada, **segarkan konteks `/home/admin1/awcms-jobs/` setiap rilis** — langkah
+  ini tertulis di skill `awcms-deploy`.
 
 - **PUTARAN 14 Agustus 2026 (ketiga puluh) — rilis v9.0.0, dan empat dokumen
   yang menua ke arah yang SALAH.**
