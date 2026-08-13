@@ -232,15 +232,29 @@ describe("sql/107 — the permission seed", () => {
     expect(sql).not.toContain("'invitations', 'delete'");
   });
 
-  test("configure is seeded at PLATFORM scope, and it is the only one", () => {
+  test("configure is seeded at PLATFORM scope, and it is the only INVITATION one", () => {
     expect(sql).toMatch(/'invitations', 'configure',[\s\S]*?'platform'/);
 
+    // Scoped to `invitations`, not to the module. It used to read the module
+    // and assert a single entry, which was true and said more than it meant:
+    // ADR-0089's `partner_registry.*` is platform-scoped for reasons of its
+    // own, and this test turned red on a change that has nothing to do with
+    // invitations. What it is FOR is that the other three invitation
+    // permissions stay tenant-scoped — a platform-scoped `create` would put
+    // inviting into somebody else's company out of every tenant's reach and
+    // into the platform's alone.
     const declared = listModules()
       .find((module) => module.key === "identity_access")!
-      .permissions!.filter((entry) => entry.scope === "platform")
-      .map((entry) => `${entry.activityCode}.${entry.action}`);
+      .permissions!.filter((entry) => entry.activityCode === "invitations")
+      .map((entry) => `${entry.action}:${entry.scope ?? "tenant"}`)
+      .sort();
 
-    expect(declared).toEqual(["invitations.configure"]);
+    expect(declared).toEqual([
+      "configure:platform",
+      "create:tenant",
+      "read:tenant",
+      "revoke:tenant"
+    ]);
   });
 });
 

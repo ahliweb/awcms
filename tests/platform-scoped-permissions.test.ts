@@ -56,7 +56,15 @@ const EXPECTED_PLATFORM_KEYS = [
   // manufacture one for another company's address; after Gelombang 7 that
   // object is a GLOBAL principal, which is the one place it matters. The
   // deliberate edit, again.
-  "identity_access.invitations.configure"
+  "identity_access.invitations.configure",
+  // ADR-0089 — the partner REGISTRY, and both halves are deliberate. `create`
+  // names who may be a partner at all, which is the platform's half of a split
+  // that ADR kept apart from the customer's `partner_access.configure`. `read`
+  // lists EVERY partner, and a tenant-scoped version of it is the cross-tenant
+  // directory the same ADR refused as a table — rebuilt as a permission. The
+  // deliberate edit, again.
+  "identity_access.partner_registry.read",
+  "identity_access.partner_registry.create"
 ];
 
 describe("platform-scoped permission declaration", () => {
