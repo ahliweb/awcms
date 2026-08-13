@@ -390,6 +390,212 @@ export const blogContentModule = defineModule({
   //
   // This declaration adds NO dependency edge to `site_search`: the arrow points
   // inward (ADR-0040 §2) — content declares, the aggregator discovers.
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * Published content is the TENANT's, not the author's — a post survives the
+   * person who wrote it, and erasure must not empty the site. So every table
+   * here answers `severed_with_subject_row`: the byline stops resolving to a
+   * person when the identity is anonymised, and the article stays up.
+   *
+   * Only three are exportable, and the line between them is authorship. A post
+   * carries a byline and the author's own words; a menu carries a `deleted_by`
+   * stamp. Exporting the second kind would hand a subject the tenant's whole
+   * content catalogue because they once tidied it.
+   */
+  subjectData: [
+    {
+      key: "blog_content.blog_posts",
+      tableName: "awcms_blog_posts",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [
+        { column: "author_tenant_user_id", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" },
+        { column: "restored_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Articles this person wrote, under their byline. Their own words, so the export carries them; the article itself outlives the erasure with the byline detached, because unpublishing a tenant's archive is not what a subject asked for."
+    },
+    {
+      key: "blog_content.blog_pages",
+      tableName: "awcms_blog_pages",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [
+        { column: "author_tenant_user_id", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" },
+        { column: "restored_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Standing pages this person authored. Held on exactly the same terms as the posts above."
+    },
+    {
+      key: "blog_content.blog_revisions",
+      tableName: "awcms_blog_revisions",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [
+        { column: "created_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Every draft this person saved and the note they wrote explaining the change. More revealing than the published version — it records what they tried and reconsidered — which is why it exports rather than being treated as internal history."
+    },
+    {
+      key: "blog_content.blog_ads",
+      tableName: "awcms_blog_ads",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Advertising creatives belonging to the tenant. The subject appears only as whoever retired one."
+    },
+    {
+      key: "blog_content.blog_menus",
+      tableName: "awcms_blog_menus",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Site navigation structures. Personal data only in the sense that somebody deleted one."
+    },
+    {
+      key: "blog_content.blog_templates",
+      tableName: "awcms_blog_templates",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Layout templates owned by the tenant, carrying nothing about a person but the deletion stamp."
+    },
+    {
+      key: "blog_content.blog_terms",
+      tableName: "awcms_blog_terms",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Categories and tags — the tenant's taxonomy, with a deletion stamp as its only link to anybody."
+    },
+    {
+      key: "blog_content.blog_widgets",
+      tableName: "awcms_blog_widgets",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Sidebar widgets authored as site furniture; `body_text` is content about the site, not about a person."
+    },
+    {
+      key: "blog_content.blog_redirects",
+      tableName: "awcms_blog_redirects",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "URL redirects for moved content. A routing rule, linked to a person only by who removed it."
+    },
+    {
+      key: "blog_content.news_portal_ad_placements",
+      tableName: "awcms_news_portal_ad_placements",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0044 — ad placements absorbed from the former `news_portal` module. Tenant configuration with a deletion stamp."
+    },
+    {
+      key: "blog_content.news_portal_homepage_sections",
+      tableName: "awcms_news_portal_homepage_sections",
+      ownerModuleKey: "blog_content",
+      subjectColumns: [{ column: "deleted_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0044 — homepage composition, likewise the tenant's own layout rather than anybody's data."
+    },
+
+    // Six configuration and join tables that reach NOBODY — no author column,
+    // no editor stamp. They answer here as this module's own statement rather
+    // than as a central exclusion, because this module is where a `created_by`
+    // would one day be added, and that is the day this entry has to change.
+    {
+      key: "blog_content.blog_settings",
+      tableName: "awcms_blog_settings",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "One row of per-tenant blog defaults — locale, page size, fallback SEO strings. Site configuration with no author column and nobody to match."
+    },
+    {
+      key: "blog_content.blog_theme_settings",
+      tableName: "awcms_blog_theme_settings",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A single light/dark mode flag per tenant. Tenant-wide presentation, not a per-user preference, and it names nobody."
+    },
+    {
+      key: "blog_content.blog_menu_items",
+      tableName: "awcms_blog_menu_items",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Entries inside a navigation menu — a label, a link and a sort order. The menu they belong to answers above; the item itself has no person on it."
+    },
+    {
+      key: "blog_content.blog_ad_placements",
+      tableName: "awcms_blog_ad_placements",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Which ad appears in which slot. A join row between an ad and a placement target, carrying no author and no viewer."
+    },
+    {
+      key: "blog_content.blog_post_terms",
+      tableName: "awcms_blog_post_terms",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The join between a post and its categories or tags. Two ids and a timestamp; the post carries the byline and answers for it."
+    },
+    {
+      key: "blog_content.blog_internal_tag_link_settings",
+      tableName: "awcms_blog_internal_tag_link_settings",
+      ownerModuleKey: "blog_content",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Whether automatic internal tag linking is on, and which tags are excluded. An editorial automation switch belonging to the tenant."
+    }
+  ],
   searchSources: [
     {
       key: "blog_content.post",

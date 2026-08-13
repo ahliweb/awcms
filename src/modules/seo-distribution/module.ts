@@ -198,6 +198,63 @@ export const seoDistributionModule = defineModule({
         "Resolve, dismiss, or attach a suggested redirect to a 404 observation (audited)"
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557) — routing rules and site metadata, reached by
+   * an editor stamp. The 404 observations are the only rows describing visitor
+   * behaviour, and ADR-0039 built them so they describe PATHS instead of people.
+   */
+  subjectData: [
+    {
+      key: "seo_distribution.seo_redirects",
+      tableName: "awcms_seo_redirects",
+      ownerModuleKey: SEO_MODULE_KEY,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0039 — exact-path redirect rules. A routing decision about URLs, stamped with the editor who made it."
+    },
+    {
+      key: "seo_distribution.seo_redirect_settings",
+      tableName: "awcms_seo_redirect_settings",
+      ownerModuleKey: SEO_MODULE_KEY,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "One row of redirect policy per tenant, linked to a person only by who last changed it."
+    },
+    {
+      key: "seo_distribution.seo_tenant_settings",
+      tableName: "awcms_seo_tenant_settings",
+      ownerModuleKey: SEO_MODULE_KEY,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Site name, default metadata and social handles. All of it describes the ORGANISATION; the only person is the editor."
+    },
+    {
+      key: "seo_distribution.seo_not_found_observations",
+      tableName: "awcms_seo_not_found_observations",
+      ownerModuleKey: SEO_MODULE_KEY,
+      subjectColumns: [{ column: "resolved_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0039 — which paths returned 404, how often, and who resolved each into a redirect. Deliberately aggregated per PATH with a referrer DOMAIN rather than a full referrer, so no visitor is identifiable in it; the only person named is the editor who fixed it."
+    }
+  ],
   dataLifecycle: [
     {
       key: SEO_NOT_FOUND_LIFECYCLE_KEY,

@@ -87,6 +87,30 @@ export const formDraftsModule = defineModule({
    * not in the engine — the engine never mutates this table, so a hold
    * enforced only there would not stop anything.
    */
+  /**
+   * ADR-0094 wave 2 (Issue #557) — an unfinished form is the person's own
+   * working copy, and `payload` can hold anything they had typed so far.
+   */
+  subjectData: [
+    {
+      key: "form_drafts.form_drafts",
+      tableName: "awcms_form_drafts",
+      ownerModuleKey: "form_drafts",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "submitted_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      // The one table here whose whole content is the subject's own keystrokes
+      // and which nothing cites as evidence — the submitted RECORD lives in the
+      // destination module, and the draft is scaffolding it already outlived.
+      erasure: "hard_delete",
+      rationale:
+        "Half-finished wizard state this person saved: `payload` is whatever they had typed, which may be more personal than the record it would have become. Exported because it is literally their own text, and deleted outright because a draft is not evidence of anything."
+    }
+  ],
   dataLifecycle: [
     {
       key: FORM_DRAFTS_LIFECYCLE_KEY,

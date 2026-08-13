@@ -93,6 +93,69 @@ export const dataLifecycleModule = defineModule({
       safeInOfflineLan: true
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557) — this module's OWN tables, held to the rule
+   * it enforces for everybody else.
+   *
+   * A legal hold is the one place where erasure and retention argue directly,
+   * and the answer is written down here rather than left to the executor: the
+   * hold outlives the person who requested it, because a hold that vanished
+   * when its requester left would silently release the evidence it exists to
+   * keep.
+   */
+  subjectData: [
+    {
+      key: "data_lifecycle.legal_holds",
+      tableName: "awcms_data_lifecycle_legal_holds",
+      ownerModuleKey: "data_lifecycle",
+      subjectColumns: [
+        { column: "requested_by", references: "tenant_user" },
+        { column: "approved_by", references: "tenant_user" },
+        { column: "released_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      // NOT `severed_with_subject_row`, and the difference is deliberate: this
+      // is the maker/checker record for a control that overrides retention, so
+      // all three stamps are evidence in their own right. Severance leaves them
+      // unresolvable, which is correct — but the reason they are kept is the
+      // obligation, not the mechanism.
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0037 — who requested, approved and released each legal hold. Retained under the obligation the hold itself represents: these three stamps are the maker/checker evidence that a retention override was authorised, and a hold whose provenance could be erased would be no hold at all.",
+      redactedColumns: ["authority_metadata"]
+    },
+    {
+      key: "data_lifecycle.archive_manifests",
+      tableName: "awcms_data_lifecycle_archive_manifests",
+      ownerModuleKey: "data_lifecycle",
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Checksums and locations of archived batches. The artifact is another table's rows under their own descriptor; the person here is whoever ran the archive."
+    },
+    {
+      key: "data_lifecycle.runs",
+      tableName: "awcms_data_lifecycle_runs",
+      ownerModuleKey: "data_lifecycle",
+      subjectColumns: [{ column: "triggered_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Aggregated counts per lifecycle run — eligible, archived, purged — and who triggered it. The counts are about tables, not people."
+    },
+    {
+      key: "data_lifecycle.cursors",
+      tableName: "awcms_data_lifecycle_cursors",
+      ownerModuleKey: "data_lifecycle",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "How far the purge engine has walked each descriptor. A resume point with no author column; resetting one would re-scan or skip a retention window."
+    }
+  ],
   dataLifecycle: [
     {
       key: "data_lifecycle.data_lifecycle_runs",

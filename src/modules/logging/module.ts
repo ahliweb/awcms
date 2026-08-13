@@ -56,6 +56,32 @@ export const loggingModule = defineModule({
   // visibility, but real purge stays owned by `purgeExpiredAuditEvents`
   // (`bun run logs:audit:purge`), which now consults a LegalHoldGuardPort
   // before its bounded DELETE.
+  /**
+   * ADR-0094 wave 2 (Issue #557) — the audit trail, and the table that makes
+   * `anonymize` the default rather than `hard_delete`.
+   */
+  subjectData: [
+    {
+      key: "logging.audit_events",
+      tableName: "awcms_audit_events",
+      ownerModuleKey: "logging",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      // The row ADR-0094 Decision 2 was written about. Deleting these would
+      // remove the evidence that something happened — including the evidence
+      // that the erasure itself happened — so the stamp stays and stops
+      // resolving to a person when the identity is anonymised.
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Everything this person did that the platform considered worth recording: the action, what it touched, and the message written at the time. Theirs to see, and the one record that must survive their erasure intact, because it is where the erasure itself is written down.",
+      // `attributes` is free-form jsonb whose contents are already
+      // redaction-filtered on write; carrying it into an export would re-widen
+      // a surface that was narrowed on purpose.
+      redactedColumns: ["attributes"]
+    }
+  ],
   dataLifecycle: [
     {
       key: LOGGING_AUDIT_EVENTS_LIFECYCLE_KEY,

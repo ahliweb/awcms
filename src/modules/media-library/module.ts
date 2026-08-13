@@ -167,6 +167,40 @@ export const mediaLibraryModule = defineModule({
   // docs all reference it, and ADR-0036 §3 keeps the `news_media` naming for the
   // same reason it keeps the table name — a cosmetic rename would trade a naming
   // annoyance for real churn and risk.
+  /**
+   * ADR-0094 wave 2 (Issue #557) — ADR-0036 kept the `awcms_news_*` names, so
+   * the table below is the media registry despite what it is called.
+   */
+  subjectData: [
+    {
+      key: "media_library.news_media_objects",
+      tableName: "awcms_news_media_objects",
+      ownerModuleKey: "media_library",
+      subjectColumns: [
+        { column: "created_by_tenant_user_id", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      // The BYTES are not erased with the uploader, and the descriptor should
+      // not imply they are: an image is content the tenant published, often
+      // showing other people, and its lifecycle is the orphan sweep this module
+      // already owns rather than a subject request.
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Files this person uploaded, with the original filename, alt text and caption they wrote. The metadata is theirs and exports; the object itself belongs to the tenant's published content and is governed by this module's orphan lifecycle, not by an erasure."
+    },
+    {
+      key: "media_library.media_library_tenant_state",
+      tableName: "awcms_media_library_tenant_state",
+      ownerModuleKey: "media_library",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A single row per tenant recording whether managed-media enforcement has been switched on. A one-way operational latch with no author column and no person in it."
+    }
+  ],
   jobs: [
     {
       command: "bun run news-media:reconcile",

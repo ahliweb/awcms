@@ -207,6 +207,78 @@ export const emailModule = defineModule({
    * `application/email-queue-purge.ts` names the terminal statuses in the
    * statement itself.
    */
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * Mail is addressed to PEOPLE, and the address is stored three ways: in the
+   * clear (`to_address`), hashed for lookup, and masked for display. The clear
+   * and hashed forms never leave, and erasure has to reach in and clear them —
+   * severing the identity does not touch a copy taken at send time.
+   *
+   * The recipient is matched by ADDRESS rather than by account, which is why
+   * neither the message log nor the suppression list can be reached from a
+   * per-tenant subject id: both say so outright.
+   */
+  subjectData: [
+    {
+      key: "email.email_messages",
+      tableName: "awcms_email_messages",
+      ownerModuleKey: "email",
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "anonymize",
+      rationale:
+        "Mail this person SENT, including subject line and the merge variables behind it. Reached as their action; mail they RECEIVED is keyed by address rather than by account, so it is answered only where the address is theirs — and the address columns are cleared on erasure because they are a copy no severance reaches.",
+      redactedColumns: [
+        "to_address",
+        "to_address_hash",
+        "variables",
+        "variables_hash"
+      ]
+    },
+    {
+      key: "email.email_suppression_list",
+      tableName: "awcms_email_suppression_list",
+      ownerModuleKey: "email",
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: true,
+      // The row is a HASH of an address plus a reason. Anonymising the identity
+      // does not touch it, and deleting it would silently re-enable mail to
+      // somebody who asked to stop receiving it — the one outcome a privacy
+      // feature must never produce.
+      erasure: "anonymize",
+      rationale:
+        "Addresses that have stopped receiving mail, and who suppressed them. A suppression is itself a privacy decision, so the record survives erasure with the actor detached; deleting it would quietly resume sending to a person who opted out.",
+      redactedColumns: ["recipient_hash"]
+    },
+    {
+      key: "email.email_templates",
+      tableName: "awcms_email_templates",
+      ownerModuleKey: "email",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" },
+        { column: "restored_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Reusable message bodies belonging to the tenant. `subject_template` is a template string, not anybody's subject line; the only people here are the editors."
+    },
+    {
+      key: "email.email_delivery_attempts",
+      tableName: "awcms_email_delivery_attempts",
+      ownerModuleKey: "email",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-attempt provider outcomes hanging off a message row. No column names a person — the link is the message, which answers for itself — and the provider snippet is operational telemetry kept under this module's own retention.",
+      redactedColumns: ["provider_response_snippet"]
+    }
+  ],
   dataLifecycle: [
     {
       key: EMAIL_ATTEMPTS_LIFECYCLE_KEY,

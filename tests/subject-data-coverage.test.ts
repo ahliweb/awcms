@@ -27,11 +27,13 @@ import {
 import { listModules } from "../src/modules";
 import { MODULE_CONTRACT_VERSION } from "../src/modules/_shared/module-contract";
 import { buildSubjectPlan } from "../src/modules/data-lifecycle/domain/subject-data-plan";
+import { collectSubjectDataDescriptors } from "../src/modules/data-lifecycle/domain/subject-data-registry";
 
 const SUBJECT = {
   tenantId: "11111111-1111-4111-8111-111111111111",
   tenantUserId: "22222222-2222-4222-8222-222222222222",
-  identityId: "33333333-3333-4333-8333-333333333333"
+  identityId: "33333333-3333-4333-8333-333333333333",
+  profileId: "44444444-4444-4444-8444-444444444444"
 };
 
 describe("the gate is satisfied, and not vacuously", () => {
@@ -107,8 +109,8 @@ describe("the gate is satisfied, and not vacuously", () => {
   });
 });
 
-describe("the first wave of descriptors says something real", () => {
-  test("three tables are described, and each names at least one subject column", () => {
+describe("the registered descriptors say something real", () => {
+  test("each names a subject column, or says outright that nothing can", () => {
     const descriptors = listModules().flatMap(
       (module) => module.subjectData ?? []
     );
@@ -116,7 +118,17 @@ describe("the first wave of descriptors says something real", () => {
     expect(descriptors.length).toBeGreaterThan(0);
 
     for (const descriptor of descriptors) {
-      expect(descriptor.subjectColumns.length).toBeGreaterThan(0);
+      // Wave 2 allows a SECOND shape: no subject column, declared on purpose,
+      // for a table whose personal data is pseudonymous by design. What stays
+      // forbidden is an empty array with nothing saying why — the planner drops
+      // it and the table goes quiet with no record that it was considered.
+      if (descriptor.unreachableBySubject) {
+        expect(descriptor.subjectColumns).toHaveLength(0);
+        expect(descriptor.exportable).toBe(false);
+        expect(descriptor.erasure).toBe("retain_under_obligation");
+      } else {
+        expect(descriptor.subjectColumns.length).toBeGreaterThan(0);
+      }
       expect(descriptor.ownerModuleKey.length).toBeGreaterThan(0);
       expect(descriptor.tableName.startsWith("awcms_")).toBe(true);
       // Required in EVERY direction — a table that exports nothing needs as
@@ -183,7 +195,7 @@ describe("the plan binds the RIGHT id, which is the whole point of two kinds", (
     );
 
     expect(plan.entries[0]!.matches).toEqual([
-      { column: "identity_id", value: SUBJECT.identityId }
+      { column: "identity_id", value: SUBJECT.identityId, match: "equals" }
     ]);
   });
 
@@ -206,7 +218,11 @@ describe("the plan binds the RIGHT id, which is the whole point of two kinds", (
     );
 
     expect(plan.entries[0]!.matches).toEqual([
-      { column: "actor_tenant_user_id", value: SUBJECT.tenantUserId }
+      {
+        column: "actor_tenant_user_id",
+        value: SUBJECT.tenantUserId,
+        match: "equals"
+      }
     ]);
   });
 
@@ -288,16 +304,69 @@ describe("the plan binds the RIGHT id, which is the whole point of two kinds", (
   });
 
   test("the global principal appears in no plan, because RLS forbids the read", () => {
-    const described = collectSubjectDescribedTables();
+    const plan = buildSubjectPlan(
+      collectSubjectDataDescriptors(listModules()),
+      SUBJECT
+    );
 
-    // ADR-0087 and ADR-0088 each planned a cross-tenant read once. A descriptor
-    // naming `awcms_principals` would be the third.
-    expect(described).not.toContain("awcms_principals");
+    // ADR-0087 and ADR-0088 each planned a cross-tenant read once. A plan
+    // naming `awcms_principals` among the tables it READS would be the third.
+    expect(plan.entries.map((entry) => entry.tableName)).not.toContain(
+      "awcms_principals"
+    );
+  });
+
+  test("but it is NAMED as unanswered, rather than silently missing", () => {
+    // Wave 2 changed this from absence to a stated exclusion, and the
+    // difference is the whole point: a report that simply omits the table is
+    // indistinguishable from one written before the table existed.
+    const plan = buildSubjectPlan(
+      collectSubjectDataDescriptors(listModules()),
+      SUBJECT
+    );
+    const principals = plan.unansweredEntries.find(
+      (entry) => entry.tableName === "awcms_principals"
+    );
+
+    expect(principals?.reason).toBe("global");
+    expect(principals?.rationale).toContain("ADR-0087");
+  });
+
+  test("a table nothing can match on is named too, for the same reason", () => {
+    const plan = buildSubjectPlan(
+      collectSubjectDataDescriptors(listModules()),
+      SUBJECT
+    );
+    const reports = plan.unansweredEntries.find(
+      (entry) => entry.tableName === "awcms_comments_reports"
+    );
+
+    // Pseudonymous by design (hashed reporter address, no account link), so
+    // `NO_SUBJECT_DATA` would be a lie and a subject column would be a fiction.
+    expect(reports?.reason).toBe("no_subject_column");
+  });
+
+  test("every unanswered table is absent from the read plan — both reasons", () => {
+    const plan = buildSubjectPlan(
+      collectSubjectDataDescriptors(listModules()),
+      SUBJECT
+    );
+    const read = new Set(plan.entries.map((entry) => entry.tableName));
+
+    for (const entry of plan.unansweredEntries) {
+      expect(read.has(entry.tableName)).toBe(false);
+    }
+
+    // Guards the assertion above against passing vacuously on an empty list.
+    expect(plan.unansweredEntries.length).toBeGreaterThan(0);
   });
 });
 
 describe("the contract version records the addition", () => {
-  test("MINOR bump, because the field is optional and every module stays valid", () => {
-    expect(MODULE_CONTRACT_VERSION).toBe("3.2.0");
+  test("MAJOR bump: the erasure union widened and `tenantColumn` was retyped", () => {
+    // Wave 2. A widened union is MAJOR here because the consumers that matter
+    // are exhaustive switches over it — the point of adding
+    // `severed_with_subject_row` is that each one must decide what it means.
+    expect(MODULE_CONTRACT_VERSION).toBe("4.0.0");
   });
 });

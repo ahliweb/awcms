@@ -117,6 +117,49 @@ export const themingModule = defineModule({
       requiredPermission: "theming.config.read"
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557) — a theme is the tenant's appearance, and the
+   * only people here are the designers who edited it.
+   */
+  subjectData: [
+    {
+      key: "theming.theming_config_versions",
+      tableName: "awcms_theming_config_versions",
+      ownerModuleKey: "theming",
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Versioned theme configuration. The config is colours and layout belonging to the tenant; a person appears only as the author of a version."
+    },
+    {
+      key: "theming.theming_tenant_state",
+      tableName: "awcms_theming_tenant_state",
+      ownerModuleKey: "theming",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Which theme version is live for the tenant. One row of pointers, stamped with who last changed it."
+    },
+    {
+      key: "theming.theming_preview_sessions",
+      tableName: "awcms_theming_preview_sessions",
+      ownerModuleKey: "theming",
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: false,
+      // A live preview token is a bearer credential for an unpublished theme.
+      // It expires on its own, and an erasure should not leave one working in
+      // the name of somebody who is gone.
+      erasure: "hard_delete",
+      rationale:
+        "Short-lived tokens letting somebody view an unpublished theme. Not exported because the token is the whole row and it is a credential; deleted on erasure rather than left live under a detached name.",
+      redactedColumns: ["token_hash"]
+    }
+  ],
   permissions: [
     {
       activityCode: THEMING_CONFIG_ACTIVITY_CODE,

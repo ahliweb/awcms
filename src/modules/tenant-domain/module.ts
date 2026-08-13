@@ -85,6 +85,27 @@ export const tenantDomainModule = defineModule({
       safeInOfflineLan: true
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557) — a hostname belongs to the tenant, not to
+   * whoever configured it.
+   */
+  subjectData: [
+    {
+      key: "tenant_domain.tenant_domains",
+      tableName: "awcms_tenant_domains",
+      ownerModuleKey: "tenant_domain",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Custom hostnames and their DNS verification state. The domain is the tenant's property and the verification token is a deployment secret; a person appears only as the administrator who added or removed one.",
+      redactedColumns: ["verification_token_hash"]
+    }
+  ],
   navigation: [
     {
       labelKey: "admin.layout.nav_tenant_domains",

@@ -52,6 +52,26 @@ family:
 # FAMILY_OWNED_CONTRACT_VERSIONS in src/modules/_shared/family-contract.ts and
 # given teeth by a SEMANTIC contract test that goes RED if the control drifts.
 contracts:
+  # 4.0.0 sejak ADR-0094 gelombang 2 (#557): DUA perubahan pada keluarga
+  # `subjectData`, keduanya MAJOR menurut aturan file kontraknya sendiri.
+  #
+  # (1) Union `SubjectDataErasure` DILEBARKAN dengan `"severed_with_subject_row"`.
+  # Union yang melebar dihitung MAJOR di sini karena konsumen yang penting adalah
+  # `switch` exhaustive di atasnya — dan justru itu maksudnya: tiap konsumen
+  # HARUS memutuskan artinya, bukan jatuh ke `default`. Ini jawaban jujur ~90
+  # tabel: mereka hanya membawa id subjek sebagai stempel (`created_by`,
+  # `deleted_by`), dan meng-`anonymize`-nya justru akan menghancurkan catatan
+  # tenant tentang siapa menghapus apa demi memutus tautan yang sudah tak
+  # teresolusi setelah `awcms_identities` dianonimkan.
+  #
+  # (2) `SubjectDataDescriptor.tenantColumn` DIUBAH TIPENYA jadi `string | null`.
+  # Sebelumnya "absen" berarti DUA hal sekaligus — "pakai `tenant_id`" DAN
+  # "tabel global" — kontradiksi yang diselesaikan perencana dengan diam-diam
+  # mengikat `tenant_id`. Kini `null` dinyatakan dengan sengaja.
+  #
+  # Tidak ada field `ModuleDescriptor` yang dihapus dan seluruh deskriptor
+  # gelombang 1 tetap sah tanpa perubahan.
+  #
   # 3.2.0 sejak ADR-0094 (#542): field opsional `ModuleDescriptor.subjectData`
   # plus tipe `SubjectDataDescriptor`/`SubjectDataColumn`/`SubjectDataErasure`
   # DITAMBAHKAN — penambahan murni, jadi MINOR. Menghilangkannya berarti tabel
@@ -68,7 +88,7 @@ contracts:
   # DIHAPUS dari union `ModuleDeploymentProfile` — union yang menyempit adalah
   # penarikan kemampuan, jadi MAJOR (preseden 2.0.0, yang menghapus tipe
   # ekspor). Nilai ini di-cross-check gerbang terhadap MODULE_CONTRACT_VERSION.
-  moduleDescriptorContractVersion: "3.2.0"
+  moduleDescriptorContractVersion: "4.0.0"
   # Per-capability port SemVer for capabilities OWNED BY A BASE MODULE (matches
   # CAPABILITY_CONTRACT_VERSIONS). Only capabilities whose owning module actually
   # ships in this base belong here. `party_directory` is owned by the base

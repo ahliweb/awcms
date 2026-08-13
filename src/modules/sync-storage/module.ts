@@ -106,6 +106,80 @@ export const syncStorageModule = defineModule({
    * in `sending`, which are claimed by a dispatcher pass whose lease is the
    * only thing that recovers them.
    */
+  /**
+   * ADR-0094 wave 2 (Issue #557) — offline sync moves other modules' rows
+   * between nodes. The payloads can carry anything, but they are keyed by
+   * aggregate rather than by person, so only the conflict resolver is reachable.
+   */
+  subjectData: [
+    {
+      key: "sync_storage.sync_conflicts",
+      tableName: "awcms_sync_conflicts",
+      ownerModuleKey: "sync_storage",
+      subjectColumns: [{ column: "resolved_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Sync conflicts and how they were settled. `payload_json` is another module's row rather than the resolver's data; the person here is whoever made the call, and that decision must survive as the record of why the two sides diverged.",
+      redactedColumns: ["payload_json"]
+    },
+    {
+      key: "sync_storage.sync_inbox",
+      tableName: "awcms_sync_inbox",
+      ownerModuleKey: "sync_storage",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Inbound sync payloads awaiting application, keyed by node, batch and aggregate. The row's subject is whatever the OWNING module's table says it is; there is no person column here to match, and that owning table answers for itself.",
+      redactedColumns: ["payload_json"]
+    },
+    {
+      key: "sync_storage.sync_nodes",
+      tableName: "awcms_sync_nodes",
+      ownerModuleKey: "sync_storage",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Registered offline nodes — a code, a name and last-seen timestamps. A node is a machine, and this row names no operator."
+    },
+    {
+      key: "sync_storage.sync_push_batches",
+      tableName: "awcms_sync_push_batches",
+      ownerModuleKey: "sync_storage",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-batch counters for a push from a node. Transport bookkeeping with no person in it."
+    },
+    {
+      key: "sync_storage.sync_aggregate_versions",
+      tableName: "awcms_sync_aggregate_versions",
+      ownerModuleKey: "sync_storage",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The current version per aggregate, used to detect conflicts. Losing a row would make the next sync mis-order or silently overwrite; it names nobody."
+    },
+    {
+      key: "sync_storage.object_sync_queue",
+      tableName: "awcms_object_sync_queue",
+      ownerModuleKey: "sync_storage",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Binary objects queued for upload from a node — an object key, a local path and retry state. Keyed by object, never by uploader."
+    }
+  ],
   dataLifecycle: [
     {
       key: OBJECT_SYNC_QUEUE_LIFECYCLE_KEY,

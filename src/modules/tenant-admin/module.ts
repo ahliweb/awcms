@@ -31,6 +31,79 @@ export const tenantAdminModule = defineModule({
       "/api/v1/tenants"
     ]
   },
+  /**
+   * ADR-0094 wave 2 (Issue #557) — the tenant's own furniture. Offices and
+   * settings are structures, not people; the links are administrator stamps,
+   * except for the status transitions, which record who suspended a customer.
+   */
+  subjectData: [
+    {
+      key: "tenant_admin.offices",
+      tableName: "awcms_offices",
+      ownerModuleKey: "tenant_admin",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" },
+        { column: "restored_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The office hierarchy, which is org structure rather than anybody's personal data. A subject appears only as the administrator who edited it — and exporting the tree because somebody once renamed a branch would hand over the tenant's shape, not the person's data."
+    },
+    {
+      key: "tenant_admin.tenants",
+      tableName: "awcms_tenants",
+      ownerModuleKey: "tenant_admin",
+      // The tenant table's own tenant column is `id` — it IS the tenant. Named
+      // explicitly rather than left to the `tenant_id` default, which would
+      // have produced a filter on a column that does not exist.
+      tenantColumn: "id",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The tenant record itself. `legal_name` belongs to an ORGANISATION; the only person here is the operator who created or last edited the row."
+    },
+    {
+      key: "tenant_admin.tenant_status_transitions",
+      tableName: "awcms_tenant_status_transitions",
+      ownerModuleKey: "tenant_admin",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0073 — who suspended or restored a tenant, and why. An act with consequences for every user of that tenant, so it is answerable as the actor's own history and must survive their erasure as evidence."
+    },
+    {
+      key: "tenant_admin.tenant_settings",
+      tableName: "awcms_tenant_settings",
+      ownerModuleKey: "tenant_admin",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "One row of timezone and feature flags per tenant, with no author column at all. Configuration about the tenant, naming nobody and matchable to nobody."
+    },
+    {
+      key: "tenant_admin.setup_state",
+      tableName: "awcms_setup_state",
+      ownerModuleKey: "tenant_admin",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A one-row latch recording that the setup wizard has run. It holds a lock timestamp and nothing else; erasing it would re-open first-run bootstrap on a live tenant."
+    }
+  ],
   navigation: [
     // PLATFORM-scoped (ADR-0054). The link is gated on the platform permission
     // itself — ADR-0051 §Keputusan butir 3 — because unlike `/admin/idn-regions`
