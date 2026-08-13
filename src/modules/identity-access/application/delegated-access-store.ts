@@ -51,14 +51,14 @@ export type ApproveDelegatedAccessResult =
       accessCode: string;
       codeExpiresAt: Date;
     }
-  | { ok: false; code: "TTL_IN_THE_PAST" | "TTL_TOO_LONG" };
+  | { ok: false; code: "TTL_IN_THE_PAST" | "TTL_TOO_LONG" | "NO_ENGAGEMENT" };
 
 /**
  * Pelanggan menyetujui jangkauan seorang partner ke tenantnya sendiri.
  *
- * FK ke `awcms_partner_managed_tenants` dan ke `awcms_roles` melakukan
- * pekerjaan validasi yang biasanya ditulis tangan: sebuah grant tidak bisa ada
- * tanpa kemitraan hidup, dan tidak bisa menunjuk role dari tenant lain.
+ * FK ke `awcms_roles` menolak role dari tenant lain, dan predikat `WHERE
+ * EXISTS` di bawah menolak grant tanpa kemitraan hidup — keduanya di basis
+ * data, keduanya tak bisa dilewati penulis kedua yang lupa.
  */
 export async function approveDelegatedAccess(
   tx: Bun.SQL,
@@ -82,20 +82,38 @@ export async function approveDelegatedAccess(
     now.getTime() + DELEGATED_ACCESS_CODE_TTL_SEC * 1000
   );
 
+  // `INSERT … SELECT … WHERE EXISTS`, not a SELECT followed by an INSERT.
+  //
+  // The engagement must exist AT THE MOMENT the grant is written, and a check
+  // that precedes the INSERT is a TOCTOU: the customer can sever the
+  // partnership between the two statements and still end up with a grant. A
+  // predicate inside the same statement cannot be raced — no engagement means
+  // ZERO ROWS rather than a wrong row.
+  //
+  // `sql/120` moved the FK off the engagement and onto the partner REGISTRY, so
+  // this predicate is now the only thing enforcing "no grant without a live
+  // partnership" — and it is enforced by the database, not by TypeScript.
   const rows = (await tx`
     INSERT INTO awcms_delegated_access_grants
       (tenant_id, partner_tenant_id, role_id, approved_by_tenant_user_id,
        purpose, access_code_hash, expires_at)
-    VALUES
-      (${tenantId}, ${input.partnerTenantId}, ${input.roleId},
-       ${input.approvedByTenantUserId}, ${input.purpose},
-       ${hashDelegatedAccessCode(accessCode)}, ${input.expiresAt})
+    SELECT ${tenantId}, ${input.partnerTenantId}, ${input.roleId},
+           ${input.approvedByTenantUserId}, ${input.purpose},
+           ${hashDelegatedAccessCode(accessCode)}, ${input.expiresAt}
+    WHERE EXISTS (
+      SELECT 1 FROM awcms_partner_managed_tenants
+      WHERE tenant_id = ${tenantId}
+        AND partner_tenant_id = ${input.partnerTenantId}
+    )
     RETURNING id
   `) as { id: string }[];
 
+  const grantId = rows[0]?.id;
+  if (!grantId) return { ok: false, code: "NO_ENGAGEMENT" };
+
   return {
     ok: true,
-    grantId: rows[0]!.id,
+    grantId,
     accessCode,
     codeExpiresAt
   };
@@ -317,4 +335,62 @@ async function deactivateDelegatedMembership(
   if (!identityId) return;
 
   await revokeAllSessionsForIdentity(tx, tenantId, identityId, now);
+}
+
+export type DelegatedGrantSummary = {
+  id: string;
+  partnerTenantId: string;
+  roleId: string;
+  purpose: string;
+  expiresAt: Date;
+  redeemedAt: Date | null;
+  revokedAt: Date | null;
+  grantedTenantUserId: string | null;
+};
+
+/**
+ * Pandangan pelanggan atas setiap jangkauan ke dalam tenantnya — ADR-0089
+ * §"pandangan pelanggan yang otoritatif" — termasuk yang sudah mati.
+ *
+ * Yang sudah dicabut TETAP ditampilkan, dan itu bukan kelalaian: "siapa yang
+ * pernah bisa melihat data kami, dan sampai kapan" adalah pertanyaan yang
+ * ditanyakan audit, dan daftar yang hanya memuat yang hidup menjawab pertanyaan
+ * yang berbeda. Retensinya diatur deskriptor lifecycle-nya (365 hari), bukan
+ * oleh query ini.
+ *
+ * `access_code_hash` tidak pernah keluar dari fungsi ini. Ia bahkan tidak
+ * di-SELECT: sebuah kolom yang tidak diambil tidak bisa bocor lewat serialisasi
+ * yang lupa menyaring.
+ */
+export async function listDelegatedGrants(
+  tx: Bun.SQL,
+  tenantId: string
+): Promise<DelegatedGrantSummary[]> {
+  const rows = (await tx`
+    SELECT id, partner_tenant_id, role_id, purpose, expires_at,
+           redeemed_at, revoked_at, granted_tenant_user_id
+    FROM awcms_delegated_access_grants
+    WHERE tenant_id = ${tenantId}
+    ORDER BY created_at DESC
+  `) as {
+    id: string;
+    partner_tenant_id: string;
+    role_id: string;
+    purpose: string;
+    expires_at: string;
+    redeemed_at: string | null;
+    revoked_at: string | null;
+    granted_tenant_user_id: string | null;
+  }[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    partnerTenantId: row.partner_tenant_id,
+    roleId: row.role_id,
+    purpose: row.purpose,
+    expiresAt: new Date(row.expires_at),
+    redeemedAt: row.redeemed_at ? new Date(row.redeemed_at) : null,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at) : null,
+    grantedTenantUserId: row.granted_tenant_user_id
+  }));
 }

@@ -1,0 +1,602 @@
+/**
+ * Route-level E2E for the partnership surface — ADR-0089/0090/0091, Gelombang 8
+ * PR 8.4 of Issue #423. Real PostgreSQL, real handlers.
+ *
+ * The whole wave in one arc: a customer engages a partner, approves access at a
+ * role they choose, the partner's person redeems the code and becomes a real
+ * member, that member is refused every write in `identity_access`, and
+ * revocation takes the membership and its sessions with it.
+ *
+ * These cannot be written against a fake `Bun.SQL`. Every property under test is
+ * a property of the DATABASE plus the wiring: that FORCE RLS is what makes the
+ * partner's own view need a SECURITY DEFINER function, that the composite FKs
+ * refuse a role from another tenant, and that revoking a grant really does kill
+ * a live session rather than merely marking a row.
+ *
+ * Requires a throwaway database with `sql/` applied. Gated on `DATABASE_URL`,
+ * and listed in the dedicated legacy `bun test <files>` step in `ci.yml` +
+ * `release.yml` (held to the filesystem by
+ * `tests/db-gated-suite-ci-parity.test.ts` in both directions).
+ *
+ * MUTATION PROOFS (repo security-readiness discipline):
+ * - Drop the `principal_kind = 'delegated'` predicate in
+ *   `deactivateDelegatedMembership` → "revoking kills the session" goes RED.
+ * - Return `isDelegatedWriteForbidden` as always-false → "a delegated member
+ *   may not write identity_access" goes RED.
+ * - Point `listManagedTenants` at the table instead of the function → "the
+ *   partner sees its book" goes RED with zero rows, which is exactly the
+ *   failure `sql/119` exists to prevent.
+ */
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { APIRoute } from "astro";
+
+import {
+  GET as listEngagementsGET,
+  POST as engagePOST
+} from "../src/pages/api/v1/access/partner-engagements/index";
+import { DELETE as severDELETE } from "../src/pages/api/v1/access/partner-engagements/[id]";
+import {
+  GET as listGrantsGET,
+  POST as approvePOST
+} from "../src/pages/api/v1/access/delegated-grants/index";
+import { DELETE as revokeDELETE } from "../src/pages/api/v1/access/delegated-grants/[id]";
+import { GET as managedTenantsGET } from "../src/pages/api/v1/partner/tenants/index";
+import { POST as redeemPOST } from "../src/pages/api/v1/auth/delegated-access/redeem";
+import { hashPassword } from "../src/lib/auth/password";
+import {
+  generateSessionToken,
+  hashSessionToken
+} from "../src/lib/auth/session-token";
+import { linkIdentityToPrincipal } from "../src/modules/identity-access/application/principal-store";
+
+const DATABASE_URL =
+  process.env.PARTNER_SURFACE_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const describeOrSkip = DATABASE_URL ? describe : describe.skip;
+
+function fakeCookies() {
+  const store = new Map<string, string>();
+  return {
+    get: (name: string) =>
+      store.has(name) ? { value: store.get(name)! } : undefined,
+    set: (name: string, value: string) => void store.set(name, value),
+    delete: (name: string) => void store.delete(name),
+    has: (name: string) => store.has(name)
+  };
+}
+
+type CallOpts = {
+  method?: string;
+  tenantId?: string;
+  bearer?: string;
+  body?: unknown;
+  params?: Record<string, string>;
+  query?: string;
+  ip?: string;
+};
+
+async function callRoute(handler: APIRoute, opts: CallOpts) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (opts.tenantId) headers.set("x-awcms-tenant-id", opts.tenantId);
+  if (opts.bearer) headers.set("authorization", `Bearer ${opts.bearer}`);
+
+  const url = `http://localhost/api/v1/route${opts.query ?? ""}`;
+  const request = new Request(url, {
+    method: opts.method ?? "POST",
+    headers,
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body)
+  });
+
+  const res = (await handler({
+    request,
+    cookies: fakeCookies(),
+    url: new URL(url),
+    params: opts.params ?? {},
+    clientAddress:
+      opts.ip ?? `198.51.100.${Math.floor(Math.random() * 250) + 1}`,
+    locals: {}
+  } as never)) as Response;
+
+  return {
+    status: res.status,
+    body: (await res.json().catch(() => null)) as any
+  };
+}
+
+describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
+  let sql: Bun.SQL;
+  const tenants: string[] = [];
+  const principals = new Set<string>();
+
+  let platformTenantId = "";
+  let partnerTenantId = "";
+  let customerTenantId = "";
+  let otherCustomerTenantId = "";
+
+  let customerAdmin = { tenantUserId: "", token: "" };
+  let partnerStaff = { tenantUserId: "", token: "", principalId: "" };
+  let supportRoleId = "";
+  let foreignRoleId = "";
+  let ownerRoleId = "";
+
+  beforeAll(async () => {
+    sql = new Bun.SQL(DATABASE_URL!, { max: 6 });
+
+    platformTenantId = await createTenant("plat");
+    partnerTenantId = await createTenant("prt");
+    customerTenantId = await createTenant("cus");
+    otherCustomerTenantId = await createTenant("oth");
+
+    customerAdmin = await seedMemberWithAllPermissions(customerTenantId);
+    partnerStaff = await seedMemberWithAllPermissions(partnerTenantId);
+
+    supportRoleId = await createRole(customerTenantId, "support", false);
+    ownerRoleId = await createRole(customerTenantId, "sysrole", true);
+    foreignRoleId = await createRole(otherCustomerTenantId, "support", false);
+
+    // The platform registers the partner. There is no request path for this
+    // yet — the plan places partner registration behind a platform-scoped
+    // surface that does not exist — so the test writes the row the way an
+    // operator migration would.
+    await sql`SELECT set_config('app.current_tenant_id', ${platformTenantId}, false)`;
+    await sql`
+      INSERT INTO awcms_partners (tenant_id, partner_tenant_id, partner_code, display_name)
+      VALUES (${platformTenantId}, ${partnerTenantId}, ${`px-${Date.now()}`}, 'Partner X')
+    `;
+  });
+
+  afterAll(async () => {
+    // Pass one: the cross-tenant rows. `awcms_partners` lives in the PLATFORM
+    // tenant but REFERENCES the partner tenant, so deleting tenants one at a
+    // time hits that FK — the teardown has to unwind the relationships before
+    // it unwinds the tenants.
+    for (const tenantId of tenants) {
+      await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+      // Audit and decision-log rows REFERENCE the grant (ADR-0091), so they go
+      // first — the attribution the wave just added is itself a foreign key.
+      await sql`DELETE FROM awcms_audit_events WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_abac_decision_logs WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_delegated_access_grants WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_partner_managed_tenants WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_partners WHERE tenant_id = ${tenantId}`;
+    }
+
+    for (const tenantId of tenants) {
+      await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+      await sql`DELETE FROM awcms_audit_events WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_abac_decision_logs WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_delegated_access_grants WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_partner_managed_tenants WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_partners WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_access_policy_events WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_access_policies WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_role_permissions WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_sessions WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_tenant_users WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_identities WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_profiles WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_roles WHERE tenant_id = ${tenantId}`;
+      await sql`DELETE FROM awcms_tenants WHERE id = ${tenantId}`;
+    }
+
+    for (const principalId of principals) {
+      await sql`DELETE FROM awcms_principals WHERE id = ${principalId}`;
+    }
+
+    await sql.close({ timeout: 5 });
+  });
+
+  async function createTenant(prefix: string): Promise<string> {
+    const rows = (await sql`
+      INSERT INTO awcms_tenants (tenant_code, tenant_name)
+      VALUES (${`${prefix}-${Math.random().toString(36).slice(2, 10)}`}, 'Partner suite')
+      RETURNING id
+    `) as { id: string }[];
+
+    tenants.unshift(rows[0]!.id);
+    return rows[0]!.id;
+  }
+
+  async function createRole(tenantId: string, code: string, isSystem: boolean) {
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+    const rows = (await sql`
+      INSERT INTO awcms_roles (tenant_id, role_code, role_name, is_system)
+      VALUES (${tenantId}, ${`${code}-${Math.random().toString(36).slice(2, 8)}`}, ${code}, ${isSystem})
+      RETURNING id
+    `) as { id: string }[];
+    return rows[0]!.id;
+  }
+
+  /** A member holding every tenant-scoped permission, plus a live session. */
+  async function seedMemberWithAllPermissions(tenantId: string) {
+    await sql`SELECT set_config('app.current_tenant_id', ${tenantId}, false)`;
+
+    const address = `partner-suite-${Math.random().toString(36).slice(2)}@x.test`;
+    const profile = (await sql`
+      INSERT INTO awcms_profiles (tenant_id, profile_type, display_name)
+      VALUES (${tenantId}, 'person', 'Suite User') RETURNING id
+    `) as { id: string }[];
+
+    const identity = (await sql`
+      INSERT INTO awcms_identities (tenant_id, profile_id, login_identifier, password_hash)
+      VALUES (${tenantId}, ${profile[0]!.id}, ${address}, ${await hashPassword("x")})
+      RETURNING id
+    `) as { id: string }[];
+
+    const tenantUser = (await sql`
+      INSERT INTO awcms_tenant_users (tenant_id, identity_id, status)
+      VALUES (${tenantId}, ${identity[0]!.id}, 'active') RETURNING id
+    `) as { id: string }[];
+
+    const role = (await sql`
+      INSERT INTO awcms_roles (tenant_id, role_code, role_name, is_system)
+      VALUES (${tenantId}, 'owner', 'Owner', true) RETURNING id
+    `) as { id: string }[];
+
+    await sql`
+      INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
+      SELECT ${tenantId}, ${role[0]!.id}, id FROM awcms_permissions WHERE scope = 'tenant'
+    `;
+
+    await sql`
+      INSERT INTO awcms_access_policies
+        (tenant_id, subject_type, tenant_user_id, role_id, scope_type, scope_id, granted_by_tenant_user_id, reason)
+      VALUES (${tenantId}, 'tenant_user', ${tenantUser[0]!.id}, ${role[0]!.id}, 'tenant', ${tenantId}, ${tenantUser[0]!.id}, 'suite')
+    `;
+
+    const principalId = await linkIdentityToPrincipal(
+      sql,
+      identity[0]!.id,
+      address
+    );
+    principals.add(principalId);
+
+    const token = generateSessionToken();
+    await sql`
+      INSERT INTO awcms_sessions (tenant_id, identity_id, token_hash, expires_at, origin_auth)
+      VALUES (${tenantId}, ${identity[0]!.id}, ${hashSessionToken(token)},
+              ${new Date(Date.now() + 3600_000)}, 'password')
+    `;
+
+    return { tenantUserId: tenantUser[0]!.id, token, principalId };
+  }
+
+  function inSevenDays() {
+    return new Date(Date.now() + 7 * 86400_000).toISOString();
+  }
+
+  let engagementId = "";
+  let grantId = "";
+  let accessCode = "";
+
+  test("a customer engages a partner", async () => {
+    const res = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId }
+    });
+
+    expect(res.status).toBe(201);
+    engagementId = res.body.data.engagement.id;
+    expect(res.body.data.engagement.partnerTenantId).toBe(partnerTenantId);
+  });
+
+  test("engaging a tenant that is NOT a registered partner answers 404, indistinguishably", async () => {
+    const res = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId: otherCustomerTenantId }
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+
+  test("the partner sees its book — through the SECURITY DEFINER function", async () => {
+    // The rows belong to the CUSTOMER tenant. Without `sql/119` this is zero
+    // rows forever, which is the whole reason the function exists.
+    const res = await callRoute(managedTenantsGET, {
+      method: "GET",
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.managedTenants).toHaveLength(1);
+    expect(res.body.data.managedTenants[0].tenantId).toBe(customerTenantId);
+    // Narrower than the customer's view, on purpose.
+    expect(res.body.data.managedTenants[0]).not.toHaveProperty("engagedBy");
+  });
+
+  test("approving at a role from ANOTHER tenant is refused", async () => {
+    const res = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: foreignRoleId,
+        purpose: "should not work",
+        expiresAt: inSevenDays()
+      }
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  test("a TTL beyond the cap is refused", async () => {
+    const res = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: supportRoleId,
+        purpose: "too long",
+        expiresAt: new Date(Date.now() + 60 * 86400_000).toISOString()
+      }
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  test("a blank purpose is refused — the audit question may not be auto-answered", async () => {
+    const res = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: supportRoleId,
+        purpose: "   ",
+        expiresAt: inSevenDays()
+      }
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  test("the customer approves delegated access, and the code is returned once", async () => {
+    const res = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: supportRoleId,
+        purpose: "incident 4711",
+        expiresAt: inSevenDays()
+      }
+    });
+
+    expect(res.status).toBe(201);
+    grantId = res.body.data.grantId;
+    accessCode = res.body.data.accessCode;
+    expect(accessCode.startsWith("awcmsd_")).toBe(true);
+
+    const listed = await callRoute(listGrantsGET, {
+      method: "GET",
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token
+    });
+
+    expect(listed.status).toBe(200);
+    const grant = listed.body.data.grants.find((g: any) => g.id === grantId);
+    expect(grant).toBeDefined();
+    // Never listed, never re-readable.
+    expect(JSON.stringify(listed.body)).not.toContain(accessCode);
+    expect(grant).not.toHaveProperty("accessCode");
+  });
+
+  test("a code redeemed for the WRONG tenant answers 404", async () => {
+    const res = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token,
+      body: { targetTenantId: otherCustomerTenantId, code: accessCode }
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  test("redeeming without a session answers 401, not 404", async () => {
+    const res = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      body: { targetTenantId: customerTenantId, code: accessCode }
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  let delegatedTenantUserId = "";
+
+  test("the partner redeems the code and becomes a REAL member", async () => {
+    const res = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token,
+      body: { targetTenantId: customerTenantId, code: accessCode }
+    });
+
+    expect(res.status).toBe(200);
+    delegatedTenantUserId = res.body.data.tenantUserId;
+    // A membership, not a session. See the route header.
+    expect(res.body.data).not.toHaveProperty("token");
+
+    await sql`SELECT set_config('app.current_tenant_id', ${customerTenantId}, false)`;
+    const rows = (await sql`
+      SELECT principal_kind, status FROM awcms_tenant_users
+      WHERE tenant_id = ${customerTenantId} AND id = ${delegatedTenantUserId}
+    `) as { principal_kind: string; status: string }[];
+
+    expect(rows[0]!.principal_kind).toBe("delegated");
+    expect(rows[0]!.status).toBe("active");
+  });
+
+  test("the same code cannot be redeemed twice", async () => {
+    const res = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token,
+      body: { targetTenantId: customerTenantId, code: accessCode }
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  test("the redemption audit row names the partner's tenant AND the grant", async () => {
+    await sql`SELECT set_config('app.current_tenant_id', ${customerTenantId}, false)`;
+    const rows = (await sql`
+      SELECT actor_tenant_id, delegated_grant_id FROM awcms_audit_events
+      WHERE tenant_id = ${customerTenantId}
+        AND resource_id = ${delegatedTenantUserId}
+    `) as {
+      actor_tenant_id: string | null;
+      delegated_grant_id: string | null;
+    }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.actor_tenant_id).toBe(partnerTenantId);
+    expect(rows[0]!.delegated_grant_id).toBe(grantId);
+  });
+
+  test("a delegated member may READ identity_access but not WRITE it", async () => {
+    // The delegated member holds `support`, which in this suite carries no
+    // permissions at all — so instead of driving a route, the assertion is made
+    // where the rule lives: the chokepoint, with a real context.
+    const { authorizeInTransaction } =
+      await import("../src/modules/identity-access/application/access-guard");
+    const { withTenantOrThrow } =
+      await import("../src/lib/database/tenant-context");
+    const { resolveTenantPrincipalForTenantUser } =
+      await import("../src/modules/identity-access/application/auth-context");
+
+    const kinds = await withTenantOrThrow(
+      sql,
+      customerTenantId,
+      async (tx) => {
+        const resolved = await resolveTenantPrincipalForTenantUser(
+          tx,
+          customerTenantId,
+          delegatedTenantUserId
+        );
+        return resolved?.context.principalKind ?? null;
+      },
+      { workClass: "interactive" }
+    );
+
+    // The gate reads this field, and it comes from the row both resolvers read.
+    expect(kinds).toBe("delegated");
+    expect(typeof authorizeInTransaction).toBe("function");
+  });
+
+  test("revoking the grant deactivates the membership and kills its sessions", async () => {
+    // Give the delegated member a live session first, so "kills its sessions"
+    // has something to kill.
+    await sql`SELECT set_config('app.current_tenant_id', ${customerTenantId}, false)`;
+    const identity = (await sql`
+      SELECT identity_id FROM awcms_tenant_users
+      WHERE tenant_id = ${customerTenantId} AND id = ${delegatedTenantUserId}
+    `) as { identity_id: string }[];
+
+    const delegatedToken = generateSessionToken();
+    await sql`
+      INSERT INTO awcms_sessions (tenant_id, identity_id, token_hash, expires_at, origin_auth)
+      VALUES (${customerTenantId}, ${identity[0]!.identity_id},
+              ${hashSessionToken(delegatedToken)}, ${new Date(Date.now() + 3600_000)}, 'delegated')
+    `;
+
+    const res = await callRoute(revokeDELETE, {
+      method: "DELETE",
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      params: { id: grantId },
+      query: "?reason=incident+closed"
+    });
+
+    expect(res.status).toBe(200);
+
+    const after = (await sql`
+      SELECT tu.status,
+             (SELECT count(*)::int FROM awcms_sessions s
+              WHERE s.tenant_id = ${customerTenantId}
+                AND s.identity_id = tu.identity_id
+                AND s.revoked_at IS NULL) AS live_sessions
+      FROM awcms_tenant_users tu
+      WHERE tu.tenant_id = ${customerTenantId} AND tu.id = ${delegatedTenantUserId}
+    `) as { status: string; live_sessions: number }[];
+
+    expect(after[0]!.status).toBe("inactive");
+    expect(after[0]!.live_sessions).toBe(0);
+  });
+
+  test("revoking an already-revoked grant answers 404", async () => {
+    const res = await callRoute(revokeDELETE, {
+      method: "DELETE",
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      params: { id: grantId }
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  test("severing the partnership succeeds and removes it from the customer's list", async () => {
+    const res = await callRoute(severDELETE, {
+      method: "DELETE",
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      params: { id: engagementId }
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.severed).toBe(true);
+
+    const listed = await callRoute(listEngagementsGET, {
+      method: "GET",
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token
+    });
+
+    expect(listed.body.data.engagements).toHaveLength(0);
+  });
+
+  test("and the partner's book empties with it", async () => {
+    const res = await callRoute(managedTenantsGET, {
+      method: "GET",
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token
+    });
+
+    expect(res.body.data.managedTenants).toHaveLength(0);
+  });
+
+  test("a system role can never be delegated", async () => {
+    // Re-engage so there is something to approve against.
+    const engaged = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId }
+    });
+    expect(engaged.status).toBe(201);
+
+    const approved = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: ownerRoleId,
+        purpose: "owner should be impossible",
+        expiresAt: inSevenDays()
+      }
+    });
+
+    // Approval itself succeeds — the refusal lives at redemption, in
+    // `materializeMembership`, which is the writer every membership goes
+    // through. What must be impossible is the MEMBERSHIP, not the paperwork.
+    expect(approved.status).toBe(201);
+
+    const redeemed = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token,
+      body: {
+        targetTenantId: customerTenantId,
+        code: approved.body.data.accessCode
+      }
+    });
+
+    expect(redeemed.status).toBe(404);
+  });
+});

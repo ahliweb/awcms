@@ -134,6 +134,27 @@ masih boleh dieja, tiga sudah menjadi tempat nilai keempat terlupakan.
 - PR ini mendarat **inert** — belum ada rute yang memanggilnya. Permukaannya PR
   8.4, dan PR itu tidak akan juga menambahkan model datanya.
 
+## Koreksi (PR 8.4, `sql/120`) — grant hidup lebih lama dari kemitraannya
+
+`sql/117` mengikat grant ke baris kemitraan dengan FK komposit, dan alasannya
+terdengar benar: "sebuah grant hanya bisa ada di tempat kemitraannya ada".
+
+**Diukur dengan menjalankannya, itu salah.** Begitu satu grant pernah dibuat,
+memutus kemitraan GAGAL selamanya: grant yang sudah dicabut tetap mereferensi
+baris pemetaan, dan pencabutan sengaja tidak menghapusnya — ia catatan retensi
+365 hari. Jadi pelanggan yang paling butuh memutus kemitraan, yang partnernya
+PERNAH benar-benar masuk, adalah satu-satunya yang tidak bisa.
+
+Yang benar: **grant adalah SEJARAH, kemitraan adalah KEADAAN SEKARANG.** "Siapa
+yang pernah bisa melihat data kami" justru paling ditanyakan setelah vendornya
+diberhentikan. FK-nya dipindahkan ke registri `awcms_partners`, dan invarian
+"tidak ada grant tanpa kemitraan hidup" tetap ditegakkan basis data **saat
+penulisan** lewat `INSERT … SELECT … WHERE EXISTS` — predikat di dalam statement
+yang sama, bukan pemeriksaan yang mendahuluinya, karena yang kedua adalah TOCTOU.
+
+Ditemukan E2E, bukan review. Itu sendiri catatan yang layak: FK-nya terbaca
+benar di setiap pembacaan sampai ada yang menjalankan urutan lengkapnya.
+
 ## Ditolak
 
 - **Role `support` yang ditanam platform** (dan seed+backfill yang menyertainya).

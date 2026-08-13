@@ -318,6 +318,152 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/access/delegated-grants:
+    get:
+      operationId: listDelegatedGrants
+      tags:
+        - Identity & Access
+      summary: List delegated-access grants, live and historical.
+      description: 'ADR-0090. Revoked and expired grants are listed too: "who could see our data last March, and until when" is the question an audit asks, and a list of only live grants answers a different one. The redemption code is never returned — its column is not even selected.'
+      responses:
+        "200":
+          description: Every grant this tenant has approved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      grants:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DelegatedAccessGrant"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: approveDelegatedAccess
+      tags:
+        - Identity & Access
+      summary: Approve delegated access for a partner, at a role you choose.
+      description: ADR-0090. Mints a single-use redemption code, returned EXACTLY ONCE in this response and never readable again. The role must already exist in this tenant and may not be a system role, so `owner` cannot be delegated; the grant may last at most 30 days. Guarded by `partner_access.assign`, because what this does is hand a role to somebody outside the organisation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - partnerTenantId
+                - roleId
+                - purpose
+                - expiresAt
+              properties:
+                partnerTenantId:
+                  type: string
+                  format: uuid
+                roleId:
+                  type: string
+                  format: uuid
+                  description: An existing, non-system role in THIS tenant.
+                purpose:
+                  type: string
+                  maxLength: 500
+                  description: Required and never defaulted. "Why does this vendor have access" is the first question an audit asks, and a blank answer supplied by the system reads as an answer.
+                expiresAt:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Approved. `accessCode` appears here and nowhere else, ever.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      grantId:
+                        type: string
+                        format: uuid
+                      accessCode:
+                        type: string
+                        description: Returned once. Hand it to the partner out of band.
+                      codeExpiresAt:
+                        type: string
+                        format: date-time
+                      expiresAt:
+                        type: string
+                        format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such partner engagement, or no such role in this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/access/delegated-grants/{id}:
+    delete:
+      operationId: revokeDelegatedAccess
+      tags:
+        - Identity & Access
+      summary: Revoke delegated access immediately.
+      description: ADR-0090. The grant dies, the membership it printed goes inactive, and every session on it is revoked — one transaction, no ordering that can leave one of the three behind. A grant that was already revoked answers 404, which is all the caller is owed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: reason
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+      responses:
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/access/evaluate:
     post:
       operationId: accessEvaluate
@@ -517,6 +663,133 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/access/partner-engagements:
+    get:
+      operationId: listPartnerEngagements
+      tags:
+        - Identity & Access
+      summary: List the partners that reach this tenant.
+      description: ADR-0089. The customer's authoritative view of every partnership into their own tenant. The partner's mirror of this (`GET /api/v1/partner/tenants`) is a convenience served by a narrow SECURITY DEFINER function; this one is the record.
+      responses:
+        "200":
+          description: The partnerships reaching this tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      engagements:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PartnerEngagement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: engagePartner
+      tags:
+        - Identity & Access
+      summary: Engage a partner for this tenant.
+      description: 'ADR-0089 — the customer initiates, always. There is no partner-facing counterpart: a partner that could insert its own engagement would be handing itself reach. "Not a registered partner" and "no such tenant" answer identically, so the endpoint cannot be swept as a directory of the platform''s partners.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - partnerTenantId
+              properties:
+                partnerTenantId:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: The partner now reaches this tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      engagement:
+                        $ref: "#/components/schemas/PartnerEngagement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No such partner. Deliberately indistinguishable from "no such tenant" and from "that tenant is not a registered partner".
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: That partner is already engaged for this tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/access/partner-engagements/{id}:
+    delete:
+      operationId: severPartnerEngagement
+      tags:
+        - Identity & Access
+      summary: Sever a partnership, killing every grant under it.
+      description: "ADR-0089/ADR-0090. Every live delegated-access grant under the partnership is revoked in the SAME transaction — memberships deactivated, sessions killed. The ordering is enforced by a foreign key rather than by remembering: deleting the engagement while a grant still names it fails."
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Severed, with the number of grants revoked with it.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      severed:
+                        type: boolean
+                      partnerTenantId:
+                        type: string
+                        format: uuid
+                      revokedGrants:
+                        type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/access/policies:
     get:
       operationId: accessListAbacPolicies
@@ -1285,6 +1558,79 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/auth/delegated-access/redeem:
+    post:
+      operationId: redeemDelegatedAccess
+      tags:
+        - Identity & Access
+      summary: Exchange a delegated-access code for a membership in the customer's tenant.
+      description: "ADR-0090. Requires a LIVE SESSION in the caller's own tenant: the code authenticates nothing, and what proves who is redeeming is the global principal behind that session. It returns a MEMBERSHIP, not a session — ordinary sign-in or `POST /api/v1/auth/session/switch` works afterwards, because afterwards they are a member. Minting a session here would mean a second copy of the target tenant's entry policy, and a second copy is where the MFA gate goes quietly missing. Every refusal answers 404."
+      parameters:
+        - name: X-AWCMS-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The caller's OWN tenant — the one their session belongs to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetTenantId
+                - code
+              properties:
+                targetTenantId:
+                  type: string
+                  format: uuid
+                  description: The customer tenant the grant was approved in.
+                code:
+                  type: string
+                  description: The single-use code the customer handed over.
+      responses:
+        "200":
+          description: The caller is now a delegated member of the target tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      tenantId:
+                        type: string
+                        format: uuid
+                      tenantUserId:
+                        type: string
+                        format: uuid
+                      nextStep:
+                        type: string
+                        enum:
+                          - sign_in_to_tenant
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: "One shape for every refusal: unknown code, expired grant, revoked grant, wrong tenant, membership refused. A holder must not learn whether the code is real."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many attempts from this source. Carries `retry-after`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/auth/invitations/{token}:
     get:
       operationId: getAuthInvitationPreview
@@ -10411,6 +10757,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /api/v1/partner/tenants:
+    get:
+      operationId: listManagedTenants
+      tags:
+        - Identity & Access
+      summary: The partner's own view of which tenants have engaged it.
+      description: ADR-0089. Served by a narrow SECURITY DEFINER function (`sql/119`), because the engagement rows belong to the TARGET tenant and are unreadable from here under FORCE RLS. The partner tenant is taken from the CALLER'S CONTEXT, never from the request, so nobody can ask for somebody else's book. Returns no `engagedBy` — that is a third party's identifier the partner does not need.
+      responses:
+        "200":
+          description: The tenants this partner manages.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      managedTenants:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ManagedTenant"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/profiles:
     get:
       operationId: listProfiles
@@ -18814,6 +19190,36 @@ components:
         createdAt:
           type: string
           format: date-time
+    DelegatedAccessGrant:
+      type: object
+      description: "A delegated-access grant as its OWNER tenant sees it (ADR-0090). The redemption code is absent by construction: the column is never selected."
+      properties:
+        id:
+          type: string
+          format: uuid
+        partnerTenantId:
+          type: string
+          format: uuid
+        roleId:
+          type: string
+          format: uuid
+        purpose:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        redeemedAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        grantedTenantUserId:
+          type: string
+          format: uuid
+          nullable: true
     DeleteTenantDomainRequest:
       type: object
       required:
@@ -19313,6 +19719,22 @@ components:
             - active
             - expired
             - revoked
+    ManagedTenant:
+      type: object
+      description: "A tenant that has engaged this partner, as the PARTNER sees it (ADR-0089). Deliberately narrower than `PartnerEngagement`: no `engagedBy`, because that is a third party's identifier."
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        tenantCode:
+          type: string
+        tenantName:
+          type: string
+        tenantStatus:
+          type: string
+        engagedAt:
+          type: string
+          format: date-time
     MediaEnforcementEnabled:
       type: object
       required:
@@ -19860,6 +20282,23 @@ components:
         current:
           type: boolean
           description: True for the session this request is authenticated by.
+    PartnerEngagement:
+      type: object
+      description: A partnership reaching THIS tenant (ADR-0089). The partner's name comes from the RLS-free `awcms_tenants` row rather than being denormalised into the mapping — a copy could go stale with nobody noticing.
+      properties:
+        id:
+          type: string
+          format: uuid
+        partnerTenantId:
+          type: string
+          format: uuid
+        partnerTenantCode:
+          type: string
+        partnerTenantName:
+          type: string
+        engagedAt:
+          type: string
+          format: date-time
     ProfileEntityLink:
       type: object
       properties:

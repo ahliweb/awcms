@@ -17,6 +17,16 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/access/delegated-grants/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/access/delegated-grants/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/access/evaluate.ts",
       "workClass": "interactive",
       "source": "default"
@@ -35,6 +45,16 @@
       "path": "src/pages/api/v1/access/modules.ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/access/partner-engagements/[id].ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/access/partner-engagements/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/access/policies/[id].ts",
@@ -740,6 +760,11 @@
       "path": "src/pages/api/v1/offices/index.ts",
       "workClass": "interactive",
       "source": "default"
+    },
+    {
+      "path": "src/pages/api/v1/partner/tenants/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
     },
     {
       "path": "src/pages/api/v1/profiles/[id].ts",

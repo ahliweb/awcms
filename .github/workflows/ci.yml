@@ -305,6 +305,7 @@ jobs:
           tests/mfa-integration.test.ts
           tests/mfa-login-e2e.test.ts
           tests/office-directory-postgres.test.ts
+          tests/partner-delegated-access-e2e.test.ts
           tests/oidc-integration.test.ts
           tests/openapi-office-response-schema-postgres.test.ts
           tests/reporting-projection-rebuild-lock.test.ts
