@@ -182,6 +182,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_site_search": "Site search",
   "admin.layout.nav_theming": "Theming",
   "admin.layout.nav_email_templates": "Email templates",
+  "admin.layout.nav_email_suppression": "Email suppression",
   "admin.layout.nav_audit_trail": "Audit trail",
   "admin.layout.nav_comments": "Moderation queue",
   "admin.layout.nav_visitor_analytics": "Visitor analytics",

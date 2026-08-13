@@ -52,13 +52,10 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "comments.settings.read",
   "comments.settings.update",
 
-  // email (9)
+  // email (6)
   "email.announcement.create",
   "email.message.cancel",
   "email.message.read",
-  "email.suppression.create",
-  "email.suppression.delete",
-  "email.suppression.read",
   "email.template.delete",
   "email.template.restore",
   "email.template.update",
