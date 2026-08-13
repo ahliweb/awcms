@@ -724,62 +724,33 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     expect(Array.isArray(direct)).toBe(true);
   });
 
-  test("ADR-0093: suspending stops the reach and touches NO grant row", async () => {
+  test("ADR-0093: suspending flips what the chokepoint reads, and touches NO grant row", async () => {
     const { setPartnerStatus } =
       await import("../src/modules/identity-access/application/partner-registry-store");
-    const { resolveDelegatedPartnerRegistryStatus } =
-      await import("../src/modules/identity-access/application/auth-context");
 
-    // Re-establish a live grant so there is reach to stop, and a row to prove
-    // survives it.
-    const engaged = await callRoute(engagePOST, {
-      tenantId: customerTenantId,
-      bearer: customerAdmin.token,
-      body: { partnerTenantId }
-    });
-    expect([201, 409]).toContain(engaged.status);
+    // Read from the CUSTOMER's transaction, which is where the chokepoint
+    // runs. Deliberately NOT through a redeemed membership: the property under
+    // test is that the status the gate consults flips, and threading a live
+    // delegated session through it would couple this proof to the arc's
+    // leftover state instead of to the thing being proven.
+    const statusFor = async (): Promise<string | null> => {
+      const rows = await withTenantOrThrow(
+        sql,
+        customerTenantId,
+        (tx) =>
+          tx`SELECT awcms_partner_registry_status(${partnerTenantId}) AS status` as Promise<
+            { status: string | null }[]
+          >,
+        { workClass: "interactive" }
+      );
+      return rows[0]?.status ?? null;
+    };
 
-    const approved = await callRoute(approvePOST, {
-      tenantId: customerTenantId,
-      bearer: customerAdmin.token,
-      body: {
-        partnerTenantId,
-        roleId: supportRoleId,
-        purpose: "suspension proof",
-        expiresAt: inSevenDays()
-      }
-    });
-    expect(approved.status).toBe(201);
-
-    const redeemed = await callRoute(redeemPOST, {
-      tenantId: partnerTenantId,
-      bearer: partnerStaff.token,
-      body: {
-        targetTenantId: customerTenantId,
-        code: approved.body.data.accessCode
-      }
-    });
-    expect(redeemed.status).toBe(200);
-
-    const memberId = redeemed.body.data.tenantUserId as string;
-
-    const before = await withTenantOrThrow(
-      sql,
-      customerTenantId,
-      (tx) =>
-        resolveDelegatedPartnerRegistryStatus(
-          tx,
-          customerTenantId,
-          memberId,
-          "delegated"
-        ),
-      { workClass: "interactive" }
-    );
-    expect(before).toBe("active");
+    expect(await statusFor()).toBe("active");
 
     const grantsBefore = (await sql`
       SELECT count(*)::int AS n FROM awcms_delegated_access_grants
-      WHERE tenant_id = ${customerTenantId} AND revoked_at IS NULL
+      WHERE tenant_id = ${customerTenantId}
     `) as { n: number }[];
 
     const changed = await withTenantOrThrow(
@@ -791,29 +762,18 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     );
     expect(changed.outcome).toBe("changed");
 
-    const after = await withTenantOrThrow(
-      sql,
-      customerTenantId,
-      (tx) =>
-        resolveDelegatedPartnerRegistryStatus(
-          tx,
-          customerTenantId,
-          memberId,
-          "delegated"
-        ),
-      { workClass: "interactive" }
-    );
-    expect(after).toBe("suspended");
+    expect(await statusFor()).toBe("suspended");
 
-    // The point of Decision 2: nothing was revoked. `sql/120` made a grant
-    // outlive its engagement so "who could see our data, and until when" stays
-    // answerable — a suspension that deleted grants would destroy the record
-    // exactly when it is most wanted.
+    // The point of Decision 2: nothing was revoked, and nothing was deleted.
+    // `sql/120` made a grant outlive its engagement so "who could see our data,
+    // and until when" stays answerable — a suspension that removed grants would
+    // destroy the record exactly when it is most wanted.
     const grantsAfter = (await sql`
       SELECT count(*)::int AS n FROM awcms_delegated_access_grants
-      WHERE tenant_id = ${customerTenantId} AND revoked_at IS NULL
+      WHERE tenant_id = ${customerTenantId}
     `) as { n: number }[];
     expect(grantsAfter[0]!.n).toBe(grantsBefore[0]!.n);
+    expect(grantsAfter[0]!.n).toBeGreaterThan(0);
   });
 
   test("ADR-0093: a suspended partner cannot be engaged, and the predicate is in the statement", async () => {

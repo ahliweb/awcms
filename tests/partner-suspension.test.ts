@@ -177,7 +177,7 @@ describe("both write paths refuse INSIDE the statement, never before it", () => 
     expect(insert).not.toContain("VALUES");
   });
 
-  test("neither store checks the status in TypeScript first", async () => {
+  test("neither store gates on a status read in TypeScript", async () => {
     for (const path of [GRANT_STORE, ENGAGEMENT_STORE]) {
       const source = stripComments(await readFile(path, "utf8"));
 
@@ -185,6 +185,36 @@ describe("both write paths refuse INSIDE the statement, never before it", () => 
       // the in-statement predicate exists to remove.
       expect(source).not.toMatch(/status\s*===\s*["']active["']/);
     }
+  });
+
+  test("the engagement store reads the status only AFTER the write refused", async () => {
+    const source = stripComments(await readFile(ENGAGEMENT_STORE, "utf8"));
+
+    const insert = source.indexOf("INSERT INTO awcms_partner_managed_tenants");
+    const classify = source.indexOf(
+      "awcms_partner_registry_status(",
+      source.indexOf("if (!rows[0])")
+    );
+
+    expect(insert).toBeGreaterThan(-1);
+    expect(classify).toBeGreaterThan(-1);
+    // The second read is not a second gate: the write has already refused, and
+    // it only chooses the sentence. Moved ABOVE the INSERT it would become the
+    // TOCTOU the predicate exists to remove.
+    expect(insert).toBeLessThan(classify);
+  });
+
+  test("an UNREGISTERED tenant stays indistinguishable, and only a suspended one is named", async () => {
+    const source = stripComments(await readFile(ENGAGEMENT_STORE, "utf8"));
+
+    // Both refusals produce zero rows from the same predicate, and collapsing
+    // them would make the platform's partner registry enumerable one guess at
+    // a time — the directory ADR-0089 refused, rebuilt as an oracle. The
+    // suspended answer is safe to name because the caller already knows that
+    // tenant is a partner: they were about to engage it.
+    expect(source).toContain('code: "PARTNER_SUSPENDED"');
+    expect(source).toContain('code: "NOT_A_PARTNER"');
+    expect(source).toContain('status[0]?.status === "suspended"');
   });
 });
 

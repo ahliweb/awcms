@@ -109,7 +109,23 @@ export async function engagePartner(
     RETURNING id, partner_tenant_id, engaged_at
   `) as { id: string; partner_tenant_id: string; engaged_at: string }[];
 
-  if (!rows[0]) return { ok: false, code: "PARTNER_SUSPENDED" };
+  if (!rows[0]) {
+    // Zero rows means the predicate refused, and there are TWO reasons it
+    // could have. Distinguished by a SECOND read — which is not a second gate:
+    // the write has already refused, and this only chooses the sentence. A
+    // TOCTOU on a message is harmless, while collapsing the two answers is not:
+    // a tenant that is not registered at all must stay indistinguishable from
+    // one that does not exist (the 404 `awcms_partner_managed_tenants`' foreign
+    // key used to produce, and which a test pins), or the registry becomes
+    // enumerable one guess at a time.
+    const status = (await tx`
+      SELECT awcms_partner_registry_status(${partnerTenantId}) AS status
+    `) as { status: string | null }[];
+
+    return status[0]?.status === "suspended"
+      ? { ok: false, code: "PARTNER_SUSPENDED" }
+      : { ok: false, code: "NOT_A_PARTNER" };
+  }
 
   const named = (await tx`
     SELECT tenant_code, tenant_name FROM awcms_tenants WHERE id = ${partnerTenantId}
