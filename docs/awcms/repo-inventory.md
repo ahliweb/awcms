@@ -8,12 +8,12 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 124   |
-| Tabel `awcms_*`                    | 146   |
-| Tabel dengan `FORCE` RLS           | 129   |
+| Migrasi                            | 126   |
+| Tabel `awcms_*`                    | 147   |
+| Tabel dengan `FORCE` RLS           | 130   |
 | Tabel RLS-free (global, by design) | 17    |
-| Berkas test                        | 379   |
-| Berkas route                       | 352   |
+| Berkas test                        | 380   |
+| Berkas route                       | 357   |
 | ADR                                | 95    |
 
 ### Modul
@@ -171,6 +171,8 @@
 | 122 | `sql/122_awcms_identity_machine_credential_write_permissions.sql`  |
 | 123 | `sql/123_awcms_partner_registry_permissions.sql`                   |
 | 124 | `sql/124_awcms_partner_suspension.sql`                             |
+| 125 | `sql/125_awcms_subject_requests.sql`                               |
+| 126 | `sql/126_awcms_subject_request_permissions.sql`                    |
 
 ### Tabel & Row-Level Security
 
@@ -292,6 +294,7 @@
 | `awcms_site_search_settings`             | `sql/064_awcms_site_search_schema.sql`                     | ya    | ya    |
 | `awcms_sod_conflict_evaluations`         | `sql/029_awcms_sod_schema.sql`                             | ya    | ya    |
 | `awcms_sod_conflict_exceptions`          | `sql/029_awcms_sod_schema.sql`                             | ya    | ya    |
+| `awcms_subject_requests`                 | `sql/125_awcms_subject_requests.sql`                       | ya    | ya    |
 | `awcms_sync_aggregate_versions`          | `sql/011_awcms_sync_storage_conflict_schema.sql`           | ya    | ya    |
 | `awcms_sync_conflicts`                   | `sql/011_awcms_sync_storage_conflict_schema.sql`           | ya    | ya    |
 | `awcms_sync_inbox`                       | `sql/010_awcms_sync_storage_outbox_inbox_schema.sql`       | ya    | ya    |
@@ -327,7 +330,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 325        |
+| `(root)`      | 326        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
@@ -336,8 +339,8 @@
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 287    |
-| `/admin/**`     | 41     |
+| `/api/v1/**`    | 291    |
+| `/admin/**`     | 42     |
 | publik / anonim | 24     |
 
 <!-- END GENERATED: repo-inventory -->

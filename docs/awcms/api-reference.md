@@ -7458,6 +7458,112 @@ Gated by data_lifecycle.runs.read. Categorized AGGREGATE counts only — never r
 | 401    | Missing or invalid session.      | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.      | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/data-lifecycle/subject-requests` — List subject requests (and the pending-erasure inbox)
+
+- **operationId**: `dataLifecycleSubjectRequestsList`
+- **Security**: bearerAuth + tenantHeader
+
+Gated by data_lifecycle.subject_request.read — a permission that discloses NO subject data: the rows carry ids, a status and the stated reason, never exported content. Filtering by status=pending_approval is the checker's inbox. Newest first (limit 100).
+
+**Parameters**
+
+| Name               | In     | Required | Type                                                           | Description |
+| ------------------ | ------ | -------- | -------------------------------------------------------------- | ----------- |
+| `status`           | query  | no       | enum(`disclosed`, `pending_approval`, `rejected`, `completed`) |             |
+| `limit`            | query  | no       | integer                                                        |             |
+| `X-Correlation-ID` | header | no       | string                                                         |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | A page of subject requests. | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/data-lifecycle/subject-requests/{id}/decide` — Approve (and execute) or reject a pending erasure (checker half)
+
+- **operationId**: `dataLifecycleSubjectEraseDecide`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.approve — a DIFFERENT permission from the maker's, and holding both is a critical SoD conflict (data_lifecycle.subject_erasure_maker_checker). Approving executes the erasure inside the SAME transaction as the status claim, so two simultaneous approvals cannot both run. Rejecting is a first-class outcome with its own reason. Both are audited critical. Requires Idempotency-Key.
+
+**Parameters**
+
+| Name               | In     | Required | Type          | Description |
+| ------------------ | ------ | -------- | ------------- | ----------- |
+| `id`               | path   | yes      | string (uuid) |             |
+| `Idempotency-Key`  | header | yes      | string        |             |
+| `X-Correlation-ID` | header | no       | string        |             |
+
+**Request body** (required): [`DataLifecycleSubjectDecisionInput`](#schema-datalifecyclesubjectdecisioninput)
+
+**Responses**
+
+| Status | Description                                                                                                                                                                                                    | Schema                                 |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | Decision recorded (and, when approved, the erasure executed), or replay of a prior identical request.                                                                                                          | object                                 |
+| 400    | Validation error.                                                                                                                                                                                              | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                                                                                                                    | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 409    | The decision was attempted by the requester (SOD_MAKER_IS_CHECKER), the request is no longer pending (REQUEST_NOT_PENDING), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/data-lifecycle/subject-requests/erase` — Request erasure of a data subject (maker half)
+
+- **operationId**: `dataLifecycleSubjectEraseRequest`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.create and it ERASES NOTHING — it records a request for somebody else to decide. Execution lives behind POST /{id}/decide under a different permission, and the row's own CHECK constraint refuses a decision by its own requester, so a caller holding both keys still cannot approve their own request. High-risk: requires Idempotency-Key, a stated ground, audited critical. The response previews what approving it would actually WRITE (`wouldWrite`) — far fewer tables than the subject appears in, because most are severed by anonymising the identity row and need no write of their own.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`DataLifecycleSubjectRequestInput`](#schema-datalifecyclesubjectrequestinput)
+
+**Responses**
+
+| Status | Description                                                                          | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | Erasure request recorded (pending approval), or replay of a prior identical request. | object                                 |
+| 400    | Validation error.                                                                    | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                          | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                          | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                  | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).      | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/data-lifecycle/subject-requests/export` — Export everything this tenant holds about a data subject
+
+- **operationId**: `dataLifecycleSubjectExport`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `Idempotency-Key`  | header | yes      | string |             |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): [`DataLifecycleSubjectRequestInput`](#schema-datalifecyclesubjectrequestinput)
+
+**Responses**
+
+| Status | Description                                                                     | Schema                                 |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The subject's data, or replay of a prior identical request.                     | object                                 |
+| 400    | Validation error.                                                               | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                     | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                     | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                             | [`ApiError`](#standard-error-envelope) |
+| 409    | The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT). | [`ApiError`](#standard-error-envelope) |
+
 ## SEO & Distribution
 
 Tenant SEO defaults for the central metadata renderer + public discovery/syndication surfaces (seo_distribution module, ADR-0038 discovery scope) — read/update site identity, default social/Organization images, Twitter handle, the tenant-wide noindex switch, and feed/sitemap config. The public robots.txt/sitemap/feed routes themselves are unauthenticated Astro XML/text routes (not part of this OpenAPI contract), host-resolved and cache-validated. config.update is high-risk (rewrites the public metadata/indexability surface), idempotency-keyed, and audited.
@@ -9206,6 +9312,38 @@ Per-tenant comment configuration. Every numeric bound mirrors a CHECK constraint
 ```json
 {
   "releaseReason": "string"
+}
+```
+
+### Schema: DataLifecycleSubjectDecisionInput
+
+| Field      | Type                      | Required | Nullable | Description |
+| ---------- | ------------------------- | -------- | -------- | ----------- |
+| `decision` | enum(`approve`, `reject`) | yes      | no       |             |
+| `reason`   | string                    | yes      | no       |             |
+
+**Example**
+
+```json
+{
+  "decision": "approve",
+  "reason": "string"
+}
+```
+
+### Schema: DataLifecycleSubjectRequestInput
+
+| Field          | Type          | Required | Nullable | Description                                                                                                                                             |
+| -------------- | ------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenantUserId` | string (uuid) | yes      | no       | The SUBJECT — a tenant user in the caller's own tenant (ADR-0094 Decision 1, never the global principal).                                               |
+| `reason`       | string        | yes      | no       | Why the disclosure or erasure is being made. Recorded on the request row and in the audit trail; the checker's only input for an irreversible decision. |
+
+**Example**
+
+```json
+{
+  "tenantUserId": "00000000-0000-0000-0000-000000000000",
+  "reason": "string"
 }
 ```
 

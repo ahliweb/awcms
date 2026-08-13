@@ -6844,6 +6844,247 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/data-lifecycle/subject-requests:
+    get:
+      tags:
+        - Data Lifecycle
+      summary: List subject requests (and the pending-erasure inbox)
+      description: "Gated by data_lifecycle.subject_request.read — a permission that discloses NO subject data: the rows carry ids, a status and the stated reason, never exported content. Filtering by status=pending_approval is the checker's inbox. Newest first (limit 100)."
+      operationId: dataLifecycleSubjectRequestsList
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - disclosed
+              - pending_approval
+              - rejected
+              - completed
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - $ref: "#/components/parameters/CorrelationId"
+      responses:
+        "200":
+          description: A page of subject requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      requests:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/data-lifecycle/subject-requests/{id}/decide:
+    post:
+      tags:
+        - Data Lifecycle
+      summary: Approve (and execute) or reject a pending erasure (checker half)
+      description: ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.approve — a DIFFERENT permission from the maker's, and holding both is a critical SoD conflict (data_lifecycle.subject_erasure_maker_checker). Approving executes the erasure inside the SAME transaction as the status claim, so two simultaneous approvals cannot both run. Rejecting is a first-class outcome with its own reason. Both are audited critical. Requires Idempotency-Key.
+      operationId: dataLifecycleSubjectEraseDecide
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataLifecycleSubjectDecisionInput"
+      responses:
+        "200":
+          description: Decision recorded (and, when approved, the erasure executed), or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      request:
+                        $ref: "#/components/schemas/DataLifecycleSubjectRequest"
+                      erasedTables:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectErasureTarget"
+                      skippedColumns:
+                        type: array
+                        description: Columns a descriptor named as redactable that the engine did NOT write, because their type cannot hold the sentinel. Reported rather than swallowed.
+                        items:
+                          type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The decision was attempted by the requester (SOD_MAKER_IS_CHECKER), the request is no longer pending (REQUEST_NOT_PENDING), or the Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/data-lifecycle/subject-requests/erase:
+    post:
+      tags:
+        - Data Lifecycle
+      summary: Request erasure of a data subject (maker half)
+      description: "ADR-0094 Decision 3. Gated by data_lifecycle.subject_erasure.create and it ERASES NOTHING — it records a request for somebody else to decide. Execution lives behind POST /{id}/decide under a different permission, and the row's own CHECK constraint refuses a decision by its own requester, so a caller holding both keys still cannot approve their own request. High-risk: requires Idempotency-Key, a stated ground, audited critical. The response previews what approving it would actually WRITE (`wouldWrite`) — far fewer tables than the subject appears in, because most are severed by anonymising the identity row and need no write of their own."
+      operationId: dataLifecycleSubjectEraseRequest
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataLifecycleSubjectRequestInput"
+      responses:
+        "200":
+          description: Erasure request recorded (pending approval), or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      request:
+                        $ref: "#/components/schemas/DataLifecycleSubjectRequest"
+                      wouldWrite:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectErasureTarget"
+                      retained:
+                        type: array
+                        description: Tables an erasure deliberately leaves ALONE, and why.
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectUnanswered"
+                      unanswered:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectUnanswered"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /api/v1/data-lifecycle/subject-requests/export:
+    post:
+      tags:
+        - Data Lifecycle
+      summary: Export everything this tenant holds about a data subject
+      description: "ADR-0094. Gated by data_lifecycle.subject_request.export — its OWN permission, because export and erasure are not one authority. Audited as a DISCLOSURE (action subject_data.disclosed, severity critical) rather than as a read, and a durable row lands in awcms_subject_requests in the same transaction. Requires Idempotency-Key and a stated reason. The response carries `unanswered`: the tables this report deliberately does not reach (global, or matchable by no column) with the reason each owning module wrote — a subject-access report that is incomplete and does not say so is worse than none, because it is signed. Answered PER TENANT (ADR-0094 Decision 1): there is no cross-tenant export."
+      operationId: dataLifecycleSubjectExport
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataLifecycleSubjectRequestInput"
+      responses:
+        "200":
+          description: The subject's data, or replay of a prior identical request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    enum:
+                      - true
+                  data:
+                    type: object
+                    properties:
+                      request:
+                        $ref: "#/components/schemas/DataLifecycleSubjectRequest"
+                      tables:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectTableExport"
+                      unanswered:
+                        type: array
+                        description: What this answer does NOT cover, and why.
+                        items:
+                          $ref: "#/components/schemas/DataLifecycleSubjectUnanswered"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Idempotency-Key was reused with a different request (IDEMPOTENCY_CONFLICT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /api/v1/database/pool/health:
     get:
       operationId: getDatabasePoolHealth
@@ -19348,6 +19589,140 @@ components:
         createdAt:
           type: string
           format: date-time
+    DataLifecycleSubjectDecisionInput:
+      type: object
+      required:
+        - decision
+        - reason
+      properties:
+        decision:
+          type: string
+          enum:
+            - approve
+            - reject
+        reason:
+          type: string
+          minLength: 8
+    DataLifecycleSubjectErasureTarget:
+      type: object
+      properties:
+        key:
+          type: string
+        tableName:
+          type: string
+        erasure:
+          type: string
+          enum:
+            - anonymize
+            - hard_delete
+            - status_transition_then_purge
+        rowsAffected:
+          type: integer
+    DataLifecycleSubjectRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subjectTenantUserId:
+          type: string
+          format: uuid
+        requestType:
+          type: string
+          enum:
+            - export
+            - erasure
+        status:
+          type: string
+          enum:
+            - disclosed
+            - pending_approval
+            - rejected
+            - completed
+          description: "`disclosed` is an export that happened; an export is never pending, because it waits for nobody."
+        reason:
+          type: string
+        requestedBy:
+          type: string
+          format: uuid
+        requestedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Always a DIFFERENT tenant user from requestedBy — enforced by a CHECK constraint, not only by the SoD rule.
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        decisionReason:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        tablesAnswered:
+          type: integer
+          nullable: true
+        tablesUnanswered:
+          type: integer
+          nullable: true
+          description: Tables outside this answer (global, or matchable by no column). Carried so the record states its own coverage.
+        rowsAffected:
+          type: integer
+          nullable: true
+    DataLifecycleSubjectRequestInput:
+      type: object
+      required:
+        - tenantUserId
+        - reason
+      properties:
+        tenantUserId:
+          type: string
+          format: uuid
+          description: The SUBJECT — a tenant user in the caller's own tenant (ADR-0094 Decision 1, never the global principal).
+        reason:
+          type: string
+          minLength: 8
+          description: Why the disclosure or erasure is being made. Recorded on the request row and in the audit trail; the checker's only input for an irreversible decision.
+    DataLifecycleSubjectTableExport:
+      type: object
+      properties:
+        key:
+          type: string
+        tableName:
+          type: string
+        ownerModuleKey:
+          type: string
+        redactedColumns:
+          type: array
+          description: Columns withheld from the export — hashes, tokens, secrets — even though the row is the subject's own.
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    DataLifecycleSubjectUnanswered:
+      type: object
+      properties:
+        key:
+          type: string
+        tableName:
+          type: string
+        ownerModuleKey:
+          type: string
+        reason:
+          type: string
+          enum:
+            - global
+            - no_subject_column
+        rationale:
+          type: string
     DelegatedAccessGrant:
       type: object
       description: "A delegated-access grant as its OWNER tenant sees it (ADR-0090). The redemption code is absent by construction: the column is never selected."
