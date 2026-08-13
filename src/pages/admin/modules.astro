@@ -61,6 +61,15 @@ const screen = await loadAdminScreen({
       moduleKey: "module_management",
       activityCode: "tenant_modules",
       action: "disable"
+    }),
+    // #546. The settings editor is a DIFFERENT activity from the enable/disable
+    // toggle, so the link is decided by its own key: an operator who may turn a
+    // module off is not thereby somebody who may rewrite its configuration, and
+    // a link that always answers 403 is worse than no link.
+    canReadSettings: await can({
+      moduleKey: "module_management",
+      activityCode: "settings",
+      action: "read"
     })
   }),
   onError: (error) => {
@@ -79,6 +88,8 @@ const modules: ModuleRow[] =
   screen.state === "allowed" ? screen.data.modules : [];
 const canEnable = screen.state === "allowed" && screen.data.canEnable;
 const canDisable = screen.state === "allowed" && screen.data.canDisable;
+const canReadSettings =
+  screen.state === "allowed" && screen.data.canReadSettings;
 const canToggle = canEnable || canDisable;
 ---
 
@@ -160,7 +171,16 @@ const canToggle = canEnable || canDisable;
                 return (
                   <tr>
                     <td data-label="Key">
-                      <span class="cell-code">{module.moduleKey}</span>
+                      {canReadSettings ? (
+                        <a
+                          class="cell-code"
+                          href={`/admin/modules/${module.moduleKey}`}
+                        >
+                          {module.moduleKey}
+                        </a>
+                      ) : (
+                        <span class="cell-code">{module.moduleKey}</span>
+                      )}
                     </td>
                     <td data-label="Name">{module.name}</td>
                     <td data-label="Version">

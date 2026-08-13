@@ -1,0 +1,275 @@
+---
+/**
+ * Module settings — Issue #546.
+ *
+ * The screen three documents said already existed. It did not: `/admin/modules`
+ * lists modules and turns them on and off, there was no `[moduleKey]` route at
+ * all, and `/admin/blog-settings` rendered a live link straight into a 404.
+ * One of those documents used the claim to justify not building an editor,
+ * which is how a false statement about a control becomes a reason not to have
+ * one. Building the thing the documents described is the correction — deleting
+ * the sentences would have left the gap and lost the record.
+ *
+ * ## It is a PATCH box, not a document editor, and that is not a shortcut
+ *
+ * `updateModuleSettings` merges shallowly — `{ ...before, ...patch }` — and
+ * there is no removal convention anywhere in the contract: no `null`-means-
+ * delete, no replace mode. A textarea presenting the override as a document
+ * would let an operator delete a key, submit, and watch it come back. So this
+ * asks for the keys to SET and says plainly that nothing is removed by leaving
+ * it out. Giving the API a removal path is a separate decision about what
+ * `null` should mean; it is not something a screen may invent.
+ *
+ * ## Three JSON blocks, because the effective value is a computation
+ *
+ * Defaults come from the module descriptor (code, not the database). The
+ * override is the tenant's row. `effective` is the shallow merge the rest of
+ * the system actually reads. Showing only the override would hide the value in
+ * force; showing only `effective` would hide which half an operator can change.
+ *
+ * ## Secrets are refused by the endpoint, and the page says so first
+ *
+ * `validateModuleSettingsPatch` rejects secret-shaped KEYS and secret-shaped
+ * VALUES even under innocent names. These settings are tenant-writable,
+ * DB-stored and admin-readable; a provider credential does not belong here.
+ */
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import "../../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../../lib/logging/error-log";
+import {
+  fetchModuleSettingsView,
+  type ModuleSettingsView
+} from "../../../modules/module-management/application/module-settings";
+
+const ssr = Astro.locals.ssrContext!;
+const moduleKey = Astro.params.moduleKey ?? "";
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "module_management",
+    activityCode: "settings",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // `null` when the key names no registered descriptor — distinct from a
+    // registered module that simply has no override row yet.
+    view: await fetchModuleSettingsView(tx, ssr.tenantId, moduleKey),
+    canUpdate: await can({
+      moduleKey: "module_management",
+      activityCode: "settings",
+      action: "update"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/modules/[moduleKey].astro: failed to load module settings",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const view: ModuleSettingsView | null =
+  screen.state === "allowed" ? screen.data.view : null;
+const canUpdate = screen.state === "allowed" && screen.data.canUpdate;
+
+function pretty(value: Record<string, unknown>): string {
+  return JSON.stringify(value, null, 2);
+}
+---
+
+<AdminLayout title={`Module settings — ${moduleKey}`}>
+  <header class="page-header fade-in-up">
+    <h1 id="module-settings-heading">Module settings</h1>
+    <p class="page-description">
+      Per-tenant overrides for <code>{moduleKey}</code>. The module ships
+      defaults in code; this tenant may override them key by key. What the rest
+      of the system reads is the two merged together.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="module-settings-denied">
+        You do not have permission to view module settings.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="module-settings-load-error">
+        Could not load these settings. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && !view && (
+      <p class="state-notice fade-in-up" id="module-settings-unknown">
+        No module is registered under that key. Check the list on{" "}
+        <a href="/admin/modules">/admin/modules</a>.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && view && (
+      <>
+        <p
+          id="module-settings-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+
+        <section
+          class="fade-in-up"
+          aria-labelledby="module-settings-effective-heading"
+        >
+          <h2 id="module-settings-effective-heading">In force now</h2>
+          <p class="page-description">
+            Schema version {view.schemaVersion}.{" "}
+            {view.updatedAt
+              ? `This tenant last changed it on ${view.updatedAt.slice(0, 10)}.`
+              : "This tenant has never overridden anything — the defaults are in force."}
+          </p>
+          <pre id="module-settings-effective">{pretty(view.effective)}</pre>
+        </section>
+
+        <section
+          class="fade-in-up"
+          aria-labelledby="module-settings-parts-heading"
+        >
+          <h2 id="module-settings-parts-heading">
+            Where those values come from
+          </h2>
+
+          <h3>Defaults (from the module's code — not editable here)</h3>
+          <pre id="module-settings-defaults">{pretty(view.defaults)}</pre>
+
+          <h3>This tenant's override</h3>
+          <pre id="module-settings-override">{pretty(view.tenantOverride)}</pre>
+        </section>
+
+        {canUpdate && (
+          <section
+            class="fade-in-up"
+            aria-labelledby="module-settings-patch-heading"
+          >
+            <h2 id="module-settings-patch-heading">Change some keys</h2>
+
+            <form id="module-settings-form" class="admin-form">
+              <p class="page-description">
+                This is a PATCH, not a replacement. Keys you write here are
+                merged into the override above; keys you leave out are kept as
+                they are. <strong>Leaving a key out does not remove it</strong>—
+                there is no way to remove an override through the API yet, so to
+                undo one, set it back to the default value shown above.
+              </p>
+              <p class="page-description">
+                Secrets are refused, both by key name and by the shape of the
+                value. These settings are stored in the database and readable by
+                every admin who can see this page; a provider credential belongs
+                in an environment variable.
+              </p>
+
+              <label for="module-settings-patch">
+                Keys to set (JSON object)
+              </label>
+              <textarea
+                id="module-settings-patch"
+                name="patch"
+                rows="10"
+                required
+                spellcheck="false"
+                placeholder={'{ "someSetting": true }'}
+              />
+
+              <button id="module-settings-submit" type="submit">
+                Apply changes
+              </button>
+            </form>
+          </section>
+        )}
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import { lockElement, sendJson } from "../../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("module-settings-action-error");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  document
+    .getElementById("module-settings-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (errorBox) errorBox.hidden = true;
+
+      const textarea = document.getElementById(
+        "module-settings-patch"
+      ) as HTMLTextAreaElement | null;
+      const button = document.getElementById(
+        "module-settings-submit"
+      ) as HTMLButtonElement | null;
+      if (!textarea || !button) return;
+
+      // Parsed here so a typo is a message next to the field rather than a 400
+      // from a round trip. The endpoint validates it again regardless — this is
+      // for the operator, not for the server.
+      let patch: unknown;
+      try {
+        patch = JSON.parse(textarea.value);
+      } catch {
+        showError("That is not valid JSON. Check for a trailing comma.");
+        return;
+      }
+
+      if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+        showError("Settings must be a JSON object, not an array or a value.");
+        return;
+      }
+
+      const moduleKey = window.location.pathname.split("/").pop() ?? "";
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJson(
+        "PATCH",
+        `/api/v1/tenant/modules/${encodeURIComponent(moduleKey)}/settings`,
+        patch
+      );
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "SETTINGS_SENSITIVE_KEY_REJECTED"
+          ? "One of those keys looks like a secret. Provider credentials belong in an environment variable, not in tenant settings."
+          : result.errorCode === "SETTINGS_SECRET_SHAPED_VALUE_REJECTED"
+            ? "One of those values looks like a credential, whatever the field is called. Put it in an environment variable instead."
+            : result.errorCode === "RESOURCE_NOT_FOUND"
+              ? "No module is registered under that key."
+              : result.errorCode === "VALIDATION_ERROR"
+                ? "The endpoint refused that patch. Settings must be a JSON object."
+                : "Could not apply those changes. Please try again."
+      );
+      unlock();
+    });
+</script>

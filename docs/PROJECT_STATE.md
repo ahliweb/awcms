@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **39** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **52** (28.096 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **40** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **53** (28.392 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,36 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh enam) — EDITOR SETTINGS MODUL (#546),
+  dan tautan yang selama ini menuju 404.**
+
+  Menutup 2 kunci, **49 → 47**. Tiga dokumen menyatakan panel
+  `/admin/modules/{key}` sudah ada; ia tidak pernah ada, dan
+  `/admin/blog-settings` me-render tautan HIDUP ke 404. Satu dokumen memakai
+  klaim itu untuk membenarkan tidak membangun editor.
+
+  **Membangun yang diklaim dokumen adalah koreksinya.** Menghapus kalimatnya
+  meninggalkan gap-nya dan kehilangan catatannya; membangun halamannya membuat
+  ketiganya benar sekaligus. Ini pola yang layak diulang saat menemukan
+  dokumentasi yang berbohong tentang keberadaan sebuah kontrol: tanyakan dulu
+  apakah lebih murah membuatnya jadi benar.
+
+  **Satu gerbang diperluas, dan bedanya dengan melonggarkan layak dicatat.**
+  `admin-navigation-registry` menuntut tiap halaman admin punya entri sidebar —
+  proxy yang benar untuk halaman statis dan salah untuk rute ber-PARAMETER,
+  karena sidebar tidak bisa memuat `[moduleKey]`. Propertinya dipertahankan dan
+  proxy-nya diganti: halaman dinamis wajib punya INDUK dan dilarang punya entri
+  sidebar. Bandingkan dengan putaran kedua puluh, di mana gerbang enforcement
+  TIDAK dilebarkan karena di sana yang salah adalah cara menulis guard-nya, bukan
+  proxy gerbangnya.
+
+  **Kotak PATCH, bukan editor dokumen — dan itu temuan, bukan pilihan gaya.**
+  `updateModuleSettings` menggabungkan dangkal dan kontraknya tidak punya
+  konvensi penghapusan sama sekali. Textarea yang menyajikan override sebagai
+  dokumen akan membiarkan operator menghapus satu kunci, submit, lalu melihatnya
+  kembali. Memberi API jalur penghapusan adalah keputusan tentang apa arti
+  `null`, dan sengaja TIDAK diambil di sini.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh lima) — LAYAR PARTNER REGISTRY (#540).**
 

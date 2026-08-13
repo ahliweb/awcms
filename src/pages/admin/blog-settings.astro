@@ -16,7 +16,8 @@
  *
  * ## This is NOT the module-settings screen, and the difference is load-bearing
  *
- * `/admin/modules/blog_content` (Module Management, generic) writes
+ * `/admin/modules/blog_content` (Module Management, generic — built in #546,
+ * and until then a link into a 404) writes
  * `awcms_module_settings` — the per-tenant override of the module descriptor's
  * `settings.defaults`, which today is `legacyTenantRouteEnabled` alone. THIS
  * screen writes `awcms_blog_settings`, a different table with a different
