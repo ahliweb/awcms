@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-92 target menjalankan berkas di `scripts/`; 37 di antaranya
+93 target menjalankan berkas di `scripts/`; 38 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -48,6 +48,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `blog:publish:scheduled`                 | `blog-scheduled-publish.ts`                    | —    |
 | `build:asset-budget:check`               | `client-asset-budget.ts`                       | —    |
 | `changesets:policy:check`                | `changeset-policy-check.ts`                    | —    |
+| `check:astro-scripts:check`              | `astro-script-typecheck.ts`                    | ✅   |
 | `check:docs`                             | `check-docs.mjs`                               | ✅   |
 | `check:docs:translation`                 | `check-docs-translation.mjs`                   | ✅   |
 | `comments:resources:check`               | `comments-resources-check.ts`                  | ✅   |

@@ -114,10 +114,13 @@ describe("the three properties this surface exists to keep", () => {
     const page = await readFile(PAGE, "utf8");
 
     const issueBlock = page.slice(
-      page.indexOf('getElementById("issue-credential-form")'),
-      page.indexOf('document.addEventListener("click"')
+      page.indexOf('onSubmit("issue-credential-form"'),
+      page.indexOf('onAction(".js-revoke-credential"')
     );
 
+    // Paired with the assertions below so an empty slice — a marker that
+    // stopped matching — cannot satisfy `not.toContain` vacuously.
+    expect(issueBlock.length).toBeGreaterThan(200);
     expect(issueBlock).toContain("sendJsonForData");
     expect(issueBlock).toContain("result.data?.token");
     expect(issueBlock).not.toContain("window.location.reload()");

@@ -434,22 +434,21 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
 <script>
   // Bound unconditionally: the controls only render when BOTH the permission
-  // gate and the platform-tenant check passed server-side, so `querySelectorAll`
-  // finds nothing for anyone else and no listener binds. Astro hoists this
-  // script at build time, so a conditional wrapper would be meaningless.
+  // gate and the platform-tenant check passed server-side, so the delegated
+  // listeners match nothing for anyone else. Astro hoists this script at build
+  // time, so a conditional wrapper would be meaningless.
   //
   // The import is deliberate and load-bearing for CSP: an import-free script is
   // INLINED by Astro, and inline scripts are blocked by this app's
   // `default-src 'self'` policy. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("idn-regions-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("idn-regions-action-error");
 
   function describeFailure(errorCode: string | null): string {
     if (errorCode === "ACCESS_DENIED") {
@@ -480,54 +479,41 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     url: string,
     busyLabel: string
   ): Promise<void> {
-    if (button.disabled) return;
-    const unlock = lockElement(button, busyLabel);
-    if (actionError) actionError.hidden = true;
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", url, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      describeFailure,
+      busyLabel
+    );
+  }
 
-    const result = await sendJson("POST", url, undefined, {
-      "Idempotency-Key": crypto.randomUUID()
-    });
+  onAction("[data-activate-dataset]", async (button) => {
+    const datasetId = button.dataset.activateDataset;
+    const datasetCode = button.dataset.datasetCode ?? "this version";
+    if (!datasetId) return;
 
-    if (result.ok) {
-      window.location.reload();
+    // Platform-wide and immediate: every tenant's address forms change the
+    // moment this commits.
+    if (
+      !window.confirm(
+        `Serve ${datasetCode} to every tenant? The current version is superseded immediately.`
+      )
+    ) {
       return;
     }
 
-    showActionError(describeFailure(result.errorCode));
-    unlock();
-  }
+    await runLifecycleAction(
+      button,
+      `/api/v1/idn-regions/datasets/${encodeURIComponent(datasetId)}/activate`,
+      "Activating…"
+    );
+  });
 
-  document
-    .querySelectorAll<HTMLButtonElement>("[data-activate-dataset]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        const datasetId = button.dataset.activateDataset;
-        const datasetCode = button.dataset.datasetCode ?? "this version";
-        if (!datasetId) return;
-
-        // Platform-wide and immediate: every tenant's address forms change the
-        // moment this commits.
-        if (
-          !window.confirm(
-            `Serve ${datasetCode} to every tenant? The current version is superseded immediately.`
-          )
-        ) {
-          return;
-        }
-
-        void runLifecycleAction(
-          button,
-          `/api/v1/idn-regions/datasets/${encodeURIComponent(datasetId)}/activate`,
-          "Activating…"
-        );
-      });
-    });
-
-  const rollbackButton = document.getElementById(
-    "idn-regions-rollback"
-  ) as HTMLButtonElement | null;
-
-  rollbackButton?.addEventListener("click", () => {
+  onAction("#idn-regions-rollback", async (button) => {
     if (
       !window.confirm(
         "Roll back to the previously served version? This affects every tenant."
@@ -536,8 +522,8 @@ const numberFormatter = new Intl.NumberFormat("en-US");
       return;
     }
 
-    void runLifecycleAction(
-      rollbackButton,
+    await runLifecycleAction(
+      button,
       "/api/v1/idn-regions/datasets/rollback",
       "Rolling back…"
     );

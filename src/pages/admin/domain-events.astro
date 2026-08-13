@@ -663,22 +663,21 @@ const deliveryColumns = canReplay ? 7 : 6;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("domain-events-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("domain-events-action-error");
 
   function askReason(prompt: string): string | null {
     const reason = window.prompt(prompt);
     if (reason === null) return null;
     const trimmed = reason.trim();
     if (trimmed === "") {
-      showActionError(
+      actionError.show(
         "A reason is required — it is recorded in the audit trail."
       );
       return null;
@@ -686,110 +685,83 @@ const deliveryColumns = canReplay ? 7 : 6;
     return trimmed;
   }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".consumer-pause-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const name = button.dataset.consumerName;
-        if (!name) return;
+  onAction(".consumer-pause-btn", async (button) => {
+    const name = button.dataset.consumerName;
+    if (!name) return;
 
-        if (
-          !window.confirm(
-            `Pause ${name}? Its events keep being recorded and keep accruing as backlog — pausing stops delivery, not production.`
-          )
-        ) {
-          return;
-        }
+    if (
+      !window.confirm(
+        `Pause ${name}? Its events keep being recorded and keep accruing as backlog — pausing stops delivery, not production.`
+      )
+    ) {
+      return;
+    }
 
-        const reason = askReason("Reason for pausing this consumer:");
-        if (reason === null) return;
+    const reason = askReason("Reason for pausing this consumer:");
+    if (reason === null) return;
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Pausing…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // No `Idempotency-Key`: setting `is_paused = true` twice has the same
         // end state, so the endpoint requires none, and sending one would
         // imply a replay contract it does not have.
-        const result = await sendJson(
+        sendJson(
           "POST",
           `/api/v1/domain-events/consumers/${encodeURIComponent(name)}/pause`,
           { reason }
-        );
+        ),
+      // Generic copy only — never surface internal detail.
+      "Could not pause the consumer. Please try again.",
+      "Pausing…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".consumer-resume-btn", async (button) => {
+    const name = button.dataset.consumerName;
+    if (!name) return;
 
-        // Generic copy only — never surface internal detail.
-        showActionError("Could not pause the consumer. Please try again.");
-        unlock();
-      });
-    });
-
-  document
-    .querySelectorAll<HTMLButtonElement>(".consumer-resume-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const name = button.dataset.consumerName;
-        if (!name) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Resuming…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Bodyless AND keyless — the endpoint takes no request body at all,
         // and resuming twice has the same end state.
-        const result = await sendJson(
+        sendJson(
           "POST",
           `/api/v1/domain-events/consumers/${encodeURIComponent(name)}/resume`
-        );
+        ),
+      "Could not resume the consumer. Please try again.",
+      "Resuming…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".delivery-replay-btn", async (button) => {
+    const id = button.dataset.deliveryId;
+    if (!id) return;
 
-        showActionError("Could not resume the consumer. Please try again.");
-        unlock();
-      });
-    });
+    const reason = askReason(
+      "Reason for replaying this delivery (recorded in the audit trail):"
+    );
+    if (reason === null) return;
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".delivery-replay-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.deliveryId;
-        if (!id) return;
-
-        const reason = askReason(
-          "Reason for replaying this delivery (recorded in the audit trail):"
-        );
-        if (reason === null) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Replaying…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Replay is the one action here that requires an `Idempotency-Key`:
         // each call does NEW work (it enqueues another attempt), so a
         // retransmitted request must not become a second replay. A fresh value
         // per click is what makes a deliberate second replay actually run.
-        const result = await sendJson(
+        sendJson(
           "POST",
           `/api/v1/domain-events/deliveries/${id}/replay`,
           { reason },
           { "Idempotency-Key": crypto.randomUUID() }
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not replay the delivery. Please try again.");
-        unlock();
-      });
-    });
+        ),
+      "Could not replay the delivery. Please try again.",
+      "Replaying…"
+    );
+  });
 </script>

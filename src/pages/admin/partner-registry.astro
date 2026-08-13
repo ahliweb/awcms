@@ -239,50 +239,34 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
   // Bundled unconditionally (Astro hoists every `<script>` at build time). The
   // import forces Astro to emit this EXTERNAL, where the app's
   // `default-src 'self'` CSP allows it.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("partner-registry-action-error");
+  const errorBox = messageBox("partner-registry-action-error");
 
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
-
-  document
-    .getElementById("register-partner-form")
-    ?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (errorBox) errorBox.hidden = true;
-
-      const form = event.currentTarget as HTMLFormElement;
-      const button = document.getElementById(
-        "register-partner-submit"
-      ) as HTMLButtonElement | null;
-      if (!button) return;
-
-      const data = new FormData(form);
-      const unlock = lockElement(button, "Please wait…");
-      const result = await sendJson("POST", "/api/v1/partners", {
-        partnerTenantId: String(data.get("partnerTenantId") ?? "").trim(),
-        partnerCode: String(data.get("partnerCode") ?? "").trim(),
-        displayName: String(data.get("displayName") ?? "").trim()
-      });
-
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-
-      showError(
-        result.errorCode === "TENANT_NOT_FOUND"
+  onSubmit("register-partner-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        sendJson("POST", "/api/v1/partners", {
+          partnerTenantId: field(data, "partnerTenantId"),
+          partnerCode: field(data, "partnerCode"),
+          displayName: field(data, "displayName")
+        }),
+      (errorCode) =>
+        errorCode === "TENANT_NOT_FOUND"
           ? "No tenant on this deployment has that id. It must already exist — this screen does not create one."
-          : result.errorCode === "CONFLICT"
+          : errorCode === "CONFLICT"
             ? "That tenant is already a partner, that code is taken, or you named the platform tenant itself."
-            : result.errorCode === "VALIDATION_FAILED"
+            : errorCode === "VALIDATION_FAILED"
               ? "Check the id, the code and the name. The code is lower-case letters, digits and hyphens."
               : "Could not register that partner. Please try again."
-      );
-      unlock();
-    });
+    );
+  });
 </script>

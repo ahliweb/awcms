@@ -368,166 +368,99 @@ const showActions = canUpdate || canDelete;
 
 <script>
   // Bundled unconditionally (Astro hoists every `<script>` at build time, so it
-  // can't be runtime-conditional) — harmless for users without the create
-  // permission: the form only renders when `canCreate`, so `form` is null and
-  // the listener never binds. The import is deliberate — it forces Astro to
-  // bundle this script EXTERNAL (an import-free script would be inlined, and
-  // inline
+  // can't be runtime-conditional) — harmless for a viewer without the create
+  // permission: the form only renders when `canCreate`, so `onSubmit` finds no
+  // form and never binds. The import is deliberate — it forces Astro to bundle
+  // this script EXTERNAL (an import-free script would be inlined, and inline
   // scripts are blocked by this app's CSP). See admin-form-client.ts.
   import {
-    lockElement,
-    postJson,
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
     sendJson
   } from "../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "office-create-form"
-  ) as HTMLFormElement | null;
-  const errorBox = document.getElementById("office-create-error");
-  const submitButton = document.getElementById(
-    "office-create-submit"
-  ) as HTMLButtonElement | null;
+  const createError = messageBox("office-create-error");
 
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
-
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    // Guard + disable the submit button for the request duration so a fast
-    // double-click can't fire two create POSTs.
-    if (!submitButton || submitButton.disabled) return;
-    const unlock = lockElement(submitButton, "Please wait…");
-
-    if (errorBox) errorBox.hidden = true;
-
-    const formData = new FormData(form);
-    const officeCode = String(formData.get("officeCode") ?? "").trim();
-    const officeName = String(formData.get("officeName") ?? "").trim();
-    const officeType = String(formData.get("officeType") ?? "").trim();
-
-    const result = await postJson("/api/v1/offices", {
-      officeCode,
-      officeName,
-      officeType
-    });
-
-    if (result.ok) {
-      // Reload so the SSR table re-renders with the new row.
-      window.location.reload();
-      return;
-    }
-
-    // Generic message only — never surface internal detail (Issue #540).
-    showError(
+  onSubmit("office-create-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson("POST", "/api/v1/offices", {
+          officeCode: field(data, "officeCode"),
+          officeName: field(data, "officeName"),
+          officeType: field(data, "officeType")
+        }),
+      // Generic message only — never surface internal detail (Issue #540).
       "Could not create the office. Check the code is unique and try again."
     );
-    unlock();
   });
 
   // Per-row edit / delete / restore (Issue #171). All three bind
   // unconditionally: the controls only render when the matching permission
-  // gate passed server-side, so `querySelectorAll` finds none for a viewer who
-  // lacks them and the listeners simply never fire. The endpoint guard is the
-  // real authority; these gates are UX-only.
-  const actionError = document.getElementById("office-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
-
-  function clearActionError(): void {
-    if (actionError) actionError.hidden = true;
-  }
+  // gate passed server-side, so the delegated listener matches nothing for a
+  // viewer who lacks them. The endpoint guard is the real authority; these
+  // gates are UX-only.
+  const actionError = messageBox("office-action-error");
 
   // Save: PATCH the row's current name + status.
-  document
-    .querySelectorAll<HTMLButtonElement>(".office-save-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.officeId;
-        if (!id) return;
-        clearActionError();
-        const unlock = lockElement(button, "Saving…");
+  onAction(".office-save-btn", async (button) => {
+    const id = button.dataset.officeId;
+    if (!id) return;
 
-        const nameInput = document.querySelector<HTMLInputElement>(
-          `[data-office-name="${id}"]`
-        );
-        const statusSelect = document.querySelector<HTMLSelectElement>(
-          `[data-office-status="${id}"]`
-        );
-        const officeName = nameInput?.value.trim() ?? "";
-        const status = statusSelect?.value ?? "";
+    const nameInput = document.querySelector<HTMLInputElement>(
+      `[data-office-name="${id}"]`
+    );
+    const statusSelect = document.querySelector<HTMLSelectElement>(
+      `[data-office-status="${id}"]`
+    );
 
-        const result = await sendJson("PATCH", `/api/v1/offices/${id}`, {
-          officeName,
-          status
-        });
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError("Could not save the office. Please try again.");
-        unlock();
-      });
-    });
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("PATCH", `/api/v1/offices/${id}`, {
+          officeName: nameInput?.value.trim() ?? "",
+          status: statusSelect?.value ?? ""
+        }),
+      "Could not save the office. Please try again.",
+      "Saving…"
+    );
+  });
 
   // Delete: bodyless soft-delete after an explicit confirm.
-  document
-    .querySelectorAll<HTMLButtonElement>(".office-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.officeId;
-        if (!id) return;
-        const code = button.dataset.officeCode ?? "this office";
-        if (!window.confirm(`Delete ${code}? It can be restored later.`)) {
-          return;
-        }
-        clearActionError();
-        const unlock = lockElement(button, "Deleting…");
+  onAction(".office-delete-btn", async (button) => {
+    const id = button.dataset.officeId;
+    if (!id) return;
+    const code = button.dataset.officeCode ?? "this office";
+    if (!window.confirm(`Delete ${code}? It can be restored later.`)) return;
 
-        const result = await sendJson("DELETE", `/api/v1/offices/${id}`);
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError("Could not delete the office. Please try again.");
-        unlock();
-      });
-    });
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("DELETE", `/api/v1/offices/${id}`),
+      "Could not delete the office. Please try again.",
+      "Deleting…"
+    );
+  });
 
   // Restore: bodyless POST; a 409 means the code was retaken by a live office.
-  document
-    .querySelectorAll<HTMLButtonElement>(".office-restore-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.officeId;
-        if (!id) return;
-        clearActionError();
-        const unlock = lockElement(button, "Restoring…");
+  onAction(".office-restore-btn", async (button) => {
+    const id = button.dataset.officeId;
+    if (!id) return;
 
-        const result = await sendJson("POST", `/api/v1/offices/${id}/restore`);
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        showActionError(
-          result.errorCode === "OFFICE_CODE_ALREADY_EXISTS"
-            ? "Cannot restore: another office already uses this code."
-            : "Could not restore the office. Please try again."
-        );
-        unlock();
-      });
-    });
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/offices/${id}/restore`),
+      (errorCode) =>
+        errorCode === "OFFICE_CODE_ALREADY_EXISTS"
+          ? "Cannot restore: another office already uses this code."
+          : "Could not restore the office. Please try again.",
+      "Restoring…"
+    );
+  });
 </script>

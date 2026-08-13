@@ -197,58 +197,34 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
 <script>
   // Bundled EXTERNAL via the import (an import-free script would be inlined and
   // blocked by this app's CSP — see admin-form-client.ts). Harmless without the
-  // create permission: the form only renders when `canCreate`, so `form` is
-  // null and the listener never binds.
-  import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+  // create permission: the form only renders when `canCreate`, so `onSubmit`
+  // finds no form and never binds.
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "email-template-create-form"
-  ) as HTMLFormElement | null;
-  const errorBox = document.getElementById("email-template-create-error");
-  const submitButton = document.getElementById(
-    "email-template-create-submit"
-  ) as HTMLButtonElement | null;
+  const errorBox = messageBox("email-template-create-error");
 
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
-
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!submitButton || submitButton.disabled) return;
-    const unlock = lockElement(submitButton, "Please wait…");
-
-    if (errorBox) errorBox.hidden = true;
-
-    const formData = new FormData(form);
-    const templateKey = String(formData.get("templateKey") ?? "").trim();
-    const name = String(formData.get("name") ?? "").trim();
-    const subject = String(formData.get("subject") ?? "").trim();
-    const body = String(formData.get("body") ?? "").trim();
-
-    // The endpoint takes a `{ locale: text }` map; this form seeds the `en`
-    // locale. Sending `textBodyTemplate` (not html) keeps the create input on
-    // the safe path — the endpoint HTML-escapes/validates either way.
-    const result = await postJson("/api/v1/email/templates", {
-      templateKey,
-      name,
-      subjectTemplate: { en: subject },
-      textBodyTemplate: { en: body }
-    });
-
-    if (result.ok) {
-      // Reload so the SSR table lists the new template.
-      window.location.reload();
-      return;
-    }
-
-    // Generic message only — never surface internal detail (Issue #540).
-    showError(
+  onSubmit("email-template-create-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      errorBox,
+      () =>
+        // The endpoint takes a `{ locale: text }` map; this form seeds the `en`
+        // locale. Sending `textBodyTemplate` (not html) keeps the create input
+        // on the safe path — the endpoint HTML-escapes/validates either way.
+        sendJson("POST", "/api/v1/email/templates", {
+          templateKey: field(data, "templateKey"),
+          name: field(data, "name"),
+          subjectTemplate: { en: field(data, "subject") },
+          textBodyTemplate: { en: field(data, "body") }
+        }),
+      // Generic message only — never surface internal detail (Issue #540).
       "Could not create the template. Check the key is not already in use and try again."
     );
-    unlock();
   });
 </script>

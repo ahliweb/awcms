@@ -502,16 +502,15 @@ const columnCount = canActOnAny ? 8 : 7;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
   import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
 
-  const actionError = document.getElementById("media-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("media-action-error");
 
   /**
    * Every endpoint on this screen requires `Idempotency-Key` — unlike
@@ -522,129 +521,99 @@ const columnCount = canActOnAny ? 8 : 7;
     return { "Idempotency-Key": crypto.randomUUID() };
   }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".media-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.mediaId;
-        if (!id) return;
-        const label = button.dataset.mediaLabel ?? "this object";
+  onAction(".media-delete-btn", async (button) => {
+    const id = button.dataset.mediaId;
+    if (!id) return;
+    const label = button.dataset.mediaLabel ?? "this object";
 
-        // A reason is required by the endpoint and recorded on the audit row,
-        // which outlives the object. Prompt rather than send a placeholder:
-        // "deleted via admin" tells the next reader nothing.
-        const reason = window.prompt(
-          `Why are you deleting ${label}? Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this.`
-        );
-        if (reason === null) return;
+    // A reason is required by the endpoint and recorded on the audit row,
+    // which outlives the object. Prompt rather than send a placeholder:
+    // "deleted via admin" tells the next reader nothing.
+    const reason = window.prompt(
+      `Why are you deleting ${label}? Every reference to it stops resolving immediately — a published page pointing at it loses its image. Restore undoes this.`
+    );
+    if (reason === null) return;
 
-        if (reason.trim() === "") {
-          showActionError("A reason is required to delete a media object.");
-          return;
-        }
+    if (reason.trim() === "") {
+      actionError.show("A reason is required to delete a media object.");
+      return;
+    }
 
-        if (reason.trim().length > MAX_DELETE_REASON_LENGTH) {
-          showActionError(
-            `The reason must be at most ${MAX_DELETE_REASON_LENGTH} characters.`
-          );
-          return;
-        }
+    if (reason.trim().length > MAX_DELETE_REASON_LENGTH) {
+      actionError.show(
+        `The reason must be at most ${MAX_DELETE_REASON_LENGTH} characters.`
+      );
+      return;
+    }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "DELETE",
           `/api/v1/media/objects/${id}`,
           { reason: reason.trim() },
           idempotency()
-        );
+        ),
+      // Generic copy only — never surface internal detail.
+      "Could not delete the media object. Please try again.",
+      "Deleting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".media-restore-btn", async (button) => {
+    const id = button.dataset.mediaId;
+    if (!id) return;
 
-        // Generic copy only — never surface internal detail.
-        showActionError("Could not delete the media object. Please try again.");
-        unlock();
-      });
-    });
-
-  document
-    .querySelectorAll<HTMLButtonElement>(".media-restore-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.mediaId;
-        if (!id) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Restoring…");
-
-        // No body: this endpoint takes none, and its request hash covers the id
-        // alone.
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        // No body: this endpoint takes none, and its request hash covers the
+        // id alone.
+        sendJson(
           "POST",
           `/api/v1/media/objects/${id}/restore`,
           undefined,
           idempotency()
-        );
+        ),
+      "Could not restore the media object. Please try again.",
+      "Restoring…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".media-purge-btn", async (button) => {
+    const id = button.dataset.mediaId;
+    if (!id) return;
+    const label = button.dataset.mediaLabel ?? "this object";
 
-        showActionError(
-          "Could not restore the media object. Please try again."
-        );
-        unlock();
-      });
-    });
+    // The one action on this screen that cannot be undone.
+    if (
+      !window.confirm(
+        `Purge ${label}? This removes its registry row permanently and cannot be undone. The stored file is removed later by the reconciliation job.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".media-purge-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.mediaId;
-        if (!id) return;
-        const label = button.dataset.mediaLabel ?? "this object";
-
-        // The one action on this screen that cannot be undone.
-        if (
-          !window.confirm(
-            `Purge ${label}? This removes its registry row permanently and cannot be undone. The stored file is removed later by the reconciliation job.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Purging…");
-
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/media/objects/${id}/purge`,
           undefined,
           idempotency()
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        // The one failure worth naming: a live foreign key is caller-actionable
-        // in a way "try again" is not — retrying will never succeed.
-        showActionError(
-          result.errorCode === "MEDIA_OBJECT_REFERENCED"
-            ? "This object is still referenced by another resource. Remove that reference first."
-            : "Could not purge the media object. Please try again."
-        );
-        unlock();
-      });
-    });
+        ),
+      // The one failure worth naming: a live foreign key is caller-actionable
+      // in a way "try again" is not — retrying will never succeed.
+      (errorCode) =>
+        errorCode === "MEDIA_OBJECT_REFERENCED"
+          ? "This object is still referenced by another resource. Remove that reference first."
+          : "Could not purge the media object. Please try again.",
+      "Purging…"
+    );
+  });
 </script>

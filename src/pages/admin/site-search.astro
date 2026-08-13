@@ -546,22 +546,25 @@ const showIndexActions = canReconcile || canRebuild;
 
 <script>
   // Bound unconditionally: the controls only render when the matching
-  // permission gate passed server-side, so `getElementById` returns null for a
-  // viewer who lacks them and the listeners never bind. Astro hoists this
-  // script at build time, so a conditional wrapper would be meaningless.
+  // permission gate passed server-side, so the delegated listeners match
+  // nothing for a viewer who lacks them. Astro hoists this script at build
+  // time, so a conditional wrapper would be meaningless.
   //
   // The import is deliberate and load-bearing for CSP: an import-free script is
   // INLINED by Astro, and inline scripts are blocked by this app's
   // `default-src 'self'` policy. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    blankToNull,
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("site-search-action-error");
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const actionError = messageBox("site-search-action-error");
+  const settingsError = messageBox("site-search-settings-error");
 
   /**
    * Reconcile and rebuild are both idempotency-keyed server-side, so each click
@@ -574,41 +577,28 @@ const showIndexActions = canReconcile || canRebuild;
     busyLabel: string,
     failureMessage: string
   ): Promise<void> {
-    if (button.disabled) return;
-    const unlock = lockElement(button, busyLabel);
-    if (actionError) actionError.hidden = true;
-
-    const result = await sendJson("POST", url, undefined, {
-      "Idempotency-Key": crypto.randomUUID()
-    });
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    showActionError(failureMessage);
-    unlock();
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", url, undefined, {
+          "Idempotency-Key": crypto.randomUUID()
+        }),
+      failureMessage,
+      busyLabel
+    );
   }
 
-  const reconcileButton = document.getElementById(
-    "site-search-reconcile"
-  ) as HTMLButtonElement | null;
-
-  reconcileButton?.addEventListener("click", () => {
-    void runIndexOperation(
-      reconcileButton,
+  onAction("#site-search-reconcile", async (button) => {
+    await runIndexOperation(
+      button,
       "/api/v1/site-search/index/reconcile",
       "Reconciling…",
       "Could not reconcile the index. Please try again."
     );
   });
 
-  const rebuildButton = document.getElementById(
-    "site-search-rebuild"
-  ) as HTMLButtonElement | null;
-
-  rebuildButton?.addEventListener("click", () => {
+  onAction("#site-search-rebuild", async (button) => {
     // Destructive: a rebuild empties the index before refilling it, so the
     // public search surface is degraded until it finishes.
     if (
@@ -618,70 +608,51 @@ const showIndexActions = canReconcile || canRebuild;
     ) {
       return;
     }
-    void runIndexOperation(
-      rebuildButton,
+    await runIndexOperation(
+      button,
       "/api/v1/site-search/index/rebuild",
       "Rebuilding…",
       "Could not rebuild the index. Please try again."
     );
   });
 
-  const settingsForm = document.getElementById(
-    "site-search-settings-form"
-  ) as HTMLFormElement | null;
-  const settingsError = document.getElementById("site-search-settings-error");
-  const settingsSubmit = document.getElementById(
-    "site-search-settings-submit"
-  ) as HTMLButtonElement | null;
-
-  settingsForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!settingsSubmit || settingsSubmit.disabled) return;
-    const unlock = lockElement(settingsSubmit, "Saving…");
-    if (settingsError) settingsError.hidden = true;
-
-    const formData = new FormData(settingsForm);
-
+  onSubmit("site-search-settings-form", async ({ data, submit }) => {
     // An empty resource-type list means "every admitted type", which the API
     // models as null — NOT as an empty array (that would index nothing).
-    const rawTypes = String(formData.get("enabledResourceTypes") ?? "").trim();
+    const rawTypes = blankToNull(field(data, "enabledResourceTypes"));
     const enabledResourceTypes =
-      rawTypes === ""
+      rawTypes === null
         ? null
         : rawTypes
             .split(",")
             .map((entry) => entry.trim())
             .filter((entry) => entry !== "");
 
-    const result = await sendJson(
-      "PUT",
-      "/api/v1/site-search/settings",
-      {
-        enabled: formData.get("enabled") === "on",
-        suggestionsEnabled: formData.get("suggestionsEnabled") === "on",
-        analyticsEnabled: formData.get("analyticsEnabled") === "on",
-        resultLimit: Number(formData.get("resultLimit")),
-        minQueryLength: Number(formData.get("minQueryLength")),
-        suggestionLimit: Number(formData.get("suggestionLimit")),
-        enabledResourceTypes
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
-    );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // Generic copy only — never surface internal detail. VALIDATION_ERROR is
-    // the one code worth distinguishing, because it is the user's own input.
-    if (settingsError) {
-      settingsError.textContent =
-        result.errorCode === "VALIDATION_ERROR"
+    await mutateAndReload(
+      submit,
+      settingsError,
+      () =>
+        sendJson(
+          "PUT",
+          "/api/v1/site-search/settings",
+          {
+            enabled: data.get("enabled") === "on",
+            suggestionsEnabled: data.get("suggestionsEnabled") === "on",
+            analyticsEnabled: data.get("analyticsEnabled") === "on",
+            resultLimit: Number(data.get("resultLimit")),
+            minQueryLength: Number(data.get("minQueryLength")),
+            suggestionLimit: Number(data.get("suggestionLimit")),
+            enabledResourceTypes
+          },
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      // Generic copy only — never surface internal detail. VALIDATION_ERROR is
+      // the one code worth distinguishing, because it is the user's own input.
+      (errorCode) =>
+        errorCode === "VALIDATION_ERROR"
           ? "Some values are out of range. Check the limits and try again."
-          : "Could not save the configuration. Please try again.";
-      settingsError.hidden = false;
-    }
-    unlock();
+          : "Could not save the configuration. Please try again.",
+      "Saving…"
+    );
   });
 </script>

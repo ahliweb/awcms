@@ -258,12 +258,15 @@ function formatTimestamp(value: string): string {
 <script>
   // Bundled unconditionally: Astro hoists every `<script>` at build time, so
   // wrapping this in a conditional would not stop it shipping — on a page where
-  // the table is absent the listeners simply find no targets. The import forces
-  // Astro to bundle this EXTERNAL; an import-free script would be inlined, and
-  // inline scripts are blocked by this app's CSP.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  // the table is absent the delegated listener finds no targets. The import
+  // forces Astro to bundle this EXTERNAL; an import-free script would be
+  // inlined, and inline scripts are blocked by this app's CSP.
+  import {
+    lockElement,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const table = document.querySelector<HTMLElement>("[data-comments-queue]");
   const banner = document.querySelector<HTMLElement>("[data-queue-banner]");
 
   function showBanner(message: string, isError: boolean): void {
@@ -285,12 +288,10 @@ function formatTimestamp(value: string): string {
     return entered && entered.trim() ? entered.trim() : null;
   }
 
-  table?.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
-      "button[data-action]"
-    );
-    if (!button) return;
-
+  // NOT `mutateAndReload`: a decision removes its own row and leaves the rest
+  // of the queue in place, so reloading would cost the moderator their scroll
+  // position for every single comment they act on.
+  onAction("[data-comments-queue] button[data-action]", async (button) => {
     const action = button.dataset.action;
     const row = button.closest<HTMLElement>("tr[data-comment-id]");
     const commentId = row?.dataset.commentId;
@@ -302,41 +303,43 @@ function formatTimestamp(value: string): string {
       return;
     }
 
-    const unlock = lockElement(button);
+    // `lockElement` used to be called here with no busy label, which set the
+    // button's text to the string "undefined" for the duration of the request.
+    const unlock = lockElement(button, "…");
 
     // A fresh Idempotency-Key per click: the header exists so a retried or
     // double-submitted request applies once, not so two deliberate decisions
     // collapse into one.
     const idempotencyKey = crypto.randomUUID();
 
-    const request =
+    const result =
       action === "archive" || action === "restore"
-        ? sendJson(
+        ? await sendJson(
             "POST",
             `/api/v1/comments/admin/${commentId}/${action}`,
             {},
             { "Idempotency-Key": idempotencyKey }
           )
-        : sendJson(
+        : await sendJson(
             "POST",
             `/api/v1/comments/admin/${commentId}/moderate`,
             { decision: action, reasonCode },
             { "Idempotency-Key": idempotencyKey }
           );
 
-    void request.then((result) => {
-      unlock();
-      if (result.ok) {
-        row?.remove();
-        showBanner("Decision applied.", false);
-        return;
-      }
-      showBanner(
-        result.errorCode
-          ? `The action failed (${result.errorCode}).`
-          : "The action failed.",
-        true
-      );
-    });
+    unlock();
+
+    if (result.ok) {
+      row?.remove();
+      showBanner("Decision applied.", false);
+      return;
+    }
+
+    showBanner(
+      result.errorCode
+        ? `The action failed (${result.errorCode}).`
+        : "The action failed.",
+      true
+    );
   });
 </script>

@@ -690,132 +690,94 @@ const queueColumns = canRetryQueue ? 7 : 6;
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("sync-action-error");
+  const actionError = messageBox("sync-action-error");
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  onAction(".node-status-btn", async (button) => {
+    const nodeId = button.dataset.nodeId;
+    const nextStatus = button.dataset.nextStatus;
+    if (!nodeId || !nextStatus) return;
+    const code = button.dataset.nodeCode ?? "this node";
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".node-status-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const nodeId = button.dataset.nodeId;
-        const nextStatus = button.dataset.nextStatus;
-        if (!nodeId || !nextStatus) return;
-        const code = button.dataset.nodeCode ?? "this node";
+    if (
+      nextStatus === "inactive" &&
+      !window.confirm(
+        `Deactivate ${code}? It stops syncing immediately. Its queued objects and past conflicts are kept.`
+      )
+    ) {
+      return;
+    }
 
-        if (
-          nextStatus === "inactive" &&
-          !window.confirm(
-            `Deactivate ${code}? It stops syncing immediately. Its queued objects and past conflicts are kept.`
-          )
-        ) {
-          return;
-        }
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(
-          button,
-          nextStatus === "active" ? "Activating…" : "Deactivating…"
-        );
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // No `Idempotency-Key`: this endpoint requires none, because setting a
         // status to the value it already has is the same end state rather than
         // fresh work.
-        const result = await sendJson("PATCH", `/api/v1/sync/nodes/${nodeId}`, {
+        sendJson("PATCH", `/api/v1/sync/nodes/${nodeId}`, {
           status: nextStatus
-        });
+        }),
+      // Generic copy only — never surface internal detail.
+      "Could not update the node. Please try again.",
+      nextStatus === "active" ? "Activating…" : "Deactivating…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
+  onAction(".conflict-resolve-btn", async (button) => {
+    const conflictId = button.dataset.conflictId;
+    const resolution = button.dataset.resolution;
+    if (!conflictId || !resolution) return;
 
-        // Generic copy only — never surface internal detail.
-        showActionError("Could not update the node. Please try again.");
-        unlock();
-      });
-    });
+    // Resolving is a decision about which version of the data wins, and it
+    // cannot be undone from this screen — confirm, then capture why.
+    if (
+      !window.confirm(
+        `Resolve this conflict as "${resolution}"? This decides which version of the data stands and cannot be undone here.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".conflict-resolve-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const conflictId = button.dataset.conflictId;
-        const resolution = button.dataset.resolution;
-        if (!conflictId || !resolution) return;
+    const note = window.prompt(
+      "Note for the resolution (optional — recorded with it):"
+    );
+    if (note === null) return;
 
-        // Resolving is a decision about which version of the data wins, and it
-        // cannot be undone from this screen — confirm, then capture why.
-        if (
-          !window.confirm(
-            `Resolve this conflict as "${resolution}"? This decides which version of the data stands and cannot be undone here.`
-          )
-        ) {
-          return;
-        }
+    // `note` is optional on this endpoint, and an empty string is not the
+    // same as absent — omit it rather than sending "".
+    const body: Record<string, unknown> = { resolution };
+    if (note.trim() !== "") body.note = note.trim();
 
-        const note = window.prompt(
-          "Note for the resolution (optional — recorded with it):"
-        );
-        if (note === null) return;
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", `/api/v1/sync/conflicts/${conflictId}/resolve`, body),
+      "Could not resolve the conflict. Please try again.",
+      "Resolving…"
+    );
+  });
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Resolving…");
+  onAction(".queue-retry-btn", async (button) => {
+    const id = button.dataset.queueId;
+    if (!id) return;
 
-        // `note` is optional on this endpoint, and an empty string is not the
-        // same as absent — omit it rather than sending "".
-        const body: Record<string, unknown> = { resolution };
-        if (note.trim() !== "") body.note = note.trim();
-
-        const result = await sendJson(
-          "POST",
-          `/api/v1/sync/conflicts/${conflictId}/resolve`,
-          body
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not resolve the conflict. Please try again.");
-        unlock();
-      });
-    });
-
-  document
-    .querySelectorAll<HTMLButtonElement>(".queue-retry-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.queueId;
-        if (!id) return;
-
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Retrying…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Bodyless and keyless: the endpoint takes no request body, and
         // returning a failed entry to `pending` twice has the same end state.
-        const result = await sendJson(
-          "POST",
-          `/api/v1/sync/object-queue/${id}/retry`
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not requeue the object. Please try again.");
-        unlock();
-      });
-    });
+        sendJson("POST", `/api/v1/sync/object-queue/${id}/retry`),
+      "Could not requeue the object. Please try again.",
+      "Retrying…"
+    );
+  });
 </script>

@@ -379,166 +379,127 @@ const colCount = canConfigure ? 5 : 4;
   // listeners find no targets. The import forces Astro to bundle this script
   // EXTERNAL — an import-free script would be inlined, and inline scripts are
   // blocked by this app's CSP. See admin-form-client.ts.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    onSubmitAll,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const actionError = document.getElementById("roles-action-error");
-  const createError = document.getElementById("role-create-error");
+  const actionError = messageBox("roles-action-error");
+  const createError = messageBox("role-create-error");
 
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
-
-  function showCreateError(message: string): void {
-    if (!createError) return;
-    createError.textContent = message;
-    createError.hidden = false;
-  }
-
-  // Create-role and grant-permission are both form submits, routed by id/attr.
-  document.addEventListener("submit", async (event) => {
-    const form = (event.target as HTMLElement).closest("form");
-    if (!form) return;
-
-    if (form.id === "role-create-form") {
-      event.preventDefault();
-      const submit = form.querySelector<HTMLButtonElement>(
-        "#role-create-submit"
-      );
-      if (!submit || submit.disabled) return;
-      const unlock = lockElement(submit, "Please wait…");
-      if (createError) createError.hidden = true;
-
-      const data = new FormData(form);
-      const roleCode = String(data.get("roleCode") ?? "").trim();
-      const roleName = String(data.get("roleName") ?? "").trim();
-
-      const result = await sendJson("POST", "/api/v1/roles", {
-        roleCode,
-        roleName
-      });
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
+  onSubmit("role-create-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson("POST", "/api/v1/roles", {
+          roleCode: field(data, "roleCode"),
+          roleName: field(data, "roleName")
+        }),
       // Generic message only — never surface internal detail (Issue #540).
-      showCreateError(
-        "Could not create the role. Check the code is unique and valid."
-      );
-      unlock();
-      return;
-    }
+      "Could not create the role. Check the code is unique and valid."
+    );
+  });
 
-    if (form.hasAttribute("data-role-grant-form")) {
-      event.preventDefault();
-      const roleId = form.getAttribute("data-role-id");
-      const submit = form.querySelector<HTMLButtonElement>(
-        "button[type='submit']"
-      );
-      const select = form.querySelector<HTMLSelectElement>(
-        "select[name='permissionId']"
-      );
-      if (!roleId || !submit || submit.disabled || !select) return;
-      const permissionId = select.value;
-      if (!permissionId) return;
+  // One grant form per role, so this is delegated rather than bound by id.
+  onSubmitAll("form[data-role-grant-form]", async ({ form, data, submit }) => {
+    const roleId = form.getAttribute("data-role-id");
+    const permissionId = field(data, "permissionId");
+    if (!roleId || !permissionId) return;
 
-      const unlock = lockElement(submit, "Please wait…");
-      if (actionError) actionError.hidden = true;
-
-      const result = await sendJson(
-        "POST",
-        `/api/v1/roles/${encodeURIComponent(roleId)}/permissions`,
-        { permissionId }
-      );
-      if (result.ok) {
-        window.location.reload();
-        return;
-      }
-      showActionError("Could not grant the permission. Please try again.");
-      unlock();
-      return;
-    }
+    await mutateAndReload(
+      submit,
+      actionError,
+      () =>
+        sendJson(
+          "POST",
+          `/api/v1/roles/${encodeURIComponent(roleId)}/permissions`,
+          { permissionId }
+        ),
+      "Could not grant the permission. Please try again."
+    );
   });
 
   // Rename / delete / restore / revoke are all button clicks.
-  document.addEventListener("click", async (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-      "button[data-role-action]"
-    );
-    if (!button || button.disabled) return;
-
-    const action = button.dataset.roleAction;
+  onAction("button[data-role-action]", async (button) => {
     const roleId = button.dataset.roleId;
     if (!roleId) return;
 
-    if (actionError) actionError.hidden = true;
+    const id = encodeURIComponent(roleId);
+    const code = button.dataset.roleCode ?? roleId;
 
-    if (action === "rename") {
-      const current = button.dataset.roleName ?? "";
-      const next = window.prompt("New role name?", current);
+    if (button.dataset.roleAction === "rename") {
+      const next = window.prompt(
+        "New role name?",
+        button.dataset.roleName ?? ""
+      );
       if (next === null || next.trim().length === 0) return;
-      const unlock = lockElement(button, "…");
-      const result = await sendJson(
-        "PATCH",
-        `/api/v1/roles/${encodeURIComponent(roleId)}`,
-        { roleName: next.trim() }
+
+      await mutateAndReload(
+        button,
+        actionError,
+        () =>
+          sendJson("PATCH", `/api/v1/roles/${id}`, { roleName: next.trim() }),
+        "Could not rename the role. Please try again.",
+        "…"
       );
-      if (result.ok) return void window.location.reload();
-      showActionError("Could not rename the role. Please try again.");
-      unlock();
       return;
     }
 
-    if (action === "delete") {
-      const code = button.dataset.roleCode ?? roleId;
+    if (button.dataset.roleAction === "delete") {
       if (!window.confirm(`Soft-delete role "${code}"?`)) return;
-      const reason = window.prompt("Reason for deleting (optional)?") ?? "";
-      const trimmed = reason.trim();
-      const unlock = lockElement(button, "…");
-      const result = await sendJson(
-        "DELETE",
-        `/api/v1/roles/${encodeURIComponent(roleId)}`,
-        trimmed.length > 0 ? { reason: trimmed } : undefined
+      const reason = (
+        window.prompt("Reason for deleting (optional)?") ?? ""
+      ).trim();
+
+      await mutateAndReload(
+        button,
+        actionError,
+        () =>
+          sendJson(
+            "DELETE",
+            `/api/v1/roles/${id}`,
+            reason.length > 0 ? { reason } : undefined
+          ),
+        "Could not delete the role. System roles cannot be deleted.",
+        "…"
       );
-      if (result.ok) return void window.location.reload();
-      showActionError(
-        "Could not delete the role. System roles cannot be deleted."
-      );
-      unlock();
       return;
     }
 
-    if (action === "restore") {
-      const code = button.dataset.roleCode ?? roleId;
+    if (button.dataset.roleAction === "restore") {
       if (!window.confirm(`Restore role "${code}"?`)) return;
-      const unlock = lockElement(button, "…");
-      const result = await sendJson(
-        "POST",
-        `/api/v1/roles/${encodeURIComponent(roleId)}/restore`
+
+      await mutateAndReload(
+        button,
+        actionError,
+        () => sendJson("POST", `/api/v1/roles/${id}/restore`),
+        "Could not restore the role. Its code may now be in use.",
+        "…"
       );
-      if (result.ok) return void window.location.reload();
-      showActionError(
-        "Could not restore the role. Its code may now be in use."
-      );
-      unlock();
       return;
     }
 
-    if (action === "revoke") {
+    if (button.dataset.roleAction === "revoke") {
       const permissionId = button.dataset.permissionId;
       if (!permissionId) return;
       if (!window.confirm("Remove this permission from the role?")) return;
-      const unlock = lockElement(button, "…");
-      const result = await sendJson(
-        "DELETE",
-        `/api/v1/roles/${encodeURIComponent(roleId)}/permissions`,
-        { permissionId }
+
+      await mutateAndReload(
+        button,
+        actionError,
+        () =>
+          sendJson("DELETE", `/api/v1/roles/${id}/permissions`, {
+            permissionId
+          }),
+        "Could not revoke the permission. Please try again.",
+        "…"
       );
-      if (result.ok) return void window.location.reload();
-      showActionError("Could not revoke the permission. Please try again.");
-      unlock();
-      return;
     }
   });
 </script>

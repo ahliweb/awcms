@@ -187,50 +187,30 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
     // external file. An import-free hoisted script would be inlined, and inline
     // scripts are blocked by this app's CSP (`default-src 'self'`, no
     // 'unsafe-inline'). See admin-form-client.ts / login.astro.
-    import { lockElement, postJson } from "../../lib/ui/admin-form-client";
+    import {
+      field,
+      messageBox,
+      mutateAndReload,
+      onSubmit,
+      sendJson
+    } from "../../lib/ui/admin-form-client";
 
-    const form = document.getElementById(
-      "profile-create-form"
-    ) as HTMLFormElement | null;
-    const errorBox = document.getElementById("profile-create-error");
-    const submitButton = document.getElementById(
-      "profile-create-submit"
-    ) as HTMLButtonElement | null;
+    const errorBox = messageBox("profile-create-error");
 
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-
-      // Guard + disable the submit button for the request duration so a fast
-      // double-click can't fire two create POSTs before the reload lands.
-      if (!submitButton || submitButton.disabled) return;
-      const unlock = lockElement(submitButton, "Creating…");
-
-      if (errorBox) errorBox.hidden = true;
-
-      const formData = new FormData(form);
-      const profileType = String(formData.get("profileType") ?? "person");
-      const displayName = String(formData.get("displayName") ?? "").trim();
-
-      const result = await postJson("/api/v1/profiles", {
-        profileType,
-        displayName
-      });
-
-      if (result.ok) {
-        // Navigating away — leave the button disabled so it can't be
-        // re-clicked during the reload.
-        window.location.reload();
-        return;
-      }
-
-      // Generic message only — never reconstruct a specific deny/validation
-      // reason or surface internal detail (Issue #540).
-      if (errorBox) {
-        errorBox.textContent =
-          "Could not create the profile. Check your details and try again.";
-        errorBox.hidden = false;
-      }
-      unlock();
+    onSubmit("profile-create-form", async ({ data, submit }) => {
+      await mutateAndReload(
+        submit,
+        errorBox,
+        () =>
+          sendJson("POST", "/api/v1/profiles", {
+            profileType: String(data.get("profileType") ?? "person"),
+            displayName: field(data, "displayName")
+          }),
+        // Generic message only — never reconstruct a specific deny/validation
+        // reason or surface internal detail (Issue #540).
+        "Could not create the profile. Check your details and try again.",
+        "Creating…"
+      );
     });
   </script>
 </AdminLayout>

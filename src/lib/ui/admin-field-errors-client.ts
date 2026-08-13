@@ -28,6 +28,8 @@
  * not a sentence the server wrote.
  */
 
+import { mutateAndReload, type MessageBox } from "./admin-form-client";
+
 /** One entry of the `ValidationError[]` that `fail(..., details)` carries for a `VALIDATION_ERROR`. */
 export type ApiFieldError = {
   field: string;
@@ -121,4 +123,47 @@ export function describeRejectedFields(
   return `The server rejected ${named.join(", ")}. Correct ${
     named.length === 1 ? "that field" : "those fields"
   } and try again.`;
+}
+
+/**
+ * The `mutateAndReload` lifecycle for a form that wants the REJECTED FIELDS
+ * named — the four content forms on `/admin/blog` and `/admin/blog-pages`
+ * (Issue #552).
+ *
+ * `mutateAndReload` maps a failure from the `errorCode` alone, which is right
+ * for buttons and wrong here: the whole point of this module is the
+ * `error.details` array that the narrow outcome shape drops. So the field
+ * errors are captured on the way past and read by the failure mapper, which
+ * only ever runs after the send has resolved.
+ */
+export async function submitWithFieldErrors(
+  submit: HTMLButtonElement | null,
+  box: MessageBox,
+  method: "POST" | "PATCH" | "PUT",
+  url: string,
+  body: unknown,
+  options: {
+    labels: Readonly<Record<string, string>>;
+    busyLabel: string;
+    /** Shown for `SLUG_CONFLICT` / `CONFLICT`, which name no field. */
+    conflict: string;
+    failure: string;
+  }
+): Promise<void> {
+  let rejected: ApiFieldError[] = [];
+
+  await mutateAndReload(
+    submit,
+    box,
+    async () => {
+      const result = await sendJsonWithFieldErrors(method, url, body);
+      rejected = result.fieldErrors;
+      return result;
+    },
+    (errorCode) =>
+      errorCode === "SLUG_CONFLICT" || errorCode === "CONFLICT"
+        ? options.conflict
+        : (describeRejectedFields(rejected, options.labels) ?? options.failure),
+    options.busyLabel
+  );
 }

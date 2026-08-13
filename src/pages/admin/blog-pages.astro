@@ -820,17 +820,23 @@ const editingBodyText = editingPage
   // `<script>` with no imports, and this app's CSP is `default-src 'self'`
   // with no `'unsafe-inline'` — an inlined script is blocked and the page's
   // behaviour dies silently. Importing forces an external `/_astro/*.js`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
   import {
-    describeRejectedFields,
-    sendJsonWithFieldErrors
-  } from "../../lib/ui/admin-field-errors-client";
+    field,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
+  import { submitWithFieldErrors } from "../../lib/ui/admin-field-errors-client";
   import {
     buildContentJsonFromBodyText,
     buildContentTextFromBodyText
   } from "../../lib/ui/blog-body-editor";
 
-  const actionError = document.getElementById("pages-action-error");
+  const actionError = messageBox("pages-action-error");
+  const createError = messageBox("page-create-error");
+  const editError = messageBox("page-edit-error");
 
   /**
    * API field -> the control the operator can actually fix. `contentJson` and
@@ -849,17 +855,7 @@ const editingBodyText = editingPage
     contentText: "Body"
   };
 
-  function showFormError(element: HTMLElement | null, message: string): void {
-    if (!element) return;
-    element.textContent = message;
-    element.hidden = false;
-  }
-
-  function showActionError(message: string): void {
-    if (!actionError) return;
-    actionError.textContent = message;
-    actionError.hidden = false;
-  }
+  const CONFLICT = "A page with that slug and locale already exists.";
 
   /** All four lifecycle endpoints require the header; create/update/delete require none. */
   function idempotency(): Record<string, string> {
@@ -875,34 +871,21 @@ const editingBodyText = editingPage
       failure: string;
     }
   ): void {
-    document.querySelectorAll<HTMLButtonElement>(selector).forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const pageId = button.dataset.pageId;
-        if (!pageId) return;
+    onAction(selector, async (button) => {
+      const pageId = button.dataset.pageId;
+      if (!pageId) return;
 
-        const confirmText = options.confirm?.(button) ?? null;
-        if (confirmText !== null && !window.confirm(confirmText)) return;
+      const confirmText = options.confirm?.(button) ?? null;
+      if (confirmText !== null && !window.confirm(confirmText)) return;
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, busyLabel);
-
-        const result = await sendJson(
-          "POST",
-          url(pageId),
-          undefined,
-          idempotency()
-        );
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
+      await mutateAndReload(
+        button,
+        actionError,
+        () => sendJson("POST", url(pageId), undefined, idempotency()),
         // Generic copy only — never surface internal detail.
-        showActionError(options.failure);
-        unlock();
-      });
+        options.failure,
+        busyLabel
+      );
     });
   }
 
@@ -948,68 +931,47 @@ const editingBodyText = editingPage
     }
   );
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".page-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const pageId = button.dataset.pageId;
-        if (!pageId) return;
-        const title = button.dataset.pageTitle ?? "this page";
+  onAction(".page-delete-btn", async (button) => {
+    const pageId = button.dataset.pageId;
+    if (!pageId) return;
+    const title = button.dataset.pageTitle ?? "this page";
 
-        if (
-          !window.confirm(
-            `Delete "${title}"? It is soft-deleted — recoverable from "View deleted pages" until it is purged.`
-          )
-        ) {
-          return;
-        }
+    if (
+      !window.confirm(
+        `Delete "${title}"? It is soft-deleted — recoverable from "View deleted pages" until it is purged.`
+      )
+    ) {
+      return;
+    }
 
-        if (actionError) actionError.hidden = true;
-        const unlock = lockElement(button, "Deleting…");
-
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // Soft delete needs no key: the endpoint's `deleted_at IS NULL` guard
         // makes a repeat a no-op rather than a second deletion.
-        const result = await sendJson("DELETE", `/api/v1/blog/pages/${pageId}`);
+        sendJson("DELETE", `/api/v1/blog/pages/${pageId}`),
+      "Could not delete the page. Please try again.",
+      "Deleting…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-
-        showActionError("Could not delete the page. Please try again.");
-        unlock();
-      });
-    });
-
-  const editForm = document.getElementById(
-    "page-edit-form"
-  ) as HTMLFormElement | null;
-
-  editForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "page-edit-submit"
-    ) as HTMLButtonElement | null;
+  onSubmit("page-edit-form", async ({ data, submit }) => {
     const idField = document.getElementById(
       "edit-page-id"
     ) as HTMLInputElement | null;
-    if (!submit || submit.disabled || !idField) return;
-
-    const data = new FormData(editForm);
-    const errorElement = document.getElementById("page-edit-error");
-    if (errorElement) errorElement.hidden = true;
+    if (!idField) return;
 
     // PATCH is a partial update; only the fields this screen owns are sent, so
     // the SEO fields and featured media are not clobbered by a stale copy.
     const body: Record<string, unknown> = {
-      title: String(data.get("title") ?? "").trim(),
-      slug: String(data.get("slug") ?? "").trim(),
+      title: field(data, "title"),
+      slug: field(data, "slug"),
       pageType: String(data.get("pageType") ?? "standard"),
       menuOrder: Number(data.get("menuOrder") ?? 0),
       // `null` clears it — the API distinguishes that from absent, which is
       // "leave the excerpt alone".
-      excerpt: String(data.get("excerpt") ?? "").trim() || null
+      excerpt: field(data, "excerpt") || null
     };
 
     // Absent when the stored document holds blocks this editor cannot
@@ -1020,8 +982,7 @@ const editingBodyText = editingPage
       const contentText = buildContentTextFromBodyText(bodyText);
 
       if (contentText === "") {
-        showFormError(
-          errorElement,
+        editError.show(
           "The body cannot be empty — write at least one paragraph."
         );
         return;
@@ -1031,45 +992,22 @@ const editingBodyText = editingPage
       body.contentText = contentText;
     }
 
-    const unlock = lockElement(submit, "Saving…");
-
-    const result = await sendJsonWithFieldErrors(
+    await submitWithFieldErrors(
+      submit,
+      editError,
       "PATCH",
       `/api/v1/blog/pages/${idField.value}`,
-      body
+      body,
+      {
+        labels: FIELD_LABELS,
+        busyLabel: "Saving…",
+        conflict: CONFLICT,
+        failure: "Could not save the page. Please try again."
+      }
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // The rejected FIELD, not a guess at it.
-    showFormError(
-      errorElement,
-      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
-        ? "A page with that slug and locale already exists."
-        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
-            "Could not save the page. Please try again.")
-    );
-    unlock();
   });
 
-  const createForm = document.getElementById(
-    "page-create-form"
-  ) as HTMLFormElement | null;
-
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById(
-      "page-create-submit"
-    ) as HTMLButtonElement | null;
-    if (!submit || submit.disabled) return;
-
-    const data = new FormData(createForm);
-    const errorElement = document.getElementById("page-create-error");
-    if (errorElement) errorElement.hidden = true;
-
+  onSubmit("page-create-form", async ({ data, submit }) => {
     const bodyText = String(data.get("body") ?? "");
     const contentText = buildContentTextFromBodyText(bodyText);
 
@@ -1077,20 +1015,17 @@ const editingBodyText = editingPage
     // textarea holding only whitespace and the validator does not — this is
     // the one rejection the form can name before the round trip.
     if (contentText === "") {
-      showFormError(
-        errorElement,
+      createError.show(
         "The body cannot be empty — write at least one paragraph."
       );
       return;
     }
 
-    const unlock = lockElement(submit, "Creating…");
-
-    const excerpt = String(data.get("excerpt") ?? "").trim();
+    const excerpt = field(data, "excerpt");
     const body: Record<string, unknown> = {
-      title: String(data.get("title") ?? "").trim(),
-      slug: String(data.get("slug") ?? "").trim(),
-      locale: String(data.get("locale") ?? "").trim() || "id",
+      title: field(data, "title"),
+      slug: field(data, "slug"),
+      locale: field(data, "locale") || "id",
       visibility: String(data.get("visibility") ?? "public"),
       pageType: String(data.get("pageType") ?? "standard"),
       menuOrder: Number(data.get("menuOrder") ?? 0),
@@ -1107,25 +1042,18 @@ const editingBodyText = editingPage
 
     // No `Idempotency-Key`: `POST /api/v1/blog/pages` requires none — a retry
     // that duplicates a create is caught by the slug/locale unique index.
-    const result = await sendJsonWithFieldErrors(
+    await submitWithFieldErrors(
+      submit,
+      createError,
       "POST",
       "/api/v1/blog/pages",
-      body
+      body,
+      {
+        labels: FIELD_LABELS,
+        busyLabel: "Creating…",
+        conflict: CONFLICT,
+        failure: "Could not create the draft. Please try again."
+      }
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    // The rejected FIELD, not a guess at it.
-    showFormError(
-      errorElement,
-      result.errorCode === "SLUG_CONFLICT" || result.errorCode === "CONFLICT"
-        ? "A page with that slug and locale already exists."
-        : (describeRejectedFields(result.fieldErrors, FIELD_LABELS) ??
-            "Could not create the draft. Please try again.")
-    );
-    unlock();
   });
 </script>

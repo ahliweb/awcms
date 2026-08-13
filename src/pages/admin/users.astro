@@ -313,33 +313,14 @@ const showActions =
   // `default-src 'self'` CSP allows it — an import-free script would inline and
   // be blocked. See admin-form-client.ts. Handlers are attached via event
   // delegation so they bind whether or not any given control rendered.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onAction,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const errorBox = document.getElementById("users-action-error");
-
-  function showError(message: string): void {
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.hidden = false;
-  }
-
-  async function run(
-    button: HTMLButtonElement,
-    action: () => Promise<{ ok: boolean; errorCode: string | null }>,
-    failureMessage: string
-  ): Promise<void> {
-    if (button.disabled) return;
-    if (errorBox) errorBox.hidden = true;
-    const unlock = lockElement(button, "Please wait…");
-
-    const result = await action();
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-    showError(failureMessage);
-    unlock();
-  }
+  const actionError = messageBox("users-action-error");
 
   type SessionSummary = {
     id: string;
@@ -354,9 +335,8 @@ const showActions =
 
   /**
    * Reads one tenant user's live sessions. Page-local rather than a shared
-   * helper for the same reason `data-lifecycle.astro` keeps its own: `sendJson`
-   * deliberately discards the response body, and a GET whose whole purpose is
-   * the body needs its own narrow shape.
+   * helper: this is a GET whose whole purpose is the body, and the shared
+   * helpers all send one.
    */
   async function fetchSessions(
     userId: string
@@ -419,7 +399,7 @@ const showActions =
     }
   }
 
-  async function toggleSessions(button: HTMLButtonElement): Promise<void> {
+  onAction(".js-user-sessions", async (button) => {
     const userId = button.dataset.userId;
     if (!userId) return;
 
@@ -451,76 +431,71 @@ const showActions =
         ? "No live sessions."
         : `${sessions.length} live session(s).`;
     renderSessions(list, sessions);
-  }
+  });
 
-  document.addEventListener("click", (event) => {
-    const target = (event.target as HTMLElement | null)?.closest("button");
-    if (!(target instanceof HTMLButtonElement)) return;
+  onAction(".js-user-sessions-revoke", async (button) => {
+    const userId = button.dataset.userId;
+    if (!userId) return;
 
-    if (target.classList.contains("js-user-sessions")) {
-      void toggleSessions(target);
-      return;
-    }
+    await mutateAndReload(
+      button,
+      actionError,
+      () => sendJson("POST", `/api/v1/users/${userId}/sessions/revoke-all`),
+      "Could not end this user's sessions. Please try again."
+    );
+  });
 
-    if (target.classList.contains("js-user-sessions-revoke")) {
-      const userId = target.dataset.userId;
-      if (!userId) return;
-      void run(
-        target,
-        () => sendJson("POST", `/api/v1/users/${userId}/sessions/revoke-all`),
-        "Could not end this user's sessions. Please try again."
-      );
-      return;
-    }
+  onAction(".js-user-status", async (button) => {
+    const userId = button.dataset.userId;
+    const nextStatus = button.dataset.nextStatus;
+    if (!userId || !nextStatus) return;
 
-    if (target.classList.contains("js-user-status")) {
-      const userId = target.dataset.userId;
-      const nextStatus = target.dataset.nextStatus;
-      if (!userId || !nextStatus) return;
-      void run(
-        target,
-        () =>
-          sendJson("PATCH", `/api/v1/users/${userId}`, { status: nextStatus }),
-        "Could not update the user status. Please try again."
-      );
-      return;
-    }
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("PATCH", `/api/v1/users/${userId}`, { status: nextStatus }),
+      "Could not update the user status. Please try again."
+    );
+  });
 
-    if (target.classList.contains("js-assign-role")) {
-      const userId = target.dataset.userId;
-      const selectId = target.dataset.selectId;
-      if (!userId || !selectId) return;
-      const select = document.getElementById(
-        selectId
-      ) as HTMLSelectElement | null;
-      const roleId = select?.value;
-      if (!roleId) return;
-      void run(
-        target,
-        () =>
-          sendJson("POST", "/api/v1/access/assignments", {
-            tenantUserId: userId,
-            roleId
-          }),
-        "Could not assign the role. It may already be assigned."
-      );
-      return;
-    }
+  onAction(".js-assign-role", async (button) => {
+    const userId = button.dataset.userId;
+    const selectId = button.dataset.selectId;
+    if (!userId || !selectId) return;
+    const select = document.getElementById(
+      selectId
+    ) as HTMLSelectElement | null;
+    const roleId = select?.value;
+    if (!roleId) return;
 
-    if (target.classList.contains("js-unassign-role")) {
-      const userId = target.dataset.userId;
-      const roleId = target.dataset.roleId;
-      if (!userId || !roleId) return;
-      void run(
-        target,
-        () =>
-          sendJson("DELETE", "/api/v1/access/assignments", {
-            tenantUserId: userId,
-            roleId
-          }),
-        "Could not remove the role. Please try again."
-      );
-    }
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("POST", "/api/v1/access/assignments", {
+          tenantUserId: userId,
+          roleId
+        }),
+      "Could not assign the role. It may already be assigned."
+    );
+  });
+
+  onAction(".js-unassign-role", async (button) => {
+    const userId = button.dataset.userId;
+    const roleId = button.dataset.roleId;
+    if (!userId || !roleId) return;
+
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson("DELETE", "/api/v1/access/assignments", {
+          tenantUserId: userId,
+          roleId
+        }),
+      "Could not remove the role. Please try again."
+    );
   });
 </script>
 

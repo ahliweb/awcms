@@ -401,55 +401,43 @@ function statusVariant(status: string): string {
   //
   // The import is load-bearing for CSP: an import-free script is INLINED by
   // Astro, and inline scripts are blocked by `default-src 'self'`.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    messageBox,
+    mutateAndReload,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  const form = document.getElementById(
-    "tenants-create-form"
-  ) as HTMLFormElement | null;
-  const formError = document.getElementById("tenants-create-error");
-  const submit = document.getElementById(
-    "tenants-create-submit"
-  ) as HTMLButtonElement | null;
+  const formError = messageBox("tenants-create-error");
 
-  form?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!submit || submit.disabled) return;
-    const unlock = lockElement(submit, "Provisioning…");
-    if (formError) formError.hidden = true;
-
-    const formData = new FormData(form);
-
-    const result = await sendJson(
-      "POST",
-      "/api/v1/tenants",
-      {
-        tenantCode: String(formData.get("tenantCode") ?? ""),
-        tenantName: String(formData.get("tenantName") ?? ""),
-        officeCode: String(formData.get("officeCode") ?? ""),
-        officeName: String(formData.get("officeName") ?? ""),
-        ownerDisplayName: String(formData.get("ownerDisplayName") ?? ""),
-        ownerLoginIdentifier: String(
-          formData.get("ownerLoginIdentifier") ?? ""
+  onSubmit("tenants-create-form", async ({ data, submit }) => {
+    await mutateAndReload(
+      submit,
+      formError,
+      () =>
+        sendJson(
+          "POST",
+          "/api/v1/tenants",
+          {
+            tenantCode: String(data.get("tenantCode") ?? ""),
+            tenantName: String(data.get("tenantName") ?? ""),
+            officeCode: String(data.get("officeCode") ?? ""),
+            officeName: String(data.get("officeName") ?? ""),
+            ownerDisplayName: String(data.get("ownerDisplayName") ?? ""),
+            ownerLoginIdentifier: String(
+              data.get("ownerLoginIdentifier") ?? ""
+            ),
+            ownerPassword: String(data.get("ownerPassword") ?? "")
+          },
+          { "Idempotency-Key": crypto.randomUUID() }
         ),
-        ownerPassword: String(formData.get("ownerPassword") ?? "")
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
-    );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-
-    if (formError) {
-      formError.textContent =
-        result.errorCode === "TENANT_CODE_TAKEN"
+      (errorCode) =>
+        errorCode === "TENANT_CODE_TAKEN"
           ? "That tenant code is already taken. Choose another."
-          : result.errorCode === "VALIDATION_ERROR"
+          : errorCode === "VALIDATION_ERROR"
             ? "Check the fields and try again — the owner password must be at least eight characters."
-            : "Could not provision the tenant. Please try again.";
-      formError.hidden = false;
-    }
-    unlock();
+            : "Could not provision the tenant. Please try again.",
+      "Provisioning…"
+    );
   });
 </script>

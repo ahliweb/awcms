@@ -1288,123 +1288,88 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
   // renders when the matching server-side permission gate passed, so a viewer
   // without it simply has no matching element. The endpoint guards are the
   // authority regardless.
-  import { lockElement, sendJson } from "../../lib/ui/admin-form-client";
+  import {
+    blankToNull as orNull,
+    inputValue as fieldValue,
+    lockElement,
+    messageBox,
+    mutateAndReload,
+    onAction,
+    onSubmit,
+    sendJson
+  } from "../../lib/ui/admin-form-client";
 
-  function show(id: string, message: string): void {
-    const box = document.getElementById(id);
-    if (!box) return;
-    box.textContent = message;
-    box.hidden = false;
-  }
-
-  function clear(id: string): void {
-    const box = document.getElementById(id);
-    if (box) box.hidden = true;
-  }
-
-  function fieldValue(id: string): string {
-    const el = document.getElementById(id) as
-      HTMLInputElement | HTMLSelectElement | null;
-    return el ? el.value.trim() : "";
-  }
-
-  /** Blank text input → `null`, which the API reads as "unset this field". */
-  function orNull(value: string): string | null {
-    return value === "" ? null : value;
-  }
+  const configError = messageBox("seo-config-form-error");
+  const settingsError = messageBox("redirect-settings-error");
+  const createError = messageBox("redirect-create-error");
+  const validateResult = messageBox("redirect-validate-result");
+  const actionError = messageBox("redirect-action-error");
+  const recoverError = messageBox("redirect-recover-error");
+  const notFoundError = messageBox("not-found-action-error");
 
   // ---------------- SEO defaults (PUT /api/v1/seo/config) ----------------
-  const configForm = document.getElementById(
-    "seo-config-form"
-  ) as HTMLFormElement | null;
-  const configSubmit = document.getElementById(
-    "seo-config-submit"
-  ) as HTMLButtonElement | null;
-
-  configForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!configSubmit || configSubmit.disabled) return;
-    clear("seo-config-form-error");
-    const unlock = lockElement(configSubmit, "Saving…");
-
-    const includedRaw = fieldValue("seo-included-types");
-    const included = includedRaw
+  onSubmit("seo-config-form", async ({ submit }) => {
+    const included = fieldValue("seo-included-types")
       .split(",")
       .map((entry) => entry.trim())
       .filter((entry) => entry.length > 0);
-    const limitRaw = fieldValue("seo-feed-item-limit");
-    const limit = Number.parseInt(limitRaw, 10);
+    const limit = Number.parseInt(fieldValue("seo-feed-item-limit"), 10);
 
-    // PUT is a FULL replace, so every field is sent — omitting one would
-    // silently clear it.
-    const result = await sendJson(
-      "PUT",
-      "/api/v1/seo/config",
-      {
-        siteName: orNull(fieldValue("seo-site-name")),
-        defaultMetaDescription: orNull(fieldValue("seo-meta-description")),
-        defaultSocialMediaId: orNull(fieldValue("seo-social-media-id")),
-        twitterSiteHandle: orNull(fieldValue("seo-twitter-handle")),
-        organizationName: orNull(fieldValue("seo-organization-name")),
-        organizationLogoMediaId: orNull(fieldValue("seo-org-logo-media-id")),
-        defaultRobotsNoindex: fieldValue("seo-noindex") === "true",
-        feedTitle: orNull(fieldValue("seo-feed-title")),
-        feedDescription: orNull(fieldValue("seo-feed-description")),
-        feedLogoMediaId: orNull(fieldValue("seo-feed-logo-media-id")),
-        feedItemLimit: Number.isNaN(limit) ? null : limit,
-        includedResourceTypes: included.length === 0 ? null : included,
-        sitemapEnabled: fieldValue("seo-sitemap-enabled") === "true",
-        feedsEnabled: fieldValue("seo-feeds-enabled") === "true"
-      },
-      // High-risk write: a fresh key per submit makes a retry safe without
-      // colliding with a genuinely different later save.
-      { "Idempotency-Key": crypto.randomUUID() }
+    await mutateAndReload(
+      submit,
+      configError,
+      () =>
+        // PUT is a FULL replace, so every field is sent — omitting one would
+        // silently clear it.
+        sendJson(
+          "PUT",
+          "/api/v1/seo/config",
+          {
+            siteName: orNull(fieldValue("seo-site-name")),
+            defaultMetaDescription: orNull(fieldValue("seo-meta-description")),
+            defaultSocialMediaId: orNull(fieldValue("seo-social-media-id")),
+            twitterSiteHandle: orNull(fieldValue("seo-twitter-handle")),
+            organizationName: orNull(fieldValue("seo-organization-name")),
+            organizationLogoMediaId: orNull(
+              fieldValue("seo-org-logo-media-id")
+            ),
+            defaultRobotsNoindex: fieldValue("seo-noindex") === "true",
+            feedTitle: orNull(fieldValue("seo-feed-title")),
+            feedDescription: orNull(fieldValue("seo-feed-description")),
+            feedLogoMediaId: orNull(fieldValue("seo-feed-logo-media-id")),
+            feedItemLimit: Number.isNaN(limit) ? null : limit,
+            includedResourceTypes: included.length === 0 ? null : included,
+            sitemapEnabled: fieldValue("seo-sitemap-enabled") === "true",
+            feedsEnabled: fieldValue("seo-feeds-enabled") === "true"
+          },
+          // High-risk write: a fresh key per submit makes a retry safe without
+          // colliding with a genuinely different later save.
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      "Could not save the SEO defaults. Check the values and try again.",
+      "Saving…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-    show(
-      "seo-config-form-error",
-      "Could not save the SEO defaults. Check the values and try again."
-    );
-    unlock();
   });
 
   // -------------- Redirect policy (PUT /redirects/settings) --------------
-  const settingsForm = document.getElementById(
-    "redirect-settings-form"
-  ) as HTMLFormElement | null;
-  const settingsSubmit = document.getElementById(
-    "redirect-settings-submit"
-  ) as HTMLButtonElement | null;
-
-  settingsForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!settingsSubmit || settingsSubmit.disabled) return;
-    clear("redirect-settings-error");
-    const unlock = lockElement(settingsSubmit, "Saving…");
-
-    const result = await sendJson(
-      "PUT",
-      "/api/v1/seo/redirects/settings",
-      {
-        urlChangeAutoPolicy: fieldValue("redirect-url-change-policy"),
-        legacyBlogRedirectEnabled: fieldValue("redirect-legacy-blog") === "true"
-      },
-      { "Idempotency-Key": crypto.randomUUID() }
+  onSubmit("redirect-settings-form", async ({ submit }) => {
+    await mutateAndReload(
+      submit,
+      settingsError,
+      () =>
+        sendJson(
+          "PUT",
+          "/api/v1/seo/redirects/settings",
+          {
+            urlChangeAutoPolicy: fieldValue("redirect-url-change-policy"),
+            legacyBlogRedirectEnabled:
+              fieldValue("redirect-legacy-blog") === "true"
+          },
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      "Could not save the redirect policy. Please try again.",
+      "Saving…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-    show(
-      "redirect-settings-error",
-      "Could not save the redirect policy. Please try again."
-    );
-    unlock();
   });
 
   // ---------------- Redirect create + dry run ----------------
@@ -1421,20 +1386,16 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     };
   }
 
-  const validateButton = document.getElementById(
-    "redirect-validate-btn"
-  ) as HTMLButtonElement | null;
+  // The dry run is the one control here that is NOT `mutateAndReload`: nothing
+  // is stored, so there is nothing to reload, and its RESPONSE BODY is the
+  // whole point — which `sendJson`'s narrow `{ ok, errorCode }` deliberately
+  // does not carry. Deliberately no Idempotency-Key either: there is no replay
+  // to collapse, and the endpoint does not ask for one.
+  onAction("#redirect-validate-btn", async (button) => {
+    createError.clear();
+    validateResult.clear();
+    const unlock = lockElement(button, "Checking…");
 
-  validateButton?.addEventListener("click", async () => {
-    if (validateButton.disabled) return;
-    clear("redirect-create-error");
-    clear("redirect-validate-result");
-    const unlock = lockElement(validateButton, "Checking…");
-
-    // Read-only dry run — deliberately NO Idempotency-Key: nothing is stored,
-    // so there is no replay to collapse, and the endpoint does not ask for one.
-    // `sendJson` only reports ok/errorCode, and this response's BODY is the
-    // point, so it is fetched directly.
     try {
       const response = await fetch("/api/v1/seo/redirects/validate", {
         method: "POST",
@@ -1453,8 +1414,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       } | null;
 
       if (!response.ok || payload?.success !== true || !payload.data) {
-        show(
-          "redirect-validate-result",
+        validateResult.show(
           "Could not check the rule right now. Please try again."
         );
         unlock();
@@ -1463,8 +1423,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
 
       const data = payload.data;
       if (data.valid === true) {
-        show(
-          "redirect-validate-result",
+        validateResult.show(
           `Looks good. Normalized source: ${data.normalizedSourcePath ?? "—"}.`
         );
       } else {
@@ -1477,84 +1436,67 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 .join(" · ")
             : (data.issue?.message ??
               "This rule conflicts with an existing one.");
-        show("redirect-validate-result", `Not valid — ${detail}`);
+        validateResult.show(`Not valid — ${detail}`);
       }
     } catch {
-      show(
-        "redirect-validate-result",
+      validateResult.show(
         "Could not check the rule right now. Please try again."
       );
     }
     unlock();
   });
 
-  const createForm = document.getElementById(
-    "redirect-create-form"
-  ) as HTMLFormElement | null;
-  const createSubmit = document.getElementById(
-    "redirect-create-submit"
-  ) as HTMLButtonElement | null;
-
-  createForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!createSubmit || createSubmit.disabled) return;
-    clear("redirect-create-error");
-    clear("redirect-validate-result");
-    const unlock = lockElement(createSubmit, "Creating…");
-
-    const result = await sendJson(
-      "POST",
-      "/api/v1/seo/redirects",
-      readRedirectDraft(),
-      // Fresh key per click: a double-click or a retry after a dropped response
-      // collapses onto one rule instead of creating two.
-      { "Idempotency-Key": crypto.randomUUID() }
+  onSubmit("redirect-create-form", async ({ submit }) => {
+    validateResult.clear();
+    await mutateAndReload(
+      submit,
+      createError,
+      () =>
+        sendJson(
+          "POST",
+          "/api/v1/seo/redirects",
+          readRedirectDraft(),
+          // Fresh key per click: a double-click or a retry after a dropped
+          // response collapses onto one rule instead of creating two.
+          { "Idempotency-Key": crypto.randomUUID() }
+        ),
+      (errorCode) =>
+        errorCode === "SOURCE_CONFLICT"
+          ? "Another live rule already governs this source path and scope."
+          : "Could not create the rule. Use Dry run to see what is wrong.",
+      "Creating…"
     );
-
-    if (result.ok) {
-      window.location.reload();
-      return;
-    }
-    show(
-      "redirect-create-error",
-      result.errorCode === "SOURCE_CONFLICT"
-        ? "Another live rule already governs this source path and scope."
-        : "Could not create the rule. Use Dry run to see what is wrong."
-    );
-    unlock();
   });
 
   // ---------------- Per-row save / lifecycle / delete ----------------
-  document
-    .querySelectorAll<HTMLButtonElement>(".redirect-save-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.redirectId;
-        if (!id) return;
-        const row = document.querySelector<HTMLTableRowElement>(
-          `[data-redirect-row="${id}"]`
-        );
-        if (!row) return;
-        clear("redirect-action-error");
-        const unlock = lockElement(button, "Saving…");
+  onAction(".redirect-save-btn", async (button) => {
+    const id = button.dataset.redirectId;
+    if (!id) return;
+    const row = document.querySelector<HTMLTableRowElement>(
+      `[data-redirect-row="${id}"]`
+    );
+    if (!row) return;
 
-        const target = document.querySelector<HTMLInputElement>(
-          `[data-redirect-target="${id}"]`
-        );
-        const code = document.querySelector<HTMLSelectElement>(
-          `[data-redirect-code="${id}"]`
-        );
-        const query = document.querySelector<HTMLSelectElement>(
-          `[data-redirect-query="${id}"]`
-        );
+    const target = document.querySelector<HTMLInputElement>(
+      `[data-redirect-target="${id}"]`
+    );
+    const code = document.querySelector<HTMLSelectElement>(
+      `[data-redirect-code="${id}"]`
+    );
+    const query = document.querySelector<HTMLSelectElement>(
+      `[data-redirect-query="${id}"]`
+    );
 
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
         // `PUT /redirects/{id}` is a FULL replace of the mutable fields: the
         // fields this row does not expose (scope, effective window, reason,
         // state) are echoed back from the rendered row, so saving a target
         // never silently clears an effective window or reactivates an
         // archived rule.
-        const result = await sendJson("PUT", `/api/v1/seo/redirects/${id}`, {
+        sendJson("PUT", `/api/v1/seo/redirects/${id}`, {
           target: target?.value.trim() ?? "",
           statusCode: Number.parseInt(code?.value ?? "301", 10),
           state: row.dataset.redirectState ?? "active",
@@ -1564,111 +1506,79 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           effectiveUntil: orNull(row.dataset.redirectUntil ?? ""),
           preserveQuery: query?.value === "true",
           reason: orNull(row.dataset.redirectReason ?? "")
-        });
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        show(
-          "redirect-action-error",
-          "Could not save the rule. Check the target and try again."
-        );
-        unlock();
-      });
-    });
+        }),
+      "Could not save the rule. Check the target and try again.",
+      "Saving…"
+    );
+  });
 
   // activate / deactivate / archive — all `redirect.update` at the endpoint.
-  document
-    .querySelectorAll<HTMLButtonElement>(".redirect-lifecycle-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.redirectId;
-        const action = button.dataset.lifecycleAction;
-        if (!id || !action) return;
-        const confirmText = button.dataset.lifecycleConfirm;
-        if (confirmText && !window.confirm(confirmText)) return;
-        clear("redirect-action-error");
-        const unlock = lockElement(button, "Working…");
+  onAction(".redirect-lifecycle-btn", async (button) => {
+    const id = button.dataset.redirectId;
+    const action = button.dataset.lifecycleAction;
+    if (!id || !action) return;
+    const confirmText = button.dataset.lifecycleConfirm;
+    if (confirmText && !window.confirm(confirmText)) return;
 
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      actionError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/seo/redirects/${id}/lifecycle`,
           { action },
           { "Idempotency-Key": crypto.randomUUID() }
-        );
+        ),
+      "Could not change the rule's state. Please try again.",
+      "Working…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        show(
-          "redirect-action-error",
-          "Could not change the rule's state. Please try again."
-        );
-        unlock();
-      });
+  // Soft delete: reason required by the endpoint, so it is prompted for. This
+  // one does NOT reload in place — it carries the id into the recovery panel,
+  // because the list excludes soft-deleted rules and this is the only place
+  // the id stays reachable without digging through the audit trail.
+  onAction(".redirect-delete-btn", async (button) => {
+    const id = button.dataset.redirectId;
+    if (!id) return;
+    const source = button.dataset.redirectSource ?? "this rule";
+    const reason = window.prompt(
+      `Delete the rule for ${source}? Enter a reason (it can be restored):`
+    );
+    if (reason === null || reason.trim().length === 0) return;
+    actionError.clear();
+    const unlock = lockElement(button, "Deleting…");
+
+    const result = await sendJson("DELETE", `/api/v1/seo/redirects/${id}`, {
+      reason: reason.trim()
     });
 
-  // Soft delete: reason required by the endpoint, so it is prompted for.
-  document
-    .querySelectorAll<HTMLButtonElement>(".redirect-delete-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.redirectId;
-        if (!id) return;
-        const source = button.dataset.redirectSource ?? "this rule";
-        const reason = window.prompt(
-          `Delete the rule for ${source}? Enter a reason (it can be restored):`
-        );
-        if (reason === null || reason.trim().length === 0) return;
-        clear("redirect-action-error");
-        const unlock = lockElement(button, "Deleting…");
-
-        const result = await sendJson("DELETE", `/api/v1/seo/redirects/${id}`, {
-          reason: reason.trim()
-        });
-
-        if (result.ok) {
-          // Carry the id into the recovery panel: the list excludes
-          // soft-deleted rules, so this is the only place the id stays
-          // reachable without digging through the audit trail.
-          const url = new URL(window.location.href);
-          url.searchParams.set("recover", id);
-          window.location.assign(url.toString());
-          return;
-        }
-        show(
-          "redirect-action-error",
-          "Could not delete the rule. Please try again."
-        );
-        unlock();
-      });
-    });
+    if (result.ok) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("recover", id);
+      window.location.assign(url.toString());
+      return;
+    }
+    actionError.show("Could not delete the rule. Please try again.");
+    unlock();
+  });
 
   // ---------------- Recovery panel: restore / purge ----------------
-  const restoreButton = document.getElementById(
-    "redirect-restore-btn"
-  ) as HTMLButtonElement | null;
-  const purgeButton = document.getElementById(
-    "redirect-purge-btn"
-  ) as HTMLButtonElement | null;
-
+  // Also not `mutateAndReload`: success navigates to the bare path so the
+  // `?recover=` parameter does not survive into the reloaded page.
   async function runRecovery(
     button: HTMLButtonElement,
     action: "restore" | "purge",
     busyLabel: string,
     failureMessage: string
   ): Promise<void> {
-    if (button.disabled) return;
     const id = fieldValue("redirect-recover-id");
     if (!id) {
-      show("redirect-recover-error", "Enter the deleted rule's id first.");
+      recoverError.show("Enter the deleted rule's id first.");
       return;
     }
-    clear("redirect-recover-error");
+    recoverError.clear();
     const unlock = lockElement(button, busyLabel);
 
     const result = await sendJson(
@@ -1682,20 +1592,20 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       window.location.assign(window.location.pathname);
       return;
     }
-    show("redirect-recover-error", failureMessage);
+    recoverError.show(failureMessage);
     unlock();
   }
 
-  restoreButton?.addEventListener("click", () => {
-    void runRecovery(
-      restoreButton,
+  onAction("#redirect-restore-btn", async (button) => {
+    await runRecovery(
+      button,
       "restore",
       "Restoring…",
       "Could not restore that rule. Check the id and try again."
     );
   });
 
-  purgeButton?.addEventListener("click", () => {
+  onAction("#redirect-purge-btn", async (button) => {
     if (
       !window.confirm(
         "Purge this rule permanently? A purged rule cannot be restored."
@@ -1703,8 +1613,8 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     ) {
       return;
     }
-    void runRecovery(
-      purgeButton,
+    await runRecovery(
+      button,
       "purge",
       "Purging…",
       "Could not purge that rule. Only an already-deleted rule can be purged."
@@ -1712,68 +1622,47 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
   });
 
   // ---------------- 404 governance: resolve / dismiss ----------------
-  document
-    .querySelectorAll<HTMLButtonElement>(".observation-resolve-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.observationId;
-        if (!id) return;
-        clear("not-found-action-error");
-        const unlock = lockElement(button, "Resolving…");
+  onAction(".observation-resolve-btn", async (button) => {
+    const id = button.dataset.observationId;
+    if (!id) return;
 
-        const suggested = document.querySelector<HTMLInputElement>(
-          `[data-observation-suggested="${id}"]`
-        );
-        const suggestedId = suggested?.value.trim() ?? "";
+    const suggested = document.querySelector<HTMLInputElement>(
+      `[data-observation-suggested="${id}"]`
+    );
+    const suggestedId = suggested?.value.trim() ?? "";
 
-        const result = await sendJson(
+    await mutateAndReload(
+      button,
+      notFoundError,
+      () =>
+        sendJson(
           "POST",
           `/api/v1/seo/not-found/${id}`,
           suggestedId ? { suggestedRedirectId: suggestedId } : {}
-        );
+        ),
+      "Could not resolve the observation. Check the rule id and try again.",
+      "Resolving…"
+    );
+  });
 
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        show(
-          "not-found-action-error",
-          "Could not resolve the observation. Check the rule id and try again."
-        );
-        unlock();
-      });
-    });
+  onAction(".observation-dismiss-btn", async (button) => {
+    const id = button.dataset.observationId;
+    if (!id) return;
+    const path = button.dataset.observationPath ?? "this observation";
+    if (
+      !window.confirm(
+        `Dismiss ${path}? The record is deleted and will only return if the 404 recurs.`
+      )
+    ) {
+      return;
+    }
 
-  document
-    .querySelectorAll<HTMLButtonElement>(".observation-dismiss-btn")
-    .forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (button.disabled) return;
-        const id = button.dataset.observationId;
-        if (!id) return;
-        const path = button.dataset.observationPath ?? "this observation";
-        if (
-          !window.confirm(
-            `Dismiss ${path}? The record is deleted and will only return if the 404 recurs.`
-          )
-        ) {
-          return;
-        }
-        clear("not-found-action-error");
-        const unlock = lockElement(button, "Dismissing…");
-
-        const result = await sendJson("DELETE", `/api/v1/seo/not-found/${id}`);
-
-        if (result.ok) {
-          window.location.reload();
-          return;
-        }
-        show(
-          "not-found-action-error",
-          "Could not dismiss the observation. Please try again."
-        );
-        unlock();
-      });
-    });
+    await mutateAndReload(
+      button,
+      notFoundError,
+      () => sendJson("DELETE", `/api/v1/seo/not-found/${id}`),
+      "Could not dismiss the observation. Please try again.",
+      "Dismissing…"
+    );
+  });
 </script>
