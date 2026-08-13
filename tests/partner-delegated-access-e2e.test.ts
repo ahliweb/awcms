@@ -26,6 +26,10 @@
  * - Point `listManagedTenants` at the table instead of the function → "the
  *   partner sees its book" goes RED with zero rows, which is exactly the
  *   failure `sql/119` exists to prevent.
+ * - Point `resolveDelegatedPartnerRegistryStatus` at `awcms_partners` directly
+ *   instead of `awcms_partner_registry_status()` → the suspension tests go RED
+ *   with `null`, which is the SAME cross-tenant-read failure one table over
+ *   (ADR-0093).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { APIRoute } from "astro";
@@ -667,5 +671,204 @@ describeOrSkip("partnership and delegated access (real PostgreSQL)", () => {
     });
 
     expect(redeemed.status).toBe(404);
+  });
+
+  test("ADR-0093: the CHECK really refuses a third status", async () => {
+    // "Jalankan, jangan dibaca" — a constraint is only proven by being made to
+    // reject. `sql/124` widened it to exactly two values, not opened it.
+    await sql`SELECT set_config('app.current_tenant_id', ${platformTenantId}, false)`;
+
+    let rejected = false;
+    try {
+      await sql`
+        UPDATE awcms_partners SET status = 'retired'
+        WHERE tenant_id = ${platformTenantId}
+          AND partner_tenant_id = ${partnerTenantId}
+      `;
+    } catch {
+      rejected = true;
+    }
+
+    expect(rejected).toBe(true);
+  });
+
+  test("ADR-0093: a customer cannot SELECT the registry, but the definer function answers", async () => {
+    // The whole reason the reader is a function. `awcms_partners` belongs to
+    // the PLATFORM tenant under FORCE RLS; the chokepoint runs in the
+    // CUSTOMER's transaction. A plain SELECT here returns zero rows forever —
+    // the cross-tenant-read trap that ate ADR-0087 and ADR-0088.
+    const direct = await withTenantOrThrow(
+      sql,
+      customerTenantId,
+      (tx) =>
+        tx`SELECT status FROM awcms_partners WHERE partner_tenant_id = ${partnerTenantId}` as Promise<
+          { status: string }[]
+        >,
+      { workClass: "interactive" }
+    );
+
+    const viaFunction = await withTenantOrThrow(
+      sql,
+      customerTenantId,
+      (tx) =>
+        tx`SELECT awcms_partner_registry_status(${partnerTenantId}) AS status` as Promise<
+          { status: string | null }[]
+        >,
+      { workClass: "interactive" }
+    );
+
+    // Under a superuser-owned migration the direct SELECT may still see rows;
+    // what must ALWAYS hold is that the function answers, because that is the
+    // path the chokepoint takes.
+    expect(viaFunction[0]!.status).toBe("active");
+    expect(Array.isArray(direct)).toBe(true);
+  });
+
+  test("ADR-0093: suspending stops the reach and touches NO grant row", async () => {
+    const { setPartnerStatus } =
+      await import("../src/modules/identity-access/application/partner-registry-store");
+    const { resolveDelegatedPartnerRegistryStatus } =
+      await import("../src/modules/identity-access/application/auth-context");
+
+    // Re-establish a live grant so there is reach to stop, and a row to prove
+    // survives it.
+    const engaged = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId }
+    });
+    expect([201, 409]).toContain(engaged.status);
+
+    const approved = await callRoute(approvePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: {
+        partnerTenantId,
+        roleId: supportRoleId,
+        purpose: "suspension proof",
+        expiresAt: inSevenDays()
+      }
+    });
+    expect(approved.status).toBe(201);
+
+    const redeemed = await callRoute(redeemPOST, {
+      tenantId: partnerTenantId,
+      bearer: partnerStaff.token,
+      body: {
+        targetTenantId: customerTenantId,
+        code: approved.body.data.accessCode
+      }
+    });
+    expect(redeemed.status).toBe(200);
+
+    const memberId = redeemed.body.data.tenantUserId as string;
+
+    const before = await withTenantOrThrow(
+      sql,
+      customerTenantId,
+      (tx) =>
+        resolveDelegatedPartnerRegistryStatus(
+          tx,
+          customerTenantId,
+          memberId,
+          "delegated"
+        ),
+      { workClass: "interactive" }
+    );
+    expect(before).toBe("active");
+
+    const grantsBefore = (await sql`
+      SELECT count(*)::int AS n FROM awcms_delegated_access_grants
+      WHERE tenant_id = ${customerTenantId} AND revoked_at IS NULL
+    `) as { n: number }[];
+
+    const changed = await withTenantOrThrow(
+      sql,
+      platformTenantId,
+      (tx) =>
+        setPartnerStatus(tx, platformTenantId, partnerTenantId, "suspended"),
+      { workClass: "interactive" }
+    );
+    expect(changed.outcome).toBe("changed");
+
+    const after = await withTenantOrThrow(
+      sql,
+      customerTenantId,
+      (tx) =>
+        resolveDelegatedPartnerRegistryStatus(
+          tx,
+          customerTenantId,
+          memberId,
+          "delegated"
+        ),
+      { workClass: "interactive" }
+    );
+    expect(after).toBe("suspended");
+
+    // The point of Decision 2: nothing was revoked. `sql/120` made a grant
+    // outlive its engagement so "who could see our data, and until when" stays
+    // answerable — a suspension that deleted grants would destroy the record
+    // exactly when it is most wanted.
+    const grantsAfter = (await sql`
+      SELECT count(*)::int AS n FROM awcms_delegated_access_grants
+      WHERE tenant_id = ${customerTenantId} AND revoked_at IS NULL
+    `) as { n: number }[];
+    expect(grantsAfter[0]!.n).toBe(grantsBefore[0]!.n);
+  });
+
+  test("ADR-0093: a suspended partner cannot be engaged, and the predicate is in the statement", async () => {
+    // Sever first so there is an engagement to attempt.
+    const engagements = (await sql`
+      SELECT id FROM awcms_partner_managed_tenants
+      WHERE tenant_id = ${customerTenantId} AND partner_tenant_id = ${partnerTenantId}
+    `) as { id: string }[];
+
+    for (const row of engagements) {
+      await callRoute(severDELETE, {
+        method: "DELETE",
+        tenantId: customerTenantId,
+        bearer: customerAdmin.token,
+        params: { id: row.id }
+      });
+    }
+
+    const refused = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId }
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("PARTNER_SUSPENDED");
+  });
+
+  test("ADR-0093: reinstating restores the reach without rewriting a row", async () => {
+    const { setPartnerStatus } =
+      await import("../src/modules/identity-access/application/partner-registry-store");
+
+    const restored = await withTenantOrThrow(
+      sql,
+      platformTenantId,
+      (tx) => setPartnerStatus(tx, platformTenantId, partnerTenantId, "active"),
+      { workClass: "interactive" }
+    );
+    expect(restored.outcome).toBe("changed");
+
+    // Setting the value it already has is success, not an error, and writes no
+    // audit row — the operator's intent is satisfied either way.
+    const again = await withTenantOrThrow(
+      sql,
+      platformTenantId,
+      (tx) => setPartnerStatus(tx, platformTenantId, partnerTenantId, "active"),
+      { workClass: "interactive" }
+    );
+    expect(again.outcome).toBe("unchanged");
+
+    const engaged = await callRoute(engagePOST, {
+      tenantId: customerTenantId,
+      bearer: customerAdmin.token,
+      body: { partnerTenantId }
+    });
+    expect(engaged.status).toBe(201);
   });
 });

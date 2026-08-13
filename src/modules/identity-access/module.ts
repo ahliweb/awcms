@@ -567,6 +567,26 @@ export const identityAccessModule = defineModule({
       scope: "platform",
       description:
         "PLATFORM: register an existing tenant as a partner — audited. Grants nothing; it is the precondition a customer's engagement checks"
+    },
+    // ADR-0093, #543. TWO permissions, not one, because they are two
+    // authorities: an operator who may stop a partner reaching in need not
+    // also be the one who lets them back. Platform-scoped like their two
+    // siblings — suspension is a statement about who may be a partner on this
+    // DEPLOYMENT, not a customer's decision about its own tenant, which
+    // already has its own name (`partner_access.configure`).
+    {
+      activityCode: "partner_registry",
+      action: "disable",
+      scope: "platform",
+      description:
+        "PLATFORM: suspend a registered partner — every delegated actor it placed stops being served immediately, and no grant row is touched"
+    },
+    {
+      activityCode: "partner_registry",
+      action: "restore",
+      scope: "platform",
+      description:
+        "PLATFORM: reinstate a suspended partner — the grants that survived start applying again"
     }
   ],
   /**

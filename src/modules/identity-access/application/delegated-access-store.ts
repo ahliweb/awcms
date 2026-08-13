@@ -105,6 +105,15 @@ export async function approveDelegatedAccess(
       WHERE tenant_id = ${tenantId}
         AND partner_tenant_id = ${input.partnerTenantId}
     )
+      -- ADR-0093: and the partner must still be active in the registry. In
+      -- the SAME statement for the same reason as the clause above — a
+      -- TypeScript check preceding the INSERT is a TOCTOU, and the platform
+      -- can suspend a partner between two statements. The registry is
+      -- FORCE-RLS and platform-owned, so the read goes through sql/124's
+      -- narrow SECURITY DEFINER function; NULL (no registry row) fails the
+      -- comparison and the INSERT writes zero rows, which is the fail-closed
+      -- direction.
+      AND awcms_partner_registry_status(${input.partnerTenantId}) = 'active'
     RETURNING id
   `) as { id: string }[];
 

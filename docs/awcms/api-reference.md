@@ -2280,6 +2280,35 @@ Not idempotency-keyed: both natural keys are globally unique, so a duplicate sub
 | 409    | The tenant is already a partner, the partnerCode is taken, or the platform tenant named itself (CONFLICT). | [`ApiError`](#standard-error-envelope) |
 | 422    | The registration failed validation (VALIDATION_FAILED); `error.details` lists every offending field.       | [`ApiError`](#standard-error-envelope) |
 
+### `PATCH /api/v1/partners/{partnerTenantId}/status` — Suspend or reinstate a registered partner (PLATFORM-scoped, audited).
+
+- **operationId**: `setPartnerRegistryStatus`
+- **Security**: bearerAuth + tenantHeader
+
+Writes one column. Suspending stops every delegated actor the partner placed from being served, in every customer tenant, at their next request — enforced at the authorization chokepoint, not by a job, so there is no window.
+
+It revokes NOTHING. No grant row is touched and no engagement is severed: a grant is the record of who could see a customer's data and until when, and that has to stay answerable after a partner is suspended. Effectiveness is computed per request, so reinstating restores every surviving grant's reach without rewriting a row.
+
+Two permissions, both PLATFORM-scoped, because they are two authorities: `identity_access.partner_registry.disable` to suspend and `identity_access.partner_registry.restore` to reinstate. Setting the status it already has succeeds with `changed: false` and writes no audit row.
+
+**Parameters**
+
+| Name              | In   | Required | Type          | Description |
+| ----------------- | ---- | -------- | ------------- | ----------- |
+| `partnerTenantId` | path | yes      | string (uuid) |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                       | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The partner, and whether this request changed anything.                                           | object                                 |
+| 401    | Missing or invalid session.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                       | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                                                               | [`ApiError`](#standard-error-envelope) |
+| 422    | `status` was absent or not one of the two values the CHECK constraint allows (VALIDATION_FAILED). | [`ApiError`](#standard-error-envelope) |
+
 ### `GET /api/v1/registration-requests` — Pending self-registration requests for this tenant.
 
 - **operationId**: `listRegistrationRequests`

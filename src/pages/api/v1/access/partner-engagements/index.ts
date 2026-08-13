@@ -99,6 +99,18 @@ export const POST = defineTenantRoute<EngagePrepared>({
           "That partner is already engaged for this tenant."
         );
       }
+      // ADR-0093. Told plainly rather than folded into the 404 above: unlike
+      // `SELF`/`NOT_A_PARTNER`, this names a tenant the customer already knows
+      // is a partner — they were about to engage it — so there is nothing left
+      // to withhold, and "no such partner" would send them looking for a typo
+      // that is not there.
+      if (result.code === "PARTNER_SUSPENDED") {
+        return fail(
+          409,
+          "PARTNER_SUSPENDED",
+          "That partner is suspended on this deployment and cannot be engaged."
+        );
+      }
       // `SELF` deliberately answers like `NOT_A_PARTNER`: a tenant asking to
       // engage itself learns nothing it did not already know.
       return fail(404, "NOT_FOUND", "No such partner.");
