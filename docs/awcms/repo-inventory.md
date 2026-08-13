@@ -12,8 +12,8 @@
 | Tabel `awcms_*`                    | 146   |
 | Tabel dengan `FORCE` RLS           | 129   |
 | Tabel RLS-free (global, by design) | 17    |
-| Berkas test                        | 371   |
-| Berkas route                       | 347   |
+| Berkas test                        | 372   |
+| Berkas route                       | 348   |
 | ADR                                | 93    |
 
 ### Modul
@@ -326,7 +326,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 317        |
+| `(root)`      | 318        |
 | `e2e`         | 12         |
 | `integration` | 41         |
 | `unit`        | 1          |
@@ -336,7 +336,7 @@
 | Permukaan       | Berkas |
 | --------------- | ------ |
 | `/api/v1/**`    | 286    |
-| `/admin/**`     | 37     |
+| `/admin/**`     | 38     |
 | publik / anonim | 24     |
 
 <!-- END GENERATED: repo-inventory -->
