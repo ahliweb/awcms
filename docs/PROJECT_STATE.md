@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **37** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **50** (27.331 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **38** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **51** (27.808 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh empat) — LAYAR INVITATIONS (#541).**
+
+  Menutup 4 kunci, **55 → 51**. Permukaannya mendarat lengkap di Gelombang 4 dan
+  tanpa halaman, persis alasan yang ledger tulis untuk keempatnya.
+
+  **Membuat satu undangan menjalankan sampai TIGA gerbang**, dan formnya
+  mengatakan yang mana: `invitations.create`, lalu `access_control.assign`
+  begitu peran disebut, lalu `invitations.configure` ber-scope platform untuk
+  `skipEmailConfirmation`. Form yang menggerbangi semuanya pada `create`
+  menawarkan dua kontrol yang 403 saat submit.
+
+  **Temuan: undangan yang dibuat saat email mati adalah undangan mati.** Respons
+  pembuatan menyebut `delivery`, dan tidak ada endpoint yang mengembalikan
+  tautannya — jadi undangan itu ada, valid, dan tak bisa diserahkan kepada siapa
+  pun; mengirim ulang gagal dengan cara yang sama. Halaman melaporkannya apa
+  adanya. Membuat tautannya bisa diambil adalah keputusan tentang di mana token
+  undangan boleh muncul, dan sengaja TIDAK diambil di sini.
+
+  **`Idempotency-Key` dikirim tepat sekali**, dan asimetrinya disengaja di kedua
+  sisi: pembuatan mewajibkannya, `resend` menolaknya karena memutar ulang harus
+  mengembalikan token yang sudah dirotasi pergi. Ia dibatasi lewat
+  `resend_count < 5` di UPDATE-nya, bukan lewat header.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh tiga) — LAYAR EMAIL SUPPRESSION (#544).**
 

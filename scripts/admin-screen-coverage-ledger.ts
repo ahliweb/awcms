@@ -64,18 +64,8 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (18)
+  // identity_access (14)
   //
-  // The four `invitations.*` keys are ADR-0082's, and they land here on the
-  // same terms `tenant_admin.tenant_lifecycle.*` did: the surface exists and is
-  // enforced, what is missing is the page. `/admin/invitations` is its own
-  // change — the ordering ADR-0056 used for `media_library`, whose API landed
-  // first and whose screen followed — and bundling it into the PR that
-  // introduces the schema would have made a schema review into a UI review.
-  "identity_access.invitations.configure",
-  "identity_access.invitations.create",
-  "identity_access.invitations.read",
-  "identity_access.invitations.revoke",
   "identity_access.business_scope_assignments.create",
   "identity_access.business_scope_assignments.read",
   "identity_access.business_scope_assignments.revoke",

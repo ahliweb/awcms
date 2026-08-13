@@ -166,6 +166,17 @@ export const identityAccessModule = defineModule({
       path: "/admin/machine-credentials",
       order: 27,
       requiredPermission: "identity_access.machine_credentials.read"
+    },
+    // ADR-0082, #541. Gated on `invitations.read`, which seeds its own `read`
+    // — an onboarding reviewer should reach the list of outstanding offers
+    // without also being handed the RBAC catalogue. 28, and 28 is free: two
+    // entries sharing an order leave the sidebar's sequence to whatever the
+    // sort happened to do that build.
+    {
+      labelKey: "admin.layout.nav_invitations",
+      path: "/admin/invitations",
+      order: 28,
+      requiredPermission: "identity_access.invitations.read"
     }
   ],
   jobs: [

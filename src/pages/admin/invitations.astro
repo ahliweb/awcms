@@ -1,0 +1,477 @@
+---
+/**
+ * Invitations — ADR-0082 (Gelombang 4 of #423), Issue #541.
+ *
+ * The surface landed complete and without a page. Its four keys sat on
+ * `NOT_YET_SCREENED` on the terms the ledger records: the endpoints exist and
+ * are enforced, what was missing is the page — the ordering ADR-0056 used for
+ * `media_library`, because bundling a screen into the PR that introduces a
+ * schema turns a schema review into a UI review.
+ *
+ * Every action posts to the real endpoints, so the ABAC guards, the audit rows
+ * and the idempotency bookkeeping live there. The permission checks below
+ * decide what to RENDER, never what is allowed.
+ *
+ * ## Creating one needs up to THREE permissions, and the form says which
+ *
+ * `POST /api/v1/invitations` runs `invitations.create`, then
+ * `access_control.assign` when roles are named, then the platform-scoped
+ * `invitations.configure` when `skipEmailConfirmation` is asked for on an
+ * address with no proven account. Each is a full authorization with its own
+ * decision-log row. A form that gated everything on `create` alone would offer
+ * two controls that 403 at submit; this one hides the role picker and the
+ * skip-confirmation box unless their own key is held.
+ *
+ * ## `delivery: "unavailable"` is shown, not swallowed
+ *
+ * The response says whether the mail was QUEUED, and there is no endpoint that
+ * returns an invitation link. So an invitation created while email delivery is
+ * unconfigured exists, is valid, and cannot be handed to anybody — resending it
+ * fails the same way. The page reports that outcome plainly instead of showing
+ * a success that is not one; making the link retrievable is a decision about
+ * where invitation tokens may appear, and it is not this screen's to take.
+ *
+ * ## Roles offered here exclude system roles
+ *
+ * `createInvitation` refuses them (`system_role`). Offering `owner` would fail
+ * in the operator's face after they had composed the whole invitation.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { listRoles } from "../../modules/identity-access/application/access-directory";
+import {
+  listInvitations,
+  type InvitationView
+} from "../../modules/identity-access/application/invitation-admin";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "identity_access",
+    activityCode: "invitations",
+    action: "read"
+  },
+  load: async ({ tx, can }) => {
+    // One transaction, one awaited query at a time — concurrent queries on a
+    // single transaction connection leak it.
+    const page = await listInvitations(tx, ssr.tenantId);
+
+    const canCreate = await can({
+      moduleKey: "identity_access",
+      activityCode: "invitations",
+      action: "create"
+    });
+    const canRevoke = await can({
+      moduleKey: "identity_access",
+      activityCode: "invitations",
+      action: "revoke"
+    });
+    const canConfigure = await can({
+      moduleKey: "identity_access",
+      activityCode: "invitations",
+      action: "configure"
+    });
+    // The SECOND guard `POST` runs when roles are named. Without it the picker
+    // is a control that composes an invitation and then 403s.
+    const canAssign = await can({
+      moduleKey: "identity_access",
+      activityCode: "access_control",
+      action: "assign"
+    });
+
+    const roles =
+      canCreate && canAssign
+        ? (await listRoles(tx, ssr.tenantId))
+            .filter((role) => !role.isSystem)
+            .map((role) => ({ id: role.id, roleCode: role.roleCode }))
+        : [];
+
+    return {
+      invitations: page.invitations,
+      hasMore: page.nextCursor !== null,
+      roles,
+      canCreate,
+      canRevoke,
+      canConfigure,
+      canAssign
+    };
+  },
+  onError: (error) => {
+    logAdminPageError(
+      "admin/invitations.astro: failed to list invitations",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const invitations: InvitationView[] =
+  screen.state === "allowed" ? screen.data.invitations : [];
+const hasMore = screen.state === "allowed" && screen.data.hasMore;
+const roles: { id: string; roleCode: string }[] =
+  screen.state === "allowed" ? screen.data.roles : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canRevoke = screen.state === "allowed" && screen.data.canRevoke;
+const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
+const canAssign = screen.state === "allowed" && screen.data.canAssign;
+
+/** Only a pending invitation can be resent or revoked. */
+function isPending(invitation: InvitationView): boolean {
+  return invitation.status === "pending";
+}
+---
+
+<AdminLayout title="Invitations">
+  <header class="page-header fade-in-up">
+    <h1 id="invitations-heading">Invitations</h1>
+    <p class="page-description">
+      Offers of an account in this tenant. An invitation names the roles its
+      holder will get, and those roles stay inert until it is accepted — nothing
+      here grants anything on its own.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="invitations-denied">
+        You do not have permission to view invitations.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="invitations-load-error">
+        Could not load invitations. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        <p
+          id="invitations-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+        <p id="invitations-notice" class="state-notice" role="status" hidden />
+
+        {canCreate && (
+          <section class="fade-in-up" aria-labelledby="invitations-new-heading">
+            <h2 id="invitations-new-heading">Invite somebody</h2>
+
+            <form id="create-invitation-form" class="admin-form">
+              <label for="create-invitation-address">Email address</label>
+              <input
+                id="create-invitation-address"
+                name="loginIdentifier"
+                type="email"
+                required
+                autocomplete="off"
+              />
+
+              <label for="create-invitation-name">Display name</label>
+              <input
+                id="create-invitation-name"
+                name="displayName"
+                type="text"
+                required
+                maxlength="120"
+              />
+
+              {canAssign ? (
+                <>
+                  <label for="create-invitation-roles">
+                    Roles on acceptance
+                  </label>
+                  <select
+                    id="create-invitation-roles"
+                    name="roleIds"
+                    multiple
+                    size="6"
+                  >
+                    {roles.map((role) => (
+                      <option value={role.id}>{role.roleCode}</option>
+                    ))}
+                  </select>
+                  <p class="page-description">
+                    System roles are not offered: an invitation cannot grant
+                    one, and finding that out after composing the invitation is
+                    the worst moment to learn it.
+                  </p>
+                </>
+              ) : (
+                <p class="page-description" id="invitations-no-role-picker">
+                  You may invite people, but not choose their roles — granting a
+                  role is a separate permission. The invitation will carry none,
+                  and somebody with that permission can assign one afterwards.
+                </p>
+              )}
+
+              {canConfigure && (
+                <label class="admin-checkbox">
+                  <input
+                    id="create-invitation-skip"
+                    type="checkbox"
+                    name="skipEmailConfirmation"
+                  />
+                  Skip email confirmation
+                </label>
+              )}
+              {canConfigure && (
+                <p class="page-description">
+                  Only for an address you have already proven belongs to this
+                  person. It mints an account with no evidence its holder
+                  controls the address.
+                </p>
+              )}
+
+              <button id="create-invitation-submit" type="submit">
+                Send invitation
+              </button>
+            </form>
+          </section>
+        )}
+
+        <section class="fade-in-up" aria-labelledby="invitations-list-heading">
+          <h2 id="invitations-list-heading">Sent invitations</h2>
+
+          {invitations.length === 0 ? (
+            <div class="empty-state">
+              <p id="invitations-empty">
+                Nobody has been invited to this tenant yet.
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Address</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Roles</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Expires</th>
+                    <th scope="col">Resent</th>
+                    {(canCreate || canRevoke) && <th scope="col">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {invitations.map((invitation) => (
+                    <tr>
+                      <th scope="row" data-label="Address">
+                        {invitation.loginIdentifierMasked}
+                      </th>
+                      <td data-label="Name">{invitation.displayName}</td>
+                      <td data-label="Roles">
+                        {invitation.roleCodes.length === 0 ? (
+                          <span class="cell-muted">none</span>
+                        ) : (
+                          invitation.roleCodes.join(", ")
+                        )}
+                      </td>
+                      <td data-label="Status">{invitation.status}</td>
+                      <td data-label="Expires">
+                        {invitation.expiresAt.slice(0, 10)}
+                      </td>
+                      <td data-label="Resent">{invitation.resendCount}</td>
+                      {(canCreate || canRevoke) && (
+                        <td data-label="Actions">
+                          {isPending(invitation) ? (
+                            <>
+                              {canCreate && (
+                                <button
+                                  type="button"
+                                  class="js-resend-invitation"
+                                  data-invitation-id={invitation.id}
+                                >
+                                  Resend
+                                </button>
+                              )}
+                              {canRevoke && (
+                                <button
+                                  type="button"
+                                  class="js-revoke-invitation"
+                                  data-invitation-id={invitation.id}
+                                >
+                                  Revoke
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <span class="cell-muted">—</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {hasMore && (
+            <p class="page-description" id="invitations-more">
+              Showing the newest page. Older invitations are reachable through
+              <code>GET /api/v1/invitations</code> with its cursor.
+            </p>
+          )}
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import { lockElement, sendJsonForData } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("invitations-action-error");
+  const noticeBox = document.getElementById("invitations-notice");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function clearBoxes(): void {
+    if (errorBox) errorBox.hidden = true;
+    if (noticeBox) noticeBox.hidden = true;
+  }
+
+  document
+    .getElementById("create-invitation-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearBoxes();
+
+      const form = event.currentTarget as HTMLFormElement;
+      const button = document.getElementById(
+        "create-invitation-submit"
+      ) as HTMLButtonElement | null;
+      if (!button) return;
+
+      const data = new FormData(form);
+      const rolesSelect = document.getElementById(
+        "create-invitation-roles"
+      ) as HTMLSelectElement | null;
+
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJsonForData<{ delivery?: string }>(
+        "POST",
+        "/api/v1/invitations",
+        {
+          loginIdentifier: String(data.get("loginIdentifier") ?? "").trim(),
+          displayName: String(data.get("displayName") ?? "").trim(),
+          roleIds: rolesSelect
+            ? [...rolesSelect.selectedOptions].map((option) => option.value)
+            : [],
+          skipEmailConfirmation: data.get("skipEmailConfirmation") === "on"
+        },
+        // REQUIRED by the endpoint — it answers 400 without one. A fresh id per
+        // submit, so a retry after a network error replays rather than invites
+        // twice.
+        { "Idempotency-Key": crypto.randomUUID() }
+      );
+
+      // The invitation exists either way. Saying "sent" when nothing was sent
+      // would leave somebody waiting for mail that was never queued, and no
+      // endpoint can hand over the link afterwards.
+      if (result.ok && result.data?.delivery === "unavailable") {
+        if (noticeBox) {
+          noticeBox.textContent =
+            "Invitation created, but NOT sent — email delivery is not configured for this tenant. There is no way to retrieve the link, so configure delivery and invite again.";
+          noticeBox.hidden = false;
+        }
+        unlock();
+        return;
+      }
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "IDENTIFIER_TAKEN"
+          ? "That address already has an account in this tenant."
+          : result.errorCode === "INVITATION_ALREADY_PENDING"
+            ? "That address already has a pending invitation. Resend it instead."
+            : result.errorCode === "ROLE_SYSTEM_PROTECTED"
+              ? "A system role cannot be granted through an invitation."
+              : result.errorCode === "UNKNOWN_ROLE"
+                ? "One of those roles no longer exists here."
+                : result.errorCode === "ACCESS_DENIED"
+                  ? "You may not invite with those roles, or skip confirmation for that address."
+                  : "Could not send that invitation. Please try again."
+      );
+      unlock();
+    });
+
+  document.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest("button");
+    if (!(target instanceof HTMLButtonElement)) return;
+
+    const invitationId = target.dataset.invitationId;
+    if (!invitationId) return;
+
+    const resending = target.classList.contains("js-resend-invitation");
+    const revoking = target.classList.contains("js-revoke-invitation");
+    if (!resending && !revoking) return;
+
+    void (async () => {
+      clearBoxes();
+      const unlock = lockElement(target, "Please wait…");
+      // NO `Idempotency-Key` on either, and that is the endpoints' decision
+      // rather than an omission. `resend` documents refusing it: replaying one
+      // would have to return a token it has already rotated away, or persist
+      // the plaintext in `awcms_idempotency_keys`. It is bounded another way —
+      // the UPDATE carries `resend_count < 5`, matching the database CHECK.
+      const result = await sendJsonForData<{ delivery?: string }>(
+        "POST",
+        resending
+          ? `/api/v1/invitations/${invitationId}/resend`
+          : `/api/v1/invitations/${invitationId}/revoke`,
+        {}
+      );
+
+      if (result.ok && resending && result.data?.delivery === "unavailable") {
+        if (noticeBox) {
+          noticeBox.textContent =
+            "Nothing was sent — email delivery is not configured for this tenant.";
+          noticeBox.hidden = false;
+        }
+        unlock();
+        return;
+      }
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "RESOURCE_NOT_FOUND"
+          ? "That invitation is no longer pending."
+          : result.errorCode === "INVITATION_RESEND_LIMIT"
+            ? "This invitation has been resent the maximum number of times. Revoke it and issue a new one."
+            : resending
+              ? "Could not resend that invitation. Please try again."
+              : "Could not revoke that invitation. Please try again."
+      );
+      unlock();
+    })();
+  });
+</script>
