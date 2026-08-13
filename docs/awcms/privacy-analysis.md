@@ -100,17 +100,32 @@ Ini isi langkah 3 untuk sebuah perubahan, dan jawabannya masuk ke PR-nya:
 
 ## 4. Hak subjek data — posisi template, dinyatakan jujur
 
-| Hak                  | Yang disediakan basis ini                                                | Yang belum ada                                                     |
-| -------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| akses / portabilitas | tidak ada ekspor per-subjek                                              | **belum ada**; operator mengekspor lewat SQL                       |
-| penghapusan          | soft delete + retensi ber-deskriptor; `hard_delete` untuk sebagian tabel | **tidak ada alur "hapus orang ini"** yang menjangkau seluruh tabel |
-| koreksi              | permukaan admin untuk profil dan identitas                               | —                                                                  |
-| pembatasan/keberatan | penonaktifan tenant user + pencabutan sesi                               | tidak ada penandaan per-tujuan                                     |
+| Hak                  | Yang disediakan basis ini                                                   | Yang belum ada                                                        |
+| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| akses / portabilitas | deskriptor `subjectData` per-tabel + gerbang cakupan (ADR-0094)             | **endpoint ekspornya belum ada**; operator masih mengekspor lewat SQL |
+| penghapusan          | soft delete + retensi ber-deskriptor; mode penghapusan per-tabel dinyatakan | **alur "hapus orang ini" belum ada**; bentuk dan cakupannya sudah     |
+| koreksi              | permukaan admin untuk profil dan identitas                                  | —                                                                     |
+| pembatasan/keberatan | penonaktifan tenant user + pencabutan sesi                                  | tidak ada penandaan per-tujuan                                        |
 
 Baris "belum ada" adalah **celah nyata**, bukan pengurangan. Operator yang
 tunduk pada rezim yang menuntutnya harus membangunnya di atas template ini, dan
 mengetahuinya di awal jauh lebih murah daripada menemukannya saat permintaan
 pertama datang.
+
+**Yang berubah sejak ADR-0094** adalah bagian yang paling mahal untuk dibangun
+belakangan: _tabel mana_ yang harus dijawab sebuah permintaan. Tiap tabel
+`awcms_*` kini WAJIB menjawab pertanyaan subjek data — lewat deskriptor
+`subjectData` milik modulnya, lewat penolakan beralasan, atau lewat ledger
+hanya-menyusut untuk tabel yang mendahului aturannya — dan
+`subject-data:coverage:check` menolak diam. Yang belum ada adalah
+endpoint-nya, dan urutannya disengaja: endpoint yang mendarat lebih dulu akan
+menjawab dengan tabel yang kebetulan diingat penulisnya, dan laporan lengkap
+yang tidak lengkap lebih buruk daripada tidak ada laporan — karena ia
+ditandatangani.
+
+Subjeknya adalah **tenant user, dijawab per tenant**. Tidak ada satu tombol
+"lupakan saya di mana-mana", dan itu bukan penyederhanaan: tiap tenant adalah
+pengendali data yang terpisah, dan FORCE RLS memodelkan hal yang benar.
 
 ## 5. Yang hanya bisa dijawab operator
 

@@ -235,6 +235,8 @@ export type ModuleDescriptor = {
    * (ADR-0013 §6 "no shared-table write").
    */
   dataLifecycle?: HighVolumeTableDescriptor[];
+  /** ADR-0094 — one entry per owned table that holds data ABOUT A PERSON. */
+  subjectData?: SubjectDataDescriptor[];
   /**
    * Public search-source descriptors this module contributes to `site_search`
    * (ported from awcms-micro Issue #270, ADR-0040) — see
@@ -748,6 +750,84 @@ export type HighVolumeTableDescriptor = {
 };
 
 /**
+ * Subject-data descriptor family — ADR-0094, Issue #542.
+ *
+ * A module contributes ONE `SubjectDataDescriptor` per table it owns that holds
+ * data ABOUT A PERSON, in its own `module.ts`'s `subjectData` array. Same
+ * shape, same reasoning and the same gate design as `dataLifecycle`: the owner
+ * declares, one engine reads `listModules()`, and
+ * `subject-data:coverage:check` makes "never answered" impossible for a table
+ * that arrives tomorrow.
+ *
+ * The question each descriptor answers is one sentence — **how does this table
+ * answer about a data subject** — and the only unacceptable answer is silence.
+ *
+ * ## The subject is a TENANT USER, never the global principal
+ *
+ * ADR-0094 Decision 1, and it is load-bearing rather than a simplification.
+ * `awcms_principals` is global; every table that holds personal data is behind
+ * FORCE RLS in ONE tenant. A descriptor naming a principal column would
+ * describe a read the database refuses — the plan that ADR-0087 and ADR-0088
+ * each wrote once and each discovered at implementation.
+ *
+ * It is also the substantively right unit: each tenant is a separate
+ * controller, and one controller must not hand over data another one holds.
+ */
+export type SubjectDataErasure =
+  /** Sever the link to the person, keep the fact. The DEFAULT, and what any table an audit trail references must use. */
+  | "anonymize"
+  /** Remove the row. Only for rows whose whole content is the person's own and which nothing references as evidence. */
+  | "hard_delete"
+  /** Flip a status, let ordinary retention purge it — for rows whose deletion is already modelled. */
+  | "status_transition_then_purge"
+  /** Kept ON PURPOSE: a statutory obligation or an active legal hold. "Erase everything" is not what the law says, and a descriptor that pretends otherwise misleads the operator who trusts it. */
+  | "retain_under_obligation";
+
+export type SubjectDataColumn = {
+  column: string;
+  /** `awcms_tenant_users.id` or `awcms_identities.id` — see `subjectColumns`. */
+  references: "tenant_user" | "identity";
+};
+
+export type SubjectDataDescriptor = {
+  /** Stable, unique across the whole registry, e.g. `"identity_access.sessions"` (`<ownerModuleKey>.<table_shortname>`). */
+  key: string;
+  /** Must start with `awcms_` and be snake_case. */
+  tableName: string;
+  /** Must equal the declaring module's own `key` — validated by the registry gate, not by the type system. */
+  ownerModuleKey: string;
+  /**
+   * Every column joining a row to the SUBJECT, and WHICH id each one carries.
+   *
+   * Both kinds are tenant-scoped, so either satisfies RLS — but they are not
+   * interchangeable, and a planner that assumed one would bind the wrong value
+   * to half the schema: `awcms_sessions` reaches the person through
+   * `identity_id`, while `awcms_audit_events` reaches them through
+   * `actor_tenant_user_id`.
+   *
+   * Several entries means several ways to be about one person, and ALL of them
+   * count: a row naming the subject as both actor and target appears once in
+   * the export and is erased once, but a descriptor naming only the first would
+   * silently omit every row where they are the second.
+   */
+  subjectColumns: readonly SubjectDataColumn[];
+  /** Defaults to `"tenant_id"`. Absent for a global table, which must then explain itself in `notes`. */
+  tenantColumn?: string;
+  /** Included in a portability export, or held back and why. */
+  exportable: boolean;
+  erasure: SubjectDataErasure;
+  /**
+   * Required in every direction. A table that exports nothing needs as much of
+   * a stated reason as one that exports everything, and
+   * `retain_under_obligation` without a named obligation is a refusal wearing a
+   * policy's clothes.
+   */
+  rationale: string;
+  /** Columns a portability export must NEVER carry — hashes, tokens, secrets — even though the row is the subject's own. */
+  redactedColumns?: readonly string[];
+};
+
+/**
  * SemVer of this file's own exported type shape — independent of
  * `package.json` (release version) and OpenAPI/AsyncAPI `info.version`.
  * MAJOR: a field removed/renamed or an optional field becomes required.
@@ -827,8 +907,15 @@ export type HighVolumeTableDescriptor = {
  * omitting it means "no commercial precondition", which is what every existing
  * descriptor already meant. No base module declares it, so the in-repo blast
  * radius is zero by construction — that is what "the wave lands inert" is.
+ *
+ * `3.2.0` (ADR-0094, Issue #542) — added the optional
+ * `ModuleDescriptor.subjectData` field plus the `SubjectDataDescriptor` /
+ * `SubjectDataErasure` exported types. MINOR: purely additive, and omitting it
+ * means the table has not answered the subject question yet — which
+ * `subject-data:coverage:check` allows only for tables that predate the rule,
+ * on a ledger that may only shrink.
  */
-export const MODULE_CONTRACT_VERSION = "3.1.0";
+export const MODULE_CONTRACT_VERSION = "3.2.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;
