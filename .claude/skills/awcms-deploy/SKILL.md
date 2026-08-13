@@ -89,10 +89,32 @@ kesalahan konfigurasi yang melapor sukses:
 ## Command inti (semua profil)
 
 ```bash
-bun run config:validate      # wajib pertama — konfigurasi valid sebelum apa pun
-bun run db:migrate           # migrasi sebagai role privileged, sebelum container app pertama
-bun run production:preflight # orkestrasi migrate -> api:spec:check -> test -> build -> db:pool:health -> security:readiness
+bun run config:validate   # wajib pertama — konfigurasi valid sebelum apa pun
+bun run db:migrate        # migrasi sebagai role privileged, sebelum container app pertama
+bun run security:readiness # gate go-live NYATA — exit non-zero bila ada `critical`
+bun run db:pool:health    # pool sehat terhadap DB target
 ```
+
+> **`bun run production:preflight` TIDAK ADA di repo ini.** Versi skill ini
+> sebelumnya mencantumkannya sebagai perintah inti; ia gagal dengan
+> `error: Script not found`. Orkestrator itu terdaftar sebagai target DITUNDA
+> di `scripts/README.md` §Ditunda — jalankan langkah-langkahnya sendiri
+> (perintah di atas, plus `bun run check` yang sudah memuat test + build).
+
+**Setelah deploy rilis yang menambah modul/permission BARU, jalankan
+backfill permission:**
+
+```bash
+bun run identity-access:permissions:backfill
+```
+
+Seed permission di migration hanya menjangkau tenant yang dibuat
+**SESUDAHNYA**. Tenant yang sudah ada tidak pernah menerima grant untuk
+permission baru, jadi owner-nya mendapat **403 senyap** di modul yang
+tampak "sudah terpasang" — bukan error yang mengarahkan ke sebabnya.
+Ini terbukti nyata di v7.0.0 (9 grant per tenant). Rilis yang menambah
+permission WAJIB menjalankan langkah ini, dan memverifikasinya dengan
+membuka layar yang bersangkutan sebagai owner, bukan dengan membaca log.
 
 ## Checklist per topologi
 
@@ -179,6 +201,13 @@ caution**: rollback image tidak membatalkan migrasi skema yang sudah
 diterapkan — uji migrasi backward-compatible (expand-first) sebelum
 deploy, atau siapkan restore dari backup (`deploy/backup/restore-postgres.sh`)
 sebagai jalur rollback skema.
+
+> **Jangan berasumsi ada backup untuk di-restore.** Pada deployment Coolify
+> yang berjalan hari ini, tabel `scheduled_database_backups` **KOSONG** —
+> nol backup terjadwal. "Siapkan restore dari backup" di atas hanya nyata
+> bila kamu **mengambil `pg_dump` sendiri SEBELUM menjalankan migrasi
+> produksi**. Verifikasi keberadaan backup, jangan menyimpulkannya dari
+> adanya skrip restore.
 
 ## Output
 

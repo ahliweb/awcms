@@ -100,28 +100,41 @@ Ini isi langkah 3 untuk sebuah perubahan, dan jawabannya masuk ke PR-nya:
 
 ## 4. Hak subjek data — posisi template, dinyatakan jujur
 
-| Hak                  | Yang disediakan basis ini                                                   | Yang belum ada                                                        |
-| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| akses / portabilitas | deskriptor `subjectData` per-tabel + gerbang cakupan (ADR-0094)             | **endpoint ekspornya belum ada**; operator masih mengekspor lewat SQL |
-| penghapusan          | soft delete + retensi ber-deskriptor; mode penghapusan per-tabel dinyatakan | **alur "hapus orang ini" belum ada**; bentuk dan cakupannya sudah     |
-| koreksi              | permukaan admin untuk profil dan identitas                                  | —                                                                     |
-| pembatasan/keberatan | penonaktifan tenant user + pencabutan sesi                                  | tidak ada penandaan per-tujuan                                        |
+| Hak                  | Yang disediakan basis ini                                                                                                             | Yang belum ada                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| akses / portabilitas | deskriptor `subjectData` per-tabel + dua gerbang, **dan endpoint ekspornya** (`POST …/subject-requests/export`, ADR-0094 gelombang 2) | —                              |
+| penghapusan          | alur "hapus orang ini" **maker/checker** (`…/erase` + `…/{id}/decide`), lima mode penghapusan per-tabel                               | —                              |
+| koreksi              | permukaan admin untuk profil dan identitas                                                                                            | —                              |
+| pembatasan/keberatan | penonaktifan tenant user + pencabutan sesi                                                                                            | tidak ada penandaan per-tujuan |
 
-Baris "belum ada" adalah **celah nyata**, bukan pengurangan. Operator yang
-tunduk pada rezim yang menuntutnya harus membangunnya di atas template ini, dan
-mengetahuinya di awal jauh lebih murah daripada menemukannya saat permintaan
-pertama datang.
+**KOREKSI 13 Agustus 2026.** Dua baris pertama tabel ini sebelumnya berbunyi
+"endpoint ekspornya belum ada" dan "alur hapus orang ini belum ada". Keduanya
+**sudah dibangun** oleh Issue #557 — jangan bangun ulang, dan jangan mengutip
+versi lama dokumen ini sebagai bukti celah.
 
-**Yang berubah sejak ADR-0094** adalah bagian yang paling mahal untuk dibangun
-belakangan: _tabel mana_ yang harus dijawab sebuah permintaan. Tiap tabel
-`awcms_*` kini WAJIB menjawab pertanyaan subjek data — lewat deskriptor
-`subjectData` milik modulnya, lewat penolakan beralasan, atau lewat ledger
-hanya-menyusut untuk tabel yang mendahului aturannya — dan
-`subject-data:coverage:check` menolak diam. Yang belum ada adalah
-endpoint-nya, dan urutannya disengaja: endpoint yang mendarat lebih dulu akan
-menjawab dengan tabel yang kebetulan diingat penulisnya, dan laporan lengkap
-yang tidak lengkap lebih buruk daripada tidak ada laporan — karena ia
-ditandatangani.
+**Urutannya disengaja, dan itulah bagian yang layak diingat.** #542 mendaratkan
+fondasinya lebih dulu dan menyisakan **139 tabel di ledger utang**; #557 menolak
+mendaratkan endpoint di atas ledger itu, karena ekspor yang menjawab dengan 3
+tabel dan diam untuk 139 sisanya adalah laporan yang **ditandatangani dan tidak
+lengkap** — lebih buruk daripada tidak ada laporan. Jadi #557 membayar utangnya
+sampai habis lebih dulu: **139 → 0** (147 tabel = 140 berdeskriptor + 7 ditolak
+beralasan), baru kemudian membangun permukaannya.
+
+Konsekuensinya untuk pembaca hari ini: pertanyaan _tabel mana yang harus dijawab
+sebuah permintaan_ — bagian yang paling mahal bila dibangun belakangan — sudah
+terjawab untuk seluruh skema, dan dijaga dua gerbang yang menanyakan hal
+berbeda: `subject-data:coverage:check` (apakah setiap tabel menjawab) dan
+`subject-data:registry:check` (apakah jawabannya benar terhadap `sql/`).
+Ekspornya **menyatakan cakupannya sendiri**: tabel yang sengaja tidak dijawab
+(global, atau tanpa kolom subjek) ikut disebut dalam laporan, karena laporan
+per-tenant yang diam-diam menghilangkan `awcms_principals` tidak bisa dibedakan
+dari laporan yang ditulis sebelum tabel itu ada.
+
+Penghapusan adalah **maker/checker** (ADR-0094 Keputusan 3): peminta tidak
+pernah bisa menyetujui permintaannya sendiri, ditegakkan empat lapis — dua
+permission terpisah, aturan SoD `critical`, CHECK constraint, dan satu UPDATE
+kondisional. Ekspor dan penghapusan adalah **dua otoritas berbeda**: memegang
+hak membaca bukan alasan memegang hak menghancurkan.
 
 Subjeknya adalah **tenant user, dijawab per tenant**. Tidak ada satu tombol
 "lupakan saya di mana-mana", dan itu bukan penyederhanaan: tiap tenant adalah

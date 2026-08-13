@@ -356,6 +356,65 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 14 Agustus 2026 (ketiga puluh) — rilis v9.0.0, dan empat dokumen
+  yang menua ke arah yang SALAH.**
+
+  Menyiapkan rilis 26 commit (ADR-0085…0094) berarti membaca ulang docs dan
+  skill terhadap kode. Yang ditemukan bukan sekadar "kurang lengkap": empat
+  artefak menyatakan hal yang **kebalikannya benar**, dan tiga di antaranya
+  adalah instruksi yang akan DIIKUTI, bukan prosa yang dibaca sambil lalu.
+
+  1. **Dua skill memerintahkan perintah yang tidak ada.** `awcms-deploy` dan
+     `awcms-production-preflight` sama-sama mencantumkan target bun run
+     production:preflight (sengaja ditulis TANPA backtick — lihat di bawah)
+     sebagai perintah inti; ia keluar dengan `error: Script not found`. Doc 07
+     sudah menyatakan orkestrator itu tak pernah diimplementasikan — jadi
+     dokumennya benar sementara dua skill yang merujuknya salah, dan skill-lah
+     yang dijalankan orang. Diganti dengan langkah nyata (`config:validate` →
+     `check` → `db:pool:health` → `security:readiness`, satu-satunya yang
+     memblokir dengan exit code).
+
+     Menuliskan putaran ini pun memerahkan gerbangnya: `check:docs` menuntut
+     tiap rujukan `bun run` **berbacktick** di berkas current-state menunjuk
+     script nyata, jadi menyebut target yang tidak ada — bahkan untuk
+     mengatakan ia tidak ada — ditolak. Itu perilaku yang BENAR: gerbang tidak
+     punya cara membedakan "aku mengutip ini sebagai cacat" dari "aku menyuruhmu
+     menjalankan ini". Yang perlu diperhatikan adalah cakupannya: `.claude/skills/`
+     berada di LUAR `check:docs`, dan itulah sebabnya kedua skill bisa membawa
+     perintah palsu ini berbulan-bulan sementara dokumen yang menyatakan
+     kebenarannya lolos gerbang tanpa keluhan.
+
+  2. **`privacy-analysis.md` menyatakan permukaan yang SUDAH dibangun sebagai
+     celah.** Ia masih berbunyi "endpoint ekspornya belum ada" dan "alur hapus
+     orang ini belum ada" setelah #557 mendaratkan keduanya. Ini bentuk
+     pembusukan paling mahal: pembaca yang percaya akan **membangun ulang**
+     sesuatu yang sudah ada, lengkap dengan otoritas keduanya digabung.
+  3. **Ledger subjek data tidak dikenal SATU skill pun.** Nol skill menyebut
+     `subjectData`, ADR-0094, atau kedua gerbangnya — termasuk skill modul yang
+     MEMILIKINYA. Akibat praktisnya: siapa pun yang menambah tabel akan
+     didaftarkan ke registry retensi (yang skill-nya jelaskan) lalu ditolak
+     `bun run check` oleh registry yang tak disebut di mana pun. `awcms-data-lifecycle`
+     kini punya §Hak subjek data; `awcms-new-migration` aturan 14;
+     `awcms-new-module` aturan 5b.
+  4. **`awcms-sensitive-data` bertentangan dengan permukaan baru.** Aturannya
+     "jangan pernah kirim raw value ke response" kini berhadapan dengan ekspor
+     hak subjek yang SAH. Dibiarkan begitu, ia mengajarkan bahwa fitur yang
+     sudah ada itu terlarang. Diperbaiki sebagai pengecualian yang menjelaskan
+     kontrolnya (`redactedColumns`), bukan pelonggaran.
+
+  Dua koreksi angka menyusul: `MODULE_CONTRACT_VERSION` tertulis `2.5.0` di
+  `awcms-module-management` (nyatanya `4.0.0`) dan `1.3.0` di
+  `family-compatibility.md` (manifestnya sendiri `4.0.0` dan digerbangi —
+  dokumennya yang menyimpang, bukan pinnya). Klaim "base ship 1 aturan SoD"
+  muncul di DUA tempat dan keduanya kini 2.
+
+  **Yang perlu diingat dari putaran ini:** generator `project-state:inventory`
+  dan `repo:inventory` menghasilkan tabel markdown TANPA padding, lalu prettier
+  memformatnya. Menjalankan generator lalu `git status` terlihat seperti drift
+  besar (431 baris) padahal nol perubahan makna — jalankan
+  `bunx prettier --write` pada berkas ter-generate sebelum menyimpulkan ada
+  drift. Ini bukan bug; ia hanya terlihat persis seperti bug.
+
 - **PUTARAN 13 Agustus 2026 (kedua puluh sembilan) — MENJALANKANNYA menemukan
   TIGA cacat yang 41 gerbang tidak lihat.**
 
@@ -3070,8 +3129,9 @@ NULL`, jadi pencarian publik untuk page **selalu** nol baris — di atas index
   (siklus/kedalaman/jumlah) MENOLAK alih-alih memotong, plus pengerasan jalur
   baca: sentinel `tenant` hanya dipercaya bila menamai tenant itu sendiri.
   Mutation-proven terhadap Postgres nyata. Nol migrasi.
-  SoD base tetap ship **1 rule** (`data_lifecycle.legal_hold_maker_checker`,
-  ADR-0037) — rule ilustratif tambahan tetap di fixture.
+  SoD base saat itu ship **1 rule** (`data_lifecycle.legal_hold_maker_checker`,
+  ADR-0037) — rule ilustratif tambahan tetap di fixture. **Kini 2**: ADR-0094
+  menambahkan `data_lifecycle.subject_erasure_maker_checker` (#557).
 
 ## 5. Kontrak alur kerja (ringkas)
 

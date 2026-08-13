@@ -47,6 +47,19 @@ TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
     pemilik migration **otomatis** ter-grant ke `awcms_app` — GRANT manual
     murni derau. Yang TIDAK otomatis: `FUNCTION` (lihat §SECURITY DEFINER)
     dan objek yang dibuat role LAIN.
+
+    **KECUALI bila tabelmu harus LEBIH SEMPIT dari default itu.** Karena 019
+    memberi keempat verb secara blanket, menulis `GRANT SELECT, INSERT, UPDATE`
+    saja **tidak** menahan DELETE — ia sudah diberikan. Kontrol "tabel ini
+    tidak boleh dihapus barisnya" hanya nyata bila migration menulis
+    `REVOKE DELETE ON <tabel> FROM awcms_app;` EKSPLISIT. Ini bukan hipotetis:
+    `sql/125` sempat memuat komentar yang menyatakan kontrol itu sambil tidak
+    menegakkannya sama sekali (ADR-0094). Tabel yang dipersempit WAJIB
+    didaftarkan di `RETIRED_TENANT_TABLE_PRIVILEGES`
+    (`scripts/security-readiness.ts`) dengan daftar verb yang tersisa, atau
+    `checkRuntimeRoleGrants` merah. Verifikasi dengan query nyata
+    (`information_schema.role_table_grants`), bukan dengan membaca migrationnya.
+
 13. **`awcms_worker`/`awcms_setup` ADA — dan grant-nya WAJIB eksplisit.**
     KOREKSI 2026-07-25: versi skill ini sebelumnya menyatakan kedua role itu
     tidak ada; itu **SALAH** sejak `sql/022_awcms_db_worker_setup_roles.sql`.
@@ -62,6 +75,22 @@ TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
     `permission denied` di produksi; over-grant → isolasi yang jadi alasan
     split-role itu bohong. Lupa memperbaruinya membuat `bun run check` merah
     (gagal keras, bukan senyap).
+
+14. **Tabel BARU wajib menjawab pertanyaan subjek data** (ADR-0094) — apa
+    yang tabel ini simpan tentang SESEORANG, dan apa yang terjadi padanya
+    saat orang itu minta dihapus. Jawabannya ditulis sebagai entri
+    `subjectData` di `module.ts` modul **pemilik tabel**, bukan di
+    migration. Ini berlaku untuk SETIAP tabel `awcms_*`, bukan hanya yang
+    jelas-jelas berisi data pribadi: tabel yang hanya membawa `created_by`
+    pun harus menyatakannya (`erasure: "severed_with_subject_row"`), dan
+    tabel yang benar-benar tidak menyimpan apa pun tentang seseorang
+    dinyatakan di `NO_SUBJECT_DATA` (`scripts/subject-data-coverage-check.ts`)
+    dengan alasan. `bun run subject-data:coverage:check` menolak diam;
+    `bun run subject-data:registry:check` memverifikasi jawabannya benar
+    terhadap `sql/` — termasuk apakah mode `erasure` yang kamu pilih
+    benar-benar berada dalam privilege `awcms_app` setelah aturan 12 dan 13
+    di atas. Prosedur + lima mode: skill `awcms-data-lifecycle`
+    §Hak subjek data.
 
 ## Template
 
