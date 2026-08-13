@@ -1,0 +1,303 @@
+/**
+ * Every table answers the subject question, and the plan binds the right id —
+ * ADR-0094, Issue #542.
+ *
+ * `privacy-analysis.md` §4 puts per-subject export and per-subject erasure in
+ * the **gap** column, not the reduced-scope one. The gap is not that nobody has
+ * written an endpoint; it is that nothing knows WHICH TABLES an answer would
+ * have to cover, and a hand-written list drifts silently on the next module to
+ * land — the defect class that produced `data-lifecycle:table-coverage:check`.
+ *
+ * So the foundation is gated before anything is built on it. An export endpoint
+ * that shipped first would cover the tables its author remembered and stay
+ * silent about the rest, and a subject-access report that is incomplete is
+ * worse than none because it is signed.
+ *
+ * Pure — no database, no network. Runs in `quality` on every PR.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  collectSubjectDescribedTables,
+  collectTables,
+  findSubjectCoverageProblems,
+  NO_SUBJECT_DATA,
+  TABLES_PREDATING_THE_SUBJECT_RULE
+} from "../scripts/subject-data-coverage-check";
+import { listModules } from "../src/modules";
+import { MODULE_CONTRACT_VERSION } from "../src/modules/_shared/module-contract";
+import { buildSubjectPlan } from "../src/modules/data-lifecycle/domain/subject-data-plan";
+
+const SUBJECT = {
+  tenantId: "11111111-1111-4111-8111-111111111111",
+  tenantUserId: "22222222-2222-4222-8222-222222222222",
+  identityId: "33333333-3333-4333-8333-333333333333"
+};
+
+describe("the gate is satisfied, and not vacuously", () => {
+  test("every table in sql/ has answered one of the three ways", () => {
+    const tables = collectTables();
+
+    // Paired with the problem check so an empty derivation cannot pass.
+    expect(tables.length).toBeGreaterThan(100);
+    expect(
+      findSubjectCoverageProblems({
+        tables,
+        described: collectSubjectDescribedTables(),
+        noSubjectData: NO_SUBJECT_DATA,
+        ledger: TABLES_PREDATING_THE_SUBJECT_RULE
+      })
+    ).toEqual([]);
+  });
+
+  test("a new table that answers nothing FAILS", () => {
+    const problems = findSubjectCoverageProblems({
+      tables: ["awcms_a_brand_new_table"],
+      described: [],
+      noSubjectData: [],
+      ledger: []
+    });
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]!.table).toBe("awcms_a_brand_new_table");
+  });
+
+  test("a described table left on the ledger FAILS — the debt count must not lie", () => {
+    const problems = findSubjectCoverageProblems({
+      tables: ["awcms_x"],
+      described: ["awcms_x"],
+      noSubjectData: [],
+      ledger: ["awcms_x"]
+    });
+
+    expect(problems).toHaveLength(1);
+  });
+
+  test("a ghost on the ledger FAILS", () => {
+    const problems = findSubjectCoverageProblems({
+      tables: [],
+      described: [],
+      noSubjectData: [],
+      ledger: ["awcms_gone"]
+    });
+
+    expect(problems).toHaveLength(1);
+  });
+
+  test("a refusal with no reason FAILS — an exception without one is worse than no gate", () => {
+    const problems = findSubjectCoverageProblems({
+      tables: ["awcms_x"],
+      described: [],
+      noSubjectData: [{ table: "awcms_x", reason: "   " }],
+      ledger: []
+    });
+
+    expect(problems).toHaveLength(1);
+  });
+
+  test("two answers for one table FAILS", () => {
+    const problems = findSubjectCoverageProblems({
+      tables: ["awcms_x"],
+      described: [],
+      noSubjectData: [{ table: "awcms_x", reason: "no personal data" }],
+      ledger: ["awcms_x"]
+    });
+
+    expect(problems).toHaveLength(1);
+  });
+});
+
+describe("the first wave of descriptors says something real", () => {
+  test("three tables are described, and each names at least one subject column", () => {
+    const descriptors = listModules().flatMap(
+      (module) => module.subjectData ?? []
+    );
+
+    expect(descriptors.length).toBeGreaterThan(0);
+
+    for (const descriptor of descriptors) {
+      expect(descriptor.subjectColumns.length).toBeGreaterThan(0);
+      expect(descriptor.ownerModuleKey.length).toBeGreaterThan(0);
+      expect(descriptor.tableName.startsWith("awcms_")).toBe(true);
+      // Required in EVERY direction — a table that exports nothing needs as
+      // much of a stated reason as one that exports everything.
+      expect(descriptor.rationale.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  test("the key names the owning module, so a stray descriptor is visible", () => {
+    for (const module of listModules()) {
+      for (const descriptor of module.subjectData ?? []) {
+        expect(descriptor.ownerModuleKey).toBe(module.key);
+        expect(descriptor.key.startsWith(`${module.key}.`)).toBe(true);
+      }
+    }
+  });
+
+  test("the credential columns are redacted, and the session token with them", () => {
+    const descriptors = listModules().flatMap(
+      (module) => module.subjectData ?? []
+    );
+
+    const identities = descriptors.find(
+      (descriptor) => descriptor.tableName === "awcms_identities"
+    );
+    const sessions = descriptors.find(
+      (descriptor) => descriptor.tableName === "awcms_sessions"
+    );
+
+    // A subject-access export that handed back a password hash would turn a
+    // privacy right into a credential-disclosure channel.
+    expect(identities?.redactedColumns).toContain("password_hash");
+    expect(sessions?.redactedColumns).toContain("token_hash");
+  });
+
+  test("the membership row is anonymised, never hard-deleted", () => {
+    const tenantUsers = listModules()
+      .flatMap((module) => module.subjectData ?? [])
+      .find((descriptor) => descriptor.tableName === "awcms_tenant_users");
+
+    // It is the FK target of audit events, decision logs, assignments and
+    // workflow history. Deleting it would either cascade the evidence away or
+    // abort on the first constraint — and the evidence includes the record
+    // that the erasure itself happened.
+    expect(tenantUsers?.erasure).toBe("anonymize");
+  });
+});
+
+describe("the plan binds the RIGHT id, which is the whole point of two kinds", () => {
+  test("an identity-referenced column binds the identity, not the tenant user", () => {
+    const plan = buildSubjectPlan(
+      [
+        {
+          key: "m.sessions",
+          tableName: "awcms_sessions",
+          ownerModuleKey: "m",
+          subjectColumns: [{ column: "identity_id", references: "identity" }],
+          exportable: true,
+          erasure: "hard_delete",
+          rationale: "where and when the person signed in"
+        }
+      ],
+      SUBJECT
+    );
+
+    expect(plan.entries[0]!.matches).toEqual([
+      { column: "identity_id", value: SUBJECT.identityId }
+    ]);
+  });
+
+  test("and a tenant-user-referenced column binds the tenant user", () => {
+    const plan = buildSubjectPlan(
+      [
+        {
+          key: "m.audit",
+          tableName: "awcms_audit_events",
+          ownerModuleKey: "m",
+          subjectColumns: [
+            { column: "actor_tenant_user_id", references: "tenant_user" }
+          ],
+          exportable: false,
+          erasure: "anonymize",
+          rationale: "who did what, kept as evidence"
+        }
+      ],
+      SUBJECT
+    );
+
+    expect(plan.entries[0]!.matches).toEqual([
+      { column: "actor_tenant_user_id", value: SUBJECT.tenantUserId }
+    ]);
+  });
+
+  test("several subject columns ALL count — the second is not dropped", () => {
+    const plan = buildSubjectPlan(
+      [
+        {
+          key: "m.both",
+          tableName: "awcms_x",
+          ownerModuleKey: "m",
+          subjectColumns: [
+            { column: "actor_tenant_user_id", references: "tenant_user" },
+            { column: "target_tenant_user_id", references: "tenant_user" }
+          ],
+          exportable: true,
+          erasure: "anonymize",
+          rationale: "a row can be about one person in two roles"
+        }
+      ],
+      SUBJECT
+    );
+
+    // A descriptor naming only the first would silently omit every row where
+    // the subject is the second.
+    expect(plan.entries[0]!.matches).toHaveLength(2);
+  });
+
+  test("a descriptor with no subject column joins to nobody and is DROPPED", () => {
+    // Otherwise it would put a table in the report with every row of the
+    // tenant in it. The registry gate should catch it first; this is the
+    // second line.
+    const plan = buildSubjectPlan(
+      [
+        {
+          key: "m.broken",
+          tableName: "awcms_x",
+          ownerModuleKey: "m",
+          subjectColumns: [],
+          exportable: true,
+          erasure: "anonymize",
+          rationale: "a mistake"
+        }
+      ],
+      SUBJECT
+    );
+
+    expect(plan.entries).toEqual([]);
+  });
+
+  test("the plan separates what exports from what an erasure must LEAVE", () => {
+    const plan = buildSubjectPlan(
+      [
+        {
+          key: "m.a",
+          tableName: "awcms_a",
+          ownerModuleKey: "m",
+          subjectColumns: [{ column: "tu", references: "tenant_user" }],
+          exportable: true,
+          erasure: "hard_delete",
+          rationale: "theirs"
+        },
+        {
+          key: "m.b",
+          tableName: "awcms_b",
+          ownerModuleKey: "m",
+          subjectColumns: [{ column: "tu", references: "tenant_user" }],
+          exportable: false,
+          erasure: "retain_under_obligation",
+          rationale: "a statutory retention period covers it"
+        }
+      ],
+      SUBJECT
+    );
+
+    expect(plan.exportEntries.map((entry) => entry.key)).toEqual(["m.a"]);
+    // "Erase everything" is not what the law says, and a plan that pretended
+    // otherwise would mislead the operator who signs the response.
+    expect(plan.retainedEntries.map((entry) => entry.key)).toEqual(["m.b"]);
+  });
+
+  test("the global principal appears in no plan, because RLS forbids the read", () => {
+    const described = collectSubjectDescribedTables();
+
+    // ADR-0087 and ADR-0088 each planned a cross-tenant read once. A descriptor
+    // naming `awcms_principals` would be the third.
+    expect(described).not.toContain("awcms_principals");
+  });
+});
+
+describe("the contract version records the addition", () => {
+  test("MINOR bump, because the field is optional and every module stays valid", () => {
+    expect(MODULE_CONTRACT_VERSION).toBe("3.2.0");
+  });
+});

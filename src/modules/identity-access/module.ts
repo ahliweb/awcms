@@ -601,6 +601,64 @@ export const identityAccessModule = defineModule({
    * nothing it points at. The rows themselves hold no secret — `token_hash` is a
    * one-way sha256 of a value that is single-use and expired anyway.
    */
+  /**
+   * ADR-0094 — how each of these tables answers about a data subject.
+   *
+   * The FIRST WAVE, deliberately small and deliberately the unambiguous ones.
+   * `subject-data:coverage:check` holds every other table to answering too, on
+   * a ledger that may only shrink, so the number below is a debt counter rather
+   * than a claim of completeness.
+   */
+  subjectData: [
+    {
+      key: "identity_access.tenant_users",
+      tableName: "awcms_tenant_users",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "id", references: "tenant_user" }],
+      exportable: true,
+      // NOT `hard_delete`, and this is the row that makes the default the
+      // default: this id is the foreign key target of audit events, decision
+      // logs, assignments and workflow history. Deleting it would either
+      // cascade the evidence away or abort on the first constraint — and the
+      // evidence includes the record that the erasure itself happened.
+      erasure: "anonymize",
+      rationale:
+        "The membership row itself: this is what 'a subject in this tenant' MEANS here, and the id every other table joins on. It carries no personal detail of its own beyond the link, so anonymising it severs the person from a history that stays intact and answerable."
+    },
+    {
+      key: "identity_access.identities",
+      tableName: "awcms_identities",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "id", references: "identity" }],
+      exportable: true,
+      erasure: "anonymize",
+      rationale:
+        "The login identity behind the membership — the address a person signs in with, which is personal data in its own right. Anonymised rather than deleted for the same reason as the row above: it is an FK target, and a tenant's own audit trail names it.",
+      // The credential itself is never portable. A subject-access export that
+      // handed back a password hash would turn a privacy right into a
+      // credential-disclosure channel, and the hash tells the subject nothing
+      // they do not already know.
+      redactedColumns: ["password_hash"]
+    },
+    {
+      key: "identity_access.sessions",
+      tableName: "awcms_sessions",
+      ownerModuleKey: "identity_access",
+      // Through `identity_id`, NOT a tenant user id — the distinction the
+      // descriptor's two `references` values exist for. A planner that assumed
+      // tenant-user everywhere would bind the wrong value here and return
+      // nothing, silently.
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: true,
+      // Nothing references a session as evidence — the audit trail records what
+      // was DONE, not which cookie carried it — and a live session is exactly
+      // the thing an erasure request should end.
+      erasure: "hard_delete",
+      rationale:
+        "Where and when the person signed in. Genuinely theirs and genuinely useful to them, which is why it exports; and referenced by nothing as evidence, which is why it is the one row here that is really deleted.",
+      redactedColumns: ["token_hash"]
+    }
+  ],
   dataLifecycle: [
     {
       key: "identity_access.password_reset_tokens",

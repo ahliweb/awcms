@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-93 target menjalankan berkas di `scripts/`; 38 di antaranya
+94 target menjalankan berkas di `scripts/`; 39 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -118,6 +118,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `site-search:reconcile`                  | `site-search-reconcile.ts`                     | —    |
 | `site-search:sources:check`              | `site-search-sources-check.ts`                 | ✅   |
 | `skills:check`                           | `skills-check.ts`                              | ✅   |
+| `subject-data:coverage:check`            | `subject-data-coverage-check.ts`               | ✅   |
 | `sync:objects:dispatch`                  | `object-sync-dispatch.ts`                      | —    |
 | `sync:objects:purge`                     | `object-queue-purge.ts`                        | —    |
 | `tenant-domain:dns:sync`                 | `tenant-domain-dns-sync.ts`                    | —    |
