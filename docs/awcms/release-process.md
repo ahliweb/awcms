@@ -153,3 +153,14 @@ Baik Changesets maupun pipeline ini tidak pernah menghapus atau menulis ulang ve
 - [`performance-suite.md`](performance-suite.md) — sebelum rilis yang menyentuh jalur query kritikal atau sizing koneksi/work-class, jalankan performance lane penuh (`bun run performance:suite -- --full`) terhadap database terisolasi (`APP_ENV=test`, bukan environment hidup mana pun) dan bandingkan laporan JSON-nya dengan rilis sebelumnya, sesuai §Comparing two releases/commits dokumen itu.
 - `.github/workflows/changesets.yml` / `.github/workflows/release.yml` — definisi workflow aktual yang dideskripsikan dokumen ini.
 - `scripts/changeset-policy-check.ts` / `scripts/release-verify.ts` — pure-function policy check yang melandasi kedua workflow, diuji unit di `tests/`.
+
+## Sesudah rilis: post-release review (langkah 18)
+
+Dalam satu minggu kerja setelah tag di-deploy, tulis satu entri di
+[`post-release-reviews.md`](post-release-reviews.md) memakai
+[`templates/post-release-review-template.md`](templates/post-release-review-template.md).
+
+Rilis yang berjalan mulus **tetap** mendapat entri, dan boleh empat baris.
+Register yang hanya memuat insiden mengajarkan pembacanya bahwa rilis biasanya
+bermasalah, dan menghapus satu-satunya garis dasar yang membuat rilis buruk
+terlihat buruk.

@@ -356,6 +356,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 13 Agustus 2026 (kesembilan belas) — TIGA CELAH ALUR DITUTUP.**
+
+  [`awcms/privacy-analysis.md`](awcms/privacy-analysis.md) (langkah 3),
+  [`awcms/templates/definition-of-ready.md`](awcms/templates/definition-of-ready.md)
+  (langkah 9), dan [`awcms/post-release-reviews.md`](awcms/post-release-reviews.md)
+  (langkah 18), plus dua template pendukung.
+
+  **Analisis privasi menunjuk, tidak menyalin.** Angka retensi per tabel tetap
+  di deskriptor yang digerbangi; menyalinnya ke dokumen privasi menghasilkan
+  angka yang basi pada hari pertama seseorang mengubahnya, dan angka basi di
+  sana lebih berbahaya daripada tidak ada angka. Ia juga menyatakan apa yang
+  hanya bisa dijawab OPERATOR, dan satu celah nyata yang tersisa: **tidak ada
+  alur ekspor/penghapusan per subjek data**.
+
+  **Pertanyaan pertama Definition of Ready adalah yang repo ini bayar dua
+  kali**: apakah policy mengizinkan pembacaan yang rencananya butuhkan. ADR-0087
+  dan ADR-0088 sama-sama gagal di situ.
+
+  **Register rilis mendarat KOSONG dan mengatakannya.** Mengisinya mundur dari
+  ingatan adalah kebalikan dari gunanya. Satu baris templatnya —"yang pertama
+  kali terlihat di produksi dan tidak di CI"— adalah tempat harga ADR-0083
+  dibayar, dan satu-satunya cara mengetahui apakah harganya masih pantas.
+
 - **PUTARAN 13 Agustus 2026 (kedelapan belas) — layar `/admin/partners`:
   pencabutan akses partner berhenti menjadi panggilan API.**
 
