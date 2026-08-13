@@ -92,14 +92,18 @@ tersentuh.
 | Threat model                | [`20_threat_model_security_architecture.md`](20_threat_model_security_architecture.md) | ada             |
 | Peta kontrol                | [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md)                 | ada, **hidup**  |
 | Retensi data                | [`data-lifecycle.md`](data-lifecycle.md) + gerbang `data-lifecycle:*`                  | ada, digerbangi |
-| **Privacy analysis / DPIA** | —                                                                                      | **BELUM ADA**   |
+| **Privacy analysis / DPIA** | [`privacy-analysis.md`](privacy-analysis.md)                                           | ada             |
+| Per fitur                   | [`templates/privacy-analysis-template.md`](templates/privacy-analysis-template.md)     | ada             |
 
-Celahnya nyata dan disebutkan di sini supaya tidak terbaca sebagai "sudah
-tertangani". Yang sudah menanggung sebagiannya: setiap tabel baru wajib
-menjawab pertanyaan retensi (`data-lifecycle:table-coverage:check`), dan
-masking data sensitif adalah bagian dari Definition of Done. Yang belum ada
-adalah analisis per-fitur tentang data pribadi apa yang dikumpulkan, atas dasar
-apa, dan berapa lama.
+Keduanya wajib dan menjawab hal berbeda: threat model menjawab "siapa
+penyerangnya", analisis privasi menjawab "data siapa yang ada di sini".
+
+Analisis privasi sengaja **tidak** menyalin angka retensi per tabel — salinan
+itu basi pada hari pertama seseorang mengubah deskriptornya, dan angka basi di
+dokumen privasi lebih berbahaya daripada tidak ada angka. Ia menunjuk ke tempat
+yang digerbangi. Ia juga menyatakan apa yang **hanya bisa dijawab operator**
+(dasar hukum, DPO, transfer lintas-yurisdiksi) alih-alih berpura-pura
+menjawabnya.
 
 ## 4. ERD + Data Dictionary
 
@@ -176,23 +180,19 @@ harus di-import lalu di-bundle, bukan inline) dan setiap layar admin wajib lewat
 
 **Menjawab:** apakah langkah 1–8 saling setuju, sebelum ada yang menulis kode.
 
-| Artefak                                                                                                | Status                             |
+| Artefak                                                                                                | Peran                              |
 | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| [`templates/definition-of-ready.md`](templates/definition-of-ready.md)                                 | **Definition of Ready umum**       |
 | [`13_final_master_index_traceability.md`](13_final_master_index_traceability.md)                       | matriks traceability antar-dokumen |
-| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | checklist — **modul baru saja**    |
-| **Definition of Ready umum**                                                                           | **BELUM ADA**                      |
+| [`templates/module-admission-decision-checklist.md`](templates/module-admission-decision-checklist.md) | checklist — modul baru             |
 
-Celah kedua yang disebutkan apa adanya. Untuk modul baru, admission checklist
-memainkan peran ini. Untuk pekerjaan lain, yang berlaku hari ini adalah
-Definition of **Done** di `CONTRIBUTING.md` — yang diperiksa di ujung, bukan di
-pangkal.
+Definition of **Done** di `CONTRIBUTING.md` diperiksa di ujung; daftar di atas
+diperiksa di pangkal, dan itu seluruh perbedaannya.
 
-Pengalaman repo ini menunjukkan biayanya: **dua gelombang berturut-turut**
-(ADR-0087 dan ADR-0088) menulis rencana yang mengasumsikan pembacaan
-lintas-tenant yang FORCE RLS larang, dan keduanya baru ketahuan saat
-implementasi. Review lintas-spesifikasi yang menanyakan "apakah policy
-mengizinkan pembacaan yang rencana ini butuhkan" akan menemukannya di langkah 9,
-bukan di langkah 11.
+Pengalaman repo ini menunjukkan biayanya, dan pertanyaan PERTAMA di Definition
+of Ready ada karena itu: **dua gelombang berturut-turut** (ADR-0087 dan
+ADR-0088) menulis rencana yang mengasumsikan pembacaan lintas-tenant yang FORCE
+RLS larang, dan keduanya baru ketahuan saat implementasi.
 
 ## 10. Issue GitHub Atomic
 
@@ -320,16 +320,24 @@ halaman depan.
 
 **Menjawab:** apa yang terjadi setelahnya, dan apa yang dipelajari.
 
-| Bagian                  | Artefak                                                        | Status                    |
-| ----------------------- | -------------------------------------------------------------- | ------------------------- |
-| Konvensi observability  | [`observability-metrics.md`](observability-metrics.md)         | ada                       |
-| Kapasitas basis data    | [`database-capacity-runbook.md`](database-capacity-runbook.md) | ada                       |
-| **Post-release review** | [`../PROJECT_STATE.md`](../PROJECT_STATE.md) §4                | ada, tapi bukan per-rilis |
+| Bagian                  | Artefak                                                           | Status |
+| ----------------------- | ----------------------------------------------------------------- | ------ |
+| Konvensi observability  | [`observability-metrics.md`](observability-metrics.md)            | ada    |
+| Kapasitas basis data    | [`database-capacity-runbook.md`](database-capacity-runbook.md)    | ada    |
+| **Post-release review** | [`post-release-reviews.md`](post-release-reviews.md) + templatnya | ada    |
+| Putaran rekomendasi     | [`../PROJECT_STATE.md`](../PROJECT_STATE.md) §4                   | ada    |
 
-§4 PROJECT_STATE adalah tempat putaran rekomendasi ditulis, dan itulah yang
-paling mendekati review pasca-rilis di repo ini — tetapi ia terikat pada
-PUTARAN KERJA, bukan pada rilis. Menjadikannya per-rilis adalah perubahan kecil
-yang belum dibuat.
+Dua register, dan pembedaannya disengaja: §4 terikat **putaran kerja** dan
+mencatat keputusan; register rilis terikat **rilis** dan mencatat apa yang
+terjadi ketika rilis itu bertemu produksi. Sebelum yang kedua ada, ia diam-diam
+ditulis sebagai yang pertama atau tidak ditulis sama sekali.
+
+**Rilis yang mulus tetap mendapat entri** — register yang hanya memuat insiden
+menghapus garis dasar yang membuat rilis buruk terlihat buruk. Dan satu baris di
+templatnya menanggung beban khusus di repo ini: _"yang pertama kali terlihat di
+produksi dan tidak terlihat di CI"_ adalah tempat harga keputusan ADR-0083
+(langkah 13) dibayar, dan mengumpulkannya rilis demi rilis adalah satu-satunya
+cara mengetahui apakah harganya masih pantas.
 
 **Aturan yang sudah berlaku:** rekomendasi wajib ditulis ke §4, termasuk yang
 DITOLAK beserta alasannya. Menurunkan ulang sebuah daftar rekomendasi memakan
@@ -337,16 +345,21 @@ satu audit penuh; menuliskannya memakan satu paragraf.
 
 ---
 
-## Ringkasan celah, dan dua langkah yang sengaja tidak ada
+## Status tiap langkah yang pernah kosong
 
 Daftar ini ada di sini supaya tidak perlu diturunkan ulang. Perhatikan kolom
 terakhir: **celah dan keputusan bukan hal yang sama**, dan mencampurnya adalah
 bagaimana pekerjaan yang belum dikerjakan memperoleh rupa penilaian.
 
-| Langkah | Hal                           | Sifat                                            |
-| ------- | ----------------------------- | ------------------------------------------------ |
-| 3       | Privacy analysis / DPIA       | **celah** — belum ada                            |
-| 9       | Definition of Ready umum      | **celah** — admission checklist hanya modul baru |
-| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment       |
-| 14      | UAT internal                  | **keputusan** — konsekuensi langkah 13           |
-| 18      | Post-release review per rilis | **celah** — ada, tetapi terikat putaran kerja    |
+| Langkah | Hal                           | Sifat                                      |
+| ------- | ----------------------------- | ------------------------------------------ |
+| 3       | Privacy analysis / DPIA       | **ditutup** 13 Agu 2026                    |
+| 9       | Definition of Ready umum      | **ditutup** 13 Agu 2026                    |
+| 13      | Deploy staging                | **keputusan** — ADR-0083, satu environment |
+| 14      | UAT internal                  | **keputusan** — konsekuensi langkah 13     |
+| 18      | Post-release review per rilis | **ditutup** 13 Agu 2026                    |
+
+Celah yang tersisa setelah itu **ada di dalam** dokumen yang menutupnya, bukan
+di tabel ini — terutama ketiadaan alur ekspor/penghapusan per subjek data
+([`privacy-analysis.md`](privacy-analysis.md) §4). Ia dicatat di sana karena di
+sanalah orang yang membutuhkannya akan mencari.
