@@ -120,6 +120,53 @@ export const pushDeliveryModule = defineModule({
    * age with no status predicate, which pointed at a queue would silently drop
    * undelivered work and look like housekeeping while doing it.
    */
+  /**
+   * ADR-0094 wave 2 (Issue #557) — a push subscription is a DEVICE belonging to
+   * a person, and the endpoint is a durable identifier for it.
+   */
+  subjectData: [
+    {
+      key: "push_delivery.push_subscriptions",
+      tableName: "awcms_push_subscriptions",
+      ownerModuleKey: "push_delivery",
+      subjectColumns: [{ column: "tenant_user_id", references: "tenant_user" }],
+      exportable: true,
+      // `endpoint` is a per-device URL at the push service and `auth_secret`
+      // encrypts to it — a live pair after erasure is a channel that can still
+      // reach the person's phone.
+      erasure: "hard_delete",
+      rationale:
+        "Which devices this person registered for notifications, with the browser summary captured at registration. Exported as the masked endpoint so they can recognise a device they no longer use; deleted on erasure because a surviving subscription is a working line to them.",
+      redactedColumns: ["endpoint", "endpoint_hash", "auth_secret"]
+    },
+    {
+      key: "push_delivery.push_messages",
+      tableName: "awcms_push_messages",
+      ownerModuleKey: "push_delivery",
+      // NOT the recipient. `subscription_id` points at the device row above and
+      // `created_by` is the sender — so a message is reachable for the SENDER
+      // and, for the recipient, only through the subscription that owns it.
+      // Stated rather than papered over: a descriptor claiming a recipient
+      // column here would name one that does not exist.
+      subjectColumns: [{ column: "created_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Notifications this person SENT, including title and body. Reached as their action; a notification they RECEIVED is reached through the subscription row above, which erasure removes along with the message's only link to them."
+    },
+    {
+      key: "push_delivery.push_delivery_attempts",
+      tableName: "awcms_push_delivery_attempts",
+      ownerModuleKey: "push_delivery",
+      subjectColumns: [],
+      unreachableBySubject: true,
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-attempt provider outcomes hanging off a message row. No column names a person — the link is the message, which the descriptor above answers for — and the provider response is operational telemetry the module keeps for its own retention window.",
+      redactedColumns: ["provider_response_snippet"]
+    }
+  ],
   dataLifecycle: [
     {
       key: PUSH_MESSAGES_LIFECYCLE_KEY,

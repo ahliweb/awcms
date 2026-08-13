@@ -657,6 +657,515 @@ export const identityAccessModule = defineModule({
       rationale:
         "Where and when the person signed in. Genuinely theirs and genuinely useful to them, which is why it exports; and referenced by nothing as evidence, which is why it is the one row here that is really deleted.",
       redactedColumns: ["token_hash"]
+    },
+
+    // ---- Wave 2 (Issue #557) ----------------------------------------------
+    //
+    // The three above are the rows that ARE the person. Everything below either
+    // records what they did, what they were allowed to do, or a short-lived
+    // security artifact issued to them — and most of it answers
+    // `severed_with_subject_row`, because it carries their id and no copy of
+    // any personal detail. Anonymising `identity_access.identities` makes every
+    // one of those ids resolve to nobody; rewriting them here as well would
+    // destroy the tenant's own record of who did what to remove a link that was
+    // already unresolvable.
+
+    {
+      key: "identity_access.external_identities",
+      tableName: "awcms_external_identities",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: true,
+      // The row's entire content is "this person at that IdP is this person
+      // here". Nothing cites it as evidence — the audit trail records the
+      // login, not the link — and an erasure that left it standing would let
+      // the next SSO sign-in re-attach the same person to the anonymised
+      // identity, quietly undoing the erasure.
+      erasure: "hard_delete",
+      rationale:
+        "The link between this person's account here and their account at an external identity provider. `issuer` plus `subject` is their identifier at that provider, which is personal data of theirs and belongs in their export."
+    },
+    {
+      key: "identity_access.abac_decision_logs",
+      tableName: "awcms_abac_decision_logs",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "tenant_user_id", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Every authorization decision made about this person: what they asked for, and whether it was allowed. It is about them, so it exports; it holds their id and no other personal detail, so anonymising the identity row is what severs it."
+    },
+    {
+      key: "identity_access.business_scope_assignments",
+      tableName: "awcms_business_scope_assignments",
+      ownerModuleKey: "identity_access",
+      // Three ways to appear, and all three count. A descriptor naming only
+      // `tenant_user_id` would answer nothing for a compliance officer who
+      // never held an assignment and only ever approved other people's.
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "granted_by_tenant_user_id", references: "tenant_user" },
+        { column: "approved_by_tenant_user_id", references: "tenant_user" },
+        { column: "revoked_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Which parts of the business this person was given access to, and who granted, approved or revoked it. Theirs when they are the subject and theirs as an action when they are the grantor — both are answerable, and neither carries a detail beyond the ids."
+    },
+    {
+      key: "identity_access.business_scope_assignment_events",
+      tableName: "awcms_business_scope_assignment_events",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The append-only history behind the assignments above — one row per grant, approval or revocation this person performed."
+    },
+    {
+      key: "identity_access.delegated_access_grants",
+      tableName: "awcms_delegated_access_grants",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "granted_tenant_user_id", references: "tenant_user" },
+        { column: "approved_by_tenant_user_id", references: "tenant_user" },
+        { column: "revoked_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Cross-tenant delegated access this person was granted, or approved for somebody else. Held to the same rule as the assignments above."
+    },
+    {
+      key: "identity_access.sod_conflict_evaluations",
+      tableName: "awcms_sod_conflict_evaluations",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "subject_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The segregation-of-duties decision log: each time this person's own permissions were tested for a conflict, and how it resolved. A decision recorded about them, so it is theirs to see."
+    },
+    {
+      key: "identity_access.sod_conflict_exceptions",
+      tableName: "awcms_sod_conflict_exceptions",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "subject_tenant_user_id", references: "tenant_user" },
+        { column: "requested_by_tenant_user_id", references: "tenant_user" },
+        { column: "approved_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Approved exceptions letting this person hold a conflicting pair of duties, plus the exceptions they requested or approved for others. Maker and checker are both named on purpose — the record is worthless if either half can disappear."
+    },
+    {
+      key: "identity_access.user_group_members",
+      tableName: "awcms_user_group_members",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "added_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0081 — which groups this person belongs to, and therefore which roles reach them indirectly. Membership is a fact about them, and one they cannot otherwise see."
+    },
+    {
+      key: "identity_access.user_groups",
+      tableName: "awcms_user_groups",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "created_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "A group is the tenant's own access structure; this person appears only as the author stamp. Exporting it would hand a subject the tenant's group catalogue because they once created one of them."
+    },
+    {
+      key: "identity_access.machine_credentials",
+      tableName: "awcms_machine_credentials",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "created_by_tenant_user_id", references: "tenant_user" },
+        { column: "revoked_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      // ADR-0092. The one table here whose erasure is an ACT rather than a
+      // consequence: a machine credential acts on the person's behalf, so
+      // leaving it live after they have been erased leaves a working key
+      // attached to somebody the system has agreed to forget. Revocation is
+      // already modelled (`revoked_at`), so the status transition is the
+      // existing mechanism rather than a new one.
+      erasure: "status_transition_then_purge",
+      rationale:
+        "Non-interactive credentials issued to this person, which act with their authority. They export because knowing which keys exist in their name is exactly what a subject needs to check; the secret itself never leaves.",
+      redactedColumns: ["token_hash"]
+    },
+    {
+      key: "identity_access.invitations",
+      tableName: "awcms_invitations",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "accepted_tenant_user_id", references: "tenant_user" },
+        { column: "invited_by_tenant_user_id", references: "tenant_user" },
+        { column: "revoked_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      // `login_identifier` and `display_name` are the invitee's own contact
+      // details, copied into this row before they had an account. Severing the
+      // identity does NOT reach them, which is exactly why this is the answer
+      // and `severed_with_subject_row` would be a lie.
+      erasure: "anonymize",
+      rationale:
+        "How this person came to be in the tenant, and the invitations they sent or revoked. Note the honest limit of a per-tenant answer: an invitation that was never accepted names an email address belonging to somebody who never became a tenant user, and ADR-0094 gives them no subject request to make here.",
+      redactedColumns: ["token_hash"]
+    },
+    {
+      key: "identity_access.registration_requests",
+      tableName: "awcms_registration_requests",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "created_identity_id", references: "identity" },
+        { column: "reviewed_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      // Same reason as invitations: `login_identifier`/`display_name` are a
+      // copy taken before the identity existed.
+      erasure: "anonymize",
+      rationale:
+        "The self-registration request this person's account was created from, and the requests they reviewed. Carries the name and address they supplied themselves, which no other table holds in that original form."
+    },
+    {
+      key: "identity_access.mfa_challenges",
+      tableName: "awcms_mfa_challenges",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      // A challenge is a few minutes of protocol state, superseded on the next
+      // attempt. There is nothing in it a subject could act on, and handing
+      // back live challenge material would be a credential-disclosure channel
+      // dressed as a privacy right.
+      exportable: false,
+      erasure: "hard_delete",
+      rationale:
+        "Short-lived step-up challenge state. Not exported because it says nothing about the person that outlives the minute it existed for, and deleted outright because nothing cites a challenge as evidence.",
+      redactedColumns: ["challenge_token_hash"]
+    },
+    {
+      key: "identity_access.oidc_auth_requests",
+      tableName: "awcms_oidc_auth_requests",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: false,
+      erasure: "hard_delete",
+      rationale:
+        "In-flight OIDC state/nonce for a sign-in that is either finishing or abandoned. Held for the same reason as an MFA challenge and discarded on the same grounds.",
+      redactedColumns: ["state_hash", "nonce", "code_verifier"]
+    },
+    {
+      key: "identity_access.session_handoff_codes",
+      tableName: "awcms_session_handoff_codes",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: false,
+      erasure: "hard_delete",
+      rationale:
+        "Single-use codes that move an authenticated session between origins. A live one is a bearer credential, so it is neither exported nor kept.",
+      redactedColumns: ["code_hash"]
+    },
+    {
+      key: "identity_access.password_reset_tokens",
+      tableName: "awcms_password_reset_tokens",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: false,
+      erasure: "hard_delete",
+      rationale:
+        "Single-use reset tokens. The row already has a short retention of its own (ADR-0037); an erasure ends it immediately rather than waiting, and the hash is never exported.",
+      redactedColumns: ["token_hash"]
+    },
+    {
+      key: "identity_access.auth_providers",
+      tableName: "awcms_auth_providers",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Tenant SSO configuration. This person appears only as the administrator who configured it — `allowed_email_domains` is a rule about addresses, not an address belonging to anyone."
+    },
+    {
+      key: "identity_access.tenant_auth_policies",
+      tableName: "awcms_tenant_auth_policies",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "updated_by", references: "tenant_user" },
+        // The reason `jsonb_array_contains` exists. This column is a jsonb
+        // LIST of the identities exempt from SSO, and holding a break-glass
+        // exemption is a fact about a person that appears nowhere else. Named
+        // with `updated_by` rather than instead of it — the same person is
+        // rarely both.
+        {
+          column: "break_glass_identity_ids",
+          references: "identity",
+          match: "jsonb_array_contains"
+        }
+      ],
+      exportable: true,
+      erasure: "anonymize",
+      rationale:
+        "Whether this person holds a break-glass exemption from the tenant's SSO requirement — a standing privilege they are entitled to know about. Anonymised rather than severed because their id sits INSIDE a jsonb list that anonymising the identity row does not reach: the entry has to be removed, or an erased person keeps a bypass.",
+      redactedColumns: ["allowed_email_domains"]
+    },
+    {
+      key: "identity_access.tenant_mfa_policies",
+      tableName: "awcms_tenant_mfa_policies",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "updated_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The tenant's MFA requirement. A policy about everyone is not personal data about anyone; the only link is the administrator stamp."
+    },
+    {
+      key: "identity_access.tenant_entitlements",
+      tableName: "awcms_tenant_entitlements",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "granted_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0084. Which commercial capabilities the TENANT has bought. The subject appears only as the operator who granted one."
+    },
+    {
+      key: "identity_access.partner_managed_tenants",
+      tableName: "awcms_partner_managed_tenants",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "engaged_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0089/ADR-0093. A commercial relationship between two tenants; the subject appears only as the person who recorded the engagement."
+    },
+
+    {
+      key: "identity_access.access_assignments",
+      tableName: "awcms_access_assignments",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "assigned_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      // RETIRED by ADR-0079/sql/103, and the descriptor has to exist anyway:
+      // the rows are still there and still say which roles a person once held.
+      // `access:grant-readers:check` forbids naming this table precisely so no
+      // reader drifts back onto it, and that gate allows this ONE shape — a
+      // `tableName:` field — because declaring a table is not reading it.
+      rationale:
+        "Historical role assignments. ADR-0079 retired this table: nothing writes it and `activeRoleGrants` is the definition of a live grant, so these rows answer 'which roles this person was given BEFORE the cut-over' and never 'what they can do now'. Frozen history is still personal data, which is why it is answered rather than passed over."
+    },
+    {
+      key: "identity_access.access_policies",
+      tableName: "awcms_access_policies",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "tenant_user_id", references: "tenant_user" },
+        { column: "granted_by_tenant_user_id", references: "tenant_user" },
+        { column: "revoked_by_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "ADR-0078 — scoped, time-bounded grants naming this person as subject, plus the ones they granted or revoked. `reason` and `revoke_reason` are free text an administrator wrote ABOUT them, which is precisely the kind of thing a subject-access request exists to surface."
+    },
+    {
+      key: "identity_access.access_policy_events",
+      tableName: "awcms_access_policy_events",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" }
+      ],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The append-only history behind the grants above — every grant, revocation and expiry this person performed."
+    },
+    {
+      key: "identity_access.roles",
+      tableName: "awcms_roles",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [
+        { column: "deleted_by", references: "tenant_user" },
+        { column: "restored_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "A role is the tenant's own access vocabulary, not anybody's personal data; this person appears only as the administrator who retired or restored one. `delete_reason` is about the ROLE."
+    },
+    {
+      key: "identity_access.identity_mfa_factors",
+      tableName: "awcms_identity_mfa_factors",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: true,
+      // Per-tenant factors, unlike their ADR-0087 principal-scoped siblings
+      // above — this table is inside the tenant, so a tenant CAN answer for it.
+      erasure: "hard_delete",
+      rationale:
+        "Which second factors this person enrolled in THIS tenant, and when. That an authenticator exists is theirs to know; the shared secret is not, and never leaves.",
+      redactedColumns: ["secret_ciphertext"]
+    },
+    {
+      key: "identity_access.identity_mfa_recovery_codes",
+      tableName: "awcms_identity_mfa_recovery_codes",
+      ownerModuleKey: "identity_access",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      // How many codes are left is useful; the codes are bearer credentials,
+      // and an export that carried them would be a privacy right handing out a
+      // way past the second factor it belongs to.
+      exportable: true,
+      erasure: "hard_delete",
+      rationale:
+        "Recovery codes for the factors above — exported as the FACT of them (issued, used, unused) with the code itself redacted, and deleted outright on erasure since a live code outlasting the person is a standing bypass.",
+      redactedColumns: ["code_hash"]
+    },
+
+    // ---- Global tables (ADR-0094 Decision 1) --------------------------------
+    //
+    // These hold personal data and are NOT answered here, because they have no
+    // tenant column and a per-tenant request has no standing to read them.
+    // Named rather than omitted: a report that silently skips
+    // `awcms_principals` is indistinguishable from one written before that
+    // table existed. `SubjectPlan.globalEntries` carries them to the operator.
+    {
+      key: "identity_access.principals",
+      tableName: "awcms_principals",
+      ownerModuleKey: "identity_access",
+      tenantColumn: null,
+      subjectColumns: [{ column: "id", references: "principal" }],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0087 — the global person behind every tenant membership, holding the normalised email they sign in with. One tenant may not hand over, or destroy, the record that spans all the others: erasing it here would silently log the same human out of tenants this controller has no relationship with. Answering it needs a platform-level request, which ADR-0094 deliberately does not create."
+    },
+    {
+      key: "identity_access.principal_mfa_factors",
+      tableName: "awcms_principal_mfa_factors",
+      ownerModuleKey: "identity_access",
+      tenantColumn: null,
+      subjectColumns: [{ column: "principal_id", references: "principal" }],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0087 — MFA factors belong to the global principal, not to a membership. Same boundary as the row above, and the same reason: a tenant that could delete these could lock a person out of every other tenant.",
+      redactedColumns: ["secret_ciphertext"]
+    },
+    {
+      key: "identity_access.principal_mfa_recovery_codes",
+      tableName: "awcms_principal_mfa_recovery_codes",
+      ownerModuleKey: "identity_access",
+      tenantColumn: null,
+      subjectColumns: [{ column: "principal_id", references: "principal" }],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0087 — recovery codes for the factors above, global for the same reason and out of a per-tenant answer's reach for the same reason.",
+      redactedColumns: ["code_hash"]
+    },
+
+    // ---- Reaching nobody ---------------------------------------------------
+    //
+    // Six tables in this module have no person on them at all: rules, policies
+    // and catalogues. They answer here rather than in `NO_SUBJECT_DATA`
+    // because this module owns them, and because the day one of them gains a
+    // `created_by` the entry that must change should sit next to the schema
+    // that changed.
+    {
+      key: "identity_access.abac_policies",
+      tableName: "awcms_abac_policies",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0079 — attribute rules evaluated against a request. A policy describes CONDITIONS, not the people they happen to match; who it was applied to is recorded in the decision log, which answers for itself."
+    },
+    {
+      key: "identity_access.invitation_policies",
+      tableName: "awcms_invitation_policies",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-tenant rules about who may be invited and on what terms. A standing rule with no author column and no invitee on it — the invitations themselves carry the people."
+    },
+    {
+      key: "identity_access.role_permissions",
+      tableName: "awcms_role_permissions",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Which permission keys a role carries. Two keys per row; the people are in the assignments that grant those roles, and those answer for themselves."
+    },
+    {
+      key: "identity_access.partners",
+      tableName: "awcms_partners",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0089 — the platform registry of partner ORGANISATIONS. `display_name` is a company, and the row links two tenants rather than naming any person; the individuals acting under a partnership are in the delegated grants."
+    },
+    {
+      key: "identity_access.tenant_subscriptions",
+      tableName: "awcms_tenant_subscriptions",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0084 — which plan a tenant is on. A commercial fact about the organisation, with no purchaser column and a statutory-billing reason to keep it."
+    },
+    {
+      key: "identity_access.bff_clients",
+      tableName: "awcms_bff_clients",
+      ownerModuleKey: "identity_access",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Registered backend-for-frontend clients — a key, a secret hash and allowed redirect URIs. A client is an APPLICATION, not a person, and no column records who registered it.",
+      redactedColumns: ["secret_hash"]
     }
   ],
   dataLifecycle: [

@@ -137,6 +137,73 @@ export const siteSearchModule = defineModule({
       description: "Read the search index failed-item diagnostics"
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * The index is a DERIVED copy of published content — every document in it is
+   * a projection of a row that answers for itself in `blog_content`. So the
+   * index answers as machinery, and the one table that could have been about
+   * people is the query log, which was deliberately built so it is not.
+   */
+  subjectData: [
+    {
+      key: "site_search.site_search_index_runs",
+      tableName: "awcms_site_search_index_runs",
+      ownerModuleKey: "site_search",
+      subjectColumns: [{ column: "triggered_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Index rebuilds and their counts. The only person named is whoever triggered a run, and a run is about the index rather than about them."
+    },
+    {
+      key: "site_search.site_search_settings",
+      tableName: "awcms_site_search_settings",
+      ownerModuleKey: "site_search",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Per-tenant search configuration, linked to a person only by who last edited it."
+    },
+    {
+      key: "site_search.site_search_query_log",
+      tableName: "awcms_site_search_query_log",
+      ownerModuleKey: "site_search",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "What visitors searched for, stored as a HASH of the query with its length and result count — never the text, and never a session or account link. What people search is among the most revealing data a site holds, and this table was built so it cannot be attributed; there is deliberately no column to match a subject on.",
+      redactedColumns: ["query_hash"]
+    },
+    {
+      key: "site_search.site_search_documents",
+      tableName: "awcms_site_search_documents",
+      ownerModuleKey: "site_search",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0040 — extracted copies of published content, keyed by source and resource id with no author column. The authored row answers in `blog_content`, and re-indexing rebuilds this table from it; a subject request has nothing here to match and nothing to gain."
+    },
+    {
+      key: "site_search.site_search_index_failures",
+      tableName: "awcms_site_search_index_failures",
+      ownerModuleKey: "site_search",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Extraction errors per source and resource. Operational diagnostics about documents, naming no person and matchable to none."
+    }
+  ],
   jobs: [
     {
       command: "bun run site-search:reconcile",

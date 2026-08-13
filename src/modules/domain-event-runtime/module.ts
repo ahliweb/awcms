@@ -108,6 +108,88 @@ export const domainEventRuntimeModule = defineModule({
    * window that swept it would delete the work AND its evidence, and the
    * deletion would be indistinguishable from the queue having drained cleanly.
    */
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * `awcms_domain_events` is the only table in the base that reaches a person
+   * BOTH ways — `actor_tenant_user_id` and `actor_profile_id` — which is
+   * exactly the case `subjectColumns` being a list exists for.
+   */
+  subjectData: [
+    {
+      key: "domain_event_runtime.domain_events",
+      tableName: "awcms_domain_events",
+      ownerModuleKey: "domain_event_runtime",
+      subjectColumns: [
+        { column: "actor_tenant_user_id", references: "tenant_user" },
+        { column: "actor_profile_id", references: "profile" }
+      ],
+      exportable: true,
+      // The event log is the spine other modules replay from. Deleting rows
+      // would rewrite history for every consumer, and anonymising the actor
+      // stamps is unnecessary once the identity itself is anonymised.
+      erasure: "severed_with_subject_row",
+      rationale:
+        "The append-only record of what happened in the tenant, with this person named as the actor behind it. `payload` is the business event and can be about somebody else entirely, so it is held back while the fact of their action is not.",
+      redactedColumns: ["payload"]
+    },
+    {
+      key: "domain_event_runtime.domain_event_replays",
+      tableName: "awcms_domain_event_replays",
+      ownerModuleKey: "domain_event_runtime",
+      subjectColumns: [{ column: "requested_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Replays this person requested and the reason they gave. Re-delivering an event is an operational act with real effects, so who asked for one is worth answering for."
+    },
+    {
+      key: "domain_event_runtime.domain_event_consumer_state",
+      tableName: "awcms_domain_event_consumer_state",
+      ownerModuleKey: "domain_event_runtime",
+      subjectColumns: [
+        { column: "paused_by", references: "tenant_user" },
+        { column: "resumed_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Whether a consumer is paused, and who paused or resumed it. Pipeline state about a consumer; the person is the operator who intervened."
+    },
+    {
+      key: "domain_event_runtime.domain_event_deliveries",
+      tableName: "awcms_domain_event_deliveries",
+      ownerModuleKey: "domain_event_runtime",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "One row per (event, consumer) attempt: status, retries, dead-letter reason. Delivery bookkeeping keyed by event rather than by person — the event itself answers above, and losing these rows would re-deliver or strand messages."
+    },
+    {
+      key: "domain_event_runtime.domain_event_consumer_effects",
+      tableName: "awcms_domain_event_consumer_effects",
+      ownerModuleKey: "domain_event_runtime",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The idempotency record proving a consumer already applied an event. Three keys and a timestamp; removing a row would let the same effect be applied twice."
+    },
+    {
+      key: "domain_event_runtime.domain_event_activity_daily",
+      tableName: "awcms_domain_event_activity_daily",
+      ownerModuleKey: "domain_event_runtime",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Daily event counts per type. An aggregate with no actor column, which is what survives when the events behind it are severed."
+    }
+  ],
   dataLifecycle: [
     {
       key: DOMAIN_EVENT_DELIVERIES_LIFECYCLE_KEY,

@@ -178,6 +178,55 @@ export const visitorAnalyticsModule = defineModule({
   // visibility, but real purge stays owned by `purgeVisitorAnalyticsData`
   // (`bun run analytics:purge`, and `POST /api/v1/analytics/retention/purge`),
   // which now consults a LegalHoldGuardPort before step 1's DELETE.
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * Analytics is where "we only keep hashes" stops being true on close reading:
+   * a visitor session also stores `ip_address`, a city, and a SNAPSHOT of the
+   * login identifier. Those are not severed by anonymising the identity row,
+   * which is why these two answer `anonymize` and not the stamp answer their
+   * neighbours give.
+   */
+  subjectData: [
+    {
+      key: "visitor_analytics.visitor_sessions",
+      tableName: "awcms_visitor_sessions",
+      ownerModuleKey: "visitor_analytics",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: true,
+      erasure: "anonymize",
+      rationale:
+        "Where this person browsed from and on what: approximate location, device and browser, and the address they were signed in as at the time. `login_identifier_snapshot` is a copy of their email that outlives any change to the identity, so erasure has to reach in and clear it rather than rely on severance.",
+      redactedColumns: [
+        "ip_address",
+        "ip_hash",
+        "visitor_key_hash",
+        "user_agent_hash"
+      ]
+    },
+    {
+      key: "visitor_analytics.visit_events",
+      tableName: "awcms_visit_events",
+      ownerModuleKey: "visitor_analytics",
+      subjectColumns: [{ column: "identity_id", references: "identity" }],
+      exportable: true,
+      erasure: "anonymize",
+      rationale:
+        "Every page this person requested while signed in, with the referrer domain and coarse geography. The most detailed behavioural record the platform keeps about anyone, and therefore the one a subject-access request most obviously covers.",
+      redactedColumns: ["ip_hash", "user_agent_hash", "geo"]
+    },
+    {
+      key: "visitor_analytics.visitor_daily_rollups",
+      tableName: "awcms_visitor_daily_rollups",
+      ownerModuleKey: "visitor_analytics",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Daily counts per tenant and area — unique visitors, pageviews, top paths and browsers. Aggregated past the point where any row is about a person, and deliberately kept: the totals are what survive when the events behind them are anonymised, and recomputing them from erased events is impossible."
+    }
+  ],
   dataLifecycle: [
     {
       key: VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY,

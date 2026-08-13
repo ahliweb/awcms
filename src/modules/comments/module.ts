@@ -179,6 +179,108 @@ export const commentsModule = defineModule({
       safeInOfflineLan: true
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * The module with the most personal data per row in the whole base, and the
+   * only one where the subject is frequently NOT a tenant user at all: a guest
+   * commenter is identified by a hashed email and a hashed IP. ADR-0094 answers
+   * per tenant user, so those rows are honestly out of reach here — each
+   * descriptor says so rather than implying a coverage it does not have.
+   */
+  subjectData: [
+    {
+      key: "comments.comments",
+      tableName: "awcms_comments_comments",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      subjectColumns: [{ column: "author_user_id", references: "tenant_user" }],
+      exportable: true,
+      // `author_display_name`, `author_email_masked` and `author_ip_hash` are
+      // copied onto the comment at write time, so severing the identity leaves
+      // the person's name sitting under their published words.
+      erasure: "anonymize",
+      rationale:
+        "What this person wrote publicly, with the name, masked address and hashed IP captured alongside it. Their own words are theirs to export; the comment itself survives erasure with the author detached, because deleting a thread's replies would rewrite a conversation other people took part in. A comment left by a GUEST carries no tenant-user id and cannot be reached from a per-tenant subject request — ADR-0094 gives a non-member no request to make.",
+      redactedColumns: ["author_email_hash", "author_ip_hash"]
+    },
+    {
+      key: "comments.moderation_events",
+      tableName: "awcms_comments_moderation_events",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      subjectColumns: [{ column: "actor_user_id", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Moderation decisions this person made: what they approved, hid or removed, and the note they wrote. Held as their action rather than as content about them, and carrying nothing beyond their id."
+    },
+    {
+      key: "comments.reports",
+      tableName: "awcms_comments_reports",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      // Reporters are identified by hashed email and hashed IP only — by
+      // design, so a moderator cannot read who reported whom. That design is
+      // exactly what puts the rows beyond a per-tenant subject request.
+      subjectColumns: [],
+      unreachableBySubject: true,
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Abuse reports, deliberately pseudonymous: a report stores only a hash of the reporter's address and IP, with no tenant-user id, so no subject request can be matched to one. Retained rather than erased because the rows are the evidence behind a moderation decision, and because there is no key by which to find the right ones — a state the module owns and this descriptor states instead of implying coverage.",
+      redactedColumns: ["reporter_email_hash", "reporter_ip_hash"]
+    },
+    {
+      key: "comments.abuse_events",
+      tableName: "awcms_comments_abuse_events",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      subjectColumns: [],
+      unreachableBySubject: true,
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Rate-limit and abuse telemetry keyed by hashed IP and a browser fingerprint hash, with no account link at all. Kept as the anti-abuse record it is; there is no column by which a subject could be found, and inventing one would mean attaching identity to traffic that was deliberately never attached.",
+      redactedColumns: ["ip_hash", "fingerprint_hash"]
+    },
+    {
+      key: "comments.reply_subscriptions",
+      tableName: "awcms_comments_reply_subscriptions",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      subjectColumns: [],
+      unreachableBySubject: true,
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Reply notifications, addressed by an encrypted email and keyed by its hash rather than by an account — a subscriber need never have signed in. Unsubscribing is the in-band control for these rows and every notification carries the link; a per-tenant subject request has no id to match them on.",
+      redactedColumns: [
+        "subscriber_email_hash",
+        "subscriber_email_encrypted",
+        "unsubscribe_token_hash"
+      ]
+    },
+    {
+      key: "comments.settings",
+      tableName: "awcms_comments_settings",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "updated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "One row of tenant-wide comment policy. The subject appears only as the administrator who last changed it."
+    },
+    {
+      key: "comments.threads",
+      tableName: "awcms_comments_threads",
+      ownerModuleKey: COMMENTS_MODULE_KEY,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "A thread is the page comments hang from — a resource reference, a locale and counters. It holds no person at all; the people are in `comments.comments`, and the thread must outlive any one of them or their replies lose the conversation they belong to."
+    }
+  ],
   dataLifecycle: [
     {
       key: COMMENTS_ABUSE_EVENTS_LIFECYCLE_KEY,

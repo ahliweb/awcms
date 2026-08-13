@@ -108,6 +108,120 @@ export const moduleManagementModule = defineModule({
       description: "Trigger a module health check"
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557) — the registry describes MODULES. Six of these
+   * nine tables are synchronised from code on every boot and name nobody at
+   * all; the three that reach a person do so through an operator stamp.
+   */
+  subjectData: [
+    {
+      key: "module_management.tenant_modules",
+      tableName: "awcms_tenant_modules",
+      ownerModuleKey: "module_management",
+      subjectColumns: [
+        { column: "enabled_by", references: "tenant_user" },
+        { column: "disabled_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Which modules a tenant has turned on, and who turned them on or off. A capability decision about the tenant; the person is the operator who made it."
+    },
+    {
+      key: "module_management.module_settings",
+      tableName: "awcms_module_settings",
+      ownerModuleKey: "module_management",
+      subjectColumns: [{ column: "updated_by", references: "tenant_user" }],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Per-tenant module setting overrides. Configuration values belonging to the tenant, stamped with who last edited them."
+    },
+    {
+      key: "module_management.modules",
+      tableName: "awcms_modules",
+      ownerModuleKey: "module_management",
+      // GLOBAL: the registry is synchronised from `listModules()` and shared by
+      // every tenant in the deployment, so there is no `tenant_id` to filter on.
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The installed-module catalogue, synchronised from `listModules()` on boot. Every row is a fact about the build; no column has ever held a person."
+    },
+    {
+      key: "module_management.module_navigation",
+      tableName: "awcms_module_navigation",
+      ownerModuleKey: "module_management",
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Sidebar entries declared by each module and re-synchronised from code. Derived registry data with no author and no subject."
+    },
+    {
+      key: "module_management.module_jobs",
+      tableName: "awcms_module_jobs",
+      ownerModuleKey: "module_management",
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Scheduled-job declarations mirrored from each module's descriptor. A catalogue of commands, naming nobody."
+    },
+    {
+      key: "module_management.module_health_checks",
+      tableName: "awcms_module_health_checks",
+      ownerModuleKey: "module_management",
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The latest health probe per module. Machine status with a timestamp and a message about a module, not about a person."
+    },
+    {
+      key: "module_management.module_dependencies",
+      tableName: "awcms_module_dependencies",
+      ownerModuleKey: "module_management",
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "The module dependency graph, derived from code. Two module keys per row and nothing else."
+    },
+    {
+      key: "module_management.sidebar_menu_types",
+      tableName: "awcms_sidebar_menu_types",
+      ownerModuleKey: "module_management",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-tenant sidebar grouping overrides — a label and a position. Tenant-wide presentation with no per-user personalisation and no author column."
+    },
+    {
+      key: "module_management.sidebar_menu_items",
+      tableName: "awcms_sidebar_menu_items",
+      ownerModuleKey: "module_management",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-tenant sidebar entry overrides. Held on the same terms as the types above: tenant-wide, not per person."
+    }
+  ],
   jobs: [
     {
       command: "bun run config:validate",

@@ -15,7 +15,9 @@
  *   about a person. A new entry is a sentence a reviewer can disagree with;
  * - `TABLES_PREDATING_THE_SUBJECT_RULE` — the tables that already existed. It
  *   may only SHRINK, and an entry that has since gained a descriptor is an
- *   error rather than a tolerated duplicate.
+ *   error rather than a tolerated duplicate. **It is now EMPTY** (Issue #557):
+ *   the 139 tables it carried have each answered, so there is no table left in
+ *   this schema whose answer is "it was here first".
  *
  * ## Why this gate lands before any endpoint
  *
@@ -28,10 +30,26 @@
  * copied, down to the table derivation, so there is one idea to learn and not
  * two that can drift apart.
  *
- * The ledger carries no per-entry reason, for the same reason its sibling
- * carries none: one reason covers all of them — they predate the rule — and
- * inventing 139 individual justifications would manufacture exactly the fiction
- * this file exists to avoid. Its length is a debt counter, printed on every run.
+ * The ledger carried no per-entry reason, for the same reason its sibling
+ * carries none: one reason covered all of them — they predated the rule — and
+ * inventing 139 individual justifications would have manufactured exactly the
+ * fiction this file exists to avoid. Its length was a debt counter, printed on
+ * every run, and Issue #557 paid it down to nothing.
+ *
+ * ## What an empty ledger changes
+ *
+ * It is deliberately kept as an empty array rather than deleted, because the
+ * gate's shape is what makes the guarantee hold: with nothing in it, EVERY
+ * table must produce a descriptor or a reasoned refusal, and re-adding a line
+ * is an edit somebody has to make on purpose in a file whose only content is
+ * work not done. Deleting the export would remove the place where that
+ * regression would have to be written down.
+ *
+ * Zero is also the precondition Issue #557's export endpoint needed. A
+ * subject-access report assembled while 139 tables had never answered would
+ * have been complete-looking and wrong — signed, which is worse than absent.
+ * Completeness is now a property the schema enforces rather than one a PR
+ * claims.
  *
  * Pure — reads `sql/` and the module registry, no database.
  */
@@ -69,6 +87,21 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
     table: "awcms_schema_migrations",
     reason:
       "The migration ledger. It records which SQL file ran and when, which is a fact about the deployment and about nobody."
+  },
+  {
+    table: "awcms_plan_entitlements",
+    reason:
+      "ADR-0084. The join between a plan and the entitlements it carries — two catalogue keys per row, both authored by an operator rather than observed about anyone."
+  },
+  {
+    table: "awcms_edge_cache_purges",
+    reason:
+      "ADR-0042. A queue of surrogate keys the edge cache must invalidate. A surrogate key names a CONTENT surface, never a visitor, and the rows are written by infrastructure in `src/lib/` that no module owns."
+  },
+  {
+    table: "awcms_idempotency_keys",
+    reason:
+      "The replay guard for high-risk mutations: a scope, a key, a request hash and the response that was returned. It holds no column linking a row to a person — the key is chosen by the CALLER and the tenant is the only identity on it — so no subject request can find its rows. The cached `response_body` can echo personal data from the mutation it replays, which is why this table carries a short retention of its own rather than a subject answer it cannot honour."
   }
 ];
 
@@ -77,147 +110,7 @@ export const NO_SUBJECT_DATA: readonly { table: string; reason: string }[] = [
  * and its length is printed on every run so the debt stays visible instead of
  * becoming the background.
  */
-export const TABLES_PREDATING_THE_SUBJECT_RULE: readonly string[] = [
-  "awcms_abac_decision_logs",
-  "awcms_abac_policies",
-  "awcms_access_assignments",
-  "awcms_access_policies",
-  "awcms_access_policy_events",
-  "awcms_audit_events",
-  "awcms_auth_providers",
-  "awcms_bff_clients",
-  "awcms_blog_ad_placements",
-  "awcms_blog_ads",
-  "awcms_blog_internal_tag_link_settings",
-  "awcms_blog_menu_items",
-  "awcms_blog_menus",
-  "awcms_blog_pages",
-  "awcms_blog_post_terms",
-  "awcms_blog_posts",
-  "awcms_blog_redirects",
-  "awcms_blog_revisions",
-  "awcms_blog_settings",
-  "awcms_blog_templates",
-  "awcms_blog_terms",
-  "awcms_blog_theme_settings",
-  "awcms_blog_widgets",
-  "awcms_business_scope_assignment_events",
-  "awcms_business_scope_assignments",
-  "awcms_comments_abuse_events",
-  "awcms_comments_comments",
-  "awcms_comments_moderation_events",
-  "awcms_comments_reply_subscriptions",
-  "awcms_comments_reports",
-  "awcms_comments_settings",
-  "awcms_comments_threads",
-  "awcms_data_lifecycle_archive_manifests",
-  "awcms_data_lifecycle_cursors",
-  "awcms_data_lifecycle_legal_holds",
-  "awcms_data_lifecycle_runs",
-  "awcms_delegated_access_grants",
-  "awcms_domain_event_activity_daily",
-  "awcms_domain_event_consumer_effects",
-  "awcms_domain_event_consumer_state",
-  "awcms_domain_event_deliveries",
-  "awcms_domain_event_replays",
-  "awcms_domain_events",
-  "awcms_edge_cache_purges",
-  "awcms_email_delivery_attempts",
-  "awcms_email_messages",
-  "awcms_email_suppression_list",
-  "awcms_email_templates",
-  "awcms_external_identities",
-  "awcms_form_drafts",
-  "awcms_idempotency_keys",
-  "awcms_identity_mfa_factors",
-  "awcms_identity_mfa_recovery_codes",
-  "awcms_idn_admin_regions",
-  "awcms_idn_region_datasets",
-  "awcms_invitation_policies",
-  "awcms_invitations",
-  "awcms_machine_credentials",
-  "awcms_media_library_tenant_state",
-  "awcms_mfa_challenges",
-  "awcms_module_dependencies",
-  "awcms_module_health_checks",
-  "awcms_module_jobs",
-  "awcms_module_navigation",
-  "awcms_module_settings",
-  "awcms_modules",
-  "awcms_news_media_objects",
-  "awcms_news_portal_ad_placements",
-  "awcms_news_portal_homepage_sections",
-  "awcms_object_sync_queue",
-  "awcms_offices",
-  "awcms_oidc_auth_requests",
-  "awcms_partner_managed_tenants",
-  "awcms_partners",
-  "awcms_password_reset_tokens",
-  "awcms_plan_entitlements",
-  "awcms_principal_mfa_factors",
-  "awcms_principal_mfa_recovery_codes",
-  "awcms_principals",
-  "awcms_profile_entity_links",
-  "awcms_profile_identifiers",
-  "awcms_profiles",
-  "awcms_push_delivery_attempts",
-  "awcms_push_messages",
-  "awcms_push_subscriptions",
-  "awcms_registration_requests",
-  "awcms_reporting_export_runs",
-  "awcms_reporting_projection_cursors",
-  "awcms_reporting_projection_metrics",
-  "awcms_reporting_projection_state",
-  "awcms_reporting_rebuild_runs",
-  "awcms_reporting_reconciliation_runs",
-  "awcms_reporting_scheduled_exports",
-  "awcms_role_permissions",
-  "awcms_roles",
-  "awcms_seo_not_found_observations",
-  "awcms_seo_redirect_settings",
-  "awcms_seo_redirects",
-  "awcms_seo_tenant_settings",
-  "awcms_session_handoff_codes",
-  "awcms_setup_state",
-  "awcms_sidebar_menu_items",
-  "awcms_sidebar_menu_types",
-  "awcms_site_search_documents",
-  "awcms_site_search_index_failures",
-  "awcms_site_search_index_runs",
-  "awcms_site_search_query_log",
-  "awcms_site_search_settings",
-  "awcms_sod_conflict_evaluations",
-  "awcms_sod_conflict_exceptions",
-  "awcms_sync_aggregate_versions",
-  "awcms_sync_conflicts",
-  "awcms_sync_inbox",
-  "awcms_sync_nodes",
-  "awcms_sync_push_batches",
-  "awcms_tenant_auth_policies",
-  "awcms_tenant_domains",
-  "awcms_tenant_entitlements",
-  "awcms_tenant_mfa_policies",
-  "awcms_tenant_modules",
-  "awcms_tenant_settings",
-  "awcms_tenant_status_transitions",
-  "awcms_tenant_subscriptions",
-  "awcms_tenants",
-  "awcms_theming_config_versions",
-  "awcms_theming_preview_sessions",
-  "awcms_theming_tenant_state",
-  "awcms_user_group_members",
-  "awcms_user_groups",
-  "awcms_visit_events",
-  "awcms_visitor_daily_rollups",
-  "awcms_visitor_sessions",
-  "awcms_workflow_decisions",
-  "awcms_workflow_definitions",
-  "awcms_workflow_delegations",
-  "awcms_workflow_instances",
-  "awcms_workflow_join_arrivals",
-  "awcms_workflow_task_assignments",
-  "awcms_workflow_tasks"
-];
+export const TABLES_PREDATING_THE_SUBJECT_RULE: readonly string[] = [];
 
 export type SubjectCoverageInput = {
   tables: readonly string[];

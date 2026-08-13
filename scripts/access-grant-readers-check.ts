@@ -83,6 +83,46 @@ export const RETIRED_GRANT_TABLES: readonly string[] = [
   "awcms_access_assignments"
 ];
 
+/**
+ * The one way to name a grant table without reading it: a `subjectData`
+ * descriptor (ADR-0094).
+ *
+ * Issue #557 drove the subject-data ledger to zero, which means EVERY table in
+ * `sql/` must now say how it answers about a person — including a retired one.
+ * `awcms_access_assignments` still holds `(tenant_user, role)` rows, so
+ * `NO_SUBJECT_DATA` would be a lie, and silence is no longer available. The
+ * declaration has to live in the owning `module.ts`, and this gate forbids that
+ * file from naming the table.
+ *
+ * Resolved narrowly rather than by adding `module.ts` to `GRANT_READERS`. A
+ * file-level entry would stop this gate watching the whole file, which is
+ * precisely the protection the block above says is "the entire protection". So
+ * the allowance is keyed on the SHAPE of the mention instead: the name may
+ * appear only as the value of a descriptor's `tableName` field. A drifted
+ * reader writes `FROM awcms_access_assignments` inside a template literal and
+ * cannot satisfy that, so the failure ADR-0079 records still fails here.
+ */
+const DESCRIPTOR_TABLE_FIELD = /tableName:\s*"(awcms_[a-z0-9_]+)"/g;
+
+/**
+ * True when every occurrence of `table` in `code` is a descriptor's
+ * `tableName:` value — i.e. the file DECLARES something about the table and
+ * never queries it.
+ */
+export function namesOnlyAsDescriptor(code: string, table: string): boolean {
+  const declared = [...code.matchAll(DESCRIPTOR_TABLE_FIELD)].filter(
+    (match) => match[1] === table
+  ).length;
+
+  if (declared === 0) {
+    return false;
+  }
+
+  const total = code.split(table).length - 1;
+
+  return total === declared;
+}
+
 export type GrantReaderEntry = {
   /** Repo-relative path, forward slashes. */
   file: string;
@@ -200,7 +240,9 @@ export function findGrantReaderProblems(
 
   for (const [file, source] of sources) {
     const code = stripComments(source);
-    const named = tables.filter((table) => code.includes(table));
+    const named = tables.filter(
+      (table) => code.includes(table) && !namesOnlyAsDescriptor(code, table)
+    );
 
     if (named.length === 0) continue;
 

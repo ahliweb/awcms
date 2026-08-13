@@ -136,6 +136,39 @@ export const idnAdminRegionsModule = defineModule({
   // cross-tenant, only two of its buttons are, and gating the link on
   // `dataset.configure` would hide the provenance every tenant is entitled to
   // read about data it is being served.
+  /**
+   * ADR-0094 wave 2 (Issue #557) — ADR-0046 made both of this module's tables
+   * GLOBAL (no `tenant_id`, no RLS), so both are outside a per-tenant answer by
+   * construction rather than by choice.
+   */
+  subjectData: [
+    {
+      key: "idn_admin_regions.idn_region_datasets",
+      tableName: "awcms_idn_region_datasets",
+      ownerModuleKey: IDN_ADMIN_REGIONS_MODULE_KEY,
+      tenantColumn: null,
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "activated_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0046 — one row per vendored Kepmendagri dataset, naming the platform operator who imported and activated it. The table is global, so no single tenant may hand over or destroy it; the provenance of reference data every tenant depends on is not one controller's to erase."
+    },
+    {
+      key: "idn_admin_regions.idn_admin_regions",
+      tableName: "awcms_idn_admin_regions",
+      ownerModuleKey: IDN_ADMIN_REGIONS_MODULE_KEY,
+      tenantColumn: null,
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0046 — the administrative region list itself: province, regency, district and village names from a public dataset. Public geography, global, and about places rather than people."
+    }
+  ],
   navigation: [
     {
       labelKey: "admin.layout.nav_idn_regions",

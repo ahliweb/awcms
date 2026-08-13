@@ -115,6 +115,98 @@ export const reportingModule = defineModule({
       description: "Manually trigger an export run for a projection"
     }
   ],
+  /**
+   * ADR-0094 wave 2 (Issue #557).
+   *
+   * A read-model is a projection of rows that answer for themselves elsewhere,
+   * so nothing here is exported as the subject's own data — the operator who
+   * ASKED for a report is the only person these tables name.
+   *
+   * `awcms_reporting_export_runs` is the one worth pausing on: an export file
+   * can contain personal data about many people, and this table holds the path
+   * to it. The file's contents are governed by the projection it came from and
+   * by that run's own expiry, not by the requester's subject request — stated
+   * here so a later reader does not mistake the stamp for coverage of the file.
+   */
+  subjectData: [
+    {
+      key: "reporting.reporting_export_runs",
+      tableName: "awcms_reporting_export_runs",
+      ownerModuleKey: "reporting",
+      subjectColumns: [{ column: "requested_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Report exports this person requested, and where the resulting file went. Their action, so it answers as their history; the exported FILE is not reached from here — it expires on its own run's schedule.",
+      redactedColumns: ["storage_path"]
+    },
+    {
+      key: "reporting.reporting_rebuild_runs",
+      tableName: "awcms_reporting_rebuild_runs",
+      ownerModuleKey: "reporting",
+      subjectColumns: [{ column: "requested_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Projection rebuilds this person triggered, with the reason they gave. An operational act of theirs, kept as the record of who reprocessed what."
+    },
+    {
+      key: "reporting.reporting_reconciliation_runs",
+      tableName: "awcms_reporting_reconciliation_runs",
+      ownerModuleKey: "reporting",
+      subjectColumns: [{ column: "requested_by", references: "tenant_user" }],
+      exportable: true,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Reconciliation checks this person ran and what they found. Held on the same terms as the rebuilds above."
+    },
+    {
+      key: "reporting.reporting_scheduled_exports",
+      tableName: "awcms_reporting_scheduled_exports",
+      ownerModuleKey: "reporting",
+      subjectColumns: [
+        { column: "created_by", references: "tenant_user" },
+        { column: "deleted_by", references: "tenant_user" }
+      ],
+      exportable: false,
+      erasure: "severed_with_subject_row",
+      rationale:
+        "Recurring export schedules belonging to the tenant. A standing configuration, linked to a person only by who set it up."
+    },
+    {
+      key: "reporting.reporting_projection_state",
+      tableName: "awcms_reporting_projection_state",
+      ownerModuleKey: "reporting",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Per-projection health: last attempt, last success, consecutive failures. Machine state about a pipeline, with no author column and nobody to match."
+    },
+    {
+      key: "reporting.reporting_projection_cursors",
+      tableName: "awcms_reporting_projection_cursors",
+      ownerModuleKey: "reporting",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "How far each projection has read its stream. A resume point; erasing it would silently reprocess or skip history for every tenant on that projection."
+    },
+    {
+      key: "reporting.reporting_projection_metrics",
+      tableName: "awcms_reporting_projection_metrics",
+      ownerModuleKey: "reporting",
+      unreachableBySubject: true,
+      subjectColumns: [],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "Numeric counters per projection. Aggregates with no row-level link to any person."
+    }
+  ],
   jobs: [
     {
       command: "bun run reporting:projections:refresh",

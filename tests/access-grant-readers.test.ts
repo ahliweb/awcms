@@ -13,7 +13,8 @@ import { describe, expect, test } from "bun:test";
 import {
   findGrantReaderProblems,
   GRANT_READERS,
-  GRANT_TABLES
+  GRANT_TABLES,
+  namesOnlyAsDescriptor
 } from "../scripts/access-grant-readers-check";
 
 const ALLOWED = [
@@ -191,5 +192,64 @@ describe("the table list is the grant tables and nothing else", () => {
     // `awcms_access_assignments` after Gelombang 3 gives the OLD, wider answer
     // while looking untouched.
     expect(GRANT_TABLES).toContain("awcms_access_policies");
+  });
+});
+
+describe("the subject-data descriptor allowance is narrow (ADR-0094 wave 2)", () => {
+  // Issue #557 drove the subject-data ledger to zero, so even a RETIRED grant
+  // table must declare how it answers about a person. The allowance exists for
+  // that one shape and must not become a way back onto the table.
+  const RETIRED = "awcms_access_assignments";
+
+  test("a `tableName:` declaration is allowed", () => {
+    const source = `{ tableName: "${RETIRED}", exportable: true }`;
+
+    expect(namesOnlyAsDescriptor(source, RETIRED)).toBe(true);
+    expect(
+      findGrantReaderProblems(
+        withAllowedPresent({ "src/modules/x/module.ts": source }),
+        ALLOWED
+      )
+    ).toEqual([]);
+  });
+
+  test("a SQL read of the same table still FAILS", () => {
+    // The failure ADR-0079 exists to record — five files at once, invisible in
+    // every one of them.
+    const source = `const rows = await tx\`SELECT role_id FROM ${RETIRED}\`;`;
+
+    expect(namesOnlyAsDescriptor(source, RETIRED)).toBe(false);
+    expect(
+      findGrantReaderProblems(
+        withAllowedPresent({ "src/modules/x/reader.ts": source }),
+        ALLOWED
+      )
+    ).toHaveLength(1);
+  });
+
+  test("a declaration does NOT license a read elsewhere in the same file", () => {
+    // The whole reason this is keyed on the shape of every mention rather than
+    // on the file: one legitimate descriptor must not buy the file a join.
+    const source = [
+      `{ tableName: "${RETIRED}" }`,
+      `const rows = await tx\`SELECT 1 FROM ${RETIRED}\`;`
+    ].join("\n");
+
+    expect(namesOnlyAsDescriptor(source, RETIRED)).toBe(false);
+    expect(
+      findGrantReaderProblems(
+        withAllowedPresent({ "src/modules/x/module.ts": source }),
+        ALLOWED
+      )
+    ).toHaveLength(1);
+  });
+
+  test("a descriptor for a DIFFERENT table does not cover this one", () => {
+    const source = [
+      `{ tableName: "awcms_access_policies" }`,
+      `const rows = await tx\`SELECT 1 FROM ${RETIRED}\`;`
+    ].join("\n");
+
+    expect(namesOnlyAsDescriptor(source, RETIRED)).toBe(false);
   });
 });

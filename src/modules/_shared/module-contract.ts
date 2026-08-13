@@ -780,13 +780,68 @@ export type SubjectDataErasure =
   | "hard_delete"
   /** Flip a status, let ordinary retention purge it — for rows whose deletion is already modelled. */
   | "status_transition_then_purge"
+  /**
+   * Nothing to do HERE: this table only carries the subject's id as a stamp
+   * (`created_by`, `deleted_by`, `actor_tenant_user_id`), and anonymising
+   * `awcms_identities` already makes every one of those stamps resolve to
+   * nobody.
+   *
+   * This is the answer roughly ninety tables in this schema honestly give, and
+   * it earns a name of its own rather than being folded into `anonymize`. The
+   * difference is not bookkeeping: an executor told to `anonymize` here would
+   * rewrite the stamp — destroying the tenant's own record of who deleted a
+   * page, to remove a link that the identity row had already made
+   * unresolvable. Erasure would do avoidable damage in ninety places and call
+   * it compliance.
+   *
+   * It is only honest while `identity_access.identities` really does
+   * anonymise, so `subject-data:registry:check` refuses this value if no
+   * descriptor in the registry severs the chain it names.
+   */
+  | "severed_with_subject_row"
   /** Kept ON PURPOSE: a statutory obligation or an active legal hold. "Erase everything" is not what the law says, and a descriptor that pretends otherwise misleads the operator who trusts it. */
   | "retain_under_obligation";
 
 export type SubjectDataColumn = {
   column: string;
-  /** `awcms_tenant_users.id` or `awcms_identities.id` — see `subjectColumns`. */
-  references: "tenant_user" | "identity";
+  /**
+   * `awcms_tenant_users.id`, `awcms_identities.id`, `awcms_profiles.id`, or —
+   * on a global table ONLY — `awcms_principals.id`. See `subjectColumns`.
+   *
+   * `"profile"` is not a convenience. `awcms_profiles` is the first table Issue
+   * #557 names, and NEITHER of the original two ids appears on it: the link
+   * runs the other way, from `awcms_identities.profile_id`. A model with only
+   * `tenant_user` and `identity` could not describe the person's own name and
+   * contact details at all — the descriptor would have had to name a column
+   * that does not exist, or the table would have stayed silent.
+   *
+   * `"principal"` is never bound to a value and never queried: ADR-0094
+   * Decision 1 keeps the global principal out of every per-tenant plan, so
+   * those descriptors exist to be NAMED in the report, not read. It is a member
+   * of this union anyway because the alternative was labelling
+   * `awcms_principal_mfa_factors.principal_id` as an identity column, which is
+   * false, unverifiable-looking, and exactly the mislabelling
+   * `subject-data:registry:check` refuses everywhere else.
+   *
+   * `subject-data:registry:check` allows it only where `tenantColumn` is
+   * `null`, so it cannot become a back door to the cross-tenant read ADR-0087
+   * and ADR-0088 each planned once.
+   */
+  references: "tenant_user" | "identity" | "profile" | "principal";
+  /**
+   * How the column holds the id. `"equals"` (the default) is the uuid column
+   * almost every table uses.
+   *
+   * `"jsonb_array_contains"` exists because one table really does keep a LIST:
+   * `awcms_tenant_auth_policies.break_glass_identity_ids` is a jsonb array of
+   * the identities that may bypass SSO. Without this member the descriptor
+   * would have had to name only the neighbouring `updated_by` stamp, and the
+   * one column on that table that genuinely says something about a person —
+   * that this person holds a break-glass exemption — would have been left out
+   * of every export and every erasure, with three artefacts claiming coverage
+   * was total.
+   */
+  match?: "equals" | "jsonb_array_contains";
 };
 
 export type SubjectDataDescriptor = {
@@ -811,8 +866,46 @@ export type SubjectDataDescriptor = {
    * silently omit every row where they are the second.
    */
   subjectColumns: readonly SubjectDataColumn[];
-  /** Defaults to `"tenant_id"`. Absent for a global table, which must then explain itself in `notes`. */
-  tenantColumn?: string;
+  /**
+   * The table holds data about people, but NO column can be matched to a
+   * per-tenant subject — so `subjectColumns` is empty ON PURPOSE.
+   *
+   * This is a real category and not a loophole. `awcms_comments_reports` stores
+   * a hash of the reporter's address and nothing else, deliberately, so a
+   * moderator cannot see who reported whom; `awcms_comments_abuse_events` is
+   * keyed by a hashed IP that was never attached to an account. Those rows are
+   * personal data, so `NO_SUBJECT_DATA` would be a lie — and they are
+   * unreachable, so a `subjectColumns` entry would be a fiction. Without this
+   * flag the only remaining answer was an empty array, which the planner drops
+   * silently: the table would vanish from every export with nothing anywhere
+   * recording that it had been considered.
+   *
+   * Marked descriptors are carried into `SubjectPlan.unansweredEntries` and
+   * reported to the operator beside the global tables, under one heading —
+   * what this answer does not cover, and why.
+   *
+   * `subject-data:registry:check` enforces the pair in both directions, and
+   * requires `exportable: false` with `erasure: "retain_under_obligation"`:
+   * a table nothing can find rows in cannot honestly promise either.
+   */
+  unreachableBySubject?: true;
+  /**
+   * `undefined` (the usual case) means `"tenant_id"`. An explicit `null` means
+   * the table is GLOBAL — it has no tenant column at all.
+   *
+   * The two are deliberately different values rather than "absent = global".
+   * Absence is what a descriptor written in a hurry produces, and under that
+   * encoding a forgotten field would quietly move a table OUT of every
+   * per-tenant answer — a table that stops being exported and stops being
+   * erased, reported by nothing. Being global has to be typed on purpose.
+   *
+   * A global table is not thereby excused: ADR-0094 Decision 1 says a subject
+   * is answered per tenant, so `awcms_principals` and its MFA satellites are
+   * named, given a rationale, and reported to the operator as OUTSIDE this
+   * answer — see `SubjectPlan.globalEntries`. Silence and a per-tenant read the
+   * database would refuse are both worse.
+   */
+  tenantColumn?: string | null;
   /** Included in a portability export, or held back and why. */
   exportable: boolean;
   erasure: SubjectDataErasure;
@@ -914,8 +1007,23 @@ export type SubjectDataDescriptor = {
  * means the table has not answered the subject question yet — which
  * `subject-data:coverage:check` allows only for tables that predate the rule,
  * on a ledger that may only shrink.
+ *
+ * `4.0.0` (ADR-0094 wave 2, Issue #557) — two changes to the `subjectData`
+ * family, both MAJOR by this file's own rule:
+ *
+ * - `SubjectDataErasure` gained the member `"severed_with_subject_row"`. A
+ *   widened union is MAJOR here because the consumers that matter are
+ *   exhaustive `switch`es over it, and the whole point of adding it is that
+ *   they must each decide what it means rather than fall through a `default`.
+ * - `SubjectDataDescriptor.tenantColumn` was retyped `string | null`, so an
+ *   explicit `null` states "this table is global" instead of the previous
+ *   encoding where absence meant both "use `tenant_id`" and "global at once" —
+ *   a contradiction the planner resolved by silently binding `tenant_id`.
+ *
+ * No `ModuleDescriptor` field was removed and every wave-1 descriptor stays
+ * valid unchanged.
  */
-export const MODULE_CONTRACT_VERSION = "3.2.0";
+export const MODULE_CONTRACT_VERSION = "4.0.0";
 
 export function defineModule(descriptor: ModuleDescriptor): ModuleDescriptor {
   return descriptor;

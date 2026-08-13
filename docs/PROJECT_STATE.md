@@ -111,8 +111,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | ADR                                | **0000**–**0094** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **41** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **54** (28.216 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **43** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.2.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Gerbang                            | **44** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
 
@@ -355,6 +355,46 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh tujuh) — LEDGER SUBJEK DATA MENCAPAI
+  NOL (#557, ADR-0094 gelombang 2), dan empat jawaban yang belum punya kosakata.**
+
+  **139 → 0.** #542 mendaratkan fondasi dan meninggalkan 139 tabel berutang;
+  #557 menulis prasyaratnya sendiri dengan jujur — endpoint ekspor di atas
+  ledger itu akan menjawab dengan 3 tabel dan diam untuk 139 sisanya. Kini 139
+  deskriptor + 7 penolakan beralasan menutup 146 tabel, dan kelengkapan menjadi
+  sifat yang dipaksa skema alih-alih yang diklaim sebuah PR.
+
+  **Menuliskan 139 jawaban menemukan EMPAT hal yang modelnya belum bisa
+  nyatakan, dan tak satu pun terlihat dari tiga deskriptor gelombang 1.** Ini
+  pelajaran yang layak diulang: memaksa diri menjawab SELURUH populasi, bukan
+  sampel yang meyakinkan, adalah yang memunculkan batas modelnya.
+  `severed_with_subject_row` (jawaban ~90 tabel; tanpanya eksekutor yang patuh
+  akan menulis ulang stempel `deleted_by` dan menghancurkan catatan tenant demi
+  memutus tautan yang sudah putus), `references: "profile"` (tanpanya
+  `awcms_profiles` — tabel PERTAMA yang issue-nya sebut — benar-benar tak
+  terjangkau, karena tautannya berjalan ke arah sebaliknya),
+  `unreachableBySubject` (untuk tabel yang pseudonim SENGAJA, di mana
+  `NO_SUBJECT_DATA` dusta dan kolom subjek fiksi), dan `tenantColumn: null`
+  eksplisit.
+
+  **Gerbang yang menemukan tujuh cacat pada deskriptor PR-nya sendiri.**
+  `subject-data:registry:check` bertanya apakah jawabannya BENAR, bukan apakah
+  ia ADA — dan seluruh tujuh temuannya adalah satu string yang tampak masuk
+  akal yang gagal diam-diam saat runtime: lima kolom redaksi salah nama, dua
+  `references` yang tak cocok dengan foreign key nyata. Bandingkan dengan
+  pelajaran gerbang yang sudah tercatat: gerbang CAKUPAN bisa hijau sambil
+  semua jawabannya salah, dan ini pasangannya.
+
+  **Ketegangan antar-gerbang diselesaikan SEMPIT.** `awcms_access_assignments`
+  dipensiunkan ADR-0079 dan `access:grant-readers:check` melarang berkas mana
+  pun menyebutnya; dengan ledger di nol ia tetap wajib menjawab. Menambahkan
+  `module.ts` ke `GRANT_READERS` akan membuat gerbang berhenti mengawasi
+  seluruh berkas — persis proteksi yang dimaksud. Izinnya karena itu dikunci
+  pada BENTUK penyebutan (hanya sebagai nilai `tableName:`), dan diuji dengan
+  menanam pembacaan SQL yang seharusnya tetap merah. Pola yang layak diulang
+  saat dua gerbang berselisih: persempit izinnya sampai ia tidak bisa menutupi
+  cacat yang gerbang itu cari, jangan lebarkan cakupannya.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh enam) — EDITOR SETTINGS MODUL (#546),
   dan tautan yang selama ini menuju 404.**
