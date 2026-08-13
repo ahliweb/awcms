@@ -1,0 +1,502 @@
+---
+/**
+ * Subject requests — ADR-0094 gelombang 2, Issue #557.
+ *
+ * The page a data-protection officer answers a legal request from. Until it
+ * existed the surface was three `POST`s nobody would remember under the
+ * fourteen-day clock a subject-access request runs on.
+ *
+ * ## Three permissions, three fieldsets, and the split is not cosmetic
+ *
+ * The page gates its READ on `subject_request.read`, which discloses nothing.
+ * Export, request-erasure, and decide each check their OWN key and each render
+ * only when held. A page that derived all three from the read gate would offer
+ * an operator two controls that 403 on submit — the latent-authz trap already
+ * recorded against `/admin/abac-policies` and `/admin/machine-credentials`.
+ *
+ * The maker/checker split is the sharpest case: `subject_erasure.create` and
+ * `.approve` are a `critical` SoD conflict, so in a correctly configured tenant
+ * NOBODY sees both the request form and the decide buttons. The page is built
+ * for that to be the normal state rather than treating it as an edge case.
+ *
+ * ## The export result is shown, never stored
+ *
+ * The report is rendered into the page and nowhere else — no download, no
+ * server-side file. A subject-access export is the single most concentrated
+ * disclosure this system can produce, and giving it a URL would give it a life
+ * beyond the session that was authorised and audited.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import {
+  listSubjectRequests,
+  type SubjectRequestRow
+} from "../../modules/data-lifecycle/application/subject-request-service";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "data_lifecycle",
+    activityCode: "subject_request",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    requests: await listSubjectRequests(tx, ssr.tenantId, { limit: 50 }),
+    canExport: await can({
+      moduleKey: "data_lifecycle",
+      activityCode: "subject_request",
+      action: "export"
+    }),
+    canRequestErasure: await can({
+      moduleKey: "data_lifecycle",
+      activityCode: "subject_erasure",
+      action: "create"
+    }),
+    canDecide: await can({
+      moduleKey: "data_lifecycle",
+      activityCode: "subject_erasure",
+      action: "approve"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/subject-requests.astro: failed to list subject requests",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const requests: SubjectRequestRow[] =
+  screen.state === "allowed" ? screen.data.requests : [];
+const canExport = screen.state === "allowed" && screen.data.canExport;
+const canRequestErasure =
+  screen.state === "allowed" && screen.data.canRequestErasure;
+const canDecide = screen.state === "allowed" && screen.data.canDecide;
+
+const pending = requests.filter(
+  (request) => request.status === "pending_approval"
+);
+---
+
+<AdminLayout title="Subject requests">
+  <header class="page-header fade-in-up">
+    <h1 id="subject-requests-heading">Subject requests</h1>
+    <p class="page-description">
+      Exports and erasures answered for a named person. A subject is answered
+      <strong>per tenant</strong>: this page covers what THIS tenant holds, and
+      a person who belongs to several tenants has a separate request in each.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="subject-requests-denied">
+        You do not have permission to view subject requests.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="subject-requests-load-error">
+        Could not load subject requests. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        <p
+          id="subject-requests-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+        <p
+          id="subject-requests-notice"
+          class="state-notice"
+          role="status"
+          hidden
+        />
+
+        {canExport && (
+          <section class="fade-in-up" aria-labelledby="subject-export-heading">
+            <h2 id="subject-export-heading">Export a subject's data</h2>
+
+            <form id="subject-export-form" class="admin-form">
+              <p class="page-description">
+                This is a <strong>disclosure</strong>, not a read: it is audited
+                as one, and the reason you give is part of that record. The
+                result appears below and is never stored or downloadable.
+              </p>
+
+              <label for="subject-export-user">Tenant user id</label>
+              <input
+                id="subject-export-user"
+                name="tenantUserId"
+                type="text"
+                required
+                autocomplete="off"
+              />
+
+              <label for="subject-export-reason">Reason for disclosure</label>
+              <input
+                id="subject-export-reason"
+                name="reason"
+                type="text"
+                required
+                minlength="8"
+                placeholder="Subject access request received 2026-08-13"
+              />
+
+              <button id="subject-export-submit" type="submit">
+                Export subject data
+              </button>
+            </form>
+
+            <div id="subject-export-result" hidden>
+              <h3>Export result</h3>
+              <p id="subject-export-summary" class="page-description" />
+              <div id="subject-export-tables" />
+              <h4>Not covered by this answer</h4>
+              <p class="page-description">
+                Tables this report deliberately does not reach, and why. A
+                report that omitted them silently would look complete.
+              </p>
+              <ul id="subject-export-unanswered" />
+            </div>
+          </section>
+        )}
+
+        {canRequestErasure && (
+          <section class="fade-in-up" aria-labelledby="subject-erase-heading">
+            <h2 id="subject-erase-heading">Request an erasure</h2>
+
+            <form id="subject-erase-form" class="admin-form">
+              <p class="page-description">
+                Requesting does not erase anything. A <strong>different</strong>{" "}
+                person holding the approval permission must decide — the two
+                permissions are a segregation-of-duties conflict, so you will
+                not normally be able to do both.
+              </p>
+
+              <label for="subject-erase-user">Tenant user id</label>
+              <input
+                id="subject-erase-user"
+                name="tenantUserId"
+                type="text"
+                required
+                autocomplete="off"
+              />
+
+              <label for="subject-erase-reason">Ground for erasure</label>
+              <input
+                id="subject-erase-reason"
+                name="reason"
+                type="text"
+                required
+                minlength="8"
+                placeholder="Erasure request received 2026-08-13, no retention obligation"
+              />
+
+              <button id="subject-erase-submit" type="submit">
+                Request erasure
+              </button>
+            </form>
+          </section>
+        )}
+
+        <section class="fade-in-up" aria-labelledby="subject-pending-heading">
+          <h2 id="subject-pending-heading">Awaiting a decision</h2>
+
+          {pending.length === 0 ? (
+            <div class="empty-state">
+              <p id="subject-requests-pending-empty">
+                Nothing is waiting for a decision.
+              </p>
+            </div>
+          ) : (
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Subject</th>
+                  <th scope="col">Requested by</th>
+                  <th scope="col">Requested at</th>
+                  <th scope="col">Ground</th>
+                  {canDecide && <th scope="col">Decision</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((request) => (
+                  <tr data-request-id={request.id}>
+                    <td>{request.subjectTenantUserId}</td>
+                    <td>{request.requestedBy}</td>
+                    <td>{request.requestedAt}</td>
+                    <td>{request.reason}</td>
+                    {canDecide && (
+                      <td>
+                        <button
+                          type="button"
+                          class="js-decide-request"
+                          data-request-id={request.id}
+                          data-decision="approve"
+                        >
+                          Approve and erase
+                        </button>
+                        <button
+                          type="button"
+                          class="js-decide-request"
+                          data-request-id={request.id}
+                          data-decision="reject"
+                        >
+                          Reject
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {!canDecide && pending.length > 0 && (
+            <p class="page-description" id="subject-requests-cannot-decide">
+              You can see what is pending but not decide it. That separation is
+              deliberate.
+            </p>
+          )}
+        </section>
+
+        <section class="fade-in-up" aria-labelledby="subject-log-heading">
+          <h2 id="subject-log-heading">Request log</h2>
+
+          {requests.length === 0 ? (
+            <div class="empty-state">
+              <p id="subject-requests-empty">
+                No subject request has been made in this tenant.
+              </p>
+            </div>
+          ) : (
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Type</th>
+                  <th scope="col">Subject</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Requested by</th>
+                  <th scope="col">Decided by</th>
+                  <th scope="col">Rows</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((request) => (
+                  <tr>
+                    <td>{request.requestType}</td>
+                    <td>{request.subjectTenantUserId}</td>
+                    <td>{request.status}</td>
+                    <td>{request.requestedBy}</td>
+                    <td>{request.decidedBy ?? "—"}</td>
+                    <td>{request.rowsAffected ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    lockElement,
+    messageBox,
+    onAction,
+    onSubmit,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+
+  const actionError = messageBox("subject-requests-action-error");
+  const noticeBox = messageBox("subject-requests-notice");
+
+  /** Every mutation here requires the header, and a fresh value per submit is what makes a deliberate second request run instead of replaying the first. */
+  function idempotency(): Record<string, string> {
+    return { "Idempotency-Key": crypto.randomUUID() };
+  }
+
+  type ExportTable = {
+    tableName: string;
+    ownerModuleKey: string;
+    redactedColumns: string[];
+    rows: Record<string, unknown>[];
+  };
+  type Unanswered = { tableName: string; reason: string; rationale: string };
+
+  function renderExport(payload: {
+    tables: ExportTable[];
+    unanswered: Unanswered[];
+  }): void {
+    const result = document.getElementById("subject-export-result");
+    const summary = document.getElementById("subject-export-summary");
+    const tables = document.getElementById("subject-export-tables");
+    const unanswered = document.getElementById("subject-export-unanswered");
+    if (!result || !summary || !tables || !unanswered) return;
+
+    const rowCount = payload.tables.reduce(
+      (total, table) => total + table.rows.length,
+      0
+    );
+    summary.textContent = `${rowCount} row(s) across ${payload.tables.length} table(s). ${payload.unanswered.length} table(s) are not covered — see below.`;
+
+    // `textContent` throughout: the report is other people's data, and a
+    // subject-access export is the last place to build HTML from stored values.
+    tables.replaceChildren(
+      ...payload.tables.map((table) => {
+        const section = document.createElement("section");
+        const heading = document.createElement("h5");
+        heading.textContent = `${table.tableName} (${table.rows.length} row(s))`;
+        const detail = document.createElement("pre");
+        detail.textContent = JSON.stringify(table.rows, null, 2);
+        section.append(heading);
+
+        if (table.redactedColumns.length > 0) {
+          const note = document.createElement("p");
+          note.className = "page-description";
+          note.textContent = `Withheld: ${table.redactedColumns.join(", ")}`;
+          section.append(note);
+        }
+
+        section.append(detail);
+        return section;
+      })
+    );
+
+    unanswered.replaceChildren(
+      ...payload.unanswered.map((entry) => {
+        const item = document.createElement("li");
+        item.textContent = `${entry.tableName} (${entry.reason}) — ${entry.rationale}`;
+        return item;
+      })
+    );
+
+    result.hidden = false;
+  }
+
+  onSubmit("subject-export-form", async ({ data, submit }) => {
+    if (!submit) return;
+    actionError.clear();
+    noticeBox.clear();
+    const unlock = lockElement(submit, "Exporting…");
+    const result = await sendJsonForData(
+      "POST",
+      "/api/v1/data-lifecycle/subject-requests/export",
+      {
+        tenantUserId: String(data.get("tenantUserId") ?? "").trim(),
+        reason: String(data.get("reason") ?? "").trim()
+      },
+      idempotency()
+    );
+
+    if (result.ok) {
+      renderExport(
+        result.data as { tables: ExportTable[]; unanswered: Unanswered[] }
+      );
+      noticeBox.show("Disclosure recorded and audited.");
+      unlock();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "RESOURCE_NOT_FOUND"
+        ? "No such tenant user in this tenant."
+        : "Could not export that subject's data. Please try again."
+    );
+    unlock();
+  });
+
+  onSubmit("subject-erase-form", async ({ data, submit }) => {
+    if (!submit) return;
+    actionError.clear();
+    noticeBox.clear();
+    const unlock = lockElement(submit, "Recording…");
+    const result = await sendJson(
+      "POST",
+      "/api/v1/data-lifecycle/subject-requests/erase",
+      {
+        tenantUserId: String(data.get("tenantUserId") ?? "").trim(),
+        reason: String(data.get("reason") ?? "").trim()
+      },
+      idempotency()
+    );
+
+    if (result.ok) {
+      // Reloaded so the new row appears in "Awaiting a decision" — the whole
+      // point of the maker's action is that somebody else now sees it.
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "RESOURCE_NOT_FOUND"
+        ? "No such tenant user in this tenant."
+        : "Could not record that erasure request. Please try again."
+    );
+    unlock();
+  });
+
+  onAction(".js-decide-request", async (button) => {
+    const requestId = button.dataset.requestId;
+    const decision = button.dataset.decision;
+    if (!requestId || !decision) return;
+
+    const reason = window.prompt(
+      decision === "approve"
+        ? "State the ground for approving this erasure (at least 8 characters). This cannot be undone."
+        : "State the ground for rejecting this erasure (at least 8 characters)."
+    );
+    if (reason === null) return;
+
+    actionError.clear();
+    noticeBox.clear();
+    const unlock = lockElement(
+      button,
+      decision === "approve" ? "Erasing…" : "Rejecting…"
+    );
+    const result = await sendJson(
+      "POST",
+      `/api/v1/data-lifecycle/subject-requests/${requestId}/decide`,
+      { decision, reason: reason.trim() },
+      idempotency()
+    );
+
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+
+    actionError.show(
+      result.errorCode === "SOD_MAKER_IS_CHECKER"
+        ? "An erasure must be decided by somebody other than the person who requested it."
+        : result.errorCode === "REQUEST_NOT_PENDING"
+          ? "That request has already been decided."
+          : result.errorCode === "VALIDATION_ERROR"
+            ? "The reason must be at least 8 characters."
+            : "Could not record that decision. Please try again."
+    );
+    unlock();
+  });
+</script>

@@ -457,6 +457,26 @@
       "source": "default"
     },
     {
+      "path": "src/pages/api/v1/data-lifecycle/subject-requests/[id]/decide.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/data-lifecycle/subject-requests/erase.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/data-lifecycle/subject-requests/export.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
+      "path": "src/pages/api/v1/data-lifecycle/subject-requests/index.ts",
+      "workClass": "interactive",
+      "source": "factory"
+    },
+    {
       "path": "src/pages/api/v1/domain-events/consumers/[name]/pause.ts",
       "workClass": "interactive",
       "source": "default"

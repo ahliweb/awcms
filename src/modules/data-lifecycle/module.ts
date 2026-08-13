@@ -1,5 +1,6 @@
 import { defineModule } from "../_shared/module-contract";
 import { DATA_LIFECYCLE_PERMISSIONS } from "./domain/data-lifecycle-permissions";
+import { SUBJECT_ERASURE_MAKER_CHECKER_RULE } from "./domain/subject-request-permissions";
 
 /**
  * `data_lifecycle` (ported from awcms-micro Issue #745, ADR-0037). `type:
@@ -47,6 +48,16 @@ export const dataLifecycleModule = defineModule({
       path: "/admin/data-lifecycle",
       order: 72,
       requiredPermission: "data_lifecycle.registry.read"
+    },
+    // Its own entry rather than a panel on `/admin/data-lifecycle`, and gated on
+    // its own key: retention policy and answering a named person's legal request
+    // are different jobs done by different people, and an operator who tunes
+    // purge windows has no business holding the export authority.
+    {
+      labelKey: "admin.layout.nav_subject_requests",
+      path: "/admin/subject-requests",
+      order: 73,
+      requiredPermission: "data_lifecycle.subject_request.read"
     }
   ],
   permissions: [
@@ -80,6 +91,32 @@ export const dataLifecycleModule = defineModule({
       activityCode: "runs",
       action: "read",
       description: "Read lifecycle run history (aggregated counts only)"
+    },
+    // ADR-0094 gelombang 2 (#557). Four keys, and every split is load-bearing —
+    // see `domain/subject-request-permissions.ts` for why read, export, and the
+    // two halves of erasure are not fewer.
+    {
+      activityCode: "subject_request",
+      action: "read",
+      description: "Read the subject-request log and the pending-erasure inbox"
+    },
+    {
+      activityCode: "subject_request",
+      action: "export",
+      description:
+        "Export everything this tenant holds about a data subject (a DISCLOSURE)"
+    },
+    {
+      activityCode: "subject_erasure",
+      action: "create",
+      description:
+        "Request erasure of a data subject (maker half — never executes it)"
+    },
+    {
+      activityCode: "subject_erasure",
+      action: "approve",
+      description:
+        "Approve and execute a pending erasure request (checker half)"
     }
   ],
   jobs: [
@@ -145,6 +182,28 @@ export const dataLifecycleModule = defineModule({
         "Aggregated counts per lifecycle run — eligible, archived, purged — and who triggered it. The counts are about tables, not people."
     },
     {
+      key: "data_lifecycle.subject_requests",
+      tableName: "awcms_subject_requests",
+      ownerModuleKey: "data_lifecycle",
+      // Three ways to appear, and the reason all three are named is the point
+      // of the table: it records what was done ABOUT a person, BY a person,
+      // and decided BY somebody else again.
+      subjectColumns: [
+        { column: "subject_tenant_user_id", references: "tenant_user" },
+        { column: "requested_by", references: "tenant_user" },
+        { column: "decided_by", references: "tenant_user" }
+      ],
+      exportable: true,
+      // The one answer that would be self-defeating any other way: this table
+      // is the evidence that a subject request was made, by whom, approved by
+      // whom, and what it wrote. An erasure that took its own record with it
+      // would destroy the proof that the erasure happened — ADR-0094 Decision
+      // 2's argument, applied to the feature itself.
+      erasure: "retain_under_obligation",
+      rationale:
+        "Every export and erasure this tenant performed, including the ones about this person and the ones they requested or decided. Exported because a subject is entitled to know that their data was disclosed and on what ground; retained under obligation because it is the accountability record for an irreversible act, and the row proving an erasure occurred must outlive the erasure."
+    },
+    {
       key: "data_lifecycle.cursors",
       tableName: "awcms_data_lifecycle_cursors",
       ownerModuleKey: "data_lifecycle",
@@ -157,6 +216,57 @@ export const dataLifecycleModule = defineModule({
     }
   ],
   dataLifecycle: [
+    {
+      key: "data_lifecycle.subject_requests",
+      tableName: "awcms_subject_requests",
+      ownerModuleKey: "data_lifecycle",
+      scope: "tenant",
+      cursorColumn: "created_at",
+      // Not `operational_queue` like this module's other tables. A subject
+      // request is the accountability record for a disclosure or an
+      // irreversible erasure, which is the same evidentiary role
+      // `awcms_audit_events` plays — and its floor is set accordingly.
+      retentionClass: "audit_security",
+      // The floor is high ON PURPOSE. A supervisory authority asking "show me
+      // every erasure you performed" two years later must not be told the
+      // record aged out; and the shortest retention an operator can configure
+      // is the one an operator under pressure will configure.
+      retentionMinDays: 730,
+      retentionMaxDays: 3650,
+      defaultRetentionDays: 2555,
+      partition: {
+        eligible: false,
+        rationale:
+          "One row per subject request — a volume measured in tens per tenant per year, orders of magnitude below the audit/analytics tables partitioning exists for."
+      },
+      archive: {
+        archivable: true,
+        format: "jsonl",
+        port: "local_offline",
+        rationale:
+          "Unlike this module's run history, these rows ARE a business record: they evidence that a data-protection obligation was discharged, by whom, and on what stated ground. Archiving them before purge is exactly the ISO 27001 evidence case the archive port exists for."
+      },
+      deletion: {
+        mode: "hard_delete",
+        rationale:
+          "There is nothing to anonymize: the row's identifying columns are tenant-user FKs whose targets are themselves anonymised by any erasure that touches them, so the row is already pseudonymous long before its retention expires. Past that horizon the record has served its accountability purpose and keeping it is the privacy harm."
+      },
+      legalHold: {
+        applicable: true,
+        precedence: "overrides_retention"
+      },
+      requiredIndexes: [
+        {
+          columns: ["tenant_id", "created_at"],
+          purpose:
+            "awcms_subject_requests_tenant_created_idx (sql/125) — the engine's own cursor path (WHERE tenant_id = ? AND created_at < ?), added by this table's migration for it rather than reused from a lookup index that happens to fit."
+        }
+      ],
+      batchLimit: 1000,
+      backupRestoreNotes:
+        "Restoring this table without the tables an erasure wrote to would produce a ledger claiming erasures that the restored data contradicts. Restore it together with the identity/profile tables, or accept that its rows describe a state the database is no longer in.",
+      executionMode: "generic"
+    },
     {
       key: "data_lifecycle.data_lifecycle_runs",
       tableName: "awcms_data_lifecycle_runs",
@@ -226,6 +336,30 @@ export const dataLifecycleModule = defineModule({
         requiresApprovalPermission:
           "identity_access.business_scope_exceptions.approve",
         maxDurationDays: 14
+      }
+    },
+    {
+      ruleKey: SUBJECT_ERASURE_MAKER_CHECKER_RULE,
+      ownerModuleKey: "data_lifecycle",
+      description:
+        "ADR-0094 Decision 3 — a subject who can REQUEST an erasure must not also be able to APPROVE one. Erasure is irreversible and the request names a person by id, so one operator holding both halves can erase anybody in the tenant with no second pair of eyes. Global-within-tenant: holding both anywhere in the tenant is the conflict, because a request carries no scope to narrow.",
+      conflictingPermissionKeys: [
+        "data_lifecycle.subject_erasure.create",
+        "data_lifecycle.subject_erasure.approve"
+      ],
+      scopeApplicability: "global_within_tenant",
+      severity: "critical",
+      exceptionPolicy: {
+        // NOT `allowed: false`, even though that reads stricter. A rule that
+        // forbids exceptions has no pending row for a checker to see, so the
+        // only way past it in a real incident is an out-of-band grant change
+        // nobody reviews. An exception is time-boxed, attributable, and lands
+        // in the #545 inbox — seven days rather than the legal hold's fourteen,
+        // because this one hands somebody the ability to erase unilaterally.
+        allowed: true,
+        requiresApprovalPermission:
+          "identity_access.business_scope_exceptions.approve",
+        maxDurationDays: 7
       }
     }
   ]

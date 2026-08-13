@@ -641,8 +641,15 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
 const RLS_FREE_TABLES = new Set(Object.keys(GLOBAL_TABLE_FORBIDDEN_PRIVILEGES));
 
 /**
- * Tenant-scoped tables that are deliberately READ-ONLY at runtime, with the
- * exact privileges `awcms_app` may still hold.
+ * Tenant-scoped tables whose runtime privileges are deliberately NARROWER than
+ * the default, with the exact set `awcms_app` may still hold.
+ *
+ * Two kinds live here, and the constant's name describes only the first. Most
+ * entries are RETIRED tables narrowed to `SELECT`. `awcms_subject_requests`
+ * (ADR-0094) is the other kind: a live, actively-written ledger that keeps
+ * every verb except `DELETE`. The mechanism is identical — an exact set,
+ * enforced both ways — so it earns its place here rather than a second registry
+ * that would have to be kept in step with this one.
  *
  * The default for a tenant-scoped table is all four verbs, and that default is
  * load-bearing: a FORCE-RLS table the runtime cannot write is a `permission
@@ -672,7 +679,18 @@ export const RETIRED_TENANT_TABLE_PRIVILEGES: Record<string, string[]> = {
   // path writes there again is the day one human has two second factors and only
   // one of them is the one login checks.
   awcms_identity_mfa_factors: ["SELECT"],
-  awcms_identity_mfa_recovery_codes: ["SELECT"]
+  awcms_identity_mfa_recovery_codes: ["SELECT"],
+  // ADR-0094 / `sql/125`. NOT retired — actively written on every subject
+  // request. Narrowed by removing exactly one verb: the row recording that an
+  // erasure was requested, approved, and executed must not be removable by the
+  // role that executes erasures, or the accountability record is only as
+  // durable as the convenience of the person it would incriminate.
+  //
+  // The `REVOKE` is what achieves it. `sql/019` grants all four verbs over the
+  // whole schema, so the migration's `GRANT SELECT, INSERT, UPDATE` withholds
+  // nothing on its own — a distinction found by querying a real database, not
+  // by reading the migration.
+  awcms_subject_requests: ["SELECT", "INSERT", "UPDATE"]
 };
 
 type RlsRow = {

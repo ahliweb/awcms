@@ -187,6 +187,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_comments": "Moderation queue",
   "admin.layout.nav_visitor_analytics": "Visitor analytics",
   "admin.layout.nav_data_lifecycle": "Data lifecycle",
+  "admin.layout.nav_subject_requests": "Subject requests",
   "admin.layout.nav_idn_regions": "Region datasets",
   "admin.layout.nav_blog": "Blog posts",
   "admin.layout.nav_blog_pages": "Blog pages",

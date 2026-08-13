@@ -107,10 +107,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **124** (`sql/001`–`124`)                                                               | `ls sql/`                                                                               |
+| Migrasi                            | **126** (`sql/001`–`126`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0094** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **41** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **54** (28.216 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **42** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **55** (28.718 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **44** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,92 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh sembilan) — MENJALANKANNYA menemukan
+  TIGA cacat yang 41 gerbang tidak lihat.**
+
+  Seluruh test permukaan #557 murni: rencananya murni, gerbang registry-nya
+  murni, kontrak layarnya teks. Tak satu pun mengeksekusi satu statement, dan
+  eksekutornya tidak lain adalah statement. `bun run check` hijau tanpa
+  menyentuhnya. Satu test integrasi terhadap PostgreSQL nyata menemukan tiga hal
+  — dan **dua di antaranya adalah cacat produksi**, bukan cacat test.
+
+  1. **`hard_delete` pada tabel yang privilege-nya DICABUT.** Dua deskriptor MFA
+     per-tenant menjanjikan penghapusan; ADR-0087/`sql/114` sengaja
+     memensiunkannya jadi read-only dan mencabut INSERT/UPDATE/DELETE dari
+     `awcms_app`. Penghapusan akan gagal `42501` di tengah transaksi, SETELAH
+     permintaannya diklaim. Yang menggoda — memberikan privilege-nya kembali —
+     justru akan membatalkan kontrol yang ADR itu pasang; jadi **deskriptornya
+     yang mengalah**, ke `severed_with_subject_row`, yang kebetulan juga jawaban
+     paling jujur untuk tabel yang runtime-nya tak boleh menulis.
+
+  2. **Komentar migrasi yang berbohong tentang kontrolnya sendiri.** `sql/125`
+     menulis "tanpa DELETE, dan itu keputusan" lalu hanya
+     `GRANT SELECT, INSERT, UPDATE`. Tetapi `sql/019` memberi `awcms_app`
+     keempat privilege atas SELURUH schema (`ON ALL TABLES` + `ALTER DEFAULT
+PRIVILEGES`), jadi GRANT yang "tidak menyebut" DELETE **tidak menahan apa
+     pun** — ia memberikan lagi apa yang sudah ada. Ditutup dengan `REVOKE`
+     eksplisit. Pelajaran yang bisa dipindah: di schema ber-blanket-grant, satu-
+     satunya cara menahan privilege adalah MENCABUTNYA, dan GRANT yang selektif
+     terbaca seperti kontrol sambil tidak menjadi kontrol.
+
+  3. **Jebakan binding Bun.SQL untuk jsonb** (cacat TEST, bukan produksi):
+     `${JSON.stringify(arr)}::jsonb` menyimpan jsonb **string**, bukan array —
+     `jsonb_typeof` menjawab `string` dan setiap uji containment jadi false.
+     `${arr}::jsonb` (yang dipakai produksi) menyimpan array. Fixture pertama
+     memakai bentuk pertama dan membuat eksekutor yang BENAR tampak rusak.
+
+  Temuan 1 dan 2 kini digerbangi: `subject-data:registry:check` memutar ulang
+  setiap `GRANT`/`REVOKE` atas `awcms_app` dari `sql/`, mulai dari blanket grant,
+  dan menolak mode penghapusan yang menuntut privilege yang dicabut. Pesannya
+  memperingatkan agar tidak "memperbaikinya" dengan memberi privilege kembali.
+
+  **Dan memperbaiki temuan 2 memerahkan gerbang KETIGA, yang juga benar.**
+  `checkRuntimeRoleGrants` menuntut tiap tabel ber-privilege lebih sempit dari
+  default DIDEKLARASIKAN, dua arah — "narrowed on purpose" harus bisa dibedakan
+  dari "rusak", dan hanya manusia yang bisa memberi bedanya. Jadi
+  `awcms_subject_requests` masuk `RETIRED_TENANT_TABLE_PRIVILEGES` sebagai
+  entri jenis KEDUA: bukan tabel pensiun ber-`SELECT` saja, melainkan ledger
+  hidup yang menahan tepat satu verb. Dokumentasi konstantanya dilebarkan
+  supaya namanya berhenti menggambarkan hanya separuh isinya, alih-alih
+  menyelundupkan entri yang tidak cocok dengan deskripsinya sendiri.
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh delapan) — PERMUKAAN HAK SUBJEK DATA
+  (#557 SELESAI), dan empat lapis yang masing-masing menangkap kegagalan
+  berbeda.**
+
+  Menutup #557 seluruhnya: ekspor, penghapusan maker/checker, empat izin +
+  migrasi seed, dan layar `/admin/subject-requests`.
+
+  **Empat lapis untuk satu aturan, dan itu bukan berlebihan.** "Yang menyetujui
+  bukan yang meminta" dijaga oleh: dua izin terpisah, aturan SoD `critical`,
+  CHECK constraint `decided_by <> requested_by`, dan klaim bersyarat satu
+  UPDATE. Tiap lapis menangkap kegagalan yang tidak ditangkap lapis lain — izin
+  menangkap orang yang salah, SoD menangkap grant yang salah, constraint
+  menangkap balapan, dan klaim bersyarat menangkap DUA approval bersamaan yang
+  jika tidak akan menjalankan penghapusan tak-terbalikkan dua kali. Pola yang
+  layak diulang untuk tiap aksi tak-terbalikkan berikutnya.
+
+  **`exceptionPolicy` aturan SoD-nya `allowed: true`, dan itu keputusan yang
+  berlawanan intuisi.** `false` terbaca lebih ketat tetapi lebih buruk: aturan
+  yang melarang pengecualian tidak punya baris tertunda untuk dilihat checker,
+  jadi satu-satunya jalan keluar saat insiden nyata adalah perubahan grant di
+  luar sistem yang tak seorang pun review. Tujuh hari, bukan empat belas seperti
+  legal hold, karena yang ini menyerahkan kemampuan menghapus secara sepihak.
+
+  **Ketegangan gerbang KEDUA, diselesaikan dengan menuruti gerbangnya.**
+  Empat rute pertama disalin dari pola `withTenant` `legal-holds.ts` — yang ada
+  di allowlist `NOT_YET_MIGRATED`. `api:tenant-route:check` menolaknya dan
+  pesannya menulis sendiri "Jangan tambahkan berkas ini ke NOT_YET_MIGRATED".
+  Keempatnya ditulis ulang ke `defineTenantRoute`. Pelajarannya: menyalin berkas
+  yang ADA di repo bukan bukti bahwa polanya masih benar — berkas itu bisa jadi
+  justru utang yang sedang dibayar.
+
+  **Eksekutornya menulis ~7 tabel, bukan ~100**, karena `erasureTargets`
+  menjatuhkan tiap `severed_with_subject_row`. Ini pembayaran langsung dari
+  kosakata yang putaran kedua puluh tujuh temukan: tanpa anggota union itu,
+  eksekutor yang patuh akan menulis ulang sembilan puluh kolom stempel dan
+  menghancurkan catatan tenant demi memutus tautan yang sudah putus.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh tujuh) — LEDGER SUBJEK DATA MENCAPAI
   NOL (#557, ADR-0094 gelombang 2), dan empat jawaban yang belum punya kosakata.**

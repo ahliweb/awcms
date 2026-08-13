@@ -14,6 +14,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   findSubjectRegistryProblems,
+  parseAppRolePrivileges,
   parseForeignKeyTargets,
   parseTableColumns,
   readMigrations
@@ -28,6 +29,15 @@ const COLUMNS = new Map<string, Set<string>>([
   ],
   ["awcms_global_things", new Set(["id", "principal_id"])],
   ["awcms_identities", new Set(["id", "tenant_id", "password_hash"])]
+]);
+
+const ALL_PRIVILEGES = new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
+
+/** Every planted table fully writable, so the tests below isolate the rule they name. */
+const PRIVILEGES = new Map<string, Set<string>>([
+  ["awcms_things", ALL_PRIVILEGES],
+  ["awcms_global_things", ALL_PRIVILEGES],
+  ["awcms_identities", ALL_PRIVILEGES]
 ]);
 
 const FOREIGN_KEYS = new Map<string, string>([
@@ -57,7 +67,8 @@ function run(
       { key: moduleKey, subjectData: [SEVERANCE_ANCHOR, ...descriptors] }
     ],
     columns: COLUMNS,
-    foreignKeys: FOREIGN_KEYS
+    foreignKeys: FOREIGN_KEYS,
+    appRolePrivileges: PRIVILEGES
   }).map((problem) => problem.message);
 }
 
@@ -136,7 +147,8 @@ describe("the defects that fail SILENTLY at runtime", () => {
         }
       ],
       columns,
-      foreignKeys: FOREIGN_KEYS
+      foreignKeys: FOREIGN_KEYS,
+      appRolePrivileges: PRIVILEGES
     });
 
     expect(problems).toEqual([]);
@@ -230,7 +242,8 @@ describe("`principal` cannot become a back door to a cross-tenant read", () => {
         }
       ],
       columns,
-      foreignKeys: FOREIGN_KEYS
+      foreignKeys: FOREIGN_KEYS,
+      appRolePrivileges: PRIVILEGES
     });
 
     expect(problems.map((problem) => problem.message).join(" ")).toContain(
@@ -275,6 +288,122 @@ describe("`unreachableBySubject` is enforced in BOTH directions", () => {
   });
 });
 
+describe("`status_transition_then_purge` names a column the executor writes", () => {
+  test("refused when the table has no `revoked_at`", () => {
+    // The coupling is invisible from both sides: the descriptor says "flip a
+    // status" without saying which, and the executor writes one hard-coded
+    // column. Without this the mismatch surfaces mid-erasure, after the
+    // request has already been claimed.
+    const problems = run([
+      { ...VALID, erasure: "status_transition_then_purge" }
+    ]);
+
+    expect(problems.join(" ")).toContain("revoked_at");
+  });
+
+  test("accepted when it does", () => {
+    const columns = new Map(COLUMNS);
+    columns.set(
+      "awcms_things",
+      new Set([...COLUMNS.get("awcms_things")!, "revoked_at"])
+    );
+
+    const problems = findSubjectRegistryProblems({
+      modules: [
+        {
+          key: "m",
+          subjectData: [
+            SEVERANCE_ANCHOR,
+            { ...VALID, erasure: "status_transition_then_purge" }
+          ]
+        }
+      ],
+      columns,
+      foreignKeys: FOREIGN_KEYS,
+      appRolePrivileges: PRIVILEGES
+    });
+
+    expect(problems).toEqual([]);
+  });
+});
+
+describe("an erasure mode must be within what the RUNTIME ROLE may do", () => {
+  // Found by RUNNING the erasure, not by reading it: two descriptors declared
+  // `hard_delete` on tables ADR-0087 (`sql/114`) had deliberately retired to
+  // read-only. Every pure gate was green; the failure would have been a 42501
+  // in production, mid-erasure, after the request was claimed.
+  const READ_ONLY = new Map<string, Set<string>>([
+    ["awcms_things", new Set(["SELECT"])],
+    ["awcms_identities", ALL_PRIVILEGES]
+  ]);
+
+  function runWith(
+    descriptor: SubjectDataDescriptor,
+    privileges: Map<string, Set<string>>
+  ): string[] {
+    return findSubjectRegistryProblems({
+      modules: [{ key: "m", subjectData: [SEVERANCE_ANCHOR, descriptor] }],
+      columns: COLUMNS,
+      foreignKeys: FOREIGN_KEYS,
+      appRolePrivileges: privileges
+    }).map((problem) => problem.message);
+  }
+
+  test("`hard_delete` on a table with DELETE revoked is refused", () => {
+    const problems = runWith({ ...VALID, erasure: "hard_delete" }, READ_ONLY);
+
+    expect(problems.join(" ")).toContain("DELETE");
+    // …and it warns against the tempting fix, which would undo an ADR's control.
+    expect(problems.join(" ")).toContain("membatalkan");
+  });
+
+  test("`anonymize` on a read-only table is refused too", () => {
+    const problems = runWith({ ...VALID, erasure: "anonymize" }, READ_ONLY);
+
+    expect(problems.join(" ")).toContain("UPDATE");
+  });
+
+  test("the two answers that write NOTHING are allowed on a read-only table", () => {
+    // This is the correction those two MFA descriptors took: severance is both
+    // truthful and executable where a write is not.
+    expect(
+      runWith({ ...VALID, erasure: "severed_with_subject_row" }, READ_ONLY)
+    ).toEqual([]);
+    expect(
+      runWith(
+        {
+          ...VALID,
+          erasure: "retain_under_obligation",
+          exportable: true
+        },
+        READ_ONLY
+      )
+    ).toEqual([]);
+  });
+
+  test("the GRANT/REVOKE replay reads the REAL migrations correctly", () => {
+    // Order matters: `sql/114` grants on the principal tables and revokes on
+    // the retired tenant-scoped ones. A parser that ignored order, or that
+    // matched the wrong role, would answer the opposite.
+    const privileges = parseAppRolePrivileges(readMigrations());
+
+    expect(privileges.get("awcms_identity_mfa_factors")?.has("DELETE")).toBe(
+      false
+    );
+    expect(privileges.get("awcms_identity_mfa_factors")?.has("SELECT")).toBe(
+      true
+    );
+    expect(privileges.get("awcms_principal_mfa_factors")?.has("DELETE")).toBe(
+      true
+    );
+    // A table no migration ever mentions is ABSENT from the map, and absent
+    // means "holds the blanket grant" — which the caller resolves to all four.
+    // Modelling absence as "no privileges" would make this gate refuse every
+    // ordinary erasure in the schema.
+    expect(privileges.has("awcms_sessions")).toBe(false);
+  });
+});
+
 describe("the severance chain is checked, not assumed", () => {
   test("`severed_with_subject_row` is refused when nothing anonymises identities", () => {
     // The dependency runs the wrong way for review to catch: change
@@ -288,7 +417,8 @@ describe("the severance chain is checked, not assumed", () => {
         }
       ],
       columns: COLUMNS,
-      foreignKeys: FOREIGN_KEYS
+      foreignKeys: FOREIGN_KEYS,
+      appRolePrivileges: PRIVILEGES
     });
 
     expect(problems.map((problem) => problem.message).join(" ")).toContain(
@@ -329,7 +459,8 @@ describe("against the real schema and the real registry", () => {
         subjectData: module.subjectData ?? []
       })),
       columns,
-      foreignKeys
+      foreignKeys,
+      appRolePrivileges: parseAppRolePrivileges(migrations)
     });
 
     expect(problems).toEqual([]);

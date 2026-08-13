@@ -39,17 +39,25 @@ function moduleOwning(rules: SoDRuleDescriptor[]): ModuleDescriptor {
 }
 
 describe("validateSoDRuleRegistry — the CI gate", () => {
-  test("the BASE registry ships ONLY the data_lifecycle System-Foundation governance rule (no domain business rules — issue #181 out-of-scope)", () => {
-    // ADR-0037 admits exactly one SoD rule to the base: a System-Foundation
-    // GOVERNANCE maker/checker over `data_lifecycle`'s OWN legal-hold
-    // create/release permissions — NOT a domain business rule (finance/
-    // procurement/payroll/inventory), which remain out-of-scope in the base and
-    // live only in the example-domain fixture.
+  test("the BASE registry ships ONLY data_lifecycle System-Foundation governance rules (no domain business rules — issue #181 out-of-scope)", () => {
+    // ADR-0037 admitted the first: a System-Foundation GOVERNANCE maker/checker
+    // over `data_lifecycle`'s OWN legal-hold create/release permissions.
+    // ADR-0094 wave 2 (#557) admitted the second, over its OWN subject-erasure
+    // request/approve permissions. Both are governance over this module's own
+    // keys — NEITHER is a domain business rule (finance/procurement/payroll/
+    // inventory), which remain out-of-scope in the base and live only in the
+    // example-domain fixture.
+    //
+    // The assertion is an exact list rather than a count, so admitting a THIRD
+    // rule is a deliberate edit here and not a number quietly going up.
     const baseRules = collectSoDRuleDescriptors(BASE);
-    expect(baseRules.map((r) => r.ruleKey)).toEqual([
-      "data_lifecycle.legal_hold_maker_checker"
+    expect(baseRules.map((r) => r.ruleKey).sort()).toEqual([
+      "data_lifecycle.legal_hold_maker_checker",
+      "data_lifecycle.subject_erasure_maker_checker"
     ]);
-    expect(baseRules[0]!.ownerModuleKey).toBe("data_lifecycle");
+    for (const rule of baseRules) {
+      expect(rule.ownerModuleKey).toBe("data_lifecycle");
+    }
     expect(validateSoDRuleRegistry(BASE).valid).toBe(true);
   });
 

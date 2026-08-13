@@ -108,7 +108,10 @@ describe("/admin/data-lifecycle permission gates", () => {
 
   test("and is declared by the module descriptor, so a migration seeds it", async () => {
     const declared = declaredTriples();
-    expect(declared.size).toBe(6);
+    // 10 since ADR-0094 wave 2 (#557) added the four subject-rights keys. They
+    // are gated by `/admin/subject-requests`, which has its own contract test —
+    // this one only needs every key THIS page names to be declared.
+    expect(declared.size).toBe(10);
 
     const missing = [...pageTriplesFrom(await readFile(PAGE, "utf8"))].filter(
       (key) => !declared.has(key)
