@@ -24,9 +24,10 @@
  * receiving mail, including password resets, and nothing can list or clear it
  * from a page), and every `identity_access.business_scope_*` key (assignment
  * plus a maker/checker exception flow with no inbox for the checker).
- * `module_management.settings.*` is the one that had a false alibi: three
+ * `module_management.settings.*` was the one with a false alibi: three
  * documents claimed a generic `/admin/modules/{key}` settings panel existed,
- * and one used that claim to justify not building an editor. It never existed.
+ * and one used that claim to justify not building an editor. It never did —
+ * until #546 built it, which is why those two keys are no longer on this list.
  */
 export const NOT_YET_SCREENED: readonly string[] = [
   // tenant_admin (2) — ADR-0073. Suspension is ENFORCED as of Issue #429; what
@@ -79,15 +80,13 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",
 
-  // module_management (8)
+  // module_management (6)
   "module_management.health.check",
   "module_management.health.read",
   "module_management.jobs.read",
   "module_management.modules.read",
   "module_management.modules.sync",
   "module_management.permissions.read",
-  "module_management.settings.read",
-  "module_management.settings.update",
 
   // profile_identity (3)
   "profile_identity.profile_management.delete",

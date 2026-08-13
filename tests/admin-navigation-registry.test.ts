@@ -68,6 +68,30 @@ async function adminPagePaths(): Promise<Set<string>> {
   return paths;
 }
 
+/**
+ * A DYNAMIC admin page — one whose path carries a route parameter, like
+ * `/admin/modules/[moduleKey]`.
+ *
+ * These cannot have a navigation entry, and not as a matter of taste: a sidebar
+ * holds concrete links, and `[moduleKey]` is not one. The rule below ("no module
+ * declares navigation to it, so it can never appear in the sidebar") encodes
+ * "reachable" as "reachable from the sidebar", which is a sound proxy for every
+ * static page and simply false for this shape — the gate had never met one until
+ * Issue #546.
+ *
+ * So the property is kept and the proxy is replaced: a dynamic page must have a
+ * PARENT page, which is where a person reaches it from. `/admin/modules` links
+ * every row to `/admin/modules/{key}`; a dynamic page whose parent does not
+ * exist is unreachable in exactly the way this test is for.
+ */
+function isDynamic(path: string): boolean {
+  return path.includes("[");
+}
+
+function parentOf(path: string): string {
+  return path.slice(0, path.lastIndexOf("/"));
+}
+
 function declaredEntries() {
   return listModules().flatMap((module) =>
     (module.navigation ?? []).map((nav) => ({
@@ -120,6 +144,25 @@ describe("admin navigation matches the pages that exist", () => {
         if (owners.length > 0) {
           problems.push(
             `"${page}" is a CORE_NAV_ENTRIES item but is also claimed by ${owners.join(", ")}.`
+          );
+        }
+        continue;
+      }
+
+      if (isDynamic(page)) {
+        // Reached from its parent, never from the sidebar. Still has to be
+        // reachable: an orphan `[param]` page is the same defect in a different
+        // shape.
+        if (!pages.has(parentOf(page))) {
+          problems.push(
+            `"${page}" is a dynamic page whose parent "${parentOf(page)}" does ` +
+              `not exist, so nothing can link to it.`
+          );
+        }
+        if (owners.length > 0) {
+          problems.push(
+            `"${page}" is a dynamic page but ${owners.join(", ")} declares ` +
+              `navigation to it — a sidebar cannot hold a route parameter.`
           );
         }
         continue;
