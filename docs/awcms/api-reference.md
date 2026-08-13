@@ -741,6 +741,64 @@ Removes a role assignment. 404 when no such assignment exists. Gated on `identit
 | 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/access/delegated-grants` — List delegated-access grants, live and historical.
+
+- **operationId**: `listDelegatedGrants`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0090. Revoked and expired grants are listed too: "who could see our data last March, and until when" is the question an audit asks, and a list of only live grants answers a different one. The redemption code is never returned — its column is not even selected.
+
+**Responses**
+
+| Status | Description                           | Schema                                 |
+| ------ | ------------------------------------- | -------------------------------------- |
+| 200    | Every grant this tenant has approved. | object                                 |
+| 401    | Missing or invalid session.           | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.           | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/delegated-grants` — Approve delegated access for a partner, at a role you choose.
+
+- **operationId**: `approveDelegatedAccess`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0090. Mints a single-use redemption code, returned EXACTLY ONCE in this response and never readable again. The role must already exist in this tenant and may not be a system role, so `owner` cannot be delegated; the grant may last at most 30 days. Guarded by `partner_access.assign`, because what this does is hand a role to somebody outside the organisation.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                 | Schema                                 |
+| ------ | ----------------------------------------------------------- | -------------------------------------- |
+| 201    | Approved. `accessCode` appears here and nowhere else, ever. | object                                 |
+| 400    | Validation error.                                           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                 | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                 | [`ApiError`](#standard-error-envelope) |
+| 404    | No such partner engagement, or no such role in this tenant. | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/access/delegated-grants/{id}` — Revoke delegated access immediately.
+
+- **operationId**: `revokeDelegatedAccess`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0090. The grant dies, the membership it printed goes inactive, and every session on it is revoked — one transaction, no ordering that can leave one of the three behind. A grant that was already revoked answers 404, which is all the caller is owed.
+
+**Parameters**
+
+| Name     | In    | Required | Type          | Description |
+| -------- | ----- | -------- | ------------- | ----------- |
+| `id`     | path  | yes      | string (uuid) |             |
+| `reason` | query | no       | string        |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | Revoked.                    | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC. | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.         | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/access/evaluate` — Reflect the ABAC decision for the caller's own access on a hypothetical request (Issue
 
 - **operationId**: `accessEvaluate`
@@ -814,6 +872,64 @@ Effective on the credential's very next request, because authentication reads th
 | 403    | Access denied by RBAC/ABAC.                          | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                                  | [`ApiError`](#standard-error-envelope) |
 | 409    | The credential is already revoked (ALREADY_REVOKED). | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/access/partner-engagements` — List the partners that reach this tenant.
+
+- **operationId**: `listPartnerEngagements`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089. The customer's authoritative view of every partnership into their own tenant. The partner's mirror of this (`GET /api/v1/partner/tenants`) is a convenience served by a narrow SECURITY DEFINER function; this one is the record.
+
+**Responses**
+
+| Status | Description                            | Schema                                 |
+| ------ | -------------------------------------- | -------------------------------------- |
+| 200    | The partnerships reaching this tenant. | object                                 |
+| 401    | Missing or invalid session.            | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.            | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/access/partner-engagements` — Engage a partner for this tenant.
+
+- **operationId**: `engagePartner`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089 — the customer initiates, always. There is no partner-facing counterpart: a partner that could insert its own engagement would be handing itself reach. "Not a registered partner" and "no such tenant" answer identically, so the endpoint cannot be swept as a directory of the platform's partners.
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                               | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 201    | The partner now reaches this tenant.                                                                                      | object                                 |
+| 400    | Validation error.                                                                                                         | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                                                                                               | [`ApiError`](#standard-error-envelope) |
+| 404    | No such partner. Deliberately indistinguishable from "no such tenant" and from "that tenant is not a registered partner". | [`ApiError`](#standard-error-envelope) |
+| 409    | That partner is already engaged for this tenant.                                                                          | [`ApiError`](#standard-error-envelope) |
+
+### `DELETE /api/v1/access/partner-engagements/{id}` — Sever a partnership, killing every grant under it.
+
+- **operationId**: `severPartnerEngagement`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089/ADR-0090. Every live delegated-access grant under the partnership is revoked in the SAME transaction — memberships deactivated, sessions killed. The ordering is enforced by a foreign key rather than by remembering: deleting the engagement while a grant still names it fails.
+
+**Parameters**
+
+| Name | In   | Required | Type          | Description |
+| ---- | ---- | -------- | ------------- | ----------- |
+| `id` | path | yes      | string (uuid) |             |
+
+**Responses**
+
+| Status | Description                                         | Schema                                 |
+| ------ | --------------------------------------------------- | -------------------------------------- |
+| 200    | Severed, with the number of grants revoked with it. | object                                 |
+| 400    | Validation error.                                   | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                         | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.                         | [`ApiError`](#standard-error-envelope) |
+| 404    | Resource not found.                                 | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/access/policies` — List the tenant's dynamic ABAC (DSL) policies (Issue
 
@@ -938,6 +1054,31 @@ Returns what `evaluateAccess` would decide for a hypothetical subject/request/en
 | 400    | Validation error.                            | [`ApiError`](#standard-error-envelope) |
 | 401    | Missing or invalid session.                  | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                  | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/delegated-access/redeem` — Exchange a delegated-access code for a membership in the customer's tenant.
+
+- **operationId**: `redeemDelegatedAccess`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0090. Requires a LIVE SESSION in the caller's own tenant: the code authenticates nothing, and what proves who is redeeming is the global principal behind that session. It returns a MEMBERSHIP, not a session — ordinary sign-in or `POST /api/v1/auth/session/switch` works afterwards, because afterwards they are a member. Minting a session here would mean a second copy of the target tenant's entry policy, and a second copy is where the MFA gate goes quietly missing. Every refusal answers 404.
+
+**Parameters**
+
+| Name                | In     | Required | Type          | Description                                                 |
+| ------------------- | ------ | -------- | ------------- | ----------------------------------------------------------- |
+| `X-AWCMS-Tenant-ID` | header | yes      | string (uuid) | The caller's OWN tenant — the one their session belongs to. |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                                                                                                                  | Schema                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 200    | The caller is now a delegated member of the target tenant.                                                                                                   | object                                 |
+| 400    | Validation error.                                                                                                                                            | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                                                                                                                  | [`ApiError`](#standard-error-envelope) |
+| 404    | One shape for every refusal: unknown code, expired grant, revoked grant, wrong tenant, membership refused. A holder must not learn whether the code is real. | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many attempts from this source. Carries `retry-after`.                                                                                                   | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/auth/invitations/{token}` — Preview an invitation (public, token-bearing).
 
@@ -2077,6 +2218,21 @@ No Idempotency-Key: the UPDATE carries `AND status = 'pending'`, so a double sub
 | 401    | Missing or invalid session.                     | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                     | [`ApiError`](#standard-error-envelope) |
 | 404    | Resource not found.                             | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/partner/tenants` — The partner's own view of which tenants have engaged it.
+
+- **operationId**: `listManagedTenants`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0089. Served by a narrow SECURITY DEFINER function (`sql/119`), because the engagement rows belong to the TARGET tenant and are unreadable from here under FORCE RLS. The partner tenant is taken from the CALLER'S CONTEXT, never from the request, so nobody can ask for somebody else's book. Returns no `engagedBy` — that is a third party's identifier the partner does not need.
+
+**Responses**
+
+| Status | Description                       | Schema                                 |
+| ------ | --------------------------------- | -------------------------------------- |
+| 200    | The tenants this partner manages. | object                                 |
+| 401    | Missing or invalid session.       | [`ApiError`](#standard-error-envelope) |
+| 403    | Access denied by RBAC/ABAC.       | [`ApiError`](#standard-error-envelope) |
 
 ### `GET /api/v1/registration-requests` — Pending self-registration requests for this tenant.
 

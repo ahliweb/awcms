@@ -27,6 +27,10 @@ export const identityAccessModule = defineModule({
       "/api/v1/registration-requests",
       "/api/v1/user-groups",
       "/api/v1/invitations",
+      // ADR-0089 PR 8.4 — the partner's own view of its book. It reads nothing
+      // of any customer's data; acting inside a customer tenant happens through
+      // the delegated membership, under that tenant's own chokepoint.
+      "/api/v1/partner",
       "/login",
       "/forgot-password",
       "/reset-password",
@@ -422,6 +426,36 @@ export const identityAccessModule = defineModule({
       action: "configure",
       scope: "platform",
       description: "PLATFORM: issue an invitation that skips email confirmation"
+    },
+    // ADR-0089/ADR-0090, Gelombang 8 PR 8.4. Three actions, all TENANT scope,
+    // and the scope is the point: a partnership is the CUSTOMER's decision
+    // about their own tenant, so `platform` would move it to the operator —
+    // exactly the inversion ADR-0089 refused.
+    //
+    // No `create`/`delete` pair. Engaging and severing are two directions of one
+    // authority over this tenant's shape, and splitting them produces the one
+    // combination that must not exist: somebody who can let a partner in and
+    // cannot put them out.
+    {
+      activityCode: "partner_access",
+      action: "read",
+      description:
+        "See which partners reach this tenant, and every delegated-access grant they hold"
+    },
+    {
+      activityCode: "partner_access",
+      action: "configure",
+      description:
+        "Engage a partner for this tenant, and sever that engagement — audited"
+    },
+    // `assign`, not an action of its own: what approval DOES is hand a role to
+    // somebody from outside, and that authority already has a name here
+    // (ADR-0081, repeated by ADR-0082 for invitations).
+    {
+      activityCode: "partner_access",
+      action: "assign",
+      description:
+        "Approve delegated access for a partner at a chosen role, and revoke it — audited"
     }
   ],
   /**

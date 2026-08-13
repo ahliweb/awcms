@@ -107,7 +107,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **118** (`sql/001`–`118`)                                                               | `ls sql/`                                                                               |
+| Migrasi                            | **120** (`sql/001`–`120`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0091** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
@@ -355,6 +355,33 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kelima belas) — PR 8.4 MENDARAT, dan E2E
+  menemukan cacat yang lolos setiap pembacaan.**
+
+  `sql/119` + `sql/120`, enam endpoint: pelanggan menyewa/memutus partner dan
+  menyetujui/mencabut grant; partner melihat bukunya lewat fungsi
+  `SECURITY DEFINER` sempit; penebusan menukar kode menjadi KEANGGOTAAN (bukan
+  sesi — salinan kedua kebijakan masuk tenant adalah tempat gerbang MFA
+  terlewat).
+
+  **Cakupannya sengaja lebih lebar dari rencana.** Rencana hanya menyebut sisi
+  partner; mengirimnya sendirian menghasilkan permukaan di atas data yang tidak
+  ada jalur request bisa membuatnya.
+
+  **Koreksi terhadap `sql/117`, ditemukan E2E:** FK grant→kemitraan membuat
+  pemutusan kemitraan MUSTAHIL begitu satu grant pernah ada. Ia terbaca benar di
+  setiap review dan salah begitu urutan lengkapnya dijalankan. `sql/120`
+  memindahkan FK ke registri; invarian penulisannya pindah ke
+  `INSERT … SELECT … WHERE EXISTS`, bukan ke TypeScript. **Pelajarannya bukan
+  "FK-nya salah" melainkan bahwa invarian berbentuk "X tidak bisa ada tanpa Y"
+  harus ditanyai: apakah X harus hidup lebih lama dari Y?**
+
+  Fungsi definer-nya diukur sebagai `awcms_app`, bukan sebagai pemilik migrasi —
+  `sql/048` sendiri memperingatkan bahwa definer TIDAK mem-bypass RLS di postur
+  ini. Suite E2E baru 18 test terdaftar di kedua workflow.
+
+  **Sisa Gelombang 8:** PR 8.5.
 
 - **PUTARAN 13 Agustus 2026 (keempat belas) — PR 8.3 MENDARAT, dan sebuah
   "tidak bisa dilakukan" berumur dua ADR ternyata BISA.**
