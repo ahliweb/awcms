@@ -164,9 +164,17 @@ describe("placement inside the guard", () => {
     // and its resolution path never touched `awcms_tenants` at all.
     const source = await Bun.file(GUARD_SOURCE).text();
     const suspended = source.indexOf("isTenantServiceStopped(");
-    const machineGate = source.indexOf("isMachineCredentialAllowedAction(");
+    // ADR-0092 renamed this gate when the WRITE class arrived
+    // (`isMachineCredentialAllowedAction` → `isMachineCredentialWriteRefused`).
+    // The gate did not move; only its name changed.
+    const machineGate = source.indexOf("isMachineCredentialWriteRefused(");
 
     expect(suspended).toBeGreaterThan(-1);
+    // Asserted too, and it is the assertion this test was missing: without it,
+    // a rename turns `machineGate` into -1 and `suspended < -1` fails for the
+    // WRONG reason — which is what happened, and which read as a real
+    // regression for as long as it took to open the file.
+    expect(machineGate).toBeGreaterThan(-1);
     // Decided on the principal, which both paths produce, and placed before the
     // machine-specific gate so neither kind can slip past it.
     expect(suspended).toBeLessThan(machineGate);

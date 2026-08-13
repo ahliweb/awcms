@@ -12,6 +12,14 @@ export type ActiveMachineCredential = {
   tenantId: string;
   tenantUserId: string;
   allowedPermissionKeys: readonly string[];
+  /**
+   * ADR-0092 — the WRITE class narrowing list. Empty for every credential
+   * issued before the class existed, which is the safe reading: empty means
+   * read-only.
+   */
+  allowedWriteActions: readonly string[];
+  /** ADR-0092 — required (by `sql/121`) whenever the list above is non-empty. */
+  allowedIpCidrs: readonly string[];
 };
 
 /**
@@ -29,6 +37,7 @@ export async function resolveActiveMachineCredential(
 ): Promise<ActiveMachineCredential | null> {
   const rows = (await tx`
     SELECT id, tenant_id, tenant_user_id, allowed_permission_keys,
+           allowed_write_actions, allowed_ip_cidrs,
            expires_at, revoked_at, last_used_at
     FROM awcms_machine_credentials
     WHERE tenant_id = ${tenantId} AND token_hash = ${tokenHash}
@@ -37,6 +46,8 @@ export async function resolveActiveMachineCredential(
     tenant_id: string;
     tenant_user_id: string;
     allowed_permission_keys: string[];
+    allowed_write_actions: string[];
+    allowed_ip_cidrs: string[];
     expires_at: Date;
     revoked_at: Date | null;
     last_used_at: Date | null;
@@ -69,6 +80,8 @@ export async function resolveActiveMachineCredential(
     id: credential.id,
     tenantId: credential.tenant_id,
     tenantUserId: credential.tenant_user_id,
-    allowedPermissionKeys: credential.allowed_permission_keys
+    allowedPermissionKeys: credential.allowed_permission_keys,
+    allowedWriteActions: credential.allowed_write_actions,
+    allowedIpCidrs: credential.allowed_ip_cidrs
   };
 }

@@ -107,8 +107,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v8.1.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **120** (`sql/001`–`120`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0091** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
+| Migrasi                            | **121** (`sql/001`–`121`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **34** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **47** (25.909 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -355,6 +355,41 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (keenam belas) — PR 8.5 MENDARAT. GELOMBANG 8
+  SELESAI, DAN PROGRAM #423 HABIS.**
+
+  [ADR-0092](adr/0092-machine-credentials-may-write.md) (`sql/121`): kredensial
+  mesin boleh menulis, dan aksinya adalah plafon KODE ∩ kolom baris. Kalau
+  daftar aksinya menjadi kolom murni, satu restore backup bisa mencetak
+  kredensial tulis se-katalog dengan setiap gerbang hijau.
+
+  Sifat "tidak ada aksi high-risk di plafon tulis" **dihitung dari konstanta
+  hidup**, bukan ditulis sebagai daftar — daftar literal menyimpang diam-diam
+  pada hari seseorang menambah aksi high-risk baru.
+
+  **Ketiadaan IP adalah DENY.** Tanpa itu, rute yang belum meneruskan alamat
+  pemanggil diam-diam mematikan kondisinya. `defineTenantRoute` mengisinya di
+  kedua jalurnya, termasuk SSE. Parser CIDR-nya menyempit saat ragu, dan arah
+  itu diuji.
+
+  Diverifikasi 7/7 di Postgres nyata; tiga mutasi memerahkan test yang tepat.
+
+  **GELOMBANG 8 TUTUP** — PR 8.1 (#529), 8.2 (#530), 8.3 (#531), 8.4 (#532),
+  8.5. Sembilan gelombang program model keanggotaan #423 selesai.
+
+  **Yang tersisa dan BELUM dikerjakan**, dicatat supaya tidak perlu diturunkan
+  ulang:
+
+  1. **Permukaan penerbitan kelas tulis** — kolomnya ada dan gerbangnya
+     menegakkannya, tetapi belum ada rute yang bisa menerbitkan kredensial
+     tulis. Sengaja: setiap PR gelombang ini mendarat inert sebelum
+     permukaannya.
+  2. **Layar admin untuk `partner_access`** (3 permission di
+     `NOT_YET_SCREENED`). Pencabutan akses partner hari ini adalah panggilan
+     API — yang bekerja, dan yang tidak akan diingat siapa pun di bawah tekanan.
+  3. **Permukaan pendaftaran partner** (`platform` scope) — `awcms_partners`
+     hari ini hanya bisa ditulis operator lewat SQL.
 
 - **PUTARAN 13 Agustus 2026 (kelima belas) — PR 8.4 MENDARAT, dan E2E
   menemukan cacat yang lolos setiap pembacaan.**

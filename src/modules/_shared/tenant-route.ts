@@ -1,5 +1,7 @@
 import type { APIContext, APIRoute, AstroCookies } from "astro";
 
+import { resolveClientIp } from "../../lib/security/rate-limit";
+
 import { fail } from "./api-response";
 import type { BusinessScopeHierarchyPort } from "./ports/business-scope-hierarchy-port";
 import type { SoDRuleDescriptor } from "./module-contract";
@@ -450,7 +452,7 @@ export type SseTenantRouteConfig<TSnapshot> = {
 export function defineSseTenantRoute<TSnapshot>(
   config: SseTenantRouteConfig<TSnapshot>
 ): APIRoute {
-  return async ({ request, cookies }) => {
+  return async ({ request, cookies, clientAddress }) => {
     const { tenantId, token } = resolveAuthInputs(request, cookies);
 
     if (!tenantId) {
@@ -463,6 +465,10 @@ export function defineSseTenantRoute<TSnapshot>(
     const sql = sqlClientForRoute();
     const tokenHash = hashSessionToken(token);
     const deadline = Date.now() + config.maxConnectionMs;
+    // Resolved ONCE, at stream open, and reused by every tick: a long-lived SSE
+    // connection has one peer, and re-deriving it per tick from a `request`
+    // that never changes would only invite the two to disagree.
+    const clientIp = resolveClientIp(request, clientAddress);
 
     /**
      * One tick: one transaction, decision first, read second.
@@ -490,7 +496,11 @@ export function defineSseTenantRoute<TSnapshot>(
               tokenHash,
               now,
               config.authorize,
-              config.authorizeOptions
+              // ADR-0092 — the write-class IP condition denies when the address
+              // is absent, so the factory supplies it for every route it owns.
+              // Merged rather than replaced: `authorizeOptions` is static
+              // config and this one value is per-request.
+              { ...config.authorizeOptions, clientIp }
             );
 
             if (!auth.allowed) {
@@ -642,7 +652,10 @@ export function defineTenantRoute<TPrepared = undefined>(
           tokenHash,
           requestContext.now,
           guard,
-          config.authorizeOptions
+          {
+            ...config.authorizeOptions,
+            clientIp: resolveClientIp(request, clientAddress)
+          }
         );
 
         if (!auth.allowed) {
