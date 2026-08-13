@@ -19,11 +19,13 @@
  * but it is an edit somebody makes on purpose, in a file whose only content is
  * work not done.
  *
- * Nine modules, and the two largest groups are worth naming because they are not
- * cosmetic: every `email` suppression key (a suppressed address silently stops
- * receiving mail, including password resets, and nothing can list or clear it
- * from a page), and every `identity_access.business_scope_*` key (assignment
- * plus a maker/checker exception flow with no inbox for the checker).
+ * Nine modules. Two groups here were named as NOT cosmetic, and both have since
+ * been built: every `email` suppression key (a suppressed address silently
+ * stops receiving mail, including password resets, and nothing could list or
+ * clear it from a page), and every `identity_access.business_scope_*` key
+ * (assignment plus a maker/checker exception flow with no inbox for the
+ * checker — #545 built the inbox, and found that the checker permission each
+ * rule declares for itself was never enforced either).
  * `module_management.settings.*` was the one with a false alibi: three
  * documents claimed a generic `/admin/modules/{key}` settings panel existed,
  * and one used that claim to justify not building an editor. It never did —
@@ -65,17 +67,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (12)
-  //
-  "identity_access.business_scope_assignments.create",
-  "identity_access.business_scope_assignments.read",
-  "identity_access.business_scope_assignments.revoke",
-  "identity_access.business_scope_conflicts.read",
-  "identity_access.business_scope_exceptions.approve",
-  "identity_access.business_scope_exceptions.create",
-  "identity_access.business_scope_exceptions.read",
-  "identity_access.business_scope_exceptions.reject",
-  "identity_access.business_scope_exceptions.revoke",
+  // identity_access (3)
   "identity_access.sso_providers.create",
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",

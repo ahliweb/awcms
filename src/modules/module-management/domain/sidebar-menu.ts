@@ -210,6 +210,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.layout.nav_partner_registry": "Partner registry",
   "admin.layout.nav_machine_credentials": "Machine credentials",
   "admin.layout.nav_invitations": "Invitations",
+  "admin.layout.nav_business_scope": "Business scope",
   "admin.layout.nav_seo": "SEO & distribution"
 };
 

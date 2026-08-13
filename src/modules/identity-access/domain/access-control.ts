@@ -289,6 +289,34 @@ export function permissionKey(
   return `${moduleKey}.${activityCode}.${action}`;
 }
 
+/**
+ * The inverse of {@link permissionKey}: turns a stored `module.activity.action`
+ * string back into the request shape the chokepoint takes. `null` when the
+ * string is not three non-empty dot-separated segments.
+ *
+ * Exists because some permission keys are DATA rather than code —
+ * `SoDRuleDescriptor.exceptionPolicy.requiresApprovalPermission` names the
+ * permission a checker must hold to approve an exception to that particular
+ * rule, and a module declares it as a string. Enforcing it means asking the
+ * chokepoint about a key nobody wrote as a literal.
+ *
+ * `action` is cast rather than checked against the `AccessAction` union: there
+ * is no runtime list of the union's members, and inventing one here would be a
+ * second place to forget when an action is added. The cast is safe in the only
+ * direction that matters — an action nobody declared matches no row in the
+ * permission catalogue, so the chokepoint denies it. A parser that threw would
+ * turn a typo in a descriptor into a 500 instead of a refusal.
+ */
+export function parsePermissionKey(key: string): AccessRequest | null {
+  const parts = key.split(".");
+  if (parts.length !== 3) return null;
+
+  const [moduleKey, activityCode, action] = parts;
+  if (!moduleKey || !activityCode || !action) return null;
+
+  return { moduleKey, activityCode, action: action as AccessAction };
+}
+
 function scopeListContains(
   list: readonly BusinessScopeReference[],
   scopeType: string,
