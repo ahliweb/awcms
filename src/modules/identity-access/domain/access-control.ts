@@ -34,6 +34,18 @@ export type TenantContext = {
    * hand-written `"user"` literals — 30 places for the wrong one to appear.
    */
   principalKind?: "user" | "delegated";
+  /**
+   * ADR-0091 — the live delegated-access grant behind this actor, resolved only
+   * when `principalKind` is `"delegated"`.
+   *
+   * Every decision-log and audit row written under it carries the id, which is
+   * what turns "what did our vendor do in here" from an unanswerable question
+   * into one query. Absent for every ordinary member, which is the overwhelming
+   * majority of requests — and the reason it is resolved by a second small
+   * lookup rather than by joining the grant table into the hot auth query that
+   * runs for everyone.
+   */
+  delegatedGrantId?: string;
   correlationId?: string;
 };
 

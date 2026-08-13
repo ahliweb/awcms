@@ -264,7 +264,8 @@ export async function authorizeInTransaction(
       context.tenantUserId,
       guard,
       decision,
-      machine?.id
+      machine?.id,
+      context.delegatedGrantId
     );
 
     return {
@@ -289,7 +290,8 @@ export async function authorizeInTransaction(
       context.tenantUserId,
       guard,
       decision,
-      machine.id
+      machine.id,
+      context.delegatedGrantId
     );
 
     return {
@@ -329,7 +331,8 @@ export async function authorizeInTransaction(
       context.tenantUserId,
       guard,
       decision,
-      machine?.id
+      machine?.id,
+      context.delegatedGrantId
     );
 
     return {
@@ -391,7 +394,8 @@ export async function authorizeInTransaction(
       context.tenantUserId,
       guard,
       decision,
-      machine?.id
+      machine?.id,
+      context.delegatedGrantId
     );
 
     return {
@@ -430,7 +434,8 @@ export async function authorizeInTransaction(
         context.tenantUserId,
         guard,
         decision,
-        machine?.id
+        machine?.id,
+        context.delegatedGrantId
       );
 
       return {
@@ -474,7 +479,8 @@ export async function authorizeInTransaction(
       context.tenantUserId,
       guard,
       decision,
-      machine?.id
+      machine?.id,
+      context.delegatedGrantId
     );
 
     return {
@@ -581,7 +587,8 @@ export async function authorizeInTransaction(
     context.tenantUserId,
     guard,
     decision,
-    machine?.id
+    machine?.id,
+    context.delegatedGrantId
   );
 
   if (!decision.allowed) {

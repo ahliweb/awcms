@@ -1,4 +1,5 @@
 import { assertUuid } from "../../../lib/database/tenant-context";
+import { recordAuditEvent } from "../../logging/application/audit-log";
 import { linkIdentityToPrincipal } from "../../identity-access/application/principal-store";
 import { hashPassword } from "../../../lib/auth/password";
 import type { SetupInitializeInput } from "../domain/setup-validation";
@@ -165,6 +166,34 @@ export async function createTenantWithOwner(
   `;
 
   if (options.restoreTenantId) {
+    // ADR-0091 closes ADR-0054's open follow-up: "the tenant that was created
+    // does not see its own birth record."
+    //
+    // It was open because it LOOKS impossible. `awcms_audit_events` is FORCE
+    // RLS, so the platform tenant cannot insert a row bearing another tenant's
+    // id — the same wall ADR-0087 and ADR-0088 hit. What makes it possible here
+    // is that this function is ALREADY standing inside the new tenant's context
+    // (`SET LOCAL` at the top, restored on the line below). The birth record is
+    // written from inside, in the window that already existed, with no cross-
+    // tenant write anywhere.
+    //
+    // The operator's `tenant_user_id` is deliberately NOT carried across.
+    // `actor_tenant_id` tells the customer their tenant was created by the
+    // platform, which is the fact they need; the individual operator's id would
+    // be an opaque uuid they cannot resolve — RLS stops them reading the
+    // platform's `awcms_tenant_users` — while still being an identifier handed
+    // to a third party. It stays on the platform-side row, where it resolves.
+    await recordAuditEvent(tx, {
+      tenantId,
+      actorTenantId: options.restoreTenantId,
+      moduleKey: "tenant_admin",
+      action: "create",
+      resourceType: "tenant",
+      resourceId: tenantId,
+      severity: "info",
+      message: "Tenant provisioned by the platform operator."
+    });
+
     // See the header: leaving the GUC pointed at the new tenant would send the
     // caller's remaining writes (audit, idempotency) into the wrong partition.
     await tx.unsafe(
