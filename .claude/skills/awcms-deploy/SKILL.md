@@ -108,10 +108,13 @@ bun run db:pool:health    # pool sehat terhadap DB target
 > tidak ada penjadwal in-process sebagai jalur kedua. Deployment yang berjalan
 > memakai image kedua `awcms-jobs:<versi>` (dibangun dari `scripts/` + `src/` +
 > `sql/`) yang dipanggil `/home/admin1/awcms-jobs/run-job.sh <target>` dari
-> cron. **Image itu di-tag per versi dan tidak ikut ter-rebuild oleh deploy
-> app** — melewatkan langkah ini berarti cron menjalankan kode rilis LAMA
-> terhadap skema BARU, diam-diam. Detail + utang yang tersisa:
-> `docs/PROJECT_STATE.md` §4.
+> cron. **Coolify MENGHAPUS image itu tiap kali app di-deploy** (prune image
+> yang tak dipakai container mana pun) — karena itu `run-job.sh` membangunnya
+> ulang sendiri saat hilang (~55 detik). Yang TIDAK otomatis: konteks build
+> `/home/admin1/awcms-jobs/` adalah SNAPSHOT sumber, jadi **segarkan tiap
+> rilis** — auto-rebuild memperbaiki penghapusan, bukan keusangan, dan versi
+> job yang tertinggal akan menjalankan kode LAMA terhadap skema BARU tanpa
+> suara. Detail + utang yang tersisa: `docs/PROJECT_STATE.md` §4.
 
 **Setelah deploy rilis yang menambah modul/permission BARU, jalankan
 backfill permission:**
