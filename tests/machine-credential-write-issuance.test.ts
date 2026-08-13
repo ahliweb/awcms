@@ -19,6 +19,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { listModules } from "../src/modules";
+import {
+  collectGuardTriples,
+  resolveConstantsForSource
+} from "../src/modules/_shared/permission-enforcement-coverage";
 import { isHighRiskAction } from "../src/modules/identity-access/domain/access-control";
 import type { AccessAction } from "../src/modules/identity-access/domain/access-control";
 import {
@@ -35,7 +39,8 @@ import {
 } from "../src/modules/identity-access/application/machine-credential-directory";
 
 const ROUTE = "src/pages/api/v1/access/machine-credentials/index.ts";
-const MIGRATION = "sql/122_awcms_identity_machine_credential_write_permissions.sql";
+const MIGRATION =
+  "sql/122_awcms_identity_machine_credential_write_permissions.sql";
 
 const NOW = new Date("2026-08-13T00:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -44,7 +49,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const TENANT = "00000000-0000-4000-8000-000000000001";
 const ACTOR = "99999999-8888-7777-6666-555555555555";
 
-function body(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function body(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
     name: "deploy hook",
     tenantUserId: "11111111-2222-3333-4444-555555555555",
@@ -306,7 +313,10 @@ describe("TIGA daftar kolom, dan tidak satu pun boleh terlewat", () => {
             NOW
           )
       ],
-      ["revoke", (tx) => revokeMachineCredential(tx, TENANT, ROW.id, ACTOR, NOW)]
+      [
+        "revoke",
+        (tx) => revokeMachineCredential(tx, TENANT, ROW.id, ACTOR, NOW)
+      ]
     ];
 
     for (const [label, call] of calls) {
@@ -412,11 +422,34 @@ describe("izin terpisah, dan ia benar-benar ada", () => {
     // setiap penerbit read-only yang ada kehilangan aksesnya; kalau keduanya
     // menjadi `machine_credentials`, setiap penerbit read-only yang ada
     // MENDAPAT hak mencetak kredensial tulis. Dua arah, satu asersi.
-    const writeAt = guard.indexOf('? "machine_credentials_write"');
-    const readAt = guard.indexOf(': "machine_credentials",');
+    const writeAt = guard.indexOf('activityCode: "machine_credentials_write"');
+    const readAt = guard.indexOf('activityCode: "machine_credentials",');
 
     expect(writeAt).toBeGreaterThan(-1);
     expect(readAt).toBeGreaterThan(writeAt);
+  });
+
+  test("dan gerbang enforcement BISA MEMBACA keduanya", async () => {
+    // Dijalankan dengan logika gerbangnya sendiri, bukan ditiru dengan string
+    // matching. Percobaan pertama menulis guard ini sebagai SATU literal dengan
+    // ternary pada `activityCode`; `collectGuardTriples` tidak bisa membacanya
+    // dan melaporkan KEDUA izin "enforced by nothing" — alibi palsu yang sama
+    // yang ADR-0058 §E catat untuk `visitor_analytics`. Sebuah rute yang tak
+    // terbaca gerbang ini adalah rute yang izinnya bisa dicabut orang lain
+    // tanpa ada yang memerah.
+    const source = await Bun.file(ROUTE).text();
+    const keys = collectGuardTriples(
+      source,
+      // No cross-file constants: this route spells every guard field as a
+      // literal, and passing an empty map is how the test proves that rather
+      // than assuming it.
+      resolveConstantsForSource(source, new Map())
+    ).map(
+      (triple) => `${triple.moduleKey}.${triple.activityCode}.${triple.action}`
+    );
+
+    expect(keys).toContain("identity_access.machine_credentials.create");
+    expect(keys).toContain("identity_access.machine_credentials_write.create");
   });
 });
 
@@ -426,8 +459,12 @@ describe("jejak audit membedakan kedua kelas", () => {
 
     expect(source).toContain("severity: writeClass ?");
     expect(source).toContain('"critical"');
-    expect(source).toContain("allowedWriteActions: result.credential.allowedWriteActions");
-    expect(source).toContain("allowedIpCidrs: result.credential.allowedIpCidrs");
+    expect(source).toContain(
+      "allowedWriteActions: result.credential.allowedWriteActions"
+    );
+    expect(source).toContain(
+      "allowedIpCidrs: result.credential.allowedIpCidrs"
+    );
   });
 
   test("dan token-nya tetap TIDAK ada di sana", async () => {

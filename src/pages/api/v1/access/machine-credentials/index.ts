@@ -90,14 +90,30 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
 
     return validation.value;
   },
-  authorize: ({ prepared }) => ({
-    moduleKey: "identity_access",
-    activityCode:
-      prepared.allowedWriteActions.length > 0
-        ? "machine_credentials_write"
-        : "machine_credentials",
-    action: "create"
-  }),
+  // TWO COMPLETE LITERALS, not one literal with a ternary `activityCode`.
+  //
+  // The shorter spelling costs a gate. `access:permissions:enforcement:check`
+  // reads guards as object LITERALS carrying all three keys, and a ternary in
+  // the `activityCode` position makes the whole guard unreadable to it — the
+  // first attempt here reported BOTH `machine_credentials.create` and
+  // `machine_credentials_write.create` as "enforced by nothing", which is the
+  // exact false alibi ADR-0058 §E records for `visitor_analytics`.
+  //
+  // The scanner already accommodates a ternary in the `action` position. Rather
+  // than widen a security gate to fit a formatting preference, the route says
+  // each guard once and in full.
+  authorize: ({ prepared }) =>
+    prepared.allowedWriteActions.length > 0
+      ? {
+          moduleKey: "identity_access",
+          activityCode: "machine_credentials_write",
+          action: "create"
+        }
+      : {
+          moduleKey: "identity_access",
+          activityCode: "machine_credentials",
+          action: "create"
+        },
   handler: async ({ tx, tenantId, auth, prepared, now }) => {
     const result = await issueMachineCredential(
       tx,
