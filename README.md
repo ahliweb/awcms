@@ -1,6 +1,6 @@
 🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](README.id.md)
 
-<!-- i18n-source-hash: sha256:e6b931184f1be68a43e242dfe3a91c33c8ef1f8df464566304ff2a30e4032cc7 -->
+<!-- i18n-source-hash: sha256:e2f436a21173682b98ca67c662cda01e899f9a66a039cc6bb7989e790664fc56 -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 
@@ -28,16 +28,16 @@
 
 ## Why this repo was rebuilt
 
-The old version of AWCMS was built on a combination of Node.js, Vite/React (admin & public), and Supabase. Throughout the migration cycle (ADR-013 through ADR-023), every component was moved in stages to a new runtime and architecture:
+In short: the old repo ran on Node.js + Vite/React + Supabase, and every
+component was moved in stages to a new runtime and architecture (ADR-013…023)
+before the legacy files were removed — not to retire the repo, but to clear the
+ground.
 
-- `chore(mcp): migrasi awcms-mcp ke runtime Bun (ADR-019, #113)`
-- `chore(public): migrasi awcms-public ke Bun (ADR-019, #113)`
-- `chore(admin): migrasi awcms admin (Vite/React) ke Bun (ADR-019, #113)`
-- `docs: referensi keputusan arsitektur kanonik (ADR-013…023 per produk)`
-- `docs(readme): add architecture update note (PostgreSQL-only, RLS wajib, EmDash optional)`
-- `docs: inventaris pemakaian Supabase (audit off-Supabase, #108)`
-
-Once every component (mcp, public, admin) had finished moving and Supabase was no longer used, the legacy files in this repo were removed (`chore(foundation): remove legacy repository files`) — not to retire the repo, but to clear the ground so AWCMS could be rebuilt on the new standard foundation, with a much broader business scope than before.
+The full account, including the migration commit list and the before/after
+technology-base table, is in
+[`docs/awcms/sejarah-repo.md`](docs/awcms/sejarah-repo.md). It moved there
+because a README should answer "what is this, now" — and history piling up at
+the front slowly buries that answer.
 
 ## Direction: awcms-mini technology base, ERP-foundation scope
 
@@ -49,17 +49,6 @@ This repo **adopts the stack and technical standard from [awcms-mini](https://gi
 - **Multi-tenant/multi-entity scale** — RBAC/ABAC/RLS + tenant/legal-entity/organization-unit boundaries ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) reused across domain modules.
 
 Actual ERP domain modules (finance/GL, inventory/warehouse, procurement, manufacturing, HR/payroll) and business verticals (POS, school portal, etc.) are **added directly in this template's `src/modules/`** when it is used ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — not in a separate derived repo. (The former [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md) guide is now **DEPRECATED**.)
-
-Technology base adopted from awcms-mini:
-
-| Aspect         | Before (old repo)                    | Now (awcms-mini base)                                                                                                                               |
-| -------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime        | Node.js                              | **Bun** (Bun-only, see ADR-0002)                                                                                                                    |
-| Web framework  | Vite + React (separate admin/public) | **Astro 7** (SSR on Bun, single modular-monolith shell)                                                                                             |
-| Database       | Supabase (managed Postgres)          | **PostgreSQL** with **mandatory RLS** (ADR-0003)                                                                                                    |
-| Architecture   | Separate apps (mcp, public, admin)   | **Modular monolith, microservice-ready** (ADR-0001), reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
-| Operating mode | Online-dependent                     | **Hybrid online-first** (online is the primary path; offline/LAN is the resilience mode with HMAC-signed sync outbox, ADR-0006)                     |
-| API contract   | Ad-hoc                               | Validated OpenAPI/AsyncAPI, standard response helper                                                                                                |
 
 Reusable base modules (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) from awcms-mini are used as-is as the foundation; ERP domain modules and business integrations are developed **directly on top of that foundation, in this template's `src/modules/`** — not in a separate derived repo ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), superseding ADR-0022).
 

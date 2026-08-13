@@ -356,6 +356,44 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN 13 Agustus 2026 (ketujuh belas) — ALUR PENGEMBANGAN PUNYA DOKUMEN
+  KANONIK, dan satu langkahnya BERTENTANGAN dengan ADR yang berlaku.**
+
+  [`awcms/alur-pengembangan.md`](awcms/alur-pengembangan.md): 18 langkah dari
+  Master Blueprint sampai post-release review, tiap langkah dipetakan ke artefak
+  NYATA dan gerbang yang menegakkannya. Ia menggantikan
+  `alur-pengembangan-mini-first.md` (yang sudah dicabut ADR-0055) dan menjadi
+  yang mengikat; `CONTRIBUTING.md` dan §"Alur kerja wajib" di `AGENTS.md`
+  keduanya kini menyatakan diri sebagai **langkah 10–12 saja**.
+
+  **KEPUTUSAN YANG MENUNGGU PEMILIK REPO — langkah 13 (Deploy Staging)
+  bertentangan dengan [ADR-0083](adr/0083-this-template-deploys-to-one-environment.md)**,
+  yang menyatakan template ini men-deploy ke SATU environment: produksi. Langkah
+  14 (UAT internal) bergantung padanya. Dokumen alur menuliskannya sebagai
+  **konflik terbuka**, bukan sebagai langkah yang seolah berjalan. Tiga jalan
+  keluarnya, dan semuanya keputusan pemilik repo: (a) hidupkan staging lewat ADR
+  yang men-supersede ADR-0083; (b) tandai 13–14 tidak berlaku untuk repo ini,
+  dengan CI + preflight produksi sebagai penggantinya; (c) tulis alurnya sebagai
+  standar KELUARGA, dengan ADR-0083 sebagai penyimpangan ber-alasan khusus repo
+  ini.
+
+  **Tiga celah lain, tidak bertentangan dengan apa pun — murni belum ada:**
+  privacy analysis/DPIA (langkah 3), Definition of Ready umum (langkah 9 — yang
+  ada hanya admission checklist untuk modul baru), dan post-release review
+  per-RILIS (langkah 18 — §4 ini adalah yang terdekat, tetapi ia terikat putaran
+  kerja, bukan rilis).
+
+  Langkah 9 punya bukti biayanya sendiri di repo ini: **dua gelombang berturut-turut**
+  (ADR-0087, ADR-0088) menulis rencana yang mengasumsikan pembacaan lintas-tenant
+  yang FORCE RLS larang, dan keduanya baru ketahuan saat implementasi.
+
+  Sejarah repo dipindahkan keluar dari `README.md` ke
+  [`awcms/sejarah-repo.md`](awcms/sejarah-repo.md) — README menjawab "ini apa,
+  sekarang", dan sejarah di bagian depan mengubur jawabannya. Ketiga agen
+  (`.claude/agents/`) kini menunjuk dokumen alur; reviewer diminta menentukan
+  KELAS perubahan lebih dulu, dan auditor diingatkan bahwa kontrol belum
+  terbukti sampai ia dibuktikan GAGAL.
+
 - **PUTARAN 13 Agustus 2026 (keenam belas) — PR 8.5 MENDARAT. GELOMBANG 8
   SELESAI, DAN PROGRAM #423 HABIS.**
 
