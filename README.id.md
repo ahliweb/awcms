@@ -26,16 +26,16 @@
 
 ## Kenapa repo ini dibangun ulang
 
-AWCMS versi lama dibangun di atas kombinasi Node.js, Vite/React (admin & public), dan Supabase. Sepanjang siklus migrasi (ADR-013 s/d ADR-023), setiap komponen dipindah bertahap ke runtime dan arsitektur baru:
+Ringkasnya: repo lama berjalan di atas Node.js + Vite/React + Supabase, dan
+seluruh komponennya dipindahkan bertahap ke runtime dan arsitektur baru
+(ADR-013…023) sebelum berkas warisannya dihapus — bukan untuk memensiunkan repo
+ini, melainkan untuk membersihkan lahan.
 
-- `chore(mcp): migrasi awcms-mcp ke runtime Bun (ADR-019, #113)`
-- `chore(public): migrasi awcms-public ke Bun (ADR-019, #113)`
-- `chore(admin): migrasi awcms admin (Vite/React) ke Bun (ADR-019, #113)`
-- `docs: referensi keputusan arsitektur kanonik (ADR-013…023 per produk)`
-- `docs(readme): add architecture update note (PostgreSQL-only, RLS wajib, EmDash optional)`
-- `docs: inventaris pemakaian Supabase (audit off-Supabase, #108)`
-
-Setelah seluruh komponen (mcp, public, admin) selesai dipindah dan Supabase tidak lagi dipakai, file-file legacy di repo ini dihapus (`chore(foundation): remove legacy repository files`) — bukan untuk memensiunkan repo, melainkan untuk membersihkan lahan agar AWCMS bisa dibangun ulang di atas fondasi standar yang baru, dengan skop bisnis yang jauh lebih luas dari sebelumnya.
+Rincian lengkapnya, termasuk daftar commit migrasi dan tabel perbandingan basis
+teknologi sebelum/sesudah, ada di
+[`docs/awcms/sejarah-repo.md`](docs/awcms/sejarah-repo.md). Ia dipindahkan ke
+sana karena README seharusnya menjawab "ini apa, sekarang" — dan sejarah yang
+menumpuk di depan pelan-pelan mengubur jawaban itu.
 
 ## Arah pengembangan: basis teknologi awcms-mini, skop fondasi ERP
 
@@ -47,17 +47,6 @@ Repo ini **mengadopsi stack dan standar teknis dari [awcms-mini](https://github.
 - **Skala multi-tenant/multi-entitas** — RBAC/ABAC/RLS + batas tenant/legal-entity/organization-unit ([ADR-0013](docs/adr/0013-extension-layers-and-boundary-model.md)) yang dipakai ulang lintas modul domain.
 
 Modul domain ERP sesungguhnya (finance/GL, inventory/warehouse, procurement, manufaktur, HR/payroll) dan vertikal bisnis (POS, portal sekolah, dsb.) **ditambahkan langsung di `src/modules/` template ini** saat dipakai ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — bukan di repo turunan terpisah. (Panduan lama [`docs/awcms/derived-application-guide.md`](docs/awcms/derived-application-guide.md) kini **DEPRECATED**.)
-
-Basis teknologi yang diadopsi dari awcms-mini:
-
-| Aspek         | Sebelumnya (repo lama)                 | Sekarang (basis awcms-mini)                                                                                                                       |
-| ------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime       | Node.js                                | **Bun** (Bun-only, lihat ADR-0002)                                                                                                                |
-| Web framework | Vite + React (admin/public terpisah)   | **Astro 7** (SSR di atas Bun, satu shell modular monolith)                                                                                        |
-| Database      | Supabase (Postgres terkelola)          | **PostgreSQL** dengan **RLS wajib** (ADR-0003)                                                                                                    |
-| Arsitektur    | Aplikasi terpisah (mcp, public, admin) | **Modular monolith, microservice-ready** (ADR-0001), modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) |
-| Mode operasi  | Online-dependent                       | **Hybrid online-first** (online jalur utama; offline/LAN sebagai mode ketahanan dengan sync outbox HMAC-signed, ADR-0006)                         |
-| Kontrak API   | Ad-hoc                                 | OpenAPI/AsyncAPI tervalidasi, response helper standar                                                                                             |
 
 Modul base reusable (Tenant, Identity, Profile, Access/RBAC-ABAC, Sync, Workflow, Reporting) dari awcms-mini dipakai apa adanya sebagai fondasi; modul domain ERP dan integrasi bisnis dikembangkan **langsung di atas fondasi tersebut, di `src/modules/` template ini** — bukan di repo turunan terpisah ([ADR-0034](docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md), men-supersede ADR-0022).
 

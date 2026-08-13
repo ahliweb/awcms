@@ -1,5 +1,9 @@
 # Alur pengembangan: awcms-mini dulu, lalu port ke awcms
 
+> **DIGANTIKAN oleh [`alur-pengembangan.md`](alur-pengembangan.md)** (13 Agustus
+> 2026), yang kini dokumen kanonik proses. Berkas ini tinggal sebagai catatan
+> sejarah dan tidak mengikat siapa pun.
+
 > **DICABUT PERMANEN ([ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md), 2 Agustus 2026).**
 > Penangguhan ADR-0047 (31 Juli 2026) berubah menjadi pencabutan: `awcms-mini`
 > dan `awcms-micro` kini **arsip** — boleh dibaca sebagai referensi sejarah,

@@ -126,6 +126,17 @@ Tiga hal yang mudah keliru:
 
 ## Alur kerja wajib setiap task
 
+> **Delapan langkah di bawah adalah langkah 10–12 dari alur penuh.** Alur
+> pengembangan lengkap — 18 langkah, dari Master Blueprint sampai post-release
+> review, masing-masing dipetakan ke artefak nyata dan gerbang yang
+> menegakkannya — ada di
+> [`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md).
+>
+> Baca **tabel kelas perubahan** di sana sebelum memulai: tidak setiap perubahan
+> menempuh 18 langkah, dan yang menentukan bukan selera melainkan kelas
+> perubahannya. Modul baru dan perubahan lapisan fondasi menempuh 1→12 penuh
+> plus ADR; perbaikan bug tanpa perubahan kontrak menempuh 10→12 saja.
+
 1. Mulai dari issue/ADR yang jelas scope-nya. Bila mengubah standar dasar, buat ADR dulu (lihat [`GOVERNANCE.md`](GOVERNANCE.md)).
 2. **Buat branch baru dari `main` SEBELUM menyentuh kode.** Setiap implementasi issue GitHub wajib dikerjakan di branch tersendiri — **jangan pernah commit langsung ke `main`** (branch protection menolak push langsung; lihat [`docs/awcms/branch-protection.md`](docs/awcms/branch-protection.md)). Penamaan: `feature/<issue>-<slug>`, `fix/<issue>-<slug>`, `docs/<topik>`, atau `security/<issue>-<slug>` — mis. `git switch -c feature/178-module-composition`. Satu branch = satu issue/PR; jangan menumpuk beberapa issue tak-berkaitan di satu branch. Detail alur di [`CONTRIBUTING.md`](CONTRIBUTING.md) §Alur kontribusi.
 3. Identifikasi dampak: schema (migration), API (OpenAPI), event (AsyncAPI), akses (RBAC/ABAC/RLS), mutation high-risk (idempotency), aksi sensitif (audit), data sensitif (masking).
@@ -201,7 +212,9 @@ Lihat [`CONTRIBUTING.md`](CONTRIBUTING.md#definition-of-done).
 - [`GOVERNANCE.md`](GOVERNANCE.md) — tata kelola & pengambilan keputusan.
 - [`docs/adr/`](docs/adr/README.md) — keputusan arsitektural (fondasi & batas ekstensi ERP).
 - [`docs/awcms/`](docs/awcms/README.md) — paket dokumen teknis detail per modul fondasi (PRD/SRS/ERD/OpenAPI/AsyncAPI) dan kontrak kesiapan ERP untuk modul domain yang ditambahkan.
-- [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — **catatan sejarah**: kontrak alur "uji di awcms-mini dulu, lalu port", dicabut oleh [ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md).
+- [`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md) — **alur pengembangan KANONIK** (18 langkah, kelas perubahan, dan daftar celah yang belum ada). Ini yang mengikat; `CONTRIBUTING.md` dan daftar di atas hanya menjelaskan langkah 10–12.
+- [`docs/awcms/alur-pengembangan-mini-first.md`](docs/awcms/alur-pengembangan-mini-first.md) — **catatan sejarah**: kontrak alur "uji di awcms-mini dulu, lalu port", dicabut oleh [ADR-0055](docs/adr/0055-development-confined-to-awcms-and-awcms-astro.md) dan digantikan dokumen di atas.
+- [`docs/awcms/sejarah-repo.md`](docs/awcms/sejarah-repo.md) — **catatan sejarah** repo: kenapa dibangun ulang, dan basis teknologi sebelum/sesudah. Dipindahkan keluar dari README.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — apa yang **sudah ada di kode** saat ini vs gap yang tersisa.
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) — **state proyek & titik-lanjut** (baca lebih dulu saat melanjutkan pekerjaan besar): model tata kelola, inventori ringkas, backlog, jebakan penting.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — proses kontribusi & Definition of Done.

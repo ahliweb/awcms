@@ -2,7 +2,7 @@
 
 Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontribusi ke AWCMS (basis/fondasi modular monolith untuk ERP & solusi bisnis yang dibangun di atasnya di repo terpisah — bukan ERP itu sendiri, lihat [ADR-0022](docs/adr/0022-erp-modules-live-in-extension-repos.md)) secara aman, konsisten, dan sesuai standar.
 
-> **Wajib dibaca lebih dulu:** [`AGENTS.md`](AGENTS.md) adalah kontrak kerja teknis (aturan wajib, guardrail keamanan, alur task). Dokumen ini melengkapinya dengan sisi proses kontribusi. Standar dasar (runtime, RLS, ABAC, kontrak API/event) tercatat di [`docs/adr/`](docs/adr/README.md); baca ADR terkait bila mengubah lapisan fondasi.
+> **Wajib dibaca lebih dulu:** [`AGENTS.md`](AGENTS.md) adalah kontrak kerja teknis (aturan wajib, guardrail keamanan, alur task), dan [`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md) adalah alur prosesnya dari ujung ke ujung. Dokumen ini melengkapinya dengan sisi proses kontribusi. Standar dasar (runtime, RLS, ABAC, kontrak API/event) tercatat di [`docs/adr/`](docs/adr/README.md); baca ADR terkait bila mengubah lapisan fondasi.
 
 ## Prinsip singkat
 
@@ -12,6 +12,14 @@ Terima kasih sudah tertarik berkontribusi. Dokumen ini menjelaskan cara berkontr
 4. **Terdokumentasi** — perubahan perilaku wajib menyertakan update dokumen dan changeset.
 
 ## Alur kontribusi
+
+> **Dokumen ini menjelaskan langkah 10–12** dari alur pengembangan penuh (issue
+> → implementasi → PR). Langkah 1–9 (blueprint, PRD, threat model, ERD, matriks
+> RBAC/ABAC/RLS, spesifikasi domain, kontrak API, UX, review lintas-spesifikasi)
+> dan 13–18 (staging, UAT, go/no-go, produksi, validasi, monitoring) ada di
+> **[`docs/awcms/alur-pengembangan.md`](docs/awcms/alur-pengembangan.md)**, yang
+> juga memuat tabel **kelas perubahan**: tidak setiap perubahan menempuh 18
+> langkah, dan yang menentukan bukan selera.
 
 ```mermaid
 flowchart LR
