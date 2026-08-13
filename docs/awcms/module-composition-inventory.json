@@ -99,7 +99,7 @@
       "capabilitiesProvided": ["auth_notification"],
       "capabilitiesConsumed": [],
       "permissionCount": 12,
-      "navigationCount": 1,
+      "navigationCount": 2,
       "jobCount": 4,
       "hasHealthCheck": false,
       "hasReadinessCheck": false,

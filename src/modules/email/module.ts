@@ -49,6 +49,17 @@ export const emailModule = defineModule({
       path: "/admin/email-templates",
       order: 32,
       requiredPermission: "email.template.read"
+    },
+    // Issue #544. Its own entry rather than a section on the templates screen:
+    // an operator reaching for this is answering "why did our mail not arrive",
+    // not editing copy, and a control they cannot FIND is the same as one that
+    // does not exist. 33, not 32 — two entries sharing an order leave the
+    // sidebar's sequence to whatever the sort happened to do that build.
+    {
+      labelKey: "admin.layout.nav_email_suppression",
+      path: "/admin/email-suppression",
+      order: 33,
+      requiredPermission: "email.suppression.read"
     }
   ],
   /**

@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **36** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **49** (26.999 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **37** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **50** (27.331 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,29 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh tiga) — LAYAR EMAIL SUPPRESSION (#544).**
+
+  Menutup 3 kunci, **58 → 55**. Kelompok kedua yang ledger cakupan layar namai
+  sendiri sebagai bukan kosmetik: alamat yang di-suppress diam-diam berhenti
+  menerima surat, TERMASUK reset password, dan tak ada yang bisa mendaftar atau
+  membersihkannya dari halaman. Diagnosisnya sampai sekarang query SQL yang harus
+  diketahui keberadaannya.
+
+  **`alreadySuppressed` adalah JAWABAN, bukan error — dan itu yang membentuk
+  halamannya.** Daftarnya hanya menyimpan alamat ter-mask dan dibatasi 100 baris,
+  jadi "apakah alamat INI di-suppress?" tidak bisa dijawab dengan membacanya.
+  Endpoint-nya menjawab 200 ber-`alreadySuppressed` alih-alih 409, sehingga satu
+  request melayani "tambahkan" DAN "sudah ada belum"; me-reload di cabang itu
+  membuang satu-satunya hal yang ditanyakan operator.
+
+  **`SUPPRESSION_REASONS` diekspor, dan `KNOWN_REASONS` diturunkan darinya.**
+  Perubahan kecil dengan aturan yang sama seperti checkbox kelas-tulis satu
+  putaran lalu: sebuah daftar yang disalin ke UI tetap benar hari ini dan
+  tertinggal diam-diam saat nilai berikutnya ditambahkan. Bentuk mutasi yang
+  membuktikannya juga sama, dan yang paling berguna adalah **mengosongkan daftar
+  sumbernya** — asersi "diturunkan" yang tidak memerah pada daftar kosong adalah
+  asersi hampa.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh dua) — EPIC #423 DITUTUP, BACKLOGNYA
   PINDAH KE ISSUE, dan layar `/admin/machine-credentials` mendarat.**

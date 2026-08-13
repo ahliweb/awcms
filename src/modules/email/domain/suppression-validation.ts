@@ -22,12 +22,23 @@ export type SuppressionInput = {
   reason: SuppressionReason;
 };
 
-const KNOWN_REASONS: ReadonlySet<string> = new Set([
+/**
+ * The reasons, in the order an operator should see them offered.
+ *
+ * Exported so `/admin/email-suppression` renders its `<select>` from THIS list
+ * rather than repeating it. A hand-written copy in the page would stay correct
+ * today and fall silently behind the day a reason is added — the form offering
+ * three of four options, with nothing red. `KNOWN_REASONS` below is derived
+ * from it for the same reason, so there is exactly one place to edit.
+ */
+export const SUPPRESSION_REASONS: readonly SuppressionReason[] = [
   "bounced",
   "complained",
   "manual",
   "unsubscribed"
-]);
+];
+
+const KNOWN_REASONS: ReadonlySet<string> = new Set(SUPPRESSION_REASONS);
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

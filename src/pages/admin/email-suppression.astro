@@ -1,0 +1,332 @@
+---
+/**
+ * Email suppression — Issue #544.
+ *
+ * Three keys sat on `NOT_YET_SCREENED` and the ledger named this group itself
+ * as one of two that are not cosmetic:
+ *
+ * > a suppressed address silently stops receiving mail, INCLUDING password
+ * > resets, and nothing can list or clear it from a page.
+ *
+ * That is a complete support failure with no diagnosis: somebody cannot sign
+ * in, asks for a reset, receives nothing, and nobody on the operator's side has
+ * a way to see why. Until this page the answer lived in a SQL query somebody
+ * had to know existed.
+ *
+ * ## The list is masked, and bounded at 100
+ *
+ * `listSuppressions` returns `recipient_masked` — the raw address is never
+ * stored in readable form and never returned. So "is THIS address suppressed?"
+ * cannot be answered by reading the table, and the page says so rather than
+ * implying the list is a search.
+ *
+ * The honest way to ask is to try to add it: the endpoint answers
+ * `alreadySuppressed` instead of creating a duplicate, and this page surfaces
+ * that answer as the check it actually is. That is not a new disclosure — it is
+ * what `POST` has always replied — but leaving it unlabelled would make the
+ * most common support question look unanswerable.
+ *
+ * ## Reasons come from the domain, not from here
+ *
+ * The `<select>` is rendered from `SUPPRESSION_REASONS`. A copy of the four
+ * values in this file would stay correct today and fall behind the day a fifth
+ * is added, offering an operator four of five options with nothing red.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import "../../styles/admin-screens.css";
+import { loadAdminScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import {
+  listSuppressions,
+  type SuppressionEntry
+} from "../../modules/email/application/suppression-directory";
+import { SUPPRESSION_REASONS } from "../../modules/email/domain/suppression-validation";
+
+const ssr = Astro.locals.ssrContext!;
+
+const screen = await loadAdminScreen({
+  ssr,
+  workClass: "interactive",
+  authorize: {
+    moduleKey: "email",
+    activityCode: "suppression",
+    action: "read"
+  },
+  load: async ({ tx, can }) => ({
+    // One transaction, one awaited query at a time.
+    entries: await listSuppressions(tx, ssr.tenantId),
+    canCreate: await can({
+      moduleKey: "email",
+      activityCode: "suppression",
+      action: "create"
+    }),
+    canDelete: await can({
+      moduleKey: "email",
+      activityCode: "suppression",
+      action: "delete"
+    })
+  }),
+  onError: (error) => {
+    logAdminPageError(
+      "admin/email-suppression.astro: failed to list suppressions",
+      error,
+      { correlationId: Astro.locals.correlationId }
+    );
+  }
+});
+
+const canRead = screen.state !== "denied";
+const loadError = screen.state === "error";
+const entries: SuppressionEntry[] =
+  screen.state === "allowed" ? screen.data.entries : [];
+const canCreate = screen.state === "allowed" && screen.data.canCreate;
+const canDelete = screen.state === "allowed" && screen.data.canDelete;
+
+/** Rendered from the domain list — see this file's header. */
+const reasons = [...SUPPRESSION_REASONS];
+---
+
+<AdminLayout title="Email suppression">
+  <header class="page-header fade-in-up">
+    <h1 id="email-suppression-heading">Email suppression</h1>
+    <p class="page-description">
+      Addresses this tenant will not send to. A suppressed address receives
+      nothing — including password resets — so an account can look broken when
+      it is only unreachable. This is where to check, and where to undo it.
+    </p>
+  </header>
+
+  {
+    !canRead && (
+      <p class="state-notice fade-in-up" id="email-suppression-denied">
+        You do not have permission to view the suppression list.
+      </p>
+    )
+  }
+
+  {
+    canRead && loadError && (
+      <p class="state-notice fade-in-up" id="email-suppression-load-error">
+        Could not load the suppression list. Please try again.
+      </p>
+    )
+  }
+
+  {
+    canRead && !loadError && (
+      <>
+        <p
+          id="email-suppression-action-error"
+          class="state-notice"
+          role="alert"
+          hidden
+        />
+        <p
+          id="email-suppression-notice"
+          class="state-notice"
+          role="status"
+          hidden
+        />
+
+        {canCreate && (
+          <section
+            class="fade-in-up"
+            aria-labelledby="email-suppression-add-heading"
+          >
+            <h2 id="email-suppression-add-heading">
+              Suppress an address — or check one
+            </h2>
+
+            <form id="add-suppression-form" class="admin-form">
+              <p class="page-description">
+                The list below shows masked addresses only, so it cannot be
+                searched. Submitting an address that is already suppressed does
+                not add a second entry — it tells you it is already there, which
+                is how to answer "why is this person not getting our mail?".
+              </p>
+
+              <label for="add-suppression-recipient">Email address</label>
+              <input
+                id="add-suppression-recipient"
+                name="recipient"
+                type="email"
+                required
+                autocomplete="off"
+                placeholder="somebody@example.com"
+              />
+
+              <label for="add-suppression-reason">Reason</label>
+              <select id="add-suppression-reason" name="reason" required>
+                {reasons.map((reason) => (
+                  <option value={reason}>{reason}</option>
+                ))}
+              </select>
+
+              <button id="add-suppression-submit" type="submit">
+                Suppress address
+              </button>
+            </form>
+          </section>
+        )}
+
+        <section
+          class="fade-in-up"
+          aria-labelledby="email-suppression-list-heading"
+        >
+          <h2 id="email-suppression-list-heading">Suppressed addresses</h2>
+
+          {entries.length === 0 ? (
+            <div class="empty-state">
+              <p id="email-suppression-empty">
+                Nothing is suppressed. Every address this tenant sends to can
+                receive mail.
+              </p>
+            </div>
+          ) : (
+            <div class="data-table-scroll">
+              <table class="data-table data-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">Address</th>
+                    <th scope="col">Reason</th>
+                    <th scope="col">Added</th>
+                    {canDelete && <th scope="col">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr>
+                      <th scope="row" data-label="Address">
+                        {entry.recipientMasked}
+                      </th>
+                      <td data-label="Reason">{entry.reason}</td>
+                      <td data-label="Added">{entry.createdAt.slice(0, 10)}</td>
+                      {canDelete && (
+                        <td data-label="Actions">
+                          <button
+                            type="button"
+                            class="js-remove-suppression"
+                            data-suppression-id={entry.id}
+                          >
+                            Allow again
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p class="page-description">
+            Newest 100. An address removed here can receive mail from the next
+            send onwards; messages already skipped are not resent.
+          </p>
+        </section>
+      </>
+    )
+  }
+</AdminLayout>
+
+<script>
+  // Bundled unconditionally (Astro hoists every `<script>` at build time). The
+  // import forces Astro to emit this EXTERNAL, where the app's
+  // `default-src 'self'` CSP allows it.
+  import {
+    lockElement,
+    sendJson,
+    sendJsonForData
+  } from "../../lib/ui/admin-form-client";
+
+  const errorBox = document.getElementById("email-suppression-action-error");
+  const noticeBox = document.getElementById("email-suppression-notice");
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function clearBoxes(): void {
+    if (errorBox) errorBox.hidden = true;
+    if (noticeBox) noticeBox.hidden = true;
+  }
+
+  document
+    .getElementById("add-suppression-form")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearBoxes();
+
+      const form = event.currentTarget as HTMLFormElement;
+      const button = document.getElementById(
+        "add-suppression-submit"
+      ) as HTMLButtonElement | null;
+      if (!button) return;
+
+      const data = new FormData(form);
+      const unlock = lockElement(button, "Please wait…");
+      const result = await sendJsonForData<{ alreadySuppressed?: boolean }>(
+        "POST",
+        "/api/v1/email/suppressions",
+        {
+          recipient: String(data.get("recipient") ?? "").trim(),
+          reason: String(data.get("reason") ?? "")
+        }
+      );
+
+      // The endpoint answers 200 with `alreadySuppressed` rather than 409, so
+      // the CHECK and the ADD are the same request. Reloading on that answer
+      // would throw away the only thing the operator asked for.
+      if (result.ok && result.data?.alreadySuppressed) {
+        if (noticeBox) {
+          noticeBox.textContent =
+            "That address is already suppressed — nothing was changed. It is in the list below, masked.";
+          noticeBox.hidden = false;
+        }
+        unlock();
+        return;
+      }
+
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+
+      showError(
+        result.errorCode === "VALIDATION_ERROR"
+          ? "Check the address and the reason."
+          : "Could not suppress that address. Please try again."
+      );
+      unlock();
+    });
+
+  document.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement | null)?.closest("button");
+    if (!(target instanceof HTMLButtonElement)) return;
+    if (!target.classList.contains("js-remove-suppression")) return;
+
+    const suppressionId = target.dataset.suppressionId;
+    if (!suppressionId) return;
+
+    void (async () => {
+      clearBoxes();
+      const unlock = lockElement(target, "Please wait…");
+      const result = await sendJson(
+        "DELETE",
+        `/api/v1/email/suppressions/${suppressionId}`
+      );
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      showError(
+        result.errorCode === "RESOURCE_NOT_FOUND"
+          ? "That entry was already removed."
+          : "Could not remove that entry. Please try again."
+      );
+      unlock();
+    })();
+  });
+</script>
