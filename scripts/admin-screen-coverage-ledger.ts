@@ -64,7 +64,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (14)
+  // identity_access (12)
   //
   "identity_access.business_scope_assignments.create",
   "identity_access.business_scope_assignments.read",
@@ -75,14 +75,6 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "identity_access.business_scope_exceptions.read",
   "identity_access.business_scope_exceptions.reject",
   "identity_access.business_scope_exceptions.revoke",
-  // ADR-0089. The PLATFORM half of partnership, and its screen is not
-  // `/admin/partners` — that page is the CUSTOMER's view of who reaches its own
-  // tenant, and putting a registry there would put the platform's list of every
-  // partnership in front of every customer. Its home is a platform screen
-  // alongside `/admin/tenants`, and that is its own change; the API landing
-  // first is the ordering ADR-0056 used for `media_library`.
-  "identity_access.partner_registry.create",
-  "identity_access.partner_registry.read",
   "identity_access.sso_providers.create",
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",

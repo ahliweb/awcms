@@ -109,8 +109,8 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **123** (`sql/001`–`123`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0092** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **38** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **51** (27.808 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Layar admin                        | **39** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **52** (28.096 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **41** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **3.1.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -355,6 +355,23 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **PUTARAN 13 Agustus 2026 (kedua puluh lima) — LAYAR PARTNER REGISTRY (#540).**
+
+  Menutup 2 kunci, **51 → 49**. Hal terpenting tentang layar ini adalah di mana
+  ia TIDAK berada: `/admin/partners` adalah pandangan PELANGGAN, dan registri di
+  sana menaruh daftar setiap kemitraan platform di depan setiap pelanggan.
+  Test kontraknya menegakkan pemisahan itu dari KEDUA arah.
+
+  **Keputusan nav yang issue-nya khawatirkan ternyata tidak ada.** Pengelompokan
+  sidebar per-MODUL, bukan per-scope, dan platform-ness dinyatakan lewat
+  `requiredPermission` ber-scope platform — persis cara `/admin/tenants`. Layar
+  platform kedua karena itu tidak menuntut mekanisme baru.
+
+  **Tidak ada picker tenant, dan itu bukan kekurangan:** daftar tenant yang bisa
+  dipilih adalah direktori yang ADR-0089 tolak. `/admin/tenants` ada untuk
+  operator platform yang perlu mencarinya, dan batas IZIN yang seharusnya
+  memutuskan, bukan sebuah `<select>`.
 
 - **PUTARAN 13 Agustus 2026 (kedua puluh empat) — LAYAR INVITATIONS (#541).**
 
