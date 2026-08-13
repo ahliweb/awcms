@@ -49,6 +49,7 @@ import {
   hashMachineCredentialToken
 } from "../../src/lib/auth/machine-credential-token";
 import { authorizeInTransaction } from "../../src/modules/identity-access/application/access-guard";
+import type { AccessAction } from "../../src/modules/identity-access/domain/access-control";
 import {
   issueMachineCredential,
   listMachineCredentials,
@@ -156,7 +157,10 @@ async function seedFixtures(): Promise<void> {
 /** Issues a credential through the real service and returns its plaintext token. */
 async function issue(
   allowedPermissionKeys: string[],
-  expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+  expiresAt = new Date(Date.now() + 60 * 60 * 1000),
+  // ADR-0092. Defaulted to the read-only class so every pre-existing caller
+  // below keeps issuing exactly what it issued before the write class existed.
+  writeClass: { allowedWriteActions?: AccessAction[]; allowedIpCidrs?: string[] } = {}
 ): Promise<{ token: string; id: string }> {
   const runtime = getRuntimeSql();
 
@@ -169,6 +173,8 @@ async function issue(
         name: "build feed",
         tenantUserId: SERVICE_USER_A,
         allowedPermissionKeys,
+        allowedWriteActions: writeClass.allowedWriteActions ?? [],
+        allowedIpCidrs: writeClass.allowedIpCidrs ?? [],
         expiresAt
       },
       new Date()

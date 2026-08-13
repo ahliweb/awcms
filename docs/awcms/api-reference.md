@@ -832,14 +832,18 @@ Gated on `identity_access.machine_credentials.read`. Returns derived `active`/`e
 | 401    | Missing or invalid session.                                 | [`ApiError`](#standard-error-envelope) |
 | 403    | Access denied by RBAC/ABAC.                                 | [`ApiError`](#standard-error-envelope) |
 
-### `POST /api/v1/access/machine-credentials` — Issue a read-only machine credential (high-risk; audit-logged).
+### `POST /api/v1/access/machine-credentials` — Issue a machine credential (high-risk; audit-logged).
 
 - **operationId**: `accessIssueMachineCredential`
 - **Security**: bearerAuth + tenantHeader
 
-Mints a bearer for a non-human caller, bound to an existing tenant user (a service account), and returns the plaintext token EXACTLY ONCE — no endpoint can return it again. Gated on `identity_access.machine_credentials.create`.
+Mints a bearer for a non-human caller, bound to an existing tenant user (a service account), and returns the plaintext token EXACTLY ONCE — no endpoint can return it again.
 
-The credential AUTHENTICATES only: every request it makes still passes module-enabled, RBAC, ABAC (default-deny) and SoD. `allowedPermissionKeys` NARROWS — effective permissions are the intersection with what the service account holds, so granting that account another role never widens an already-issued credential. Requests authenticated this way are refused unless the action is read-only (ADR-0049 §3).
+The credential AUTHENTICATES only: every request it makes still passes module-enabled, RBAC, ABAC (default-deny) and SoD. `allowedPermissionKeys` NARROWS — effective permissions are the intersection with what the service account holds, so granting that account another role never widens an already-issued credential.
+
+TWO CLASSES, TWO PERMISSIONS. Omit `allowedWriteActions` and this is the read-only credential of ADR-0049 §3, gated on `identity_access.machine_credentials.create`; requests it makes are refused unless the action is `read`. Name write actions and it is the ADR-0092 write class, gated on `identity_access.machine_credentials_write.create` INSTEAD — a separate key so that opening this class does not hand write-minting authority to every role that already holds `create`.
+
+The write class is narrower in every other direction: only actions in the code ceiling (`create`, `update` — never a high-risk one), at least one `allowedIpCidrs` entry, at most 30 days, and a request whose caller IP is unknown is refused rather than exempted.
 
 Not idempotency-keyed, deliberately: replaying the response would mean persisting the plaintext token.
 
@@ -1513,7 +1517,7 @@ Every rejection — unknown client, non-allow-listed URI, a URI carrying a query
 - **operationId**: `redeemSessionHandoffCode`
 - **Security**: bearerAuth + tenantHeader
 
-ADR-0050. The only endpoint here authenticated by a **client secret** rather than a session: this is the request that obtains a session, so there is none to present yet. Not a machine credential either — those are read-only by construction (ADR-0049), and a read-only principal minting a human session would be an escalation path.
+ADR-0050. The only endpoint here authenticated by a **client secret** rather than a session: this is the request that obtains a session, so there is none to present yet. Not a machine credential either. ADR-0092 lets one write inside a narrow ceiling (`create`/`update`, never a high-risk action), and minting a human session is precisely the authority that ceiling exists to keep away from a non-human bearer.
 
 Call it from the BFF's SERVER. The token must never reach a browser: the BFF stores it server-side and gives the browser its own portal cookie.
 
@@ -9286,12 +9290,20 @@ sectionType cannot be changed after creation — omit it, do not send the old or
 
 ### Schema: IssueMachineCredentialRequest
 
-| Field                   | Type               | Required | Nullable | Description                                                                                                                                              |
-| ----------------------- | ------------------ | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                  | string             | yes      | no       | Operator-facing label, e.g. "awcms-astro build feed".                                                                                                    |
-| `tenantUserId`          | string (uuid)      | yes      | no       | An existing tenant user in THIS tenant (the service account).                                                                                            |
-| `allowedPermissionKeys` | array of string    | yes      | no       | Permission keys (`module.activity.action`) this credential may use. Required and non-empty — an empty list means "can do nothing", never "unrestricted". |
-| `expiresAt`             | string (date-time) | yes      | no       | Required, in the future, at most 365 days away. There is no perpetual credential.                                                                        |
+| Field                   | Type                              | Required | Nullable | Description                                                                                                                                                                        |
+| ----------------------- | --------------------------------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                  | string                            | yes      | no       | Operator-facing label, e.g. "awcms-astro build feed".                                                                                                                              |
+| `tenantUserId`          | string (uuid)                     | yes      | no       | An existing tenant user in THIS tenant (the service account).                                                                                                                      |
+| `allowedPermissionKeys` | array of string                   | yes      | no       | Permission keys (`module.activity.action`) this credential may use. Required and non-empty — an empty list means "can do nothing", never "unrestricted".                           |
+| `allowedWriteActions`   | array of enum(`create`, `update`) | no       | no       | ADR-0092. OPTIONAL — omitting it (or sending an empty array) issues the read-only credential of ADR-0049, which is what every caller written before this class got and still gets. |
+
+Naming any action switches the guard to `identity_access.machine_credentials_write.create` and makes `allowedIpCidrs` mandatory. `read` is REJECTED here rather than accepted as a no-op: every credential may already read whatever its `allowedPermissionKeys` name, and accepting it would suggest otherwise.
+|
+| `allowedIpCidrs` | array of string | no | no | ADR-0092. IPv4/IPv6 literals or CIDR blocks. Required and non-empty when `allowedWriteActions` is non-empty, and REJECTED when it is empty — a read-only credential is not restricted by this list, so accepting one would describe a binding that is not enforced.
+
+Unparseable entries are refused at issuance. At request time an unreadable entry matches nothing, so the failure would otherwise be a credential that reads as bound and can never authenticate.
+|
+| `expiresAt` | string (date-time) | yes | no | Required, in the future, at most 365 days away — or at most 30 days when `allowedWriteActions` is non-empty. There is no perpetual credential. |
 
 **Example**
 
@@ -9300,6 +9312,8 @@ sectionType cannot be changed after creation — omit it, do not send the old or
   "name": "string",
   "tenantUserId": "00000000-0000-0000-0000-000000000000",
   "allowedPermissionKeys": ["string"],
+  "allowedWriteActions": ["create"],
+  "allowedIpCidrs": ["string"],
   "expiresAt": "2026-01-01T00:00:00.000Z"
 }
 ```

@@ -333,6 +333,25 @@ export const identityAccessModule = defineModule({
       description:
         "Revoke a machine credential, effective on its next request — audited"
     },
+    // The WRITE class (ADR-0092, sql/121/122) — a THIRD activity rather than a
+    // fourth action on `machine_credentials`, and the reason is the same one
+    // that separated `machine_credentials` from `access_control` in the first
+    // place, applied to itself.
+    //
+    // Had the write class reused `machine_credentials.create`, every role that
+    // already holds it would have gained the ability to mint credentials that
+    // CHANGE data on the day this merged — a grant widening with no grant being
+    // edited, and nothing in any diff to review. Issuance is a superset:
+    // holding this key implies being able to mint a read-only credential too,
+    // which is why there is no separate `read` or `revoke` here. `revoke` does
+    // not split, deliberately — during an incident, whoever can kill a leaked
+    // credential must be able to kill EVERY class of it.
+    {
+      activityCode: "machine_credentials_write",
+      action: "create",
+      description:
+        "Issue a WRITE-capable machine credential (create/update only, IP-bound, at most 30 days) — audited"
+    },
     // Other people's sessions (Gelombang 2 PR 2.2 of #423, sql/101). A separate
     // activity from `access_control` for the reason `registration_requests` and
     // `machine_credentials` are: folding it in would make every role editor an

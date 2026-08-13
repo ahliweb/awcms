@@ -38,9 +38,26 @@ export const GET = defineTenantRoute({
 });
 
 /**
- * `POST /api/v1/access/machine-credentials` (ADR-0049) — issues a READ-ONLY
- * credential bound to a service account, returning the plaintext token exactly
- * once.
+ * `POST /api/v1/access/machine-credentials` (ADR-0049) — issues a credential
+ * bound to a service account, returning the plaintext token exactly once.
+ *
+ * ## Two classes, and a DIFFERENT permission for the second (ADR-0092)
+ *
+ * A request that names no `allowedWriteActions` is the read-only credential
+ * ADR-0049 shipped, gated on `machine_credentials.create` exactly as before. A
+ * request that names some is the write class, and it is gated on
+ * `machine_credentials_write.create` instead.
+ *
+ * Reusing one permission for both was the obvious shape and the wrong one: it
+ * would hand write-minting authority, on merge day, to everybody who already
+ * holds `create` — a grant widening itself with no grant being edited. The
+ * program this endpoint belongs to (#423) is built on the rule that no change
+ * may leave the tree with authorization looser than it found it, and this is
+ * the cheapest place that rule could have been broken.
+ *
+ * The split is resolved from the parsed body via `defineTenantRoute`'s callback
+ * form of `authorize`, so the guard is decided BEFORE the transaction opens and
+ * the body cannot pick a weaker check than the thing it asks for.
  *
  * ## Deliberately NOT idempotency-keyed
  *
@@ -73,11 +90,14 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
 
     return validation.value;
   },
-  authorize: {
+  authorize: ({ prepared }) => ({
     moduleKey: "identity_access",
-    activityCode: "machine_credentials",
+    activityCode:
+      prepared.allowedWriteActions.length > 0
+        ? "machine_credentials_write"
+        : "machine_credentials",
     action: "create"
-  },
+  }),
   handler: async ({ tx, tenantId, auth, prepared, now }) => {
     const result = await issueMachineCredential(
       tx,
@@ -95,6 +115,8 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
       );
     }
 
+    const writeClass = result.credential.allowedWriteActions.length > 0;
+
     await recordAuditEvent(tx, {
       tenantId,
       actorTenantUserId: auth.context.tenantUserId,
@@ -102,14 +124,22 @@ export const POST = defineTenantRoute<IssueMachineCredentialInput>({
       action: "machine_credential.issued",
       resourceType: "machine_credential",
       resourceId: result.credential.id,
-      severity: "warning",
-      message: `Machine credential "${result.credential.name}" issued.`,
+      // A credential that can CHANGE data is not the same event as one that can
+      // read, and a reader filtering an audit trail by severity should not have
+      // to know this endpoint has two classes to find the ones that matter.
+      severity: writeClass ? "critical" : "warning",
+      message: writeClass
+        ? `Machine credential "${result.credential.name}" issued — WRITE class.`
+        : `Machine credential "${result.credential.name}" issued.`,
       // The token is NOT here, and `allowedPermissionKeys` is: the audit trail
       // must answer "what could this thing read" without ever being able to
-      // answer "what was its token".
+      // answer "what was its token". ADR-0092 adds the other two halves of the
+      // same question — what it could CHANGE, and from where.
       attributes: {
         tenantUserId: result.credential.tenantUserId,
         allowedPermissionKeys: result.credential.allowedPermissionKeys,
+        allowedWriteActions: result.credential.allowedWriteActions,
+        allowedIpCidrs: result.credential.allowedIpCidrs,
         expiresAt: result.credential.expiresAt.toISOString()
       }
     });

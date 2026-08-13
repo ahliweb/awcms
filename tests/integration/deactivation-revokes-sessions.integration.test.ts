@@ -184,6 +184,8 @@ suite("deactivation revokes live access", () => {
           name: "target feed",
           tenantUserId: TARGET_USER,
           allowedPermissionKeys: ["blog_content.posts.read"],
+          allowedWriteActions: [],
+          allowedIpCidrs: [],
           expiresAt: new Date(Date.now() + 60 * 60 * 1000)
         },
         new Date()
@@ -241,6 +243,8 @@ suite("deactivation revokes live access", () => {
           name: "admin feed",
           tenantUserId: ADMIN_USER,
           allowedPermissionKeys: ["blog_content.posts.read"],
+          allowedWriteActions: [],
+          allowedIpCidrs: [],
           expiresAt: new Date(Date.now() + 60 * 60 * 1000)
         },
         new Date()

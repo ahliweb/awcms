@@ -67,7 +67,7 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "form_drafts.draft.create",
   "form_drafts.draft.update",
 
-  // identity_access (19)
+  // identity_access (20)
   //
   // The four `invitations.*` keys are ADR-0082's, and they land here on the
   // same terms `tenant_admin.tenant_lifecycle.*` did: the surface exists and is
@@ -91,6 +91,11 @@ export const NOT_YET_SCREENED: readonly string[] = [
   "identity_access.machine_credentials.create",
   "identity_access.machine_credentials.read",
   "identity_access.machine_credentials.revoke",
+  // ADR-0092. Joins its three siblings rather than being screened alone: there
+  // is no machine-credential page at all, and a screen that can mint the WRITE
+  // class while the read class stays an API call would be the wrong one to
+  // build first.
+  "identity_access.machine_credentials_write.create",
   "identity_access.sso_providers.create",
   "identity_access.sso_providers.delete",
   "identity_access.sso_providers.update",
