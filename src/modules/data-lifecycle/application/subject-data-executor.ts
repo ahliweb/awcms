@@ -46,6 +46,20 @@ export function assertSafeIdentifier(identifier: string): string {
   return identifier;
 }
 
+/**
+ * Validate, then DOUBLE-QUOTE.
+ *
+ * No exportable table has a reserved-word column today — checked, not assumed.
+ * But `order`, `user`, `end` and `default` are all plausible column names, and
+ * an unquoted one would make this engine throw for that table only, at runtime,
+ * in a privacy request. Quoting costs nothing here because every identifier is
+ * already lowercase `[a-z_][a-z0-9_]*`, which is exactly what an unquoted
+ * identifier folds to — so the quoted form names the same column, always.
+ */
+function quoted(identifier: string): string {
+  return `"${assertSafeIdentifier(identifier)}"`;
+}
+
 export type ColumnType = { column: string; dataType: string };
 
 /**
@@ -129,7 +143,7 @@ function subjectPredicate(
 ): { sql: string; values: string[] } {
   const values: string[] = [];
   const clauses = entry.matches.map((match) => {
-    const column = assertSafeIdentifier(match.column);
+    const column = quoted(match.column);
     const placeholder = `$${firstParameterIndex + values.length}`;
     values.push(match.value);
 
@@ -162,13 +176,13 @@ export async function readSubjectExport(
   const results: SubjectTableExport[] = [];
 
   for (const entry of plan.exportEntries) {
-    const table = assertSafeIdentifier(entry.tableName);
-    const tenantColumn = assertSafeIdentifier(entry.tenantColumn);
+    const table = quoted(entry.tableName);
+    const tenantColumn = quoted(entry.tenantColumn);
     const redacted = new Set(entry.redactedColumns);
     const selected = (columnTypes.get(entry.tableName) ?? [])
       .map((column) => column.column)
       .filter((column) => !redacted.has(column))
-      .map(assertSafeIdentifier);
+      .map(quoted);
 
     // Every column redacted means the row has nothing left to disclose. Reading
     // it would return a count dressed as content.
@@ -241,8 +255,8 @@ export async function runSubjectErasure(
   const skipped: string[] = [];
 
   for (const entry of erasureTargets(plan)) {
-    const table = assertSafeIdentifier(entry.tableName);
-    const tenantColumn = assertSafeIdentifier(entry.tenantColumn);
+    const table = quoted(entry.tableName);
+    const tenantColumn = quoted(entry.tenantColumn);
     const predicate = subjectPredicate(entry, 2);
     let rowsAffected = 0;
 
@@ -275,9 +289,7 @@ export async function runSubjectErasure(
         const dataType = types.get(column);
 
         if (dataType && ANONYMISABLE_TYPES.has(dataType)) {
-          assignments.push(
-            `${assertSafeIdentifier(column)} = ${bind(ANONYMIZED_TEXT)}`
-          );
+          assignments.push(`${quoted(column)} = ${bind(ANONYMIZED_TEXT)}`);
         } else {
           skipped.push(
             `${entry.tableName}.${column} (${dataType ?? "absent"})`
@@ -292,7 +304,7 @@ export async function runSubjectErasure(
       // confers a standing bypass of the tenant's SSO requirement.
       for (const match of entry.matches) {
         if (match.match === "jsonb_array_contains") {
-          const column = assertSafeIdentifier(match.column);
+          const column = quoted(match.column);
           assignments.push(
             `${column} = COALESCE((SELECT jsonb_agg(element) FROM jsonb_array_elements(${column}) AS element WHERE element <> to_jsonb(${bind(match.value)}::text)), '[]'::jsonb)`
           );
@@ -318,7 +330,7 @@ export async function runSubjectErasure(
       // without `revoked_at`, so a mismatch is a CI failure rather than a throw
       // in the middle of an erasure whose request has already been claimed.
       const rows = (await tx.unsafe(
-        `UPDATE ${table} SET revoked_at = now() ` +
+        `UPDATE ${table} SET "revoked_at" = now() ` +
           `WHERE ${tenantColumn} = $1::uuid AND ${predicate.sql} AND revoked_at IS NULL RETURNING 1`,
         [tenantId, ...predicate.values]
       )) as unknown[];

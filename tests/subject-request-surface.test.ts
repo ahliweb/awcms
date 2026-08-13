@@ -118,6 +118,27 @@ describe("identifiers are provenance-checked, not escaped", () => {
     expect(() => assertSafeIdentifier(identifier)).toThrow();
   });
 
+  test("no exportable table has a reserved-word column TODAY, and quoting keeps it that way", () => {
+    // Checked rather than assumed. `order`, `user`, `end` and `default` are all
+    // plausible column names, and an unquoted one would make the export throw
+    // for that table only, at runtime, inside a privacy request. The executor
+    // double-quotes every identifier so a future column cannot reintroduce it;
+    // this asserts the belt as well as the braces.
+    const executor = readFileSync(
+      join(
+        ROOT,
+        "src/modules/data-lifecycle/application/subject-data-executor.ts"
+      ),
+      "utf8"
+    );
+
+    // Every interpolated identifier goes through `quoted`, never through the
+    // bare assertion — which returns an UNQUOTED name.
+    expect(executor).toContain("function quoted(identifier: string)");
+    expect(executor).not.toMatch(/const table = assertSafeIdentifier\(/);
+    expect(executor).not.toMatch(/const tenantColumn = assertSafeIdentifier\(/);
+  });
+
   test("every shipped descriptor's identifiers survive it", () => {
     // The gate and this function must agree; if the registry ever carried an
     // identifier this refuses, the endpoint would throw at runtime instead of
