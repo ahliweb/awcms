@@ -1,5 +1,271 @@
 # awcms
 
+## 9.1.0
+
+### Minor Changes
+
+- d1f4bb5: feat(i18n): 25 dari 43 layar admin kini berbicara lewat katalog, sisanya TERDAFTAR
+
+  Gelombang ketiga ADR-0095: memindahkan literal Inggris di layar admin ke `t()`.
+  Angkanya, karena angka yang tidak dinyatakan adalah angka yang menyusut sendiri:
+
+  - **1.663 → 25** literal yang belum diterjemahkan di seluruh `src/pages/admin`.
+  - **25 dari 43** layar bersih sepenuhnya; **18 sisanya** ada di ledger
+    `i18n:screens:check` yang **hanya boleh MENYUSUT**.
+  - **1.258 msgid** dideklarasikan; **540 diterjemahkan**, **718 belum** — dan
+    jumlah itu adalah ledger `i18n:catalog:check`, dinaikkan dari 0 dengan alasan
+    tertulis, sekali, persis seperti yang diramalkan catatan sebelumnya.
+
+  **Kenapa sisanya DIDEKLARASIKAN alih-alih ditunggu.** String yang tidak ada di
+  `locales/` bukan "belum diterjemahkan" melainkan **tidak bisa diterjemahkan** —
+  tak terlihat oleh penerjemah dan tak terhitung oleh apa pun. Mendeklarasikan
+  semuanya membuat utangnya PUNYA ANGKA. Dan itu aman karena entri kosong menurun
+  ke `msgid`, yang ADALAH teks sumber Inggris (ADR-0095 §"Keputusan 2"): pembaca
+  Indonesia melihat bahasa Inggris yang BENAR pada bagian yang belum selesai,
+  bukan kunci yang bocor atau elemen kosong.
+
+  **Gerbang baru `i18n:screens:check`** menjawab pertanyaan yang sengaja TIDAK
+  dijawab `i18n:catalog:check`: bukan "apakah msgid yang dipakai dideklarasikan"
+  (konsistensi), melainkan "layar mana yang masih merender literal" (cakupan).
+  Menggabungkan keduanya akan melahirkan gerbang yang hijau sambil semua
+  jawabannya salah — kelas cacat yang sudah tercatat di repo ini.
+
+  Menulis gerbang itu memakan tiga koreksi, dan ketiganya layak dicatat karena
+  semuanya adalah versi dari kesalahan yang sama:
+
+  1. Versi pertama melewati SEMUA isi `{...}` dengan menghitung kedalaman kurung.
+     Ia melaporkan **7** literal di dasbor yang punya lebih dari **tiga puluh** —
+     karena mayoritas teks layar admin hidup di dalam kondisional JSX. Gerbang
+     cakupan yang diam-diam mengabaikan mayoritas hal yang diukurnya adalah
+     kegagalan yang paling mahal, karena ia terbaca sebagai kabar baik.
+  2. Komentar JSX (`{/* … */}`) terhitung sebagai prosa. Beberapa layar
+     menjelaskan escaping `set:text`-nya sendiri di sana, lengkap dengan tag
+     `<pre>`, sehingga tiap kalimat penjelasan dilaporkan sebagai string yang
+     belum diterjemahkan.
+  3. `class={count > 0 ? …}` memuat `>` di TENGAH ekspresi, jadi pemindai
+     menutup tag di operator perbandingan dan melaporkan sisa ternary sebagai
+     prosa.
+
+  Alat bantu migrasinya juga salah tiga kali sebelum benar — placeholder
+  proteksinya sendiri ikut terbungkus `t()` (isi komentar hilang, bukan
+  dipulihkan), dan dua kelas kode ter-bungkus sebagai string. Semuanya ketahuan
+  karena `bun run build` DIJALANKAN: `tsc` tidak memeriksa template `.astro`, jadi
+  sumber yang rusak lolos typecheck dan hanya kompiler Astro yang melihatnya.
+  Itu penegasan pelajaran "jalankan, jangan dibaca" yang sudah ada di memori
+  proyek.
+
+  Koreksi KEEMPAT dan KELIMA datang dari CodeQL, bukan dari saya:
+  `js/bad-tag-filter`, severity tinggi, dua kali berturut-turut.
+
+  Yang menutup sebuah `<script>` lebih luas daripada `</script>`. Tokeniser HTML
+  mengakhiri elemennya pada `</script` yang diikuti spasi-putih atau `/`, lalu
+  MEMBUANG apa pun sebelum `>` — jadi `</script >`, `</script\t\n bar="baz">`,
+  dan `</script/>` semuanya menutup: atribut pada tag penutup DIABAIKAN, bukan
+  ditolak. Perbaikan pertama saya hanya menambah `\s*` dan menutup satu bentuk;
+  CodeQL langsung menunjuk bentuk berikutnya.
+
+  Melewatkan satu bentuk bukan meleset tipis. Kuantifiernya malas, jadi penutup
+  yang tak dikenali tidak gagal setempat — ia LANJUT sampai penutup berikutnya di
+  berkas yang sama dan menelan tiap baris di antaranya. Pada gerbang CAKUPAN
+  kegagalan itu senyap SEKALIGUS menyanjung: literal di rentang yang tertelan
+  tidak dilaporkan sebagai error, melainkan tidak dilaporkan sama sekali, dan
+  angkanya TURUN.
+
+  Diperbaiki menjadi `</script(?:[\s/][^>]*)?>` (dan bentuk yang sama untuk
+  `</style`), lalu dipagari `tests/i18n-screen-coverage.test.ts`: 13 test, dengan
+  kelima bentuk penutup itu dijalankan sebagai tabel. Pola lama dibuktikan GAGAL
+  lebih dulu — `extractTemplateText` mengembalikan `[]` untuk berkas yang
+  seharusnya menghasilkan satu label.
+
+  **Keterbatasan yang dinyatakan, bukan disembunyikan:** 12 dari 1.258 msgid
+  (<1%) adalah PENGGALAN kalimat, karena kalimatnya terpotong oleh `<code>` atau
+  `<strong>` di tengah. Ia diterjemahkan dengan benar tetapi canggung bagi
+  penerjemah; menggabungkannya menjadi satu msgid ber-placeholder adalah pekerjaan
+  tangan yang menunggu di 18 layar ledger itu.
+
+- d1f4bb5: feat(i18n): antarmuka admin berbicara Bahasa Indonesia dan Inggris (ADR-0095, `sql/128`)
+
+  Repo ini menargetkan pasar Indonesia — ia mem-vendor hierarki wilayah Kemendagri
+  (ADR-0046) dan seluruh ADR-nya ditulis dalam Bahasa Indonesia — sementara keempat
+  puluh layar adminnya mengirim literal Inggris, dan `LocaleBadge` adalah lencana MATI
+  yang komentarnya sendiri menjelaskan sebabnya: "a switcher would be a control with
+  nothing behind it".
+
+  Sekarang ada sesuatu di baliknya.
+
+  **Preferensi bahasa milik PRINCIPAL, bukan identitas per-tenant.** Tabel global
+  `awcms_principal_preferences` meniru bentuk `awcms_principal_mfa_factors` (ADR-0087)
+  persis. Kenyamanan bukan argumen yang memutuskan; ADR-0088 yang memutuskan — layar
+  pemilihan tenant dirender SAAT BELUM ADA TENANT, jadi preferensi ber-`tenant_id`
+  secara struktural tak terbaca di sana, dan layar pertama yang dilihat seorang
+  pengguna Indonesia setelah login akan selamanya berbahasa Inggris. Peringatan
+  ADR-0094 soal pembacaan lintas-tenant dibaca dan tidak berlaku: yang dilarang FORCE
+  RLS adalah tabel BER-`tenant_id` untuk tenant lain, dan tabel ini tak punya kolom itu.
+
+  **`msgid` ADALAH teks sumber Inggris.** Label sidebar dirender dari
+  `ModuleDescriptor.navigation[].label` di 24 modul, jadi skema kunci ciptaan
+  (`admin.nav.posts`) menuntut tiap deskriptor tumbuh field baru dan tiap gerbang yang
+  memvalidasi bentuknya ikut berubah. Dengan gettext, `t(entry.label)` menerjemahkan
+  label yang sudah ada tanpa SATU PUN deskriptor berubah — dan string yang belum
+  diterjemahkan menurun ke bahasa Inggris yang BENAR, bukan ke kunci yang bocor ke layar.
+  Itulah yang membuat katalog bisa mendarat bertahap alih-alih sekaligus.
+
+  **Katalog DI-KOMPILASI ke modul TS yang ikut ter-bundle**, dan ini pelajaran yang baru
+  saja dibayar mahal: stage `runtime` `Dockerfile.production` hanya menyalin `dist/`,
+  dan 29 job yang terdaftar rapi semuanya keluar `Script not found` di produksi selama
+  berminggu-minggu. Katalog yang dibaca dari `locales/` saat request adalah cacat yang
+  PERSIS SAMA, satu subsistem ke samping dan lebih senyap — tanpa error, hanya setiap
+  layar mendadak berbahasa Inggris. `bun run i18n:catalog:check` mengompilasi ulang
+  `.po` dan membandingkan byte, sehingga berkas `.generated` adalah fakta dan bukan klaim.
+
+  Ekspresi `Plural-Forms` dari header `.po` TIDAK dievaluasi — itu ekspresi C di dalam
+  berkas data. Pemilih bentuk jamak ada di kode (`en` 2 bentuk, `id` 1), dan headernya
+  dibaca untuk DIVERIFIKASI.
+
+  Yang ikut mendarat:
+
+  - `LocaleBadge` DIHAPUS, digantikan `LanguageSwitcher` yang benar-benar mengubah
+    bahasa — form biasa, jadi ia bekerja tanpa JavaScript dan di halaman tanpa sesi.
+  - Urutan resolusi: cookie override → preferensi principal → `default_locale` tenant →
+    `Accept-Language` → `en`. `awcms_tenants.default_locale` sudah ada sejak `sql/001`;
+    ini pembaca keduanya.
+  - `awcms_tenants.default_theme` — kolom yang ADA namun TAK PERNAH dibaca siapa pun —
+    akhirnya mendapat pembaca pertamanya lewat seam `data-tenant-default-theme` yang
+    sudah didokumentasikan `theme-init-script.ts`. Preferensi tema karena itu ikut
+    tersimpan per-manusia TANPA menyentuh byte skrip init, sehingga hash CSP-nya utuh.
+    Komentar di berkas itu yang menyatakan kolomnya "tidak ada" adalah salah dan
+    dikoreksi.
+  - `isSameOriginPath` (`src/lib/security/`) untuk validasi `return_to`: pertanyaan yang
+    lebih sempit dari guard beku `seo_distribution` (hanya path relatif, tak pernah URL
+    absolut), jadi ia berupa ALLOW-LIST karakter alih-alih daftar bypass yang harus
+    diingat — dan `identity_access` tidak jadi bergantung pada `seo_distribution`.
+
+  Permukaan publik TIDAK dilokalkan di sini, dan itu disengaja: satu URL publik yang
+  badannya berubah menurut cookie akan membuat Varnish menyajikan halaman Indonesia
+  kepada pembaca Inggris. Melokalkannya menuntut kunci cache ikut membawa locale, dan itu
+  prasyarat yang didaftar, bukan detail implementasi.
+
+- d1f4bb5: feat(identity): akun Anda sendiri akhirnya punya PERMUKAAN (ADR-0096)
+
+  Permintaan "manajemen profil pengguna" menemukan bukan fitur yang kurang,
+  melainkan fitur yang **sudah ada seluruhnya di backend dan tak punya satu pun
+  permukaan**: tujuh belas endpoint self-service — ganti kata sandi, daftar sesi
+  dan pencabutannya, enrol/matikan MFA TOTP, kode pemulihan, tautan SSO — dan
+  **NOL** berkas di `src/pages` atau `src/components` yang memanggil satu pun.
+  Semuanya hanya bisa dijangkau dengan `curl`.
+
+  Kenapa tak ada yang melihatnya: `admin:screen-coverage:check` bertanya "apakah
+  tiap IZIN diklaim sebuah layar", dan rute-rute ini **sengaja tak berizin**.
+  Permukaan-nol-nya karena itu tidak pernah memerahkan gerbang mana pun.
+
+  Halamannya bukan bagian yang sulit. Yang sulit satu kalimat: **apa yang boleh
+  diubah seseorang tentang dirinya sendiri tanpa izin apa pun** — dan jawaban yang
+  salah di situ adalah eskalasi privilese yang menyamar sebagai editor profil.
+  Karena itu daftarnya ditulis dan DIBEKUKAN: `display_name`, locale, tema, kata
+  sandi (dengan kata sandi lama), faktor MFA, sesi, tautan SSO. TIDAK termasuk
+  `legal_name` (`verification_status` ada justru karena nama legal dinyatakan lalu
+  DIPERIKSA), `status`, `verification_status`, `risk_level`, dan identifier —
+  mengganti alamat login adalah PEMULIHAN AKUN yang menuntut pembuktian
+  kepemilikan alamat baru, dinyatakan sebagai celah yang disadari alih-alih
+  didiamkan.
+
+  **Rute self-service TERPISAH, bukan pelonggaran rute administratif.**
+  `PATCH /api/v1/auth/profile` menulis kolom yang sama dengan
+  `PATCH /api/v1/profiles/{id}`, tetapi ia tidak menerima id sama sekali — subjeknya
+  diturunkan dari sesi. Menambahkan cabang "…atau ini milikmu" ke endpoint berizin
+  akan memasukkan pemeriksaan kepemilikan ke permukaan administratif (bentuk yang
+  digantikan ADR-0063), dan sekali sebuah endpoint punya dua mode otorisasi,
+  pembacanya harus membuktikan cabang mana yang berlaku sebelum bisa menyatakan
+  apa pun tentang keamanannya.
+
+  Dua gerbang menolak draf pertama, keduanya benar:
+
+  - `modules:table-writes:check` — `awcms_profiles` milik `profile_identity`, dan
+    `identity_access` memiliki permukaan `/api/v1/auth/*` TIDAK menjadikannya
+    ko-pemilik baris itu (ADR-0013 §6). Tulisannya pindah ke
+    `updateOwnDisplayName` di modul pemiliknya, yang menerima id IDENTITAS dan
+    bukan id profil — itulah yang membuatnya self-service alih-alih administratif.
+  - `access:chokepoint:check` — tiap layar admin wajib melewati chokepoint. Layar
+    ini tak punya izin masuk untuk dievaluasi, dan menciptakannya adalah jebakan
+    ADR-0058 §E persis: aksi yang tak di-seed menolak SEMUA ORANG termasuk pemilik
+    tenant, di halaman yang dituju orang saat mengira kata sandinya bocor.
+    `authorize: []` juga bukan jawabannya — ia MENOLAK, fail-closed, dan aturan itu
+    dipertahankan apa adanya.
+
+    Jadi lahir `loadSelfServiceScreen`: fungsi TERPISAH (bukan flag pada
+    `loadAdminScreen`, yang akan membuat helper pengotorisasi kadang-kadang tidak
+    mengotorisasi), tetap membuka satu transaksi tenant ber-work-class, menuntut
+    `selfServiceReason` tertulis, dan dibatasi daftar ter-enumerasi di
+    `tests/admin-screen-self-service.test.ts` — satu entri, dan berbar seperti
+    `BOUNDED_BY_DESIGN`.
+
+  Tema kini tersimpan per-MANUSIA, bukan hanya per-perangkat. `localStorage` tetap
+  jalur cepatnya (toggle bekerja tanpa jaringan) dan nilai tersimpan berlaku di
+  perangkat BARU lewat seam `data-tenant-default-theme` — tanpa menyentuh byte
+  skrip init, sehingga hash CSP-nya utuh.
+
+  Avatar di topbar menjadi tautan, memenuhi seam yang komentar `AdminLayout.astro`
+  sendiri catat sejak lama ("micro's points at `/admin/profile`, a page awcms does
+  not have").
+
+  Gerbang `i18n:catalog:check` juga diperbaiki di sini: ia melaporkan `t("Light")`
+  yang muncul di dalam KOMENTAR sebagai msgid tak dideklarasikan. Godaannya adalah
+  menulis ulang komentarnya; itu terbalik — ia menjadikan false positive sebagai
+  pajak permanen atas penulisan komentar. Gerbangnya kini membuang komentar lebih
+  dulu, dengan pemindai yang melacak state string supaya `//` di dalam `"https://…"`
+  tidak menelan sisa barisnya (false negative di gerbang cakupan lebih buruk
+  daripada false positive yang diperbaikinya).
+
+### Patch Changes
+
+- 783c92b: fix(ui): `hidden` kalah dari `display` — form auth tetap tampil dengan tombol terkunci
+
+  Setelah reset password berhasil, halaman menampilkan notifikasi "Your password has been
+  changed" SEKALIGUS formulir yang masih berdiri di bawahnya, lengkap dengan tombol submit
+  yang membeku pada "Please wait…".
+
+  Halamannya tidak salah: ia memang memanggil `form.hidden = true`. Yang membatalkannya
+  adalah stylesheet. `[hidden] { display: none }` bawaan browser adalah aturan ATRIBUT,
+  sehingga aturan kelas mana pun yang menyetel `display` mengalahkannya —
+  `.auth-form { display: flex }` membuat `hidden` tidak berpengaruh apa pun.
+
+  Berlaku di EMPAT halaman publik yang memakai pola sama: `reset-password`,
+  `forgot-password`, `register`, `accept-invitation`.
+
+  Diperbaiki di akarnya dengan `[hidden] { display: none !important }` global di
+  `tokens.css`. `!important` di sini adalah intinya, bukan jalan pintas: `hidden` adalah
+  pernyataan bahwa elemen itu tidak relevan, dan tidak ada aturan tata letak yang boleh
+  menganulirnya.
+
+- 783c92b: fix(email): `ON CONFLICT` butuh SELECT — dispatcher mengirim email lalu gagal mencatatnya
+
+  Ditemukan dengan MENGIRIM email sungguhan di produksi, bukan dengan membaca apa pun.
+  `bun run email:dispatch` mengklaim satu pesan, memanggil Mailketing (surat itu SAMPAI),
+  lalu mati saat mencatat percobaannya: `permission denied for table
+awcms_email_delivery_attempts`.
+
+  Kegagalannya lebih buruk dari sekadar error, karena panggilan provider berada DI LUAR
+  transaksi yang mencatat percobaan: pesannya tetap `sending`, dan re-claim saat lease
+  kedaluwarsa mengirimnya LAGI. Under-grant di sini adalah loop pengiriman ganda, bukan
+  antrean yang macet.
+
+  `awcms_worker` memegang persis `INSERT` (`sql/022`) + `DELETE` (`sql/095`), sementara
+  statementnya membawa `ON CONFLICT ON CONSTRAINT … DO NOTHING` — dan PostgreSQL menuntut
+  **SELECT** pada tabel yang arbiternya harus ia baca. `INSERT` saja adalah privilege yang
+  benar untuk INSERT biasa dan SALAH untuk statement ini; perbedaan yang tidak terlihat
+  dari membaca daftar grant, karena daftarnya berkata "worker menulis di sini", dan itu benar.
+
+  Tiga tabel worker lain punya bentuk persis sama dan diperbaiki bersamaan sebelum
+  workload pertamanya tiba: `awcms_domain_event_activity_daily`,
+  `awcms_reporting_projection_state`, `awcms_workflow_task_assignments`.
+  `awcms_business_scope_assignment_events` sengaja TIDAK diberi SELECT — tulisannya INSERT
+  polos tanpa `ON CONFLICT`.
+
+  Gerbangnya tidak melihat ini karena `WORKER_ROLE_GRANTS` diuji-drift dua arah terhadap
+  migrasi: KEDUA sisi berkata `INSERT, DELETE`, jadi keduanya konsisten dan keduanya salah.
+  Matriks itu menjawab "apakah grant cocok dengan yang kita tulis", tidak pernah "apakah
+  statement yang benar-benar dikirim kode bisa dieksekusi".
+
 ## 9.0.0
 
 ### Major Changes
