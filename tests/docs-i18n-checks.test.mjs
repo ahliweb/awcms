@@ -1,104 +1,166 @@
 /**
- * Unit test untuk logika murni gate staleness terjemahan docs
- * (`scripts/lib/docs-i18n-checks.mjs`). Dijalankan dengan `bun test`.
+ * Unit tests for the pure logic behind the documentation translation gates
+ * (`scripts/lib/docs-i18n-checks.mjs`). Run with `bun test`.
+ *
+ * These were written for ADR-0023, where INDONESIAN was the source and the
+ * staleness marker lived in the generated English file. ADR-0097 inverts that:
+ * English at the bare path is the source, Indonesian at `.id.md` is the mirror,
+ * and the marker moves to the mirror. The assertions are inverted with it —
+ * a test suite that still passed after the direction flipped would be proving
+ * nothing about the direction.
  */
 import { describe, expect, test } from "bun:test";
 import {
+  checkMirrorCoverage,
+  checkTranslationPair,
   computeSourceHash,
-  extractRecordedHash,
-  deriveEnglishPath,
-  checkTranslationPair
+  deriveMirrorPath,
+  deriveSourcePath,
+  extractRecordedHash
 } from "../scripts/lib/docs-i18n-checks.mjs";
 
 describe("computeSourceHash", () => {
-  test("deterministik untuk konten yang sama", () => {
-    expect(computeSourceHash("halo dunia")).toBe(
-      computeSourceHash("halo dunia")
+  test("is deterministic for identical content", () => {
+    expect(computeSourceHash("hello world")).toBe(
+      computeSourceHash("hello world")
     );
   });
 
-  test("berbeda untuk konten berbeda", () => {
-    expect(computeSourceHash("halo dunia")).not.toBe(
-      computeSourceHash("halo dunia!")
+  test("differs for different content", () => {
+    expect(computeSourceHash("hello world")).not.toBe(
+      computeSourceHash("hello worlds")
     );
   });
 
-  test("berformat sha256:<hex 64 karakter>", () => {
+  test("is a sha256 marker value", () => {
     expect(computeSourceHash("x")).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });
 
 describe("extractRecordedHash", () => {
-  test("mengambil hash dari penanda yang valid", () => {
-    const hash = computeSourceHash("sumber");
-    const en = `# Title\n\n<!-- i18n-source-hash: ${hash} -->\n\nBody.`;
-    expect(extractRecordedHash(en)).toBe(hash);
+  test("reads the marker out of a mirror", () => {
+    const hash = computeSourceHash("source");
+    expect(
+      extractRecordedHash(`<!-- i18n-source-hash: ${hash} -->\n\n# Doc`)
+    ).toBe(hash);
   });
 
-  test("null bila tidak ada penanda", () => {
-    expect(extractRecordedHash("# Title\n\nBody tanpa penanda.")).toBeNull();
+  test("returns null when there is no marker", () => {
+    expect(extractRecordedHash("# Doc\n\nNo marker here.")).toBeNull();
   });
 });
 
-describe("deriveEnglishPath", () => {
-  test("mengubah *.id.md jadi *.md", () => {
-    expect(deriveEnglishPath("README.id.md")).toBe("README.md");
-    expect(deriveEnglishPath("docs/awcms/README.id.md")).toBe(
+describe("path derivation", () => {
+  test("source -> mirror", () => {
+    expect(deriveMirrorPath("docs/awcms/README.md")).toBe(
+      "docs/awcms/README.id.md"
+    );
+  });
+
+  test("mirror -> source", () => {
+    expect(deriveSourcePath("docs/awcms/README.id.md")).toBe(
       "docs/awcms/README.md"
     );
   });
 
-  test("null untuk path yang bukan *.id.md", () => {
-    expect(deriveEnglishPath("README.md")).toBeNull();
-    expect(deriveEnglishPath("docs/awcms/01_canvas_induk.md")).toBeNull();
+  /** A mirror is not itself a source; deriving one from it would produce `X.id.id.md`. */
+  test("a mirror has no mirror", () => {
+    expect(deriveMirrorPath("docs/awcms/README.id.md")).toBeNull();
+  });
+
+  test("non-markdown is not a source", () => {
+    expect(deriveMirrorPath("docs/awcms/diagram.svg")).toBeNull();
+    expect(deriveSourcePath("docs/awcms/README.md")).toBeNull();
   });
 });
 
-describe("checkTranslationPair", () => {
-  const idContent = "Konten sumber Indonesia.";
-  const currentHash = computeSourceHash(idContent);
+describe("checkTranslationPair — is this mirror current?", () => {
+  const source = "# Title\n\nEnglish body.\n";
+  const hash = computeSourceHash(source);
+  const mirror = `<!-- i18n-source-hash: ${hash} -->\n\n# Judul\n`;
 
-  test("tidak ada temuan bila hash penanda EN cocok dengan sumber ID", () => {
-    const en = `<!-- i18n-source-hash: ${currentHash} -->\n\nEnglish content.`;
-    expect(
-      checkTranslationPair("README.id.md", idContent, "README.md", en)
-    ).toEqual([]);
+  test("accepts a mirror whose marker matches the English source", () => {
+    expect(checkTranslationPair("doc.md", source, "doc.id.md", mirror)).toEqual(
+      []
+    );
   });
 
-  test("melapor bila berkas EN tidak ada", () => {
+  /**
+   * The direction test. The marker records the hash of the ENGLISH source, so
+   * editing English must invalidate the mirror. Under ADR-0023 it was the other
+   * way round and this case was green.
+   */
+  test("rejects a mirror after the English source changes", () => {
     const problems = checkTranslationPair(
-      "README.id.md",
-      idContent,
-      "README.md",
-      null
+      "doc.md",
+      `${source}One more English sentence.\n`,
+      "doc.id.md",
+      mirror
     );
+
     expect(problems).toHaveLength(1);
-    expect(problems[0]?.file).toBe("README.id.md");
-    expect(problems[0]?.message).toContain("tidak ada");
+    expect(problems[0]?.file).toBe("doc.id.md");
+    expect(problems[0]?.message).toContain("stale mirror");
   });
 
-  test("melapor bila berkas EN tidak punya penanda hash", () => {
+  test("rejects a mirror carrying no marker", () => {
     const problems = checkTranslationPair(
-      "README.id.md",
-      idContent,
-      "README.md",
-      "English content without a marker."
+      "doc.md",
+      source,
+      "doc.id.md",
+      "# Judul\n"
     );
+
     expect(problems).toHaveLength(1);
-    expect(problems[0]?.file).toBe("README.md");
-    expect(problems[0]?.message).toContain("penanda");
+    expect(problems[0]?.message).toContain("no <!-- i18n-source-hash");
   });
 
-  test("melapor bila hash penanda basi (sumber ID sudah berubah)", () => {
-    const staleEn = `<!-- i18n-source-hash: sha256:${"0".repeat(64)} -->\n\nOld translation.`;
-    const problems = checkTranslationPair(
-      "README.id.md",
-      idContent,
-      "README.md",
-      staleEn
-    );
+  /** Reported against the mirror: that is the file which exists to be acted on. */
+  test("rejects an orphan mirror whose English source is gone", () => {
+    const problems = checkTranslationPair("doc.md", null, "doc.id.md", mirror);
+
     expect(problems).toHaveLength(1);
-    expect(problems[0]?.file).toBe("README.md");
-    expect(problems[0]?.message).toContain("basi");
+    expect(problems[0]?.file).toBe("doc.id.md");
+    expect(problems[0]?.message).toContain("no English source");
+  });
+});
+
+describe("checkMirrorCoverage — which documents have no mirror at all?", () => {
+  test("accepts a document that has its mirror", () => {
+    expect(checkMirrorCoverage(["a.md"], new Set(["a.id.md"]), [])).toEqual([]);
+  });
+
+  test("accepts an unmirrored document that is on the ledger", () => {
+    expect(checkMirrorCoverage(["a.md"], new Set(), ["a.md"])).toEqual([]);
+  });
+
+  test("rejects an unmirrored document that is not on the ledger", () => {
+    const problems = checkMirrorCoverage(["a.md"], new Set(), []);
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.message).toContain("no Indonesian mirror");
+  });
+
+  /**
+   * The ledger may only SHRINK. An entry whose mirror now exists overstates the
+   * debt, and a counter that overstates is a counter nobody believes — which is
+   * how a migration stalls while still reading as deliberate.
+   */
+  test("rejects a ledger entry whose mirror now exists", () => {
+    const problems = checkMirrorCoverage(["a.md"], new Set(["a.id.md"]), [
+      "a.md"
+    ]);
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.message).toContain("may only shrink");
+  });
+
+  test("rejects a ledger entry that is not a document in scope", () => {
+    const problems = checkMirrorCoverage(["a.md"], new Set(["a.id.md"]), [
+      "gone.md"
+    ]);
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.message).toContain("not a tracked document in scope");
   });
 });

@@ -724,6 +724,12 @@ export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
   /** @type {Problem[]} */
   const problems = [];
   for (const name of adrFileNames) {
+    // `NNNN-slug.id.md` is the Indonesian MIRROR of an ADR, not a second ADR
+    // (ADR-0097). `ADR_FILE_PATTERN`'s `.+` swallows the `.id`, so without this
+    // guard every mirrored ADR is reported as missing from the index and the
+    // only way to satisfy it would be to list the same decision twice.
+    if (name.endsWith(".id.md")) continue;
+
     const match = ADR_FILE_PATTERN.exec(name);
     if (!match) continue; // README.md / README.id.md / 0000-template.md handled by caller's filter
     if (match[1] === "0000") continue; // the template is intentionally not indexed
