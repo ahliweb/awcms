@@ -110,7 +110,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **128** (`sql/001`–`128`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0096** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-14).**) | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.030 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **56** (30.083 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **46** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 

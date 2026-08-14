@@ -9,18 +9,35 @@
  * props it already took (a locale rather than an assumption) are why this is a
  * replacement rather than a rewrite.
  *
- * ## Why a form that submits, rather than a `<select>` driven by script
+ * ## Why the form is submitted by SCRIPT, not natively
  *
- * The switch has to work on `/login` and on ADR-0088's tenant-selection screen —
- * pages where there is no session, so no preference can be stored, and the
- * cookie is the only place the choice can live. A plain form POST works there,
- * works with script disabled, and needs no client bundle at all.
+ * The first version of this component posted the form natively and claimed to
+ * work with script disabled. **In production it did not work at all**, and the
+ * reason is worth writing down because no gate in this repo could have caught it.
  *
- * The `<script>` below is a progressive ENHANCEMENT (submit on change, so the
- * reader does not have to find a button), not the mechanism. It is
- * import-bearing so Astro bundles it to an external module — an inline script
- * would be blocked by this repo's `default-src 'self'` CSP, which admits exactly
- * one inline script (the theme-init hash) and no others.
+ * Astro's `checkOrigin` (`core/app/origin-check.js`) refuses any request whose
+ * content-type is form-like unless `request.headers.get("origin") === url.origin`.
+ * This deployment terminates TLS at Traefik and the app itself listens on plain
+ * HTTP, so `url.origin` is `http://…` while every browser sends `https://…`.
+ * Those two strings are never equal, so a native form POST is answered
+ * `403 Cross-site POST form submissions are forbidden` — always, for everyone.
+ *
+ * It passed every gate because it is only wrong behind a TLS-terminating proxy:
+ * dev, `bun run build`, and the Playwright smoke test all speak plain HTTP to
+ * the app, where origin and `url.origin` DO match.
+ *
+ * Posting JSON avoids it honestly rather than by evasion: `checkOrigin` exempts
+ * non-form content-types because a cross-site `application/json` POST is already
+ * blocked by CORS preflight. That is also what every other write in this
+ * application does — this component was the only native form POST in the repo.
+ *
+ * The cost is that the switch now REQUIRES script. That is not a new constraint
+ * on any page it appears on: `/login` submits its credentials with `fetch`, so a
+ * reader without script cannot sign in to reach the admin at all.
+ *
+ * The `<script>` is import-bearing so Astro bundles it to an external module — an
+ * inline script would be blocked by this repo's `default-src 'self'` CSP, which
+ * admits exactly one inline script (the theme-init hash) and no others.
  *
  * ## Why it posts to an API route instead of setting the cookie in script
  *
@@ -93,11 +110,12 @@ const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
     }
   </select>
   {
-    /* Shown only when script is unavailable — the enhancement below hides it.
-      A form with no visible submit and no script is a control that cannot be
-      operated, which is the very failure this component replaced. */
+    /* `hidden` in the MARKUP, not hidden later by script. The switch cannot work
+      without script (see the header), so a button that is visible until script
+      runs is a control that is broken for exactly the readers who cannot use it.
+      The script unhides nothing; it simply takes over the `submit` event. */
   }
-  <button type="submit" class="locale-switcher-submit"
+  <button type="submit" class="locale-switcher-submit" hidden
     >{t("Change language")}</button
   >
 </form>
@@ -166,20 +184,55 @@ const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
   const select = form?.querySelector<HTMLSelectElement>(
     ".locale-switcher-select"
   );
-  const submit = form?.querySelector<HTMLButtonElement>(
-    ".locale-switcher-submit"
-  );
 
   if (form && select) {
-    // Script is available, so the explicit button is redundant.
-    submit?.setAttribute("hidden", "hidden");
-
     select.addEventListener("change", () => {
-      // `form.requestSubmit()` rather than `submit()`: the latter skips
-      // validation and, more importantly here, does not fire `submit` handlers —
-      // so anything added later would be silently bypassed.
+      // `form.requestSubmit()` rather than `submit()`: the latter does not fire
+      // `submit` handlers, so it would bypass the listener below and fall back
+      // to the native form POST that this deployment answers with 403.
       form.requestSubmit();
     });
+
+    form.addEventListener("submit", (event) => {
+      // The native POST would be form-encoded, and Astro's `checkOrigin` refuses
+      // form-encoded writes whenever `url.origin` disagrees with the `Origin`
+      // header — which it always does behind TLS termination. JSON is exempt.
+      event.preventDefault();
+      void applyLocale();
+    });
+  }
+
+  async function applyLocale(): Promise<void> {
+    if (!form || !select) return;
+
+    const returnTo = form.querySelector<HTMLInputElement>(
+      'input[name="return_to"]'
+    )?.value;
+
+    select.disabled = true;
+
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // The anonymous endpoint needs no session, but the persisting one is
+        // bearer-gated — without this it would answer 401 for a signed-in reader.
+        credentials: "same-origin",
+        body: JSON.stringify({ locale: select.value, return_to: returnTo })
+      });
+
+      if (!response.ok) {
+        select.disabled = false;
+        return;
+      }
+
+      // Re-request the page rather than swapping text in place: the locale
+      // decides the server-rendered document, `<html lang>` included.
+      window.location.reload();
+    } catch {
+      // Offline or blocked — leave the control usable rather than stuck.
+      select.disabled = false;
+    }
   }
 
   // Referenced so the import is not elided by the bundler, and so this file
