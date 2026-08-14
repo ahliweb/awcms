@@ -103,9 +103,9 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 | Aspek                              | Nilai (ter-generate)                                                                    | Sumber kebenaran                                                                        |
 | ---------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **9.1.0**                                                                               | `package.json`                                                                          |
+| Versi                              | **9.1.1**                                                                               | `package.json`                                                                          |
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v9.1.0..HEAD`                                                     |
+| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v9.1.1..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **128** (`sql/001`–`128`)                                                               | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0096** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-14).**) | `ls docs/adr/`                                                                          |
