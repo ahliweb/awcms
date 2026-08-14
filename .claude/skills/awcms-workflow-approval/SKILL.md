@@ -99,14 +99,36 @@ bounded batch, advisory lock, `--dry-run`. **Idempotency guard**: `UPDATE`
 escalation dikondisikan `WHERE status = 'pending' AND escalation_step =
 <value dibaca pass ini>` — race yang kalah (run konkuren, atau pass yang
 di-retry) mempengaruhi nol baris dan diam-diam di-skip, tidak pernah
-escalate dobel. **Role DB-nya**: di mini job ini berjalan sebagai role
-least-privilege `awcms_worker` (`SELECT`-only sejak fix PR #778, lihat
-§Security finding). **Repo ini tidak punya role `awcms_worker`** —
-`WORKER_DATABASE_URL` fallback ke `DATABASE_URL` (owner migrasi), jadi job
-ini hari ini berjalan dengan hak penuh dan pemisahan privilege itu BELUM
-ada di sini. Role yang ada baru `awcms_app` (`sql/019`, Issue #141).
-Jangan tulis `GRANT ... TO awcms_worker` di migration repo ini — akan gagal
-jalan.
+escalate dobel. **Role DB-nya**: job ini berjalan sebagai role
+least-privilege `awcms_worker`.
+
+> **KOREKSI 15 Agustus 2026 — versi sebelumnya SALAH, dan salahnya ke arah
+> yang berbahaya.** Ia menyatakan repo ini "tidak punya role `awcms_worker`",
+> bahwa `WORKER_DATABASE_URL` jatuh kembali ke `DATABASE_URL` sehingga
+> "pemisahan privilege BELUM ada di sini", dan melarang menulis
+> `GRANT ... TO awcms_worker` karena "akan gagal jalan". Keempatnya keliru:
+>
+> - `awcms_worker` DIBUAT di `sql/022_awcms_db_worker_setup_roles.sql`
+>   (Issue #163), bukan tidak ada.
+> - Migrasi repo ini memuat **78** pernyataan `GRANT ... TO awcms_worker`
+>   yang sudah lama berjalan — larangan itu akan menolak pekerjaan yang benar.
+> - Produksi terverifikasi memakai pemisahan itu: `WORKER_DATABASE_URL`
+>   menunjuk `awcms_worker`, `DATABASE_URL` menunjuk `awcms_app`.
+> - `sql/022` sudah memberi `awcms_workflow_instances` **`SELECT` saja** —
+>   yakni persis perbaikan finding #4 PR #778, sudah terpasang di sini.
+>
+> Arah kesalahannya yang membuatnya mahal: agen yang mempercayainya akan
+> MENOLAK menulis GRANT worker dan menjalankan job sebagai role pemilik,
+> sehingga menghapus pemisahan privilege yang sudah ada — regresi keamanan
+> yang lahir dari dokumentasi, bukan dari kode. Skill `awcms-deploy` sudah
+> dikoreksi untuk klaim yang sama; berkas ini terlewat.
+
+Grant worker untuk modul ini hidup di `sql/022` dan `sql/127`, dan
+**dijaga gerbang**: `WORKER_ROLE_GRANTS` di `scripts/security-readiness.ts`
+menyatakan set yang diharapkan (`awcms_workflow_tasks` `SELECT,UPDATE`;
+`awcms_workflow_instances` `SELECT`; `awcms_workflow_definitions` `SELECT`;
+`awcms_workflow_task_assignments` `INSERT,SELECT`). Menambah grant tanpa
+menambahkannya ke daftar itu akan memerahkan `security:readiness`.
 
 ## Administrative recovery (`application/workflow-recovery.ts`)
 
@@ -145,10 +167,17 @@ baru atau transisi status ter-guard.
 4. **Worker role escalation-job over-grant (Low)** — di mini, migrasi 060
    memberi `SELECT, UPDATE` di `awcms_workflow_instances` ke
    `awcms_worker`, padahal escalation job hanya pernah `SELECT` dari
-   tabel itu. Dipangkas jadi `SELECT`-only. **Temuan ini vacuous di repo
-   ini**: tidak ada role `awcms_worker` maupun migrasi 060 di sini — GRANT
-   yang over-scope itu tidak pernah ada untuk dipangkas. Relevan hanya
-   sebagai pelajaran saat pemisahan worker role akhirnya di-port.
+   tabel itu. Dipangkas jadi `SELECT`-only.
+
+   **KOREKSI 15 Agustus 2026:** versi sebelumnya menyebut temuan ini
+   "vacuous di repo ini" karena katanya role dan migrasinya tidak ada.
+   Justru sebaliknya — dan itu kabar baik: `sql/022:145` sudah memberi
+   `awcms_workflow_instances` **`SELECT` saja**, jadi bentuk yang benar
+   SUDAH terpasang, dan `WORKER_ROLE_GRANTS` di `security-readiness.ts`
+   MENJAGANYA tetap begitu. Pelajarannya karena itu berlaku penuh di sini,
+   bukan menunggu port: tiap grant worker baru wajib sebesar query yang
+   benar-benar dijalankan, dan gerbangnya akan menuntut daftar itu ikut
+   diperbarui.
 
 **Pelajaran generik dari keempatnya**: endpoint action baru pada resource
 yang punya konsep "pemilik/requester" WAJIB (a) lookup requester SEBELUM
