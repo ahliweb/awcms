@@ -105,7 +105,11 @@ describe("no native form POST survives Astro's origin check", () => {
       "utf8"
     );
 
-    expect(component).not.toMatch(/^<script>/m);
+    // Case-insensitive, and tolerant of attributes: `<SCRIPT>` and
+    // `<script type="module">` are both scripts, and a guard that only knows
+    // one spelling is a guard the next edit walks straight past. CodeQL
+    // `js/bad-tag-filter` flagged the narrower version of this line.
+    expect(component).not.toMatch(/^<script[\s/>]/im);
   });
 
   test("AdminLayout loads the switcher's behaviour", () => {
