@@ -4,6 +4,7 @@ import { getDatabaseClient } from "../../../lib/database/client";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
+import { resolveRequestOrigin } from "../../../lib/http/site-origin";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -36,7 +37,7 @@ const NEWS_SHARE_CLIENT_SCRIPT_SRC = "/js/news-share.js";
  * 404s (same generic shape) when the tenant's `legacyTenantRouteEnabled`
  * setting is `false`.
  */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, request, url }) => {
   const tenantCode = params.tenantCode;
   const slug = params.slug;
 
@@ -63,7 +64,7 @@ export const GET: APIRoute = async ({ params, url }) => {
         return notFoundHtmlResponse();
       }
 
-      const selfUrl = `${url.origin}/blog/${tenantCode}/${post.slug}`;
+      const selfUrl = `${resolveRequestOrigin(url, request)}/blog/${tenantCode}/${post.slug}`;
       const seoTitle = resolveSeoTitle(post);
       const metaDescription = resolveMetaDescription(post);
       const canonicalUrl = resolveCanonicalUrl(post, selfUrl);

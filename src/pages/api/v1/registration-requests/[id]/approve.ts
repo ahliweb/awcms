@@ -3,6 +3,7 @@ import { defineTenantRoute } from "../../../../../modules/_shared/tenant-route";
 import { createEmailAuthNotificationAdapter } from "../../../../../modules/email/application/auth-notification-port-adapter";
 import { approveRegistrationRequest } from "../../../../../modules/identity-access/application/self-registration";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
+import { resolveDeclaredBaseUrl } from "../../../../../lib/http/site-origin";
 
 const TOKEN_TTL_MIN = Number(
   process.env.AUTH_PASSWORD_RESET_TOKEN_TTL_MIN ?? 30
@@ -83,7 +84,7 @@ export const POST = defineTenantRoute({
     action: "approve"
   },
   handler: async ({ tx, tenantId, auth, prepared, locals }) => {
-    const appUrl = process.env.APP_URL ?? "http://localhost:4321";
+    const appUrl = resolveDeclaredBaseUrl();
     const result = await approveRegistrationRequest(
       tx,
       tenantId,

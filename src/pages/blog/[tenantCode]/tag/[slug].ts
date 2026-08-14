@@ -4,6 +4,7 @@ import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenantOrThrow } from "../../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../../lib/html/escape";
+import { resolveRequestOrigin } from "../../../../lib/http/site-origin";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -22,7 +23,7 @@ import {
 } from "../../../../modules/blog-content/domain/public-page-rendering";
 
 /** `GET /blog/{tenantCode}/tag/{slug}` (Issue #540) — same as the category archive, scoped to `taxonomy_type = 'tag'`, including the Issue #564 `legacyTenantRouteEnabled` gate. */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, request, url }) => {
   const tenantCode = params.tenantCode;
   const slug = params.slug;
 
@@ -72,7 +73,7 @@ ${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}/tag/${t
       const html = renderPublicPageShell({
         title: `${term.name} — ${tenant.tenantName} Blog`,
         description: term.description ?? `Posts tagged ${term.name}.`,
-        canonicalUrl: `${url.origin}/blog/${tenantCode}/tag/${term.slug}`,
+        canonicalUrl: `${resolveRequestOrigin(url, request)}/blog/${tenantCode}/tag/${term.slug}`,
         bodyHtml,
         locale: tenant.defaultLocale,
         variant: "list"

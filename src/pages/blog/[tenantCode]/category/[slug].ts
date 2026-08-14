@@ -4,6 +4,7 @@ import { getDatabaseClient } from "../../../../lib/database/client";
 import { withTenantOrThrow } from "../../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../../lib/html/escape";
+import { resolveRequestOrigin } from "../../../../lib/http/site-origin";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -22,7 +23,7 @@ import {
 } from "../../../../modules/blog-content/domain/public-page-rendering";
 
 /** `GET /blog/{tenantCode}/category/{slug}` (Issue #540) — same listing predicate as the index, scoped to posts assigned this category. 404 for an unknown or soft-deleted category, or (Issue #564) when `legacyTenantRouteEnabled` is `false`. */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, request, url }) => {
   const tenantCode = params.tenantCode;
   const slug = params.slug;
 
@@ -73,7 +74,7 @@ ${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}/categor
         title: `${term.name} — ${tenant.tenantName} Blog`,
         description:
           term.description ?? `Posts categorized under ${term.name}.`,
-        canonicalUrl: `${url.origin}/blog/${tenantCode}/category/${term.slug}`,
+        canonicalUrl: `${resolveRequestOrigin(url, request)}/blog/${tenantCode}/category/${term.slug}`,
         bodyHtml,
         locale: tenant.defaultLocale,
         variant: "list"

@@ -37,6 +37,7 @@ import { renderSeoHeadTags } from "../domain/seo-head-rendering";
 import type { SeoTenantSettings } from "../domain/seo-config";
 import { fetchSeoTenantSettings } from "./seo-config-directory";
 import { resolveTenantPrimaryHost } from "./resolve-canonical-host";
+import { resolveSiteScheme } from "../../../lib/http/site-origin";
 
 export type SeoResourceRenderInput = {
   tenantId: string;
@@ -154,6 +155,7 @@ export async function renderResourceSeoHead(
 
   const context: SeoRenderContext = {
     primaryHost,
+    siteScheme: resolveSiteScheme(),
     tenantDisplayName: input.tenantDisplayName,
     settings,
     resolvedImage: social,

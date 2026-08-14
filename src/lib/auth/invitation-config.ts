@@ -17,6 +17,7 @@
  * a deployment-level switch to protect. Adding one would be a new decision, not
  * a copy of that one.
  */
+import { resolveDeclaredBaseUrl } from "../http/site-origin";
 
 /** Hours a fresh or resent invitation link stays valid. Days, not minutes: unlike a password reset, nobody is standing at the screen waiting for it. */
 export const DEFAULT_INVITATION_TTL_HOURS = 168;
@@ -40,7 +41,7 @@ export function resolveInvitationConfig(
   const tokenTtlHours =
     Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_INVITATION_TTL_HOURS;
 
-  const appUrl = env.APP_URL ?? "http://localhost:4321";
+  const appUrl = resolveDeclaredBaseUrl(env);
 
   return {
     tokenTtlHours,

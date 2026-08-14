@@ -40,6 +40,7 @@ function facts(overrides: Partial<SeoResourceFacts> = {}): SeoResourceFacts {
 function context(overrides: Partial<SeoRenderContext> = {}): SeoRenderContext {
   return {
     primaryHost: "example.com",
+    siteScheme: "https",
     tenantDisplayName: "Example",
     settings: { ...EMPTY_SEO_TENANT_SETTINGS },
     resolvedImage: null,

@@ -4,6 +4,7 @@ import { getDatabaseClient } from "../../../lib/database/client";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
+import { resolveRequestOrigin } from "../../../lib/http/site-origin";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -41,7 +42,7 @@ import {
  * routes — see `src/modules/blog-content/README.md` §Public route
  * settings.
  */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, request, url }) => {
   const tenantCode = params.tenantCode;
 
   if (!tenantCode) {
@@ -78,7 +79,7 @@ ${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}`)}`;
         description:
           settings.seoDefaultDescription ??
           `Latest posts from ${tenant.tenantName}.`,
-        canonicalUrl: `${url.origin}/blog/${tenantCode}`,
+        canonicalUrl: `${resolveRequestOrigin(url, request)}/blog/${tenantCode}`,
         bodyHtml,
         locale: tenant.defaultLocale,
         variant: "list"

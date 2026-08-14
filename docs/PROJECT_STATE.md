@@ -101,18 +101,18 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 
 <!-- Dihasilkan `bun run project-state:inventory:generate`. JANGAN diedit tangan; gerbangnya `bun run project-state:inventory:check`. -->
 
-| Aspek                              | Nilai (ter-generate)                                                                  | Sumber kebenaran                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Versi                              | **9.1.2**                                                                             | `package.json`                                                                          |
-| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
-| Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
-| Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **128** (`sql/001`–`128`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
-| Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.044 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **47** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
-| Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
+| Aspek | Nilai (ter-generate) | Sumber kebenaran |
+| --- | --- | --- |
+| Versi | **9.1.2** | `package.json` |
+| Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_ | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c` |
+| Commit sejak rilis terakhir | _jalankan perintah di kolom kanan_ | `git rev-list --count v9.1.2..HEAD` |
+| Modul base | **22** (lihat daftar di ARCHITECTURE.md) | `src/modules/index.ts` |
+| Migrasi | **128** (`sql/001`–`128`) | `ls sql/` |
+| ADR | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**) | `ls docs/adr/` |
+| Layar admin | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro` | **56** (29.973 baris) — soal typecheck lihat §6 | `find src -name '*.astro'` |
+| Gerbang | **48** di rantai `bun run check` | `scripts.check` di `package.json`, dipisah pada `&&` |
+| Kontrak | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0** | `openapi/`, `asyncapi/`, `_shared/module-contract.ts` |
 
 <!-- project-state-inventory:selesai -->
 
@@ -398,8 +398,42 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   4. **`url.origin` aplikasi memakai skema `http` di situs `https`, dan itu
      BOCOR ke keluaran.** Terverifikasi: `curl https://…/blog/ahliweb/feed.xml`
      mengembalikan `<link>http://awcms.ahlikoding.com/…</link>` untuk tiap entri.
-     Canonical HTML kebetulan benar (`https`) karena dibangun dari jalur lain —
-     jadi ini juga bukti bahwa asal URL absolut di repo ini ADA DUA.
+
+     > **KOREKSI (15 Agu 2026) — buktinya salah, dan angkanya juga.** Putaran ini
+     > semula menyimpulkan bahwa canonical HTML "kebetulan benar (`https`) karena
+     > dibangun dari jalur lain — jadi ini juga bukti bahwa asal URL absolut di
+     > repo ini ADA DUA". **Bukti itu tidak sah.** `canonical` dan `og:url` pada
+     > halaman yang sama keduanya dibangun dari SATU variabel
+     > (`options.canonicalUrl`, `blog-content/domain/public-page-rendering.ts`
+     > baris 118 dan 177), dan keduanya `http` saat meninggalkan origin. Yang
+     > membuat canonical tampak benar adalah **Cloudflare Automatic HTTPS
+     > Rewrites**, yang menambal atribut `href`/`src` pada HTML yang lewat —
+     > sedangkan `og:url` memakai atribut `content`, yang tidak ia sentuh. Jadi
+     > pasangan itu bukan bukti dua sumber; ia satu sumber yang salah di
+     > kedua tempat, tertutupi pada satu tag oleh perantara yang tidak kita
+     > kendalikan.
+     >
+     > Kesimpulannya sendiri ternyata **terlalu kecil, bukan terlalu besar**.
+     > Inventarisasi lengkap menemukan **TIGA** sumber asal, bukan dua:
+     >
+     > - **A — `url.origin`**: 6 berkas `src/pages/blog/[tenantCode]/**`
+     >   (canonical, `og:url`, JSON-LD `@id`, tautan berbagi sosial, feed, dan
+     >   sitemap blog). Skemanya `http` di produksi dan host-nya adalah host
+     >   PERMINTAAN, bukan host tenant.
+     > - **B — literal `https://${primaryHost}`**: seluruh `seo_distribution`
+     >   (robots, sitemap akar, feed akar, redirect legacy). Skemanya benar dan
+     >   host-nya dari basis data.
+     > - **C — `process.env.APP_URL`** (fallback `http://localhost:4321`):
+     >   `redirect_uri` OIDC, tautan reset kata sandi, tautan undangan, dan
+     >   tautan persetujuan pendaftaran — yakni permukaan yang paling mahal bila
+     >   salah, karena ia dikirim lewat email dan diklik nanti.
+     >
+     > Ditambah dua deklarasi asal yang MATI tetapi menyesatkan pembaca
+     > berikutnya: `astro.config.mjs` `site: "http://localhost:4321"` dan
+     > `openapi/awcms-public-api.src.yaml` `servers[0].url` yang sama. Dan
+     > `renderResourceSeoHead` — perender canonical/`og:url` yang dimaksudkan
+     > sebagai PUSAT — **nol pemanggil**: jalur yang benar sudah ditulis, tidak
+     > pernah disambungkan, dan jalur yang salah yang melayani produksi.
 
      Sebabnya: adapter Node menurunkan protokol dari listener-nya sendiri, dan
      TIDAK ADA satu pun tempat di repo ini yang membaca `X-Forwarded-Proto`.

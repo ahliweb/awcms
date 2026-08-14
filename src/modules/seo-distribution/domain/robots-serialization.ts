@@ -15,9 +15,18 @@
  * host (never the request `Host`), and only when one is verified.
  */
 
+import type { SiteScheme } from "../../../lib/http/site-origin";
+
 export type RobotsRenderInput = {
   /** Tenant's verified primary host (server-derived from `tenant_domain`), or `null` when there is none. */
   primaryHost: string | null;
+  /**
+   * How this site is reached. The `Sitemap:` line used to hardcode `https`,
+   * which pointed an offline-LAN deployment at a scheme it does not answer on.
+   * Resolved once by `src/lib/http/site-origin.ts` and passed in, so this stays
+   * a pure serializer.
+   */
+  siteScheme: SiteScheme;
   /** Tenant-wide noindex switch (`default_robots_noindex`) — when true, disallow all crawling. */
   siteNoindex: boolean;
   /** Whether to advertise the sitemap (config `sitemap_enabled`). */
@@ -50,7 +59,9 @@ export function renderRobotsTxt(input: RobotsRenderInput): string {
 
   if (input.sitemapEnabled && input.primaryHost !== null) {
     lines.push("");
-    lines.push(`Sitemap: https://${input.primaryHost}/sitemap.xml`);
+    lines.push(
+      `Sitemap: ${input.siteScheme}://${input.primaryHost}/sitemap.xml`
+    );
   }
 
   return lines.join("\n") + "\n";

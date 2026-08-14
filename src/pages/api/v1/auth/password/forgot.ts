@@ -22,6 +22,7 @@ import { requestPasswordReset } from "../../../../../modules/identity-access/app
 import { withPublicAuthTenant } from "../../../../../modules/identity-access/application/public-auth-tenant";
 import { validateForgotIdentifierInput } from "../../../../../modules/identity-access/domain/password-reset-validation";
 import { recordAuditEvent } from "../../../../../modules/logging/application/audit-log";
+import { resolveDeclaredBaseUrl } from "../../../../../lib/http/site-origin";
 
 const TOKEN_TTL_MIN = Number(
   process.env.AUTH_PASSWORD_RESET_TOKEN_TTL_MIN ?? 30
@@ -131,7 +132,7 @@ export const POST: APIRoute = async ({ request, clientAddress, locals }) => {
   const sql = getDatabaseClient();
   const now = new Date();
   const correlationId = locals.correlationId;
-  const appUrl = process.env.APP_URL ?? "http://localhost:4321";
+  const appUrl = resolveDeclaredBaseUrl();
   const source = {
     ipHash: hashClientIp(clientIp),
     userAgent: summarizeUserAgent(request)

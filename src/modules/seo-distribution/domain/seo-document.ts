@@ -25,6 +25,7 @@
  * keeping "decide the model" and "escape the markup" separate, same discipline
  * `blog-content`'s own `seo-rendering.ts` / `public-page-rendering.ts` split.
  */
+import type { SiteScheme } from "../../../lib/http/site-origin";
 import {
   isPubliclyIndexable,
   isPubliclyResolvable,
@@ -56,6 +57,15 @@ export type ResolvedSeoImage = {
 export type SeoRenderContext = {
   /** The tenant's primary host (server-derived from `tenant_domain`), or `null` when the deployment has no primary domain (offline-lan degrade — no host is invented, ADR-0038 §5.4). */
   primaryHost: string | null;
+  /**
+   * How this site is reached — `https` everywhere it is served over TLS.
+   *
+   * Passed in rather than hardcoded so this stays a pure builder AND so the
+   * scheme has one source (`src/lib/http/site-origin.ts`) instead of a
+   * literal per module. The literal it replaces was right for production and
+   * wrong for an offline-LAN deployment serving plain HTTP.
+   */
+  siteScheme: SiteScheme;
   /** The tenant's display name (`awcms_tenants.tenant_name`) — the `og:site_name` fallback when `settings.siteName` is null. */
   tenantDisplayName: string;
   settings: SeoTenantSettings;
@@ -108,13 +118,17 @@ export type SeoDocument = {
 export type SeoDocumentResult =
   { renderable: false } | { renderable: true; document: SeoDocument };
 
-function absoluteOrRelative(primaryHost: string | null, path: string): string {
+function absoluteOrRelative(
+  primaryHost: string | null,
+  path: string,
+  scheme: SiteScheme
+): string {
   // Host is ALWAYS server-derived; when absent we degrade to the relative path
   // rather than inventing a host from the request (host-header-poisoning
   // defense, ADR-0038 §5). A relative canonical still resolves correctly
   // against the page's own URL for every crawler.
   if (primaryHost === null) return path;
-  return `https://${primaryHost}${path}`;
+  return `${scheme}://${primaryHost}${path}`;
 }
 
 function parseRobots(directive: SeoRobotsDirective): {
@@ -149,7 +163,9 @@ function buildSiteIdentityNodes(
 ): JsonLdNode[] {
   const nodes: JsonLdNode[] = [];
   const siteUrl =
-    context.primaryHost !== null ? `https://${context.primaryHost}/` : null;
+    context.primaryHost !== null
+      ? `${context.siteScheme}://${context.primaryHost}/`
+      : null;
 
   const website: Record<string, unknown> = {
     "@type": "WebSite",
@@ -205,7 +221,8 @@ export function buildSeoDocument(
 
   const canonicalUrl = absoluteOrRelative(
     context.primaryHost,
-    facts.canonicalPath
+    facts.canonicalPath,
+    context.siteScheme
   );
 
   // Reciprocal alternates only — the provider already excludes locales with no
@@ -214,7 +231,11 @@ export function buildSeoDocument(
   const localeAlternates: SeoLocaleLink[] = [
     ...facts.localeAlternates.map((alt) => ({
       hreflang: alt.locale,
-      href: absoluteOrRelative(context.primaryHost, alt.path)
+      href: absoluteOrRelative(
+        context.primaryHost,
+        alt.path,
+        context.siteScheme
+      )
     })),
     { hreflang: "x-default", href: canonicalUrl }
   ];
