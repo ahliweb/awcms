@@ -13,7 +13,7 @@
  * Pure logic lives in `scripts/lib/docs-i18n-checks.mjs`; this file does I/O and
  * exit codes. Run: `bun run check:docs:translation`.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
@@ -332,8 +332,7 @@ function listSources() {
         file
       )
     )
-    .filter((file) => !GENERATED_NOT_HAND_MIRRORED.has(file))
-    .filter((file) => existsSync(join(ROOT, file)));
+    .filter((file) => !GENERATED_NOT_HAND_MIRRORED.has(file));
 }
 
 /** @returns {string[]} tracked `.id.md` mirrors that exist on disk. */
@@ -347,10 +346,34 @@ function listMirrors() {
     ["ls-files", "--cached", "--others", "--exclude-standard", "*.id.md"],
     { cwd: ROOT, encoding: "utf8" }
   );
-  return out
-    .split("\n")
-    .filter(Boolean)
-    .filter((file) => existsSync(join(ROOT, file)));
+  return out.split("\n").filter(Boolean);
+}
+
+/**
+ * Read a file, or return null when it is not there.
+ *
+ * Not `existsSync` + `readFileSync`: that pair is a time-of-check/time-of-use
+ * race. Here the consequence is a spurious finding rather than a corrupt write,
+ * but the sibling writer (`docs-i18n-stamp.mjs`) had the same shape and CodeQL
+ * `js/file-system-race` flagged it — leaving the twin in place would be knowing
+ * about a defect and keeping it.
+ *
+ * @param {string} path
+ * @returns {string | null}
+ */
+function readFileIfPresent(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      /** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /** @returns {Problem[]} */
@@ -363,11 +386,9 @@ export function runChecks() {
     const sourcePath = deriveSourcePath(mirrorPath);
     if (!sourcePath) continue;
 
-    const mirrorContent = readFileSync(join(ROOT, mirrorPath), "utf8");
-    const sourceFull = join(ROOT, sourcePath);
-    const sourceContent = existsSync(sourceFull)
-      ? readFileSync(sourceFull, "utf8")
-      : null;
+    const mirrorContent = readFileIfPresent(join(ROOT, mirrorPath));
+    if (mirrorContent === null) continue;
+    const sourceContent = readFileIfPresent(join(ROOT, sourcePath));
 
     problems.push(
       ...checkTranslationPair(

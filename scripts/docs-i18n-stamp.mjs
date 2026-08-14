@@ -22,7 +22,7 @@
  *   bun run docs:i18n:stamp            # rewrite banners + markers in place
  *   bun run docs:i18n:stamp --check    # report what would change, exit 1 if any
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
@@ -56,8 +56,7 @@ function indonesianBanner(sourcePath) {
 /**
  * Replace a leading banner line, or insert one. Everything after the banner is
  * preserved byte for byte — this tool must never be a reason to re-review prose.
- */
-/**
+ *
  * @param {string} content
  * @param {string} banner
  * @returns {string}
@@ -83,8 +82,9 @@ function withoutMarker(content) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-/** Marker goes immediately after the banner, before the first heading. */
 /**
+ * Marker goes immediately after the banner, before the first heading.
+ *
  * @param {string} content
  * @param {string} hash
  * @returns {string}
@@ -111,8 +111,33 @@ function listMirrors() {
     { cwd: ROOT, encoding: "utf8" }
   )
     .split("\n")
-    .filter(Boolean)
-    .filter((file) => existsSync(join(ROOT, file)));
+    .filter(Boolean);
+}
+
+/**
+ * Read a file, or return null when it is not there.
+ *
+ * Deliberately not `existsSync` + `readFileSync`: that pair is a
+ * time-of-check/time-of-use race, and the failure it invites is silent — the
+ * check passes, the file disappears, and the read throws in the middle of a
+ * multi-file rewrite, leaving the tree half-stamped.
+ *
+ * @param {string} path
+ * @returns {string | null}
+ */
+function readFileIfPresent(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      /** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /** @type {string[]} */
@@ -123,16 +148,23 @@ for (const mirrorPath of listMirrors()) {
   if (!sourcePath) continue;
 
   const sourceFull = join(ROOT, sourcePath);
-  if (!existsSync(sourceFull)) continue;
 
-  const originalSource = readFileSync(sourceFull, "utf8");
+  // Read and handle absence from the READ, rather than asking `existsSync`
+  // first. The two-step form is a time-of-check/time-of-use race — the file can
+  // vanish between the check and the read — and it is not hypothetical here:
+  // this tool runs over a tree that `git`, Prettier and an editor may all be
+  // touching. CodeQL `js/file-system-race` flagged it.
+  const originalSource = readFileIfPresent(sourceFull);
+  if (originalSource === null) continue;
+
   const nextSource = withBanner(
     withoutMarker(originalSource),
     englishBanner(mirrorPath)
   );
 
   const mirrorFull = join(ROOT, mirrorPath);
-  const originalMirror = readFileSync(mirrorFull, "utf8");
+  const originalMirror = readFileIfPresent(mirrorFull);
+  if (originalMirror === null) continue;
   const nextMirror = withMarker(
     withBanner(originalMirror, indonesianBanner(sourcePath)),
     // Hash the source AS IT WILL BE WRITTEN, not as it was read — otherwise the
