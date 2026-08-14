@@ -105,10 +105,63 @@ export type ModuleSettingsContract = {
   defaults?: Record<string, unknown>;
 };
 
+/**
+ * When a job runs, in a form a machine can install.
+ *
+ * `recommendedSchedule` has always been free prose ("Every 1-2 minutes via
+ * cron/systemd timer."). Prose is readable and unexecutable, and the result was
+ * measurable: on the production host `crontab -l` carried exactly ONE of the 32
+ * declared jobs. Scheduled publishing never fired, the domain-event outbox was
+ * never drained, push delivery was inert, and the entire retention family never
+ * ran — which means the retention guarantees ADR-0094 states were enforced by
+ * nothing at all. Nothing reported this, because a job that is never scheduled
+ * produces no error; it produces silence.
+ *
+ * So the schedule becomes data. `jobs:crontab:generate` renders the crontab from
+ * these declarations, and `jobs:schedule:check` fails when a job declares none —
+ * a new job can no longer be born dormant.
+ */
+export type ModuleJobSchedule =
+  | {
+      mode: "manual";
+      /**
+       * Why this job is NOT on a timer. Required, and it must be a structural
+       * reason ("one-shot data migration", "run before a deploy"), not "nobody
+       * got round to it" — that answer belongs in a cron expression.
+       */
+      because: string;
+    }
+  | {
+      mode: "cron";
+      /** Standard five-field cron expression, e.g. `*​/2 * * * *`. UTC. */
+      expression: string;
+      /**
+       * What happens the FIRST time this runs on a system where it has never
+       * run.
+       *
+       * This is not ceremony. Enabling these jobs on a deployment that has been
+       * up for months is not "resuming a schedule" — for some of them it is a
+       * single unbounded action against a backlog that accumulated the whole
+       * time: every overdue post published at once, every queued push delivered
+       * to real devices, every row past its retention deleted in one pass. Each
+       * of those is the CORRECT behaviour and still needs to be seen before it
+       * happens once.
+       *
+       * `bounded` — the first run costs no more than any later run.
+       * `review-before-first-run` — do a `--dry-run` and read the counts first.
+       */
+      backlog: "bounded" | "review-before-first-run";
+      /** Required when `backlog` is `review-before-first-run`: what the first run would do. */
+      backlogNote?: string;
+    };
+
 export type ModuleJobDescriptor = {
   command: string;
   purpose: string;
+  /** Human prose. Kept for the operator-facing API; `schedule` is the executable form. */
   recommendedSchedule?: string;
+  /** Machine-readable schedule — see `ModuleJobSchedule`. */
+  schedule?: ModuleJobSchedule;
   environmentNotes?: string;
   safeInOfflineLan?: boolean;
 };

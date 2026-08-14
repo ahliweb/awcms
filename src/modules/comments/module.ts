@@ -173,6 +173,13 @@ export const commentsModule = defineModule({
   jobs: [
     {
       command: "bun run comments:retention",
+      schedule: {
+        mode: "cron",
+        expression: "0 4 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes comment data past retention — the whole accumulated excess on the first pass. This is user-authored content. Dry-run and read the count."
+      },
       purpose:
         "Bounded, per-tenant retention/anonymization sweep: NULL author identity fields on comments older than the retention cutoff (retaining row + body + append-only moderation history), and delete unconfirmed reply subscriptions past the confirmation window. Skips a tenant whose comment content descriptor is under an active legal hold (legal hold overrides retention).",
       recommendedSchedule: "daily (off-peak)",

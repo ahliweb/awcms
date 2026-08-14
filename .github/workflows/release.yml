@@ -176,19 +176,27 @@ jobs:
         id: tags
         run: |
           REPO="ghcr.io/ahliweb/awcms"
+          JOBS_REPO="ghcr.io/ahliweb/awcms-jobs"
           if [ "${{ github.event_name }}" = "push" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
             TAGS="${REPO}:${VERSION}
           ${REPO}:sha-${GITHUB_SHA::12}
           ${REPO}:latest"
+            JOBS_TAGS="${JOBS_REPO}:${VERSION}
+          ${JOBS_REPO}:sha-${GITHUB_SHA::12}
+          ${JOBS_REPO}:latest"
             PRIMARY="${REPO}:${VERSION}"
           else
             TAGS="${REPO}:dryrun-${GITHUB_SHA::12}"
+            JOBS_TAGS="${JOBS_REPO}:dryrun-${GITHUB_SHA::12}"
             PRIMARY="${REPO}:dryrun-${GITHUB_SHA::12}"
           fi
           {
             echo "tags<<EOF"
             echo "$TAGS"
+            echo "EOF"
+            echo "jobs-tags<<EOF"
+            echo "$JOBS_TAGS"
             echo "EOF"
             echo "primary=$PRIMARY"
             echo "repo=$REPO"
@@ -210,10 +218,36 @@ jobs:
         with:
           context: .
           file: Dockerfile.production
+          # Named explicitly. Without it this builds the LAST stage, so adding a
+          # stage to the Dockerfile would silently change what gets published as
+          # the application image.
+          target: runtime
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false # provenance handled explicitly below (attest-build-provenance), not buildx's own
           sbom: false # SBOM handled explicitly below (anchore/sbom-action), not buildx's own
+
+      # The runtime image carries only `dist/`, so none of the 32 registered job
+      # targets can execute in it (`bun run logs:audit:purge` →
+      # `Module not found "scripts/audit-log-purge.ts"`, verified on the running
+      # production container). The `jobs` stage is the same commit with the
+      # sources the schedulers need.
+      #
+      # It is published HERE, from the release, because the alternative was a
+      # hand-copied source snapshot on the host that did not follow releases —
+      # so after every deploy the cron ran the previous release's code against
+      # the new schema until someone remembered to refresh it, and nothing
+      # reported that.
+      - name: Build and push jobs image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.production
+          target: jobs
+          push: true
+          tags: ${{ steps.tags.outputs.jobs-tags }}
+          provenance: false
+          sbom: false
 
       - name: SBOM — source tree
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0

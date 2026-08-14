@@ -156,6 +156,11 @@ export const visitorAnalyticsModule = defineModule({
   jobs: [
     {
       command: "bun run analytics:rollup",
+      schedule: {
+        mode: "cron",
+        expression: "15 0 * * *",
+        backlog: "bounded"
+      },
       purpose:
         "Recompute the previous day's awcms_visitor_daily_rollups from raw awcms_visit_events, per active tenant. Idempotent (full UPSERT recompute).",
       recommendedSchedule: "daily (shortly after UTC midnight)",
@@ -165,6 +170,13 @@ export const visitorAnalyticsModule = defineModule({
     },
     {
       command: "bun run analytics:purge",
+      schedule: {
+        mode: "cron",
+        expression: "45 3 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes analytics rows past retention — the whole accumulated excess on the first pass. Dry-run and read the count."
+      },
       purpose:
         "Delete/clear visitor analytics data past its retention windows (events, session raw detail, sessions, rollups), per active tenant.",
       recommendedSchedule: "daily",

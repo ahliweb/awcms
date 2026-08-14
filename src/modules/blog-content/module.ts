@@ -723,6 +723,13 @@ export const blogContentModule = defineModule({
   jobs: [
     {
       command: "bun run blog:publish:scheduled",
+      schedule: {
+        mode: "cron",
+        expression: "*/5 * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Publishes every post whose scheduled time has passed. This is OUTWARD-FACING and hard to undo: posts scheduled months ago all go live in one pass, in the wrong order relative to the news cycle. List them before enabling."
+      },
       purpose:
         "Publish every due `status='scheduled'` blog post (scheduled_at <= now()) for every active tenant. Idempotent — a post already published, or still in the future, is a no-op on re-run.",
       recommendedSchedule: "Every 1-5 minutes via cron/systemd timer.",
@@ -732,6 +739,11 @@ export const blogContentModule = defineModule({
     },
     {
       command: "bun run blog:ads:ingest",
+      schedule: {
+        mode: "manual",
+        because:
+          "A one-shot migration of legacy ad rows. Re-running it on a timer would re-ingest a source that is only supposed to be read once."
+      },
       purpose:
         "ADR-0044 §4 Fase 2: migrate the retired free-URL advertisement system (`awcms_blog_ads` + `awcms_blog_ad_placements`) onto the media-backed `awcms_news_portal_ad_placements`, and REPORT every ad it cannot migrate. Preview is the default — the job writes nothing until given `--apply`, which additionally requires `--placement-key=<key>` because the legacy data does not say which of the twelve slots an ad belongs in and this job will not guess. An ad is migrated only when its `image_url` is already the public URL of one of that tenant's registered, publicly-referenceable media objects; a remote, malformed, foreign-key, or unregistered image is residue, printed with its URL for a human to re-upload through the media library. Idempotent via `source_legacy_ad_id` under a partial unique index (migration 079), so the intended preview -> apply -> fix residue -> apply again loop never duplicates a row.",
       recommendedSchedule:
@@ -742,6 +754,11 @@ export const blogContentModule = defineModule({
     },
     {
       command: "bun run blog:ads:drop-readiness",
+      schedule: {
+        mode: "manual",
+        because:
+          "A pre-flight report an operator reads by hand before writing the drop migration. It answers a question a human is about to ask, not one a timer is."
+      },
       purpose:
         "ADR-0044 §4 Fase 2: answers whether `awcms_blog_ads` and `awcms_blog_ad_placements` may be dropped yet, and exits non-zero while the answer is no. A legacy ad is accounted for when a successor row names it via `source_legacy_ad_id` (migration 079) or when it is soft-deleted — an operator read the residue report and decided it does not come along. Anything else blocks, and there is deliberately no override flag. Read-only: it issues no INSERT, UPDATE or DELETE, so it is safe to run against production at any time, including before the ingest has ever run.",
       recommendedSchedule:

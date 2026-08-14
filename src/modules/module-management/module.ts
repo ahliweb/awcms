@@ -225,6 +225,11 @@ export const moduleManagementModule = defineModule({
   jobs: [
     {
       command: "bun run config:validate",
+      schedule: {
+        mode: "manual",
+        because:
+          "A deploy gate, not a background task: it runs as the first stage of a deployment and its whole value is failing BEFORE the app starts."
+      },
       purpose:
         "Validate required/conditional environment variables at boot time before anything attempts to connect to a database or run migrations.",
       recommendedSchedule:

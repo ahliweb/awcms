@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-102 target menjalankan berkas di `scripts/`; 44 di antaranya
+104 target menjalankan berkas di `scripts/`; 45 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -92,6 +92,8 @@ terjadwal, atau oleh workflow CI tertentu.
 | `idn-regions:activate` | `idn-regions-activate.ts` | — |
 | `idn-regions:import` | `idn-regions-import.ts` | — |
 | `idn-regions:rollback` | `idn-regions-rollback.ts` | — |
+| `jobs:crontab:check` | `jobs-crontab.ts` | ✅ |
+| `jobs:crontab:generate` | `jobs-crontab.ts` | — |
 | `logging:lint:check` | `logging-lint-check.ts` | ✅ |
 | `logs:audit:purge` | `audit-log-purge.ts` | — |
 | `memory:docs:check` | `sync-agent-memory.ts` | — |
