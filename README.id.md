@@ -1,4 +1,6 @@
-🇮🇩 Bahasa Indonesia (sumber) · 🇬🇧 [English (default)](README.md)
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](README.md)
+
+<!-- i18n-source-hash: sha256:6cc5bf74d3f5079573c36ea231106fe1b9c119e7de9c4bdf6beca4aeb229388f -->
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/ci.yml?branch=main&label=CI&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/ahliweb/awcms/codeql.yml?branch=main&label=CodeQL&logo=github)](https://github.com/ahliweb/awcms/actions/workflows/codeql.yml) [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE) [![runtime](https://img.shields.io/badge/runtime-Bun-blue?logo=bun&logoColor=white)](https://bun.sh)
 

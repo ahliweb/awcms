@@ -1,6 +1,4 @@
-🇬🇧 English (default) · 🇮🇩 [Bahasa Indonesia (sumber)](family-compatibility.id.md)
-
-<!-- i18n-source-hash: sha256:eb782f2eb4554ebf82f178273d0019ae8b4ebff4e8eb7944038113e17d7b94da -->
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](family-compatibility.id.md)
 
 # AWCMS family contract manifest
 
