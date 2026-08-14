@@ -3826,3 +3826,9 @@ msgstr ""
 
 msgid "You do not have permission to view users."
 msgstr ""
+
+msgid "Not available on this deployment"
+msgstr ""
+
+msgid "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
+msgstr ""

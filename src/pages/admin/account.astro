@@ -45,6 +45,8 @@ import {
   readPreferences,
   resolvePrincipalIdForIdentity
 } from "../../modules/identity-access/application/principal-preference-store";
+import { isMfaFeatureEnabled } from "../../lib/auth/mfa-config";
+import { isSsoEnabled } from "../../lib/auth/sso-config";
 
 const ssr = Astro.locals.ssrContext;
 
@@ -87,6 +89,24 @@ let storedLocale: string | null = null;
 let storedTheme: string | null = null;
 let ssoProviders: OwnSsoProviderLink[] = [];
 let loadError = false;
+
+/**
+ * DEPLOYMENT switches, distinct from the caller’s own enrolment state.
+ *
+ * This screen used to branch only on whether the person had a factor
+ * (`mfaEnabled`) and a linked provider. With `AUTH_MFA_ENABLED` unset — which is
+ * how production runs today — that rendered a “Set up two-factor
+ * authentication” button whose endpoint answers 400: a control that exists,
+ * invites a click, and cannot work. Exactly the fake affordance the
+ * `LanguageSwitcher` comment condemns, one screen over.
+ *
+ * The gate is deliberately narrow. `isMfaFeatureEnabled` governs ENROLMENT
+ * only; disable, recovery codes and step-up are driven by database state so an
+ * operator can turn the flag off without stranding people who already enrolled
+ * (`mfa-config.ts`). Gating the whole section would take away the exit.
+ */
+const mfaFeatureEnabled = isMfaFeatureEnabled();
+const ssoFeatureEnabled = isSsoEnabled();
 
 /**
  * `loadSelfServiceScreen`, not `loadAdminScreen` (ADR-0096 §1).
@@ -447,13 +467,23 @@ const themeOptions = [
       ) : (
         <>
           <p class="admin-card-hint" id="account-mfa-state">
-            {t(
-              "Not enabled. Two-factor authentication asks for a code from your phone in addition to your password."
-            )}
+            {mfaFeatureEnabled
+              ? t(
+                  "Not enabled. Two-factor authentication asks for a code from your phone in addition to your password."
+                )
+              : /* Enrolment is off for this deployment. Say so, rather than
+                   offering a button whose endpoint answers 400 — a control that
+                   cannot work is worse than an absent one, because the person
+                   keeps trying. */
+                t(
+                  "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
+                )}
           </p>
-          <button type="button" class="btn-primary" id="account-mfa-enrol">
-            {t("Set up two-factor authentication")}
-          </button>
+          {mfaFeatureEnabled && (
+            <button type="button" class="btn-primary" id="account-mfa-enrol">
+              {t("Set up two-factor authentication")}
+            </button>
+          )}
         </>
       )
     }
@@ -524,13 +554,23 @@ const themeOptions = [
             <li class="account-sso-item">
               <span class="account-sso-name">{provider.displayName}</span>
               {provider.linkedAt === null ? (
-                <button
-                  type="button"
-                  class="btn-secondary btn-small account-sso-link"
-                  data-provider-key={provider.providerKey}
-                >
-                  {t("Connect")}
-                </button>
+                /* Same rule as MFA enrolment: `Connect` starts a flow that
+                   `AUTH_SSO_ENABLED` gates, so with the flag off the button
+                   would fail on click. `Disconnect` below stays available —
+                   unlinking must not depend on a switch the person cannot see. */
+                ssoFeatureEnabled ? (
+                  <button
+                    type="button"
+                    class="btn-secondary btn-small account-sso-link"
+                    data-provider-key={provider.providerKey}
+                  >
+                    {t("Connect")}
+                  </button>
+                ) : (
+                  <span class="admin-card-hint">
+                    {t("Not available on this deployment")}
+                  </span>
+                )
               ) : (
                 <>
                   <span class="badge">
