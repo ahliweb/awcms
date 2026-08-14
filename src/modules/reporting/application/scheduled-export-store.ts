@@ -102,7 +102,29 @@ export async function getScheduledExport(
   return rows[0] ? toRow(rows[0]) : null;
 }
 
-/** Every ENABLED, non-soft-deleted config across every tenant, for the scheduled dispatch job — the caller iterates tenants and calls this per-tenant (via `withTenant`), same convention every other scheduled job in this repo already uses. */
+/**
+ * Every ENABLED, non-soft-deleted config across every tenant, for the scheduled
+ * dispatch job — the caller iterates tenants and calls this per-tenant (via
+ * `withTenant`), the same convention every other scheduled job here uses.
+ *
+ * THE `::timestamptz` IN THE STATEMENT BELOW IS LOAD-BEARING. `now` arrives as
+ * an untyped parameter, and the only clue Postgres has for inferring its type is
+ * the interval subtracted from it — which resolves to `interval - interval`. The
+ * expression is then an `interval`, and comparing a `timestamptz` to one has no
+ * operator, so the statement THROWS rather than returning a wrong answer:
+ *
+ *     operator does not exist: timestamp with time zone > interval
+ *
+ * That is not hypothetical. It ran for the first time on 15 August 2026, when
+ * the job was finally given a schedule, and failed on every tick until the cast.
+ * Nothing caught it earlier because the job had never been scheduled, no test
+ * called this function, and `--dry-run` reported success without reaching this
+ * path — a dry run is not a run.
+ *
+ * `tests/integration/scheduled-export-due.integration.test.ts` executes it
+ * against a real planner, which is the only thing that can answer whether this
+ * statement is runnable.
+ */
 export async function listDueScheduledExports(
   tx: Bun.SQL,
   tenantId: string,
@@ -116,7 +138,7 @@ export async function listDueScheduledExports(
       AND NOT EXISTS (
         SELECT 1 FROM awcms_reporting_export_runs er
         WHERE er.tenant_id = se.tenant_id AND er.scheduled_export_id = se.id
-          AND er.created_at > ${now} - make_interval(mins => se.schedule_interval_minutes)
+          AND er.created_at > ${now}::timestamptz - make_interval(mins => se.schedule_interval_minutes)
       )
   `) as ScheduledExportDbRow[];
 
