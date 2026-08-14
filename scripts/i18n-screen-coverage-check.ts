@@ -132,8 +132,14 @@ export function extractTemplateText(source: string): string[] {
   }
 
   body = body
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    // `\s*` before the `>` is NOT cosmetic. HTML permits whitespace there, so
+    // `</script >` closes a script — but a pattern demanding `</script>` skips
+    // right past it and keeps consuming until the NEXT closing tag in the file,
+    // swallowing the real markup in between. In a COVERAGE gate that failure is
+    // silent and reads as good news: the literals inside the swallowed span are
+    // simply never counted. CodeQL `js/bad-tag-filter` caught this one.
+    .replace(/<style[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     // JSX comments — `{/* … */}`. These are prose ABOUT the template and are
     // the single largest source of false positives here: several screens

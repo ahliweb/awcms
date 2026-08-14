@@ -52,6 +52,17 @@ sumber yang rusak lolos typecheck dan hanya kompiler Astro yang melihatnya.
 Itu penegasan pelajaran "jalankan, jangan dibaca" yang sudah ada di memori
 proyek.
 
+Koreksi KEEMPAT datang dari CodeQL, bukan dari saya: `js/bad-tag-filter`,
+severity tinggi. Pola `<script[\s\S]*?</script>` tidak cocok dengan
+`</script >` — HTML mengizinkan spasi sebelum `>`. Karena polanya malas, ia
+tidak sekadar gagal membuang satu blok; ia LANJUT sampai penutup berikutnya di
+berkas yang sama dan menelan seluruh markup di antaranya. Pada gerbang CAKUPAN,
+kegagalan itu senyap dan terbaca sebagai kabar baik: literal di rentang yang
+tertelan tak pernah terhitung. Diperbaiki menjadi `</script\s*>` (dan
+`</style\s*>`), lalu dipagari `tests/i18n-screen-coverage.test.ts` — yang
+dibuktikan GAGAL lebih dulu terhadap pola lama, dengan `extractTemplateText`
+mengembalikan `[]` untuk berkas yang seharusnya punya satu label.
+
 **Keterbatasan yang dinyatakan, bukan disembunyikan:** 12 dari 1.258 msgid
 (<1%) adalah PENGGALAN kalimat, karena kalimatnya terpotong oleh `<code>` atau
 `<strong>` di tengah. Ia diterjemahkan dengan benar tetapi canggung bagi
