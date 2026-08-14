@@ -356,6 +356,133 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
 
 ## 4. Backlog / langkah berikutnya
 
+- **PUTARAN REKOMENDASI — 15 Agustus 2026, diturunkan dari repo + produksi v9.1.2
+  yang SEDANG BERJALAN.** Tiap temuan di bawah punya bukti yang dijalankan, bukan
+  dibaca. Yang tidak terverifikasi ditandai TERDUGA.
+
+  ### P0 — sedang menyebabkan kehilangan senyap SEKARANG
+  1. **31 dari 32 target job TIDAK PERNAH berjalan di produksi.** `crontab -l` di
+     `dinkes-prod` hanya memuat satu: `email:dispatch` tiap 5 menit. Ini BUKAN
+     pengulangan catatan "image produksi tak bisa menjalankan job" — mitigasi
+     `run-job.sh` sudah ada dan bekerja; yang tidak ada adalah **jadwalnya**.
+
+     Akibat yang bisa dinamai, bukan abstrak: `blog:publish:scheduled` (post
+     terjadwal tak pernah terbit), `domain-events:dispatch` (outbox tak pernah
+     terkuras → integrasi mati diam), `push:dispatch` (seluruh modul
+     push_delivery inert), `reporting:projections:refresh` (laporan basi),
+     `site-search:reconcile` (indeks melenceng), `workflow:escalations:dispatch`
+     (eskalasi approval tak pernah jalan), `tenant-domain:dns:sync`, dan
+     **seluruh keluarga retensi** (`logs:audit:purge`, `analytics:purge`,
+     `comments:retention`, `data-lifecycle:archive-purge`, `*:queue:purge`) —
+     yang berarti klaim retensi ADR-0094 tidak ditegakkan oleh apa pun.
+
+     Perbaikan benar sudah dinamai dokumen ini: stage `jobs` di
+     `Dockerfile.production` yang diterbitkan `release.yml`, lalu satu timer per
+     job sesuai `recommendedSchedule` di deskriptornya. Sampai itu ada, minimal
+     daftarkan cron untuk enam job berdampak-tertinggi di atas.
+
+  2. **`identity-access:business-scope:expiry` dan
+     `identity-access:subscription-lifecycle` termasuk yang tidak berjalan —
+     jadi AKSES HIDUP LEBIH LAMA DARI MASA BERLAKUNYA.** Ini bagian keamanan dari
+     temuan 1 dan layak dinaikkan sendiri: kedaluwarsa yang tidak dieksekusi
+     tidak terlihat seperti kegagalan, ia terlihat seperti akses yang sah.
+
+  3. **NOL backup terjadwal.** `scheduled_database_backups` Coolify kosong; tiap
+     backup yang ada diambil tangan (yang terbaru: `awcms-pre-128-20260814`,
+     diverifikasi `pg_restore -l`, 1.549 objek). Host ini SUDAH punya polanya
+     untuk `hermes`: backup harian + push ke maxio + verifikasi mingguan. Salin
+     pola itu untuk `awcms`, termasuk **uji restore**, karena backup yang tak
+     pernah dipulihkan adalah dugaan, bukan cadangan.
+
+  ### P1 — cacat yang KELUARANNYA sudah salah di produksi
+  4. **`url.origin` aplikasi memakai skema `http` di situs `https`, dan itu
+     BOCOR ke keluaran.** Terverifikasi: `curl https://…/blog/ahliweb/feed.xml`
+     mengembalikan `<link>http://awcms.ahlikoding.com/…</link>` untuk tiap entri.
+     Canonical HTML kebetulan benar (`https`) karena dibangun dari jalur lain —
+     jadi ini juga bukti bahwa asal URL absolut di repo ini ADA DUA.
+
+     Sebabnya: adapter Node menurunkan protokol dari listener-nya sendiri, dan
+     TIDAK ADA satu pun tempat di repo ini yang membaca `X-Forwarded-Proto`.
+     Ia juga akar dari kelas cacat yang memakan v9.1.1 (`checkOrigin` menolak
+     tiap form POST asli). Perbaikan: SATU sumber asal-situs (turunkan dari
+     `APP_URL`, atau hormati `X-Forwarded-Proto` saat `TRUSTED_PROXY_ENABLED`),
+     lalu arahkan semua pembangun URL absolut ke sana.
+
+  5. **`/admin/account` menawarkan pendaftaran MFA sementara `AUTH_MFA_ENABLED`
+     tidak `true` di produksi.** Halaman itu bercabang pada `account.mfa.enabled`
+     (status ENROLMEN pengguna), bukan pada `isMfaFeatureEnabled` (saklar
+     DEPLOYMENT). Jadi tombolnya tampil dan endpoint-nya menolak — persis "fake
+     affordance" yang dikutuk komentar `LanguageSwitcher` sendiri. TERDUGA pada
+     penolakan endpoint-nya (butuh sesi untuk dijalankan); percabangan UI-nya
+     terbaca langsung di sumber. Berlaku sama untuk seksi SSO
+     (`AUTH_SSO_ENABLED` juga tidak `true`).
+
+  6. **Permukaan publik yang hilang:** `/news/`, `/sitemap.xml`, dan `/rss.xml`
+     semuanya **404** di produksi, sementara `/blog/{tenantCode}` dan
+     `/blog/{tenantCode}/feed.xml` **200**. Untuk sebuah CMS, ketiadaan
+     `sitemap.xml` adalah lubang distribusi, bukan kosmetik. Putuskan bentuk URL
+     publik yang kanonik lebih dulu — ini bertetangga dengan pekerjaan locale
+     publik yang sudah terblokir di butir kunci-cache.
+
+  ### P2 — arsitektur
+  7. **Dua kelas kegagalan HANYA-PRODUKSI kini terbukti, dan tak satu pun punya
+     gerbang sebelum 14 Agustus:** (a) `checkOrigin` Astro vs proxy pengakhir
+     TLS, (b) Astro me-inline script tanpa import lintas-chunk sehingga CSP
+     menolaknya. Keduanya lolos 47 gerbang dan 4.375 test. `tests/form-post-origin-check.test.ts`
+     menutup keduanya untuk komponen ITU; yang belum ada adalah gerbang
+     ARTEFAK-BUILD yang umum: "tak boleh ada script inline selain hash
+     theme-init". Itu satu pemeriksaan atas `dist/`, dan ia akan menangkap
+     seluruh kelasnya, bukan satu contohnya.
+
+  8. **Uji asap yang berbicara HTTPS.** Playwright, dev, dan `bun run build`
+     semuanya bicara HTTP polos ke app, dan itulah sebabnya kedua cacat di atas
+     tak terlihat. Satu skenario di belakang reverse-proxy pengakhir TLS
+     (sekadar Traefik/Caddy di depan `dist/`) akan menemukan keduanya dalam
+     hitungan detik.
+
+  ### P3 — performa
+  9. **Varnish SEHAT — dan cara mengukurnya penting.** Diukur DI container
+     Varnish: `MISS` → `HIT` → `HIT` dengan `Age` menaik. Diukur lewat
+     Cloudflare ia tampak `DYNAMIC` selamanya, karena origin hanya mengirim
+     `Surrogate-Control` (yang dimengerti Varnish) dan `max-age=0,
+must-revalidate` untuk browser. **Jangan** menyimpulkan cache mati dari
+     header Cloudflare — `environments.md` §celah C14 sudah mengatakannya, dan
+     pengukuran pertama saya hari ini melanggarnya.
+
+  10. **Cloudflare karena itu tidak meng-cache APA PUN** (hanya TLS + kompresi).
+      Menambah `s-maxage` akan mengubahnya, tetapi HANYA aman bila antrean purge
+      juga menjangkau API zona CF — hari ini tidak. Satu paket, atau jangan
+      sama sekali; separuhnya menyajikan konten basi.
+
+  11. **Plafon aset klien terpakai 94%** (168.759 B dari 180.000 B). Bukan
+      masalah hari ini, tetapi headroom-nya tipis untuk satu layar baru. Naikkan
+      dengan alasan tertulis, atau pangkas.
+
+  ### P4 — keamanan
+  12. **`COMMENTS_SUBSCRIBER_ENCRYPTION_KEY` tidak diset** (satu-satunya
+      kegagalan `security:readiness`, tingkat warning, 0 critical). Ia gagal
+      TERTUTUP — tak ada alamat plaintext yang tertulis — tetapi berarti
+      notifikasi balasan tak bisa dikirim. Set, atau matikan fiturnya secara
+      eksplisit supaya keadaannya dinyatakan.
+
+  13. **MFA, SSO, dan Turnstile semuanya mati di produksi** meski ketiganya
+      sudah dibangun dan diuji. Untuk permukaan admin yang memegang hak owner,
+      MFA yang mati adalah paparan yang layak diputuskan secara sadar dan
+      dicatat, bukan diwariskan dari default.
+
+  ### P5 — kemampuan men-debug
+  14. **Fondasinya ada, hilirnya tidak.** `correlationId` dipropagasi, log
+      terstruktur JSON, `setLogSink` tersedia sebagai titik ekstensi — tetapi
+      tidak ada sink yang dikonfigurasi, jadi log berhenti di stdout container
+      dan LENYAP saat tiap deploy mengganti container. Kirim keluar host (host
+      ini sudah melakukannya untuk `hermes`).
+
+  15. **Tidak ada alarm laju-error, dan itu terbukti mahal.** Pengalih bahasa
+      menjawab 403 untuk SETIAP pengguna selama berjam-jam dan tidak ada yang
+      memberi tahu siapa pun; ia ditemukan hanya karena saya meng-`curl` satu
+      permukaan yang baru saja saya kirim. Satu pemeriksaan sintetik pada dua
+      atau tiga alur inti akan menangkapnya.
+
 - **i18n (ADR-0095) dan permukaan akun (ADR-0096) — apa yang SUDAH mendarat,
   dan apa yang persis tersisa. 14 Agustus 2026.**
 
