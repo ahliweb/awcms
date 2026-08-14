@@ -35,9 +35,23 @@
  * on any page it appears on: `/login` submits its credentials with `fetch`, so a
  * reader without script cannot sign in to reach the admin at all.
  *
- * The `<script>` is import-bearing so Astro bundles it to an external module — an
- * inline script would be blocked by this repo's `default-src 'self'` CSP, which
- * admits exactly one inline script (the theme-init hash) and no others.
+ * ## Why the behaviour lives in a module rather than in the `<script>`
+ *
+ * Because "import-bearing, therefore bundled externally" was ASSUMED here and
+ * was false. Astro inlines a component script that has no imports left after
+ * bundling, and this repo's CSP is `script-src 'self' 'sha256-…'` with exactly
+ * one hash — the theme-init script. An inline script it has no hash for never
+ * runs.
+ *
+ * The earlier version held its import in place with
+ * `if (typeof LOCALE_COOKIE_NAME !== "string") throw …`. That constant is a
+ * string, so the minifier proved the test false, deleted the branch, found the
+ * import unused, and elided it. The script became import-free and was inlined —
+ * precisely what the guard existed to prevent, while its comment went on saying
+ * it could not happen.
+ *
+ * A bare side-effect `import "…"` cannot be elided, because dropping it would
+ * drop observable behaviour. See `src/lib/ui/language-switcher-client.ts`.
  *
  * ## Why it posts to an API route instead of setting the cookie in script
  *
@@ -175,70 +189,3 @@ const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
     }
   }
 </style>
-
-<script>
-  // Import-bearing so Astro emits an EXTERNAL module (CSP `script-src 'self'`).
-  import { LOCALE_COOKIE_NAME } from "../lib/i18n/request-locale";
-
-  const form = document.querySelector<HTMLFormElement>(".locale-switcher");
-  const select = form?.querySelector<HTMLSelectElement>(
-    ".locale-switcher-select"
-  );
-
-  if (form && select) {
-    select.addEventListener("change", () => {
-      // `form.requestSubmit()` rather than `submit()`: the latter does not fire
-      // `submit` handlers, so it would bypass the listener below and fall back
-      // to the native form POST that this deployment answers with 403.
-      form.requestSubmit();
-    });
-
-    form.addEventListener("submit", (event) => {
-      // The native POST would be form-encoded, and Astro's `checkOrigin` refuses
-      // form-encoded writes whenever `url.origin` disagrees with the `Origin`
-      // header — which it always does behind TLS termination. JSON is exempt.
-      event.preventDefault();
-      void applyLocale();
-    });
-  }
-
-  async function applyLocale(): Promise<void> {
-    if (!form || !select) return;
-
-    const returnTo = form.querySelector<HTMLInputElement>(
-      'input[name="return_to"]'
-    )?.value;
-
-    select.disabled = true;
-
-    try {
-      const response = await fetch(form.action, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // The anonymous endpoint needs no session, but the persisting one is
-        // bearer-gated — without this it would answer 401 for a signed-in reader.
-        credentials: "same-origin",
-        body: JSON.stringify({ locale: select.value, return_to: returnTo })
-      });
-
-      if (!response.ok) {
-        select.disabled = false;
-        return;
-      }
-
-      // Re-request the page rather than swapping text in place: the locale
-      // decides the server-rendered document, `<html lang>` included.
-      window.location.reload();
-    } catch {
-      // Offline or blocked — leave the control usable rather than stuck.
-      select.disabled = false;
-    }
-  }
-
-  // Referenced so the import is not elided by the bundler, and so this file
-  // fails to build if the cookie name is ever renamed out from under it — the
-  // endpoint and this component must agree on it.
-  if (typeof LOCALE_COOKIE_NAME !== "string") {
-    throw new Error("LOCALE_COOKIE_NAME must be a string");
-  }
-</script>

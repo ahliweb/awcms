@@ -444,7 +444,21 @@ const ICON_USER =
       // The import forces Astro to bundle this to an EXTERNAL file — an
       // import-free script would be inlined, and inline scripts are blocked by
       // the middleware CSP (`default-src 'self'`). See admin-form-client.ts.
+      //
+      // "Has an import" turns out to be the wrong way to state that rule, and
+      // stating it wrongly cost a release. What Astro actually inlines is a
+      // script left with no CROSS-CHUNK import after bundling. `lockElement`
+      // survives because `admin-form-client` is shared by many screens and so
+      // becomes its own chunk; a private one-caller module is folded into the
+      // script itself and the script is then inlined.
+      //
+      // `LanguageSwitcher` learned that the expensive way: its own `<script>`
+      // imported a module nothing else used, was inlined, and never ran under
+      // the CSP. Its behaviour is loaded HERE instead, from the one script
+      // already proven external, because `AdminLayout` is the only thing that
+      // renders that component.
       import { lockElement } from "../lib/ui/admin-form-client";
+      import "../lib/ui/language-switcher-client";
 
       const logoutButton = document.getElementById(
         "admin-logout"
