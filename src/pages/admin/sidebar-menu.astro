@@ -22,6 +22,7 @@
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   buildSidebarEditorModel,
   fetchSidebarArrangement,
@@ -33,6 +34,7 @@ import {
 } from "../../modules/module-management/domain/sidebar-menu";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -105,17 +107,19 @@ const typeOptions = [
 
 <AdminLayout title="Sidebar menu">
   <section class="admin-section">
-    <h1>Sidebar menu</h1>
+    <h1>{t("Sidebar menu")}</h1>
     <p class="admin-section-lead">
-      Rearrange this tenant&rsquo;s admin sidebar. The list of links comes from
-      the installed modules and cannot be added to here &mdash; you can reorder,
-      rename, move between sections, or hide an entry.
+      {
+        t(
+          "Rearrange this tenant&rsquo;s admin sidebar. The list of links comes from the installed modules and cannot be added to here &mdash; you can reorder, rename, move between sections, or hide an entry."
+        )
+      }
     </p>
 
     {
       !canRead && (
         <p class="admin-empty">
-          You do not have permission to view the sidebar configuration.
+          {t("You do not have permission to view the sidebar configuration.")}
         </p>
       )
     }
@@ -123,7 +127,7 @@ const typeOptions = [
     {
       canRead && loadFailed && (
         <p class="admin-empty">
-          Could not load the sidebar configuration right now.
+          {t("Could not load the sidebar configuration right now.")}
         </p>
       )
     }
@@ -131,8 +135,9 @@ const typeOptions = [
     {
       canRead && model && !canConfigure && (
         <p class="admin-empty">
-          Read-only: you do not have permission to change the sidebar
-          arrangement.
+          {t(
+            "Read-only: you do not have permission to change the sidebar arrangement."
+          )}
         </p>
       )
     }
@@ -144,12 +149,12 @@ const typeOptions = [
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Link</th>
-                  <th scope="col">Owner</th>
-                  <th scope="col">Section</th>
-                  <th scope="col">Position</th>
-                  <th scope="col">Label override</th>
-                  <th scope="col">Hidden</th>
+                  <th scope="col">{t("Link")}</th>
+                  <th scope="col">{t("Owner")}</th>
+                  <th scope="col">{t("Section")}</th>
+                  <th scope="col">{t("Position")}</th>
+                  <th scope="col">{t("Label override")}</th>
+                  <th scope="col">{t("Hidden")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,15 +225,15 @@ const typeOptions = [
             </table>
           </div>
 
-          <h2>Sections</h2>
+          <h2>{t("Sections")}</h2>
           <div class="admin-table-wrap">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Section</th>
-                  <th scope="col">Position</th>
-                  <th scope="col">Label override</th>
-                  <th scope="col">Hidden</th>
+                  <th scope="col">{t("Section")}</th>
+                  <th scope="col">{t("Position")}</th>
+                  <th scope="col">{t("Label override")}</th>
+                  <th scope="col">{t("Hidden")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -281,10 +286,10 @@ const typeOptions = [
           {canConfigure && (
             <div class="admin-form-actions">
               <button type="submit" id="sidebar-save">
-                Save arrangement
+                {t("Save arrangement")}
               </button>
               <button type="button" id="sidebar-reset" class="admin-secondary">
-                Reset to default
+                {t("Reset to default")}
               </button>
             </div>
           )}

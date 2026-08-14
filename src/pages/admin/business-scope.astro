@@ -60,6 +60,7 @@ import {
 } from "../../modules/_shared/keyset-pagination";
 import { listModules } from "../../modules";
 import { collectSoDRuleDescriptors } from "../../modules/identity-access/domain/sod-rule-registry";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listBusinessScopeAssignments,
   type BusinessScopeAssignmentRow
@@ -74,6 +75,7 @@ import {
 } from "../../modules/identity-access/application/sod-conflict-evaluation-log";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const CONFLICT_PAGE_SIZE = 50;
 
@@ -288,18 +290,20 @@ const decidedColumns = canRevokeException ? 7 : 6;
 
 <AdminLayout title="Business scope">
   <header class="page-header fade-in-up">
-    <h1 id="business-scope-heading">Business scope</h1>
+    <h1 id="business-scope-heading">{t("Business scope")}</h1>
     <p class="page-description">
-      Which part of the organisation a person's authority covers, the
-      segregation-of-duties conflicts that produced, and the time-bounded
-      exceptions someone approved to work past one.
+      {
+        t(
+          "Which part of the organisation a person's authority covers, the segregation-of-duties conflicts that produced, and the time-bounded exceptions someone approved to work past one."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="business-scope-denied">
-        You do not have permission to view business scope.
+        {t("You do not have permission to view business scope.")}
       </p>
     )
   }
@@ -307,7 +311,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="business-scope-load-error">
-        Could not load the business-scope console. Please try again.
+        {t("Could not load the business-scope console. Please try again.")}
       </p>
     )
   }
@@ -331,17 +335,17 @@ const decidedColumns = canRevokeException ? 7 : 6;
               Waiting for a decision ({pending.length})
             </h2>
             <p class="page-description">
-              An exception lets one person hold both halves of a conflict for a
-              bounded window. Approving is the whole point of the checker half
-              of this flow — and the person who asked for it, and the person it
-              is for, are both refused.
+              {t(
+                "An exception lets one person hold both halves of a conflict for a bounded window. Approving is the whole point of the checker half of this flow \u2014 and the person who asked for it, and the person it is for, are both refused."
+              )}
             </p>
 
             {pending.length === 0 ? (
               <div class="empty-state">
                 <p id="business-scope-inbox-empty">
-                  Nothing is waiting. Requests appear here the moment someone
-                  files one.
+                  {t(
+                    "Nothing is waiting. Requests appear here the moment someone files one."
+                  )}
                 </p>
               </div>
             ) : (
@@ -349,13 +353,13 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
-                      <th scope="col">Rule</th>
-                      <th scope="col">Subject</th>
-                      <th scope="col">Scope</th>
-                      <th scope="col">Justification</th>
-                      <th scope="col">Requested by</th>
-                      <th scope="col">Window</th>
-                      <th scope="col">Decision</th>
+                      <th scope="col">{t("Rule")}</th>
+                      <th scope="col">{t("Subject")}</th>
+                      <th scope="col">{t("Scope")}</th>
+                      <th scope="col">{t("Justification")}</th>
+                      <th scope="col">{t("Requested by")}</th>
+                      <th scope="col">{t("Window")}</th>
+                      <th scope="col">{t("Decision")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -392,14 +396,15 @@ const decidedColumns = canRevokeException ? 7 : 6;
                                 class="module-toggle js-approve-exception"
                                 data-exception-id={exception.id}
                               >
-                                Approve
+                                {t("Approve")}
                               </button>
                             )}
                             {canApproveException &&
                               !callerMayApprove(exception) && (
                                 <span class="cell-muted">
-                                  You filed this or it is about you — a
-                                  different checker must decide it.
+                                  {t(
+                                    "You filed this or it is about you \u2014 a different checker must decide it."
+                                  )}
                                 </span>
                               )}
                             {canRejectException && (
@@ -408,7 +413,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                                 class="btn-inline js-reject-exception"
                                 data-exception-id={exception.id}
                               >
-                                Reject
+                                {t("Reject")}
                               </button>
                             )}
                           </div>
@@ -427,7 +432,9 @@ const decidedColumns = canRevokeException ? 7 : 6;
             class="fade-in-up"
             aria-labelledby="business-scope-assignments-heading"
           >
-            <h2 id="business-scope-assignments-heading">Scope assignments</h2>
+            <h2 id="business-scope-assignments-heading">
+              {t("Scope assignments")}
+            </h2>
 
             <div class="admin-toolbar">
               {[...ASSIGNMENT_STATUSES, "all"].map((option) => (
@@ -443,8 +450,9 @@ const decidedColumns = canRevokeException ? 7 : 6;
             {assignments.length === 0 ? (
               <div class="empty-state">
                 <p id="business-scope-assignments-empty">
-                  No assignment matches this filter. Without one, a person's
-                  authority is not narrowed to any part of the organisation.
+                  {t(
+                    "No assignment matches this filter. Without one, a person's authority is not narrowed to any part of the organisation."
+                  )}
                 </p>
               </div>
             ) : (
@@ -452,13 +460,15 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
-                      <th scope="col">Subject</th>
-                      <th scope="col">Role</th>
-                      <th scope="col">Scope</th>
-                      <th scope="col">Window</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Granted by</th>
-                      {canRevokeAssignment && <th scope="col">Actions</th>}
+                      <th scope="col">{t("Subject")}</th>
+                      <th scope="col">{t("Role")}</th>
+                      <th scope="col">{t("Scope")}</th>
+                      <th scope="col">{t("Window")}</th>
+                      <th scope="col">{t("Status")}</th>
+                      <th scope="col">{t("Granted by")}</th>
+                      {canRevokeAssignment && (
+                        <th scope="col">{t("Actions")}</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -497,7 +507,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                                 class="btn-inline btn-inline--danger js-revoke-assignment"
                                 data-assignment-id={assignment.id}
                               >
-                                Revoke
+                                {t("Revoke")}
                               </button>
                             )}
                           </td>
@@ -511,17 +521,19 @@ const decidedColumns = canRevokeException ? 7 : 6;
 
             {canCreateAssignment && (
               <>
-                <h3>Assign a scope</h3>
+                <h3>{t("Assign a scope")}</h3>
                 <form id="assign-scope-form" class="admin-form">
                   <p class="page-description">
-                    Ids, not pickers: a selectable list of every tenant user is
-                    a directory this module gates separately, and
-                    <a href="/admin/users"> the Users screen</a> is where that
-                    lookup already belongs. Assigning to yourself is refused by
-                    the endpoint.
+                    {t(
+                      "Ids, not pickers: a selectable list of every tenant user is a directory this module gates separately, and"
+                    )}
+                    <a href="/admin/users">{t("the Users screen")}</a>
+                    {t(
+                      "is where that lookup already belongs. Assigning to yourself is refused by the endpoint."
+                    )}
                   </p>
 
-                  <label for="assign-scope-user">Tenant user id</label>
+                  <label for="assign-scope-user">{t("Tenant user id")}</label>
                   <input
                     id="assign-scope-user"
                     name="tenantUserId"
@@ -532,7 +544,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                   />
 
                   <label for="assign-scope-role">
-                    Role id (blank = every role this person holds)
+                    {t("Role id (blank = every role this person holds)")}
                   </label>
                   <input
                     id="assign-scope-role"
@@ -541,7 +553,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     autocomplete="off"
                   />
 
-                  <label for="assign-scope-type">Scope type</label>
+                  <label for="assign-scope-type">{t("Scope type")}</label>
                   <input
                     id="assign-scope-type"
                     name="scopeType"
@@ -551,14 +563,16 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     placeholder="office"
                   />
                   <p class="page-description">
-                    Only a scope type some module can RESOLVE is accepted — this
-                    base resolves <code>office</code> against the office tree.
-                    Anything else is refused rather than assumed, which is what
-                    keeps an unresolvable scope from reading as unrestricted
-                    access.
+                    {t(
+                      "Only a scope type some module can RESOLVE is accepted \u2014 this base resolves"
+                    )}
+                    <code>{t("office")}</code>
+                    {t(
+                      "against the office tree. Anything else is refused rather than assumed, which is what keeps an unresolvable scope from reading as unrestricted access."
+                    )}
                   </p>
 
-                  <label for="assign-scope-id">Scope id</label>
+                  <label for="assign-scope-id">{t("Scope id")}</label>
                   <input
                     id="assign-scope-id"
                     name="scopeId"
@@ -568,7 +582,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                   />
 
                   <label for="assign-scope-until">
-                    Effective until (blank = open-ended)
+                    {t("Effective until (blank = open-ended)")}
                   </label>
                   <input
                     id="assign-scope-until"
@@ -576,7 +590,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     type="date"
                   />
 
-                  <label for="assign-scope-reason">Reason</label>
+                  <label for="assign-scope-reason">{t("Reason")}</label>
                   <input
                     id="assign-scope-reason"
                     name="reason"
@@ -585,7 +599,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                   />
 
                   <button id="assign-scope-submit" type="submit">
-                    Assign scope
+                    {t("Assign scope")}
                   </button>
                 </form>
               </>
@@ -598,12 +612,14 @@ const decidedColumns = canRevokeException ? 7 : 6;
             class="fade-in-up"
             aria-labelledby="business-scope-exceptions-heading"
           >
-            <h2 id="business-scope-exceptions-heading">Decided exceptions</h2>
+            <h2 id="business-scope-exceptions-heading">
+              {t("Decided exceptions")}
+            </h2>
 
             {decided.length === 0 ? (
               <div class="empty-state">
                 <p id="business-scope-exceptions-empty">
-                  No exception has been decided yet.
+                  {t("No exception has been decided yet.")}
                 </p>
               </div>
             ) : (
@@ -611,13 +627,15 @@ const decidedColumns = canRevokeException ? 7 : 6;
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
-                      <th scope="col">Rule</th>
-                      <th scope="col">Subject</th>
-                      <th scope="col">Scope</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Window</th>
-                      <th scope="col">Approved by</th>
-                      {canRevokeException && <th scope="col">Actions</th>}
+                      <th scope="col">{t("Rule")}</th>
+                      <th scope="col">{t("Subject")}</th>
+                      <th scope="col">{t("Scope")}</th>
+                      <th scope="col">{t("Status")}</th>
+                      <th scope="col">{t("Window")}</th>
+                      <th scope="col">{t("Approved by")}</th>
+                      {canRevokeException && (
+                        <th scope="col">{t("Actions")}</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -652,7 +670,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                                 class="btn-inline btn-inline--danger js-revoke-exception"
                                 data-exception-id={exception.id}
                               >
-                                Revoke
+                                {t("Revoke")}
                               </button>
                             )}
                           </td>
@@ -667,20 +685,21 @@ const decidedColumns = canRevokeException ? 7 : 6;
             {canCreateException &&
               (EXCEPTABLE_RULES.length === 0 ? (
                 <p class="page-description" id="business-scope-no-rules">
-                  No installed module declares a segregation-of-duties rule that
-                  allows exceptions, so there is nothing here to except. Rules
-                  arrive with the module that owns them.
+                  {t(
+                    "No installed module declares a segregation-of-duties rule that allows exceptions, so there is nothing here to except. Rules arrive with the module that owns them."
+                  )}
                 </p>
               ) : (
                 <>
-                  <h3>Request an exception</h3>
+                  <h3>{t("Request an exception")}</h3>
                   <form id="request-exception-form" class="admin-form">
                     <p class="page-description">
-                      Filing one grants nothing: it is `pending` until a
-                      DIFFERENT person approves it, and it expires on its own.
+                      {t(
+                        "Filing one grants nothing: it is `pending` until a DIFFERENT person approves it, and it expires on its own."
+                      )}
                     </p>
 
-                    <label for="request-exception-rule">Rule</label>
+                    <label for="request-exception-rule">{t("Rule")}</label>
                     <select id="request-exception-rule" name="ruleKey" required>
                       {EXCEPTABLE_RULES.map((rule) => (
                         <option
@@ -709,7 +728,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     </div>
 
                     <label for="request-exception-subject">
-                      Subject tenant user id
+                      {t("Subject tenant user id")}
                     </label>
                     <input
                       id="request-exception-subject"
@@ -721,7 +740,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     />
 
                     <label for="request-exception-scope-type">
-                      Scope type (blank = tenant-wide)
+                      {t("Scope type (blank = tenant-wide)")}
                     </label>
                     <input
                       id="request-exception-scope-type"
@@ -730,7 +749,9 @@ const decidedColumns = canRevokeException ? 7 : 6;
                       autocomplete="off"
                     />
 
-                    <label for="request-exception-scope-id">Scope id</label>
+                    <label for="request-exception-scope-id">
+                      {t("Scope id")}
+                    </label>
                     <input
                       id="request-exception-scope-id"
                       name="scopeId"
@@ -738,7 +759,9 @@ const decidedColumns = canRevokeException ? 7 : 6;
                       autocomplete="off"
                     />
 
-                    <label for="request-exception-until">Effective until</label>
+                    <label for="request-exception-until">
+                      {t("Effective until")}
+                    </label>
                     <input
                       id="request-exception-until"
                       name="effectiveTo"
@@ -746,13 +769,13 @@ const decidedColumns = canRevokeException ? 7 : 6;
                       required
                     />
                     <p class="page-description">
-                      Every exception is time-bounded — there is no indefinite
-                      override. The ceiling comes from the rule itself and the
-                      field above narrows to it as you choose one.
+                      {t(
+                        "Every exception is time-bounded \u2014 there is no indefinite override. The ceiling comes from the rule itself and the field above narrows to it as you choose one."
+                      )}
                     </p>
 
                     <label for="request-exception-justification">
-                      Justification
+                      {t("Justification")}
                     </label>
                     <textarea
                       id="request-exception-justification"
@@ -762,7 +785,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                     />
 
                     <button id="request-exception-submit" type="submit">
-                      File the request
+                      {t("File the request")}
                     </button>
                   </form>
                 </>
@@ -775,17 +798,19 @@ const decidedColumns = canRevokeException ? 7 : 6;
             class="fade-in-up"
             aria-labelledby="business-scope-conflicts-heading"
           >
-            <h2 id="business-scope-conflicts-heading">Conflict history</h2>
+            <h2 id="business-scope-conflicts-heading">
+              {t("Conflict history")}
+            </h2>
             <p class="page-description">
-              Every time a rule was evaluated — at assignment time and at every
-              high-risk decision — and what it decided. Read-only: this is the
-              evidence, not a control.
+              {t(
+                "Every time a rule was evaluated \u2014 at assignment time and at every high-risk decision \u2014 and what it decided. Read-only: this is the evidence, not a control."
+              )}
             </p>
 
             {conflicts.length === 0 ? (
               <div class="empty-state">
                 <p id="business-scope-conflicts-empty">
-                  No rule has been evaluated yet.
+                  {t("No rule has been evaluated yet.")}
                 </p>
               </div>
             ) : (
@@ -794,13 +819,13 @@ const decidedColumns = canRevokeException ? 7 : 6;
                   <table class="data-table data-table--stack">
                     <thead>
                       <tr>
-                        <th scope="col">When</th>
-                        <th scope="col">Rule</th>
-                        <th scope="col">Subject</th>
-                        <th scope="col">Trigger</th>
-                        <th scope="col">Conflict</th>
-                        <th scope="col">Resolved via</th>
-                        <th scope="col">Reason</th>
+                        <th scope="col">{t("When")}</th>
+                        <th scope="col">{t("Rule")}</th>
+                        <th scope="col">{t("Subject")}</th>
+                        <th scope="col">{t("Trigger")}</th>
+                        <th scope="col">{t("Conflict")}</th>
+                        <th scope="col">{t("Resolved via")}</th>
+                        <th scope="col">{t("Reason")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -848,7 +873,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
                       class="quick-link"
                       href={linkWith({ conflictCursor: nextConflictCursor })}
                     >
-                      Older
+                      {t("Older")}
                       <span class="quick-link-arrow" aria-hidden="true">
                         →
                       </span>

@@ -429,3 +429,28 @@
     transform: none;
   }
 }
+
+/* /admin/account — single sign-on list (ADR-0096). One row per enabled
+   provider: name, state, action. */
+.account-sso-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.account-sso-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.account-sso-name {
+  font-weight: 600;
+  /* Takes the slack so the action buttons stay right-aligned on wide screens
+     and wrap beneath the name on narrow ones. */
+  margin-inline-end: auto;
+}

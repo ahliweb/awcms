@@ -58,6 +58,7 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listWorkflowInboxTasks,
   listWorkflowInstanceHistory,
@@ -74,6 +75,7 @@ import {
 } from "../../modules/workflow-approval/domain/reason-bounds";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 /** Mirrors `VALID_STATUSES` in `src/pages/api/v1/workflows/tasks/index.ts`. */
 const STATUS_OPTIONS = [
@@ -268,19 +270,22 @@ const selectedTask = selectedInstanceId
 
 <AdminLayout title="Approvals">
   <header class="page-header fade-in-up">
-    <h1 id="approvals-heading">Approvals</h1>
+    <h1 id="approvals-heading">{t("Approvals")}</h1>
     <p class="page-description">
-      Tasks awaiting a decision, the history behind them, and the delegations
-      that let someone else decide on your behalf. Overdue tasks are escalated
-      by <code>workflow:escalations:dispatch</code>; escalation notifies, it
-      never decides.
+      {
+        t(
+          "Tasks awaiting a decision, the history behind them, and the delegations that let someone else decide on your behalf. Overdue tasks are escalated by"
+        )
+      }<code>{t("workflow:escalations:dispatch")}</code>{
+        t("; escalation notifies, it never decides.")
+      }
     </p>
   </header>
 
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="approvals-denied">
-        You do not have permission to view approvals.
+        {t("You do not have permission to view approvals.")}
       </p>
     )
   }
@@ -288,8 +293,9 @@ const selectedTask = selectedInstanceId
   {
     canSeeAnything && loadError && (
       <p class="state-notice fade-in-up" id="approvals-error">
-        The approval inbox could not be loaded right now. This is a problem
-        reading it, not an empty inbox — please try again later.
+        {t(
+          "The approval inbox could not be loaded right now. This is a problem reading it, not an empty inbox \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -308,7 +314,7 @@ const selectedTask = selectedInstanceId
   {
     canRead && !loadError && (
       <form method="get" class="admin-toolbar fade-in-up" id="task-filter-form">
-        <label for="filter-status">Status</label>
+        <label for="filter-status">{t("Status")}</label>
         <select id="filter-status" name="status">
           {STATUS_OPTIONS.map((value) => (
             <option value={value} selected={statusFilter === value}>
@@ -317,7 +323,7 @@ const selectedTask = selectedInstanceId
           ))}
         </select>
 
-        <label for="filter-workflow-key">Workflow key</label>
+        <label for="filter-workflow-key">{t("Workflow key")}</label>
         <input
           id="filter-workflow-key"
           name="workflowKey"
@@ -327,7 +333,7 @@ const selectedTask = selectedInstanceId
           placeholder="e.g. purchase_requisition"
         />
 
-        <label for="filter-resource-type">Resource type</label>
+        <label for="filter-resource-type">{t("Resource type")}</label>
         <input
           id="filter-resource-type"
           name="resourceType"
@@ -336,7 +342,7 @@ const selectedTask = selectedInstanceId
           autocomplete="off"
         />
 
-        <label for="filter-search">Search</label>
+        <label for="filter-search">{t("Search")}</label>
         <input
           id="filter-search"
           name="search"
@@ -354,10 +360,10 @@ const selectedTask = selectedInstanceId
             value="true"
             checked={overdueOnly}
           />
-          Overdue only
+          {t("Overdue only")}
         </label>
 
-        <button type="submit">Apply filters</button>
+        <button type="submit">{t("Apply filters")}</button>
       </form>
     )
   }
@@ -369,24 +375,26 @@ const selectedTask = selectedInstanceId
         aria-labelledby="task-list-title"
       >
         <h2 class="admin-section-title" id="task-list-title">
-          Tasks
+          {t("Tasks")}
           <span class="count-pill">{tasks.length}</span>
         </h2>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="approval-tasks-table">
             <caption class="sr-only">
-              Workflow tasks, newest first, 100 per page.
+              {t("Workflow tasks, newest first, 100 per page.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Workflow</th>
-                <th scope="col">Resource</th>
-                <th scope="col">Node</th>
-                <th scope="col">Quorum</th>
-                <th scope="col">Due</th>
-                <th scope="col">Status</th>
-                {(canDecide || showRecovery) && <th scope="col">Actions</th>}
+                <th scope="col">{t("Workflow")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Node")}</th>
+                <th scope="col">{t("Quorum")}</th>
+                <th scope="col">{t("Due")}</th>
+                <th scope="col">{t("Status")}</th>
+                {(canDecide || showRecovery) && (
+                  <th scope="col">{t("Actions")}</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -427,7 +435,7 @@ const selectedTask = selectedInstanceId
                           cursor: null
                         })}
                       >
-                        History
+                        {t("History")}
                         <span class="quick-link-arrow" aria-hidden="true">
                           →
                         </span>
@@ -446,7 +454,7 @@ const selectedTask = selectedInstanceId
                       {task.overdue && (
                         <span class="status-badge" data-variant="warning">
                           <span class="status-dot" aria-hidden="true" />
-                          overdue
+                          {t("overdue")}
                         </span>
                       )}
                     </td>
@@ -477,7 +485,7 @@ const selectedTask = selectedInstanceId
                                   data-task-id={task.id}
                                   data-decision="approve"
                                 >
-                                  Approve
+                                  {t("Approve")}
                                 </button>
                                 <button
                                   type="button"
@@ -485,7 +493,7 @@ const selectedTask = selectedInstanceId
                                   data-task-id={task.id}
                                   data-decision="reject"
                                 >
-                                  Reject
+                                  {t("Reject")}
                                 </button>
                               </>
                             )}
@@ -495,7 +503,7 @@ const selectedTask = selectedInstanceId
                                 class="btn-inline task-reassign-btn"
                                 data-task-id={task.id}
                               >
-                                Reassign
+                                {t("Reassign")}
                               </button>
                             )}
                             {canForceDecide && (
@@ -504,12 +512,12 @@ const selectedTask = selectedInstanceId
                                 class="btn-inline btn-inline--danger task-force-btn"
                                 data-task-id={task.id}
                               >
-                                Force decision
+                                {t("Force decision")}
                               </button>
                             )}
                           </div>
                         ) : (
-                          <span class="cell-muted">decided</span>
+                          <span class="cell-muted">{t("decided")}</span>
                         )}
                       </td>
                     )}
@@ -526,7 +534,7 @@ const selectedTask = selectedInstanceId
                 `created_at` text, so a page boundary cannot skip or repeat a
                 row the way a millisecond-truncated timestamp would. */}
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              Next 100
+              {t("Next 100")}
               <span class="quick-link-arrow" aria-hidden="true">
                 →
               </span>
@@ -545,7 +553,7 @@ const selectedTask = selectedInstanceId
         id="instance-history"
       >
         <h2 class="admin-section-title" id="instance-history-title">
-          Instance history
+          {t("Instance history")}
           <span class="count-pill">{history.length}</span>
         </h2>
         <p class="page-description">
@@ -561,7 +569,7 @@ const selectedTask = selectedInstanceId
 
         <div class="row-actions">
           <a class="quick-link" href={linkWith({ instance: null })}>
-            Close history
+            {t("Close history")}
           </a>
           {canCancel && (
             <button
@@ -569,7 +577,7 @@ const selectedTask = selectedInstanceId
               class="btn-inline btn-inline--danger instance-cancel-btn"
               data-instance-id={selectedInstanceId}
             >
-              Cancel instance
+              {t("Cancel instance")}
             </button>
           )}
         </div>
@@ -577,15 +585,15 @@ const selectedTask = selectedInstanceId
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Decisions and audit events for this workflow instance.
+              {t("Decisions and audit events for this workflow instance.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">When</th>
-                <th scope="col">Kind</th>
-                <th scope="col">Action</th>
-                <th scope="col">Actor</th>
-                <th scope="col">Detail</th>
+                <th scope="col">{t("When")}</th>
+                <th scope="col">{t("Kind")}</th>
+                <th scope="col">{t("Action")}</th>
+                <th scope="col">{t("Actor")}</th>
+                <th scope="col">{t("Detail")}</th>
               </tr>
             </thead>
             <tbody>
@@ -596,10 +604,11 @@ const selectedTask = selectedInstanceId
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌸
                       </span>
-                      <span class="empty-state-title">No history</span>
+                      <span class="empty-state-title">{t("No history")}</span>
                       <span class="empty-state-text">
-                        Nothing has been decided or recorded against this
-                        instance yet — or the id does not name one.
+                        {t(
+                          "Nothing has been decided or recorded against this instance yet \u2014 or the id does not name one."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -631,7 +640,7 @@ const selectedTask = selectedInstanceId
                           then renders. `set:text` escapes and sets the content
                           directly. */}
                       <details>
-                        <summary>Detail</summary>
+                        <summary>{t("Detail")}</summary>
                         <pre
                           class="cell-code"
                           set:text={JSON.stringify(entry.detail, null, 2)}
@@ -656,29 +665,29 @@ const selectedTask = selectedInstanceId
         id="delegations"
       >
         <h2 class="admin-section-title" id="delegations-title">
-          Delegations
+          {t("Delegations")}
           <span class="count-pill">{delegations.length}</span>
         </h2>
         <p class="page-description">
-          A delegation lets the delegate decide on the delegator's behalf while
-          it is in effect. It never widens what the delegate may decide beyond
-          the delegator's own eligibility.
+          {t(
+            "A delegation lets the delegate decide on the delegator's behalf while it is in effect. It never widens what the delegate may decide beyond the delegator's own eligibility."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Workflow delegations for this tenant.
+              {t("Workflow delegations for this tenant.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Delegator</th>
-                <th scope="col">Delegate</th>
-                <th scope="col">Scope</th>
-                <th scope="col">From</th>
+                <th scope="col">{t("Delegator")}</th>
+                <th scope="col">{t("Delegate")}</th>
+                <th scope="col">{t("Scope")}</th>
+                <th scope="col">{t("From")}</th>
                 <th scope="col">To</th>
-                <th scope="col">Status</th>
-                {canRevokeDelegation && <th scope="col">Actions</th>}
+                <th scope="col">{t("Status")}</th>
+                {canRevokeDelegation && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -689,9 +698,13 @@ const selectedTask = selectedInstanceId
                       <span class="empty-state-icon" aria-hidden="true">
                         ⇄
                       </span>
-                      <span class="empty-state-title">No delegations</span>
+                      <span class="empty-state-title">
+                        {t("No delegations")}
+                      </span>
                       <span class="empty-state-text">
-                        Nobody is currently deciding on anyone else's behalf.
+                        {t(
+                          "Nobody is currently deciding on anyone else's behalf."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -745,7 +758,7 @@ const selectedTask = selectedInstanceId
                               class="btn-inline btn-inline--danger delegation-revoke-btn"
                               data-delegation-id={row.id}
                             >
-                              Revoke
+                              {t("Revoke")}
                             </button>
                           )}
                         </div>
@@ -760,7 +773,7 @@ const selectedTask = selectedInstanceId
 
         {canCreateDelegation && (
           <form id="delegation-create-form" class="admin-create-form">
-            <p class="form-legend">Delegate your decisions</p>
+            <p class="form-legend">{t("Delegate your decisions")}</p>
             <p
               id="delegation-create-error"
               class="admin-create-error"
@@ -769,7 +782,7 @@ const selectedTask = selectedInstanceId
             />
 
             <label for="delegate-user-id">
-              Delegate tenant user id
+              {t("Delegate tenant user id")}
               {/* A free-text id, not a picker: a directory of tenant users is
                   `identity_access` data, gated on its own permissions. Find
                   the id on <a href="/admin/users">Users</a>. */}
@@ -784,7 +797,7 @@ const selectedTask = selectedInstanceId
             </label>
 
             <label for="delegation-workflow-key">
-              Workflow key (optional — blank means every workflow)
+              {t("Workflow key (optional \u2014 blank means every workflow)")}
               <input
                 type="text"
                 id="delegation-workflow-key"
@@ -794,7 +807,7 @@ const selectedTask = selectedInstanceId
             </label>
 
             <label for="delegation-resource-type">
-              Resource type (optional — blank means every resource)
+              {t("Resource type (optional \u2014 blank means every resource)")}
               <input
                 type="text"
                 id="delegation-resource-type"
@@ -804,7 +817,7 @@ const selectedTask = selectedInstanceId
             </label>
 
             <label for="delegation-effective-to">
-              Effective until (optional)
+              {t("Effective until (optional)")}
               <input
                 type="datetime-local"
                 id="delegation-effective-to"
@@ -813,7 +826,7 @@ const selectedTask = selectedInstanceId
             </label>
 
             <label for="delegation-reason">
-              Reason
+              {t("Reason")}
               {/* Bounds come from the same constant the validator enforces. */}
               <input
                 type="text"
@@ -827,7 +840,7 @@ const selectedTask = selectedInstanceId
             </label>
 
             <button type="submit" id="delegation-create-submit">
-              Create delegation
+              {t("Create delegation")}
             </button>
           </form>
         )}

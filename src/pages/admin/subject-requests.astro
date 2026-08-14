@@ -30,12 +30,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listSubjectRequests,
   type SubjectRequestRow
 } from "../../modules/data-lifecycle/application/subject-request-service";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -88,18 +90,24 @@ const pending = requests.filter(
 
 <AdminLayout title="Subject requests">
   <header class="page-header fade-in-up">
-    <h1 id="subject-requests-heading">Subject requests</h1>
+    <h1 id="subject-requests-heading">{t("Subject requests")}</h1>
     <p class="page-description">
-      Exports and erasures answered for a named person. A subject is answered
-      <strong>per tenant</strong>: this page covers what THIS tenant holds, and
-      a person who belongs to several tenants has a separate request in each.
+      {
+        t(
+          "Exports and erasures answered for a named person. A subject is answered"
+        )
+      }<strong>{t("per tenant")}</strong>{
+        t(
+          ": this page covers what THIS tenant holds, and a person who belongs to several tenants has a separate request in each."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="subject-requests-denied">
-        You do not have permission to view subject requests.
+        {t("You do not have permission to view subject requests.")}
       </p>
     )
   }
@@ -107,7 +115,7 @@ const pending = requests.filter(
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="subject-requests-load-error">
-        Could not load subject requests. Please try again.
+        {t("Could not load subject requests. Please try again.")}
       </p>
     )
   }
@@ -130,16 +138,18 @@ const pending = requests.filter(
 
         {canExport && (
           <section class="fade-in-up" aria-labelledby="subject-export-heading">
-            <h2 id="subject-export-heading">Export a subject's data</h2>
+            <h2 id="subject-export-heading">{t("Export a subject's data")}</h2>
 
             <form id="subject-export-form" class="admin-form">
               <p class="page-description">
-                This is a <strong>disclosure</strong>, not a read: it is audited
-                as one, and the reason you give is part of that record. The
-                result appears below and is never stored or downloadable.
+                {t("This is a")}
+                <strong>{t("disclosure")}</strong>
+                {t(
+                  ", not a read: it is audited as one, and the reason you give is part of that record. The result appears below and is never stored or downloadable."
+                )}
               </p>
 
-              <label for="subject-export-user">Tenant user id</label>
+              <label for="subject-export-user">{t("Tenant user id")}</label>
               <input
                 id="subject-export-user"
                 name="tenantUserId"
@@ -148,7 +158,9 @@ const pending = requests.filter(
                 autocomplete="off"
               />
 
-              <label for="subject-export-reason">Reason for disclosure</label>
+              <label for="subject-export-reason">
+                {t("Reason for disclosure")}
+              </label>
               <input
                 id="subject-export-reason"
                 name="reason"
@@ -159,18 +171,19 @@ const pending = requests.filter(
               />
 
               <button id="subject-export-submit" type="submit">
-                Export subject data
+                {t("Export subject data")}
               </button>
             </form>
 
             <div id="subject-export-result" hidden>
-              <h3>Export result</h3>
+              <h3>{t("Export result")}</h3>
               <p id="subject-export-summary" class="page-description" />
               <div id="subject-export-tables" />
-              <h4>Not covered by this answer</h4>
+              <h4>{t("Not covered by this answer")}</h4>
               <p class="page-description">
-                Tables this report deliberately does not reach, and why. A
-                report that omitted them silently would look complete.
+                {t(
+                  "Tables this report deliberately does not reach, and why. A report that omitted them silently would look complete."
+                )}
               </p>
               <ul id="subject-export-unanswered" />
             </div>
@@ -179,17 +192,18 @@ const pending = requests.filter(
 
         {canRequestErasure && (
           <section class="fade-in-up" aria-labelledby="subject-erase-heading">
-            <h2 id="subject-erase-heading">Request an erasure</h2>
+            <h2 id="subject-erase-heading">{t("Request an erasure")}</h2>
 
             <form id="subject-erase-form" class="admin-form">
               <p class="page-description">
-                Requesting does not erase anything. A <strong>different</strong>{" "}
-                person holding the approval permission must decide — the two
-                permissions are a segregation-of-duties conflict, so you will
-                not normally be able to do both.
+                {t("Requesting does not erase anything. A")}
+                <strong>{t("different")}</strong> person holding the approval
+                permission must decide — the two permissions are a
+                segregation-of-duties conflict, so you will not normally be able
+                to do both.
               </p>
 
-              <label for="subject-erase-user">Tenant user id</label>
+              <label for="subject-erase-user">{t("Tenant user id")}</label>
               <input
                 id="subject-erase-user"
                 name="tenantUserId"
@@ -198,7 +212,9 @@ const pending = requests.filter(
                 autocomplete="off"
               />
 
-              <label for="subject-erase-reason">Ground for erasure</label>
+              <label for="subject-erase-reason">
+                {t("Ground for erasure")}
+              </label>
               <input
                 id="subject-erase-reason"
                 name="reason"
@@ -209,30 +225,30 @@ const pending = requests.filter(
               />
 
               <button id="subject-erase-submit" type="submit">
-                Request erasure
+                {t("Request erasure")}
               </button>
             </form>
           </section>
         )}
 
         <section class="fade-in-up" aria-labelledby="subject-pending-heading">
-          <h2 id="subject-pending-heading">Awaiting a decision</h2>
+          <h2 id="subject-pending-heading">{t("Awaiting a decision")}</h2>
 
           {pending.length === 0 ? (
             <div class="empty-state">
               <p id="subject-requests-pending-empty">
-                Nothing is waiting for a decision.
+                {t("Nothing is waiting for a decision.")}
               </p>
             </div>
           ) : (
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Subject</th>
-                  <th scope="col">Requested by</th>
-                  <th scope="col">Requested at</th>
-                  <th scope="col">Ground</th>
-                  {canDecide && <th scope="col">Decision</th>}
+                  <th scope="col">{t("Subject")}</th>
+                  <th scope="col">{t("Requested by")}</th>
+                  <th scope="col">{t("Requested at")}</th>
+                  <th scope="col">{t("Ground")}</th>
+                  {canDecide && <th scope="col">{t("Decision")}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -250,7 +266,7 @@ const pending = requests.filter(
                           data-request-id={request.id}
                           data-decision="approve"
                         >
-                          Approve and erase
+                          {t("Approve and erase")}
                         </button>
                         <button
                           type="button"
@@ -258,7 +274,7 @@ const pending = requests.filter(
                           data-request-id={request.id}
                           data-decision="reject"
                         >
-                          Reject
+                          {t("Reject")}
                         </button>
                       </td>
                     )}
@@ -270,31 +286,32 @@ const pending = requests.filter(
 
           {!canDecide && pending.length > 0 && (
             <p class="page-description" id="subject-requests-cannot-decide">
-              You can see what is pending but not decide it. That separation is
-              deliberate.
+              {t(
+                "You can see what is pending but not decide it. That separation is deliberate."
+              )}
             </p>
           )}
         </section>
 
         <section class="fade-in-up" aria-labelledby="subject-log-heading">
-          <h2 id="subject-log-heading">Request log</h2>
+          <h2 id="subject-log-heading">{t("Request log")}</h2>
 
           {requests.length === 0 ? (
             <div class="empty-state">
               <p id="subject-requests-empty">
-                No subject request has been made in this tenant.
+                {t("No subject request has been made in this tenant.")}
               </p>
             </div>
           ) : (
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Type</th>
-                  <th scope="col">Subject</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Requested by</th>
-                  <th scope="col">Decided by</th>
-                  <th scope="col">Rows</th>
+                  <th scope="col">{t("Type")}</th>
+                  <th scope="col">{t("Subject")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Requested by")}</th>
+                  <th scope="col">{t("Decided by")}</th>
+                  <th scope="col">{t("Rows")}</th>
                 </tr>
               </thead>
               <tbody>

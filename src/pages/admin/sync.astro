@@ -48,6 +48,7 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   fetchObjectQueueEntries,
   fetchSyncConflicts,
@@ -58,6 +59,7 @@ import {
 } from "../../modules/sync-storage/application/sync-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -233,19 +235,20 @@ const queueColumns = canRetryQueue ? 7 : 6;
 
 <AdminLayout title="Sync & storage">
   <header class="page-header fade-in-up">
-    <h1 id="sync-heading">Sync &amp; storage</h1>
+    <h1 id="sync-heading">{t("Sync & storage")}</h1>
     <p class="page-description">
-      Offline/LAN replication: the nodes that push and pull, the conflicts that
-      need a human decision, and the object upload queue. Nodes authenticate
-      with an HMAC signature, not a session — this screen manages them, it never
-      performs a sync.
+      {
+        t(
+          "Offline/LAN replication: the nodes that push and pull, the conflicts that need a human decision, and the object upload queue. Nodes authenticate with an HMAC signature, not a session \u2014 this screen manages them, it never performs a sync."
+        )
+      }
     </p>
   </header>
 
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="sync-denied">
-        You do not have permission to view sync and storage.
+        {t("You do not have permission to view sync and storage.")}
       </p>
     )
   }
@@ -253,8 +256,9 @@ const queueColumns = canRetryQueue ? 7 : 6;
   {
     canSeeAnything && loadError && (
       <p class="state-notice fade-in-up" id="sync-error">
-        The sync console could not be loaded right now. This is a problem
-        reading it, not a healthy silence — please try again later.
+        {t(
+          "The sync console could not be loaded right now. This is a problem reading it, not a healthy silence \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -276,7 +280,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
         <div class="stat-grid stagger-children">
           {canReadNodes && (
             <div class="stat-card">
-              <span class="stat-label">Active nodes</span>
+              <span class="stat-label">{t("Active nodes")}</span>
               <span class="stat-value">
                 {activeNodeCount}/{nodes.length}
               </span>
@@ -284,16 +288,18 @@ const queueColumns = canRetryQueue ? 7 : 6;
           )}
           {canReadConflicts && (
             <div class="stat-card">
-              <span class="stat-label">Open conflicts</span>
+              <span class="stat-label">{t("Open conflicts")}</span>
               <span class="stat-value">{openConflictCount}</span>
               {openConflictCount > 0 && (
-                <span class="stat-hint">Each needs a human decision</span>
+                <span class="stat-hint">
+                  {t("Each needs a human decision")}
+                </span>
               )}
             </div>
           )}
           {canReadQueue && (
             <div class="stat-card">
-              <span class="stat-label">Failed objects (this page)</span>
+              <span class="stat-label">{t("Failed objects (this page)")}</span>
               <span class="stat-value">{failedQueueCount}</span>
             </div>
           )}
@@ -310,25 +316,26 @@ const queueColumns = canRetryQueue ? 7 : 6;
         id="sync-nodes"
       >
         <h2 class="admin-section-title" id="nodes-title">
-          Nodes
+          {t("Nodes")}
           <span class="count-pill">{nodes.length}</span>
         </h2>
         <p class="page-description">
-          Deactivating a node stops it syncing. Its queued objects and past
-          conflicts are kept — deactivation is not deletion.
+          {t(
+            "Deactivating a node stops it syncing. Its queued objects and past conflicts are kept \u2014 deactivation is not deletion."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="sync-nodes-table">
-            <caption class="sr-only">Registered sync nodes.</caption>
+            <caption class="sr-only">{t("Registered sync nodes.")}</caption>
             <thead>
               <tr>
-                <th scope="col">Node</th>
-                <th scope="col">Status</th>
-                <th scope="col">Last push</th>
-                <th scope="col">Last pull</th>
-                <th scope="col">Pull sequence</th>
-                {canUpdateNodes && <th scope="col">Actions</th>}
+                <th scope="col">{t("Node")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Last push")}</th>
+                <th scope="col">{t("Last pull")}</th>
+                <th scope="col">{t("Pull sequence")}</th>
+                {canUpdateNodes && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -339,10 +346,13 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⇅
                       </span>
-                      <span class="empty-state-title">No sync nodes</span>
+                      <span class="empty-state-title">
+                        {t("No sync nodes")}
+                      </span>
                       <span class="empty-state-text">
-                        A node registers itself on its first authenticated push,
-                        inactive until an administrator activates it.
+                        {t(
+                          "A node registers itself on its first authenticated push, inactive until an administrator activates it."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -417,15 +427,15 @@ const queueColumns = canRetryQueue ? 7 : 6;
         id="sync-conflicts"
       >
         <h2 class="admin-section-title" id="conflicts-title">
-          Conflicts
+          {t("Conflicts")}
           <span class="count-pill">{conflicts.length}</span>
         </h2>
 
         <form method="get" class="admin-toolbar" id="conflict-filter-form">
-          <label for="filter-conflict-status">Status</label>
+          <label for="filter-conflict-status">{t("Status")}</label>
           <select id="filter-conflict-status" name="conflictStatus">
             <option value="" selected={conflictStatusFilter === undefined}>
-              Any status
+              {t("Any status")}
             </option>
             {CONFLICT_STATUS_OPTIONS.map((value) => (
               <option value={value} selected={conflictStatusFilter === value}>
@@ -433,23 +443,23 @@ const queueColumns = canRetryQueue ? 7 : 6;
               </option>
             ))}
           </select>
-          <button type="submit">Apply</button>
+          <button type="submit">{t("Apply")}</button>
         </form>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="sync-conflicts-table">
             <caption class="sr-only">
-              Sync conflicts, newest first, capped at 50 rows.
+              {t("Sync conflicts, newest first, capped at 50 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Aggregate</th>
-                <th scope="col">Type</th>
-                <th scope="col">Status</th>
-                <th scope="col">Resolution</th>
-                <th scope="col">Raised</th>
-                <th scope="col">Payload</th>
-                {canResolveConflicts && <th scope="col">Actions</th>}
+                <th scope="col">{t("Aggregate")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Resolution")}</th>
+                <th scope="col">{t("Raised")}</th>
+                <th scope="col">{t("Payload")}</th>
+                {canResolveConflicts && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -460,9 +470,9 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ✓
                       </span>
-                      <span class="empty-state-title">No conflicts</span>
+                      <span class="empty-state-title">{t("No conflicts")}</span>
                       <span class="empty-state-text">
-                        Nothing is waiting on a human decision.
+                        {t("Nothing is waiting on a human decision.")}
                       </span>
                     </div>
                   </td>
@@ -504,7 +514,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                     </td>
                     <td data-label="Payload">
                       <details>
-                        <summary>Payload</summary>
+                        <summary>{t("Payload")}</summary>
                         {/* `set:text` rather than a child expression: <pre>
                             preserves whitespace and prettier reindents .astro
                             children, so an expression written between the tags
@@ -536,7 +546,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                             ))}
                           </div>
                         ) : (
-                          <span class="cell-muted">resolved</span>
+                          <span class="cell-muted">{t("resolved")}</span>
                         )}
                       </td>
                     )}
@@ -558,15 +568,15 @@ const queueColumns = canRetryQueue ? 7 : 6;
         id="sync-object-queue"
       >
         <h2 class="admin-section-title" id="queue-title">
-          Object queue
+          {t("Object queue")}
           <span class="count-pill">{queue.length}</span>
         </h2>
 
         <form method="get" class="admin-toolbar" id="queue-filter-form">
-          <label for="filter-queue-status">Status</label>
+          <label for="filter-queue-status">{t("Status")}</label>
           <select id="filter-queue-status" name="queueStatus">
             <option value="" selected={queueStatusFilter === undefined}>
-              Any status
+              {t("Any status")}
             </option>
             {QUEUE_STATUS_OPTIONS.map((value) => (
               <option value={value} selected={queueStatusFilter === value}>
@@ -574,23 +584,23 @@ const queueColumns = canRetryQueue ? 7 : 6;
               </option>
             ))}
           </select>
-          <button type="submit">Apply</button>
+          <button type="submit">{t("Apply")}</button>
         </form>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="sync-queue-table">
             <caption class="sr-only">
-              Object upload queue, newest first, 200 per page.
+              {t("Object upload queue, newest first, 200 per page.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Object</th>
-                <th scope="col">Node</th>
-                <th scope="col">Status</th>
-                <th scope="col">Retries</th>
-                <th scope="col">Next retry</th>
-                <th scope="col">Last error</th>
-                {canRetryQueue && <th scope="col">Actions</th>}
+                <th scope="col">{t("Object")}</th>
+                <th scope="col">{t("Node")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Retries")}</th>
+                <th scope="col">{t("Next retry")}</th>
+                <th scope="col">{t("Last error")}</th>
+                {canRetryQueue && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -601,9 +611,11 @@ const queueColumns = canRetryQueue ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌸
                       </span>
-                      <span class="empty-state-title">Queue is empty</span>
+                      <span class="empty-state-title">
+                        {t("Queue is empty")}
+                      </span>
                       <span class="empty-state-text">
-                        Nothing is waiting to upload under this filter.
+                        {t("Nothing is waiting to upload under this filter.")}
                       </span>
                     </div>
                   </td>
@@ -652,7 +664,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                               class="btn-inline queue-retry-btn"
                               data-queue-id={entry.objectQueueId}
                             >
-                              Retry
+                              {t("Retry")}
                             </button>
                           ) : (
                             <span class="cell-muted">—</span>
@@ -673,7 +685,7 @@ const queueColumns = canRetryQueue ? 7 : 6;
                 `created_at` TEXT, so a page boundary cannot skip rows sharing
                 a millisecond the way a re-parsed `Date` would. */}
             <a class="quick-link" href={linkWith({ cursor: queueNextCursor })}>
-              Next page
+              {t("Next page")}
               <span class="quick-link-arrow" aria-hidden="true">
                 →
               </span>

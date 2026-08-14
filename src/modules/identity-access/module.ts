@@ -1104,6 +1104,17 @@ export const identityAccessModule = defineModule({
         "ADR-0087 — recovery codes for the factors above, global for the same reason and out of a per-tenant answer's reach for the same reason.",
       redactedColumns: ["code_hash"]
     },
+    {
+      key: "identity_access.principal_preferences",
+      tableName: "awcms_principal_preferences",
+      ownerModuleKey: "identity_access",
+      tenantColumn: null,
+      subjectColumns: [{ column: "principal_id", references: "principal" }],
+      exportable: false,
+      erasure: "retain_under_obligation",
+      rationale:
+        "ADR-0095 — the human's UI locale and colour theme. Personal data (it is a statement about a person), and global for the reason ADR-0095 §\"Keputusan 1\" gives: the language someone reads is a property of them, not of one membership, and ADR-0088's tenant-selection screen renders before any tenant exists to scope it to. Held back from a per-tenant answer on the same boundary as the three rows above — a tenant that could erase this would silently change how the same human reads every OTHER tenant's admin, and one that could export it would be handing over a choice the person made to the platform rather than to them. The row is not, however, a secret: it holds no hash, token or address, so nothing here is redacted, and a platform-level request could answer it in full whenever ADR-0094's deliberate omission of one is revisited."
+    },
 
     // ---- Reaching nobody ---------------------------------------------------
     //

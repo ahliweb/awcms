@@ -837,3 +837,70 @@ export async function completeTenantSsoCallback(
 
   return finalResult;
 }
+
+/** One provider the caller may sign in with, and whether they have linked it. */
+export type OwnSsoProviderLink = {
+  providerKey: string;
+  displayName: string;
+  /** `linked_at` of the caller's own link, or null when not linked. */
+  linkedAt: string | null;
+};
+
+/**
+ * The ENABLED providers of this tenant, each marked with whether the CALLER has
+ * linked it (ADR-0096).
+ *
+ * ## Why this is self-service and not the admin provider list
+ *
+ * `GET /api/v1/auth/sso-providers` returns the tenant's provider configuration
+ * and is permissioned, because it exposes issuer URLs, client ids, allowed email
+ * domains and the secret's storage mode — administrative facts about how sign-in
+ * is wired. This returns two strings and a timestamp per provider: the name to
+ * put on a button, and whether the caller has already used it.
+ *
+ * That difference is why it is a separate reader rather than a relaxed guard on
+ * the other: the fields it must NOT return are the reason the other one is
+ * guarded at all.
+ *
+ * ## What it excludes, and why each exclusion matters
+ *
+ * - `enabled = false` and soft-deleted providers: offering a button that cannot
+ *   complete is worse than offering nothing.
+ * - Links belonging to anyone else: the `identity_id` predicate is on the JOIN,
+ *   so another person's link can never mark a provider as linked here. Without
+ *   it the screen would tell every user that a provider was "connected" as soon
+ *   as one colleague connected it.
+ *
+ * `identityId` comes from the caller's session — the routes never accept one.
+ */
+export async function listOwnSsoProviderLinks(
+  tx: Bun.SQL,
+  tenantId: string,
+  identityId: string
+): Promise<OwnSsoProviderLink[]> {
+  const rows = (await tx`
+    SELECT p.provider_key, p.display_name, e.linked_at
+    FROM awcms_auth_providers p
+    LEFT JOIN awcms_external_identities e
+      ON e.provider_id = p.id
+     AND e.tenant_id = p.tenant_id
+     AND e.identity_id = ${identityId}
+    WHERE p.tenant_id = ${tenantId}
+      AND p.enabled = true
+      AND p.deleted_at IS NULL
+    ORDER BY p.display_name ASC
+  `) as Array<{
+    provider_key: string;
+    display_name: string;
+    linked_at: Date | string | null;
+  }>;
+
+  return rows.map((row) => ({
+    providerKey: row.provider_key,
+    displayName: row.display_name,
+    linkedAt:
+      row.linked_at === null
+        ? null
+        : new Date(row.linked_at as string | Date).toISOString()
+  }));
+}

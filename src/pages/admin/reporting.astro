@@ -62,6 +62,7 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   fetchEmailHealthReport,
   type EmailHealthReport
@@ -94,6 +95,7 @@ import {
 } from "../../modules/reporting/domain/operator-input-bounds";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the reads share ONE transaction, and the
 // decision is the chokepoint's.
@@ -267,20 +269,20 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 
 <AdminLayout title="Reporting operations">
   <header class="page-header fade-in-up">
-    <h1 id="reporting-heading">Reporting operations</h1>
+    <h1 id="reporting-heading">{t("Reporting operations")}</h1>
     <p class="page-description">
-      Read-model health and delivery: the freshness of every registered
-      projection, the rebuilds and reconciliations run against them, the email
-      queue, and the scheduled exports built from them. The tenant activity,
-      access &amp; audit, sync health and module usage views live on the
-      <a href="/admin">dashboard</a>.
+      {
+        t(
+          "Read-model health and delivery: the freshness of every registered projection, the rebuilds and reconciliations run against them, the email queue, and the scheduled exports built from them. The tenant activity, access & audit, sync health and module usage views live on the"
+        )
+      }<a href="/admin">{t("dashboard")}</a>.
     </p>
   </header>
 
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="reporting-denied">
-        You do not have permission to view reporting operations.
+        {t("You do not have permission to view reporting operations.")}
       </p>
     )
   }
@@ -288,8 +290,9 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
   {
     canSeeAnything && loadError && (
       <p class="state-notice fade-in-up" id="reporting-error">
-        The reporting console could not be loaded right now. This is a problem
-        reading it, not an empty console — please try again later.
+        {t(
+          "The reporting console could not be loaded right now. This is a problem reading it, not an empty console \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -313,7 +316,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         id="reporting-email-health"
       >
         <h2 class="admin-section-title" id="email-health-title">
-          Email queue health
+          {t("Email queue health")}
           <span
             class="status-badge"
             data-variant={emailHealth.isHealthy ? "success" : "warning"}
@@ -323,46 +326,47 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
           </span>
         </h2>
         <p class="page-description">
-          The fifth management reporting view. An idle queue is healthy — only
-          failures and a retry backlog are not.
+          {t(
+            "The fifth management reporting view. An idle queue is healthy \u2014 only failures and a retry backlog are not."
+          )}
         </p>
 
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Queued</span>
+            <span class="stat-label">{t("Queued")}</span>
             <span class="stat-value">{emailHealth.queuedCount}</span>
             <span class="stat-hint">
-              Oldest: {formatTimestamp(emailHealth.oldestQueuedAt)}
+              {t("Oldest:")} {formatTimestamp(emailHealth.oldestQueuedAt)}
             </span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Awaiting retry</span>
+            <span class="stat-label">{t("Awaiting retry")}</span>
             <span class="stat-value">{emailHealth.retryWaitCount}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Failed</span>
+            <span class="stat-label">{t("Failed")}</span>
             <span class="stat-value">{emailHealth.failedCount}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Suppressed</span>
+            <span class="stat-label">{t("Suppressed")}</span>
             <span class="stat-value">{emailHealth.suppressedCount}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Sent (24h)</span>
+            <span class="stat-label">{t("Sent (24h)")}</span>
             <span class="stat-value">{emailHealth.sentLast24hCount}</span>
             <span class="stat-hint">
-              Last: {formatTimestamp(emailHealth.mostRecentSentAt)}
+              {t("Last:")} {formatTimestamp(emailHealth.mostRecentSentAt)}
             </span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Dispatch</span>
+            <span class="stat-label">{t("Dispatch")}</span>
             <span class="stat-value stat-value--mono">
               {emailHealth.emailEnabled
                 ? (emailHealth.provider ?? "enabled")
                 : "disabled"}
             </span>
             {/* Process env, not a per-tenant setting — see `fetchEmailHealthReport`. */}
-            <span class="stat-hint">Deployment-wide setting</span>
+            <span class="stat-hint">{t("Deployment-wide setting")}</span>
           </div>
         </div>
       </section>
@@ -377,14 +381,15 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         id="reporting-projections"
       >
         <h2 class="admin-section-title" id="projections-title">
-          Projections
+          {t("Projections")}
           <span class="count-pill">{projections.length}</span>
         </h2>
         <p class="page-description">
-          Freshness is computed live from the last successful update, never read
-          back from a stored column — a projection whose updater stopped running
-          ages into <code>stale</code> on its own rather than staying frozen at{" "}
-          <code>current</code>.
+          {t(
+            "Freshness is computed live from the last successful update, never read back from a stored column \u2014 a projection whose updater stopped running ages into"
+          )}
+          <code>{t("stale")}</code> on its own rather than staying frozen at{" "}
+          <code>{t("current")}</code>.
         </p>
 
         {projections.length === 0 ? (
@@ -392,11 +397,11 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             <span class="empty-state-icon" aria-hidden="true">
               ◔
             </span>
-            <span class="empty-state-title">No projections visible</span>
+            <span class="empty-state-title">{t("No projections visible")}</span>
             <span class="empty-state-text">
-              Projections are declared in code by the modules that own them. Any
-              that exist require their own permission on top of this screen's,
-              so this can also mean none of them is granted to you.
+              {t(
+                "Projections are declared in code by the modules that own them. Any that exist require their own permission on top of this screen's, so this can also mean none of them is granted to you."
+              )}
             </span>
           </div>
         ) : (
@@ -429,13 +434,13 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 
                   <dl class="stat-grid">
                     <div class="stat-card">
-                      <dt class="stat-label">Owner</dt>
+                      <dt class="stat-label">{t("Owner")}</dt>
                       <dd class="stat-value stat-value--mono">
                         {projection.ownerModuleKey} v{projection.version}
                       </dd>
                     </div>
                     <div class="stat-card">
-                      <dt class="stat-label">Last success</dt>
+                      <dt class="stat-label">{t("Last success")}</dt>
                       <dd class="stat-value stat-value--mono">
                         {formatAge(projection.freshness.ageSeconds)}
                       </dd>
@@ -444,7 +449,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       </span>
                     </div>
                     <div class="stat-card">
-                      <dt class="stat-label">Consecutive failures</dt>
+                      <dt class="stat-label">{t("Consecutive failures")}</dt>
                       <dd class="stat-value">
                         {projection.freshness.consecutiveFailures}
                       </dd>
@@ -463,7 +468,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 
                   {projection.freshness.lastErrorMessage && (
                     <p class="state-notice">
-                      Last error:
+                      {t("Last error:")}
                       <span
                         class="cell-code"
                         set:text={projection.freshness.lastErrorMessage}
@@ -474,7 +479,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                   {latest && (
                     <details>
                       <summary>
-                        Reconciliation ·{" "}
+                        {t("Reconciliation \u00b7")}{" "}
                         {latest.mismatch
                           ? "mismatch against source"
                           : "matched source"}{" "}
@@ -486,10 +491,10 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         </caption>
                         <thead>
                           <tr>
-                            <th scope="col">Metric</th>
-                            <th scope="col">Projection</th>
-                            <th scope="col">Source</th>
-                            <th scope="col">Match</th>
+                            <th scope="col">{t("Metric")}</th>
+                            <th scope="col">{t("Projection")}</th>
+                            <th scope="col">{t("Source")}</th>
+                            <th scope="col">{t("Match")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -517,7 +522,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                   <div class="row-actions">
                     {projection.drillDownPath && (
                       <a class="quick-link" href={projection.drillDownPath}>
-                        Drill down
+                        {t("Drill down")}
                         <span class="quick-link-arrow" aria-hidden="true">
                           →
                         </span>
@@ -530,7 +535,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         class="module-toggle projection-reconcile-btn"
                         data-projection-key={projection.key}
                       >
-                        Reconcile
+                        {t("Reconcile")}
                       </button>
                     )}
 
@@ -540,7 +545,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         class="btn-inline btn-inline--danger projection-rebuild-cancel-btn"
                         data-projection-key={projection.key}
                       >
-                        Cancel rebuild
+                        {t("Cancel rebuild")}
                       </button>
                     )}
                   </div>
@@ -548,7 +553,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                   {canRebuild && !isRebuilding && (
                     <div class="admin-toolbar">
                       <label for={`rebuild-reason-${projection.key}`}>
-                        Rebuild reason
+                        {t("Rebuild reason")}
                       </label>
                       <input
                         type="text"
@@ -565,7 +570,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         class="btn-inline projection-rebuild-btn"
                         data-projection-key={projection.key}
                       >
-                        Rebuild
+                        {t("Rebuild")}
                       </button>
                     </div>
                   )}
@@ -586,23 +591,23 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         id="reporting-rebuild-history"
       >
         <h2 class="admin-section-title" id="rebuild-history-title">
-          Rebuild history
+          {t("Rebuild history")}
           <span class="count-pill">{rebuildRuns.length}</span>
         </h2>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Projection rebuild runs, newest first, capped at 100 rows.
+              {t("Projection rebuild runs, newest first, capped at 100 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Projection</th>
-                <th scope="col">Status</th>
-                <th scope="col">Rows</th>
-                <th scope="col">Started</th>
-                <th scope="col">Finished</th>
-                <th scope="col">Reason</th>
+                <th scope="col">{t("Projection")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Rows")}</th>
+                <th scope="col">{t("Started")}</th>
+                <th scope="col">{t("Finished")}</th>
+                <th scope="col">{t("Reason")}</th>
               </tr>
             </thead>
             <tbody>
@@ -613,11 +618,13 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       <span class="empty-state-icon" aria-hidden="true">
                         ↻
                       </span>
-                      <span class="empty-state-title">No rebuilds yet</span>
+                      <span class="empty-state-title">
+                        {t("No rebuilds yet")}
+                      </span>
                       <span class="empty-state-text">
-                        Incremental updates keep a projection current without
-                        one; a rebuild is for recovering after a source or
-                        definition change.
+                        {t(
+                          "Incremental updates keep a projection current without one; a rebuild is for recovering after a source or definition change."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -637,7 +644,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         {run.status}
                       </span>
                       {run.cancelRequested && run.status === "running" && (
-                        <span class="cell-muted"> · cancelling</span>
+                        <span class="cell-muted">{t("\u00b7 cancelling")}</span>
                       )}
                     </td>
                     <td data-label="Rows">{run.rowsProcessed}</td>
@@ -675,28 +682,30 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         id="reporting-export-configs"
       >
         <h2 class="admin-section-title" id="export-configs-title">
-          Scheduled exports
+          {t("Scheduled exports")}
           <span class="count-pill">{exportConfigs.length}</span>
         </h2>
         <p class="page-description">
-          Generated by <code>reporting:exports:dispatch</code>. Disabling a
-          schedule retires it — there is no re-enable, so an interval change
-          means creating a new schedule.
+          {t("Generated by")}
+          <code>{t("reporting:exports:dispatch")}</code>
+          {t(
+            ". Disabling a schedule retires it \u2014 there is no re-enable, so an interval change means creating a new schedule."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Scheduled export configurations for this tenant.
+              {t("Scheduled export configurations for this tenant.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Projection</th>
-                <th scope="col">Format</th>
-                <th scope="col">Interval</th>
-                <th scope="col">State</th>
-                <th scope="col">Created</th>
-                {canConfigureExports && <th scope="col">Actions</th>}
+                <th scope="col">{t("Projection")}</th>
+                <th scope="col">{t("Format")}</th>
+                <th scope="col">{t("Interval")}</th>
+                <th scope="col">{t("State")}</th>
+                <th scope="col">{t("Created")}</th>
+                {canConfigureExports && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -708,10 +717,12 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                         ⇩
                       </span>
                       <span class="empty-state-title">
-                        No scheduled exports
+                        {t("No scheduled exports")}
                       </span>
                       <span class="empty-state-text">
-                        A projection can still be exported on demand below.
+                        {t(
+                          "A projection can still be exported on demand below."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -752,7 +763,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                               data-export-id={config.id}
                               data-export-label={config.projectionKey}
                             >
-                              Disable
+                              {t("Disable")}
                             </button>
                           )}
                         </div>
@@ -767,7 +778,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
 
         {canConfigureExports && projectionKeys.length > 0 && (
           <form id="export-create-form" class="admin-create-form">
-            <p class="form-legend">Schedule a new export</p>
+            <p class="form-legend">{t("Schedule a new export")}</p>
             <p
               id="export-create-error"
               class="admin-create-error"
@@ -776,7 +787,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             />
 
             <label for="export-projection-key">
-              Projection
+              {t("Projection")}
               <select id="export-projection-key" name="projectionKey" required>
                 {projectionKeys.map((key) => (
                   <option value={key}>{key}</option>
@@ -785,15 +796,15 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             </label>
 
             <label for="export-format">
-              Format
+              {t("Format")}
               <select id="export-format" name="format" required>
-                <option value="csv">csv</option>
-                <option value="json">json</option>
+                <option value="csv">{t("csv")}</option>
+                <option value="json">{t("json")}</option>
               </select>
             </label>
 
             <label for="export-interval">
-              Interval (minutes)
+              {t("Interval (minutes)")}
               {/* Bounds come from the same constants the endpoint validates
                   against, so the browser can never accept what the server
                   rejects. */}
@@ -810,14 +821,14 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             </label>
 
             <button type="submit" id="export-create-submit">
-              Create schedule
+              {t("Create schedule")}
             </button>
           </form>
         )}
 
         {showExportActions && (
           <form id="export-trigger-form" class="admin-create-form">
-            <p class="form-legend">Export once, now</p>
+            <p class="form-legend">{t("Export once, now")}</p>
             <p
               id="export-trigger-error"
               class="admin-create-error"
@@ -826,7 +837,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             />
 
             <label for="trigger-projection-key">
-              Projection
+              {t("Projection")}
               <select id="trigger-projection-key" name="projectionKey" required>
                 {projectionKeys.map((key) => (
                   <option value={key}>{key}</option>
@@ -835,15 +846,15 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
             </label>
 
             <label for="trigger-format">
-              Format
+              {t("Format")}
               <select id="trigger-format" name="format" required>
-                <option value="csv">csv</option>
-                <option value="json">json</option>
+                <option value="csv">{t("csv")}</option>
+                <option value="json">{t("json")}</option>
               </select>
             </label>
 
             <button type="submit" id="export-trigger-submit">
-              Generate export
+              {t("Generate export")}
             </button>
           </form>
         )}
@@ -859,27 +870,28 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         id="reporting-export-runs"
       >
         <h2 class="admin-section-title" id="export-runs-title">
-          Export runs
+          {t("Export runs")}
           <span class="count-pill">{exportRuns.length}</span>
         </h2>
         <p class="page-description">
-          Each artifact is checksum-verified when downloaded, and an expired one
-          is refused rather than served stale.
+          {t(
+            "Each artifact is checksum-verified when downloaded, and an expired one is refused rather than served stale."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Export runs, newest first, capped at 100 rows.
+              {t("Export runs, newest first, capped at 100 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Projection</th>
-                <th scope="col">Status</th>
-                <th scope="col">Rows</th>
-                <th scope="col">Created</th>
-                <th scope="col">Expires</th>
-                <th scope="col">Artifact</th>
+                <th scope="col">{t("Projection")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Rows")}</th>
+                <th scope="col">{t("Created")}</th>
+                <th scope="col">{t("Expires")}</th>
+                <th scope="col">{t("Artifact")}</th>
               </tr>
             </thead>
             <tbody>
@@ -890,10 +902,13 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌸
                       </span>
-                      <span class="empty-state-title">No export runs</span>
+                      <span class="empty-state-title">
+                        {t("No export runs")}
+                      </span>
                       <span class="empty-state-text">
-                        Runs appear here once a schedule fires or an on-demand
-                        export is generated.
+                        {t(
+                          "Runs appear here once a schedule fires or an on-demand export is generated."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -937,7 +952,7 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                           class="quick-link"
                           href={`/api/v1/reports/exports/runs/${run.id}/download`}
                         >
-                          Download
+                          {t("Download")}
                           <span class="quick-link-arrow" aria-hidden="true">
                             →
                           </span>

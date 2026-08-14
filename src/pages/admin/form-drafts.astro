@@ -41,12 +41,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listFormDrafts,
   type FormDraftView
 } from "../../modules/form-drafts/application/form-draft-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 /** Mirrors `VALID_STATUSES` in `src/pages/api/v1/form-drafts/index.ts`. */
 const STATUS_OPTIONS = ["draft", "submitted", "abandoned", "expired"] as const;
@@ -127,20 +129,20 @@ const columnCount = canDelete ? 7 : 6;
 
 <AdminLayout title="Form drafts">
   <header class="page-header fade-in-up">
-    <h1 id="form-drafts-heading">Form drafts</h1>
+    <h1 id="form-drafts-heading">{t("Form drafts")}</h1>
     <p class="page-description">
-      Server-side scratch state for multi-step forms. Drafts are created by the
-      wizards of other modules — this screen is for inspecting and clearing
-      them, not for authoring. The newest 100 matching drafts are shown; narrow
-      the list with the filters below. Purged automatically by
-      <code>form-drafts:purge</code>.
+      {
+        t(
+          "Server-side scratch state for multi-step forms. Drafts are created by the wizards of other modules \u2014 this screen is for inspecting and clearing them, not for authoring. The newest 100 matching drafts are shown; narrow the list with the filters below. Purged automatically by"
+        )
+      }<code>{t("form-drafts:purge")}</code>.
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="form-drafts-denied">
-        You do not have permission to view form drafts.
+        {t("You do not have permission to view form drafts.")}
       </p>
     )
   }
@@ -152,7 +154,7 @@ const columnCount = canDelete ? 7 : 6;
         class="admin-toolbar fade-in-up"
         id="draft-filter-form"
       >
-        <label for="filter-module-key">Module key</label>
+        <label for="filter-module-key">{t("Module key")}</label>
         <input
           id="filter-module-key"
           name="moduleKey"
@@ -162,7 +164,7 @@ const columnCount = canDelete ? 7 : 6;
           placeholder="e.g. blog_content"
         />
 
-        <label for="filter-wizard-key">Wizard key</label>
+        <label for="filter-wizard-key">{t("Wizard key")}</label>
         <input
           id="filter-wizard-key"
           name="wizardKey"
@@ -172,10 +174,10 @@ const columnCount = canDelete ? 7 : 6;
           placeholder="e.g. post_composer"
         />
 
-        <label for="filter-status">Status</label>
+        <label for="filter-status">{t("Status")}</label>
         <select id="filter-status" name="status">
           <option value="" selected={statusFilter === ""}>
-            Any status
+            {t("Any status")}
           </option>
           {STATUS_OPTIONS.map((value) => (
             <option value={value} selected={statusFilter === value}>
@@ -184,7 +186,7 @@ const columnCount = canDelete ? 7 : 6;
           ))}
         </select>
 
-        <button type="submit">Apply filters</button>
+        <button type="submit">{t("Apply filters")}</button>
       </form>
     )
   }
@@ -192,8 +194,9 @@ const columnCount = canDelete ? 7 : 6;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="form-drafts-error">
-        Form drafts could not be loaded right now. This is a problem reading the
-        list, not an empty list — please try again later.
+        {t(
+          "Form drafts could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -216,24 +219,24 @@ const columnCount = canDelete ? 7 : 6;
         aria-labelledby="draft-list-title"
       >
         <h2 class="admin-section-title" id="draft-list-title">
-          Drafts
+          {t("Drafts")}
           <span class="count-pill">{drafts.length}</span>
         </h2>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="form-drafts-table">
             <caption class="sr-only">
-              Form drafts, newest first, capped at 100 rows.
+              {t("Form drafts, newest first, capped at 100 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Module</th>
-                <th scope="col">Wizard</th>
-                <th scope="col">Resource</th>
-                <th scope="col">Step</th>
-                <th scope="col">Status</th>
-                <th scope="col">Updated</th>
-                {canDelete && <th scope="col">Actions</th>}
+                <th scope="col">{t("Module")}</th>
+                <th scope="col">{t("Wizard")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Step")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {canDelete && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -315,7 +318,7 @@ const columnCount = canDelete ? 7 : 6;
                             data-draft-id={draft.id}
                             data-draft-label={`${draft.moduleKey}/${draft.wizardKey}`}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         </div>
                       </td>

@@ -8,13 +8,13 @@
 | Aspek                              | Nilai |
 | ---------------------------------- | ----- |
 | Modul terdaftar                    | 22    |
-| Migrasi                            | 127   |
-| Tabel `awcms_*`                    | 147   |
+| Migrasi                            | 128   |
+| Tabel `awcms_*`                    | 148   |
 | Tabel dengan `FORCE` RLS           | 130   |
-| Tabel RLS-free (global, by design) | 17    |
-| Berkas test                        | 381   |
-| Berkas route                       | 357   |
-| ADR                                | 95    |
+| Tabel RLS-free (global, by design) | 18    |
+| Berkas test                        | 387   |
+| Berkas route                       | 361   |
+| ADR                                | 97    |
 
 ### Modul
 
@@ -174,6 +174,7 @@
 | 125 | `sql/125_awcms_subject_requests.sql`                               |
 | 126 | `sql/126_awcms_subject_request_permissions.sql`                    |
 | 127 | `sql/127_awcms_worker_on_conflict_select_grants.sql`               |
+| 128 | `sql/128_awcms_principal_preferences.sql`                          |
 
 ### Tabel & Row-Level Security
 
@@ -261,6 +262,7 @@
 | `awcms_plans`                            | `sql/109_awcms_entitlement_schema.sql`                     | tidak | tidak |
 | `awcms_principal_mfa_factors`            | `sql/114_awcms_principal_mfa.sql`                          | tidak | tidak |
 | `awcms_principal_mfa_recovery_codes`     | `sql/114_awcms_principal_mfa.sql`                          | tidak | tidak |
+| `awcms_principal_preferences`            | `sql/128_awcms_principal_preferences.sql`                  | tidak | tidak |
 | `awcms_principals`                       | `sql/112_awcms_principals.sql`                             | tidak | tidak |
 | `awcms_profile_entity_links`             | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
 | `awcms_profile_identifiers`              | `sql/003_awcms_central_profile_schema.sql`                 | ya    | ya    |
@@ -331,7 +333,7 @@
 
 | Direktori     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 326        |
+| `(root)`      | 332        |
 | `e2e`         | 12         |
 | `integration` | 42         |
 | `unit`        | 1          |
@@ -340,8 +342,8 @@
 
 | Permukaan       | Berkas |
 | --------------- | ------ |
-| `/api/v1/**`    | 291    |
-| `/admin/**`     | 42     |
+| `/api/v1/**`    | 294    |
+| `/admin/**`     | 43     |
 | publik / anonim | 24     |
 
 <!-- END GENERATED: repo-inventory -->

@@ -107,11 +107,11 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                      | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                      | `git rev-list --count v9.0.0..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                                | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **127** (`sql/001`–`127`)                                                               | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0094** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-13).**) | `ls docs/adr/`                                                                          |
-| Layar admin                        | **42** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **55** (28.718 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
-| Gerbang                            | **44** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
+| Migrasi                            | **128** (`sql/001`–`128`)                                                               | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0096** (`0000` = template; status ADR tertinggi: **Diterima (2026-08-14).**) | `ls docs/adr/`                                                                          |
+| Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:`   | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
+| Berkas `.astro`                    | **56** (30.030 baris) — soal typecheck lihat §6                                         | `find src -name '*.astro'`                                                              |
+| Gerbang                            | **46** di rantai `bun run check`                                                        | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**               | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
 <!-- project-state-inventory:selesai -->
@@ -355,6 +355,52 @@ dirintis langsung di sini setelah pembekuan ADR-0047.)
   [`awcms/environments.md`](awcms/environments.md).
 
 ## 4. Backlog / langkah berikutnya
+
+- **i18n (ADR-0095) dan permukaan akun (ADR-0096) — apa yang SUDAH mendarat,
+  dan apa yang persis tersisa. 14 Agustus 2026.**
+
+  **Mendarat:** fondasi i18n (katalog gettext `locales/en.po` + `id.po` yang
+  DIKOMPILASI ke `src/lib/i18n/catalogs/*.generated.ts` sehingga ikut ke
+  `dist/`), resolusi locale di middleware, `LanguageSwitcher` yang benar-benar
+  bekerja (menggantikan `LocaleBadge` yang mati), preferensi bahasa + tema
+  per-PRINCIPAL (`sql/128`), dan `/admin/account` yang akhirnya memberi
+  permukaan pada 17 endpoint self-service yang sebelumnya hanya bisa `curl`.
+
+  **Angka yang tersisa, semuanya ber-ledger yang hanya boleh MENYUSUT:**
+
+  | Ledger                                               | Sekarang | Artinya                                                |
+  | ---------------------------------------------------- | -------- | ------------------------------------------------------ |
+  | `i18n:screens:check`                                 | 18 layar | masih merender total 25 literal Inggris                |
+  | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | 718      | msgid dideklarasikan tetapi `msgstr` `id` masih kosong |
+
+  **Langkah berikutnya, berurutan:**
+
+  1. **Terjemahkan 718 entri `id` yang tersisa.** Mayoritasnya kalimat panjang,
+     bukan label. Turunkan angkanya di `scripts/i18n-catalog-check.ts` tiap
+     kali — gerbangnya MENOLAK ledger yang lebih besar dari kenyataan, jadi ia
+     tidak bisa dibiarkan menua.
+  2. **Selesaikan 18 layar** di ledger `i18n:screens:check`. Sisa literalnya
+     adalah kasus yang alat migrasi sengaja tidak sentuh: kalimat yang terbelah
+     oleh `<code>`/`<strong>` di tengah. Perbaikannya adalah menggabungkannya
+     jadi SATU msgid ber-placeholder (`t("… {code} …", { code })`), bukan
+     membungkus tiap penggalan — 12 msgid penggalan yang sudah ada berasal dari
+     kelas yang sama dan sebaiknya ikut digabung.
+  3. **Locale untuk permukaan PUBLIK — TERBLOKIR oleh keputusan kunci cache,
+     dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
+     yang badannya berubah menurut cookie locale berarti pembaca Inggris
+     disajikan halaman Indonesia dari cache. ADR-0095 §"Keputusan 5" karena itu
+     TIDAK melokalkan satu pun surface publik dan mendaftarkannya sebagai
+     prasyarat: kunci cache harus membawa locale lebih dulu, dan itu ADR-nya
+     sendiri. Yang menunggu di belakangnya: `hreflang` yang benar
+     (`src/middleware.ts` masih meneruskan `locale: null` ke resolusi redirect
+     — dengan komentar yang menjelaskan bahwa ini kini PENOLAKAN yang disengaja,
+     bukan ketiadaan seam), dan field konten multi-bahasa untuk `blog_content`.
+  4. **Zona waktu per-pengguna.** `/admin/account` merender stempel waktu dalam
+     UTC dan mengatakannya; menebak zona server akan membuat "terakhir dilihat"
+     salah tanpa ada yang bisa mendeteksinya. Ia milik tabel preferensi yang
+     sudah dibuat ADR-0095.
+  5. **Penggantian alamat login.** Sengaja DI LUAR ADR-0096: ia pemulihan akun,
+     bukan penyuntingan profil, dan menuntut pembuktian kepemilikan alamat baru.
 
 - **PEMBLOKIR OPERASIONAL — image produksi TIDAK BISA menjalankan satu pun dari
   29 job terdaftar. Ditemukan 14 Agustus 2026 saat men-deploy v9.0.0.**

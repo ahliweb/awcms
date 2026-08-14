@@ -26,6 +26,7 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listDeletedOffices,
   listOffices
@@ -40,6 +41,7 @@ type OfficeRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const OFFICE_STATUS_OPTIONS = ["active", "inactive"];
 
@@ -112,18 +114,20 @@ const showActions = canUpdate || canDelete;
 
 <AdminLayout title="Offices">
   <header class="page-header fade-in-up">
-    <h1 id="offices-heading">Offices</h1>
+    <h1 id="offices-heading">{t("Offices")}</h1>
     <p class="page-description">
-      The tenant's office hierarchy. Offices can be edited inline, soft-deleted,
-      and restored — deleted offices are listed separately so they remain
-      reachable.
+      {
+        t(
+          "The tenant's office hierarchy. Offices can be edited inline, soft-deleted, and restored \u2014 deleted offices are listed separately so they remain reachable."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="offices-denied">
-        You do not have permission to view offices.
+        {t("You do not have permission to view offices.")}
       </p>
     )
   }
@@ -131,7 +135,7 @@ const showActions = canUpdate || canDelete;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="offices-error">
-        Offices could not be loaded right now. Please try again later.
+        {t("Offices could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -139,7 +143,7 @@ const showActions = canUpdate || canDelete;
   {
     canCreate && (
       <form id="office-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">Create an office</p>
+        <p class="form-legend">{t("Create an office")}</p>
         <p
           id="office-create-error"
           class="admin-create-error"
@@ -147,7 +151,7 @@ const showActions = canUpdate || canDelete;
           hidden
         />
 
-        <label for="office-code">Office code</label>
+        <label for="office-code">{t("Office code")}</label>
         <input
           id="office-code"
           name="officeCode"
@@ -156,7 +160,7 @@ const showActions = canUpdate || canDelete;
           autocomplete="off"
         />
 
-        <label for="office-name">Office name</label>
+        <label for="office-name">{t("Office name")}</label>
         <input
           id="office-name"
           name="officeName"
@@ -165,17 +169,17 @@ const showActions = canUpdate || canDelete;
           autocomplete="off"
         />
 
-        <label for="office-type">Office type</label>
+        <label for="office-type">{t("Office type")}</label>
         <select id="office-type" name="officeType">
-          <option value="head_office">head_office</option>
-          <option value="branch">branch</option>
-          <option value="store">store</option>
-          <option value="warehouse">warehouse</option>
-          <option value="other">other</option>
+          <option value="head_office">{t("head_office")}</option>
+          <option value="branch">{t("branch")}</option>
+          <option value="store">{t("store")}</option>
+          <option value="warehouse">{t("warehouse")}</option>
+          <option value="other">{t("other")}</option>
         </select>
 
         <button type="submit" id="office-create-submit">
-          Create office
+          {t("Create office")}
         </button>
       </form>
     )
@@ -199,11 +203,11 @@ const showActions = canUpdate || canDelete;
           <caption>{offices.length} office(s)</caption>
           <thead>
             <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Name</th>
-              <th scope="col">Type</th>
-              <th scope="col">Status</th>
-              {showActions && <th scope="col">Actions</th>}
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Status")}</th>
+              {showActions && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -214,7 +218,7 @@ const showActions = canUpdate || canDelete;
                     <span class="empty-state-icon" aria-hidden="true">
                       ⌂
                     </span>
-                    <span class="empty-state-title">No offices yet</span>
+                    <span class="empty-state-title">{t("No offices yet")}</span>
                     <span class="empty-state-text">
                       {canCreate
                         ? "Create your first office using the form above."
@@ -288,7 +292,7 @@ const showActions = canUpdate || canDelete;
                             class="module-toggle office-save-btn"
                             data-office-id={office.id}
                           >
-                            Save
+                            {t("Save")}
                           </button>
                         )}
                         {canDelete && (
@@ -298,7 +302,7 @@ const showActions = canUpdate || canDelete;
                             data-office-id={office.id}
                             data-office-code={office.officeCode}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         )}
                       </div>
@@ -317,7 +321,7 @@ const showActions = canUpdate || canDelete;
     canRead && !loadError && canUpdate && deletedOffices.length > 0 && (
       <section class="admin-section fade-in-up" id="deleted-offices">
         <h2 class="admin-section-title">
-          Deleted offices
+          {t("Deleted offices")}
           <span class="count-pill">{deletedOffices.length}</span>
         </h2>
         <div class="data-table-scroll">
@@ -328,10 +332,10 @@ const showActions = canUpdate || canDelete;
             <caption>{deletedOffices.length} deleted office(s)</caption>
             <thead>
               <tr>
-                <th scope="col">Code</th>
-                <th scope="col">Name</th>
-                <th scope="col">Type</th>
-                <th scope="col">Actions</th>
+                <th scope="col">{t("Code")}</th>
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -352,7 +356,7 @@ const showActions = canUpdate || canDelete;
                         data-office-id={office.id}
                         data-office-code={office.officeCode}
                       >
-                        Restore
+                        {t("Restore")}
                       </button>
                     </div>
                   </td>

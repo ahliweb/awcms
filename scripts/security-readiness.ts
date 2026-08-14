@@ -627,6 +627,18 @@ export const GLOBAL_TABLE_FORBIDDEN_PRIVILEGES: Record<string, string[]> = {
   // disabled, which is why `disabled_by_tenant_id` can answer "who reset me".
   awcms_principal_mfa_factors: [],
   awcms_principal_mfa_recovery_codes: [],
+  // Global display preferences (ADR-0095, sql/128) — UI locale and colour theme.
+  // Global for the same reason as the two lines above: the language a person
+  // reads is a property of that person, and ADR-0088's tenant-selection screen
+  // renders before any tenant exists to scope it to.
+  //
+  // DELETE forbidden, unlike the recovery codes above. A spent recovery code is
+  // deleted because "gone" is its correct end state; a preference is never gone,
+  // it is reset — which this schema models as `NULL` ("not chosen"), reachable
+  // with the UPDATE already granted. INSERT and UPDATE are the upsert the
+  // account screen performs; SELECT is required BY that upsert's `ON CONFLICT`,
+  // not merely by reads.
+  awcms_principal_preferences: ["DELETE"],
   awcms_entitlements: ["INSERT", "UPDATE", "DELETE"],
   awcms_plans: ["INSERT", "UPDATE", "DELETE"],
   awcms_plan_entitlements: ["INSERT", "UPDATE", "DELETE"]

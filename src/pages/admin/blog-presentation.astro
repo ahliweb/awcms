@@ -77,8 +77,10 @@ import {
   isWidgetPosition
 } from "../../modules/blog-content/domain/widget-policy";
 import { BLOG_THEME_MODES } from "../../modules/blog-content/domain/theme-policy";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 type Section = "templates" | "menus" | "widgets" | "theme";
 
@@ -264,19 +266,22 @@ const editingWidget =
 
 <AdminLayout title="Blog presentation">
   <header class="page-header fade-in-up">
-    <h1 id="presentation-heading">Blog presentation</h1>
+    <h1 id="presentation-heading">{t("Blog presentation")}</h1>
     <p class="page-description">
-      How the blog looks: page templates, navigation menus, sidebar and footer
-      widgets, and the theme mode. Content itself lives on <a href="/admin/blog"
-        >the blog console</a
-      >.
+      {
+        t(
+          "How the blog looks: page templates, navigation menus, sidebar and footer widgets, and the theme mode. Content itself lives on"
+        )
+      }<a href="/admin/blog">{t("the blog console")}</a>.
     </p>
   </header>
 
   {
     section === null && (
       <p class="state-notice fade-in-up" id="presentation-denied">
-        You do not have permission to view any blog presentation settings.
+        {t(
+          "You do not have permission to view any blog presentation settings."
+        )}
       </p>
     )
   }
@@ -284,8 +289,9 @@ const editingWidget =
   {
     section !== null && loadError && (
       <p class="state-notice fade-in-up" id="presentation-error">
-        Presentation settings could not be loaded right now. This is a problem
-        reading them, not an empty configuration — please try again later.
+        {t(
+          "Presentation settings could not be loaded right now. This is a problem reading them, not an empty configuration \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -327,20 +333,20 @@ const editingWidget =
         aria-labelledby="template-list-title"
       >
         <h2 class="admin-section-title" id="template-list-title">
-          Templates
+          {t("Templates")}
           <span class="count-pill">{templates.length}</span>
         </h2>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-templates-table">
-            <caption class="sr-only">Blog page templates.</caption>
+            <caption class="sr-only">{t("Blog page templates.")}</caption>
             <thead>
               <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Layout</th>
-                <th scope="col">Active</th>
-                <th scope="col">Updated</th>
-                {canConfigureTemplates && <th scope="col">Actions</th>}
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Layout")}</th>
+                <th scope="col">{t("Active")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {canConfigureTemplates && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -351,10 +357,13 @@ const editingWidget =
                     colspan={canConfigureTemplates ? 5 : 4}
                   >
                     <div class="empty-state">
-                      <span class="empty-state-title">No templates yet</span>
+                      <span class="empty-state-title">
+                        {t("No templates yet")}
+                      </span>
                       <span class="empty-state-text">
-                        Create one below to offer a layout choice on posts and
-                        pages.
+                        {t(
+                          "Create one below to offer a layout choice on posts and pages."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -397,7 +406,7 @@ const editingWidget =
                             class="quick-link"
                             href={linkWith({ edit: entry.id })}
                           >
-                            Edit
+                            {t("Edit")}
                           </a>
                           <button
                             type="button"
@@ -406,7 +415,7 @@ const editingWidget =
                             data-entity-id={entry.id}
                             data-entity-name={entry.name}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         </div>
                       </td>
@@ -437,18 +446,18 @@ const editingWidget =
 
           {!editingTemplate && (
             <div class="admin-form-row">
-              <label for="template-key">Key</label>
+              <label for="template-key">{t("Key")}</label>
               <input id="template-key" name="key" type="text" required />
               {/* Immutable after creation: `UpdateTemplateInput` has no `key`,
                   and posts/pages reference a template by it. */}
               <p class="form-hint">
-                Stable identifier. Cannot be changed after creation.
+                {t("Stable identifier. Cannot be changed after creation.")}
               </p>
             </div>
           )}
 
           <div class="admin-form-row">
-            <label for="template-name">Name</label>
+            <label for="template-name">{t("Name")}</label>
             <input
               id="template-name"
               name="name"
@@ -459,7 +468,7 @@ const editingWidget =
           </div>
 
           <div class="admin-form-row">
-            <label for="template-columns">Columns</label>
+            <label for="template-columns">{t("Columns")}</label>
             <select id="template-columns" name="columns">
               {[1, 2, 3].map((value) => (
                 <option
@@ -475,7 +484,7 @@ const editingWidget =
           </div>
 
           <div class="admin-form-row">
-            <label for="template-sidebar">Sidebar</label>
+            <label for="template-sidebar">{t("Sidebar")}</label>
             <select id="template-sidebar" name="sidebarPosition">
               {["left", "right", "none"].map((value) => (
                 <option
@@ -499,7 +508,7 @@ const editingWidget =
                 type="checkbox"
                 checked={editingTemplate?.isActive ?? true}
               />
-              Active
+              {t("Active")}
             </label>
           </div>
 
@@ -516,7 +525,7 @@ const editingWidget =
             </button>
             {editingTemplate && (
               <a class="quick-link" href={linkWith({ edit: null })}>
-                Cancel
+                {t("Cancel")}
               </a>
             )}
           </div>
@@ -535,24 +544,26 @@ const editingWidget =
         aria-labelledby="menu-list-title"
       >
         <h2 class="admin-section-title" id="menu-list-title">
-          Menus
+          {t("Menus")}
           <span class="count-pill">{menus.length}</span>
         </h2>
 
         <p class="form-hint" id="menu-items-note">
-          Menu <strong>items</strong> are not edited here. The API replaces the
-          entire item list on every save, so a flat form would delete every item
-          it did not happen to render.
+          {t("Menu")}
+          <strong>{t("items")}</strong>
+          {t(
+            "are not edited here. The API replaces the entire item list on every save, so a flat form would delete every item it did not happen to render."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-menus-table">
-            <caption class="sr-only">Blog navigation menus.</caption>
+            <caption class="sr-only">{t("Blog navigation menus.")}</caption>
             <thead>
               <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Updated</th>
-                {canConfigureMenus && <th scope="col">Actions</th>}
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {canConfigureMenus && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -563,9 +574,9 @@ const editingWidget =
                     colspan={canConfigureMenus ? 3 : 2}
                   >
                     <div class="empty-state">
-                      <span class="empty-state-title">No menus yet</span>
+                      <span class="empty-state-title">{t("No menus yet")}</span>
                       <span class="empty-state-text">
-                        Create one below to group navigation links.
+                        {t("Create one below to group navigation links.")}
                       </span>
                     </div>
                   </td>
@@ -592,7 +603,7 @@ const editingWidget =
                             class="quick-link"
                             href={linkWith({ edit: entry.id })}
                           >
-                            Edit
+                            {t("Edit")}
                           </a>
                           <button
                             type="button"
@@ -601,7 +612,7 @@ const editingWidget =
                             data-entity-id={entry.id}
                             data-entity-name={entry.name}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         </div>
                       </td>
@@ -628,16 +639,16 @@ const editingWidget =
 
           {!editingMenu && (
             <div class="admin-form-row">
-              <label for="menu-key">Key</label>
+              <label for="menu-key">{t("Key")}</label>
               <input id="menu-key" name="key" type="text" required />
               <p class="form-hint">
-                Stable identifier. Cannot be changed after creation.
+                {t("Stable identifier. Cannot be changed after creation.")}
               </p>
             </div>
           )}
 
           <div class="admin-form-row">
-            <label for="menu-name">Name</label>
+            <label for="menu-name">{t("Name")}</label>
             <input
               id="menu-name"
               name="name"
@@ -655,7 +666,7 @@ const editingWidget =
             </button>
             {editingMenu && (
               <a class="quick-link" href={linkWith({ edit: null })}>
-                Cancel
+                {t("Cancel")}
               </a>
             )}
           </div>
@@ -674,16 +685,16 @@ const editingWidget =
         aria-labelledby="widget-list-title"
       >
         <h2 class="admin-section-title" id="widget-list-title">
-          Widgets
+          {t("Widgets")}
           <span class="count-pill">{widgets.length}</span>
         </h2>
 
         <form method="get" class="admin-toolbar" id="widget-filter-form">
           <input type="hidden" name="section" value="widgets" />
-          <label for="filter-position">Position</label>
+          <label for="filter-position">{t("Position")}</label>
           <select id="filter-position" name="position">
             <option value="" selected={positionFilter === undefined}>
-              Any position
+              {t("Any position")}
             </option>
             {WIDGET_POSITIONS.map((value) => (
               <option value={value} selected={positionFilter === value}>
@@ -691,21 +702,21 @@ const editingWidget =
               </option>
             ))}
           </select>
-          <button type="submit">Apply filter</button>
+          <button type="submit">{t("Apply filter")}</button>
         </form>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-widgets-table">
             <caption class="sr-only">
-              Blog widgets, in render order within each position.
+              {t("Blog widgets, in render order within each position.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Position</th>
-                <th scope="col">Order</th>
-                <th scope="col">Active</th>
-                {canConfigureWidgets && <th scope="col">Actions</th>}
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Position")}</th>
+                <th scope="col">{t("Order")}</th>
+                <th scope="col">{t("Active")}</th>
+                {canConfigureWidgets && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -716,9 +727,11 @@ const editingWidget =
                     colspan={canConfigureWidgets ? 5 : 4}
                   >
                     <div class="empty-state">
-                      <span class="empty-state-title">No widgets here</span>
+                      <span class="empty-state-title">
+                        {t("No widgets here")}
+                      </span>
                       <span class="empty-state-text">
-                        Create one below, or clear the position filter.
+                        {t("Create one below, or clear the position filter.")}
                       </span>
                     </div>
                   </td>
@@ -751,7 +764,7 @@ const editingWidget =
                             class="quick-link"
                             href={linkWith({ edit: entry.id })}
                           >
-                            Edit
+                            {t("Edit")}
                           </a>
                           <button
                             type="button"
@@ -760,7 +773,7 @@ const editingWidget =
                             data-entity-id={entry.id}
                             data-entity-name={entry.title}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         </div>
                       </td>
@@ -786,7 +799,7 @@ const editingWidget =
           <input type="hidden" id="widget-id" value={editingWidget?.id ?? ""} />
 
           <div class="admin-form-row">
-            <label for="widget-position">Position</label>
+            <label for="widget-position">{t("Position")}</label>
             <select id="widget-position" name="position">
               {WIDGET_POSITIONS.map((value) => (
                 <option
@@ -800,7 +813,7 @@ const editingWidget =
           </div>
 
           <div class="admin-form-row">
-            <label for="widget-title">Title</label>
+            <label for="widget-title">{t("Title")}</label>
             <input
               id="widget-title"
               name="title"
@@ -811,7 +824,7 @@ const editingWidget =
           </div>
 
           <div class="admin-form-row">
-            <label for="widget-body">Body text</label>
+            <label for="widget-body">{t("Body text")}</label>
             {/* Plain text, escaped at render — the module rejects raw HTML
                 rather than sanitising it. */}
             <textarea id="widget-body" name="bodyText" rows="4" required>
@@ -820,7 +833,7 @@ const editingWidget =
           </div>
 
           <div class="admin-form-row">
-            <label for="widget-sort">Sort order</label>
+            <label for="widget-sort">{t("Sort order")}</label>
             <input
               id="widget-sort"
               name="sortOrder"
@@ -838,7 +851,7 @@ const editingWidget =
                 type="checkbox"
                 checked={editingWidget?.isActive ?? true}
               />
-              Active
+              {t("Active")}
             </label>
           </div>
 
@@ -850,7 +863,7 @@ const editingWidget =
             </button>
             {editingWidget && (
               <a class="quick-link" href={linkWith({ edit: null })}>
-                Cancel
+                {t("Cancel")}
               </a>
             )}
           </div>
@@ -866,11 +879,12 @@ const editingWidget =
     section === "theme" && !loadError && theme !== null && (
       <section class="admin-section fade-in-up" aria-labelledby="theme-title">
         <h2 class="admin-section-title" id="theme-title">
-          Theme
+          {t("Theme")}
         </h2>
 
         <p class="page-description" id="theme-source">
-          Current mode is <strong class="cell-code">{theme.mode}</strong>,{" "}
+          {t("Current mode is")}
+          <strong class="cell-code">{theme.mode}</strong>,{" "}
           {theme.isOverride
             ? "set as a blog-specific override."
             : "inherited from the tenant default."}
@@ -882,15 +896,16 @@ const editingWidget =
             succeed is the #351 shape. */}
         <p class="form-hint" id="theme-one-way-note">
           Setting a blog theme creates an override that{" "}
-          <strong>cannot be removed</strong> from here — the API has no way to
-          clear it, only to change it. Until one is set, the blog follows the
-          tenant default.
+          <strong>{t("cannot be removed")}</strong>
+          {t(
+            "from here \u2014 the API has no way to clear it, only to change it. Until one is set, the blog follows the tenant default."
+          )}
         </p>
 
         {canConfigureTheme && (
           <form class="admin-form" id="theme-form">
             <div class="admin-form-row">
-              <label for="theme-mode">Mode</label>
+              <label for="theme-mode">{t("Mode")}</label>
               <select id="theme-mode" name="mode">
                 {BLOG_THEME_MODES.map((value) => (
                   <option value={value} selected={theme.mode === value}>
@@ -909,7 +924,7 @@ const editingWidget =
 
             <div class="admin-form-actions">
               <button type="submit" id="theme-submit">
-                Save theme
+                {t("Save theme")}
               </button>
             </div>
           </form>

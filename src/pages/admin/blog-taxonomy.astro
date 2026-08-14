@@ -68,6 +68,7 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listBlogTerms,
   type BlogTermView
@@ -78,6 +79,7 @@ import {
 } from "../../modules/blog-content/domain/taxonomy-policy";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -166,18 +168,20 @@ const hasFilter = typeFilter !== undefined;
 
 <AdminLayout title="Blog taxonomy">
   <header class="page-header fade-in-up">
-    <h1 id="taxonomy-heading">Blog taxonomy</h1>
+    <h1 id="taxonomy-heading">{t("Blog taxonomy")}</h1>
     <p class="page-description">
-      Categories and tags for <a href="/admin/blog">blog posts</a>. Categories
-      may nest; tags may not. Terms are assigned to a post from the post itself,
-      not from here.
+      {t("Categories and tags for")}<a href="/admin/blog">{t("blog posts")}</a>{
+        t(
+          ". Categories may nest; tags may not. Terms are assigned to a post from the post itself, not from here."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="taxonomy-denied">
-        You do not have permission to view blog taxonomy.
+        {t("You do not have permission to view blog taxonomy.")}
       </p>
     )
   }
@@ -185,8 +189,9 @@ const hasFilter = typeFilter !== undefined;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="taxonomy-error">
-        Terms could not be loaded right now. This is a problem reading the list,
-        not an empty list — please try again later.
+        {t(
+          "Terms could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -205,20 +210,20 @@ const hasFilter = typeFilter !== undefined;
   {
     canRead && !loadError && (
       <form method="get" class="admin-toolbar fade-in-up" id="term-filter-form">
-        <label for="filter-taxonomy-type">Type</label>
+        <label for="filter-taxonomy-type">{t("Type")}</label>
         <select id="filter-taxonomy-type" name="taxonomyType">
           <option value="" selected={typeFilter === undefined}>
-            Categories and tags
+            {t("Categories and tags")}
           </option>
           <option value="category" selected={typeFilter === "category"}>
-            category
+            {t("category")}
           </option>
           <option value="tag" selected={typeFilter === "tag"}>
-            tag
+            {t("tag")}
           </option>
         </select>
 
-        <button type="submit">Apply filter</button>
+        <button type="submit">{t("Apply filter")}</button>
       </form>
     )
   }
@@ -230,7 +235,7 @@ const hasFilter = typeFilter !== undefined;
         aria-labelledby="term-list-title"
       >
         <h2 class="admin-section-title" id="term-list-title">
-          Terms
+          {t("Terms")}
           <span class="count-pill">{terms.length}</span>
         </h2>
 
@@ -238,24 +243,25 @@ const hasFilter = typeFilter !== undefined;
             tenant has no more. `listBlogTerms` is LIMIT 100. */}
         {terms.length === 100 && (
           <p class="state-notice" id="taxonomy-truncated">
-            Showing the first 100 terms by name. Filter by type to narrow the
-            list.
+            {t(
+              "Showing the first 100 terms by name. Filter by type to narrow the list."
+            )}
           </p>
         )}
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-terms-table">
             <caption class="sr-only">
-              Blog categories and tags, by name.
+              {t("Blog categories and tags, by name.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Type</th>
-                <th scope="col">Parent</th>
-                <th scope="col">Description</th>
-                <th scope="col">Updated</th>
-                {showsRowActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Parent")}</th>
+                <th scope="col">{t("Description")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {showsRowActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -326,7 +332,7 @@ const hasFilter = typeFilter !== undefined;
                             class="quick-link"
                             href={linkWith({ edit: entry.id })}
                           >
-                            Edit
+                            {t("Edit")}
                             <span class="quick-link-arrow" aria-hidden="true">
                               →
                             </span>
@@ -337,7 +343,7 @@ const hasFilter = typeFilter !== undefined;
                             data-term-id={entry.id}
                             data-term-name={entry.name}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         </div>
                       </td>
@@ -359,14 +365,14 @@ const hasFilter = typeFilter !== undefined;
         aria-labelledby="term-edit-title"
       >
         <h2 class="admin-section-title" id="term-edit-title">
-          Edit term
+          {t("Edit term")}
         </h2>
 
         <form class="admin-form" id="term-edit-form">
           <input type="hidden" id="edit-term-id" value={editingTerm.id} />
 
           <div class="admin-form-row">
-            <label for="edit-name">Name</label>
+            <label for="edit-name">{t("Name")}</label>
             <input
               id="edit-name"
               name="name"
@@ -377,7 +383,7 @@ const hasFilter = typeFilter !== undefined;
           </div>
 
           <div class="admin-form-row">
-            <label for="edit-slug">Slug</label>
+            <label for="edit-slug">{t("Slug")}</label>
             <input
               id="edit-slug"
               name="slug"
@@ -388,7 +394,7 @@ const hasFilter = typeFilter !== undefined;
           </div>
 
           <div class="admin-form-row">
-            <label for="edit-description">Description</label>
+            <label for="edit-description">{t("Description")}</label>
             <input
               id="edit-description"
               name="description"
@@ -405,7 +411,8 @@ const hasFilter = typeFilter !== undefined;
               `awcms_blog_terms_tag_no_parent_check` for its children, which
               the API cannot express as one atomic edit. */}
           <p class="form-hint" id="term-edit-immutable-hint">
-            Type is <strong set:text={editingTerm.taxonomyType} /> and parent is{" "}
+            {t("Type is")}
+            <strong set:text={editingTerm.taxonomyType} /> and parent is{" "}
             <strong
               set:text={
                 editingTerm.parentId
@@ -413,9 +420,9 @@ const hasFilter = typeFilter !== undefined;
                   : "none"
               }
             />
-            . Neither can be changed after creation: the API performs no cycle
-            detection, so re-parenting here could create a loop no reader can
-            escape. Delete the term and create it again instead.
+            {t(
+              ". Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
+            )}
           </p>
 
           <p
@@ -427,10 +434,10 @@ const hasFilter = typeFilter !== undefined;
 
           <div class="admin-form-actions">
             <button type="submit" id="term-edit-submit">
-              Save term
+              {t("Save term")}
             </button>
             <a class="quick-link" href={linkWith({ edit: null })}>
-              Cancel
+              {t("Cancel")}
             </a>
           </div>
         </form>
@@ -445,32 +452,32 @@ const hasFilter = typeFilter !== undefined;
         aria-labelledby="term-create-title"
       >
         <h2 class="admin-section-title" id="term-create-title">
-          Create a term
+          {t("Create a term")}
         </h2>
 
         <form class="admin-form" id="term-create-form">
           <div class="admin-form-row">
-            <label for="create-taxonomy-type">Type</label>
+            <label for="create-taxonomy-type">{t("Type")}</label>
             <select id="create-taxonomy-type" name="taxonomyType" required>
-              <option value="category">category</option>
-              <option value="tag">tag</option>
+              <option value="category">{t("category")}</option>
+              <option value="tag">{t("tag")}</option>
             </select>
           </div>
 
           <div class="admin-form-row">
-            <label for="create-name">Name</label>
+            <label for="create-name">{t("Name")}</label>
             <input id="create-name" name="name" type="text" required />
           </div>
 
           <div class="admin-form-row">
-            <label for="create-slug">Slug</label>
+            <label for="create-slug">{t("Slug")}</label>
             <input id="create-slug" name="slug" type="text" required />
           </div>
 
           <div class="admin-form-row">
-            <label for="create-parent">Parent category</label>
+            <label for="create-parent">{t("Parent category")}</label>
             <select id="create-parent" name="parentId">
-              <option value="">No parent</option>
+              <option value="">{t("No parent")}</option>
               {parentChoices.map((choice) => (
                 <option value={choice.id}>{choice.name}</option>
               ))}
@@ -479,12 +486,12 @@ const hasFilter = typeFilter !== undefined;
                 no children, so it cannot close a loop. The client clears this
                 field for `tag`, which the database forbids from having one. */}
             <p class="form-hint" id="term-create-parent-hint">
-              Categories only — a tag may not have a parent.
+              {t("Categories only \u2014 a tag may not have a parent.")}
             </p>
           </div>
 
           <div class="admin-form-row">
-            <label for="create-description">Description</label>
+            <label for="create-description">{t("Description")}</label>
             <input id="create-description" name="description" type="text" />
           </div>
 
@@ -497,7 +504,7 @@ const hasFilter = typeFilter !== undefined;
 
           <div class="admin-form-actions">
             <button type="submit" id="term-create-submit">
-              Create term
+              {t("Create term")}
             </button>
           </div>
         </form>

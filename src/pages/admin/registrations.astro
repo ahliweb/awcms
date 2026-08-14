@@ -22,12 +22,14 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { isSelfRegistrationEnabled } from "../../lib/auth/self-registration-config";
 import { listRoles } from "../../modules/identity-access/application/access-directory";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listPendingRegistrations,
   type PendingRegistrationView
 } from "../../modules/identity-access/application/self-registration";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const selfRegistrationEnabled = isSelfRegistrationEnabled();
 
@@ -96,18 +98,20 @@ const columnCount = canApprove || canReject ? 4 : 3;
 
 <AdminLayout title="Registration requests">
   <header class="page-header fade-in-up">
-    <h1 id="registrations-heading">Registration requests</h1>
+    <h1 id="registrations-heading">{t("Registration requests")}</h1>
     <p class="page-description">
-      People who asked to join this tenant. Approving creates their account and
-      emails them a link to set a password — it does not set one for them.
-      Rejecting creates nothing and notifies nobody.
+      {
+        t(
+          "People who asked to join this tenant. Approving creates their account and emails them a link to set a password \u2014 it does not set one for them. Rejecting creates nothing and notifies nobody."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="registrations-denied">
-        You do not have permission to view registration requests.
+        {t("You do not have permission to view registration requests.")}
       </p>
     )
   }
@@ -115,9 +119,9 @@ const columnCount = canApprove || canReject ? 4 : 3;
   {
     canRead && !selfRegistrationEnabled && (
       <p class="state-notice fade-in-up" id="registrations-disabled">
-        Self-registration is switched off for this deployment (
-        <code>AUTH_SELF_REGISTRATION_ENABLED</code>), so no new request can
-        arrive. Anything already queued below can still be reviewed.
+        {t("Self-registration is switched off for this deployment (")}
+        <code>{t("AUTH_SELF_REGISTRATION_ENABLED")}</code>), so no new request
+        can arrive. Anything already queued below can still be reviewed.
       </p>
     )
   }
@@ -125,7 +129,7 @@ const columnCount = canApprove || canReject ? 4 : 3;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="registrations-load-error">
-        Could not load registration requests. Please try again.
+        {t("Could not load registration requests. Please try again.")}
       </p>
     )
   }
@@ -142,9 +146,9 @@ const columnCount = canApprove || canReject ? 4 : 3;
 
         {requests.length === 0 ? (
           <div class="empty-state fade-in-up" id="registrations-empty">
-            <p class="empty-state-title">Nothing waiting</p>
+            <p class="empty-state-title">{t("Nothing waiting")}</p>
             <p class="empty-state-text">
-              No registration request is pending review.
+              {t("No registration request is pending review.")}
             </p>
           </div>
         ) : (
@@ -152,10 +156,10 @@ const columnCount = canApprove || canReject ? 4 : 3;
             <table class="data-table data-table--stack">
               <thead>
                 <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Requested</th>
-                  {columnCount === 4 && <th scope="col">Actions</th>}
+                  <th scope="col">{t("Name")}</th>
+                  <th scope="col">{t("Email")}</th>
+                  <th scope="col">{t("Requested")}</th>
+                  {columnCount === 4 && <th scope="col">{t("Actions")}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +181,7 @@ const columnCount = canApprove || canReject ? 4 : 3;
                             id={`role-${entry.id}`}
                             aria-label="Role to grant on approval (optional)"
                           >
-                            <option value="">No role</option>
+                            <option value="">{t("No role")}</option>
                             {roles.map((role) => (
                               <option value={role.id}>{role.roleCode}</option>
                             ))}
@@ -190,7 +194,7 @@ const columnCount = canApprove || canReject ? 4 : 3;
                             data-request-id={entry.id}
                             data-select-id={`role-${entry.id}`}
                           >
-                            Approve
+                            {t("Approve")}
                           </button>
                         )}
                         {canReject && (
@@ -199,7 +203,7 @@ const columnCount = canApprove || canReject ? 4 : 3;
                             class="js-reject-registration"
                             data-request-id={entry.id}
                           >
-                            Reject
+                            {t("Reject")}
                           </button>
                         )}
                       </td>

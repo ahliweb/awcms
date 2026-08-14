@@ -44,6 +44,7 @@ import {
   type SecurityView
 } from "../../modules/visitor-analytics/application/analytics-queries";
 import { listVisitorSessions } from "../../modules/visitor-analytics/application/session-directory";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   shapeVisitorSession,
   type VisitorSessionDto
@@ -55,6 +56,7 @@ import {
 } from "../../modules/visitor-analytics/domain/dashboard-view";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Raw-detail (IP/user-agent/login snapshot) visibility is resolved through the
 // ABAC evaluator inside `withTenant` below (see `rawDetailAllowed`), NOT a bare
@@ -191,18 +193,20 @@ const sessionCells = sessions.map((s) =>
 
 <AdminLayout title="Visitor Analytics">
   <header class="page-header fade-in-up">
-    <h1 id="analytics-heading">Visitor analytics</h1>
+    <h1 id="analytics-heading">{t("Visitor analytics")}</h1>
     <p class="page-description">
-      Privacy-first human visitor statistics. Visitor identifiers are stored as
-      salted hashes, never raw, unless explicitly enabled. Figures are
-      server-rendered from this tenant's own data.
+      {
+        t(
+          "Privacy-first human visitor statistics. Visitor identifiers are stored as salted hashes, never raw, unless explicitly enabled. Figures are server-rendered from this tenant's own data."
+        )
+      }
     </p>
   </header>
 
   {
     !canView && (
       <p class="state-notice fade-in-up" id="analytics-denied">
-        You do not have permission to view visitor analytics.
+        {t("You do not have permission to view visitor analytics.")}
       </p>
     )
   }
@@ -210,9 +214,9 @@ const sessionCells = sessions.map((s) =>
   {
     canView && !config.enabled && (
       <p class="state-notice fade-in-up" id="analytics-disabled">
-        Visitor analytics collection is disabled
-        (VISITOR_ANALYTICS_ENABLED=false). Figures below reflect only data
-        collected while it was enabled.
+        {t(
+          "Visitor analytics collection is disabled (VISITOR_ANALYTICS_ENABLED=false). Figures below reflect only data collected while it was enabled."
+        )}
       </p>
     )
   }
@@ -220,7 +224,7 @@ const sessionCells = sessions.map((s) =>
   {
     canView && loadError && (
       <p class="state-notice fade-in-up" id="analytics-error">
-        Analytics could not be loaded right now. Please try again later.
+        {t("Analytics could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -234,23 +238,23 @@ const sessionCells = sessions.map((s) =>
             aria-labelledby="realtime-title"
           >
             <h2 class="admin-section-title" id="realtime-title">
-              Online now
+              {t("Online now")}
             </h2>
             <div class="stat-grid">
               <div class="stat-card">
-                <span class="stat-label">Humans online</span>
+                <span class="stat-label">{t("Humans online")}</span>
                 <span class="stat-value">{realtime.onlineHumanCount}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Admin</span>
+                <span class="stat-label">{t("Admin")}</span>
                 <span class="stat-value">{realtime.onlineAdminCount}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Public</span>
+                <span class="stat-label">{t("Public")}</span>
                 <span class="stat-value">{realtime.onlinePublicCount}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">API</span>
+                <span class="stat-label">{t("API")}</span>
                 <span class="stat-value">{realtime.onlineApiCount}</span>
               </div>
             </div>
@@ -259,10 +263,10 @@ const sessionCells = sessions.map((s) =>
 
         <section class="admin-section fade-in-up" aria-labelledby="range-title">
           <h2 class="admin-section-title" id="range-title">
-            Summary
+            {t("Summary")}
           </h2>
           <form method="get" class="admin-toolbar" id="range-form">
-            <label for="range-select">Time range</label>
+            <label for="range-select">{t("Time range")}</label>
             <select id="range-select" name="range">
               {RANGE_OPTIONS.map((value) => (
                 <option value={value} selected={value === range}>
@@ -270,28 +274,28 @@ const sessionCells = sessions.map((s) =>
                 </option>
               ))}
             </select>
-            <button type="submit">Apply</button>
+            <button type="submit">{t("Apply")}</button>
           </form>
           {summary && (
             <div class="stat-grid">
               <div class="stat-card">
-                <span class="stat-label">Human unique visitors</span>
+                <span class="stat-label">{t("Human unique visitors")}</span>
                 <span class="stat-value">{summary.humanUniqueVisitors}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Human pageviews</span>
+                <span class="stat-label">{t("Human pageviews")}</span>
                 <span class="stat-value">{summary.humanPageviews}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Bot pageviews</span>
+                <span class="stat-label">{t("Bot pageviews")}</span>
                 <span class="stat-value">{summary.botPageviews}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Public unique visitors</span>
+                <span class="stat-label">{t("Public unique visitors")}</span>
                 <span class="stat-value">{summary.publicUniqueVisitors}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Admin unique users</span>
+                <span class="stat-label">{t("Admin unique users")}</span>
                 <span class="stat-value">{summary.adminUniqueUsers}</span>
               </div>
             </div>
@@ -300,21 +304,21 @@ const sessionCells = sessions.map((s) =>
 
         <section class="admin-section fade-in-up" aria-labelledby="pages-title">
           <h2 class="admin-section-title" id="pages-title">
-            Top pages
+            {t("Top pages")}
           </h2>
           <div class="data-table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Path</th>
-                  <th scope="col">Views</th>
+                  <th scope="col">{t("Path")}</th>
+                  <th scope="col">{t("Views")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isNamedCountListEmpty(pages) ? (
                   <tr>
                     <td class="data-table-empty" colspan={2}>
-                      No data yet.
+                      {t("No data yet.")}
                     </td>
                   </tr>
                 ) : (
@@ -337,21 +341,21 @@ const sessionCells = sessions.map((s) =>
           aria-labelledby="devices-title"
         >
           <h2 class="admin-section-title" id="devices-title">
-            Browsers &amp; devices
+            {t("Browsers & devices")}
           </h2>
           <div class="data-table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Browser</th>
-                  <th scope="col">Count</th>
+                  <th scope="col">{t("Browser")}</th>
+                  <th scope="col">{t("Count")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isNamedCountListEmpty(browsers) ? (
                   <tr>
                     <td class="data-table-empty" colspan={2}>
-                      No data yet.
+                      {t("No data yet.")}
                     </td>
                   </tr>
                 ) : (
@@ -369,15 +373,15 @@ const sessionCells = sessions.map((s) =>
             <table class="data-table">
               <thead>
                 <tr>
-                  <th scope="col">Device type</th>
-                  <th scope="col">Count</th>
+                  <th scope="col">{t("Device type")}</th>
+                  <th scope="col">{t("Count")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isNamedCountListEmpty(devices) ? (
                   <tr>
                     <td class="data-table-empty" colspan={2}>
-                      No data yet.
+                      {t("No data yet.")}
                     </td>
                   </tr>
                 ) : (
@@ -399,21 +403,21 @@ const sessionCells = sessions.map((s) =>
             aria-labelledby="locations-title"
           >
             <h2 class="admin-section-title" id="locations-title">
-              Countries
+              {t("Countries")}
             </h2>
             <div class="data-table-scroll">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th scope="col">Country</th>
-                    <th scope="col">Count</th>
+                    <th scope="col">{t("Country")}</th>
+                    <th scope="col">{t("Count")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isNamedCountListEmpty(countries) ? (
                     <tr>
                       <td class="data-table-empty" colspan={2}>
-                        No data yet.
+                        {t("No data yet.")}
                       </td>
                     </tr>
                   ) : (
@@ -436,11 +440,11 @@ const sessionCells = sessions.map((s) =>
             aria-labelledby="security-title"
           >
             <h2 class="admin-section-title" id="security-title">
-              Bot traffic
+              {t("Bot traffic")}
             </h2>
             <div class="stat-grid">
               <div class="stat-card">
-                <span class="stat-label">Bot pageviews</span>
+                <span class="stat-label">{t("Bot pageviews")}</span>
                 <span class="stat-value">{security.botPageviews}</span>
               </div>
             </div>
@@ -448,15 +452,15 @@ const sessionCells = sessions.map((s) =>
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th scope="col">Bot reason</th>
-                    <th scope="col">Count</th>
+                    <th scope="col">{t("Bot reason")}</th>
+                    <th scope="col">{t("Count")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isNamedCountListEmpty(security.topBotReasons) ? (
                     <tr>
                       <td class="data-table-empty" colspan={2}>
-                        No data yet.
+                        {t("No data yet.")}
                       </td>
                     </tr>
                   ) : (
@@ -479,26 +483,26 @@ const sessionCells = sessions.map((s) =>
             aria-labelledby="sessions-title"
           >
             <h2 class="admin-section-title">
-              <span id="sessions-title">Recent sessions</span>
+              <span id="sessions-title">{t("Recent sessions")}</span>
               <span class="count-pill">{sessionCells.length}</span>
             </h2>
             <div class="data-table-scroll">
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Area</th>
-                    <th scope="col">Path</th>
-                    <th scope="col">Browser</th>
+                    <th scope="col">{t("Area")}</th>
+                    <th scope="col">{t("Path")}</th>
+                    <th scope="col">{t("Browser")}</th>
                     <th scope="col">OS</th>
-                    <th scope="col">Device</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Country</th>
+                    <th scope="col">{t("Device")}</th>
+                    <th scope="col">{t("Type")}</th>
+                    <th scope="col">{t("Country")}</th>
                     {canRawDetail && (
                       <>
                         <th scope="col">IP</th>
-                        <th scope="col">IP hash</th>
-                        <th scope="col">UA hash</th>
-                        <th scope="col">Login</th>
+                        <th scope="col">{t("IP hash")}</th>
+                        <th scope="col">{t("UA hash")}</th>
+                        <th scope="col">{t("Login")}</th>
                       </>
                     )}
                   </tr>
@@ -510,7 +514,7 @@ const sessionCells = sessions.map((s) =>
                         class="data-table-empty"
                         colspan={canRawDetail ? 11 : 7}
                       >
-                        No sessions yet.
+                        {t("No sessions yet.")}
                       </td>
                     </tr>
                   ) : (

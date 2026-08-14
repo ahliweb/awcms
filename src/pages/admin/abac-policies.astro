@@ -23,12 +23,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listAbacPolicies,
   type AbacPolicyView
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. Note what that closes HERE in particular: this
@@ -78,18 +80,20 @@ const canUpdate = canConfigure;
 
 <AdminLayout title="ABAC policies">
   <header class="page-header fade-in-up">
-    <h1 id="abac-policies-heading">ABAC policies</h1>
+    <h1 id="abac-policies-heading">{t("ABAC policies")}</h1>
     <p class="page-description">
-      Per-tenant custom access policies. This table is empty by default — the
-      evaluator applies the built-in role/permission rules, and custom policies
-      are an opt-in extension surface.
+      {
+        t(
+          "Per-tenant custom access policies. This table is empty by default \u2014 the evaluator applies the built-in role/permission rules, and custom policies are an opt-in extension surface."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="abac-policies-denied">
-        You do not have permission to view ABAC policies.
+        {t("You do not have permission to view ABAC policies.")}
       </p>
     )
   }
@@ -97,7 +101,7 @@ const canUpdate = canConfigure;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="abac-policies-error">
-        Policies could not be loaded right now. Please try again later.
+        {t("Policies could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -105,7 +109,7 @@ const canUpdate = canConfigure;
   {
     canCreate && (
       <form id="policy-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">Create a policy</p>
+        <p class="form-legend">{t("Create a policy")}</p>
         <p
           id="policy-create-error"
           class="admin-create-error"
@@ -113,7 +117,7 @@ const canUpdate = canConfigure;
           hidden
         />
 
-        <label for="policy-code">Policy code</label>
+        <label for="policy-code">{t("Policy code")}</label>
         <input
           id="policy-code"
           name="policyCode"
@@ -122,13 +126,13 @@ const canUpdate = canConfigure;
           autocomplete="off"
         />
 
-        <label for="policy-effect">Effect</label>
+        <label for="policy-effect">{t("Effect")}</label>
         <select id="policy-effect" name="effect">
-          <option value="allow">allow</option>
-          <option value="deny">deny</option>
+          <option value="allow">{t("allow")}</option>
+          <option value="deny">{t("deny")}</option>
         </select>
 
-        <label for="policy-description">Description (optional)</label>
+        <label for="policy-description">{t("Description (optional)")}</label>
         <input
           id="policy-description"
           name="description"
@@ -137,7 +141,7 @@ const canUpdate = canConfigure;
         />
 
         <button type="submit" id="policy-create-submit">
-          Create policy
+          {t("Create policy")}
         </button>
       </form>
     )
@@ -161,11 +165,11 @@ const canUpdate = canConfigure;
           <caption>{policies.length} policy(ies)</caption>
           <thead>
             <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Effect</th>
-              <th scope="col">Description</th>
-              <th scope="col">Active</th>
-              {canUpdate && <th scope="col">Actions</th>}
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Effect")}</th>
+              <th scope="col">{t("Description")}</th>
+              <th scope="col">{t("Active")}</th>
+              {canUpdate && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -176,10 +180,13 @@ const canUpdate = canConfigure;
                     <span class="empty-state-icon" aria-hidden="true">
                       ⚖
                     </span>
-                    <span class="empty-state-title">No custom policies</span>
+                    <span class="empty-state-title">
+                      {t("No custom policies")}
+                    </span>
                     <span class="empty-state-text">
-                      The built-in role/permission rules apply. Add a custom
-                      policy to extend or override them for this tenant.
+                      {t(
+                        "The built-in role/permission rules apply. Add a custom policy to extend or override them for this tenant."
+                      )}
                     </span>
                   </div>
                 </td>
@@ -223,7 +230,7 @@ const canUpdate = canConfigure;
                           data-effect={policy.effect}
                           data-description={policy.description ?? ""}
                         >
-                          Edit
+                          {t("Edit")}
                         </button>
                         <button
                           type="button"

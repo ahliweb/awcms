@@ -20,6 +20,7 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listRoles,
   listTenantUsers,
@@ -28,6 +29,7 @@ import {
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. This screen lists who holds what in the tenant,
@@ -103,18 +105,20 @@ const showActions =
 
 <AdminLayout title="Users">
   <header class="page-header fade-in-up">
-    <h1 id="users-heading">Users</h1>
+    <h1 id="users-heading">{t("Users")}</h1>
     <p class="page-description">
-      Tenant users, their status, and their assigned roles. Login identifiers
-      are masked here — they are personal data and are never shown in full in a
-      list view.
+      {
+        t(
+          "Tenant users, their status, and their assigned roles. Login identifiers are masked here \u2014 they are personal data and are never shown in full in a list view."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="users-denied">
-        You do not have permission to view users.
+        {t("You do not have permission to view users.")}
       </p>
     )
   }
@@ -122,7 +126,7 @@ const showActions =
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="users-error">
-        Users could not be loaded right now. Please try again later.
+        {t("Users could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -141,10 +145,10 @@ const showActions =
             <caption>{users.length} user(s)</caption>
             <thead>
               <tr>
-                <th scope="col">Login identifier</th>
-                <th scope="col">Status</th>
-                <th scope="col">Roles</th>
-                {showActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Login identifier")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Roles")}</th>
+                {showActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -155,9 +159,11 @@ const showActions =
                       <span class="empty-state-icon" aria-hidden="true">
                         ◑
                       </span>
-                      <span class="empty-state-title">No users yet</span>
+                      <span class="empty-state-title">{t("No users yet")}</span>
                       <span class="empty-state-text">
-                        Users provisioned for this tenant will appear here.
+                        {t(
+                          "Users provisioned for this tenant will appear here."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -198,7 +204,7 @@ const showActions =
                                     data-role-id={roleIdByCode.get(code)}
                                     aria-label={`Remove role ${code}`}
                                   >
-                                    Remove
+                                    {t("Remove")}
                                   </button>
                                 )}
                               </li>
@@ -231,7 +237,7 @@ const showActions =
                                   class="visually-hidden"
                                   for={`assign-role-${user.id}`}
                                 >
-                                  Role to assign
+                                  {t("Role to assign")}
                                 </label>
                                 <select
                                   id={`assign-role-${user.id}`}
@@ -249,7 +255,7 @@ const showActions =
                                   data-user-id={user.id}
                                   data-select-id={`assign-role-${user.id}`}
                                 >
-                                  Assign
+                                  {t("Assign")}
                                 </button>
                               </span>
                             )}
@@ -261,7 +267,7 @@ const showActions =
                                 aria-expanded="false"
                                 aria-controls={`sessions-${user.id}`}
                               >
-                                Sessions
+                                {t("Sessions")}
                               </button>
                             )}
                             {canRevokeSessions && (
@@ -270,7 +276,7 @@ const showActions =
                                 class="module-toggle js-user-sessions-revoke"
                                 data-user-id={user.id}
                               >
-                                Sign out everywhere
+                                {t("Sign out everywhere")}
                               </button>
                             )}
                           </div>

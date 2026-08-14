@@ -41,8 +41,10 @@ import {
   type SuppressionEntry
 } from "../../modules/email/application/suppression-directory";
 import { SUPPRESSION_REASONS } from "../../modules/email/domain/suppression-validation";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -88,18 +90,20 @@ const reasons = [...SUPPRESSION_REASONS];
 
 <AdminLayout title="Email suppression">
   <header class="page-header fade-in-up">
-    <h1 id="email-suppression-heading">Email suppression</h1>
+    <h1 id="email-suppression-heading">{t("Email suppression")}</h1>
     <p class="page-description">
-      Addresses this tenant will not send to. A suppressed address receives
-      nothing — including password resets — so an account can look broken when
-      it is only unreachable. This is where to check, and where to undo it.
+      {
+        t(
+          "Addresses this tenant will not send to. A suppressed address receives nothing \u2014 including password resets \u2014 so an account can look broken when it is only unreachable. This is where to check, and where to undo it."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="email-suppression-denied">
-        You do not have permission to view the suppression list.
+        {t("You do not have permission to view the suppression list.")}
       </p>
     )
   }
@@ -107,7 +111,7 @@ const reasons = [...SUPPRESSION_REASONS];
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="email-suppression-load-error">
-        Could not load the suppression list. Please try again.
+        {t("Could not load the suppression list. Please try again.")}
       </p>
     )
   }
@@ -134,18 +138,19 @@ const reasons = [...SUPPRESSION_REASONS];
             aria-labelledby="email-suppression-add-heading"
           >
             <h2 id="email-suppression-add-heading">
-              Suppress an address — or check one
+              {t("Suppress an address \u2014 or check one")}
             </h2>
 
             <form id="add-suppression-form" class="admin-form">
               <p class="page-description">
-                The list below shows masked addresses only, so it cannot be
-                searched. Submitting an address that is already suppressed does
-                not add a second entry — it tells you it is already there, which
-                is how to answer "why is this person not getting our mail?".
+                {t(
+                  'The list below shows masked addresses only, so it cannot be searched. Submitting an address that is already suppressed does not add a second entry \u2014 it tells you it is already there, which is how to answer "why is this person not getting our mail?".'
+                )}
               </p>
 
-              <label for="add-suppression-recipient">Email address</label>
+              <label for="add-suppression-recipient">
+                {t("Email address")}
+              </label>
               <input
                 id="add-suppression-recipient"
                 name="recipient"
@@ -155,7 +160,7 @@ const reasons = [...SUPPRESSION_REASONS];
                 placeholder="somebody@example.com"
               />
 
-              <label for="add-suppression-reason">Reason</label>
+              <label for="add-suppression-reason">{t("Reason")}</label>
               <select id="add-suppression-reason" name="reason" required>
                 {reasons.map((reason) => (
                   <option value={reason}>{reason}</option>
@@ -163,7 +168,7 @@ const reasons = [...SUPPRESSION_REASONS];
               </select>
 
               <button id="add-suppression-submit" type="submit">
-                Suppress address
+                {t("Suppress address")}
               </button>
             </form>
           </section>
@@ -173,13 +178,16 @@ const reasons = [...SUPPRESSION_REASONS];
           class="fade-in-up"
           aria-labelledby="email-suppression-list-heading"
         >
-          <h2 id="email-suppression-list-heading">Suppressed addresses</h2>
+          <h2 id="email-suppression-list-heading">
+            {t("Suppressed addresses")}
+          </h2>
 
           {entries.length === 0 ? (
             <div class="empty-state">
               <p id="email-suppression-empty">
-                Nothing is suppressed. Every address this tenant sends to can
-                receive mail.
+                {t(
+                  "Nothing is suppressed. Every address this tenant sends to can receive mail."
+                )}
               </p>
             </div>
           ) : (
@@ -187,10 +195,10 @@ const reasons = [...SUPPRESSION_REASONS];
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Address</th>
-                    <th scope="col">Reason</th>
-                    <th scope="col">Added</th>
-                    {canDelete && <th scope="col">Actions</th>}
+                    <th scope="col">{t("Address")}</th>
+                    <th scope="col">{t("Reason")}</th>
+                    <th scope="col">{t("Added")}</th>
+                    {canDelete && <th scope="col">{t("Actions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -208,7 +216,7 @@ const reasons = [...SUPPRESSION_REASONS];
                             class="js-remove-suppression"
                             data-suppression-id={entry.id}
                           >
-                            Allow again
+                            {t("Allow again")}
                           </button>
                         </td>
                       )}
@@ -220,8 +228,9 @@ const reasons = [...SUPPRESSION_REASONS];
           )}
 
           <p class="page-description">
-            Newest 100. An address removed here can receive mail from the next
-            send onwards; messages already skipped are not resent.
+            {t(
+              "Newest 100. An address removed here can receive mail from the next send onwards; messages already skipped are not resent."
+            )}
           </p>
         </section>
       </>

@@ -7,7 +7,46 @@ import {
   resolveTenantPrincipal
 } from "../../modules/identity-access/application/auth-context";
 import { isTenantServiceStopped } from "../../modules/identity-access/domain/suspended-tenant-allowlist";
+import {
+  readPreferences,
+  resolvePrincipalIdForIdentity
+} from "../../modules/identity-access/application/principal-preference-store";
 import { hashSessionToken } from "./session-token";
+import type { SQL } from "bun";
+
+/**
+ * Reads the tenant's display defaults (ADR-0095 §"Keputusan 5" steps 3).
+ *
+ * `awcms_tenants.default_locale` has existed since sql/001 and is read by
+ * `seo_distribution` for hreflang; this is its second reader.
+ * `default_theme` has existed just as long and this is its FIRST — the comment
+ * in `theme-init-script.ts` claiming awcms "has no per-tenant default-theme
+ * column today" was simply wrong about its own schema.
+ *
+ * Degrades to null on any fault: chrome, not a guard.
+ */
+async function readTenantDisplayDefaults(
+  tx: SQL,
+  tenantId: string
+): Promise<{ defaultLocale: string | null; defaultTheme: string | null }> {
+  try {
+    const rows = (await tx`
+      SELECT default_locale, default_theme
+      FROM awcms_tenants
+      WHERE id = ${tenantId}
+    `) as Array<{
+      default_locale: string | null;
+      default_theme: string | null;
+    }>;
+
+    return {
+      defaultLocale: rows[0]?.default_locale ?? null,
+      defaultTheme: rows[0]?.default_theme ?? null
+    };
+  } catch {
+    return { defaultLocale: null, defaultTheme: null };
+  }
+}
 
 export const SESSION_COOKIE_NAME = "awcms_session";
 export const TENANT_COOKIE_NAME = "awcms_tenant_id";
@@ -28,6 +67,31 @@ export type SsrContext = {
    * `Astro.locals` is not serialised into the rendered page.
    */
   tokenHash: string;
+  /**
+   * The signed-in human's stored display preferences and their tenant's
+   * defaults (ADR-0095).
+   *
+   * Resolved INSIDE the transaction this function already opens, rather than by
+   * the middleware afterwards. A second transaction per `/admin/*` request to
+   * learn a two-character language code would be a real cost on every page, and
+   * the queries are two keyed single-row reads joining work already in flight.
+   *
+   * `principalId` is nullable because `awcms_identities.principal_id` is
+   * (sql/112 §3 — an identity written by a path not yet taught about principals
+   * must be visibly unlinked, not a 500). A null one simply has no stored
+   * preference.
+   */
+  display: {
+    principalId: string | null;
+    /** `awcms_principal_preferences.locale`, or null when not chosen. */
+    preferredLocale: string | null;
+    /** `awcms_principal_preferences.theme`, or null when not chosen. */
+    preferredTheme: string | null;
+    /** `awcms_tenants.default_locale` — the fallback below the preference. */
+    tenantDefaultLocale: string | null;
+    /** `awcms_tenants.default_theme` — see `theme-init-script.ts`'s seam. */
+    tenantDefaultTheme: string | null;
+  };
 };
 
 /**
@@ -79,13 +143,33 @@ export async function resolveSsrContext(
         context.tenantUserId
       );
 
+      // ADR-0095 — display preferences, in this same transaction.
+      //
+      // Every read below degrades to null rather than throwing: a language is
+      // chrome, and a fault reading it must render the admin in the fallback
+      // language, never fail the session resolution that guards 40 screens.
+      const principalId = await resolvePrincipalIdForIdentity(
+        tx,
+        tenantId,
+        context.identityId
+      );
+      const preferences = await readPreferences(tx, principalId);
+      const tenantDefaults = await readTenantDisplayDefaults(tx, tenantId);
+
       return {
         tenantId: context.tenantId,
         tenantUserId: context.tenantUserId,
         identityId: context.identityId,
         roles: context.roles,
         permissions,
-        tokenHash
+        tokenHash,
+        display: {
+          principalId,
+          preferredLocale: preferences.locale,
+          preferredTheme: preferences.theme,
+          tenantDefaultLocale: tenantDefaults.defaultLocale,
+          tenantDefaultTheme: tenantDefaults.defaultTheme
+        }
       };
     });
 

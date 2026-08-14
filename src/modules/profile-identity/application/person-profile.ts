@@ -65,3 +65,70 @@ export async function createPersonProfileForIdentity(
 
   return rows[0]!.id;
 }
+
+/**
+ * Renames the profile behind a LOGIN IDENTITY — the self-service half of
+ * ADR-0096, and the second reason this file exists.
+ *
+ * ## Why the write lives here and not in the route
+ *
+ * ADR-0013 §6, "no shared-table write": `awcms_profiles` is `profile_identity`'s
+ * table, and `identity_access` owning the `/api/v1/auth/*` surface does not make
+ * it a co-owner of the row. The first draft of `auth/profile.ts` did the UPDATE
+ * inline and `modules:table-writes:check` reported it — correctly, and for the
+ * same reason the create above was consolidated: two modules writing one table
+ * is how `status` and `verification_status` silently diverged between two
+ * account-creation paths.
+ *
+ * ## Why it takes an IDENTITY id rather than a profile id
+ *
+ * Because that is what makes it self-service rather than administrative. The
+ * caller never names a profile; this resolves it from the identity behind the
+ * session, so there is no id to tamper with and no ownership check that could be
+ * forgotten. `updateParty` (the operator-facing sibling) takes a profile id and
+ * is permissioned precisely because it can be pointed anywhere.
+ *
+ * ## What it deliberately does not touch
+ *
+ * `display_name` only. Not `legal_name` (asserted-then-checked, per
+ * `verification_status`), not `status`, not `verification_status`, not
+ * `risk_level` — ADR-0096 §3 freezes that list, and a self-service writer that
+ * grew one of those fields would be a privilege escalation wearing a profile
+ * editor's clothes.
+ *
+ * ## No audit event, same reasoning as the create above
+ *
+ * `awcms_audit_events` records what administrators do to OTHER people. A person
+ * renaming themselves has no actor/subject split to record, and a row saying
+ * "somebody changed their own name" would describe the mechanism rather than a
+ * decision anybody needs to review.
+ *
+ * Returns `null` when the identity has no reachable profile, which the caller
+ * treats as an authentication failure rather than a 404 — a live session whose
+ * identity has no profile is an invariant violation, not a user-facing state.
+ */
+export async function updateOwnDisplayName(
+  tx: Bun.SQL,
+  tenantId: string,
+  identityId: string,
+  displayName: string
+): Promise<{ id: string; displayName: string } | null> {
+  // Keyed through the identity, and the `tenant_id` predicate is belt-and-braces
+  // over FORCE RLS — this repo never leans on RLS alone in an explicit statement.
+  const rows = (await tx`
+    UPDATE awcms_profiles p
+    SET display_name = ${displayName},
+        updated_at = now(),
+        updated_by = ${identityId}
+    FROM awcms_identities i
+    WHERE i.tenant_id = ${tenantId}
+      AND i.id = ${identityId}
+      AND p.tenant_id = i.tenant_id
+      AND p.id = i.profile_id
+    RETURNING p.id, p.display_name
+  `) as Array<{ id: string; display_name: string }>;
+
+  const row = rows[0];
+
+  return row ? { id: row.id, displayName: row.display_name } : null;
+}

@@ -41,6 +41,7 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listConsumerStates,
   type DomainEventConsumerView
@@ -57,6 +58,7 @@ import {
 } from "../../modules/domain-event-runtime/domain/reason-bounds";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -202,19 +204,24 @@ const deliveryColumns = canReplay ? 7 : 6;
 
 <AdminLayout title="Domain events">
   <header class="page-header fade-in-up">
-    <h1 id="domain-events-heading">Domain events</h1>
+    <h1 id="domain-events-heading">{t("Domain events")}</h1>
     <p class="page-description">
-      The transactional outbox and its consumers. Events are recorded in the
-      same transaction as the change that caused them; delivery is what happens
-      afterwards, on the <code>domain-events:dispatch</code> schedule. A dead-lettered
-      delivery has exhausted its attempts and will not be retried until it is replayed.
+      {
+        t(
+          "The transactional outbox and its consumers. Events are recorded in the same transaction as the change that caused them; delivery is what happens afterwards, on the"
+        )
+      }<code>{t("domain-events:dispatch")}</code>{
+        t(
+          "schedule. A dead-lettered delivery has exhausted its attempts and will not be retried until it is replayed."
+        )
+      }
     </p>
   </header>
 
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="domain-events-denied">
-        You do not have permission to view the domain event runtime.
+        {t("You do not have permission to view the domain event runtime.")}
       </p>
     )
   }
@@ -222,8 +229,9 @@ const deliveryColumns = canReplay ? 7 : 6;
   {
     canSeeAnything && loadError && (
       <p class="state-notice fade-in-up" id="domain-events-error">
-        The event runtime console could not be loaded right now. This is a
-        problem reading it, not an idle runtime — please try again later.
+        {t(
+          "The event runtime console could not be loaded right now. This is a problem reading it, not an idle runtime \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -247,29 +255,31 @@ const deliveryColumns = canReplay ? 7 : 6;
         id="domain-events-consumers"
       >
         <h2 class="admin-section-title" id="consumers-title">
-          Consumers
+          {t("Consumers")}
           <span class="count-pill">{consumers.length}</span>
         </h2>
 
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Pending deliveries</span>
+            <span class="stat-label">{t("Pending deliveries")}</span>
             <span class="stat-value">{pendingTotal}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Dead-lettered</span>
+            <span class="stat-label">{t("Dead-lettered")}</span>
             <span class="stat-value">{deadLetterTotal}</span>
             {deadLetterTotal > 0 && (
               <span class="stat-hint">
-                Replay below once the cause is fixed
+                {t("Replay below once the cause is fixed")}
               </span>
             )}
           </div>
           <div class="stat-card">
-            <span class="stat-label">Paused consumers</span>
+            <span class="stat-label">{t("Paused consumers")}</span>
             <span class="stat-value">{pausedCount}</span>
             {pausedCount > 0 && (
-              <span class="stat-hint">A paused consumer accrues backlog</span>
+              <span class="stat-hint">
+                {t("A paused consumer accrues backlog")}
+              </span>
             )}
           </div>
         </div>
@@ -277,16 +287,16 @@ const deliveryColumns = canReplay ? 7 : 6;
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="consumers-table">
             <caption class="sr-only">
-              Registered domain event consumers and their backlog.
+              {t("Registered domain event consumers and their backlog.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Consumer</th>
-                <th scope="col">Events</th>
-                <th scope="col">State</th>
-                <th scope="col">Pending</th>
-                <th scope="col">Dead-lettered</th>
-                {canManageConsumers && <th scope="col">Actions</th>}
+                <th scope="col">{t("Consumer")}</th>
+                <th scope="col">{t("Events")}</th>
+                <th scope="col">{t("State")}</th>
+                <th scope="col">{t("Pending")}</th>
+                <th scope="col">{t("Dead-lettered")}</th>
+                {canManageConsumers && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -297,10 +307,11 @@ const deliveryColumns = canReplay ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⇉
                       </span>
-                      <span class="empty-state-title">No consumers</span>
+                      <span class="empty-state-title">{t("No consumers")}</span>
                       <span class="empty-state-text">
-                        Consumers are a static, reviewed source-code registry —
-                        never registered at runtime.
+                        {t(
+                          "Consumers are a static, reviewed source-code registry \u2014 never registered at runtime."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -348,7 +359,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                               class="btn-inline consumer-resume-btn"
                               data-consumer-name={consumer.name}
                             >
-                              Resume
+                              {t("Resume")}
                             </button>
                           ) : (
                             <button
@@ -356,7 +367,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                               class="btn-inline btn-inline--danger consumer-pause-btn"
                               data-consumer-name={consumer.name}
                             >
-                              Pause
+                              {t("Pause")}
                             </button>
                           )}
                         </div>
@@ -381,10 +392,10 @@ const deliveryColumns = canReplay ? 7 : 6;
       >
         {canReadDeliveries && (
           <>
-            <label for="filter-delivery-status">Delivery status</label>
+            <label for="filter-delivery-status">{t("Delivery status")}</label>
             <select id="filter-delivery-status" name="deliveryStatus">
               <option value="" selected={deliveryStatusFilter === ""}>
-                Any status
+                {t("Any status")}
               </option>
               {DELIVERY_STATUS_OPTIONS.map((value) => (
                 <option value={value} selected={deliveryStatusFilter === value}>
@@ -393,7 +404,7 @@ const deliveryColumns = canReplay ? 7 : 6;
               ))}
             </select>
 
-            <label for="filter-consumer">Consumer</label>
+            <label for="filter-consumer">{t("Consumer")}</label>
             <input
               id="filter-consumer"
               name="consumer"
@@ -404,7 +415,7 @@ const deliveryColumns = canReplay ? 7 : 6;
           </>
         )}
 
-        <label for="filter-event-type">Event type</label>
+        <label for="filter-event-type">{t("Event type")}</label>
         <input
           id="filter-event-type"
           name="eventType"
@@ -416,7 +427,7 @@ const deliveryColumns = canReplay ? 7 : 6;
 
         {canReadEvents && (
           <>
-            <label for="filter-aggregate-type">Aggregate type</label>
+            <label for="filter-aggregate-type">{t("Aggregate type")}</label>
             <input
               id="filter-aggregate-type"
               name="aggregateType"
@@ -427,7 +438,7 @@ const deliveryColumns = canReplay ? 7 : 6;
           </>
         )}
 
-        <button type="submit">Apply filters</button>
+        <button type="submit">{t("Apply filters")}</button>
       </form>
     )
   }
@@ -440,24 +451,24 @@ const deliveryColumns = canReplay ? 7 : 6;
         id="domain-events-deliveries"
       >
         <h2 class="admin-section-title" id="deliveries-title">
-          Deliveries
+          {t("Deliveries")}
           <span class="count-pill">{deliveries.length}</span>
         </h2>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="deliveries-table">
             <caption class="sr-only">
-              Delivery attempts, newest first, capped at 100 rows.
+              {t("Delivery attempts, newest first, capped at 100 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Event</th>
-                <th scope="col">Consumer</th>
-                <th scope="col">Status</th>
-                <th scope="col">Attempts</th>
-                <th scope="col">Next attempt</th>
-                <th scope="col">Last error</th>
-                {canReplay && <th scope="col">Actions</th>}
+                <th scope="col">{t("Event")}</th>
+                <th scope="col">{t("Consumer")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Attempts")}</th>
+                <th scope="col">{t("Next attempt")}</th>
+                <th scope="col">{t("Last error")}</th>
+                {canReplay && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -468,10 +479,13 @@ const deliveryColumns = canReplay ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ✓
                       </span>
-                      <span class="empty-state-title">No deliveries match</span>
+                      <span class="empty-state-title">
+                        {t("No deliveries match")}
+                      </span>
                       <span class="empty-state-text">
-                        Widen the filters above, or nothing has been dispatched
-                        yet.
+                        {t(
+                          "Widen the filters above, or nothing has been dispatched yet."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -497,7 +511,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                         {delivery.status}
                       </span>
                       {delivery.replayOfDeliveryId && (
-                        <span class="cell-muted"> · replay</span>
+                        <span class="cell-muted">{t("\u00b7 replay")}</span>
                       )}
                     </td>
                     <td data-label="Attempts">
@@ -541,7 +555,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                               class="btn-inline delivery-replay-btn"
                               data-delivery-id={delivery.id}
                             >
-                              Replay
+                              {t("Replay")}
                             </button>
                           ) : (
                             <span class="cell-muted">—</span>
@@ -567,28 +581,28 @@ const deliveryColumns = canReplay ? 7 : 6;
         id="domain-events-events"
       >
         <h2 class="admin-section-title" id="events-title">
-          Events
+          {t("Events")}
           <span class="count-pill">{events.length}</span>
         </h2>
         <p class="page-description">
-          The outbox itself, newest first. These rows are append-only evidence
-          of what happened — they are never edited, and replaying a delivery
-          does not create a new one.
+          {t(
+            "The outbox itself, newest first. These rows are append-only evidence of what happened \u2014 they are never edited, and replaying a delivery does not create a new one."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="events-table">
             <caption class="sr-only">
-              Recorded domain events, newest first, capped at 100 rows.
+              {t("Recorded domain events, newest first, capped at 100 rows.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Seq</th>
-                <th scope="col">Type</th>
-                <th scope="col">Aggregate</th>
-                <th scope="col">Producer</th>
-                <th scope="col">Occurred</th>
-                <th scope="col">Payload</th>
+                <th scope="col">{t("Seq")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Aggregate")}</th>
+                <th scope="col">{t("Producer")}</th>
+                <th scope="col">{t("Occurred")}</th>
+                <th scope="col">{t("Payload")}</th>
               </tr>
             </thead>
             <tbody>
@@ -599,10 +613,13 @@ const deliveryColumns = canReplay ? 7 : 6;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌸
                       </span>
-                      <span class="empty-state-title">No events match</span>
+                      <span class="empty-state-title">
+                        {t("No events match")}
+                      </span>
                       <span class="empty-state-text">
-                        Widen the filters above, or nothing has published an
-                        event yet.
+                        {t(
+                          "Widen the filters above, or nothing has published an event yet."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -631,7 +648,7 @@ const deliveryColumns = canReplay ? 7 : 6;
                     </td>
                     <td data-label="Payload">
                       <details>
-                        <summary>Payload</summary>
+                        <summary>{t("Payload")}</summary>
                         {/* `set:text` rather than a child expression: <pre>
                             preserves whitespace and prettier reindents .astro
                             children, so an expression written between the tags

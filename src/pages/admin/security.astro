@@ -37,6 +37,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { isMfaFeatureEnabled } from "../../lib/auth/mfa-config";
 import { isSsoEnabled } from "../../lib/auth/sso-config";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   isFullOnlineSecurityActive,
   resolveOnlineSecurityProfile
@@ -61,6 +62,7 @@ import {
 } from "../../modules/identity-access/application/tenant-mfa-policy";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const deployment = {
   onlineSecurityActive: isFullOnlineSecurityActive(),
@@ -225,18 +227,20 @@ const mfaContradiction =
 
 <AdminLayout title="Authentication & security">
   <header class="page-header fade-in-up">
-    <h1 id="security-heading">Authentication &amp; security</h1>
+    <h1 id="security-heading">{t("Authentication & security")}</h1>
     <p class="page-description">
-      How this tenant signs in: password and SSO policy, break-glass accounts,
-      and MFA enforcement. Changes here go through the same guarded, audited
-      endpoints an API client would use.
+      {
+        t(
+          "How this tenant signs in: password and SSO policy, break-glass accounts, and MFA enforcement. Changes here go through the same guarded, audited endpoints an API client would use."
+        )
+      }
     </p>
   </header>
 
   {
     !canReadAnything && (
       <p class="state-notice fade-in-up" id="security-denied">
-        You do not have permission to view authentication settings.
+        {t("You do not have permission to view authentication settings.")}
       </p>
     )
   }
@@ -244,7 +248,7 @@ const mfaContradiction =
   {
     canReadAnything && loadError && (
       <p class="state-notice fade-in-up" id="security-load-error">
-        Could not load authentication settings. Please try again.
+        {t("Could not load authentication settings. Please try again.")}
       </p>
     )
   }
@@ -253,18 +257,18 @@ const mfaContradiction =
     canReadAnything && !loadError && (
       <>
         <section class="fade-in-up" aria-labelledby="security-deployment">
-          <h2 id="security-deployment">Deployment posture</h2>
+          <h2 id="security-deployment">{t("Deployment posture")}</h2>
           <p class="page-description">
-            Decided by this deployment's environment, not by the tenant — shown
-            because the policies below depend on it. No key or secret value is
-            displayed.
+            {t(
+              "Decided by this deployment's environment, not by the tenant \u2014 shown because the policies below depend on it. No key or secret value is displayed."
+            )}
           </p>
           <div class="data-table-scroll">
             <table class="data-table data-table--stack">
               <thead>
                 <tr>
-                  <th scope="col">Control</th>
-                  <th scope="col">State</th>
+                  <th scope="col">{t("Control")}</th>
+                  <th scope="col">{t("State")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,18 +297,22 @@ const mfaContradiction =
 
         {canReadPolicy && policy && (
           <section class="fade-in-up" aria-labelledby="security-auth-policy">
-            <h2 id="security-auth-policy">Tenant authentication policy</h2>
+            <h2 id="security-auth-policy">
+              {t("Tenant authentication policy")}
+            </h2>
 
             {ssoContradiction && (
               <p class="state-notice" id="security-sso-contradiction">
-                SSO is required for this tenant, but SSO sign-in is switched off
-                for this deployment. Nobody outside the break-glass list can
-                sign in until <code>AUTH_SSO_ENABLED</code> is turned on.
+                {t(
+                  "SSO is required for this tenant, but SSO sign-in is switched off for this deployment. Nobody outside the break-glass list can sign in until"
+                )}
+                <code>{t("AUTH_SSO_ENABLED")}</code>
+                {t("is turned on.")}
               </p>
             )}
 
             <form class="admin-create-form" id="security-policy-form">
-              <p class="form-legend">Sign-in methods</p>
+              <p class="form-legend">{t("Sign-in methods")}</p>
               <p
                 id="security-policy-error"
                 class="admin-create-error"
@@ -319,7 +327,7 @@ const mfaContradiction =
                   checked={policy.passwordLoginEnabled}
                   disabled={!canUpdatePolicy}
                 />
-                Allow password sign-in
+                {t("Allow password sign-in")}
               </label>
 
               <label>
@@ -329,7 +337,7 @@ const mfaContradiction =
                   checked={policy.ssoEnabled}
                   disabled={!canUpdatePolicy}
                 />
-                Allow SSO sign-in
+                {t("Allow SSO sign-in")}
               </label>
 
               <label>
@@ -339,8 +347,9 @@ const mfaContradiction =
                   checked={policy.ssoRequired}
                   disabled={!canUpdatePolicy}
                 />
-                Require SSO (password sign-in refused except for break-glass
-                accounts)
+                {t(
+                  "Require SSO (password sign-in refused except for break-glass accounts)"
+                )}
               </label>
 
               <label>
@@ -350,8 +359,9 @@ const mfaContradiction =
                   checked={policy.autoLinkVerifiedEmail}
                   disabled={!canUpdatePolicy}
                 />
-                Auto-link an SSO login to an existing account with the same
-                verified email
+                {t(
+                  "Auto-link an SSO login to an existing account with the same verified email"
+                )}
               </label>
 
               <label>
@@ -361,11 +371,11 @@ const mfaContradiction =
                   checked={policy.jitProvisioningEnabled}
                   disabled={!canUpdatePolicy}
                 />
-                Create an account on first SSO login (no roles granted)
+                {t("Create an account on first SSO login (no roles granted)")}
               </label>
 
               <label for="security-allowed-domains">
-                Allowed email domains (comma separated; empty means any)
+                {t("Allowed email domains (comma separated; empty means any)")}
               </label>
               <input
                 id="security-allowed-domains"
@@ -377,18 +387,16 @@ const mfaContradiction =
                 disabled={!canUpdatePolicy}
               />
 
-              <p class="form-legend">Break-glass accounts</p>
+              <p class="form-legend">{t("Break-glass accounts")}</p>
               <p class="page-description">
-                Accounts that keep password sign-in even when SSO is required.
-                Turning off password sign-in, or requiring SSO, is refused
-                server-side unless at least one of these is still active — that
-                is what stops an identity-provider outage from locking everyone
-                out of the tenant permanently.
+                {t(
+                  "Accounts that keep password sign-in even when SSO is required. Turning off password sign-in, or requiring SSO, is refused server-side unless at least one of these is still active \u2014 that is what stops an identity-provider outage from locking everyone out of the tenant permanently."
+                )}
               </p>
 
               {canUpdatePolicy && breakGlassCandidates.length === 0 && (
                 <p class="state-notice" id="security-no-candidates">
-                  No active account is currently eligible.
+                  {t("No active account is currently eligible.")}
                 </p>
               )}
 
@@ -415,7 +423,7 @@ const mfaContradiction =
 
               {canUpdatePolicy && (
                 <button type="submit" id="security-policy-submit">
-                  Save authentication policy
+                  {t("Save authentication policy")}
                 </button>
               )}
             </form>
@@ -424,18 +432,20 @@ const mfaContradiction =
 
         {canReadMfa && mfaPolicy && (
           <section class="fade-in-up" aria-labelledby="security-mfa">
-            <h2 id="security-mfa">Multi-factor authentication</h2>
+            <h2 id="security-mfa">{t("Multi-factor authentication")}</h2>
 
             {mfaContradiction && (
               <p class="state-notice" id="security-mfa-contradiction">
-                MFA is enforced for this tenant, but enrolment is closed for
-                this deployment (<code>AUTH_MFA_ENABLED=false</code>). A user
-                without a factor cannot enrol one, and cannot sign in.
+                {t(
+                  "MFA is enforced for this tenant, but enrolment is closed for this deployment ("
+                )}
+                <code>{t("AUTH_MFA_ENABLED=false")}</code>). A user without a
+                factor cannot enrol one, and cannot sign in.
               </p>
             )}
 
             <form class="admin-create-form" id="security-mfa-form">
-              <p class="form-legend">Enforcement level</p>
+              <p class="form-legend">{t("Enforcement level")}</p>
               <p
                 id="security-mfa-error"
                 class="admin-create-error"
@@ -458,7 +468,7 @@ const mfaContradiction =
 
               {canConfigureMfa && (
                 <button type="submit" id="security-mfa-submit">
-                  Save MFA policy
+                  {t("Save MFA policy")}
                 </button>
               )}
             </form>
@@ -467,19 +477,24 @@ const mfaContradiction =
 
         {canReadProviders && (
           <section class="fade-in-up" aria-labelledby="security-providers">
-            <h2 id="security-providers">OIDC providers</h2>
+            <h2 id="security-providers">{t("OIDC providers")}</h2>
             <p class="page-description">
-              Read-only here. Adding, editing and removing a provider stays on
-              <code>/api/v1/auth/sso-providers</code> — those writes carry a
-              client secret, and a form that posts one deserves its own change.
+              {t(
+                "Read-only here. Adding, editing and removing a provider stays on"
+              )}
+              <code>{t("/api/v1/auth/sso-providers")}</code>
+              {t(
+                "\u2014 those writes carry a client secret, and a form that posts one deserves its own change."
+              )}
             </p>
 
             {providers.length === 0 ? (
               <div class="empty-state" id="security-providers-empty">
-                <p class="empty-state-title">No provider configured</p>
+                <p class="empty-state-title">{t("No provider configured")}</p>
                 <p class="empty-state-text">
-                  This tenant has no OIDC provider, so SSO sign-in cannot
-                  succeed regardless of the policy above.
+                  {t(
+                    "This tenant has no OIDC provider, so SSO sign-in cannot succeed regardless of the policy above."
+                  )}
                 </p>
               </div>
             ) : (
@@ -487,11 +502,11 @@ const mfaContradiction =
                 <table class="data-table data-table--stack">
                   <thead>
                     <tr>
-                      <th scope="col">Key</th>
-                      <th scope="col">Name</th>
-                      <th scope="col">Issuer</th>
-                      <th scope="col">Secret</th>
-                      <th scope="col">State</th>
+                      <th scope="col">{t("Key")}</th>
+                      <th scope="col">{t("Name")}</th>
+                      <th scope="col">{t("Issuer")}</th>
+                      <th scope="col">{t("Secret")}</th>
+                      <th scope="col">{t("State")}</th>
                     </tr>
                   </thead>
                   <tbody>

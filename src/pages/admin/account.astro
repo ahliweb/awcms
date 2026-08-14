@@ -1,0 +1,675 @@
+---
+/**
+ * `/admin/account` — the signed-in person's own account (ADR-0096).
+ *
+ * ## What this screen is for
+ *
+ * Seventeen self-service endpoints existed before it and NOTHING called them:
+ * password change, session listing and revocation, MFA enrolment and disable,
+ * recovery codes, SSO link/unlink. All of it was reachable only with `curl`.
+ *
+ * `admin:screen-coverage:check` could not have found that. It asks whether every
+ * declared PERMISSION is claimed by a screen, and these routes are deliberately
+ * unpermissioned (ADR-0096 §1) — so their zero-surface state was invisible to
+ * the one gate that looks adjacent.
+ *
+ * ## Why everything is read server-side in ONE transaction
+ *
+ * Four independent client fetches would each pay session resolution, and the
+ * page would assemble itself in front of the reader. The reads below join a
+ * single `withTenantOrThrow`, so the screen arrives complete.
+ *
+ * Mutations go the other way — through the real endpoints, over `fetch`, each
+ * inheriting its own guard, rate limit and audit. Nothing here writes directly.
+ *
+ * ## Degrade, never 500
+ *
+ * Every section falls back to a stated error rather than throwing: this page is
+ * where somebody goes when they think their password leaked, which is exactly
+ * when a stack trace is most expensive. A failed read shows that section as
+ * unavailable and leaves the others usable.
+ */
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { loadSelfServiceScreen } from "../../lib/auth/admin-screen";
+import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
+import { LOCALE_ENDONYM, listLocales } from "../../lib/i18n";
+import { formatDate, formatDateTime } from "../../lib/i18n";
+import { listOwnSessions } from "../../modules/identity-access/application/session-directory";
+import { getMfaStatus } from "../../modules/identity-access/application/mfa";
+import {
+  listOwnSsoProviderLinks,
+  type OwnSsoProviderLink
+} from "../../modules/identity-access/application/tenant-sso";
+import {
+  readPreferences,
+  resolvePrincipalIdForIdentity
+} from "../../modules/identity-access/application/principal-preference-store";
+
+const ssr = Astro.locals.ssrContext;
+
+if (!ssr) {
+  throw new Error(
+    "/admin/account rendered without Astro.locals.ssrContext — the /admin guard in src/middleware.ts must run first."
+  );
+}
+
+const locale = Astro.locals.locale;
+const { t, tx } = getTranslatorFor(locale);
+
+/**
+ * Timestamps render in UTC.
+ *
+ * Deliberate, and a limitation stated rather than hidden: this base has no
+ * per-user time zone, and guessing the server's would make a session's "last
+ * seen" wrong in a way nobody could detect — the reader would simply believe it.
+ * `Z` on the label says which clock it is. A real per-user zone belongs with the
+ * preferences ADR-0095 introduced, and is not invented here.
+ */
+const DISPLAY_TIME_ZONE = "UTC";
+
+type SessionRow = {
+  id: string;
+  issuedAt: string;
+  expiresAt: string;
+  current: boolean;
+  assuranceLevel: string;
+  originAuth: string;
+  userAgentSummary: string | null;
+};
+
+let displayName = "";
+let loginIdentifier = "";
+let sessions: SessionRow[] = [];
+let mfaEnabled = false;
+let mfaActivatedAt: string | null = null;
+let storedLocale: string | null = null;
+let storedTheme: string | null = null;
+let ssoProviders: OwnSsoProviderLink[] = [];
+let loadError = false;
+
+/**
+ * `loadSelfServiceScreen`, not `loadAdminScreen` (ADR-0096 §1).
+ *
+ * This screen has no entry permission to evaluate, and inventing one would be
+ * the ADR-0058 §E trap: an action no migration seeds denies EVERYONE, tenant
+ * owner included, while this file would read as correctly guarded. `authorize:
+ * []` is not an option either — `selectEntryOutcome` denies an empty list, on
+ * purpose and fail-closed.
+ *
+ * What is not skipped: the single tenant transaction under a declared work
+ * class, so RLS applies and this page cannot open its own connection.
+ * `tests/admin-screen-self-service.test.ts` enumerates the screens allowed to
+ * take this path, so it cannot spread quietly.
+ */
+const screen = await loadSelfServiceScreen({
+  ssr,
+  workClass: "interactive",
+  selfServiceReason:
+    "Every row read here is the caller's own — their profile, sessions, MFA factor and stored preferences — and the screen accepts no id, so there is nothing it could be pointed at (ADR-0096).",
+  onError: (error) => logAdminPageError("/admin/account", error),
+  load: async ({ tx }) => {
+    const profileRows = (await tx`
+      SELECT p.display_name, i.login_identifier
+      FROM awcms_identities i
+      JOIN awcms_profiles p
+        ON p.tenant_id = i.tenant_id AND p.id = i.profile_id
+      WHERE i.tenant_id = ${ssr.tenantId} AND i.id = ${ssr.identityId}
+    `) as Array<{ display_name: string; login_identifier: string }>;
+
+    const principalId = await resolvePrincipalIdForIdentity(
+      tx,
+      ssr.tenantId,
+      ssr.identityId
+    );
+
+    return {
+      profile: profileRows[0] ?? null,
+      // `listOwnSessions` resolves the caller from the token hash itself, so
+      // there is no identity parameter here that could be pointed elsewhere.
+      sessions: await listOwnSessions(
+        tx,
+        ssr.tenantId,
+        ssr.tokenHash,
+        new Date()
+      ),
+      mfa: await getMfaStatus(tx, ssr.tenantId, ssr.identityId),
+      preferences: await readPreferences(tx, principalId),
+      sso: await listOwnSsoProviderLinks(tx, ssr.tenantId, ssr.identityId)
+    };
+  }
+});
+
+// `error` covers both a thrown load and the circuit breaker refusing the
+// transaction — `loadSelfServiceScreen` funnels both there, so this page never
+// has to shape-check a `Response` the way a hand-rolled `withTenant` call would.
+if (screen.state === "allowed") {
+  const account = screen.data;
+
+  displayName = account.profile?.display_name ?? "";
+  loginIdentifier = account.profile?.login_identifier ?? "";
+  sessions = (account.sessions ?? []) as SessionRow[];
+  mfaEnabled = account.mfa.enabled;
+  mfaActivatedAt = account.mfa.enabled
+    ? (account.mfa.activatedAt ?? null)
+    : null;
+  storedLocale = account.preferences.locale;
+  storedTheme = account.preferences.theme;
+  ssoProviders = account.sso;
+} else {
+  loadError = true;
+}
+
+/**
+ * The two concrete modes reuse the `theme` CONTEXT the topbar toggle uses, so
+ * the same word is translated once and cannot drift between the two controls
+ * that set the same value. `i18n:catalog:check` caught the first draft doing
+ * `t("Light")` — a different key, silently untranslated.
+ *
+ * The other two options have no counterpart in the toggle: "" is the unset
+ * state (sql/128's NULL), and "system" reads as "match my device" here because
+ * this screen is about a stored preference rather than a live toggle.
+ */
+const themeOptions = [
+  { value: "", label: t("Follow this tenant's default") },
+  { value: "system", label: t("Match my device") },
+  { value: "light", label: tx("theme", "Light") },
+  { value: "dark", label: tx("theme", "Dark") }
+];
+---
+
+<AdminLayout title={t("My account")}>
+  <header class="page-header fade-in-up">
+    <h1 id="account-heading">{t("My account")}</h1>
+    <p class="page-description">
+      {
+        t(
+          "Your name, the language and theme you read this admin in, your password, and the devices and sign-in methods attached to your account. Everything here is about you — nothing on this page can change anyone else."
+        )
+      }
+    </p>
+  </header>
+
+  {
+    loadError && (
+      <p class="state-notice fade-in-up" id="account-load-error">
+        {t("Could not load your account. Please try again.")}
+      </p>
+    )
+  }
+
+  {
+    /* Translated strings for `admin-account-client.ts`.
+
+      The catalog is a SERVER module: importing it into client code would ship
+      every locale to every browser, and it cannot be read at runtime there at
+      all. So the strings the script needs are rendered here as data attributes —
+      the same seam `ThemeToggle` uses for its mode labels — and the script reads
+      them with English fallbacks, so a missing attribute degrades to a readable
+      sentence rather than `undefined`. */
+  }
+  <div
+    id="account-i18n"
+    hidden
+    data-saving={t("Saving…")}
+    data-signing-out={t("Signing out…")}
+    data-rate-limited={t(
+      "Too many attempts. Please wait a moment and try again."
+    )}
+    data-profile-invalid={t("Enter a display name of 1 to 200 characters.")}
+    data-profile-failed={t("Could not save your profile. Please try again.")}
+    data-preferences-failed={t(
+      "Could not save your preferences. Please try again."
+    )}
+    data-password-wrong={t("Your current password is not correct.")}
+    data-password-weak={t(
+      "That new password does not meet the password policy."
+    )}
+    data-password-failed={t(
+      "Could not change your password. Please try again."
+    )}
+    data-mfa-already-active={t(
+      "Two-factor authentication is already switched on for your account."
+    )}
+    data-mfa-start-failed={t("Could not start setup. Please try again.")}
+    data-mfa-bad-code={t("That code is not right. Try the next one.")}
+    data-mfa-verify-failed={t("Could not confirm the code. Please try again.")}
+    data-mfa-disable-failed={t(
+      "Could not turn off two-factor authentication. Please try again."
+    )}
+    data-mfa-codes-failed={t(
+      "Could not generate new recovery codes. Please try again."
+    )}
+    data-step-up-prompt={t(
+      "Enter the current six-digit code from your authenticator app to confirm."
+    )}
+    data-step-up-cancelled={t("Confirmation cancelled — nothing changed.")}
+    data-session-revoke-failed={t(
+      "Could not sign that device out. Please try again."
+    )}
+    data-session-revoke-all-failed={t(
+      "Could not sign your other devices out. Please try again."
+    )}
+    data-sso-link-failed={t(
+      "Could not start connecting that provider. Please try again."
+    )}
+    data-sso-unlink-failed={t(
+      "Could not disconnect that provider. Please try again."
+    )}
+    data-sso-last-method={t(
+      "That is the only way you can sign in, so it cannot be disconnected. Set a password first."
+    )}
+  >
+  </div>
+
+  <section
+    class="admin-card fade-in-up"
+    aria-labelledby="account-profile-heading"
+  >
+    <h2 id="account-profile-heading">{t("Profile")}</h2>
+    <p class="admin-card-hint">
+      {
+        t(
+          "Your display name is what other people in this tenant see next to your actions."
+        )
+      }
+    </p>
+
+    <form id="account-profile-form" class="admin-form">
+      <div class="admin-field">
+        <label for="account-display-name">{t("Display name")}</label>
+        <input
+          type="text"
+          id="account-display-name"
+          name="displayName"
+          value={displayName}
+          maxlength="200"
+          required
+        />
+      </div>
+
+      <div class="admin-field">
+        <label for="account-login-identifier">{t("Sign-in address")}</label>
+        <input
+          type="text"
+          id="account-login-identifier"
+          value={loginIdentifier}
+          readonly
+          aria-describedby="account-login-identifier-hint"
+        />
+        <p class="admin-field-hint" id="account-login-identifier-hint">
+          {
+            /* Stated rather than silently disabled: a read-only field with no
+              explanation reads as a bug. ADR-0096 §3 lists this as a known gap —
+              changing it is account recovery, not profile editing. */
+          }
+          {
+            t(
+              "Changing the address you sign in with is not available here yet — it needs proof that the new address is yours."
+            )
+          }
+        </p>
+      </div>
+
+      <p class="form-error" id="account-profile-error" role="alert" hidden></p>
+      <button type="submit" class="btn-primary">{t("Save profile")}</button>
+    </form>
+  </section>
+
+  <section
+    class="admin-card fade-in-up"
+    aria-labelledby="account-preferences-heading"
+  >
+    <h2 id="account-preferences-heading">{t("Language and appearance")}</h2>
+    <p class="admin-card-hint">
+      {
+        t(
+          "These follow you to any device you sign in from, because they belong to you rather than to one tenant."
+        )
+      }
+    </p>
+
+    <form id="account-preferences-form" class="admin-form">
+      <div class="admin-field">
+        <label for="account-locale">{t("Language")}</label>
+        <select id="account-locale" name="locale">
+          <option value="" selected={storedLocale === null}>
+            {t("Follow this tenant's default")}
+          </option>
+          {
+            listLocales().map((option) => (
+              <option
+                value={option}
+                selected={storedLocale === option}
+                lang={option}
+              >
+                {LOCALE_ENDONYM[option]}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+
+      <div class="admin-field">
+        <label for="account-theme">{t("Colour theme")}</label>
+        <select id="account-theme" name="theme">
+          {
+            themeOptions.map((option) => (
+              <option
+                value={option.value}
+                selected={(storedTheme ?? "") === option.value}
+              >
+                {option.label}
+              </option>
+            ))
+          }
+        </select>
+        <p class="admin-field-hint">
+          {
+            /* The precedence is genuinely surprising, so it is written down
+              rather than left to be discovered: the topbar toggle writes
+              localStorage, which wins on THIS device. */
+          }
+          {
+            t(
+              "The theme button in the top bar changes this device straight away. What you choose here applies on devices you have not used yet."
+            )
+          }
+        </p>
+      </div>
+
+      <p class="form-error" id="account-preferences-error" role="alert" hidden>
+      </p>
+      <button type="submit" class="btn-primary">{t("Save preferences")}</button>
+    </form>
+  </section>
+
+  <section
+    class="admin-card fade-in-up"
+    aria-labelledby="account-password-heading"
+  >
+    <h2 id="account-password-heading">{t("Password")}</h2>
+
+    <form id="account-password-form" class="admin-form">
+      <div class="admin-field">
+        <label for="account-current-password">{t("Current password")}</label>
+        <input
+          type="password"
+          id="account-current-password"
+          name="currentPassword"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <div class="admin-field">
+        <label for="account-new-password">{t("New password")}</label>
+        <input
+          type="password"
+          id="account-new-password"
+          name="newPassword"
+          autocomplete="new-password"
+          required
+        />
+      </div>
+
+      <p class="form-error" id="account-password-error" role="alert" hidden></p>
+      <button type="submit" class="btn-primary">{t("Change password")}</button>
+    </form>
+  </section>
+
+  <section class="admin-card fade-in-up" aria-labelledby="account-mfa-heading">
+    <h2 id="account-mfa-heading">{t("Two-factor authentication")}</h2>
+
+    {
+      mfaEnabled ? (
+        <>
+          <p class="admin-card-hint" id="account-mfa-state">
+            {mfaActivatedAt
+              ? t("Enabled since {activated}.", {
+                  activated: formatDateTime(
+                    locale,
+                    mfaActivatedAt,
+                    DISPLAY_TIME_ZONE
+                  )
+                })
+              : t("Enabled.")}
+          </p>
+          <div class="admin-actions">
+            <button type="button" class="btn-secondary" id="account-mfa-codes">
+              {t("Generate new recovery codes")}
+            </button>
+            <button type="button" class="btn-danger" id="account-mfa-disable">
+              {t("Turn off two-factor authentication")}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p class="admin-card-hint" id="account-mfa-state">
+            {t(
+              "Not enabled. Two-factor authentication asks for a code from your phone in addition to your password."
+            )}
+          </p>
+          <button type="button" class="btn-primary" id="account-mfa-enrol">
+            {t("Set up two-factor authentication")}
+          </button>
+        </>
+      )
+    }
+
+    {
+      /* Filled in by the client script after enrolment starts. The secret is
+        rendered into the DOM only for the person enrolling, on a `no-store`
+        page, and never reaches the server log — it is already theirs. */
+    }
+    <div id="account-mfa-enrolment" hidden>
+      <p class="admin-card-hint">
+        {
+          t(
+            "Add this secret to your authenticator app, then enter the six-digit code it shows."
+          )
+        }
+      </p>
+      <p class="account-secret"><code id="account-mfa-secret"></code></p>
+      <form id="account-mfa-verify-form" class="admin-form">
+        <div class="admin-field">
+          <label for="account-mfa-code">{t("Six-digit code")}</label>
+          <input
+            type="text"
+            id="account-mfa-code"
+            name="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="6"
+            required
+          />
+        </div>
+        <button type="submit" class="btn-primary">{t("Confirm code")}</button>
+      </form>
+    </div>
+
+    <div id="account-mfa-recovery" hidden>
+      <p class="admin-card-hint">
+        {
+          t(
+            "Save these recovery codes somewhere safe. Each one works once, and they are shown only now."
+          )
+        }
+      </p>
+      <ul class="account-recovery-codes" id="account-mfa-recovery-list"></ul>
+    </div>
+
+    <p class="form-error" id="account-mfa-error" role="alert" hidden></p>
+  </section>
+
+  {
+    /* Rendered only when the tenant has enabled at least one provider. An empty
+      section headed "Sign-in methods" on a tenant that uses passwords only would
+      be a control surface implying a capability that is switched off. */
+    ssoProviders.length > 0 && (
+      <section
+        class="admin-card fade-in-up"
+        aria-labelledby="account-sso-heading"
+      >
+        <h2 id="account-sso-heading">{t("Single sign-on")}</h2>
+        <p class="admin-card-hint">
+          {t(
+            "Sign-in providers this tenant has enabled. Linking one lets you sign in with it as well as with your password."
+          )}
+        </p>
+
+        <ul class="account-sso-list">
+          {ssoProviders.map((provider) => (
+            <li class="account-sso-item">
+              <span class="account-sso-name">{provider.displayName}</span>
+              {provider.linkedAt === null ? (
+                <button
+                  type="button"
+                  class="btn-secondary btn-small account-sso-link"
+                  data-provider-key={provider.providerKey}
+                >
+                  {t("Connect")}
+                </button>
+              ) : (
+                <>
+                  <span class="badge">
+                    {t("Connected {linked}", {
+                      linked: formatDate(
+                        locale,
+                        provider.linkedAt,
+                        DISPLAY_TIME_ZONE
+                      )
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    class="btn-danger btn-small account-sso-unlink"
+                    data-provider-key={provider.providerKey}
+                  >
+                    {t("Disconnect")}
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <p class="form-error" id="account-sso-error" role="alert" hidden />
+      </section>
+    )
+  }
+
+  <section
+    class="admin-card fade-in-up"
+    aria-labelledby="account-sessions-heading"
+  >
+    <h2 id="account-sessions-heading">{t("Where you are signed in")}</h2>
+    <p class="admin-card-hint">
+      {
+        t(
+          "Each row is a browser or device holding a live session. Signing one out takes effect immediately."
+        )
+      }
+    </p>
+
+    {
+      sessions.length === 0 ? (
+        <p class="state-notice" id="account-sessions-empty">
+          {t("No other sessions to show.")}
+        </p>
+      ) : (
+        <div class="table-scroll">
+          <table class="admin-table" id="account-sessions-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Device")}</th>
+                <th scope="col">{t("Signed in")}</th>
+                <th scope="col">{t("Expires")}</th>
+                <th scope="col">{t("Sign-in method")}</th>
+                <th scope="col">
+                  <span class="sr-only">{t("Actions")}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((session) => (
+                <tr>
+                  <td>
+                    {session.userAgentSummary ?? t("Unknown device")}
+                    {session.current && (
+                      <span class="badge badge-current">
+                        {t("This device")}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {formatDateTime(
+                      locale,
+                      session.issuedAt,
+                      DISPLAY_TIME_ZONE
+                    )}
+                  </td>
+                  <td>
+                    {formatDateTime(
+                      locale,
+                      session.expiresAt,
+                      DISPLAY_TIME_ZONE
+                    )}
+                  </td>
+                  <td>{session.originAuth}</td>
+                  <td>
+                    {!session.current && (
+                      <button
+                        type="button"
+                        class="btn-danger btn-small account-session-revoke"
+                        data-session-id={session.id}
+                      >
+                        {t("Sign out")}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    <p class="form-error" id="account-sessions-error" role="alert" hidden></p>
+    <button type="button" class="btn-danger" id="account-sessions-revoke-all">
+      {t("Sign out everywhere else")}
+    </button>
+  </section>
+</AdminLayout>
+
+<style>
+  .account-secret code {
+    font-size: var(--fs-lg);
+    letter-spacing: 0.08em;
+    word-break: break-all;
+  }
+
+  .account-recovery-codes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: var(--sp-2);
+    list-style: none;
+    padding: 0;
+    font-family: var(--font-mono, monospace);
+  }
+
+  .badge-current {
+    margin-inline-start: var(--sp-2);
+  }
+
+  /* `[hidden]` alone loses to any rule that sets `display` — the trap that made
+     four auth forms inert. `tokens.css` now carries a global
+     `[hidden] { display: none !important }`, and this comment marks why the
+     sections above can rely on the attribute at all. */
+</style>
+
+<script>
+  import "../../lib/ui/admin-account-client";
+</script>

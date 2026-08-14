@@ -60,6 +60,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { decodeKeysetCursor } from "../../modules/_shared/keyset-pagination";
 import { MAX_DELETE_REASON_LENGTH } from "../../modules/media-library/domain/media-lifecycle-validation";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listMediaObjects,
   MEDIA_OBJECT_LIST_LIMIT,
@@ -69,6 +70,7 @@ import {
 } from "../../modules/media-library/application/media-object-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -222,19 +224,20 @@ const columnCount = canActOnAny ? 8 : 7;
 
 <AdminLayout title="Media library">
   <header class="page-header fade-in-up">
-    <h1 id="media-heading">Media library</h1>
+    <h1 id="media-heading">{t("Media library")}</h1>
     <p class="page-description">
-      Every media object this tenant has registered, in any state — including
-      the ones that never finished uploading or failed verification. Deleting is
-      reversible; purging is not, and clears the registry row rather than the
-      stored file.
+      {
+        t(
+          "Every media object this tenant has registered, in any state \u2014 including the ones that never finished uploading or failed verification. Deleting is reversible; purging is not, and clears the registry row rather than the stored file."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="media-denied">
-        You do not have permission to view the media library.
+        {t("You do not have permission to view the media library.")}
       </p>
     )
   }
@@ -242,8 +245,9 @@ const columnCount = canActOnAny ? 8 : 7;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="media-error">
-        The media library could not be loaded right now. This is a problem
-        reading it, not an empty library — please try again later.
+        {t(
+          "The media library could not be loaded right now. This is a problem reading it, not an empty library \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -264,21 +268,21 @@ const columnCount = canActOnAny ? 8 : 7;
       <section class="admin-section fade-in-up" aria-label="Media summary">
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">On this page</span>
+            <span class="stat-label">{t("On this page")}</span>
             <span class="stat-value">{objects.length}</span>
             <span class="stat-hint">{MEDIA_OBJECT_LIST_LIMIT} per page</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Not publicly referenceable</span>
+            <span class="stat-label">{t("Not publicly referenceable")}</span>
             <span class="stat-value">{unsafeCount}</span>
             {unsafeCount > 0 && (
               <span class="stat-hint">
-                Only verified and attached objects resolve
+                {t("Only verified and attached objects resolve")}
               </span>
             )}
           </div>
           <div class="stat-card">
-            <span class="stat-label">Soft-deleted (this page)</span>
+            <span class="stat-label">{t("Soft-deleted (this page)")}</span>
             <span class="stat-value">{deletedCount}</span>
           </div>
         </div>
@@ -293,15 +297,15 @@ const columnCount = canActOnAny ? 8 : 7;
         aria-labelledby="media-filter-title"
       >
         <h2 class="admin-section-title" id="media-filter-title">
-          Filters
+          {t("Filters")}
         </h2>
         {/* A GET form, so every filtered view is a shareable URL and the back
             button works. Paging drops `cursor` by omitting it. */}
         <form method="get" action="/admin/media" class="admin-filter-form">
           <label class="field">
-            <span class="field-label">Status</span>
+            <span class="field-label">{t("Status")}</span>
             <select name="status" class="field-input">
-              <option value="">Any</option>
+              <option value="">{t("Any")}</option>
               {STATUS_OPTIONS.map((option) => (
                 <option value={option} selected={statusRaw === option}>
                   {option}
@@ -311,7 +315,7 @@ const columnCount = canActOnAny ? 8 : 7;
           </label>
 
           <label class="field">
-            <span class="field-label">Deletion</span>
+            <span class="field-label">{t("Deletion")}</span>
             <select name="deletion" class="field-input">
               {DELETION_OPTIONS.map((option) => (
                 <option value={option} selected={deletionFilter === option}>
@@ -322,7 +326,7 @@ const columnCount = canActOnAny ? 8 : 7;
           </label>
 
           <label class="field">
-            <span class="field-label">Mime type</span>
+            <span class="field-label">{t("Mime type")}</span>
             <input
               type="text"
               name="mimeType"
@@ -334,10 +338,10 @@ const columnCount = canActOnAny ? 8 : 7;
 
           <div class="admin-toolbar">
             <button type="submit" class="btn-primary">
-              Apply
+              {t("Apply")}
             </button>
             <a class="quick-link" href="/admin/media">
-              Reset
+              {t("Reset")}
             </a>
           </div>
         </form>
@@ -353,37 +357,35 @@ const columnCount = canActOnAny ? 8 : 7;
         id="media-objects"
       >
         <h2 class="admin-section-title" id="media-objects-title">
-          Objects
+          {t("Objects")}
           <span class="count-pill">{objects.length}</span>
         </h2>
         <p class="page-description">
-          Deleting an object stops every reference to it resolving immediately —
-          a published page pointing at it loses its image. That is the point
-          when the object should not be served, and restore is how it comes
-          back. Purging removes the registry row only; the stored file is
-          removed later by the reconciliation job, which owns the bucket.
+          {t(
+            "Deleting an object stops every reference to it resolving immediately \u2014 a published page pointing at it loses its image. That is the point when the object should not be served, and restore is how it comes back. Purging removes the registry row only; the stored file is removed later by the reconciliation job, which owns the bucket."
+          )}
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="media-objects-table">
-            <caption class="sr-only">Registered media objects.</caption>
+            <caption class="sr-only">{t("Registered media objects.")}</caption>
             <thead>
               <tr>
-                <th scope="col">Object</th>
-                <th scope="col">Type</th>
-                <th scope="col">Size</th>
-                <th scope="col">Dimensions</th>
-                <th scope="col">Status</th>
-                <th scope="col">Created</th>
-                <th scope="col">Deleted</th>
-                {canActOnAny && <th scope="col">Actions</th>}
+                <th scope="col">{t("Object")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Size")}</th>
+                <th scope="col">{t("Dimensions")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Created")}</th>
+                <th scope="col">{t("Deleted")}</th>
+                {canActOnAny && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
               {objects.length === 0 ? (
                 <tr>
                   <td colspan={columnCount} class="cell-muted">
-                    No media objects match these filters.
+                    {t("No media objects match these filters.")}
                   </td>
                 </tr>
               ) : (
@@ -443,7 +445,7 @@ const columnCount = canActOnAny ? 8 : 7;
                                     item.originalFilename ?? item.objectKey
                                   }
                                 >
-                                  Delete
+                                  {t("Delete")}
                                 </button>
                               )
                             : [
@@ -453,7 +455,7 @@ const columnCount = canActOnAny ? 8 : 7;
                                     class="btn-inline media-restore-btn"
                                     data-media-id={item.id}
                                   >
-                                    Restore
+                                    {t("Restore")}
                                   </button>
                                 ),
                                 canPurge && (
@@ -465,7 +467,7 @@ const columnCount = canActOnAny ? 8 : 7;
                                       item.originalFilename ?? item.objectKey
                                     }
                                   >
-                                    Purge
+                                    {t("Purge")}
                                   </button>
                                 )
                               ]}
@@ -485,7 +487,7 @@ const columnCount = canActOnAny ? 8 : 7;
                 `created_at` TEXT, so a page boundary cannot skip rows sharing a
                 millisecond — which a batch upload produces by the dozen. */}
             <a class="quick-link" href={linkWith({ cursor: nextCursor })}>
-              Next page
+              {t("Next page")}
               <span class="quick-link-arrow" aria-hidden="true">
                 →
               </span>

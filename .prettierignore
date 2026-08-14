@@ -9,3 +9,10 @@ graphify-out/
 # generated verbatim memory mirror (bun run memory:docs:sync) — reformatting it
 # would break the memory:docs:restore round-trip
 docs/awcms/agent-memory.md
+# compiled message catalogs (bun run i18n:compile, ADR-0095) — same reason one
+# line up. `i18n:catalog:check` proves these files are FRESH by recompiling the
+# .po and comparing bytes, so the compiler has to be their only author. Prettier
+# unquotes object keys that do not need quotes ("Approvals" -> Approvals), which
+# is a change the compiler would not make and would therefore read as staleness
+# on every run — a permanently red gate that no edit could fix.
+src/lib/i18n/catalogs/*.generated.ts
