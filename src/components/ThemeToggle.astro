@@ -17,9 +17,19 @@
  * translated labels arrive later without the client script needing to read a
  * catalog it cannot access.
  *
- * CSP: this component's `<script>` has no `is:inline`, so Astro bundles it to
- * an external module served from this origin — allowed by `script-src 'self'`
- * with no hash bookkeeping. Only the head script needs a hash.
+ * CSP: this component ships NO script of its own. The behaviour lives in
+ * `src/lib/ui/theme-toggle-client.ts`, imported by `AdminLayout.astro`'s script
+ * block so it lands in a shared chunk that `script-src 'self'` admits.
+ *
+ * That is a CORRECTION, not a preference. This comment used to claim that a
+ * component `<script>` without `is:inline` is bundled to an external module and
+ * therefore needs no hash bookkeeping. The built manifest disagreed: the one
+ * import was a string constant, the minifier folded it, nothing was left that
+ * needed a chunk, and Astro inlined the whole body — which the CSP then refused,
+ * leaving this button rendered and inert in production. See the module's own
+ * doc comment for the full mechanism, and `bun run build:inline-scripts:check`
+ * for the gate that now reads `dist/` instead of trusting a comment like this
+ * one.
  */
 interface Props {
   ariaLabel?: string;
@@ -88,93 +98,3 @@ const {
     }
   }
 </style>
-
-<script>
-  import { THEME_STORAGE_KEY } from "../lib/security/theme-init-script";
-
-  const ORDER = ["system", "light", "dark"] as const;
-  type ThemeMode = (typeof ORDER)[number];
-
-  const ICONS: Record<ThemeMode, string> = {
-    system: "🖥️",
-    light: "☀️",
-    dark: "🌙"
-  };
-
-  function isThemeMode(value: string | null): value is ThemeMode {
-    return value === "system" || value === "light" || value === "dark";
-  }
-
-  function labelFor(button: HTMLElement, mode: ThemeMode): string {
-    const key = `label${mode.charAt(0).toUpperCase()}${mode.slice(1)}` as
-      "labelSystem" | "labelLight" | "labelDark";
-
-    return button.dataset[key] ?? mode;
-  }
-
-  function resolveTheme(mode: ThemeMode): "light" | "dark" {
-    if (mode === "light" || mode === "dark") {
-      return mode;
-    }
-
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-  }
-
-  function applyButtonState(button: HTMLElement, mode: ThemeMode): void {
-    button.dataset.mode = mode;
-
-    const icon = button.querySelector(".theme-toggle-icon");
-    const label = button.querySelector(".theme-toggle-label");
-
-    if (icon) {
-      icon.textContent = ICONS[mode];
-    }
-
-    if (label) {
-      label.textContent = labelFor(button, mode);
-    }
-  }
-
-  function init(): void {
-    const button = document.getElementById("theme-toggle");
-
-    if (!button) {
-      return;
-    }
-
-    // A hand-edited/corrupted localStorage value must not wedge the control:
-    // anything unrecognised falls back to "system" rather than being trusted.
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    const stored: ThemeMode = isThemeMode(raw) ? raw : "system";
-    applyButtonState(button, stored);
-
-    // Follow the OS while in "system" mode, so the admin doesn't sit on a
-    // stale theme when the machine flips at sunset with the tab open.
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    media.addEventListener("change", () => {
-      if (button.dataset.mode === "system") {
-        document.documentElement.setAttribute(
-          "data-theme",
-          resolveTheme("system")
-        );
-      }
-    });
-
-    button.addEventListener("click", () => {
-      const current = button.dataset.mode;
-      const currentMode: ThemeMode = isThemeMode(current ?? null)
-        ? (current as ThemeMode)
-        : "system";
-      const nextIndex = (ORDER.indexOf(currentMode) + 1) % ORDER.length;
-      const next = ORDER[nextIndex] ?? "system";
-
-      localStorage.setItem(THEME_STORAGE_KEY, next);
-      document.documentElement.setAttribute("data-theme", resolveTheme(next));
-      applyButtonState(button, next);
-    });
-  }
-
-  init();
-</script>

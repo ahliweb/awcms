@@ -457,8 +457,17 @@ const ICON_USER =
       // the CSP. Its behaviour is loaded HERE instead, from the one script
       // already proven external, because `AdminLayout` is the only thing that
       // renders that component.
+      //
+      // `ThemeToggle` was the SAME defect, sitting in the build unnoticed while
+      // its own comment asserted it was external. Its import was a string
+      // constant, which the minifier folds away entirely — so "has an import"
+      // was true in the source and false in the artefact. It is loaded here for
+      // the same reason, and `bun run build:inline-scripts:check` now reads the
+      // built manifest so the next one is caught by a gate rather than by a
+      // user reporting a dead button.
       import { lockElement } from "../lib/ui/admin-form-client";
       import "../lib/ui/language-switcher-client";
+      import "../lib/ui/theme-toggle-client";
 
       const logoutButton = document.getElementById(
         "admin-logout"
