@@ -52,12 +52,21 @@ log() { echo "$(date -Is) run-job.sh: $*"; }
 if [ -z "$IMAGE" ]; then
   IMAGE="${REGISTRY_IMAGE}:${TAG}"
   if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
-    log "$IMAGE not present locally — pulling"
-    if ! docker pull -q "$IMAGE" >/dev/null 2>&1; then
-      log "pull failed; falling back to a local build from $CONTEXT"
+    if docker pull -q "$IMAGE" >/dev/null 2>&1; then
+      log "pulled $IMAGE"
+    else
+      # The registry image does not exist yet (it ships from `release.yml`).
+      # Fall back to a local build — but CHECK FIRST whether we already built
+      # one. The original version of this branch did not, so with 23 jobs on
+      # timers it ran `docker build` every couple of minutes, forever. It was
+      # invisible in the job's own output (each run still succeeded) and showed
+      # up only as `local build complete` on every single tick.
       IMAGE="awcms-jobs:local"
-      docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
-      log "local build complete"
+      if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        log "$REGISTRY_IMAGE:$TAG unavailable — building $IMAGE from $CONTEXT"
+        docker build -q -t "$IMAGE" "$CONTEXT" >/dev/null
+        log "local build complete"
+      fi
     fi
   fi
 fi
