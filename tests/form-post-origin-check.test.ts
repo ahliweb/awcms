@@ -61,45 +61,85 @@ function walk(dir: string, out: string[] = []): string[] {
 const POSTING_FORM = /<form\b[^>]*\bmethod\s*=\s*["']post["']/i;
 
 describe("no native form POST survives Astro's origin check", () => {
-  const offenders: string[] = [];
   const posting: string[] = [];
 
   for (const file of walk(SRC_ROOT)) {
     const body = stripComments(readFileSync(file, "utf8"));
-    if (!POSTING_FORM.test(body)) continue;
-
-    const relativePath = relative(REPO_ROOT, file);
-    posting.push(relativePath);
-
-    // The interception must be in the same file as the form — a handler living
-    // somewhere else is not something this assertion can honestly verify.
-    if (!body.includes("preventDefault")) offenders.push(relativePath);
+    if (POSTING_FORM.test(body)) posting.push(relative(REPO_ROOT, file));
   }
 
-  test("every posting form cancels the native submit", () => {
-    expect(offenders).toEqual([]);
-  });
-
   /**
-   * Not a style rule — a bound. Each posting form is a place this trap can
-   * reappear, so their number is worth noticing when it grows.
+   * Not a style rule — a bound. Every posting form is a place this trap can
+   * reappear, and the interception that saves it is checked below by name. A new
+   * entry here is a new thing to verify, not a formatting question.
    */
   test("the set of posting forms is still the one known form", () => {
     expect(posting).toEqual(["src/components/LanguageSwitcher.astro"]);
   });
+
+  test("its native submit is cancelled, in the module that carries it", () => {
+    const client = stripComments(
+      readFileSync(
+        join(SRC_ROOT, "lib", "ui", "language-switcher-client.ts"),
+        "utf8"
+      )
+    );
+
+    expect(client).toContain("preventDefault");
+  });
+
+  /**
+   * The component must own NO `<script>` of its own.
+   *
+   * A private one-caller module is folded into the script that imports it, which
+   * leaves that script with no cross-chunk import — and Astro inlines exactly
+   * those, into a page whose CSP is `script-src 'self' 'sha256-…'` with a single
+   * hash for the theme-init script. So the switcher's behaviour is loaded from
+   * `AdminLayout`'s script, which is external because it also imports the shared
+   * `admin-form-client` chunk. Giving this component a `<script>` again would
+   * quietly reproduce the inlining.
+   */
+  test("the component ships no script of its own", () => {
+    const component = readFileSync(
+      join(SRC_ROOT, "components", "LanguageSwitcher.astro"),
+      "utf8"
+    );
+
+    // Case-insensitive, and tolerant of attributes: `<SCRIPT>` and
+    // `<script type="module">` are both scripts, and a guard that only knows
+    // one spelling is a guard the next edit walks straight past. CodeQL
+    // `js/bad-tag-filter` flagged the narrower version of this line.
+    expect(component).not.toMatch(/^<script[\s/>]/im);
+  });
+
+  test("AdminLayout loads the switcher's behaviour", () => {
+    const layout = stripComments(
+      readFileSync(join(SRC_ROOT, "layouts", "AdminLayout.astro"), "utf8")
+    );
+
+    expect(layout).toContain('import "../lib/ui/language-switcher-client"');
+    // Its externality depends on this shared chunk staying in the same script.
+    expect(layout).toContain('from "../lib/ui/admin-form-client"');
+  });
 });
 
 describe("the language switcher sends JSON", () => {
-  const source = stripComments(
+  const client = stripComments(
+    readFileSync(
+      join(SRC_ROOT, "lib", "ui", "language-switcher-client.ts"),
+      "utf8"
+    )
+  );
+  const component = stripComments(
     readFileSync(join(SRC_ROOT, "components", "LanguageSwitcher.astro"), "utf8")
   );
 
   test("it posts application/json, which checkOrigin exempts", () => {
-    expect(source).toContain('"Content-Type": "application/json"');
+    expect(client).toContain('"Content-Type": "application/json"');
   });
 
   test("it sends credentials, or the persisting endpoint answers 401", () => {
-    expect(source).toContain('credentials: "same-origin"');
+    expect(client).toContain('credentials: "same-origin"');
   });
 
   /**
@@ -107,7 +147,7 @@ describe("the language switcher sends JSON", () => {
    * would show a broken control to precisely the readers who cannot use it.
    */
   test("the no-script submit button ships hidden", () => {
-    expect(source).toMatch(
+    expect(component).toMatch(
       /<button[^>]*class="locale-switcher-submit"[^>]*hidden/
     );
   });
