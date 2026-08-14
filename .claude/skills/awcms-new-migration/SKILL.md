@@ -1,96 +1,98 @@
 ---
 name: awcms-new-migration
-description: Buat migration SQL PostgreSQL AWCMS yang benar. Gunakan setiap kali menambah/mengubah tabel, kolom, index, constraint, atau RLS. Menegakkan penamaan NNN_awcms_<area>_<desc>.sql, tenant_id, RLS, index FK, timestamptz, dan numeric sesuai doc 04 & 10.
+description: Write a correct AWCMS PostgreSQL SQL migration. Use whenever adding/changing a table, column, index, constraint, or RLS. Enforces the NNN_awcms_<area>_<desc>.sql naming, tenant_id, RLS, FK indexes, timestamptz, and numeric per doc 04 & 10.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — New SQL Migration
 
-Ikuti standar di `docs/awcms/04_erd_data_dictionary.md` dan `docs/awcms/10_template_kode_coding_standard.md`.
+Follow the standards in `docs/awcms/04_erd_data_dictionary.md` and `docs/awcms/10_template_kode_coding_standard.md`.
 
-## Penamaan
+## Naming
 
 ```text
 sql/NNN_awcms_<area>_<description>.sql
 ```
 
-- `NNN` berurutan, nol di depan (mis. `023`).
-- **Jangan** me-rename migration yang sudah rilis; koreksi = migration baru.
-- Cek nomor terakhir di `sql/` sebelum menambah.
+- `NNN` is sequential, zero-padded (e.g. `023`).
+- **Do not** rename a migration that has already shipped; a correction = a new migration.
+- Check the last number in `sql/` before adding one.
 
-## Aturan wajib
+## Mandatory rules
 
-1. `id uuid PRIMARY KEY DEFAULT gen_random_uuid()` (perlu `pgcrypto`).
-2. Tabel tenant-scoped **wajib** kolom `tenant_id uuid NOT NULL`.
-3. Timestamp = `timestamptz`; uang/quantity = `numeric` (bukan float).
-4. `CREATE TABLE IF NOT EXISTS` dan `CREATE INDEX IF NOT EXISTS`.
-5. Index untuk `(tenant_id)`, setiap FK child, dan `(tenant_id, created_at DESC)` untuk transaksi/log.
-6. `CHECK` constraint untuk kolom enum-like (status, type).
-7. **RLS wajib** untuk tabel tenant-scoped (lihat template).
-8. **Jangan** membungkus dengan `BEGIN;`/`COMMIT;`/`ROLLBACK;`/`START
-TRANSACTION;` — `scripts/db-migrate.ts` mengelola transaksi migration
-   itu sendiri dan `assertNoTransactionControl` akan MENOLAK (error,
-   bukan warning) migration apa pun yang mengandung statement kontrol
-   transaksi di level top-level (di luar comment/string
-   literal/dollar-quoted body). Tulis DDL langsung tanpa wrapper.
-9. **Tidak** menyimpan password/API key/secret plaintext.
-10. Tabel master/config/draft yang deletable wajib soft delete (`deleted_at`, `deleted_by`, `delete_reason`) + index/partial unique aktif.
-11. Tabel BARU tanpa `tenant_id`/RLS (global, dibaca/ditulis lintas
-    tenant — mis. katalog konfigurasi, registry): dokumentasikan alasannya
-    di header migration, lalu daftarkan nama tabelnya ke `RLS_FREE_TABLES`
-    di `scripts/security-readiness.ts` — kalau tidak, `checkRlsEnabled`
-    menganggapnya tabel tenant-scoped tanpa RLS dan **memblokir go-live**.
-    (`ALLOWED_GLOBAL_TABLE_GRANTS` **tidak ada** di script ini — itu masih
-    milik awcms-mini; jangan cari/daftarkan ke sana.)
-12. **JANGAN tulis blok `GRANT ... TO awcms_app` per tabel.** Role `awcms_app`
-    ada sejak `sql/019_awcms_db_role_separation.sql` (Issue #141), dan 019
-    memasang `ALTER DEFAULT PRIVILEGES` sehingga tabel/sequence baru yang dibuat
-    pemilik migration **otomatis** ter-grant ke `awcms_app` — GRANT manual
-    murni derau. Yang TIDAK otomatis: `FUNCTION` (lihat §SECURITY DEFINER)
-    dan objek yang dibuat role LAIN.
+1. `id uuid PRIMARY KEY DEFAULT gen_random_uuid()` (needs `pgcrypto`).
+2. A tenant-scoped table **must** have a `tenant_id uuid NOT NULL` column.
+3. Timestamps = `timestamptz`; money/quantity = `numeric` (not float).
+4. `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`.
+5. Indexes on `(tenant_id)`, on every child FK, and on `(tenant_id, created_at DESC)` for transactions/logs.
+6. `CHECK` constraints for enum-like columns (status, type).
+7. **RLS is mandatory** for tenant-scoped tables (see the template).
+8. **Do not** wrap it in `BEGIN;`/`COMMIT;`/`ROLLBACK;`/`START
+TRANSACTION;` — `scripts/db-migrate.ts` manages the migration transaction
+   itself and `assertNoTransactionControl` will REJECT (error,
+   not warning) any migration containing a transaction control
+   statement at the top level (outside a comment/string
+   literal/dollar-quoted body). Write the DDL directly, without a wrapper.
+9. **Never** store a plaintext password/API key/secret.
+10. A deletable master/config/draft table must have soft delete (`deleted_at`, `deleted_by`, `delete_reason`) + an active index/partial unique.
+11. A NEW table without `tenant_id`/RLS (global, read/written across
+    tenants — e.g. a configuration catalogue, a registry): document the reason
+    in the migration header, then register the table name in `RLS_FREE_TABLES`
+    in `scripts/security-readiness.ts` — otherwise `checkRlsEnabled`
+    treats it as a tenant-scoped table without RLS and **blocks go-live**.
+    (`ALLOWED_GLOBAL_TABLE_GRANTS` **does not exist** in this script — that
+    still belongs to awcms-mini; do not look for it or register there.)
+12. **DO NOT write per-table `GRANT ... TO awcms_app` blocks.** The `awcms_app`
+    role has existed since `sql/019_awcms_db_role_separation.sql` (Issue #141), and 019
+    installs `ALTER DEFAULT PRIVILEGES` so that new tables/sequences created by
+    the migration owner are **automatically** granted to `awcms_app` — a manual
+    GRANT is pure noise. What is NOT automatic: `FUNCTION` (see §SECURITY DEFINER)
+    and objects created by ANOTHER role.
 
-    **KECUALI bila tabelmu harus LEBIH SEMPIT dari default itu.** Karena 019
-    memberi keempat verb secara blanket, menulis `GRANT SELECT, INSERT, UPDATE`
-    saja **tidak** menahan DELETE — ia sudah diberikan. Kontrol "tabel ini
-    tidak boleh dihapus barisnya" hanya nyata bila migration menulis
-    `REVOKE DELETE ON <tabel> FROM awcms_app;` EKSPLISIT. Ini bukan hipotetis:
-    `sql/125` sempat memuat komentar yang menyatakan kontrol itu sambil tidak
-    menegakkannya sama sekali (ADR-0094). Tabel yang dipersempit WAJIB
-    didaftarkan di `RETIRED_TENANT_TABLE_PRIVILEGES`
-    (`scripts/security-readiness.ts`) dengan daftar verb yang tersisa, atau
-    `checkRuntimeRoleGrants` merah. Verifikasi dengan query nyata
-    (`information_schema.role_table_grants`), bukan dengan membaca migrationnya.
+    **EXCEPT when your table must be NARROWER than that default.** Because 019
+    grants all four verbs blanket, writing only `GRANT SELECT, INSERT, UPDATE`
+    does **not** hold back DELETE — it has already been granted. The control "rows in
+    this table must not be deleted" is only real if the migration writes an
+    EXPLICIT `REVOKE DELETE ON <table> FROM awcms_app;`. This is not hypothetical:
+    `sql/125` at one point carried a comment asserting that control while not
+    enforcing it at all (ADR-0094). A narrowed table MUST be
+    registered in `RETIRED_TENANT_TABLE_PRIVILEGES`
+    (`scripts/security-readiness.ts`) with the list of remaining verbs, or
+    `checkRuntimeRoleGrants` goes red. Verify with a real query
+    (`information_schema.role_table_grants`), not by reading the migration.
 
-13. **`awcms_worker`/`awcms_setup` ADA — dan grant-nya WAJIB eksplisit.**
-    KOREKSI 2026-07-25: versi skill ini sebelumnya menyatakan kedua role itu
-    tidak ada; itu **SALAH** sejak `sql/022_awcms_db_worker_setup_roles.sql`.
-    Keduanya sengaja **tidak** ikut `ALTER DEFAULT PRIVILEGES` — itulah inti
-    least-privilege-nya. Jadi bila tabel barumu dibaca/ditulis job terjadwal:
-    - tulis `GRANT <verb...> ON <tabel> TO awcms_worker;` seminimal mungkin
-      (hanya verb yang benar-benar dipakai job — mis. retensi yang
-      meng-anonimkan cukup `SELECT, UPDATE`, tanpa `DELETE`/`INSERT`);
-    - tambahkan entri **identik** ke `WORKER_ROLE_GRANTS` di
-      `scripts/security-readiness.ts`, plus komentar alasan tiap verb.
+13. **`awcms_worker`/`awcms_setup` DO EXIST — and their grants MUST be explicit.**
+    CORRECTION 2026-07-25: an earlier version of this skill stated that those two roles
+    did not exist; that is **WRONG** as of `sql/022_awcms_db_worker_setup_roles.sql`.
+    They deliberately do **not** take part in `ALTER DEFAULT PRIVILEGES` — that is the
+    core of their least-privilege. So if your new table is read/written by a scheduled job:
+    - write `GRANT <verb...> ON <table> TO awcms_worker;` as minimally as possible
+      (only the verbs the job actually uses — e.g. a retention job that
+      anonymises needs just `SELECT, UPDATE`, without `DELETE`/`INSERT`);
+    - add an **identical** entry to `WORKER_ROLE_GRANTS` in
+      `scripts/security-readiness.ts`, plus a comment giving the reason for each verb.
 
-    Matriks itu dijaga drift test dua-arah: under-grant → job kena
-    `permission denied` di produksi; over-grant → isolasi yang jadi alasan
-    split-role itu bohong. Lupa memperbaruinya membuat `bun run check` merah
-    (gagal keras, bukan senyap).
+    That matrix is guarded by a two-way drift test: under-grant → the job hits
+    `permission denied` in production; over-grant → the isolation that was the reason
+    for the role split is a lie. Forgetting to update it turns `bun run check` red
+    (a hard failure, not a silent one).
 
-14. **Tabel BARU wajib menjawab pertanyaan subjek data** (ADR-0094) — apa
-    yang tabel ini simpan tentang SESEORANG, dan apa yang terjadi padanya
-    saat orang itu minta dihapus. Jawabannya ditulis sebagai entri
-    `subjectData` di `module.ts` modul **pemilik tabel**, bukan di
-    migration. Ini berlaku untuk SETIAP tabel `awcms_*`, bukan hanya yang
-    jelas-jelas berisi data pribadi: tabel yang hanya membawa `created_by`
-    pun harus menyatakannya (`erasure: "severed_with_subject_row"`), dan
-    tabel yang benar-benar tidak menyimpan apa pun tentang seseorang
-    dinyatakan di `NO_SUBJECT_DATA` (`scripts/subject-data-coverage-check.ts`)
-    dengan alasan. `bun run subject-data:coverage:check` menolak diam;
-    `bun run subject-data:registry:check` memverifikasi jawabannya benar
-    terhadap `sql/` — termasuk apakah mode `erasure` yang kamu pilih
-    benar-benar berada dalam privilege `awcms_app` setelah aturan 12 dan 13
-    di atas. Prosedur + lima mode: skill `awcms-data-lifecycle`
-    §Hak subjek data.
+14. **A NEW table must answer the data-subject question** (ADR-0094) — what
+    does this table store about SOMEONE, and what happens to it
+    when that person asks to be erased. The answer is written as a
+    `subjectData` entry in the `module.ts` of the module that **owns the table**, not in the
+    migration. This applies to EVERY `awcms_*` table, not just the ones that
+    obviously contain personal data: even a table that only carries `created_by`
+    must state it (`erasure: "severed_with_subject_row"`), and a
+    table that genuinely stores nothing about anyone is declared
+    in `NO_SUBJECT_DATA` (`scripts/subject-data-coverage-check.ts`)
+    with a reason. `bun run subject-data:coverage:check` refuses silence;
+    `bun run subject-data:registry:check` verifies the answer is correct
+    against `sql/` — including whether the `erasure` mode you chose
+    is actually within `awcms_app`'s privileges after rules 12 and 13
+    above. Procedure + the five modes: skill `awcms-data-lifecycle`
+    §Data subject rights.
 
 ## Template
 
@@ -119,8 +121,8 @@ CREATE INDEX IF NOT EXISTS awcms_<name>_tenant_created_idx
 CREATE INDEX IF NOT EXISTS awcms_<name>_active_idx
   ON awcms_<name> (tenant_id, created_at DESC)
   WHERE deleted_at IS NULL;
--- Konvensi nama index: SUFFIX `_idx` (unique: `_uidx` atau `_key`), bukan
--- prefix `idx_` — mis. sql/013, sql/015:
+-- Index naming convention: SUFFIX `_idx` (unique: `_uidx` or `_key`), not
+-- the prefix `idx_` — e.g. sql/013, sql/015:
 -- `awcms_workflow_task_assignments_task_idx`,
 -- `awcms_reporting_export_runs_scheduled_idx`.
 
@@ -130,82 +132,82 @@ CREATE POLICY awcms_<name>_tenant_isolation ON awcms_<name>
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
 ```
 
-### `ENABLE` tanpa `FORCE` = RLS mati, bukan RLS lemah
+### `ENABLE` without `FORCE` = RLS dead, not RLS weak
 
-**`FORCE` bukan pengetat opsional — tanpanya policy-mu tidak pernah dievaluasi.**
-PostgreSQL melewati RLS untuk **pemilik tabel**, dan aplikasi ini connect
-sebagai pemilik migration via `DATABASE_URL`. Jadi `ENABLE` sendirian
-menghasilkan tabel yang _terlihat_ terlindungi — policy ada, `relrowsecurity`
-true — sementara setiap query mengembalikan baris semua tenant.
+**`FORCE` is not an optional tightening — without it your policy is never evaluated.**
+PostgreSQL skips RLS for the **table owner**, and this application connects
+as the migration owner via `DATABASE_URL`. So `ENABLE` on its own
+produces a table that _looks_ protected — the policy exists, `relrowsecurity`
+is true — while every query returns rows from all tenants.
 
-Ini bukan hipotetis: migration 002-008 dan 010-012 mengirim **23 tabel**
-seperti itu (termasuk `awcms_identities`, `awcms_sessions`), dan sebuah audit
-sebelumnya justru mencatat "RLS ENABLE di semua tabel tenant-scoped" sebagai
-bukti sehat. Diperbaiki `sql/017_awcms_enforce_rls_force.sql`.
+This is not hypothetical: migrations 002-008 and 010-012 shipped **23 tables**
+like that (including `awcms_identities`, `awcms_sessions`), and an earlier audit
+actually recorded "RLS ENABLE on all tenant-scoped tables" as
+evidence of health. Fixed by `sql/017_awcms_enforce_rls_force.sql`.
 
-Saat me-review/mengaudit RLS: **grep `FORCE`, bukan `ENABLE`**, dan periksa role
-koneksi aplikasi. Koneksi `SUPERUSER`/`BYPASSRLS` melewati RLS _bahkan dengan_
-`FORCE` — itu lapisan terpisah (role least-privilege `awcms_app`).
+When reviewing/auditing RLS: **grep for `FORCE`, not `ENABLE`**, and check the
+application's connection role. A `SUPERUSER`/`BYPASSRLS` connection bypasses RLS _even with_
+`FORCE` — that is a separate layer (the least-privilege `awcms_app` role).
 
-Cara membuktikan policy benar-benar menegakkan (bukan sekadar terdaftar): buat
-DB sekali-pakai + role `NOSUPERUSER NOBYPASSRLS`, jalankan migration **sebagai
-role itu** supaya ia jadi pemilik, seed dua tenant, lalu baca data tenant B
-dengan `app.current_tenant_id` disetel ke tenant A. Harus nol baris.
+How to prove a policy actually enforces (rather than merely being registered): create a
+throwaway DB + a `NOSUPERUSER NOBYPASSRLS` role, run the migrations **as
+that role** so it becomes the owner, seed two tenants, then read tenant B's data
+with `app.current_tenant_id` set to tenant A. It must be zero rows.
 
-**FK tidak dilindungi RLS.** Pemeriksaan integritas referensial dijalankan
-dengan hak pemilik dan melewati RLS, jadi FK yang tidak tenant-scoped tetap
-menerima nilai lintas tenant meski `FORCE` aktif. Untuk kolom self-reference
-atau FK antar-tabel tenant-scoped, pakai FK **komposit**:
+**FKs are not protected by RLS.** Referential integrity checks run
+with owner rights and bypass RLS, so an FK that is not tenant-scoped still
+accepts cross-tenant values even with `FORCE` active. For a self-reference column
+or an FK between tenant-scoped tables, use a **composite** FK:
 
 ```sql
--- butuh UNIQUE (tenant_id, id) di tabel target
+-- needs UNIQUE (tenant_id, id) on the target table
 FOREIGN KEY (tenant_id, parent_id) REFERENCES awcms_<target> (tenant_id, id)
 ```
 
-## Menggunakan `SECURITY DEFINER` (bootstrap read sebelum tenant context ada)
+## Using `SECURITY DEFINER` (bootstrap reads before a tenant context exists)
 
-Kadang sebuah query harus jalan **sebelum** tenant context ada sama sekali
-(mis. resolusi publik `hostname`/`tenantCode` -> `tenant_id`), padahal
-tabelnya `FORCE ROW LEVEL SECURITY`. Jangan lepas `FORCE ROW LEVEL
-SECURITY` untuk mengakalinya — buat fungsi `SECURITY DEFINER` yang sempit.
-Checklist wajib (detail lengkap + alasan tiap butir:
-`docs/adr/0003-postgresql-rls-multi-tenant.md` §Checklist). Base ini belum
-punya contoh `SECURITY DEFINER` sendiri — rujukan kanoniknya ada di repo
-awcms-mini (migration 033, tenant domain lookup function; Issue #559 di repo
-itu), bukan di `sql/` repo ini:
+Sometimes a query has to run **before** any tenant context exists at all
+(e.g. public resolution of `hostname`/`tenantCode` -> `tenant_id`), while
+the table is `FORCE ROW LEVEL SECURITY`. Do not drop `FORCE ROW LEVEL
+SECURITY` to work around it — write a narrow `SECURITY DEFINER` function.
+Mandatory checklist (full detail + the reason for each item:
+`docs/adr/0003-postgresql-rls-multi-tenant.md` §Checklist). This base does not yet
+have its own `SECURITY DEFINER` example — the canonical reference is in the
+awcms-mini repo (migration 033, the tenant domain lookup function; Issue #559 in that
+repo), not in this repo's `sql/`:
 
-1. Konfirmasi role pemilik migration benar-benar superuser (`SELECT
-rolsuper FROM pg_roles`) — keamanan mekanisme ini datang dari situ, bukan
-   dari RLS/`FORCE`.
-2. Body fungsi SQL statis/tetap, parameter selalu argumen fungsi
-   diparameterkan — tidak ada dynamic SQL/string concatenation.
-3. Minimalkan kolom yang di-return — tidak ada kolom sensitif kecuali
-   benar-benar dibutuhkan.
-4. `REVOKE ALL ... FROM PUBLIC` lalu `GRANT EXECUTE` eksplisit ke role
-   spesifik (mis. `awcms_app`) — ini **tidak** otomatis tercakup
-   `ALTER DEFAULT PRIVILEGES` di `sql/019_awcms_db_role_separation.sql`
-   (itu hanya `TABLES`/`SEQUENCES`, bukan `FUNCTIONS`). Nomor 013 di
-   awcms-mini; di repo ini default-privilege awcms_app dipasang `sql/019`.
-5. `SET search_path = public, pg_temp` di definisi fungsi.
-6. `STABLE`/`IMMUTABLE` untuk fungsi read-only, bukan `VOLATILE` default.
-7. Verifikasi empiris terhadap DB yang berjalan (bukan asumsi dari
-   dokumentasi PostgreSQL semata) sebelum melaporkan mekanisme ini aman.
-8. Kalau ada query kedua yang kondisional setelah fungsi ini (mis. "kalau
-   baris ditemukan, query lagi ke tabel lain"), pertimbangkan apakah beda
-   jumlah round-trip antar outcome jadi timing side-channel — gabungkan
-   jadi satu query via `JOIN` kalau tabel kedua sudah RLS-free/publicly
+1. Confirm the migration owner role really is a superuser (`SELECT
+rolsuper FROM pg_roles`) — the security of this mechanism comes from there, not
+   from RLS/`FORCE`.
+2. The function body is static/fixed SQL, parameters are always parameterised
+   function arguments — no dynamic SQL/string concatenation.
+3. Minimise the returned columns — no sensitive column unless
+   genuinely required.
+4. `REVOKE ALL ... FROM PUBLIC` then an explicit `GRANT EXECUTE` to a
+   specific role (e.g. `awcms_app`) — this is **not** automatically covered by
+   the `ALTER DEFAULT PRIVILEGES` in `sql/019_awcms_db_role_separation.sql`
+   (that covers only `TABLES`/`SEQUENCES`, not `FUNCTIONS`). It is number 013 in
+   awcms-mini; in this repo awcms_app's default privileges are installed by `sql/019`.
+5. `SET search_path = public, pg_temp` in the function definition.
+6. `STABLE`/`IMMUTABLE` for a read-only function, not the default `VOLATILE`.
+7. Empirical verification against a running DB (not an assumption from
+   the PostgreSQL documentation alone) before reporting this mechanism as safe.
+8. If there is a second conditional query after this function (e.g. "if
+   a row is found, query another table"), consider whether the differing
+   round-trip count between outcomes becomes a timing side channel — merge them
+   into one query via `JOIN` if the second table is already RLS-free/publicly
    readable.
 
 ## Append-only & immutable
 
-- Posted sales document & stock movement: **append-only**, tidak di-update/delete. Koreksi lewat reversal/return/adjustment.
-- Jangan tambahkan soft delete ke entitas posted/append-only/audit/security log/exported tax batch.
-- Untuk business key yang boleh dipakai ulang setelah arsip, gunakan partial unique index `WHERE deleted_at IS NULL`.
+- Posted sales documents & stock movements: **append-only**, never updated/deleted. Corrections go through a reversal/return/adjustment.
+- Do not add soft delete to a posted/append-only/audit/security log/exported tax batch entity.
+- For a business key that may be reused after archiving, use a partial unique index `WHERE deleted_at IS NULL`.
 
-## Verifikasi
+## Verification
 
 ```bash
-bun run db:migrate   # tidak double-run, berhenti saat error
+bun run db:migrate   # no double-run, stops on error
 ```
 
-Setelah migrate: cek row count kritis, constraint/index, partial unique soft delete, dan RLS aktif. Update ERD/data dictionary bila perlu (doc 04) dan matrix migration (doc 13).
+After migrating: check critical row counts, constraints/indexes, the soft-delete partial unique, and that RLS is active. Update the ERD/data dictionary if needed (doc 04) and the migration matrix (doc 13).

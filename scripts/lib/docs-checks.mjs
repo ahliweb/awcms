@@ -712,8 +712,14 @@ export const ADR_FILE_PATTERN = /^(\d{4})-.+\.md$/;
 /**
  * ADR index drift gate (Issue #183 F3) — every numbered ADR file
  * `docs/adr/NNNN-*.md` (except the `0000` template) MUST be linked from the
- * authoritative ADR index (`docs/adr/README.id.md`). Ported ADRs (0027-0031)
+ * authoritative ADR index (`docs/adr/README.md`). Ported ADRs (0027-0031)
  * had drifted out of the index; this makes that impossible to recur silently.
+ *
+ * The index this reads is the ENGLISH one. Under ADR-0023 the authoritative
+ * index was `README.id.md` and this gate read that; ADR-0097 inverted the
+ * direction, and a gate that keeps holding the MIRROR to the ADR set is asking
+ * the copy to lead. The mirror stays covered — by its `i18n-source-hash`, which
+ * goes stale the moment the English index gains a row.
  *
  * @param {string[]} adrFileNames - basenames present in `docs/adr/`.
  * @param {string} indexFile - repo-relative path of the index (for the message).
@@ -739,7 +745,7 @@ export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
       problems.push({
         file: indexFile,
         line: 1,
-        message: `ADR ${name} tidak terdaftar di indeks ADR — tambahkan barisnya (dan regenerasi padanan Inggris + i18n-source-hash).`
+        message: `ADR ${name} is not listed in the ADR index — add its row (then re-translate the Indonesian mirror and update its i18n-source-hash).`
       });
     }
   }

@@ -1,235 +1,237 @@
 ---
 name: awcms-workflow-approval
-description: Kerjakan bagian mana pun dari modul workflow_approval AWCMS (Issue 11.1 linear engine, evolved Issue #747 epic platform-evolution #738 Wave 2 jadi graph-based managed engine). Gunakan saat menambah node graph baru, delegation/escalation/administrative-recovery, atau condition/action resolver. PR #778 memperbaiki 4 security finding sebelum merge — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
+description: Work on any part of the AWCMS workflow_approval module (Issue 11.1 linear engine, evolved by Issue #747 epic platform-evolution #738 Wave 2 into a graph-based managed engine). Use when adding a new graph node, delegation/escalation/administrative-recovery, or a condition/action resolver. PR #778 fixed 4 security findings before merge — this summarises the invariants that must be preserved so they are not regressed.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Workflow Approval Module
 
-`workflow_approval` (`src/modules/workflow-approval`, Issue 11.1 lalu
-evolved Issue #747 epic `platform-evolution` #738 Wave 2) adalah **managed,
-versioned, graph-based** enterprise workflow minimum — tetap menjaga
-guardrail asli base: tidak ada term/aksi bisnis domain-spesifik (base tidak
-mengirim POS cancel/Coretax export/warehouse transfer), tidak ada BPMN
-engine eksternal, dan tidak ada eksekusi kode runtime di condition/action
-(doc 21 §3 decision tree, node Q5). Baca
-`src/modules/workflow-approval/README.md` untuk detail lengkap; skill ini
-merangkum invariant keamanan yang WAJIB dipertahankan (4 finding PR #778
-sudah pernah diregresi sekali, jangan diulang).
+`workflow_approval` (`src/modules/workflow-approval`, Issue 11.1 then
+evolved by Issue #747 epic `platform-evolution` #738 Wave 2) is the minimum
+**managed, versioned, graph-based** enterprise workflow — while still keeping
+the original base guardrails: no domain-specific business terms/actions (the base does not
+send a POS cancel/Coretax export/warehouse transfer), no external BPMN
+engine, and no runtime code execution in conditions/actions
+(doc 21 §3 decision tree, node Q5). Read
+`src/modules/workflow-approval/README.md` for the full detail; this skill
+summarises the security invariants that MUST be preserved (the 4 findings of PR #778
+have already been regressed once, do not repeat them).
 
-## Kapan pakai skill ini vs skill generik
+## When to use this skill vs the generic skills
 
-Melengkapi `awcms-abac-guard` (self-approval-deny check yang dipakai
-ulang di sini), `awcms-idempotency`, `awcms-audit-log`. Skill ini
-menyediakan konteks graph-engine dan invariant keamanan spesifik modul ini.
+It complements `awcms-abac-guard` (the self-approval-deny check that is reused
+here), `awcms-idempotency`, `awcms-audit-log`. This skill
+supplies the graph-engine context and the security invariants specific to this module.
 
-## Evolusi dari Issue 11.1 (linear) ke Issue #747 (graph-based managed)
+## Evolution from Issue 11.1 (linear) to Issue #747 (graph-based managed)
 
-| Issue 11.1 (linear)                         | Issue #747 (managed, graph-based)                                          |
-| ------------------------------------------- | -------------------------------------------------------------------------- |
-| Satu `status: active/inactive` per definisi | `version` + `lifecycle_status: draft/active/retired`, versi immutable      |
-| `steps` (jsonb list terurut)                | `graph` (nodes/transitions — approval/condition/parallel/join/notify/end)  |
-| Tidak ada endpoint create-definition publik | `POST/PUT/DELETE /workflows/definitions`, `.../publish`, `.../retire`, dst |
-| `current_step_order` (satu int)             | `awcms_workflow_tasks` (satu baris per node aktif — multi-node aktif)      |
-| Satu assignee implisit                      | `_task_assignments` — quorum/any/all, delegation-resolved deciders         |
-| Tidak ada delegation                        | `_delegations` — effective-dated, scoped, reason, audited, revocable       |
-| Tidak ada escalation/timeout                | Per-node `escalation` config + `workflow:escalations:dispatch`             |
-| Tidak ada administrative recovery           | Reassign/cancel/force-approve/force-reject, permission-gated+audited       |
+| Issue 11.1 (linear)                          | Issue #747 (managed, graph-based)                                          |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| One `status: active/inactive` per definition | `version` + `lifecycle_status: draft/active/retired`, immutable versions   |
+| `steps` (ordered jsonb list)                 | `graph` (nodes/transitions — approval/condition/parallel/join/notify/end)  |
+| No public create-definition endpoint         | `POST/PUT/DELETE /workflows/definitions`, `.../publish`, `.../retire`, etc |
+| `current_step_order` (a single int)          | `awcms_workflow_tasks` (one row per active node — multiple active nodes)   |
+| One implicit assignee                        | `_task_assignments` — quorum/any/all, delegation-resolved deciders         |
+| No delegation                                | `_delegations` — effective-dated, scoped, reason, audited, revocable       |
+| No escalation/timeout                        | Per-node `escalation` config + `workflow:escalations:dispatch`             |
+| No administrative recovery                   | Reassign/cancel/force-approve/force-reject, permission-gated+audited       |
 
-## Graph model (`domain/workflow-graph.ts`) — set node type TERTUTUP, bukan scripting engine
+## Graph model (`domain/workflow-graph.ts`) — a CLOSED node type set, not a scripting engine
 
 - **`approval`** — 1+ `assigneeTenantUserIds`; `quorumRule` (`all`/`any`/
-  `quorum` + `quorumThreshold`) menentukan kapan node selesai. Satu
-  `reject` SELALU menyelesaikan node sebagai rejected, apa pun rule-nya
-  (default konservatif yang disengaja, `domain/workflow-quorum.ts`).
-  `escalation` config opsional (`timeoutMinutes`,
+  `quorum` + `quorumThreshold`) determines when the node completes. A single
+  `reject` ALWAYS completes the node as rejected, whatever the rule is
+  (a deliberately conservative default, `domain/workflow-quorum.ts`).
+  Optional `escalation` config (`timeoutMinutes`,
   `escalateToTenantUserId`, `maxEscalations`).
-- **`condition`** — SALAH SATU: perbandingan bounded (`factKey`/
-  `operator`/`value`, operator `eq|neq|gt|gte|lt|lte|in`) atas fact yang
-  dideklarasikan di `factsSchema` definisi, ATAU referensi ke
-  `WorkflowConditionResolver` yang terdaftar statis (`resolverName`).
-  Tidak pernah keduanya, tidak pernah tidak ada satu pun.
-- **`parallel`**/**`join`** — fan-out 2+ cabang konkuren, fan-in setelah
-  SEMUA cabang tiba di join (`awcms_workflow_join_arrivals`). Nested
-  parallel/join **TIDAK didukung** (lihat §Deferred).
-- **`notify`** — memicu notifikasi lewat capability port
-  `WorkflowNotificationPort` (ADR-0011; adapter di `email`, wraps
-  `enqueueAnnouncement`) dan langsung lanjut; tidak pernah blocking.
-- **`end`** — terminal; set outcome instance.
+- **`condition`** — EITHER: a bounded comparison (`factKey`/
+  `operator`/`value`, operators `eq|neq|gt|gte|lt|lte|in`) over a fact
+  declared in the definition's `factsSchema`, OR a reference to a
+  statically registered `WorkflowConditionResolver` (`resolverName`).
+  Never both, never neither.
+- **`parallel`**/**`join`** — fan-out into 2+ concurrent branches, fan-in after
+  ALL branches arrive at the join (`awcms_workflow_join_arrivals`). Nested
+  parallel/join is **NOT supported** (see §Deferred).
+- **`notify`** — triggers a notification through the capability port
+  `WorkflowNotificationPort` (ADR-0011; adapter in `email`, wraps
+  `enqueueAnnouncement`) and immediately continues; never blocking.
+- **`end`** — terminal; sets the instance outcome.
 
-`validateWorkflowGraph` memvalidasi struktural setiap referensi node,
-batas quorum threshold, kecocokan branch-set parallel/join, dan menolak
-cycle (DFS) — jalan di SETIAP write definisi DAN lagi saat publish
+`validateWorkflowGraph` structurally validates every node reference,
+the quorum threshold bounds, the parallel/join branch-set match, and rejects
+cycles (DFS) — it runs on EVERY definition write AND again at publish
 (defense in depth).
 
 ## Version pinning
 
 `awcms_workflow_instances.workflow_definition_id` (FK, immutable
-setelah published) + `workflow_definition_version` terdenormalisasi
-mem-pin setiap instance ke baris definisi PERSIS yang aktif saat
-`startWorkflowInstance` berjalan. Karena baris published/active/retired
-tidak pernah diedit di tempat (`application/workflow-definition-directory.ts`
-menegakkan editing hanya untuk `draft`), setiap baca/advance instance itu
-nanti selalu re-fetch graph yang identik terlepas dari versi baru yang
-dipublikasikan setelahnya.
+once published) + the denormalised `workflow_definition_version`
+pin each instance to EXACTLY the definition row that was active when
+`startWorkflowInstance` ran. Because published/active/retired rows
+are never edited in place (`application/workflow-definition-directory.ts`
+enforces editing only for `draft`), every later read/advance of the instance
+always re-fetches an identical graph regardless of newer versions
+published afterwards.
 
 ## Delegation (`domain/workflow-delegation.ts`)
 
-Delegation HANYA membiarkan delegate bertindak memakai standing MILIK
-delegator — TIDAK PERNAH permission grant, tidak pernah lebih luas dari
-`workflowKey`/`resourceType`/window efektif yang dideklarasikan baris
-delegation itu sendiri. Self-approval denial (`identity-access/domain/
-access-control.ts`, tidak berubah) tetap membandingkan tenant user yang
-BERTINDAK terhadap `requested_by_tenant_user_id` instance — delegate TIDAK
-BISA dipakai untuk approve request yang delegatornya sendiri ajukan.
-Create (`POST /workflows/delegations`) dan revoke
-(`POST /workflows/delegations/{id}/revoke`) WAJIB `Idempotency-Key` dan
-tercatat lewat `recordAuditEvent` (TAMBAHAN dari domain event
-`workflow.delegation.created`/`.revoked` yang sudah dipublikasikan lewat
-outbox `domain_event_runtime` — audit log dan domain event adalah DUA
-record berbeda, dikonsumsi independen, bukan hal yang sama). Revoke
-di-gate pada permission `workflow.delegation.revoke` (Owner/Manager per
-doc 17) — ownership check `revokeWorkflowDelegation` (hanya delegator
-asli boleh revoke) tetap sebagai defense-in-depth DI ATAS permission gate
-itu, bukan pengganti (lihat §Security finding di bawah — ini pernah bug).
+Delegation ONLY lets the delegate act using the delegator's OWN
+standing — NEVER a permission grant, never broader than the
+`workflowKey`/`resourceType`/effective window declared by the delegation
+row itself. The self-approval denial (`identity-access/domain/
+access-control.ts`, unchanged) still compares the tenant user who is
+ACTING against the instance's `requested_by_tenant_user_id` — a delegate CANNOT
+be used to approve a request the delegator themselves submitted.
+Create (`POST /workflows/delegations`) and revoke
+(`POST /workflows/delegations/{id}/revoke`) MUST carry `Idempotency-Key` and
+are recorded via `recordAuditEvent` (IN ADDITION to the domain events
+`workflow.delegation.created`/`.revoked` already published through the
+`domain_event_runtime` outbox — the audit log and the domain event are TWO
+different records, consumed independently, not the same thing). Revoke
+is gated on the permission `workflow.delegation.revoke` (Owner/Manager per
+doc 17) — the ownership check in `revokeWorkflowDelegation` (only the original
+delegator may revoke) remains as defense-in-depth ON TOP of that permission
+gate, not as a replacement (see §Security findings below — this was once a bug).
 
 ## Escalation/timeout (`application/workflow-escalation.ts`)
 
-Dibangun di atas shared worker runner (`src/lib/jobs/job-runner.ts`) —
-bounded batch, advisory lock, `--dry-run`. **Idempotency guard**: `UPDATE`
-escalation dikondisikan `WHERE status = 'pending' AND escalation_step =
-<value dibaca pass ini>` — race yang kalah (run konkuren, atau pass yang
-di-retry) mempengaruhi nol baris dan diam-diam di-skip, tidak pernah
-escalate dobel. **Role DB-nya**: job ini berjalan sebagai role
-least-privilege `awcms_worker`.
+Built on top of the shared worker runner (`src/lib/jobs/job-runner.ts`) —
+bounded batch, advisory lock, `--dry-run`. **Idempotency guard**: the escalation
+`UPDATE` is conditioned on `WHERE status = 'pending' AND escalation_step =
+<value read in this pass>` — the losing race (a concurrent run, or a retried
+pass) affects zero rows and is silently skipped, never escalating
+twice. **Its DB role**: this job runs as the least-privilege role
+`awcms_worker`.
 
-> **KOREKSI 15 Agustus 2026 — versi sebelumnya SALAH, dan salahnya ke arah
-> yang berbahaya.** Ia menyatakan repo ini "tidak punya role `awcms_worker`",
-> bahwa `WORKER_DATABASE_URL` jatuh kembali ke `DATABASE_URL` sehingga
-> "pemisahan privilege BELUM ada di sini", dan melarang menulis
-> `GRANT ... TO awcms_worker` karena "akan gagal jalan". Keempatnya keliru:
+> **CORRECTION 15 August 2026 — the previous version was WRONG, and wrong in a
+> dangerous direction.** It stated that this repo "has no `awcms_worker` role",
+> that `WORKER_DATABASE_URL` falls back to `DATABASE_URL` so
+> "privilege separation DOES NOT exist here yet", and forbade writing
+> `GRANT ... TO awcms_worker` because it "would fail to run". All four are wrong:
 >
-> - `awcms_worker` DIBUAT di `sql/022_awcms_db_worker_setup_roles.sql`
->   (Issue #163), bukan tidak ada.
-> - Migrasi repo ini memuat **78** pernyataan `GRANT ... TO awcms_worker`
->   yang sudah lama berjalan — larangan itu akan menolak pekerjaan yang benar.
-> - Produksi terverifikasi memakai pemisahan itu: `WORKER_DATABASE_URL`
->   menunjuk `awcms_worker`, `DATABASE_URL` menunjuk `awcms_app`.
-> - `sql/022` sudah memberi `awcms_workflow_instances` **`SELECT` saja** —
->   yakni persis perbaikan finding #4 PR #778, sudah terpasang di sini.
+> - `awcms_worker` IS CREATED in `sql/022_awcms_db_worker_setup_roles.sql`
+>   (Issue #163), it is not absent.
+> - This repo's migrations contain **78** `GRANT ... TO awcms_worker` statements
+>   that have long been running — that prohibition would reject correct work.
+> - Production is verified to use that separation: `WORKER_DATABASE_URL`
+>   points at `awcms_worker`, `DATABASE_URL` points at `awcms_app`.
+> - `sql/022` already grants `awcms_workflow_instances` **`SELECT` only** —
+>   which is exactly the fix for PR #778's finding #4, already in place here.
 >
-> Arah kesalahannya yang membuatnya mahal: agen yang mempercayainya akan
-> MENOLAK menulis GRANT worker dan menjalankan job sebagai role pemilik,
-> sehingga menghapus pemisahan privilege yang sudah ada — regresi keamanan
-> yang lahir dari dokumentasi, bukan dari kode. Skill `awcms-deploy` sudah
-> dikoreksi untuk klaim yang sama; berkas ini terlewat.
+> The direction of the error is what made it expensive: an agent who believed it would
+> REFUSE to write worker GRANTs and run the job as the owner role,
+> thereby removing the privilege separation that already exists — a security
+> regression born of documentation, not of code. The `awcms-deploy` skill has already
+> been corrected for the same claim; this file was missed.
 
-Grant worker untuk modul ini hidup di `sql/022` dan `sql/127`, dan
-**dijaga gerbang**: `WORKER_ROLE_GRANTS` di `scripts/security-readiness.ts`
-menyatakan set yang diharapkan (`awcms_workflow_tasks` `SELECT,UPDATE`;
+The worker grants for this module live in `sql/022` and `sql/127`, and are
+**gated**: `WORKER_ROLE_GRANTS` in `scripts/security-readiness.ts`
+declares the expected set (`awcms_workflow_tasks` `SELECT,UPDATE`;
 `awcms_workflow_instances` `SELECT`; `awcms_workflow_definitions` `SELECT`;
-`awcms_workflow_task_assignments` `INSERT,SELECT`). Menambah grant tanpa
-menambahkannya ke daftar itu akan memerahkan `security:readiness`.
+`awcms_workflow_task_assignments` `INSERT,SELECT`). Adding a grant without
+adding it to that list will turn `security:readiness` red.
 
 ## Administrative recovery (`application/workflow-recovery.ts`)
 
 Reassign (`POST /workflows/tasks/{id}/reassign`), cancel
 (`POST /workflows/instances/{id}/cancel`), force-approve/force-reject
-(`POST /workflows/tasks/{id}/force-decision`) — masing-masing
+(`POST /workflows/tasks/{id}/force-decision`) — each is
 permission-gated (`workflow.recovery.reassign`/`.cancel`/`.force_decide`),
-reason-required, `Idempotency-Key`, fully audited. Tidak pernah menimpa/
-menghapus baris decision/task/assignment sebelumnya — selalu append baris
-baru atau transisi status ter-guard.
+reason-required, `Idempotency-Key`, fully audited. It never overwrites/
+deletes an earlier decision/task/assignment row — it always appends a new row
+or performs a guarded status transition.
 
-## CRITICAL — 4 security finding PR #778 (fixed before merge, jangan diregresi)
+## CRITICAL — the 4 security findings of PR #778 (fixed before merge, do not regress)
 
-1. **`force-decision` self-approval bypass (High)** — route mengotorisasi
-   lewat `workflow.recovery.force_decide` TANPA mengisi
-   `resourceAttributes.requestedByTenantUserId`, dan self-approval-deny
-   check `access-control.ts` di-hardwire hanya untuk action `"approve"` —
-   sehingga caller yang mengajukan instance-nya SENDIRI dan punya
-   `force_decide` bisa force-approve permintaannya sendiri, bypass quorum
-   sepenuhnya. Fix: lookup task/instance SEBELUM guard (pola sama
-   `decisions.ts`), dan self-approval-deny check diperluas mencakup
-   `"force_decide"` juga (blok force-approve DAN force-reject instance
-   milik sendiri). **Endpoint recovery baru wajib lookup requester
-   SEBELUM guard, mengikuti pola ini.**
-2. **Audit log entry hilang (High)** — `publish`, `retire`, handler
-   `DELETE` definitions, dan delegation create/revoke tidak memanggil
-   `recordAuditEvent` meski mutation high-risk; kelima sekarang
-   memanggilnya. `DELETE .../definitions/{id}` dan kedua endpoint
-   delegation juga sempat kehilangan enforcement `Idempotency-Key` —
-   sekarang ditambahkan.
-3. **Permission `workflow.delegation.revoke` tidak ditegakkan (Low)** —
-   route revoke di-gate pada `workflow.delegation.read` dan HANYA
-   mengandalkan ownership check; permission `revoke` yang sudah diseed
-   (doc 17: Owner/Manager `RCV`) jadi dead code. Fix: gate pada
+1. **`force-decision` self-approval bypass (High)** — the route authorised
+   via `workflow.recovery.force_decide` WITHOUT populating
+   `resourceAttributes.requestedByTenantUserId`, and the self-approval-deny
+   check in `access-control.ts` was hardwired to the action `"approve"` only —
+   so a caller who submitted their OWN instance and holds
+   `force_decide` could force-approve their own request, bypassing quorum
+   entirely. Fix: look the task/instance up BEFORE the guard (the same pattern as
+   `decisions.ts`), and the self-approval-deny check was widened to cover
+   `"force_decide"` as well (blocking force-approve AND force-reject of one's own
+   instance). **A new recovery endpoint must look the requester up
+   BEFORE the guard, following this pattern.**
+2. **Missing audit log entries (High)** — `publish`, `retire`, the
+   `DELETE` definitions handler, and delegation create/revoke did not call
+   `recordAuditEvent` even though they are high-risk mutations; all five now
+   call it. `DELETE .../definitions/{id}` and both delegation endpoints
+   also lacked `Idempotency-Key` enforcement for a while —
+   it has now been added.
+3. **The permission `workflow.delegation.revoke` was not enforced (Low)** —
+   the revoke route was gated on `workflow.delegation.read` and relied ONLY
+   on the ownership check; the already-seeded `revoke` permission
+   (doc 17: Owner/Manager `RCV`) became dead code. Fix: gate on
    `workflow.delegation.revoke`.
-4. **Worker role escalation-job over-grant (Low)** — di mini, migrasi 060
-   memberi `SELECT, UPDATE` di `awcms_workflow_instances` ke
-   `awcms_worker`, padahal escalation job hanya pernah `SELECT` dari
-   tabel itu. Dipangkas jadi `SELECT`-only.
+4. **Worker role escalation-job over-grant (Low)** — in mini, migration 060
+   granted `SELECT, UPDATE` on `awcms_workflow_instances` to
+   `awcms_worker`, even though the escalation job only ever `SELECT`s from
+   that table. Trimmed to `SELECT`-only.
 
-   **KOREKSI 15 Agustus 2026:** versi sebelumnya menyebut temuan ini
-   "vacuous di repo ini" karena katanya role dan migrasinya tidak ada.
-   Justru sebaliknya — dan itu kabar baik: `sql/022:145` sudah memberi
-   `awcms_workflow_instances` **`SELECT` saja**, jadi bentuk yang benar
-   SUDAH terpasang, dan `WORKER_ROLE_GRANTS` di `security-readiness.ts`
-   MENJAGANYA tetap begitu. Pelajarannya karena itu berlaku penuh di sini,
-   bukan menunggu port: tiap grant worker baru wajib sebesar query yang
-   benar-benar dijalankan, dan gerbangnya akan menuntut daftar itu ikut
-   diperbarui.
+   **CORRECTION 15 August 2026:** the previous version called this finding
+   "vacuous in this repo" because it claimed the role and its migration did not exist.
+   The opposite is true — and that is good news: `sql/022:145` already grants
+   `awcms_workflow_instances` **`SELECT` only**, so the correct shape is
+   ALREADY in place, and `WORKER_ROLE_GRANTS` in `security-readiness.ts`
+   KEEPS it that way. The lesson therefore applies fully here,
+   not pending a port: every new worker grant must be no larger than the query
+   actually executed, and the gate will demand that the list be updated
+   along with it.
 
-**Pelajaran generik dari keempatnya**: endpoint action baru pada resource
-yang punya konsep "pemilik/requester" WAJIB (a) lookup requester SEBELUM
-guard supaya self-approval-deny bisa membandingkan, (b) selalu panggil
-`recordAuditEvent` untuk mutation high-risk meski "cuma" administrative
-action, (c) gate pada permission SPESIFIK-nya sendiri (jangan reuse
-permission `.read` yang lebih lemah), (d) worker role grant SELALU
-diverifikasi hanya sebesar yang benar-benar dipakai query nyata.
+**The generic lesson from all four**: a new action endpoint on a resource
+that has an "owner/requester" concept MUST (a) look the requester up BEFORE
+the guard so self-approval-deny has something to compare, (b) always call
+`recordAuditEvent` for high-risk mutations even for a "mere" administrative
+action, (c) gate on its OWN SPECIFIC permission (do not reuse the weaker
+`.read` permission), (d) worker role grants are ALWAYS
+verified to be no larger than what the real queries actually use.
 
-## Deferred (sengaja di luar scope #747, jangan asumsikan sudah ada)
+## Deferred (deliberately out of scope for #747, do not assume it exists)
 
-- **Nested `parallel`/`join`** — branch yang punya `parallel` node sendiri
-  TIDAK didukung; `awcms_workflow_join_arrivals` asumsikan satu level
-  nesting.
-- **`any`-join** — hanya `all`-join yang diimplementasikan.
-- **Node type `action`** yang memanggil `WorkflowActionHandler` terdaftar
-  — registry/port sudah ada dan teruji, tapi belum ada node type yang
-  memanggilnya.
-- **SoD hooks dari Issue #746** — self-approval/delegation authorization
-  di sini didesain supaya hook SoD masa depan bisa plug-in ke
-  `findEligibleAssignment`/`evaluateAccess` tanpa rewrite, tapi belum ada
-  yang SoD-specific dibangun di sini.
-- **Visual definition/graph editor** — `POST/PUT /workflows/definitions/**`
-  hanya via API, tidak ada UI authoring graph.
+- **Nested `parallel`/`join`** — a branch that has its own `parallel` node
+  is NOT supported; `awcms_workflow_join_arrivals` assumes a single level
+  of nesting.
+- **`any`-join** — only `all`-join is implemented.
+- **The `action` node type** that calls a registered `WorkflowActionHandler`
+  — the registry/port exists and is tested, but no node type calls
+  it yet.
+- **SoD hooks from Issue #746** — the self-approval/delegation authorization
+  here is designed so a future SoD hook can plug into
+  `findEligibleAssignment`/`evaluateAccess` without a rewrite, but nothing
+  SoD-specific has been built here yet.
+- **A visual definition/graph editor** — `POST/PUT /workflows/definitions/**`
+  is API-only, there is no graph authoring UI.
 
 ## Idempotency
 
-Setiap mutation high-risk (`decisions`, `reassign`, `force-decision`,
+Every high-risk mutation (`decisions`, `reassign`, `force-decision`,
 `publish`, `retire`, `DELETE .../definitions/{id}`,
 `.../instances/{id}/cancel`, `.../delegations` create,
-`.../delegations/{id}/revoke`) wajib `Idempotency-Key`, memakai store
-generik `awcms_idempotency_keys` yang sama.
+`.../delegations/{id}/revoke`) requires `Idempotency-Key`, using the same
+generic `awcms_idempotency_keys` store.
 
-## Pitfall umum
+## Common pitfalls
 
-1. Endpoint recovery/decision baru wajib lookup requester/owner SEBELUM
-   memanggil `evaluateAccess` — kalau tidak, self-approval-deny check
-   tidak punya nilai untuk dibandingkan (lihat finding #1 di atas).
-2. Jangan lupa `recordAuditEvent` untuk mutation baru — domain event lewat
-   `appendDomainEvent` BUKAN pengganti audit log, keduanya wajib ada.
-3. Jangan reuse permission `.read` sebagai gate mutation — selalu bikin
-   permission spesifik-aksi (`.revoke`, `.reassign`, dst.).
-4. Jangan tambah nested `parallel`/`join` tanpa redesign
-   `awcms_workflow_join_arrivals`'s skema fan-in — asumsi satu-level
-   nesting tertanam di situ.
-5. Jangan tambah kode/expression evaluation ke `condition` node — hanya
-   perbandingan bounded atau resolver terdaftar statis, tidak pernah
+1. A new recovery/decision endpoint must look the requester/owner up BEFORE
+   calling `evaluateAccess` — otherwise the self-approval-deny check
+   has no value to compare against (see finding #1 above).
+2. Do not forget `recordAuditEvent` for a new mutation — a domain event via
+   `appendDomainEvent` is NOT a replacement for the audit log, both must be present.
+3. Do not reuse the `.read` permission as a mutation gate — always create an
+   action-specific permission (`.revoke`, `.reassign`, etc.).
+4. Do not add nested `parallel`/`join` without redesigning
+   `awcms_workflow_join_arrivals`'s fan-in schema — the single-level
+   nesting assumption is baked into it.
+5. Do not add code/expression evaluation to the `condition` node — only
+   bounded comparisons or statically registered resolvers, never
    `eval`/scripting.
 
-## Verifikasi
+## Verification
 
-Cari `tests/**/workflow*.test.ts` dan `tests/integration/workflow*.integration.test.ts`
-untuk test self-approval-deny, quorum, delegation, escalation idempotency,
-dan recovery action. Jalankan `bun test` dengan `DATABASE_URL` — `bun run
-check` tanpa `DATABASE_URL` melewatkan test integration secara diam-diam.
+Look for `tests/**/workflow*.test.ts` and `tests/integration/workflow*.integration.test.ts`
+for the self-approval-deny, quorum, delegation, escalation idempotency,
+and recovery action tests. Run `bun test` with `DATABASE_URL` — `bun run
+check` without `DATABASE_URL` silently skips the integration tests.

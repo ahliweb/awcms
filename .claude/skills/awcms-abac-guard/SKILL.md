@@ -1,52 +1,53 @@
 ---
 name: awcms-abac-guard
-description: Terapkan kontrol akses RBAC+ABAC default-deny plus RLS pada endpoint/service AWCMS. Gunakan pada setiap endpoint non-public dan setiap akses data tenant-scoped. Menegakkan default deny, deny-overrides-allow, decision log, dan tenant isolation sesuai doc 03 & 10.
+description: Apply default-deny RBAC+ABAC access control plus RLS on an AWCMS endpoint/service. Use on every non-public endpoint and every tenant-scoped data access. Enforces default deny, deny-overrides-allow, the decision log, and tenant isolation per doc 03 & 10.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — ABAC Guard & Tenant Isolation
 
-Ikuti `docs/awcms/03_srs_detail_per_modul.md`, `docs/awcms/10_template_kode_coding_standard.md`, dan **`docs/awcms/17_default_seed_rbac_abac.md`** (matriks role→permission & default ABAC policy). Mekanisme RLS/tenant context konkret: `docs/awcms/16_backend_data_access_integration.md`.
+Follow `docs/awcms/03_srs_detail_per_modul.md`, `docs/awcms/10_template_kode_coding_standard.md`, and **`docs/awcms/17_default_seed_rbac_abac.md`** (the role→permission matrix & default ABAC policies). The concrete RLS/tenant-context mechanism: `docs/awcms/16_backend_data_access_integration.md`.
 
-## ATURAN PERTAMA — satu chokepoint, `authorizeInTransaction`
+## FIRST RULE — one chokepoint, `authorizeInTransaction`
 
-**Setiap keputusan otorisasi untuk permission tenant WAJIB lewat
+**Every authorization decision for a tenant permission MUST go through
 `authorizeInTransaction`** (`src/modules/identity-access/application/access-guard.ts`),
-atau lewat `defineTenantRoute` yang memanggilnya. Jangan menyusun jalur sendiri
-dari `resolveTenantContext` + `fetchGrantedPermissionKeys` + aturan domain.
+or through `defineTenantRoute` which calls it. Do not assemble your own path out
+of `resolveTenantContext` + `fetchGrantedPermissionKeys` + domain rules.
 
-Alasannya bukan kerapian. Chokepoint itu adalah SATU-SATUNYA tempat berikut ini
-dievaluasi, dan jalur buatan sendiri melewatkan **semuanya** tanpa satu pun
-error:
+The reason is not tidiness. That chokepoint is the ONLY place the following are
+evaluated, and a home-made path skips **all of them** without a single error:
 
-| Lapisan                                    | Kalau dilewati                                           |
-| ------------------------------------------ | -------------------------------------------------------- |
-| `evaluateAccess` — evaluator ABAC DSL      | **policy `deny` eksplisit milik tenant tidak dihormati** |
-| `isPlatformScopedPermissionKey` (ADR-0053) | aksi lintas-tenant tak digerbangi                        |
-| `resolveBusinessScopeFacts` (ADR-0060)     | cakupan bisnis tak ikut memutuskan                       |
-| `isHighRiskAction` + SoD (#181)            | konflik segregation-of-duties tak diperiksa              |
+| Layer                                      | If it is bypassed                                       |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `evaluateAccess` — the ABAC DSL evaluator  | **the tenant's explicit `deny` policy is not honoured** |
+| `isPlatformScopedPermissionKey` (ADR-0053) | cross-tenant actions are not gated                      |
+| `resolveBusinessScopeFacts` (ADR-0060)     | business scope does not take part in the decision       |
+| `isHighRiskAction` + SoD (#181)            | segregation-of-duties conflicts are not checked         |
 
-Aturan kepemilikan domain (mis. `evaluatePostUpdateAccess`) TIDAK berjalan di
-luar chokepoint: ia dievaluasi **lebih dulu**, lalu hasilnya DISERAHKAN ke dalam
-`authorizeInTransaction` sebagai `ownershipGrant` yang **MELEBARKAN** himpunan
-permission (ADR-0063) — lihat §`ownershipGrant` di bawah. Jangan menulis pola
-"chokepoint dulu, aturan kepemilikan sesudah di luar chokepoint" — itu versi
-lama yang sudah dicabut.
+Domain ownership rules (e.g. `evaluatePostUpdateAccess`) do NOT run outside the
+chokepoint: they are evaluated **first**, and their result is HANDED INTO
+`authorizeInTransaction` as an `ownershipGrant` that **WIDENS** the permission
+set (ADR-0063) — see §`ownershipGrant` below. Do not write the pattern
+"chokepoint first, ownership rule afterwards outside the chokepoint" — that is
+the old version and it has been revoked.
 
-> **Ini bukan aturan hipotetis.** Asesmen 4 Agustus 2026
+> **This is not a hypothetical rule.** The 4 August 2026 assessment
 > ([`docs/awcms/repo-assessment-2026-08-04.md`](../../../docs/awcms/repo-assessment-2026-08-04.md) §2)
-> menemukan `POST /api/v1/blog/posts/{id}/submit-review` menegakkan permission
-> yang SAMA dengan `PATCH /{id}` tanpa memanggil chokepoint sama sekali —
-> sehingga policy ABAC dihormati di satu rute dan diabaikan di rute lain.
-> `access:permissions:enforcement:check` tidak menangkapnya: ia bertanya "apakah
-> permission ini punya penegak", bukan "apakah SETIAP situs penegakan memakai
+> found that `POST /api/v1/blog/posts/{id}/submit-review` enforced the SAME
+> permission as `PATCH /{id}` without calling the chokepoint at all — so an ABAC
+> policy was honoured on one route and ignored on another.
+> `access:permissions:enforcement:check` did not catch it: it asks "does this
+> permission have an enforcer", not "does EVERY enforcement site use the
 > chokepoint".
 
-### Aturan kepemilikan? Pakai `ownershipGrant`, jangan keluar dari chokepoint
+### An ownership rule? Use `ownershipGrant`, do not leave the chokepoint
 
-Kalau akses diberikan pada sumbu yang katalog permission TIDAK bisa ekspresikan
-— "penulis boleh menyunting kontennya sendiri yang belum terbit meski tak
-memegang permission-nya" — jangan memutuskan di luar chokepoint. Serahkan
-sebagai basis grant ([ADR-0063](../../../docs/adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md)):
+If access is granted along an axis the permission catalog CANNOT express — "an
+author may edit their own unpublished content even without holding the
+permission" — do not decide outside the chokepoint. Hand it in as a grant basis
+([ADR-0063](../../../docs/adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md)):
 
 ```ts
 const ownership = evaluatePostUpdateAccess(context, roleKeys, { ... });
@@ -59,35 +60,35 @@ const auth = await authorizeInTransaction(tx, tenantId, tokenHash, now, GUARD, {
 });
 ```
 
-Ia **MELEBARKAN** himpunan permission yang dievaluasi, bukan memotong keputusan:
-tenant isolation, ABAC `deny`, business-scope dan SoD semuanya tetap bisa
-menolak. Kredensial mesin dikecualikan. Decision log menandainya
-`ownership_grant:<reason>` supaya allow kepemilikan tak terbaca seperti allow
-RBAC.
+It **WIDENS** the permission set being evaluated, it does not short-circuit the
+decision: tenant isolation, ABAC `deny`, business scope and SoD can all still
+deny. Machine credentials are excluded. The decision log marks it
+`ownership_grant:<reason>` so an ownership allow does not read like an RBAC
+allow.
 
-**JANGAN** menulis `if (ownership.granted) return allowed` di guard — itu
-memotong keempat lapisan, lolos setiap test perilaku, dan digerbangi kontrak
-teks-sumber.
+**DO NOT** write `if (ownership.granted) return allowed` in a guard — that
+short-circuits all four layers, passes every behavioural test, and is gated by a
+source-text contract.
 
-Dua pengecualian sah, keduanya terdaftar di `access:chokepoint:check`:
-**pra-autentikasi** (`auth/login.ts#POST` — belum ada subjek) dan **introspeksi
-diri** (`access/evaluate.ts#POST` — memanggil `evaluateAccess` langsung, jadi
-ABAC diterapkan bukan dilewati).
+Two legitimate exceptions, both registered in `access:chokepoint:check`:
+**pre-authentication** (`auth/login.ts#POST` — there is no subject yet) and
+**self-introspection** (`access/evaluate.ts#POST` — it calls `evaluateAccess`
+directly, so ABAC is applied, not skipped).
 
-Digerbangi `bun run access:chokepoint:check` — di-iris **per HANDLER**, karena
-`blog/posts/[id].ts` pernah memanggil chokepoint di `GET`/`DELETE` sementara
-`PATCH` di berkas yang sama tidak, dan pembacaan per-berkas menyebutnya patuh.
+Gated by `bun run access:chokepoint:check` — sliced **per HANDLER**, because
+`blog/posts/[id].ts` once called the chokepoint in `GET`/`DELETE` while `PATCH`
+in the same file did not, and a per-file reading called it compliant.
 
-## Prinsip
+## Principles
 
-1. **Default deny** — tidak ada policy yang mengizinkan = tolak.
-2. **Deny overrides allow** — satu deny mengalahkan semua allow.
-3. **RLS tetap wajib** walau ABAC sudah cek (defense in depth).
-4. Akses ditolak yang high-risk → catat di decision log.
-5. UI hiding **bukan** kontrol utama; backend tetap validasi.
-6. Archive/restore/purge soft delete default deny sampai permission eksplisit tersedia.
+1. **Default deny** — no policy that allows = reject.
+2. **Deny overrides allow** — a single deny beats every allow.
+3. **RLS is still mandatory** even when ABAC has already checked (defense in depth).
+4. A denied high-risk access → record it in the decision log.
+5. UI hiding is **not** the primary control; the backend still validates.
+6. Archive/restore/purge of a soft delete is default deny until an explicit permission exists.
 
-## Bentuk request/decision
+## Request/decision shape
 
 ```ts
 type AccessRequest = {
@@ -151,50 +152,50 @@ type AccessDecision = {
 };
 ```
 
-## Prosedur
+## Procedure
 
 ```mermaid
 flowchart LR
   Req[Request] --> Ctx[Tenant context + SET app.current_tenant_id] --> Eval[Evaluate ABAC] --> D{allowed?}
-  D -- Tidak --> Log[Decision log jika high-risk] --> Deny[403 ACCESS_DENIED]
-  D -- Ya --> Next[Lanjut ke validasi/service]
+  D -- No --> Log[Decision log if high-risk] --> Deny[403 ACCESS_DENIED]
+  D -- Yes --> Next[Continue to validation/service]
 ```
 
-## Aturan implementasi
+## Implementation rules
 
-- **Guard HANYA pada `action` yang DI-SEED di `awcms_permissions`.** Katalog
-  permission disemai lewat migrasi `sql/*` (mis. `sql/005` untuk `access_control`
-  = `read`/`assign`/`configure`, `office_management` = `read`/`create`/`update`).
-  Owner role di-grant SELURUH baris `awcms_permissions` saat bootstrap
-  (`platform-bootstrap.ts` `SELECT id FROM awcms_permissions`), dan jalur e2e =
-  migrasi → `POST /setup/initialize` TANPA module permission-sync di antaranya.
-  Jadi guard pada `action` yang tidak ter-seed **men-DENY bahkan owner (403)** —
-  dan ini LATENT: e2e admin env-gated sering ter-skip di CI kosong → hijau
-  padahal rusak. Sebelum menulis guard baru: pakai action yang sudah ter-seed
-  untuk aktivitas itu (mis. administrasi role/policy → `configure`, assign role →
-  `assign`), ATAU tambah action lewat **migrasi seed baru** (`INSERT ... ON
-CONFLICT DO NOTHING`; migrasi terapan immutable — jangan edit `sql/005`).
-  Deklarasi di `module.ts` `permissions[]` **tidak cukup** — itu bukan baris
-  katalog DB saat bootstrap (Issue #171). Cocokkan gate UI SSR dengan action
-  guard endpoint yang sama.
-- Set tenant context di **awal** transaction: `SET app.current_tenant_id = ...`.
-- Query tenant-scoped **wajib** filter `tenant_id` (jangan hanya andalkan RLS).
-- **Role sistem (`is_system`) itu invarian:** tolak soft-delete, grant/revoke
-  permission, dan assign/unassign role sistem via API (mirror `softDeleteRole`),
-  dan jangan biarkan admin dinonaktifkan sampai tak ada admin aktif tersisa —
-  jika tidak, holder permission terdelegasi bisa eskalasi/mengunci tenant
-  (Issue #171 review).
-- Query resource soft-deletable default `deleted_at IS NULL`; `includeDeleted`, `restore`, dan `purge` wajib ABAC eksplisit.
-- Contoh batas peran: operator ditolak akses pajak/export/assign role; cross-tenant selalu blocked.
-- `tenantUserId`/`identityId` berasal dari auth middleware, **bukan** header public mentah.
-- **Layar admin write-form** memakai `sendJson`/`postJson`/`lockElement`
-  (`src/lib/ui/admin-form-client.ts`, skill `awcms-ui-screen`) untuk
-  memanggil endpoint mutation — pastikan gate/permission yang dicek untuk
-  menampilkan tombol/form itu adalah `action` yang SAMA dan SUDAH ter-seed
-  di `awcms_permissions` (aturan di atas), bukan action yang "kelihatan
-  benar" tapi belum ter-seed — kalau salah, tombolnya tampil tapi request-nya
-  403 bahkan untuk owner.
+- **Guard ONLY on an `action` that is SEEDED in `awcms_permissions`.** The
+  permission catalog is seeded through `sql/*` migrations (e.g. `sql/005` for
+  `access_control` = `read`/`assign`/`configure`, `office_management` =
+  `read`/`create`/`update`). The owner role is granted EVERY `awcms_permissions`
+  row at bootstrap (`platform-bootstrap.ts` `SELECT id FROM awcms_permissions`),
+  and the e2e path is migration → `POST /setup/initialize` WITHOUT a module
+  permission-sync in between. So a guard on an unseeded `action` **DENIES even
+  the owner (403)** — and this is LATENT: the env-gated admin e2e is often
+  skipped in an empty CI → green while broken. Before writing a new guard: use
+  an action already seeded for that activity (e.g. role/policy administration →
+  `configure`, assigning a role → `assign`), OR add the action through a **new
+  seed migration** (`INSERT ... ON CONFLICT DO NOTHING`; an applied migration is
+  immutable — do not edit `sql/005`). Declaring it in `module.ts`
+  `permissions[]` is **not enough** — that is not a DB catalog row at bootstrap
+  (Issue #171). Match the SSR UI gate to the same guard action as the endpoint.
+- Set the tenant context at the **start** of the transaction: `SET app.current_tenant_id = ...`.
+- A tenant-scoped query **must** filter on `tenant_id` (do not rely on RLS alone).
+- **A system role (`is_system`) is invariant:** reject soft-delete, permission
+  grant/revoke, and assign/unassign of a system role via the API (mirroring
+  `softDeleteRole`), and do not allow an admin to be deactivated down to no
+  active admin remaining — otherwise a holder of a delegated permission can
+  escalate/lock out the tenant (Issue #171 review).
+- A query on a soft-deletable resource defaults to `deleted_at IS NULL`; `includeDeleted`, `restore`, and `purge` require explicit ABAC.
+- Example role boundaries: an operator is denied tax/export/role-assign access; cross-tenant is always blocked.
+- `tenantUserId`/`identityId` come from the auth middleware, **not** from a raw public header.
+- **Admin write-form screens** use `sendJson`/`postJson`/`lockElement`
+  (`src/lib/ui/admin-form-client.ts`, skill `awcms-ui-screen`) to call the
+  mutation endpoint — make sure the gate/permission checked in order to show
+  that button/form is the SAME `action` and is ALREADY seeded in
+  `awcms_permissions` (the rule above), not an action that "looks right" but is
+  not seeded — get it wrong and the button shows while the request 403s even for
+  the owner.
 
-## Verifikasi (test)
+## Verification (tests)
 
-- default deny; deny overrides allow; cashier limit; tax officer access; cross-tenant blocked; archive/restore denied tanpa permission; decision log tercatat.
+- default deny; deny overrides allow; cashier limit; tax officer access; cross-tenant blocked; archive/restore denied without permission; decision log recorded.

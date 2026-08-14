@@ -1,166 +1,167 @@
 ---
 name: awcms-performance
-description: Audit dan tingkatkan performa aplikasi & database AWCMS. Gunakan saat diminta "optimasi performa/query", ada endpoint lambat, N+1, masalah indexing/pagination, tuning connection pool, atau perencanaan materialized view/caching. Menegakkan pola akses data doc 16, pooling/backpressure, dan pagination keyset.
+description: Audit and improve AWCMS application & database performance. Use when asked for "performance/query optimisation", when an endpoint is slow, on N+1, indexing/pagination problems, connection pool tuning, or materialized view/caching planning. Enforces the doc 16 data access patterns, pooling/backpressure, and keyset pagination.
 ---
 
-> **PERINGATAN — sebagian perintah di halaman ini BELUM ADA, dan §Performance
-> suite di bawah MEMBANTAH peringatan ini.**
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
+
+> **WARNING — some commands on this page DO NOT EXIST, and the §Performance
+> suite below CONTRADICTS this warning.**
 > `performance:suite`, `performance:query-plan:check`, `database:capacity:check`
-> terdaftar di [`scripts/README.md`](../../../scripts/README.md) §Ditunda sebagai
-> target acuan, bukan skrip nyata. Menjalankannya akan gagal.
+> are listed in [`scripts/README.md`](../../../scripts/README.md) §Deferred as
+> reference targets, not as real scripts. Running them will fail.
 >
-> **Dan direktori `src/lib/performance/` tidak ada.** §Performance suite di
-> bagian bawah halaman ini menyuruh pembacanya "gunakan suite yang sudah ada di
-> `src/lib/performance/`, jangan bangun tooling ad hoc baru" — itu **salah**, dan
-> ia bertahan karena `bun run skills:check` membebaskan seluruh skill ini lewat
-> satu entri `ASPIRATIONAL_SKILLS` yang alasannya menyebut _perintah_ sementara
-> pembebasannya juga mencakup _path_. Perlakukan seluruh §Performance suite
-> sebagai **spesifikasi target**, bukan runbook. (Asesmen 4 Agustus 2026 §9.6.)
+> **And the directory `src/lib/performance/` does not exist.** The §Performance
+> suite at the bottom of this page tells its reader to "use the suite that
+> already exists in `src/lib/performance/`, do not build new ad hoc tooling" —
+> that is **wrong**, and it survives because `bun run skills:check` exempts this
+> entire skill through a single `ASPIRATIONAL_SKILLS` entry whose reason mentions
+> _commands_ while the exemption also covers _paths_. Treat the whole
+> §Performance suite as a **target specification**, not a runbook.
+> (Assessment 4 August 2026 §9.6.)
 >
-> **Yang NYATA hari ini — pakai ini:**
+> **What is REAL today — use these:**
 >
-> | Alat                                                 | Cakupan                                                                                                                                  |
-> | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-> | `bun run db:fk-index:check`                          | 182 kolom FK, semua terjangkau index, 1 pengecualian ([ADR-0064](../../../docs/adr/0064-foreign-key-columns-must-be-index-reachable.md)) |
-> | `bun run db:work-class:check`                        | pemisahan kelas kerja pool                                                                                                               |
-> | `tests/integration/query-budget.integration.test.ts` | plafon **3 query** untuk listing/paging/feed publik blog, fixture 40 post                                                                |
-> | `bun run db:pool:health`, `bun run redis:health`     | kesehatan pool/cache saat runtime                                                                                                        |
+> | Tool                                                 | Coverage                                                                                                                             |
+> | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+> | `bun run db:fk-index:check`                          | 182 FK columns, all index-reachable, 1 exception ([ADR-0064](../../../docs/adr/0064-foreign-key-columns-must-be-index-reachable.md)) |
+> | `bun run db:work-class:check`                        | pool work-class separation                                                                                                           |
+> | `tests/integration/query-budget.integration.test.ts` | ceiling of **3 queries** for the public blog listing/paging/feed, 40-post fixture                                                    |
+> | `bun run db:pool:health`, `bun run redis:health`     | pool/cache health at runtime                                                                                                         |
 >
-> **Batas yang wajib diketahui sebelum menyebut "CI hijau" sebagai jaminan
-> performa:** dari **33** gerbang rantai `check`, **satu** memeriksa performa.
-> Anggaran query bukan gerbang rantai melainkan **test integrasi DB-gated** —
-> pada mesin tanpa PostgreSQL ia di-`skip` dan `bun run check` tetap hijau. Dan
-> cakupannya hanya jalur baca publik blog: **31 layar admin dan pembangun sitemap
-> belum beranggaran**.
+> **Limits you must know before calling "CI green" a performance guarantee:** of
+> the **33** gates in the `check` chain, **one** checks performance. The query
+> budget is not a chain gate but a **DB-gated integration test** — on a machine
+> without PostgreSQL it is `skip`ped and `bun run check` stays green. And its
+> coverage is only the public blog read path: **31 admin screens and the sitemap
+> builder have no budget**.
 >
-> **Tiga celah performa terbuka (asesmen §9):**
+> **Three open performance gaps (assessment §9):**
 >
-> 1. **Purge menjangkau Varnish, BUKAN tier yang menyajikan pembaca.** Jalur
->    nyatanya tiga lapis — `Cloudflare (proxied) -> Traefik -> varnish -> app`
->    ([`environments.md`](../../../docs/awcms/environments.md) §Cache tepi) —
->    sementara `EDGE_CACHE_PURGE_ENDPOINT` menunjuk container Varnish saja. Nol
->    pemanggilan API zona Cloudflare di `src/`. Diprobe: `/robots.txt` staging
->    balas `cf-cache-status: HIT`, `age: 182`, di saat aplikasi menandai
->    `x-edge-cache-skip: surface_not_declared`. Kebasiannya **berbatas**
->    `s-maxage` (`EDGE_CACHE_MAX_TTL_SECONDS=300`) jadi ini jeda, bukan
->    kebocoran — tetapi tabel uji penerimaan di `environments.md` mengukur
->    `X-Cache` dari Varnish, tier yang bukan penjawabnya, sehingga jeda itu tak
->    akan muncul di pengujian mana pun.
+> 1. **Purge reaches Varnish, NOT the tier that serves readers.** The real path
+>    is three layers — `Cloudflare (proxied) -> Traefik -> varnish -> app`
+>    ([`environments.md`](../../../docs/awcms/environments.md) §Edge cache) —
+>    while `EDGE_CACHE_PURGE_ENDPOINT` points only at the Varnish container. Zero
+>    calls to the Cloudflare zone API in `src/`. Probed: `/robots.txt` on staging
+>    answers `cf-cache-status: HIT`, `age: 182`, at the moment the application
+>    marks `x-edge-cache-skip: surface_not_declared`. The staleness is **bounded**
+>    by `s-maxage` (`EDGE_CACHE_MAX_TTL_SECONDS=300`) so this is a lag, not a
+>    leak — but the acceptance test table in `environments.md` measures `X-Cache`
+>    from Varnish, the tier that is not the one answering, so that lag will never
+>    show up in any test.
 >
->    > **Dan JANGAN menambah kompresi di aplikasi/VCL.** Putaran kedua asesmen
->    > sempat merekomendasikannya atas dasar "nol kompresi di jalur penyajian" —
->    > benar untuk apa yang repo miliki, **salah** untuk apa yang diterima
->    > pembaca: staging dan produksi mengembalikan `content-encoding: gzip` dari
->    > Cloudflare. Rekomendasi itu **DICABUT**; menambahkannya sekarang
->    > menciptakan dua tempat yang memutuskan hal yang sama. Yang tersisa: sebuah
->    > deployment template ini di luar CDN pengompresi tidak dapat kompresi, dan
->    > tak ada gerbang yang mengatakannya.
+>    > **And DO NOT add compression in the application/VCL.** The second round of
+>    > the assessment briefly recommended it on the grounds of "zero compression
+>    > in the serving path" — true for what the repo owns, **wrong** for what the
+>    > reader receives: staging and production return `content-encoding: gzip`
+>    > from Cloudflare. That recommendation is **REVOKED**; adding it now creates
+>    > two places deciding the same thing. What remains: a deployment of this
+>    > template outside a compressing CDN gets no compression, and no gate says so.
 >
-> 2. **Tidak ada anggaran ukuran aset klien.** 139 KB hari ini — inilah saat
->    termurah menggerbanginya.
-> 3. **Core Web Vitals belum diukur.**
+> 2. **There is no client asset size budget.** 139 KB today — this is the cheapest
+>    moment to gate it.
+> 3. **Core Web Vitals are not measured.**
 >    [ADR-0067](../../../docs/adr/0067-core-web-vitals-collection.md) `Proposed`
->    menawarkan tiga opsi yang **semuanya RUM** (mengumpulkan data pengunjung),
->    dan karena itu menunggu keputusan pemilik produk. Yang belum ditimbang:
->    **pengukuran lab** — Playwright sudah terpasang di repo ini, mengumpulkan
->    nol data pengunjung, dan menjawab pertanyaan yang berbeda ("apakah perubahan
->    ini membuat halaman lebih lambat"). Jangan menunggu keputusan RUM untuk
->    mengerjakannya.
+>    offers three options that are **all RUM** (collecting visitor data), and for
+>    that reason it is waiting on a product owner decision. What has not been
+>    weighed: **lab measurement** — Playwright is already installed in this repo,
+>    collects zero visitor data, and answers a different question ("does this
+>    change make the page slower"). Do not wait for the RUM decision to do it.
 
 # AWCMS — Performance & Database Tuning
 
-Sumber kebenaran: **`docs/awcms/16_backend_data_access_integration.md`** (lapisan akses data, pooling/backpressure, transaction), **`docs/awcms/database-pooling.md`**, dan **`docs/awcms/07_sprint_testing_production_readiness.md`** (target performa). Skill ini **peningkatan**: ukur → temukan bottleneck → perbaiki → ukur ulang.
+Source of truth: **`docs/awcms/16_backend_data_access_integration.md`** (data access layer, pooling/backpressure, transactions), **`docs/awcms/database-pooling.md`**, and **`docs/awcms/07_sprint_testing_production_readiness.md`** (performance targets). This skill is an **improvement** loop: measure → find the bottleneck → fix → measure again.
 
-## Aturan emas
+## Golden rule
 
-**Ukur sebelum optimasi.** Jangan menebak — jalankan `EXPLAIN (ANALYZE, BUFFERS)` pada query yang dicurigai, dan benchmark endpoint (p50/p95/p99) sebelum & sesudah. Optimasi tanpa data = spekulasi.
+**Measure before optimising.** Do not guess — run `EXPLAIN (ANALYZE, BUFFERS)` on the suspected query, and benchmark the endpoint (p50/p95/p99) before & after. Optimisation without data = speculation.
 
 ## Database
 
-- [ ] **Index RLS-aware** — query tenant-scoped selalu difilter `tenant_id`; index komposit **harus** berprefiks `(tenant_id, …)` agar cocok dengan predikat RLS + filter. Cek index hilang via `EXPLAIN` (Seq Scan pada tabel besar = merah).
-- [ ] **Hindari N+1** — jangan query dalam loop; batch pakai `= ANY(tx.array(ids, "uuid"))` (lihat memory Bun SQL array binding) atau `JOIN`. Cari pola `for (…) await tx\`SELECT …\``.
-- [ ] **Pagination keyset, bukan OFFSET** — `WHERE (created_at, id) < (:cursor)` + `LIMIT`, bukan `OFFSET n` besar (doc 14 §Pagination). OFFSET besar memindai lalu membuang baris. Helper bersama sudah ada (Issue #435): `encodeKeysetCursor`/`decodeKeysetCursor` (`src/modules/_shared/keyset-pagination.ts`, cursor opaque base64 `createdAt|id`, cursor rusak → `400 VALIDATION_ERROR` bukan diam-diam dianggap "tanpa cursor") — **reuse**, jangan implementasi ulang per endpoint.
-- [ ] **Join setelah LIMIT bisa membuat planner salah pilih plan** — kalau query sudah punya index yang tepat tapi `EXPLAIN` tetap menunjukkan Seq Scan, cek apakah `LIMIT` diterapkan **setelah** `JOIN` (planner mengestimasi baris hasil join, bisa meleset jauh dan menganggap Index Scan lebih mahal dari kenyataan). Perbaikan: pindahkan `LIMIT`+`ORDER BY` ke **subquery sebelum join** (pola `fetchObjectQueueEntries`, `src/modules/sync-storage/application/sync-directory.ts`, Issue #435) — planner tidak lagi punya pilihan selain memenuhi `LIMIT` langsung dari index.
-- [ ] **Kolom eksplisit** — hindari `SELECT *`; ambil hanya kolom yang dipakai (kurangi I/O + payload).
-- [ ] **`count(*)::int`** untuk agregat kecil; ingat bigint Postgres kembali sebagai string dari Bun.SQL → `Number(...)` eksplisit, jangan `as number`.
-- [ ] **jsonb** — index GIN hanya bila di-query berdasarkan isi; jangan simpan payload besar yang tak pernah difilter.
-- [ ] **Materialized view / read model** — untuk laporan agregasi berat yang tak butuh real-time; refresh terjadwal. Report base saat ini agregasi baca langsung (doc: reporting) — pertimbangkan MV bila data tumbuh.
-- [ ] **Statement timeout** — `DATABASE_STATEMENT_TIMEOUT_MS` mencegah query liar mengunci koneksi.
+- [ ] **RLS-aware indexes** — tenant-scoped queries are always filtered by `tenant_id`; composite indexes **must** be prefixed `(tenant_id, …)` so they match the RLS predicate + the filter. Check for missing indexes via `EXPLAIN` (a Seq Scan on a big table = red).
+- [ ] **Avoid N+1** — do not query inside a loop; batch with `= ANY(tx.array(ids, "uuid"))` (see the Bun SQL array binding memory) or a `JOIN`. Look for the pattern `for (…) await tx\`SELECT …\``.
+- [ ] **Keyset pagination, not OFFSET** — `WHERE (created_at, id) < (:cursor)` + `LIMIT`, not a large `OFFSET n` (doc 14 §Pagination). A large OFFSET scans then throws rows away. A shared helper already exists (Issue #435): `encodeKeysetCursor`/`decodeKeysetCursor` (`src/modules/_shared/keyset-pagination.ts`, opaque base64 cursor `createdAt|id`, a corrupt cursor → `400 VALIDATION_ERROR` rather than being silently treated as "no cursor") — **reuse it**, do not reimplement per endpoint.
+- [ ] **A join after LIMIT can make the planner pick the wrong plan** — if a query already has the right index but `EXPLAIN` still shows a Seq Scan, check whether `LIMIT` is applied **after** the `JOIN` (the planner estimates the join result rows, can be far off, and can consider an Index Scan more expensive than it really is). The fix: move `LIMIT`+`ORDER BY` into a **subquery before the join** (the `fetchObjectQueueEntries` pattern, `src/modules/sync-storage/application/sync-directory.ts`, Issue #435) — the planner then has no option but to satisfy the `LIMIT` straight from the index.
+- [ ] **Explicit columns** — avoid `SELECT *`; take only the columns you use (less I/O + payload).
+- [ ] **`count(*)::int`** for small aggregates; remember a Postgres bigint comes back as a string from Bun.SQL → explicit `Number(...)`, not `as number`.
+- [ ] **jsonb** — a GIN index only if it is queried by content; do not store large payloads that are never filtered on.
+- [ ] **Materialized view / read model** — for heavy aggregation reports that do not need real time; scheduled refresh. Base reports today are direct read aggregations (doc: reporting) — consider an MV as data grows.
+- [ ] **Statement timeout** — `DATABASE_STATEMENT_TIMEOUT_MS` stops a runaway query from locking a connection.
 
-## Aplikasi & koneksi
+## Application & connections
 
-- [ ] **Work-class pool + backpressure** — endpoint diklasifikasi (`critical_transaction`/`interactive`/`reporting`/`background_sync`/`maintenance`, doc 16). Laporan berat & sync **tidak** boleh di kelas `interactive`; saturasi → `503 DATABASE_BUSY`, bukan menjenuhkan seluruh pool.
-- [ ] **Transaksi seringkas mungkin** — kerja CPU-bound (argon2 hashing) & panggilan provider eksternal **di luar** transaksi DB (ADR-0006); jangan menahan koneksi/lock saat menunggu I/O eksternal.
-- [ ] **PgBouncer** — bila `DATABASE_PGBOUNCER=true`, prepared statement dinonaktifkan (mode transaction). Pastikan `DATABASE_POOL_MAX` selaras dengan limit pool server.
-- [ ] **SSR reuse** — halaman admin fetch via fungsi application-layer di dalam satu `withTenant`, bukan round-trip HTTP ke API sendiri (pola `*-directory.ts`/`*-report.ts`).
-- [ ] **Locking** — `FOR UPDATE` hanya pada baris yang benar-benar dimutasi bersama (mis. stok); hindari lock rentang lebar.
+- [ ] **Work-class pool + backpressure** — endpoints are classified (`critical_transaction`/`interactive`/`reporting`/`background_sync`/`maintenance`, doc 16). Heavy reports & sync must **not** be in the `interactive` class; saturation → `503 DATABASE_BUSY`, instead of saturating the whole pool.
+- [ ] **Keep transactions as short as possible** — CPU-bound work (argon2 hashing) & external provider calls go **outside** the DB transaction (ADR-0006); do not hold a connection/lock while waiting on external I/O.
+- [ ] **PgBouncer** — when `DATABASE_PGBOUNCER=true`, prepared statements are disabled (transaction mode). Make sure `DATABASE_POOL_MAX` lines up with the server pool limit.
+- [ ] **SSR reuse** — admin pages fetch via an application-layer function inside a single `withTenant`, not an HTTP round trip to our own API (the `*-directory.ts`/`*-report.ts` pattern).
+- [ ] **Locking** — `FOR UPDATE` only on rows that really are mutated together (e.g. stock); avoid wide range locks.
 
-## Verifikasi
+## Verification
 
-- `EXPLAIN ANALYZE` sebelum/sesudah menunjukkan perbaikan nyata (Seq→Index Scan, plan cost turun).
-- Benchmark p95 endpoint membaik; tak ada regresi fungsional (`bun run check` hijau).
-- Uji beban ringan: query saturasi kelas pool → `503`, mengering ke 0 (bukti backpressure, seperti verifikasi Issue 10.2).
-- Tak ada N+1 baru; tak ada `OFFSET` besar; index cocok dengan predikat.
+- `EXPLAIN ANALYZE` before/after shows a real improvement (Seq→Index Scan, plan cost down).
+- Endpoint p95 benchmark improves; no functional regression (`bun run check` green).
+- Light load test: saturate a pool class with queries → `503`, draining to 0 (evidence of backpressure, like the Issue 10.2 verification).
+- No new N+1; no large `OFFSET`; indexes match the predicates.
 
-## Transport & penyajian
+## Transport & serving
 
-- [ ] **Kompresi respons** — lihat celah 1 di banner. Saat menutupnya: **satu
-      tempat saja**. Aplikasi (pola `awcms-astro`) ATAU `beresp.do_gzip` di VCL —
-      dua tempat yang memutuskan hal yang sama adalah cara membuat `Content-Encoding`
-      ganda dan cache yang menyimpan objek yang salah untuk klien yang salah.
-- [ ] **`Vary: Accept-Encoding`** sudah dipancarkan `src/lib/edge-cache/response-headers.ts`
-      pada respons yang bisa di-cache. Setelah kompresi menyala, header itu
-      menjadi benar; sebelum itu ia hanya melipatgandakan ruang kunci cache.
-- [ ] **Validator kondisional** (ETag/`Last-Modified` → 304) sudah ada di rute
-      discovery — pertahankan saat menambah surface publik baru.
-- [ ] **Cache tepi** default MATI dan no-op saat mati; jangan menyalakannya
-      sebagai "optimasi" tanpa membaca `awcms-edge-cache` §Tulang punggung dulu —
-      cache bersama di depan aplikasi multi-tenant adalah mesin kebocoran.
+- [ ] **Response compression** — see gap 1 in the banner. When closing it: **one
+      place only**. The application (the `awcms-astro` pattern) OR `beresp.do_gzip`
+      in VCL — two places deciding the same thing is how you get a double
+      `Content-Encoding` and a cache that stores the wrong object for the wrong client.
+- [ ] **`Vary: Accept-Encoding`** is already emitted by `src/lib/edge-cache/response-headers.ts`
+      on cacheable responses. Once compression is on, that header becomes correct;
+      before that it only multiplies the cache key space.
+- [ ] **Conditional validators** (ETag/`Last-Modified` → 304) already exist on the
+      discovery routes — keep them when adding a new public surface.
+- [ ] **Edge cache** is OFF by default and a true no-op when off; do not turn it on
+      as an "optimisation" without reading `awcms-edge-cache` §Backbone first —
+      a shared cache in front of a multi-tenant application is a leak engine.
 
 <!-- aspirational:mulai -->
 
-## Performance suite representatif (Issue #744) — SPESIFIKASI TARGET, BUKAN RUNBOOK
+## Representative performance suite (Issue #744) — TARGET SPECIFICATION, NOT A RUNBOOK
 
-> **`src/lib/performance/` tidak ada di repo ini** dan ketiga perintah di bawah
-> akan gagal. Bagian ini dipertahankan sebagai **bentuk** yang harus diambil
-> sebuah suite performa bila dibangun — bukan sebagai instruksi. Lihat banner.
+> **`src/lib/performance/` does not exist in this repo** and the three commands
+> below will fail. This section is kept as the **shape** a performance suite
+> should take if it is built — not as instructions. See the banner.
 
-Untuk audit performa yang butuh bukti lebih dari sekadar `EXPLAIN` manual —
-fixture multi-tenant sintetik berskala, skenario load/soak/saturasi-dan-
-recovery, dan budget regresi query-plan versioned — bentuk yang dituju:
+For a performance audit that needs more evidence than a manual `EXPLAIN` —
+scaled synthetic multi-tenant fixtures, load/soak/saturation-and-recovery
+scenarios, and versioned query-plan regression budgets — the intended shape is:
 
 ```bash
-# Safe subset (detik) — dijalankan di CI job `quality` (.github/workflows/ci.yml),
-# BUKAN bagian dari komposit `bun run check` (sama seperti resilience:dr-drill):
+# Safe subset (seconds) — run in the CI job `quality` (.github/workflows/ci.yml),
+# NOT part of the `bun run check` composite (same as resilience:dr-drill):
 bun run performance:suite -- --confirm-non-production=<APP_ENV>
 bun run performance:query-plan:check -- --confirm-non-production=<APP_ENV>
 
-# Full lane (skala besar + soak, terjadwal/manual — --full):
+# Full lane (large scale + soak, scheduled/manual — --full):
 bun run performance:suite -- --confirm-non-production=<APP_ENV> --full
 ```
 
-Menambah budget baru (bila suite itu dibangun)? Registrasikan di
-`src/lib/performance/query-plan-budgets.ts` (SQL pasangannya di
-`query-plan-runner.ts`) dengan `approval.reason` yang jelas — mengubah
-threshold yang sudah ada wajib diff yang direview, bukan flag runtime.
-Lihat [`performance-suite.md`](../../../docs/awcms/performance-suite.md)
-untuk arsitektur lengkap, safe subset vs full lane, dan format artefak.
+Adding a new budget (if that suite is built)? Register it in
+`src/lib/performance/query-plan-budgets.ts` (its paired SQL in
+`query-plan-runner.ts`) with a clear `approval.reason` — changing an existing
+threshold must be a reviewed diff, not a runtime flag.
+See [`performance-suite.md`](../../../docs/awcms/performance-suite.md)
+for the full architecture, safe subset vs full lane, and the artifact format.
 
-**Yang bisa dikerjakan HARI INI tanpa membangun suite itu:** perluas
-`countQueries` (`tests/integration/query-budget.ts`) ke layar admin terberat dan
-ke pembangun sitemap. Polanya sudah terbukti dua kali (test SoD #181, lalu
-#385), dan plafon di atas fixture yang lebih besar dari plafonnya adalah yang
-membuktikan sesuatu — plafon di atas satu baris tidak, karena N+1 dan
-implementasi konstan sama-sama mengeluarkan sekitar satu query.
+**What CAN be done TODAY without building that suite:** extend
+`countQueries` (`tests/integration/query-budget.ts`) to the heaviest admin
+screens and to the sitemap builder. The pattern is proven twice already (the SoD
+test #181, then #385), and a ceiling over a fixture that is bigger than the
+ceiling is what proves something — a ceiling over a single row does not, because
+N+1 and a constant implementation both emit about one query.
 
 <!-- aspirational:selesai -->
 
-## Skill terkait
+## Related skills
 
-`awcms-new-migration` (tambah index via migration berurutan), `awcms-integration` (I/O eksternal & outbox), `awcms-testing` (benchmark/load test), `awcms-production-preflight` (`db:pool:health`), `awcms-edge-cache` (surface & purge), `awcms-security-hardening` (postur bersama).
+`awcms-new-migration` (add an index via a sequential migration), `awcms-integration` (external I/O & outbox), `awcms-testing` (benchmark/load test), `awcms-production-preflight` (`db:pool:health`), `awcms-edge-cache` (surfaces & purge), `awcms-security-hardening` (shared posture).
 
-Status performa yang **hidup** — target Core Web Vitals, apa yang sudah benar,
-dan tiga belas celah ber-pemeriksa — ada di
+The **live** performance status — Core Web Vitals targets, what is already
+right, and the thirteen gaps with their checkers — lives in
 [`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md) §8–§9.
-Mutakhirkan dokumen itu saat sebuah celah ditutup; halaman ini adalah caranya,
-dokumen itu adalah keadaannya.
+Update that document when a gap is closed; this page is the how, that document
+is the state.

@@ -1,220 +1,222 @@
 ---
 name: awcms-reporting
-description: Kelola modul reporting AWCMS — lima view management reporting live (tenant activity, access/audit, sync health, module usage, email health) plus mekanisme read-model projection (rebuild/reconcile/export terjadwal). Gunakan saat menambah/mengubah endpoint `/api/v1/reports/*`, menambah projection descriptor modul lain, atau menyentuh rebuild/export scheduling.
+description: Manage the AWCMS reporting module — five live management reporting views (tenant activity, access/audit, sync health, module usage, email health) plus the read-model projection mechanism (rebuild/reconcile/scheduled export). Use when adding/changing `/api/v1/reports/*` endpoints, adding a projection descriptor in another module, or touching rebuild/export scheduling.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Reporting (live views + projections)
 
-Baca `src/modules/reporting/README.md` untuk detail penuh tiap view dan
-endpoint — skill ini merangkum keputusan yang sudah dibuat supaya tidak
-di-re-derive. Skema di repo ini: `sql/015_awcms_reporting_projections_schema.sql`
-(tabel projection/rebuild-run/scheduled-export) dan
-`sql/016_awcms_reporting_permissions.sql` (**seluruh tujuh** permission
-`reporting.*` dalam satu file — `dashboard.read` untuk lima view live PLUS
-keenam permission projection/export; komentar di dalamnya sendiri menyebut
-ini gabungan port dari dua migration awcms-mini yang terpisah, tapi di repo
-ini keduanya SUDAH digabung jadi satu file `sql/016` — jangan kutip nomor
-migration awcms-mini yang lama sebagai nama file di repo ini, verifikasi
-selalu dengan `ls sql/ | grep report` dulu).
+Read `src/modules/reporting/README.md` for the full detail of every view and
+endpoint — this skill summarises the decisions already made so they do not have
+to be re-derived. The schema in this repo: `sql/015_awcms_reporting_projections_schema.sql`
+(the projection/rebuild-run/scheduled-export tables) and
+`sql/016_awcms_reporting_permissions.sql` (**all seven** `reporting.*`
+permissions in one file — `dashboard.read` for the five live views PLUS
+the six projection/export permissions; its own comments call
+this a merged port of two separate awcms-mini migrations, but in this
+repo the two are ALREADY merged into the single file `sql/016` — do not quote the old
+awcms-mini migration numbers as file names in this repo, always verify
+with `ls sql/ | grep report` first).
 
-## Kapan pakai skill ini vs skill generik
+## When to use this skill vs the generic skills
 
-Melengkapi (bukan menggantikan) `awcms-new-endpoint`, `awcms-new-migration`,
-`awcms-abac-guard`, `awcms-idempotency` — itu tetap dipakai untuk cara
-membangun endpoint/migration/guard/idempotency. Skill ini menyediakan
-konteks domain `reporting` spesifik: kapan sebuah metrik boleh jadi
-projection, invariant rebuild-lock, dan permission catalog projection/export.
+It complements (does not replace) `awcms-new-endpoint`, `awcms-new-migration`,
+`awcms-abac-guard`, `awcms-idempotency` — those are still used for how to
+build an endpoint/migration/guard/idempotency. This skill supplies the
+`reporting`-specific domain context: when a metric may become a
+projection, the rebuild-lock invariant, and the projection/export permission catalog.
 
-## Lima view live (tidak pernah cache/materialized view)
+## Five live views (never cached/materialized views)
 
 `GET /api/v1/reports/{tenant-activity,access-audit,sync-health,module-usage,
-email-health}` — live read-aggregation setiap request atas tabel
-`tenant_admin`/`identity_access`/`sync_storage`/`email` yang SUDAH ada, **tidak
-ada tabel baru** untuk kelimanya. Guard identik untuk semua: bearer session +
+email-health}` — a live read-aggregation on every request over the EXISTING
+`tenant_admin`/`identity_access`/`sync_storage`/`email` tables, **no
+new tables** for any of the five. The guard is identical for all: bearer session +
 `X-AWCMS-Tenant-ID`, `{ moduleKey: "reporting", activityCode: "dashboard",
-action: "read" }` — **satu** permission `reporting.dashboard.read` menggerbangi
-seluruh lima view (sengaja tidak dipecah per-view). Akses ditolak → `403
-ACCESS_DENIED`, tidak pernah data kosong diam-diam. `access-audit` window 30
-hari **hardcoded** (`ACCESS_AUDIT_DECISION_WINDOW_DAYS`) — tidak ada
-pagination/filter tanggal kustom hari ini. Dashboard SSR (`/admin`) memanggil
-fungsi `application/*-report.ts` LANGSUNG lewat `withTenant` (bukan HTTP
-round-trip ke endpoint sendiri) — pola sama `admin/settings.astro`; halaman
-merender panel "Akses ditolak" (bukan card kosong/500) kalau
-`reporting.dashboard.read` tidak dimiliki. `email-health` **belum**
-ditambahkan ke dashboard SSR (baru lewat endpoint API) — jangan asumsikan
-kartu ke-5 sudah ada di `/admin`.
+action: "read" }` — **one** permission `reporting.dashboard.read` gates
+all five views (deliberately not split per view). Access denied → `403
+ACCESS_DENIED`, never silently empty data. The `access-audit` 30-day window is
+**hardcoded** (`ACCESS_AUDIT_DECISION_WINDOW_DAYS`) — there is no
+custom date pagination/filter today. The SSR dashboard (`/admin`) calls the
+`application/*-report.ts` functions DIRECTLY through `withTenant` (not an HTTP
+round-trip to its own endpoint) — the same pattern as `admin/settings.astro`; the page
+renders an "Access denied" panel (not an empty card/500) when
+`reporting.dashboard.read` is not held. `email-health` has **not** yet been
+added to the SSR dashboard (only via the API endpoint) — do not assume the
+5th card already exists on `/admin`.
 
-**Sengaja tidak ada worker/materialized view/cache** untuk kelima view ini —
-latensi mengikuti biaya query langsung untuk tenant volume besar; optimasi
-itu di luar scope. §Projections di bawah adalah jalur BARU DAN TERPISAH yang
-membungkus SEBAGIAN metrik ini (access-audit, module-usage) tanpa mengganti
-endpoint live-nya — keduanya tetap ada berdampingan.
+**There is deliberately no worker/materialized view/cache** for these five views —
+latency follows the cost of the direct query for high-volume tenants; that optimisation
+is out of scope. §Projections below is a NEW AND SEPARATE path that
+wraps SOME of these metrics (access-audit, module-usage) without replacing
+their live endpoints — both continue to exist side by side.
 
-## Projections (Issue #753) — kapan sebuah metrik BOLEH jadi projection
+## Projections (Issue #753) — when a metric MAY become a projection
 
-Modul mendaftarkan projection lewat array `reportingProjections` di
-`module.ts` sendiri (`ProjectionDescriptor`,
-`src/modules/_shared/module-contract.ts`) — pola "modul mendeklarasikan array
-sendiri, satu aggregator pusat membaca `listModules()`" yang sama seperti
-`dataLifecycle`/`sodRules`. Dua strategi update:
+A module registers a projection through the `reportingProjections` array in
+its own `module.ts` (`ProjectionDescriptor`,
+`src/modules/_shared/module-contract.ts`) — the same "the module declares its own
+array, one central aggregator reads `listModules()`" pattern as
+`dataLifecycle`/`sodRules`. Two update strategies:
 
-- **`cursor_table`** — poll cursor-ordered bounded atas satu/lebih tabel
-  sumber. **Hanya benar untuk sumber yang genuinely append-only** (tidak ada
-  hard delete, tidak ada soft-delete-lalu-restore) — engine hanya bisa
-  MENAMBAH, jadi baris sumber yang kemudian hilang/di-restore akan diam-diam
-  membuat hitungan desync. Inilah kenapa `access_audit_summary` (decision log
-  ABAC, benar-benar append-only) dan `module_activity_summary`
-  (identity/sync-node, tidak ada mekanisme delete di base ini) yang dipilih
-  untuk dibungkus — **BUKAN** `sync-health`/`email-health`/office-count dari
-  `module-usage`, yang mutable-state atau soft-delete-dengan-restore dan
-  butuh row-level CDC/delta tracking untuk diproyeksikan aman (follow-up
-  lebih besar, belum dikerjakan). **Jangan tambah `cursor_table` projection
-  di atas sumber yang bisa di-restore/hard-delete tanpa CDC/delta tracking
-  yang setara.**
-- **`domain_event`** — update steady-state di-PUSH oleh consumer
-  `domain_event_runtime` terdaftar (Issue #742), reuse job/lock/batching/
-  idempotency/retry/pause-resume yang sudah ada, bukan membangun mekanisme
-  kedua.
+- **`cursor_table`** — a bounded cursor-ordered poll over one or more source
+  tables. **Only correct for sources that are genuinely append-only** (no
+  hard delete, no soft-delete-then-restore) — the engine can only
+  ADD, so a source row that later disappears/is restored will silently
+  desync the counts. That is why `access_audit_summary` (the ABAC decision
+  log, genuinely append-only) and `module_activity_summary`
+  (identity/sync-node, no delete mechanism in this base) were chosen
+  to be wrapped — **NOT** `sync-health`/`email-health`/the office count from
+  `module-usage`, which are mutable-state or soft-delete-with-restore and
+  need row-level CDC/delta tracking to be projected safely (a larger
+  follow-up, not done yet). **Do not add a `cursor_table` projection
+  on top of a source that can be restored/hard-deleted without equivalent
+  CDC/delta tracking.**
+- **`domain_event`** — steady-state updates are PUSHED by a registered
+  `domain_event_runtime` consumer (Issue #742), reusing the existing job/lock/batching/
+  idempotency/retry/pause-resume rather than building a second
+  mechanism.
 
-Setiap projection — apa pun strategi steady-state-nya — di-REBUILD lewat
-mekanisme `cursor_table` re-scan bounded yang SAMA (`rebuildSource`, selalu
-ada), membaca tabel sumber otoritatif langsung.
+Every projection — whatever its steady-state strategy — is REBUILT through the
+SAME bounded `cursor_table` re-scan mechanism (`rebuildSource`, always
+present), reading the authoritative source tables directly.
 
-## TOCTOU rebuild-lock (Issue #151) — invariant paling gampang diregresi
+## The rebuild-lock TOCTOU (Issue #151) — the invariant easiest to regress
 
-Race antara worker incremental steady-state dan rebuild trigger: memindahkan
-`findRunningRebuild` ke dalam transaksi `runCursorStreamPass` PERLU tapi
-**TIDAK CUKUP** — setiap transaksi jalan di READ COMMITTED (`withTenant` tidak
-pernah mengubah isolation level), tiap statement dalam SATU transaksi
-mengambil snapshot baru, jadi `triggerOrResumeRebuild` yang commit di antara
-statement `findRunningRebuild` dan `getStreamCursor` pass yang sama tetap
-invisible ke statement pertama, visible ke yang kedua — celah check-then-act
-yang sama, cuma dipersempit dari "antar dua transaksi" jadi "antar dua
-statement". Memindahkan cek saja juga tidak menutup separuh lain bahaya ini:
-dua transaksi pass (satu incremental, satu rebuild) yang sama-sama membaca
-`cursor_value = NULL` yang baru di-reset akan SAMA-SAMA re-scan tabel sumber
-dari awal dan SAMA-SAMA `applyMetricDeltas` — serialize di row-lock metrik
-sehingga MENJUMLAHKAN, bukan bertabrakan — double-count diam-diam.
+The race between the incremental steady-state worker and a rebuild trigger: moving
+`findRunningRebuild` inside the `runCursorStreamPass` transaction is NECESSARY but
+**NOT SUFFICIENT** — every transaction runs at READ COMMITTED (`withTenant` never
+changes the isolation level), each statement within ONE transaction
+takes a fresh snapshot, so a `triggerOrResumeRebuild` that commits between the
+`findRunningRebuild` and `getStreamCursor` statements of the same pass is still
+invisible to the first statement and visible to the second — the same
+check-then-act gap, merely narrowed from "between two transactions" to "between two
+statements". Moving the check alone also does not close the other half of this hazard:
+two pass transactions (one incremental, one rebuild) that both read
+the freshly reset `cursor_value = NULL` will BOTH re-scan the source table
+from the start and BOTH `applyMetricDeltas` — serialised on the metric row lock
+so they ADD UP rather than collide — a silent double-count.
 
-**Fix**: `pg_advisory_xact_lock` per-(tenant, projection)
-(`application/projection-lock.ts`) — dipegang DATABASE untuk seluruh
-transaksi, dilepas otomatis saat COMMIT/ROLLBACK, dan efektif LINTAS PROSES
-(rebuild trigger jalan di web request `app`/`interactive`; incremental worker
-jalan di proses `bun run reporting:projections:refresh` `worker`/
-`maintenance` terpisah — tidak ada in-process gate yang bisa men-serialize
-keduanya). **Setiap** penulis baris cursor/metric projection mengambil lock
-ini sebagai statement PERTAMA transaksinya, sebelum membaca apa pun yang lalu
-ditindaklanjuti: `projection-incremental-worker.ts`'s `runCursorStreamPass`,
-`projection-rebuild.ts`'s `triggerOrResumeRebuild` (SATU-SATUNYA yang
-me-reset) + `runRebuildStreamPass`, `event-activity-projection.ts`'s
-`applyEventActivityProjectionIncrement`. Lock-ordering: lock ini SELALU
-diambil PERTAMA, sebelum row lock apa pun di tabel cursor/metric/rebuild-run
-— jangan balik urutan ini di kode baru (deadlock). Blocking
-(`pg_advisory_xact_lock`), bukan try-and-skip — semua bagian yang berkontensi
-adalah transaksi pendek yang bounded (satu halaman `batchLimit`, atau satu
-reset). Test: `tests/reporting-projection-rebuild-lock.test.ts` (Postgres
-nyata, skip bersih kalau `REPORTING_TEST_DATABASE_URL` tidak di-set).
+**Fix**: `pg_advisory_xact_lock` per (tenant, projection)
+(`application/projection-lock.ts`) — held by the DATABASE for the whole
+transaction, released automatically on COMMIT/ROLLBACK, and effective ACROSS PROCESSES
+(the rebuild trigger runs in a web request, `app`/`interactive`; the incremental worker
+runs in a separate `bun run reporting:projections:refresh` `worker`/
+`maintenance` process — there is no in-process gate that could serialise
+the two). **Every** writer of a projection cursor/metric row takes this lock
+as the FIRST statement of its transaction, before reading anything it then
+acts upon: `projection-incremental-worker.ts`'s `runCursorStreamPass`,
+`projection-rebuild.ts`'s `triggerOrResumeRebuild` (the ONLY one that
+resets) + `runRebuildStreamPass`, `event-activity-projection.ts`'s
+`applyEventActivityProjectionIncrement`. Lock ordering: this lock is ALWAYS
+taken FIRST, before any row lock on the cursor/metric/rebuild-run tables
+— do not invert this order in new code (deadlock). It is blocking
+(`pg_advisory_xact_lock`), not try-and-skip — all contending parts
+are short, bounded transactions (one `batchLimit` page, or one
+reset). Test: `tests/reporting-projection-rebuild-lock.test.ts` (a real
+Postgres, cleanly skipped when `REPORTING_TEST_DATABASE_URL` is not set).
 
-`triggerOrResumeRebuild` satu-satunya tempat cursor/metrik di-reset ke nol —
-dalam transaksi PEMANGGIL (route API), atomik dengan baris run baru, audit
-log, dan idempotency record. Partial unique index `sql/015`
+`triggerOrResumeRebuild` is the only place a cursor/metric is reset to zero —
+inside the CALLER's transaction (the API route), atomic with the new run row, the audit
+log, and the idempotency record. The partial unique index in `sql/015`
 (`awcms_reporting_rebuild_runs_running_unique ... WHERE status = 'running'`)
-membuat double-reset konkuren mustahil di level database; `createRebuildRun`
-pakai `INSERT ... ON CONFLICT DO NOTHING` (bukan exception unique-violation
-mentah). `continueRebuildPasses` TIDAK
-PERNAH me-reset apa pun — hanya memajukan cursor run yang sudah `'running'`,
-satu pass bounded = satu transaksi (select batch → apply delta → advance
-cursor → bump `rows_processed`), pola crash-safe yang sama seperti engine
-archive/purge `data_lifecycle`.
+makes a concurrent double-reset impossible at the database level; `createRebuildRun`
+uses `INSERT ... ON CONFLICT DO NOTHING` (not a raw unique-violation
+exception). `continueRebuildPasses` NEVER
+resets anything — it only advances the cursor of a run that is already `'running'`,
+one bounded pass = one transaction (select batch → apply delta → advance
+cursor → bump `rows_processed`), the same crash-safe pattern as `data_lifecycle`'s
+archive/purge engine.
 
-## Freshness — dihitung live, tidak pernah di-cache
+## Freshness — computed live, never cached
 
-`domain/freshness.ts`'s `computeProjectionFreshness` murni fungsi dari fakta
-persisted (`last_success_at`, `consecutive_failures`) vs `now` — bukan enum
-status tersimpan. Lima state: `current`/`delayed`/`stale`/`rebuilding`
-(selalu menang)/`failed` (ambang consecutive-failure, dicek setelah
-`rebuilding`). Kalau worker berhenti total, tidak ada write lagi, tapi path
-baca tetap benar meng-age status murni dari waktu berlalu.
+`domain/freshness.ts`'s `computeProjectionFreshness` is a pure function of the
+persisted facts (`last_success_at`, `consecutive_failures`) vs `now` — not a stored
+status enum. Five states: `current`/`delayed`/`stale`/`rebuilding`
+(always wins)/`failed` (the consecutive-failure threshold, checked after
+`rebuilding`). If the worker stops entirely there are no more writes, but the read
+path still correctly ages the status purely from elapsed time.
 
 ## Reconciliation & scheduled exports
 
-`POST /api/v1/reports/projections/{key}/reconcile` — hitung ULANG control
-total penuh langsung dari `rebuildSource`, bandingkan ke metrik projection
-live; on-demand saja, TIDAK butuh `Idempotency-Key` (nol mutasi state bisnis,
-hanya append satu baris histori). Mismatch selagi projection cuma `delayed`
-adalah WAJAR, bukan bug — baca freshness bersamaan dengan reconcile, jangan
-menggantikannya. Scheduled export (`application/export-generation.ts`)
-menulis snapshot CSV/JSON ke `REPORTING_EXPORT_ROOT_PATH` (checksum SHA-256,
-CSV formula-injection dinetralkan) DI LUAR transaksi DB, lalu mencatat satu
-baris manifest `awcms_reporting_export_runs`. `bun run
-reporting:exports:dispatch` reuse fungsi generation yang sama untuk tiap
-`awcms_reporting_scheduled_exports` yang enabled+due. Download
-(`GET .../exports/runs/{id}/download`) re-cek RBAC/ABAC+tenant scope saat
-download, menolak artifact kedaluwarsa dengan `410 Gone`. **`filter` diterima/
-disimpan tapi BELUM diterapkan** — `POST /api/v1/reports/exports`'s `filter`
-field tersimpan dan selalu dikembalikan, tapi generation tidak pernah
-mengonsultasinya; endpoint create MENOLAK `filter` non-kosong dengan `400
-NOT_IMPLEMENTED` sampai skema dan wiring-nya dibangun — jangan
-mengasumsikan filter sudah berfungsi karena field-nya "diterima".
+`POST /api/v1/reports/projections/{key}/reconcile` — RECOMPUTES the full control
+total directly from `rebuildSource` and compares it to the live projection metric;
+on-demand only, does NOT require `Idempotency-Key` (zero business state mutation,
+it only appends one history row). A mismatch while the projection is merely `delayed`
+is NORMAL, not a bug — read freshness alongside reconcile, do not
+substitute one for the other. Scheduled export (`application/export-generation.ts`)
+writes a CSV/JSON snapshot to `REPORTING_EXPORT_ROOT_PATH` (SHA-256 checksum,
+CSV formula injection neutralised) OUTSIDE the DB transaction, then records one
+`awcms_reporting_export_runs` manifest row. `bun run
+reporting:exports:dispatch` reuses the same generation function for each
+enabled+due `awcms_reporting_scheduled_exports`. Download
+(`GET .../exports/runs/{id}/download`) re-checks RBAC/ABAC+tenant scope at
+download time and rejects an expired artifact with `410 Gone`. **`filter` is accepted/
+stored but NOT YET applied** — `POST /api/v1/reports/exports`'s `filter`
+field is stored and always returned, but generation never consults it; the create
+endpoint REJECTS a non-empty `filter` with `400
+NOT_IMPLEMENTED` until the schema and its wiring are built — do not
+assume filtering works just because the field is "accepted".
 
 ## Permission catalog
 
-`reporting.dashboard.read` (`sql/016`) — satu-satunya untuk lima view
-live, tidak berubah. Enam permission projection/export **di file `sql/016`
-yang sama** (`domain/projection-permissions.ts`'s
-`REPORTING_PROJECTION_PERMISSIONS`, single source of truth — reuse konstanta
-ini, jangan re-type string literal):
+`reporting.dashboard.read` (`sql/016`) — the only one for the five live
+views, unchanged. Six projection/export permissions **in the same `sql/016`
+file** (`domain/projection-permissions.ts`'s
+`REPORTING_PROJECTION_PERMISSIONS`, the single source of truth — reuse this
+constant, do not re-type the string literals):
 `reporting.projections.read`, `reporting.projections.rebuild` (high-risk,
-action `rebuild`, reason-required, `Idempotency-Key` wajib, audited),
-`reporting.projections.analyze` (reconcile — presedential "analisis read-only
-bukan verb baru" yang sama seperti `data_lifecycle.plan.analyze`),
+action `rebuild`, reason-required, `Idempotency-Key` mandatory, audited),
+`reporting.projections.analyze` (reconcile — the same "a read-only analysis
+is not a new verb" precedent as `data_lifecycle.plan.analyze`),
 `reporting.exports.read`, `reporting.exports.configure` (high-risk,
-`Idempotency-Key` wajib, audited), `reporting.exports.export` (trigger manual,
-high-risk, `Idempotency-Key` wajib, audited).
+`Idempotency-Key` mandatory, audited), `reporting.exports.export` (manual trigger,
+high-risk, `Idempotency-Key` mandatory, audited).
 
-**Dua lapis guard untuk membaca projection** (list/get-detail/reconcile):
-gate kasar `authorizeInTransaction` di route (`reporting.projections.read`/
-`.analyze`) PERLU tapi TIDAK CUKUP — setiap descriptor JUGA mendeklarasikan
-`requiredPermission` sendiri, ditegakkan `domain/
-projection-permission-filter.ts` (memfilter list, 403 untuk single-key
-lookup) — pola sama `module-management/domain/navigation-registry.ts`'s
-`filterVisibleNavigationEntries`. Ketiga descriptor bawaan PR ini kebetulan
-berbagi `requiredPermission` yang sama, jadi lapis kedua ini belum
-terbedakan untuk descriptor manapun HARI INI — tapi inilah yang mencegah
-caller berpermission kasar saja melihat projection FUTURE berpermission
-lebih sempit yang didaftarkan modul turunan.
+**Two guard layers for reading a projection** (list/get-detail/reconcile):
+the coarse `authorizeInTransaction` gate on the route (`reporting.projections.read`/
+`.analyze`) is NECESSARY but NOT SUFFICIENT — every descriptor ALSO declares
+its own `requiredPermission`, enforced by `domain/
+projection-permission-filter.ts` (filtering the list, 403 for a single-key
+lookup) — the same pattern as `module-management/domain/navigation-registry.ts`'s
+`filterVisibleNavigationEntries`. The three descriptors shipped with this PR happen to
+share the same `requiredPermission`, so this second layer does not yet
+differentiate any descriptor TODAY — but it is what prevents a
+caller holding only the coarse permission from seeing a FUTURE projection with a
+narrower permission registered by a derived module.
 
 ## Admin UI mutation client
 
-`/admin/reporting` (`src/pages/admin/reporting.astro`, PR #335 — README modul sempat memerikan <!-- historis:mulai -->`/admin/reporting/projections`<!-- historis:selesai --> + helper `submitJson` yang TIDAK PERNAH ADA di repo ini)
-— setiap mutation (rebuild/cancel/reconcile/export) lewat endpoint
-`/api/v1/reports/*` yang REAL, tanpa shortcut privileged. Pakai
-`sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`, lihat skill
-`awcms-ui-screen`) untuk memanggilnya — **catatan**: README modul ini
-menyebut `submitJson`, yang TIDAK ADA di `admin-form-client.ts` versi repo
-ini (verifikasi: `grep -n "^export" src/lib/ui/admin-form-client.ts`); pakai
-`sendJson`/`postJson` yang benar-benar ada.
+`/admin/reporting` (`src/pages/admin/reporting.astro`, PR #335 — the module README once described <!-- historis:mulai -->`/admin/reporting/projections`<!-- historis:selesai --> + a `submitJson` helper that NEVER EXISTED in this repo)
+— every mutation (rebuild/cancel/reconcile/export) goes through the REAL
+`/api/v1/reports/*` endpoints, with no privileged shortcut. Use
+`sendJson`/`postJson` (`src/lib/ui/admin-form-client.ts`, see the
+`awcms-ui-screen` skill) to call them — **note**: this module's README
+mentions `submitJson`, which DOES NOT EXIST in this repo's version of
+`admin-form-client.ts` (verify: `grep -n "^export" src/lib/ui/admin-form-client.ts`); use
+the `sendJson`/`postJson` that actually exist.
 
-## Belum tersedia
+## Not yet available
 
-Materialized view/caching untuk lima view live (lihat di atas — sengaja
-tidak dibangun). Pagination/filter tanggal kustom untuk `access-audit`. Test
-adversarial "bounded pass → simulated crash → resumed continuation → total
-benar" dari awcms-mini — **belum ada di sini** (kandidat BANGUN, bukan port; ADR-0055 §1). Suite `tests/integration/` **kini
-ADA** (harness dua-world, Issue #154), termasuk
-`reporting-projections.integration.test.ts` dan
-`db-role-separation.integration.test.ts` yang meng-cover least-privilege role
-split — jadi tempat menaruh test crash-resume itu sudah tersedia; yang belum
-adalah test-nya sendiri. Verifikasi `ls tests/integration/` sebelum mengklaim
-salah satu arah. Modul domain turunan (mis.
-AWPOS) menambah view reporting domainnya sendiri di modul terpisah, bukan di
-modul generik ini.
+Materialized views/caching for the five live views (see above — deliberately
+not built). Custom date pagination/filter for `access-audit`. The adversarial
+test "bounded pass → simulated crash → resumed continuation → correct
+total" from awcms-mini — **not here yet** (a BUILD candidate, not a port; ADR-0055 §1). The `tests/integration/` suite **NOW
+EXISTS** (two-world harness, Issue #154), including
+`reporting-projections.integration.test.ts` and
+`db-role-separation.integration.test.ts` which cover the least-privilege role
+split — so the place to put that crash-resume test is available; what is missing
+is the test itself. Verify with `ls tests/integration/` before claiming
+either direction. Derived domain modules (e.g.
+AWPOS) add their own domain reporting views in a separate module, not in
+this generic module.
 
-## Skill terkait
+## Related skills
 
-`awcms-new-endpoint`, `awcms-new-migration`, `awcms-abac-guard` (permission
-catalog projection/export), `awcms-idempotency` (rebuild/export mutation),
+`awcms-new-endpoint`, `awcms-new-migration`, `awcms-abac-guard` (the
+projection/export permission catalog), `awcms-idempotency` (rebuild/export mutations),
 `awcms-audit-log` (rebuild/export high-risk actions), `awcms-ui-screen`
-(pola markup `projections.astro`), `awcms-module-management` (kontrak
-`ProjectionDescriptor`/`listModules()` yang sama dengan
+(the `projections.astro` markup patterns), `awcms-module-management` (the same
+`ProjectionDescriptor`/`listModules()` contract as
 `dataLifecycle`/`sodRules`).

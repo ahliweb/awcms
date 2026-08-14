@@ -1,124 +1,126 @@
 ---
 name: awcms-sync-hmac
-description: Amankan sinkronisasi offline-online AWCMS dengan HMAC signature dan anti-replay. Gunakan saat implementasi sync push/pull, verifikasi request node, atau R2 object queue. Sesuai doc 08 & 10.
+description: Secure AWCMS offline-online synchronisation with HMAC signatures and anti-replay. Use when implementing sync push/pull, verifying node requests, or the R2 object queue. Per doc 08 & 10.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Sync HMAC & Offline Sync
 
-Ikuti `docs/awcms/08_sop_operasional_user_guide.md` dan `docs/awcms/10_template_kode_coding_standard.md`.
+Follow `docs/awcms/08_sop_operasional_user_guide.md` and `docs/awcms/10_template_kode_coding_standard.md`.
 
-## Signature ber-versi (perbaikan GHSA-c972-3q5p-g3h4)
+## Versioned signature (fix for GHSA-c972-3q5p-g3h4)
 
-Celah lintas-tenant lama (tenant & node **di luar** material tanda tangan)
-sudah ditutup dengan skema signature **ber-versi**. Gunakan **v2** untuk semua
-kode & node baru.
+The old cross-tenant hole (tenant & node **outside** the signature material)
+has been closed with a **versioned** signature scheme. Use **v2** for all new
+code & nodes.
 
-### v2 — kanonik (WAJIB untuk kode baru)
+### v2 — canonical (MUST for new code)
 
 ```text
 signature = HMAC-SHA256(secret, "v2:<tenantId>:<nodeCode>:<timestamp>:<body>")
 ```
 
-- Tenant dan node **di dalam** material → signature yang dibuat untuk tenant A
-  tidak lagi valid saat header `X-AWCMS-Tenant-ID` ditukar ke tenant B.
-- Node **wajib** mengirim header `X-AWCMS-Signature-Version: 2`.
-- Field constraint agar material tidak ambigu: `tenantId` = UUID; `nodeCode` &
-  `timestamp` dari HTTP header (tak boleh mengandung CR/LF); `body` adalah field
-  terakhir sehingga `:` di dalamnya tak menggeser batas field sebelumnya.
-- **Enforcement L1 (delimiter hardening, GHSA-c972):** `tenantId` = UUID
-  **ditegakkan** di boundary v2, bukan sekadar diasumsikan. `nodeCode` boleh
-  mengandung `:` (schema `node_code text`), jadi tanpa syarat UUID, batas
-  tenant/node ambigu — `(tenantId="A", nodeCode="x:y")` dan
-  `(tenantId="A:x", nodeCode="y")` menghasilkan material identik. UUID = 36 char
-  tetap tanpa `:` → batas tak ambigu. `computeSyncSignatureV2` **throw** bila
-  `tenantId` bukan UUID; `verifySyncSignatureV2` **fail-closed** (return
-  `false`). Hanya `tenantId` yang dibatasi; `nodeCode` tak disentuh dan **format
-  material v2 TIDAK berubah** → node v1/v2 lama (tenant id-nya UUID) tak
-  terpengaruh; mini/spec tak perlu ubah format material.
-- Implementasi kanonik ada di repo **awcms** (`domain/sync-hmac.ts`
+- Tenant and node are **inside** the material → a signature made for tenant A
+  is no longer valid when the `X-AWCMS-Tenant-ID` header is swapped to tenant B.
+- The node **must** send the header `X-AWCMS-Signature-Version: 2`.
+- Field constraints so the material is unambiguous: `tenantId` = UUID; `nodeCode` &
+  `timestamp` come from HTTP headers (must not contain CR/LF); `body` is the last
+  field, so a `:` inside it cannot shift the boundary of a preceding field.
+- **L1 enforcement (delimiter hardening, GHSA-c972):** `tenantId` = UUID is
+  **enforced** at the v2 boundary, not merely assumed. `nodeCode` may
+  contain `:` (schema `node_code text`), so without the UUID requirement the
+  tenant/node boundary is ambiguous — `(tenantId="A", nodeCode="x:y")` and
+  `(tenantId="A:x", nodeCode="y")` produce identical material. A UUID is 36 chars
+  and always free of `:` → the boundary is unambiguous. `computeSyncSignatureV2` **throws**
+  when `tenantId` is not a UUID; `verifySyncSignatureV2` is **fail-closed** (returns
+  `false`). Only `tenantId` is constrained; `nodeCode` is untouched and **the v2
+  material format DOES NOT change** → old v1/v2 nodes (whose tenant id is a UUID) are
+  unaffected; mini/spec need no material-format change.
+- The canonical implementation lives in the **awcms** repo (`domain/sync-hmac.ts`
   `computeSyncSignatureV2` / `verifySyncSignatureV2`).
 
-### v1 — legacy, RENTAN (transisi saja)
+### v1 — legacy, VULNERABLE (transition only)
 
 ```text
 signature = HMAC-SHA256(secret, "<timestamp>.<body>")
 ```
 
-- Dipakai bila node **tidak** mengirim `X-AWCMS-Signature-Version`.
-- Tenant & node tidak terikat → **masih bisa dipalsukan lintas-tenant**. Ada
-  hanya supaya node lama tetap jalan selama migrasi.
-- Diterima **hanya** selama env `SYNC_HMAC_ALLOW_LEGACY` bukan `false`
-  (default: mengizinkan). Operator men-set `SYNC_HMAC_ALLOW_LEGACY=false`
-  setelah semua node pindah ke v2 untuk menolak v1 sepenuhnya.
-- **Celah tertutup penuh hanya saat `SYNC_HMAC_ALLOW_LEGACY=false` DAN semua
-  node memakai v2.** Jangan klaim advisory tertutup sebelum kedua syarat itu.
+- Used when the node does **not** send `X-AWCMS-Signature-Version`.
+- Tenant & node are not bound → **it can still be forged across tenants**. It exists
+  only so old nodes keep working during migration.
+- Accepted **only** while the env `SYNC_HMAC_ALLOW_LEGACY` is not `false`
+  (default: allow). The operator sets `SYNC_HMAC_ALLOW_LEGACY=false`
+  once all nodes have moved to v2, to reject v1 entirely.
+- **The hole is fully closed only when `SYNC_HMAC_ALLOW_LEGACY=false` AND every
+  node uses v2.** Do not claim the advisory is closed before both conditions hold.
 
-### Koordinasi lintas-repo
+### Cross-repo coordination
 
-v2 kanonik di **awcms** (base ini), dan sejak ADR-0055 tidak ada repo keluarga
-lain yang memikul implementasi node. Syaratnya karena itu dinyatakan ulang
-terhadap deployment NYATA, bukan terhadap repo arsip: **setiap node sync yang
-benar-benar berjalan** wajib memakai material v2 yang persis sama sebelum
-`SYNC_HMAC_ALLOW_LEGACY=false` diaktifkan. (Kalimat sebelumnya menggantungkan
-saklar ini pada pembaruan **awcms-mini** — repo arsip yang tidak akan pernah
-diperbarui, sehingga syaratnya tidak akan pernah terpenuhi dan celah v1 tidak
-akan pernah bisa dinyatakan tertutup.) Idealnya
-lanjutkan ke **secret per-node** (saran advisory ke-3) — di luar scope patch ini.
+v2 is canonical in **awcms** (this base), and since ADR-0055 no other family repo
+carries a node implementation. The condition is therefore restated
+against REAL deployments, not against archive repos: **every sync node that is
+actually running** must use exactly the same v2 material before
+`SYNC_HMAC_ALLOW_LEGACY=false` is switched on. (The previous wording hung this
+switch on an update to **awcms-mini** — an archive repo that will never be
+updated, so the condition could never be met and the v1 hole could never
+be declared closed.) Ideally
+continue on to **per-node secrets** (the advisory's 3rd suggestion) — out of scope for this patch.
 
-## Registrasi node — default `inactive` + approve admin
+## Node registration — default `inactive` + admin approval
 
-`resolveOrRegisterSyncNode` meng-INSERT node first-contact dengan
-`status='inactive'` (bukan `active`). Node dikarantina sampai admin menyetujui
-lewat `PATCH /api/v1/sync/nodes/{id}` (`status: "active"`, guarded
-`sync_storage.node_management.update`, audited). Ini menutup jalur "node-id
-baru" — request palsu untuk tenant lain mendarat di node inactive dan ditolak
-gate `node.status !== "active"`. Node yang sudah `active` tak terpengaruh.
-(Kolom `sql/010` masih default `active` untuk baris historis; INSERT di kode
-yang membuat baris baru jadi eksplisit `inactive` — tanpa mengedit migration
-terapan.)
+`resolveOrRegisterSyncNode` INSERTs a first-contact node with
+`status='inactive'` (not `active`). The node is quarantined until an admin approves it
+via `PATCH /api/v1/sync/nodes/{id}` (`status: "active"`, guarded by
+`sync_storage.node_management.update`, audited). This closes the "new node-id"
+path — a forged request for another tenant lands on an inactive node and is rejected by
+the `node.status !== "active"` gate. Nodes already `active` are unaffected.
+(The `sql/010` column still defaults to `active` for historical rows; the INSERT in the
+code that creates new rows is explicitly `inactive` — without editing an applied
+migration.)
 
-## Header
+## Headers
 
 `X-AWCMS-Tenant-ID`, `X-AWCMS-Node-ID`, `X-AWCMS-Timestamp`,
-`X-AWCMS-Signature`, `X-AWCMS-Signature-Version` (`2` untuk v2).
+`X-AWCMS-Signature`, `X-AWCMS-Signature-Version` (`2` for v2).
 
-## Aturan validasi
+## Validation rules
 
-1. Signature **wajib** ada; tolak jika kosong.
-2. Timestamp valid; **max skew default 300 detik** (anti replay).
-3. **Timing-safe compare** untuk signature (kedua versi).
-4. v2: material mengikat tenant+node — tenant-swap otomatis invalid.
-5. v1 diterima hanya bila `SYNC_HMAC_ALLOW_LEGACY` ≠ `false`.
-6. Node **inactive** ditolak (`node.status !== "active"` → 403); node baru
-   auto-register `inactive` dan wajib approve admin.
-7. Duplicate event idempotent (tidak dobel) — lihat `awcms-idempotency`.
-8. Posted transaction **immutable**; sync tidak menimpa transaksi posted.
-9. HMAC secret & R2 credential hanya dari **environment**.
+1. The signature **must** be present; reject if empty.
+2. Timestamp valid; **max skew defaults to 300 seconds** (anti-replay).
+3. **Timing-safe compare** for the signature (both versions).
+4. v2: the material binds tenant+node — a tenant swap is automatically invalid.
+5. v1 accepted only when `SYNC_HMAC_ALLOW_LEGACY` ≠ `false`.
+6. **Inactive** nodes are rejected (`node.status !== "active"` → 403); a new node
+   auto-registers as `inactive` and requires admin approval.
+7. Duplicate events are idempotent (no double apply) — see `awcms-idempotency`.
+8. A posted transaction is **immutable**; sync does not overwrite a posted transaction.
+9. HMAC secret & R2 credentials come only from the **environment**.
 
-## Alur
+## Flow
 
 ```mermaid
 sequenceDiagram
   participant N as Node
   participant S as Server
   N->>S: push (Tenant-ID + Node-ID + Timestamp + Signature + Signature-Version:2 + body)
-  S->>S: cek node aktif · verifikasi HMAC v2 (tenant+node bound) · cek skew · idempotent
-  S-->>N: ack + checkpoint (atau tolak)
+  S->>S: check node active · verify HMAC v2 (tenant+node bound) · check skew · idempotent
+  S-->>N: ack + checkpoint (or reject)
   N->>S: pull update
-  S-->>N: event baru
-  Note over N,S: Conflict high-risk → resolusi manual + audit
+  S-->>N: new events
+  Note over N,S: High-risk conflict → manual resolution + audit
 ```
 
-## R2 object queue (opsional)
+## R2 object queue (optional)
 
-- File lokal disimpan dulu, masuk `awcms_object_sync_queue`.
-- Upload saat online; **checksum diverifikasi**; retry aman.
+- Files are stored locally first, entering `awcms_object_sync_queue`.
+- Uploaded when online; **checksums are verified**; retry is safe.
 
-## Verifikasi (test)
+## Verification (tests)
 
-- v2 tenant-swap ditolak (material beda → HMAC beda).
-- v1 diterima saat `SYNC_HMAC_ALLOW_LEGACY=true`, ditolak saat `false`.
-- Node auto-register `inactive` → pull ditolak; node `active` tetap jalan.
-- HMAC valid diterima; invalid/expired ditolak.
+- v2 tenant-swap is rejected (different material → different HMAC).
+- v1 accepted when `SYNC_HMAC_ALLOW_LEGACY=true`, rejected when `false`.
+- A node auto-registered as `inactive` → pull rejected; an `active` node still works.
+- Valid HMAC accepted; invalid/expired rejected.
 - Duplicate batch idempotent; checkpoint updated.
-- Conflict tercatat immutable + audit.
+- Conflicts recorded immutably + audited.

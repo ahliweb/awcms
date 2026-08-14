@@ -1,88 +1,93 @@
 ---
 name: awcms-github-snapshot
-description: Refresh snapshot dokumentasi GitHub (docs/awcms/github/) setelah issue/label/milestone/security alert berubah di GitHub. Gunakan sebelum audit/release, atau saat diminta menyinkronkan docs dengan state GitHub terbaru. Sesuai docs/awcms/github/README.md.
+description: Refresh the GitHub documentation snapshot (docs/awcms/github/) after issues/labels/milestones/security alerts change on GitHub. Use before an audit/release, or when asked to sync the docs with the latest GitHub state. Per docs/awcms/github/README.md.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — GitHub Snapshot Refresh
 
-Ikuti `docs/awcms/github/README.md`. Snapshot ini adalah salinan
-faktual state GitHub (issue, label, milestone, security alert) — bukan
-backlog rencana (itu tetap `docs/awcms/06_github_issues_detail.md`).
+Follow `docs/awcms/github/README.md`. This snapshot is a factual copy of
+GitHub state (issues, labels, milestones, security alerts) — not the
+planned backlog (that stays `docs/awcms/06_github_issues_detail.md`).
 
-## Sebelum refresh: cek issue yang PR-nya sudah merge tapi belum ke-close
+## Before refreshing: check for issues whose PR merged but which never closed
 
-**Recurring, sudah terjadi dua kali** (epic `blog_content` #537-#540;
-epic online public tenant routing #556-#560): PR di repo ini kadang tidak
-menyertakan kata kunci `Closes #NNN` di body-nya, jadi merge PR **tidak**
-otomatis menutup issue terkait — issue-nya tertinggal `open` di GitHub
-walau kodenya sudah live di `main`. `gh issue list --state open` saja
-**tidak cukup** untuk tahu backlog nyata (lihat memori
-`pr-body-missing-closes-keyword`). Sebelum menjalankan refresh:
+**Recurring, has already happened twice** (epic `blog_content` #537-#540;
+epic online public tenant routing #556-#560): PRs in this repo sometimes
+do not include the `Closes #NNN` keyword in their body, so merging the PR
+does **not** automatically close the related issue — the issue is left
+`open` on GitHub even though the code is already live on `main`.
+`gh issue list --state open` alone is **not enough** to know the real
+backlog (see memory `pr-body-missing-closes-keyword`). Before running the
+refresh:
 
 ```bash
 gh issue list --state open --limit 50 --json number,title
 gh pr list --state merged --limit 30 --json number,title,mergedAt
 ```
 
-Cocokkan tiap issue open dengan judul PR yang menyebut nomor issue itu
-(pola judul di repo ini: `... (Issue #NNN)`). Untuk setiap match yang
-PR-nya sudah `mergedAt` terisi, tutup issue-nya manual dengan komentar
-yang menyebut PR penutupnya, baru lanjut ke command refresh di bawah —
-jangan biarkan refresh berjalan dengan open-issue count yang sebenarnya
-sudah salah.
+Match each open issue against the title of a PR that mentions that issue
+number (the title pattern in this repo: `... (Issue #NNN)`). For every
+match whose PR already has `mergedAt` filled in, close the issue manually
+with a comment naming the PR that closed it, and only then move on to the
+refresh command below — do not let the refresh run with an open-issue
+count that is already wrong.
 
 ## Command
 
 ```bash
 gh auth status
-# TIDAK ADA target `bun run` untuk ini — refresh dilakukan MANUAL dengan `gh`
-# (lihat perintah di bawah), lalu hasilnya ditulis ke docs/awcms/github/.
+# There is NO `bun run` target for this — the refresh is done MANUALLY with `gh`
+# (see the commands below), and the result is written into docs/awcms/github/.
 ```
 
-`scripts/github-snapshot-refresh.ts` (Issue #464) meregenerasi bagian
-mekanis lewat `gh` CLI (tidak pernah membaca/menyimpan token sendiri):
+`scripts/github-snapshot-refresh.ts` (Issue #464) regenerates the
+mechanical parts through the `gh` CLI (it never reads/stores a token
+itself):
 
-- **Tabel metadata** (snapshot timestamp, jumlah issue/label/milestone,
-  latest CodeQL run, alert count) di `README.md`, `issues-open-001.md`,
+- **Metadata tables** (snapshot timestamp, issue/label/milestone counts,
+  latest CodeQL run, alert count) in `README.md`, `issues-open-001.md`,
   `issues-closed-001.md`, `labels-milestones.md`, `security.md` —
-  diganti utuh per baris.
-- **Dua tabel daftar issue yang tumbuh** (open issues; closed issues
-  pasca-doc06, `>= #433`) diregenerasi penuh di antara marker
+  replaced wholesale, line by line.
+- **The two growing issue-list tables** (open issues; closed issues after
+  doc06, `>= #433`) are fully regenerated between the markers
   `<!-- github-snapshot:NAME:start/end -->`.
 
-## Yang TIDAK disentuh script (tetap manual)
+## What the script does NOT touch (stays manual)
 
-- Narasi hand-written (bagian "### ... completed" di `README.md`).
-- Tabel historis 38-issue doc06 asli di `issues-closed-001.md`.
-- Tabel klasifikasi detail label/milestone di `labels-milestones.md`.
-- Tabel "Ringkasan state saat snapshot" di `README.md` (kolom Catatan
-  prose-heavy) — perbarui manual bila OPEN/CLOSED count berubah.
+- Hand-written narrative (the "### ... completed" sections in `README.md`).
+- The historical original 38-issue doc06 table in `issues-closed-001.md`.
+- The detailed label/milestone classification tables in `labels-milestones.md`.
+- The "State summary at snapshot time" table in `README.md` (the
+  prose-heavy Notes column) — update it manually when the OPEN/CLOSED
+  count changes.
 
-Tinjau bagian-bagian ini manual setelah menjalankan script bila ada
-issue/label/milestone baru yang butuh konteks naratif.
+Review these sections manually after running the script whenever there
+are new issues/labels/milestones that need narrative context.
 
-**Catatan (Issue #475):** bila CodeQL run terbaru untuk `main` masih
-`in_progress`/`queued` (mis. baru saja push/merge), baris "Latest CodeQL
-run" di `security.md` **sengaja tidak diperbarui** — script mencetak
-peringatan di console dan membiarkan nilai lama, bukan menebak status
-run yang belum selesai sebagai `Failure`. Jalankan ulang script beberapa
-menit kemudian bila baris itu perlu nilai terbaru.
+**Note (Issue #475):** if the latest CodeQL run for `main` is still
+`in_progress`/`queued` (e.g. you just pushed/merged), the "Latest CodeQL
+run" line in `security.md` is **deliberately not updated** — the script
+prints a warning to the console and leaves the old value, rather than
+guessing an unfinished run's status as `Failure`. Re-run the script a few
+minutes later if that line needs the latest value.
 
-## Alur
+## Flow
 
 ```mermaid
 flowchart LR
   A[gh auth status] --> B["gh issue/pr list --json (manual)"]
   B --> C[bun run format]
   C --> D[bun run check:docs]
-  D --> E{Narasi manual perlu update?}
-  E -- Ya --> F[Edit bagian hand-written yang relevan]
-  E -- Tidak --> G[Commit]
+  D --> E{Manual narrative needs an update?}
+  E -- Yes --> F[Edit the relevant hand-written sections]
+  E -- No --> G[Commit]
   F --> G
 ```
 
 ## Output
 
-Ringkasan: file yang diperbarui, angka open/closed/label/milestone baru,
-dan daftar bagian manual yang perlu ditinjau (bila ada issue/label baru
-sejak snapshot terakhir).
+A summary: which files were updated, the new open/closed/label/milestone
+numbers, and the list of manual sections that need review (if there are
+new issues/labels since the last snapshot).

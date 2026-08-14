@@ -160,7 +160,7 @@ flowchart LR
 
 ## For contributors
 
-1. Read `AGENTS.md` — technical work contract, mandatory rules, security guardrails.
+1. Read [`AGENTS.md`](AGENTS.md) — technical work contract, mandatory rules, security guardrails.
 2. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribution flow, setup, commit conventions, Definition of Done.
 3. Use the **project skills** in [`.claude/skills/`](.claude/skills/) so standards are applied consistently (one skill per topic: migration, endpoint, ABAC guard, audit log, testing, etc.).
 4. Work **atomically** per issue; add a migration when the schema changes, OpenAPI when the API changes, AsyncAPI when an event changes.

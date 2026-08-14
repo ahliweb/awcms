@@ -1,0 +1,370 @@
+---
+name: awcms-data-lifecycle
+description: Modul data_lifecycle SUDAH di-port ke repo ini (ADR-0037, dari awcms-micro Issue #745; migrasi sql/055 schema + sql/056 permission). System Foundation (`type: system`, deps `[tenant_admin, identity_access, logging]`) yang MEMILIKI empat tabel `awcms_data_lifecycle_*` (legal_holds/cursors/archive_manifests/runs, semua FORCE RLS), registry `HighVolumeTableDescriptor` yang dikontribusikan tiap modul pemilik (`ModuleDescriptor.dataLifecycle`), dry-run planner zero-mutation, bounded archive/purge engine, provider-neutral archive port (local/offline). Menyediakan `LegalHoldGuardPort` (`_shared/ports/legal-hold-guard-port.ts`, seam level-sumber BUKAN capability-registry) yang dikonsumsi `logging` (wajib) & `visitor_analytics` (opsional-step) di composition root purge mereka. SEJAK ADR-0094 modul ini juga memiliki permukaan KEDUA yang terpisah — hak subjek data (`subjectData` descriptor, ekspor, penghapusan maker/checker, `sql/125`–`126`) — lihat §Hak subjek data. Gunakan saat mendaftarkan tabel bervolume tinggi baru, mendaftarkan tabel BARU APA PUN ke ledger subjek, membuat/melepas legal hold, atau mengubah engine.
+---
+
+🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
+
+<!-- i18n-source-hash: sha256:8c1ec4e12d81ea4b0cd1e1a3477dd0e27743194e7923b5d5eec356d956ec8b24 -->
+
+# AWCMS — Data Lifecycle (Registry, Legal Hold, Dry-Run, Archive/Purge)
+
+> **STATUS — modul ini SUDAH di-port ke repo ini (ADR-0037).**
+> `data_lifecycle` hidup di `src/modules/data-lifecycle/` (16 berkas),
+> migrasi `sql/055` (schema, empat tabel `awcms_data_lifecycle_*` FORCE
+> RLS) + `sql/056` (permission), dan `HighVolumeTableDescriptor` +
+> `ModuleDescriptor.dataLifecycle` ADA di `_shared/module-contract.ts`
+> (`MODULE_CONTRACT_VERSION` ≥ 2.1.0). Rujukan tabel/kode di bawah NYATA di
+> repo ini. `LegalHoldGuardPort` adalah **seam port level-sumber**, BUKAN
+> entri `capability-contract-versions.ts` — di-wire di composition root
+> (script/route), tidak pernah di-import dari dalam pohon `application`/
+> `domain` modul konsumen. Konsumen aktif: `logging.audit_events`
+> (delegated, guard WAJIB) & `visitor_analytics.visit_events` (delegated,
+> guard menggerbangi step-1 DELETE saja).
+>
+> **Adopter nyata per 2026-07-26 — 7 modul, 10 deskriptor** (bukan 2; sumber
+> kebenaran `listModules()`, bukan daftar ini):
+>
+> | modul               | tabel                                | retentionClass        |
+> | ------------------- | ------------------------------------ | --------------------- |
+> | `logging`           | `awcms_audit_events`                 | `audit_security`      |
+> | `visitor_analytics` | `awcms_visit_events`                 | `analytics_telemetry` |
+> | `data_lifecycle`    | `awcms_data_lifecycle_runs`          | `operational_queue`   |
+> | `seo_distribution`  | `awcms_seo_not_found_observations`   | `analytics_telemetry` |
+> | `form_drafts`       | `awcms_form_drafts`                  | `operational_queue`   |
+> | `site_search`       | `awcms_site_search_query_log`        | `analytics_telemetry` |
+> | `site_search`       | `awcms_site_search_index_failures`   | `system_event`        |
+> | `comments`          | `awcms_comments_abuse_events`        | `system_event`        |
+> | `comments`          | `awcms_comments_reply_subscriptions` | `communication_log`   |
+> | `comments`          | `awcms_comments_comments`            | `communication_log`   |
+>
+> Versi sebelumnya menyatakan `form_drafts`/`comments` "DITUNDA (modul belum
+> di-port)". **Keduanya sudah di-port** (`sql/062`–`063`, `sql/066`–`067`) dan
+> keduanya `executionMode: "delegated"`. `newsletter` memang masih belum ada.
+
+Sumber kebenaran: `src/modules/_shared/module-contract.ts`
+(`HighVolumeTableDescriptor`), `src/modules/data-lifecycle/` (domain/
+application/infrastructure/api), `src/modules/data-lifecycle/README.md`
+(detail teknis lengkap + pemetaan kepatuhan + prosedur restore),
+`docs/adr/0037-data-lifecycle-module-admission.md`, ADR-0013 §6 (data
+ownership matrix — "no shared-table write").
+
+## Kapan pakai skill ini
+
+1. **Menambah tabel `awcms_*` APA PUN** — bukan hanya yang bervolume
+   tinggi. Sejak ADR-0094 setiap tabel wajib menjawab pertanyaan subjek
+   data, dan `bun run check` menolak diam. Lihat §Hak subjek data.
+2. **Mendaftarkan tabel bervolume tinggi baru** ke registry retensi —
+   lihat §Playbook di bawah. Ini registry yang BERBEDA dari nomor 1;
+   sebuah tabel bisa masuk salah satu, keduanya, atau (bila bukan
+   bervolume tinggi) hanya yang pertama.
+3. **Membuat/melepas legal hold** dari kode (service layer, bukan hanya
+   via API).
+4. **Menjalankan/mengubah ekspor atau penghapusan subjek** — lihat
+   §Hak subjek data, khususnya §Lima mode `erasure`.
+5. **Mengubah engine** (`dry-run-planner.ts`, `archive-purge-job.ts`,
+   `local-archive-adapter.ts`) — baca §Jangan ulangi bug presisi cursor
+   di bawah SEBELUM menyentuh perbandingan batas cursor mana pun.
+
+## Playbook: mendaftarkan tabel bervolume tinggi baru
+
+1. Di `module.ts` modul PEMILIK tabel (bukan `data-lifecycle/module.ts`
+   — descriptor didaftarkan oleh modul yang memiliki tabelnya sendiri),
+   tambah entry ke `dataLifecycle: [...]`:
+
+   ```ts
+   dataLifecycle: [
+     {
+       key: "your_module.your_table", // unik, "<ownerModuleKey>.<tableShortName>"
+       tableName: "awcms_your_table",
+       ownerModuleKey: "your_module", // HARUS sama dengan module.ts's key sendiri
+       scope: "tenant", // scope: "global" belum dieksekusi end-to-end, lihat Batasan
+       cursorColumn: "created_at", // kolom timestamptz untuk batching/ordering
+       retentionClass: "operational_queue", // | audit_security | analytics_telemetry | financial_tax | communication_log | system_event
+       retentionMinDays: 7,
+       retentionMaxDays: 365,
+       defaultRetentionDays: 90,
+       partition: { eligible: false, rationale: "..." }, // wajib rationale walau eligible:false
+       archive: { archivable: false, rationale: "..." }, // archivable:true wajib format+port
+       deletion: { mode: "hard_delete", rationale: "..." },
+       legalHold: { applicable: true, precedence: "overrides_retention" }, // TIDAK bisa "not_applicable" bila applicable:true
+       requiredIndexes: [
+         { columns: ["tenant_id", "created_at"], purpose: "..." }
+       ],
+       batchLimit: 5000, // <= 50.000 (MAX_LIFECYCLE_BATCH_LIMIT)
+       backupRestoreNotes: "...",
+       executionMode: "delegated", // ATAU "generic" — lihat pilihan di bawah
+       existingAdopter: {
+         // WAJIB bila executionMode "delegated", DILARANG bila "generic"
+         jobCommand: "bun run <modul>:purge", // ganti dengan target NYATA di package.json
+         purgeFunctionRef:
+           "src/modules/your_module/application/your-purge.ts#purgeYourTable",
+         description: "..."
+       }
+     }
+   ];
+   ```
+
+2. **Pilih `executionMode`**:
+   - Sudah punya job purge sendiri (kasus paling umum)? →
+     `"delegated"` — TETAP pakai job/fungsi yang sudah ada, jangan
+     duplikasi logic-nya. `data_lifecycle`'s engine hanya membaca tabel
+     ini untuk dry-run (read-only, aman); purge asli tidak pernah
+     disentuh mesin ini.
+   - Belum punya mekanisme purge sama sekali dan ingin
+     `data_lifecycle`'s engine yang mengeksekusi bounded archive/purge
+     untukmu? → `"generic"` — WAJIB kolom `id uuid PRIMARY KEY` (asumsi
+     global doc 04) dan index komposit tenant+cursor (dicek registry
+     gate). Hanya `deletion.mode: "hard_delete"` yang dieksekusi mesin
+     ini hari ini — mode lain ditolak (error jelas), bukan salah
+     eksekusi diam-diam.
+
+3. `bun run data-lifecycle:registry:check` — perbaiki error yang
+   dilaporkan (menyebut field dan alasan persis).
+
+4. Dokumentasikan rasional retensi tabel barumu di `README.md` modul
+   PEMILIK (dan/atau `src/modules/data-lifecycle/README.md` §compliance)
+   — **jangan** klaim satu periode retensi legal universal; jelaskan
+   alasan spesifik kelas data ini.
+
+5. `bun run changeset`.
+
+## Hak subjek data (ADR-0094) — registry KEDUA, dan ia mencakup SETIAP tabel
+
+> Dua registry, dua pertanyaan berbeda. Jangan tertukar:
+>
+> | descriptor      | pertanyaan                                   | cakupan                     | gerbang                                                       |
+> | --------------- | -------------------------------------------- | --------------------------- | ------------------------------------------------------------- |
+> | `dataLifecycle` | kapan baris ini KEDALUWARSA?                 | tabel bervolume tinggi saja | `data-lifecycle:registry:check`                               |
+> | `subjectData`   | apa yang tabel ini simpan TENTANG SESEORANG? | **setiap tabel `awcms_*`**  | `subject-data:coverage:check` + `subject-data:registry:check` |
+
+Per 2026-08-13 ledger `subjectData` **NOL**: 147 tabel = 140
+berdeskriptor + 7 ditolak beralasan + **0 berutang**. `subject-data:coverage:check`
+menjaga ledger utang agar hanya bisa MENGECIL — menambah tabel tanpa
+descriptor membuat `bun run check` merah, dan daftar pengecualian
+`TABLES_PREDATING_THE_SUBJECT_RULE` di `scripts/subject-data-coverage-check.ts`
+sengaja dibiarkan sebagai array KOSONG supaya regresi harus ditulis tangan.
+
+### Playbook: tabel baru menjawab pertanyaan subjek
+
+Di `module.ts` modul **pemilik tabel** (sama seperti `dataLifecycle` —
+bukan di `data-lifecycle/module.ts`), tambah entry ke `subjectData: [...]`:
+
+```ts
+subjectData: [
+  {
+    key: "your_module.your_table", // "<ownerModuleKey>.<tableShortName>", unik
+    tableName: "awcms_your_table",
+    ownerModuleKey: "your_module", // HARUS sama dengan key module.ts sendiri
+    subjectColumns: [
+      { column: "tenant_user_id", references: "tenant_user" }
+      // references: "tenant_user" | "identity" | "profile" | "principal"
+      // match: "equals" (default) | "jsonb_array_contains"
+    ],
+    // tenantColumn: undefined → "tenant_id"; "id" → kolomnya bernama lain;
+    //   null → tabel GLOBAL (tiga arti BERBEDA, gerbang menegakkan ketiganya)
+    exportable: true,
+    erasure: "anonymize",
+    rationale: "...", // WAJIB, dan dibaca manusia — bukan formalitas
+    redactedColumns: ["token_hash"] // kolom yang TIDAK pernah masuk ekspor
+  }
+];
+```
+
+Lalu `bun run subject-data:coverage:check && bun run subject-data:registry:check`.
+
+**Dua gerbang, dua pertanyaan.** Coverage bertanya _apakah setiap tabel
+menjawab_; registry bertanya _apakah jawabannya BENAR_ — ia me-resolve tiap
+descriptor terhadap `sql/`: kolom subjek benar-benar ada, `references` cocok
+dengan target FK sungguhan, kolom teredaksi ada, kontrak `tenantColumn`
+konsisten, rantai severance utuh, dan **mode `erasure` berada dalam
+privilege `awcms_app`** (ia memutar ulang setiap `GRANT`/`REVOKE` di `sql/`
+menurut urutan migrasi). Gerbang cakupan yang hijau sambil setiap jawabannya
+salah adalah kegagalan NYATA yang pernah terjadi di repo ini — itu sebabnya
+gerbang kedua ada.
+
+### Lima mode `erasure` — dan yang paling sering benar BUKAN `anonymize`
+
+| mode                           | artinya                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `anonymize`                    | timpa kolom personal di tempat; baris tetap ada           |
+| `hard_delete`                  | hapus barisnya                                            |
+| `status_transition_then_purge` | tandai (`revoked_at`) lalu biarkan retensi yang menghapus |
+| `severed_with_subject_row`     | **tidak ada yang perlu dikerjakan DI SINI**               |
+| `retain_under_obligation`      | sengaja DIPERTAHANKAN — keputusan, bukan kelalaian        |
+
+`severed_with_subject_row` adalah jawaban MAYORITAS di skema ini (~90
+tabel) dan paling mudah salah dipahami. Ia dipakai saat tabel hanya
+membawa id subjek sebagai **stempel** (`created_by`, `deleted_by`,
+`actor_tenant_user_id`): menganonimkan `awcms_identities` sudah membuat
+setiap stempel itu tidak lagi menunjuk siapa pun. Eksekutor yang
+disuruh `anonymize` di sini akan **menimpa stempelnya** — menghancurkan
+catatan tenant tentang siapa yang menghapus sebuah halaman, demi
+memutus tautan yang sudah terputus. `erasureTargets()` di
+`domain/subject-data-plan.ts` menyaring mode ini dan
+`retain_under_obligation` keluar; jangan lewati fungsi itu.
+
+### Tiga id, bukan satu
+
+Subjek adalah **tenant user** (ADR-0094 Keputusan 1 — dijawab PER TENANT,
+tidak pernah lewat `awcms_principals` yang global). Sebuah baris menjangkau
+orang itu lewat salah satu dari tiga id, dan descriptor yang menyatakannya:
+`tenant_user_id`, `identity_id`, atau **`profile_id`**. Yang ketiga tidak
+opsional: tidak ada satu pun kolom di `awcms_profiles` yang membawa dua id
+pertama — tautannya berjalan ke arah sebaliknya, dari
+`awcms_identities.profile_id`. `references: "principal"` hanya sah pada
+descriptor `tenantColumn: null` dan sengaja tidak punya entri di
+`SUBJECT_ID_OF`; planner menyaringnya keluar.
+
+### Permukaan: ekspor ≠ penghapusan, dan penghapusan maker/checker
+
+Empat permission terpisah (`domain/subject-request-permissions.ts`):
+
+| permission                               | untuk                                                   |
+| ---------------------------------------- | ------------------------------------------------------- |
+| `data_lifecycle.subject_request.read`    | melihat antrean; TIDAK menyingkap data subjek           |
+| `data_lifecycle.subject_request.export`  | melakukan ekspor — sebuah **PENGUNGKAPAN**, diaudit     |
+| `data_lifecycle.subject_erasure.create`  | MEMINTA penghapusan (maker) — tidak pernah mengeksekusi |
+| `data_lifecycle.subject_erasure.approve` | menyetujui/menolak (checker) — eksekusi ada di sini     |
+
+Memegang `create` **dan** `approve` sekaligus adalah konflik SoD
+`critical` (`SUBJECT_ERASURE_MAKER_CHECKER_RULE`). Pemisahan itu ditegakkan
+di **empat** lapis independen: dua permission, aturan SoD, CHECK constraint
+`awcms_subject_requests_checker_is_not_maker` di `sql/125`, dan satu UPDATE
+kondisional (`claimPendingErasure`) yang membawa `requested_by <> checker`
+di dalam `WHERE`-nya. Klaim dan eksekusi berada dalam SATU transaksi —
+memecahnya (baca status → hapus → update) adalah bentuk yang membuat
+penghitung lockout menghitung K percobaan paralel sebagai satu, dan di sini
+ia menjalankan penghapusan tak-terbalikkan dua kali.
+
+Rute: `src/pages/api/v1/data-lifecycle/subject-requests/{index,export,erase}.ts`
+
+- `[id]/decide.ts` (semua di atas `defineTenantRoute`), layar
+  `src/pages/admin/subject-requests.astro`, tabel `sql/125`, permission
+  `sql/126`.
+
+### Ekspor MENYATAKAN cakupannya sendiri
+
+`SubjectPlan.unansweredEntries` membawa tabel yang sengaja TIDAK dijawab
+(global, atau tanpa kolom subjek) sampai ke laporan. Laporan per-tenant
+yang diam-diam menghilangkan `awcms_principals` tidak bisa dibedakan dari
+laporan yang ditulis sebelum tabel itu ada; laporan yang MENYEBUTNYA bisa
+ditindaklanjuti. Jangan "rapikan" dengan membuang daftar ini.
+
+### Jebakan yang sudah terbukti — jangan diulang
+
+- **`hard_delete` pada tabel yang privilegenya sudah dicabut.** Dua
+  descriptor MFA menjanjikan `hard_delete` sementara ADR-0087/`sql/114`
+  sengaja menjadikannya read-only → `42501` di tengah penghapusan, SETELAH
+  permintaan diklaim. Perbaikannya `severed_with_subject_row`, **bukan**
+  mengembalikan GRANT DELETE (itu membatalkan kontrol ADR-nya).
+- **Komentar migrasi yang membohongi kontrolnya sendiri.** `sql/125` sempat
+  menulis "tidak ada DELETE" sambil hanya `GRANT SELECT, INSERT, UPDATE` —
+  padahal blanket grant `sql/019` sudah memberi DELETE. Kontrol yang
+  dimaksud butuh `REVOKE DELETE` EKSPLISIT. Tabel yang dipersempit begini
+  wajib didaftarkan di `RETIRED_TENANT_TABLE_PRIVILEGES`
+  (`scripts/security-readiness.ts`) atau `checkRuntimeRoleGrants` merah.
+- **Test murni tidak mengeksekusi SQL.** Kedua cacat di atas lolos
+  `bun run check` lengkap dan baru terlihat saat engine dijalankan terhadap
+  Postgres SUNGGUHAN. Untuk perubahan di `application/subject-data-executor.ts`,
+  jalankan integration test DB-gated — jangan andalkan test murni saja.
+- **Binding jsonb.** `${JSON.stringify(arr)}::jsonb` menyimpan _string_
+  jsonb (`jsonb_typeof` = `string`) sehingga containment selalu false;
+  `${arr}::jsonb` menyimpan array. Ini membuat eksekutor yang BENAR tampak
+  rusak.
+
+## Legal hold — precedence dan default-deny (kritis, jangan dilonggarkan)
+
+- Hold aktif (tenant-wide `descriptorKey: null`, atau menyasar descriptor
+  spesifik) SELALU override retensi/purge biasa — dicek di
+  `planLifecycleDryRun` SEBELUM cabang apa pun yang bisa melaporkan baris
+  purgeable. `retentionDaysOverride` seagresif apa pun tidak bisa
+  membuka jalan purge saat hold aktif.
+- `legalHold.applicable` pada descriptor adalah **metadata dokumentasi
+  murni** — JANGAN PERNAH membuat mesin mengecek field ini untuk
+  memutuskan apakah hold berlaku. Hold record NYATA selalu berlaku
+  terlepas dari nilai field ini (mencegah modul pemilik mendeklarasikan
+  tabelnya sendiri "kebal hold").
+- `data_lifecycle.legal_hold.create` dan `.release` WAJIB tetap
+  permission KODE TERPISAH — jangan pernah menggabungkannya jadi satu
+  permission `manage`. `security:readiness`'s
+  `checkDataLifecycleLegalHoldReleaseSeparate` (critical) akan gagal bila
+  ini dilanggar.
+- Release WAJIB reason (≥10 karakter, `validateReleaseLegalHoldInput`),
+  `Idempotency-Key`, dan audit `critical` — sama seperti create.
+- `endsAt` pada hold **tidak** otomatis melepas hold — murni metadata
+  "perkiraan tanggal review". Hanya aksi release eksplisit yang mengubah
+  status.
+
+## Jangan ulangi bug presisi cursor (microsecond vs millisecond)
+
+`timestamptz` PostgreSQL presisi mikrodetik; `Date` JavaScript hanya
+milidetik. **Setiap** perbandingan batas cursor yang membaca sebuah nilai
+dari Postgres (via `SELECT`, otomatis jadi JS `Date`) lalu memakainya
+sebagai bound `<=`/`>`/`>=` di query BERIKUTNYA kehilangan presisi —
+baris yang MENDEFINISIKAN batas itu bisa gagal memenuhi perbandingan
+terhadap dirinya sendiri.
+
+- **Sudah diperbaiki** di `archive-purge-job.ts` via
+  `CURSOR_BOUNDARY_SAFETY_MARGIN_MS` (1ms) — pola: pad batas ke ARAH
+  YANG BENAR (upper bound `<=` → tambah 1ms; lower bound resume `>` →
+  ubah jadi `>=` dengan bound `+1ms`) sebelum dipakai sebagai parameter
+  query berikutnya. Konstanta/helper: `domain/cursor-boundary.ts`.
+- **Bila menambah perbandingan cursor BARU** (fitur baru, refactor):
+  reuse `CURSOR_BOUNDARY_SAFETY_MARGIN_MS` yang sudah ada, JANGAN
+  bandingkan nilai `Date` yang dibaca-lalu-ditulis-ulang secara langsung
+  tanpa padding. Uji dengan test regresi
+  `tests/data-lifecycle-cursor-boundary.test.ts` + integration
+  DB-gated (bug ini SELALU muncul di baris terakhir setiap batch, bukan
+  kasus langka — tanpa fix, backlog kecil bisa terjebak loop sampai
+  `DEFAULT_MAX_PASSES`).
+- Detail investigasi lengkap (bagaimana bug ditemukan, dampak sebelum
+  fix): `src/modules/data-lifecycle/README.md` §Timestamp precision.
+
+## Identifier dinamis (tableName/tenantColumn/cursorColumn) di SQL
+
+Selalu lewat `assertSafeIdentifier` (regex allowlist) SEBELUM
+diinterpolasi ke teks SQL via `tx.unsafe(sql, params)` — nilai
+sebenarnya (`tenantId`, `cutoff`, dst.) tetap SELALU lewat parameter
+`$1`/`$2`/... terikat, tidak pernah string-concat. Identifier HANYA
+boleh berasal dari `HighVolumeTableDescriptor` yang sudah divalidasi
+registry gate — tidak pernah dari request/user input. Pola sama
+`visitor-analytics/application/analytics-queries.ts`'s
+`topJsonFieldCounts`.
+
+## Jangan bikin mekanisme baru untuk yang sudah ada
+
+- **Locking/batching/retry** — reuse `src/lib/jobs/*` (shared worker
+  runner, PR #713/Issue #697) lewat `runBoundedBatches`. JANGAN tambah
+  advisory lock/batching sendiri.
+- **Audit** — reuse `recordAuditEvent` yang sudah ada
+  (`logging/application/audit-log.ts`). JANGAN bikin tabel audit
+  terpisah untuk aksi data-lifecycle.
+- **Redaksi/masking** — tidak ada mekanisme baru; dry-run/run history
+  hanya menyimpan count teragregasi, tidak pernah row content, jadi
+  tidak ada nilai sensitif untuk diredaksi di sana sejak awal.
+- **ABAC/RLS** — pola `authorizeInTransaction` + `withTenant` standar
+  (skill `awcms-abac-guard`), tidak ada mekanisme otorisasi baru.
+
+## Verifikasi
+
+- `bun run data-lifecycle:registry:check` — registry retensi valid.
+- `bun run subject-data:coverage:check` — 0 tabel berutang (ledger hanya
+  boleh mengecil).
+- `bun run subject-data:registry:check` — tiap descriptor subjek resolve
+  terhadap `sql/`: kolom ada, `references` cocok FK, mode `erasure` berada
+  dalam privilege `awcms_app`.
+- Perubahan pada eksekutor subjek: integration test DB-gated dijalankan
+  terhadap Postgres nyata, bukan hanya test murni (lihat §Jebakan).
+- `bun run security:readiness` — dua check baru
+  (`checkDataLifecycleRegistryValid`, `checkDataLifecycleLegalHoldReleaseSeparate`)
+  pass.
+- Dry-run terhadap Postgres nyata: descriptor manapun, memanggil dua kali
+  berturut-turut dengan input sama menghasilkan hasil identik (tidak ada
+  mutasi).
+- Legal hold aktif: dry-run melaporkan SEMUA baris eligible sebagai
+  `held`, `purgeableCount: 0`, bahkan dengan `retentionDaysOverride`
+  paling agresif.
+- `executionMode: "generic"` descriptor: test volume besar (>batchLimit)
+  membuktikan multi-pass benar tanpa duplikasi/lompatan baris, dan
+  manifest arsip yang dihasilkan lolos `ArchivePort.verify()`.

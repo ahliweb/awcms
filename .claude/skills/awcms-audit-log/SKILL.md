@@ -1,13 +1,15 @@
 ---
 name: awcms-audit-log
-description: Tulis audit log untuk aksi high-risk AWCMS dengan redaction. Gunakan pada login, access assignment, profile merge, price change, transaction posted/cancel/return, stock adjustment, warehouse transfer, Coretax export, sync conflict resolution, AI tool call, dan security readiness decision. Sesuai doc 03 & 10.
+description: Write audit logs for AWCMS high-risk actions with redaction. Use on login, access assignment, profile merge, price change, transaction posted/cancel/return, stock adjustment, warehouse transfer, Coretax export, sync conflict resolution, AI tool call, and security readiness decision. Per doc 03 & 10.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Audit Log (High-Risk)
 
-Ikuti `docs/awcms/03_srs_detail_per_modul.md` dan `docs/awcms/10_template_kode_coding_standard.md`.
+Follow `docs/awcms/03_srs_detail_per_modul.md` and `docs/awcms/10_template_kode_coding_standard.md`.
 
-## Bentuk input
+## Input shape
 
 ```ts
 type AuditEventInput = {
@@ -19,52 +21,52 @@ type AuditEventInput = {
   resourceId?: string;
   severity?: "info" | "warning" | "critical";
   message: string;
-  attributes?: Record<string, unknown>; // WAJIB sudah diredaksi
+  attributes?: Record<string, unknown>; // MUST already be redacted
   correlationId?: string;
 };
 ```
 
-## Aksi yang WAJIB diaudit
+## Actions that MUST be audited
 
-Login failed/success · access assignment · profile merge · product price change · soft delete/restore/purge · transaction posted/cancel/return · stock adjustment · warehouse transfer · Coretax export · sync conflict resolution · AI tool call · security readiness decision · workflow task decision/reassign/retire/revoke (`src/pages/api/v1/workflows/tasks/[id]/decisions.ts:197`) · document void/reclassify (`document-infrastructure/application/document-directory.ts:354,672`) · data-exchange export/import commit — bukan cuma Coretax, semua export/import job (`export-execute-job.ts:197`, `import-commit-job.ts:220`) · legal hold create/release (`data-lifecycle/application/legal-hold-service.ts:130,200`).
+Login failed/success · access assignment · profile merge · product price change · soft delete/restore/purge · transaction posted/cancel/return · stock adjustment · warehouse transfer · Coretax export · sync conflict resolution · AI tool call · security readiness decision · workflow task decision/reassign/retire/revoke (`src/pages/api/v1/workflows/tasks/[id]/decisions.ts:197`) · document void/reclassify (`document-infrastructure/application/document-directory.ts:354,672`) · data-exchange export/import commit — not just Coretax, every export/import job (`export-execute-job.ts:197`, `import-commit-job.ts:220`) · legal hold create/release (`data-lifecycle/application/legal-hold-service.ts:130,200`).
 
-## Aturan
+## Rules
 
-1. Audit **tenant-scoped** (`tenant_id`), tulis ke `awcms_audit_events`.
-2. **Redaksi dulu** attributes — jangan pernah masukkan: password, token, API key, `authorization`, NPWP/NIK penuh, phone/WhatsApp/email penuh, receipt token.
-3. Audit **melengkapi**, bukan menggantikan, domain event & structured log.
-4. Sertakan `correlationId` untuk trace.
-5. Untuk denial high-risk, koordinasikan dengan decision log (`awcms-abac-guard`).
-6. Soft delete/restore/purge wajib menyertakan reason dan tidak boleh membawa PII mentah di attributes.
+1. Audit is **tenant-scoped** (`tenant_id`), written to `awcms_audit_events`.
+2. **Redact first** — never put into attributes: password, token, API key, `authorization`, full NPWP/NIK, full phone/WhatsApp/email, receipt token.
+3. Audit **complements**, it does not replace, domain events & structured logs.
+4. Include the `correlationId` for tracing.
+5. For high-risk denials, coordinate with the decision log (`awcms-abac-guard`).
+6. Soft delete/restore/purge must include a reason and must not carry raw PII in attributes.
 
 ## Redaction keys
 
-`password`, `passwordHash`, `token`, `accessToken`, `refreshToken`, `apiKey`, `secret`, `credential`, `authorization`, `npwp`, `nik`, `phone`, `whatsapp`, `email`, `cookie` (Issue #687), plus allowlist exact-match untuk key IP address (`ip`, `ipAddress`, `clientIp`, `remoteAddr`, `x-forwarded-for`, dst — sengaja BUKAN substring seperti key lain di atas, lihat `src/modules/_shared/redaction.ts` untuk kenapa: substring `"ip"` akan ikut meredaksi `description`/`shipping`/`recipient`).
+`password`, `passwordHash`, `token`, `accessToken`, `refreshToken`, `apiKey`, `secret`, `credential`, `authorization`, `npwp`, `nik`, `phone`, `whatsapp`, `email`, `cookie` (Issue #687), plus an exact-match allowlist for IP address keys (`ip`, `ipAddress`, `clientIp`, `remoteAddr`, `x-forwarded-for`, etc — deliberately NOT a substring like the other keys above, see `src/modules/_shared/redaction.ts` for why: the substring `"ip"` would also redact `description`/`shipping`/`recipient`).
 
-## Verifikasi
+## Verification
 
-- Aksi high-risk menghasilkan satu audit event.
-- Soft delete, restore, dan purge menghasilkan audit event terpisah.
-- Tidak ada secret/PII mentah di kolom attributes.
-- Retention audit: 1–5 tahun sesuai kebutuhan — mekanisme purge nyata (`purgeExpiredAuditEvents`, default 730 hari, `bun run logs:audit:purge`) sudah tersedia sejak Issue #447, JANGAN buat mekanisme purge baru untuk `awcms_audit_events`, lihat `awcms-observability`.
+- A high-risk action produces exactly one audit event.
+- Soft delete, restore, and purge each produce a separate audit event.
+- No raw secret/PII in the attributes column.
+- Audit retention: 1–5 years as needed — a real purge mechanism (`purgeExpiredAuditEvents`, default 730 days, `bun run logs:audit:purge`) has existed since Issue #447, DO NOT build a new purge mechanism for `awcms_audit_events`, see `awcms-observability`.
 
-## console.error/console.warn dengan raw exception — DILARANG (Issue #687)
+## console.error/console.warn with a raw exception — FORBIDDEN (Issue #687)
 
-`redactSensitiveAttributes` di atas hanya bekerja pada KEY objek — pesan
-exception (`.message`/`.stack`, termasuk rantai `.cause`) adalah teks bebas
-tanpa key, dan bisa saja mengandung secret (connection string, token) yang
-lolos dari redaksi berbasis key. **Jangan** pernah menulis
-`console.error(label, error)` mentah atau
-`error instanceof Error ? error.message : String(error)` lalu mencetaknya
-langsung di `src/pages/admin/**`, `src/pages/api/v1/**`, atau `scripts/*.ts`
-— pakai `logAdminPageError`/`logScriptFailure`
-(`src/lib/logging/error-log.ts`, dibangun di atas `sanitizeErrorForLog`/
-`safeErrorDetail` di `src/lib/logging/error-sanitizer.ts`, yang keduanya
-memanggil `redactSecretsInText` baru). Gate `bun run logging:lint:check`
-(`scripts/logging-lint-check.ts`, bagian dari `bun run check`) menolak pola
-lama ini secara otomatis — lihat doc 20 §Standar tambahan Issue #687 untuk
-detail lengkap dan panduan troubleshooting operator-safe.
+`redactSensitiveAttributes` above only works on object KEYS — an exception
+message (`.message`/`.stack`, including the `.cause` chain) is free text
+without keys, and may well contain a secret (connection string, token) that
+escapes key-based redaction. **Never** write a raw
+`console.error(label, error)` or
+`error instanceof Error ? error.message : String(error)` and then print it
+directly in `src/pages/admin/**`, `src/pages/api/v1/**`, or `scripts/*.ts`
+— use `logAdminPageError`/`logScriptFailure`
+(`src/lib/logging/error-log.ts`, built on top of `sanitizeErrorForLog`/
+`safeErrorDetail` in `src/lib/logging/error-sanitizer.ts`, both of which call
+the new `redactSecretsInText`). The `bun run logging:lint:check` gate
+(`scripts/logging-lint-check.ts`, part of `bun run check`) rejects this old
+pattern automatically — see doc 20 §Standar tambahan Issue #687 for the full
+details and operator-safe troubleshooting guidance.
 
 ## Correlation ID & extension point
 
-Sejak Issue #447: `correlationId` pada `AuditEventInput` cukup diisi dari `context.locals.correlationId` (jangan generate UUID baru sendiri); dan setiap `recordAuditEvent` sukses otomatis memanggil extension point `AuditExportHook` bila terpasang (default no-op) — lihat `awcms-observability` untuk aturan lengkap sebelum memasang/mengimplementasikan consumer di titik itu.
+Since Issue #447: the `correlationId` on `AuditEventInput` just needs to be filled from `context.locals.correlationId` (do not generate a new UUID yourself); and every successful `recordAuditEvent` automatically calls the `AuditExportHook` extension point if one is installed (no-op by default) — see `awcms-observability` for the full rules before installing/implementing a consumer at that point.

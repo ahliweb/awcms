@@ -1,186 +1,187 @@
 ---
 name: awcms-browser-test
-description: Tulis/jalankan browser E2E test AWCMS dengan Playwright di atas Bun. Gunakan saat butuh verifikasi lintas-layer nyata di browser (render halaman, form submit, navigasi, state SSR+client script bersamaan) — bukan pengganti unit/integration/API contract test dari skill `awcms-testing`, melainkan puncak piramida testing-nya (doc 07). Juga rujukan saat tidak ada tool browser interaktif tersedia dan verifikasi UI perlu dijalankan lewat CLI.
+description: Write/run AWCMS browser E2E tests with Playwright on top of Bun. Use when you need real cross-layer verification in a browser (page render, form submit, navigation, SSR + client script state together) — not a replacement for the unit/integration/API contract tests from the `awcms-testing` skill, but the top of its testing pyramid (doc 07). Also the reference when no interactive browser tool is available and UI verification has to be run through the CLI.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Browser E2E Test (Playwright + Bun)
 
-Puncak piramida testing doc 07 (`docs/awcms/07_sprint_testing_production_readiness.md`
-§Piramida: "sedikit end-to-end di puncak"). Skill `awcms-testing` mengatur
-unit/integration/API-contract/security/performance test yang dijalankan
-lewat `bun test`; skill ini mengatur lapisan E2E berbasis browser sungguhan
-yang **tidak** dijalankan lewat `bun test` — beda test runner, beda tujuan.
+The top of the doc 07 testing pyramid (`docs/awcms/07_sprint_testing_production_readiness.md`
+§Pyramid: "a few end-to-end at the top"). The `awcms-testing` skill governs the
+unit/integration/API-contract/security/performance tests that are run
+through `bun test`; this skill governs the E2E layer based on a real browser
+which is **not** run through `bun test` — different test runner, different purpose.
 
-## Kapan pakai skill ini
+## When to use this skill
 
-- Menambah/mengubah halaman Astro (SSR + inline `<script>` client) yang
-  perilakunya baru benar-benar teruji lewat browser sungguhan — render
-  awal, event handler, fetch ke API, state setelah reload.
-- Sebelum PR untuk perubahan UI non-trivial, sebagai pelengkap
-  `tests/integration/*.integration.test.ts` yang (per konvensi repo ini,
-  lihat `tests/integration/blog-content-admin-ui.integration.test.ts`)
-  **tidak** merender markup — integration test menguji fungsi data-layer
-  yang dipanggil SSR, bukan HTML yang dihasilkan atau `<script>` client.
-- Situasi tanpa tool browser interaktif (mis. sesi CLI headless) yang perlu
-  "coba di browser beneran" untuk memverifikasi sebuah fitur — jalankan
-  spec Playwright alih-alih `curl` manual satu per satu.
+- Adding/changing an Astro page (SSR + inline client `<script>`) whose
+  behaviour is only really tested through a real browser — initial
+  render, event handlers, fetch to the API, state after reload.
+- Before a PR for a non-trivial UI change, as a complement to
+  `tests/integration/*.integration.test.ts` which (by this repo's convention,
+  see `tests/integration/blog-content-admin-ui.integration.test.ts`)
+  does **not** render markup — integration tests exercise the data-layer functions
+  called by SSR, not the resulting HTML or the client `<script>`.
+- Situations without an interactive browser tool (e.g. a headless CLI session) that need
+  "try it in a real browser" to verify a feature — run a
+  Playwright spec instead of hand-running `curl` one by one.
 
-## Kapan TIDAK perlu skill ini
+## When this skill is NOT needed
 
-- Logic murni (validator, calculator, state machine) → unit test biasa.
-- Kontrak endpoint API (status code, shape response, auth/tenant header) →
-  integration test yang memanggil `APIRoute` handler langsung, jauh lebih
-  cepat dan tidak butuh browser sama sekali.
-- Data-layer SSR admin page (fungsi yang dipanggil frontmatter) →
-  integration test seperti `tests/integration/tenant-domain-admin.integration.test.ts`,
-  bukan spec Playwright — jangan duplikasi coverage yang sudah ada di sana
-  dengan E2E yang lebih lambat.
+- Pure logic (validator, calculator, state machine) → an ordinary unit test.
+- API endpoint contracts (status code, response shape, auth/tenant header) →
+  an integration test that calls the `APIRoute` handler directly, far
+  faster and needing no browser at all.
+- The SSR data layer of an admin page (functions called from the frontmatter) →
+  an integration test like `tests/integration/tenant-domain-admin.integration.test.ts`,
+  not a Playwright spec — do not duplicate coverage that already exists there
+  with slower E2E.
 
-## Setup (sekali per checkout)
+## Setup (once per checkout)
 
 ```bash
-bun add -d @playwright/test   # sudah ada di devDependencies repo ini
-bun run test:e2e:install      # bun --bun playwright install --with-deps chromium — butuh root/apt-get
+bun add -d @playwright/test   # already in this repo's devDependencies
+bun run test:e2e:install      # bun --bun playwright install --with-deps chromium — needs root/apt-get
 ```
 
-`--with-deps` menginstal shared library OS yang dibutuhkan Chromium
-headless (`libnss3`, `libgtk`, dst) lewat `apt-get` — **butuh root**. Di
-sandbox tanpa akses root (`sudo` gagal karena `no new privileges`), lewati
-`playwright install` dan pakai browser sistem yang sudah terpasang lewat
-env var `PLAYWRIGHT_CHROMIUM_EXECUTABLE` (lihat `playwright.config.ts` —
-sudah dibaca otomatis, contoh `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome`).
-Diverifikasi empiris berfungsi di lingkungan pengembangan ini (Bun 1.3.14,
-Linux, `google-chrome` sistem) tanpa perlu `--no-sandbox` tambahan.
+`--with-deps` installs the OS shared libraries headless Chromium needs
+(`libnss3`, `libgtk`, etc.) via `apt-get` — **needs root**. In a
+sandbox without root access (`sudo` fails because of `no new privileges`), skip
+`playwright install` and use the already-installed system browser via the
+env var `PLAYWRIGHT_CHROMIUM_EXECUTABLE` (see `playwright.config.ts` —
+it is read automatically, e.g. `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/google-chrome`).
+Empirically verified to work in this development environment (Bun 1.3.14,
+Linux, system `google-chrome`) without any extra `--no-sandbox`.
 
-## Menjalankan test
+## Running the tests
 
-E2E butuh app yang benar-benar jalan (bukan `webServer` auto-start
-Playwright — app ini butuh koneksi Postgres hidup untuk boot sama sekali,
-`webServer` tidak bisa menyediakan itu):
+E2E needs an app that is actually running (not Playwright's `webServer`
+auto-start — this app needs a live Postgres connection to boot at all,
+and `webServer` cannot provide that):
 
 ```bash
-# Terminal 1 — DATABASE_URL wajib set, sama seperti integration test
-bun run dev     # atau: bun run build && bun run preview
+# Terminal 1 — DATABASE_URL must be set, same as for integration tests
+bun run dev     # or: bun run build && bun run preview
 
 # Terminal 2
 bun run test:e2e
 ```
 
-`E2E_BASE_URL` override target selain `http://localhost:4321` default
-(`playwright.config.ts`). **Sejak Issue #685** (epic #679,
-platform-hardening) sudah jadi job CI tersendiri —
-`.github/workflows/ci.yml`'s `e2e-smoke` — yang mengorkestrasi Postgres
-service terisolasi, `db:migrate`, `bun run build`, `bun run start`, health
-check, lalu `bun run test:e2e` sungguhan (bukan skip-jika-server-tidak-
-jalan, karena CI memang menyediakan server+DB hidup). **Tetap belum**
-bagian dari `bun run check` lokal (`check` tidak boot server/DB sendiri) —
-lokal tetap manual seperti di atas. Job CI-nya berjalan **dua fase**
-(lifecycle server terpisah): fase 1 dengan config default menjalankan
-semua spec KECUALI `admin-security-enabled.e2e.ts` (yang di-tag
-`@full-online-gate` di `test.describe`-nya sendiri, bukan dicocokkan lewat
-judul prosa — `--grep-invert "@full-online-gate"`, tahan terhadap rename
-judul di masa depan), fase 2 me-restart server
-dengan `AUTH_ONLINE_SECURITY_ENABLED=true`/`AUTH_ONLINE_SECURITY_PROFILE=full_online`
-lalu menjalankan hanya spec itu — ditemukan empiris saat mewire job ini
-bahwa `admin-security-disabled.e2e.ts` dan `admin-security-enabled.e2e.ts`
-menguji render YANG BERTENTANGAN dari halaman yang sama digerbangi env var
-boot-time, jadi tidak bisa jalan terhadap satu instance server yang sama.
-Spec baru yang butuh config server non-default lain (var env baru, dsb.)
-kemungkinan butuh fase ketiga serupa — lihat `ci.yml`'s `e2e-smoke` job
-untuk pola lengkapnya sebelum menambah.
+`E2E_BASE_URL` overrides the target away from the default `http://localhost:4321`
+(`playwright.config.ts`). **Since Issue #685** (epic #679,
+platform-hardening) it is a CI job of its own —
+`.github/workflows/ci.yml`'s `e2e-smoke` — which orchestrates an isolated Postgres
+service, `db:migrate`, `bun run build`, `bun run start`, a health
+check, then a real `bun run test:e2e` (not skip-if-the-server-is-not-
+running, because CI does provide a live server+DB). It is **still not**
+part of the local `bun run check` (`check` does not boot a server/DB itself) —
+locally it stays manual as above. Its CI job runs in **two phases**
+(separate server lifecycles): phase 1 with the default config runs
+every spec EXCEPT `admin-security-enabled.e2e.ts` (which is tagged
+`@full-online-gate` on its own `test.describe`, not matched through a
+prose title — `--grep-invert "@full-online-gate"`, resilient to future title
+renames), phase 2 restarts the server
+with `AUTH_ONLINE_SECURITY_ENABLED=true`/`AUTH_ONLINE_SECURITY_PROFILE=full_online`
+then runs only that spec — it was found empirically while wiring this job
+that `admin-security-disabled.e2e.ts` and `admin-security-enabled.e2e.ts`
+test CONTRADICTORY renders of the same page gated by a boot-time env
+var, so they cannot run against one and the same server instance.
+A new spec that needs some other non-default server config (a new env var, etc.)
+will likely need a similar third phase — see `ci.yml`'s `e2e-smoke` job
+for the full pattern before adding one.
 
-## Konvensi wajib
+## Mandatory conventions
 
-1. **Nama file `*.e2e.ts`, BUKAN `*.spec.ts`/`*.test.ts`**, di
-   `tests/e2e/`. `bun test` secara default merekursif mencocokkan
-   `*.test.*`/`*_test.*`/`*.spec.*`/`*_spec.*` — kalau spec Playwright
-   memakai salah satu pola itu, `bun test` (dan `bun run check`) akan ikut
-   mencoba menjalankannya sebagai file `bun:test` dan gagal (spec
-   Playwright import `test`/`expect` dari `@playwright/test`, konteks
-   runtime beda total dari `bun:test`). `.e2e.ts` sengaja tidak cocok
-   pola manapun di atas — verifikasi: `bun test tests/e2e` selalu
-   melaporkan "did not match any test files".
-2. **Jalankan test runner lewat `bun run test:e2e` (→ `bun --bun playwright
-test`), bukan `playwright test` polos.** AGENTS.md aturan #14
-   ("Backend Bun-only") melarang menambah tooling Node.js kecuali Bun
-   belum mendukung kebutuhan teknisnya, dengan pengecualian terdokumentasi
-   — jadi ini bukan pilihan gaya, tapi kepatuhan wajib. `@playwright/test`'s
-   binary punya shebang `#!/usr/bin/env node`; tanpa flag `--bun`, `bun run
-test:e2e` (atau `bunx playwright test`) diam-diam menjalankan proses
-   test-runner-nya di **Node.js sungguhan** (diverifikasi empiris:
-   `process.versions` di dalam proses test menunjukkan `node`, bukan
-   `bun`, tanpa `--bun`) — pelanggaran diam-diam terhadap aturan #14 yang
-   mudah lolos review kalau tidak dicek langsung.
-   `bun --bun playwright test` (dipakai `test:e2e`, pola sama seperti
-   `"dev": "bun --bun astro dev"` yang sudah ada) memaksa Bun jadi runtime
-   proses test-runner-nya sendiri — diverifikasi empiris `isBun: true` di
-   dalam proses test, dan `chromium.launch()` + kedua test nyata di
-   `login.e2e.ts` lulus konsisten di bawah mode ini (Bun 1.3.14, Linux).
-   Ada laporan lama (oven-sh/bun#15679, terutama Windows, fix PR #31932
-   belum merged per riset saat skill ini ditulis) soal `chromium.launch()`
-   hang di bawah Bun native runtime lewat subprocess/IPC
-   (`--remote-debugging-pipe` fd3) yang dipakai Playwright — **tidak
-   tereproduksi** di Linux/Bun 1.3.14 saat skill ini diverifikasi. Kalau
-   suatu saat `bun --bun playwright test` hang/gagal di platform/versi
-   Bun tertentu (mis. Windows), itu kegagalan yang sudah diketahui
-   kelasnya — jangan buru-buru ganti balik ke Node tanpa mengikuti proses
-   pengecualian AGENTS.md #14 (izin maintainer + entry di
-   `docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`); coba dulu
-   versi Bun yang lebih baru.
-3. **Satu `page.goto` per skenario nyata, assert lewat `getByRole`/`#id`
-   selector yang stabil** — hindari selector berbasis teks visible yang
-   berubah kalau string i18n diedit; pakai `id`/`name`/`data-*` yang
-   sudah ada di markup (lihat `tests/e2e/login.e2e.ts` untuk contoh nyata:
+1. **File name `*.e2e.ts`, NOT `*.spec.ts`/`*.test.ts`**, under
+   `tests/e2e/`. `bun test` by default recursively matches
+   `*.test.*`/`*_test.*`/`*.spec.*`/`*_spec.*` — if a Playwright spec
+   uses one of those patterns, `bun test` (and `bun run check`) will also
+   try to run it as a `bun:test` file and fail (a Playwright spec
+   imports `test`/`expect` from `@playwright/test`, a totally different
+   runtime context from `bun:test`). `.e2e.ts` deliberately matches
+   none of the patterns above — verify: `bun test tests/e2e` always
+   reports "did not match any test files".
+2. **Run the test runner via `bun run test:e2e` (→ `bun --bun playwright test`), not bare `playwright test`.** AGENTS.md rule #14
+   ("Bun-only backend") forbids adding Node.js tooling unless Bun
+   does not yet support the technical need, with a documented exception
+   — so this is not a style choice but mandatory compliance. `@playwright/test`'s
+   binary has the shebang `#!/usr/bin/env node`; without the `--bun` flag, `bun run test:e2e`
+   (or `bunx playwright test`) silently runs its
+   test-runner process on **real Node.js** (empirically verified:
+   `process.versions` inside the test process shows `node`, not
+   `bun`, without `--bun`) — a silent violation of rule #14 that
+   easily passes review if not checked directly.
+   `bun --bun playwright test` (used by `test:e2e`, the same pattern as the
+   existing `"dev": "bun --bun astro dev"`) forces Bun to be the runtime
+   of the test-runner process itself — empirically verified `isBun: true` inside
+   the test process, and `chromium.launch()` plus both real tests in
+   `login.e2e.ts` pass consistently under this mode (Bun 1.3.14, Linux).
+   There are old reports (oven-sh/bun#15679, mostly Windows, fix PR #31932
+   not merged as of the research when this skill was written) about `chromium.launch()`
+   hanging under the Bun native runtime through the subprocess/IPC
+   (`--remote-debugging-pipe` fd3) that Playwright uses — **not
+   reproduced** on Linux/Bun 1.3.14 when this skill was verified. If
+   at some point `bun --bun playwright test` hangs/fails on a particular
+   platform/Bun version (e.g. Windows), that is a failure whose class is
+   already known — do not rush back to Node without following the
+   AGENTS.md #14 exception process (maintainer approval + an entry in
+   `docs/awcms/AUDIT_STANDAR_PENGEMBANGAN_2026-07-04.md`); try a
+   newer Bun version first.
+3. **One `page.goto` per real scenario, assert through stable `getByRole`/`#id`
+   selectors** — avoid selectors based on visible text that changes when
+   an i18n string is edited; use the `id`/`name`/`data-*` that already
+   exist in the markup (see `tests/e2e/login.e2e.ts` for a real example:
    `#login-form`, `#tenant-id`, `#login-identifier`, `#password`,
    `#login-submit`, `#login-error`).
-4. **Pilih target yang tidak butuh data ter-seed** kalau memungkinkan
-   (mis. `/login` selalu render form yang sama terlepas dari isi DB) —
-   spec yang butuh tenant/user nyata harus menyiapkan sendiri lewat SQL
-   langsung atau `POST /api/v1/auth/login` di awal test (lihat memory
-   `manual-admin-ui-smoke-test` project untuk pola bootstrap tenant+admin
-   manual kalau setup wizard sudah terkunci).
-5. **Error message di UI tidak boleh bocorkan detail internal** — kalau
-   spec menguji jalur error, assert isi pesan TIDAK mengandung kata kunci
-   seperti "stack"/"postgres"/nama fungsi internal, bukan cuma assert
-   "ada pesan error" (lihat contoh di `login.e2e.ts`'s kedua test).
-6. **CSP halaman `.astro`: script HARUS eksternal, jangan pernah inline
-   atau conditional** (Issue #166, memory `awcms-admin-ui-notes`). CSP
-   `default-src 'self'` (middleware) memblokir semua inline script/style.
-   Karena itu setiap `<script>` halaman **wajib meng-import** dari
-   `src/lib/ui/admin-form-client.ts` — import itu yang memaksa Astro
-   mem-bundle-nya jadi file eksternal; script tanpa import di-inline-kan
-   Astro dan **diblokir CSP** (perilaku mati diam-diam, tetap lolos build).
-   DAN: Astro meng-hoist `<script>` saat **build**, jadi JANGAN membungkusnya
-   di conditional runtime `{cond && (<script>…)}` — itu percuma (bundle tetap
-   ter-ship) DAN membuat `prettier`/parser Astro gagal (`SyntaxError`).
-   Taruh `<script>` sebagai elemen top-level tanpa conditional; guard di JS
-   (`const el = getElementById(...); el?.addEventListener(...)`). CSS: pakai
-   stylesheet eksternal (`build.inlineStylesheets: "never"`), bukan `<style>`
-   inline. Jalankan E2E terhadap build produksi (`build && start`), bukan
-   `dev` (dev server menyuntik HMR inline yang diblokir CSP ini).
+4. **Pick a target that needs no seeded data** where possible
+   (e.g. `/login` always renders the same form regardless of DB contents) —
+   a spec that needs a real tenant/user must prepare it itself through direct
+   SQL or `POST /api/v1/auth/login` at the start of the test (see the project
+   memory `manual-admin-ui-smoke-test` for the manual tenant+admin bootstrap
+   pattern once the setup wizard is locked).
+5. **Error messages in the UI must not leak internal detail** — if a
+   spec tests an error path, assert that the message does NOT contain keywords
+   such as "stack"/"postgres"/an internal function name, not merely assert
+   "there is an error message" (see the example in `login.e2e.ts`'s second test).
+6. **CSP on `.astro` pages: scripts MUST be external, never inline
+   or conditional** (Issue #166, memory `awcms-admin-ui-notes`). CSP
+   `default-src 'self'` (middleware) blocks all inline script/style.
+   Because of that every page `<script>` **must import** from
+   `src/lib/ui/admin-form-client.ts` — that import is what forces Astro
+   to bundle it into an external file; a script without an import is inlined by
+   Astro and **blocked by CSP** (silently dead behaviour, still passes the build).
+   AND: Astro hoists `<script>` at **build** time, so DO NOT wrap it
+   in a runtime conditional `{cond && (<script>…)}` — that is pointless (the bundle
+   ships anyway) AND it makes `prettier`/the Astro parser fail (`SyntaxError`).
+   Put `<script>` as a top-level element with no conditional; guard in JS
+   (`const el = getElementById(...); el?.addEventListener(...)`). CSS: use
+   an external stylesheet (`build.inlineStylesheets: "never"`), not an inline
+   `<style>`. Run E2E against the production build (`build && start`), not
+   `dev` (the dev server injects inline HMR which this CSP blocks).
 
-## File referensi
+## Reference files
 
-- `playwright.config.ts` — config utama (testDir, testMatch, baseURL,
-  launchOptions dengan escape hatch `PLAYWRIGHT_CHROMIUM_EXECUTABLE`).
-- `tests/e2e/login.e2e.ts` — contoh kerja nyata (bukan placeholder),
-  sudah dijalankan dan lulus terhadap dev server + Postgres sungguhan
-  sebagai bagian dari penambahan skill ini.
+- `playwright.config.ts` — the main config (testDir, testMatch, baseURL,
+  launchOptions with the `PLAYWRIGHT_CHROMIUM_EXECUTABLE` escape hatch).
+- `tests/e2e/login.e2e.ts` — a real working example (not a placeholder),
+  already run and passing against a dev server + a real Postgres
+  as part of adding this skill.
 
 ## Status
 
-Selain `login.e2e.ts`, sudah ada spec untuk `/admin/analytics`,
-`/admin/security` (kedua profil gate), dan — sejak Issue #693 (epic #679
-platform-hardening) — `admin-responsive-nav.e2e.ts` (sidebar/drawer
-responsif: toggle, scrim, Escape, focus management, skip link),
+Besides `login.e2e.ts`, there are already specs for `/admin/analytics`,
+`/admin/security` (both gate profiles), and — since Issue #693 (epic #679
+platform-hardening) — `admin-responsive-nav.e2e.ts` (responsive
+sidebar/drawer: toggle, scrim, Escape, focus management, skip link),
 `admin-access-users-migrated.e2e.ts`/`admin-tenant-domains-migrated.e2e.ts`
-(migrasi ke primitive `DataTable`/`StatusBadge`/`ConfirmDialog`), dan
-`admin-a11y-smoke.e2e.ts` (smoke test aksesibilitas otomatis berbasis
-`@axe-core/playwright`, ditambahkan sebagai devDependency khusus untuk
-issue ini — lihat docblock file itu untuk kenapa ini bukan pelanggaran
-"Bun-only", AGENTS.md #14: itu soal runtime/tooling build, bukan dependency
-yang dipakai dari dalam proses `bun --bun playwright test` yang sudah
-berjalan di Bun). Belum ada spec untuk admin page lain (`blog/*`, dst) —
-tambahkan sesuai kebutuhan issue, jangan retrofit semua admin page
-sekaligus tanpa alasan konkret (lihat prinsip repo ini: jangan bangun
-cakupan di luar scope issue yang sedang dikerjakan).
+(migration to the `DataTable`/`StatusBadge`/`ConfirmDialog` primitives), and
+`admin-a11y-smoke.e2e.ts` (an automated accessibility smoke test based on
+`@axe-core/playwright`, added as a devDependency specifically for
+this issue — see that file's docblock for why this is not a violation of
+"Bun-only", AGENTS.md #14: that rule is about the runtime/build tooling, not about a dependency
+used from inside the `bun --bun playwright test` process that is already
+running on Bun). There is no spec yet for the other admin pages (`blog/*`, etc.) —
+add them as the issue at hand requires, do not retrofit every admin page
+at once without a concrete reason (see this repo's principle: do not build
+coverage outside the scope of the issue being worked on).

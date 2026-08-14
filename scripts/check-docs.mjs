@@ -224,7 +224,9 @@ export function runChecks() {
     const adrFileNames = readdirSync(adrDir).filter((name) =>
       name.endsWith(".md")
     );
-    const indexRel = "docs/adr/README.id.md";
+    // The ENGLISH index is authoritative (ADR-0097). Its Indonesian mirror is
+    // held to it by `i18n-source-hash`, not by a second copy of this gate.
+    const indexRel = "docs/adr/README.md";
     const indexAbs = join(ROOT, indexRel);
     if (existsSync(indexAbs)) {
       problems.push(

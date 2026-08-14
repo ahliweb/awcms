@@ -1,20 +1,22 @@
 ---
 name: awcms-email
-description: Kirim email transaksional (password reset, announcement, workflow notification) via modul email reusable AWCMS — provider-neutral (Mailketing adapter), template management, dan dispatcher outbox. Gunakan saat modul domain turunan perlu mengirim email, atau saat menambah kategori/template baru.
+description: Send transactional email (password reset, announcement, workflow notification) through the reusable AWCMS email module — provider-neutral (Mailketing adapter), template management, and an outbox dispatcher. Use when a derived domain module needs to send email, or when adding a new category/template.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Email Module
 
-Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapter Mailketing, dispatcher, template management, i18n). Modul ini generik — analog `sync_storage`'s object storage: Mailketing adalah _satu_ adapter, bukan alasan modul jadi domain-spesifik (lihat README §Relationship to historical issue #390).
+Follow `src/modules/email/README.md` (full architecture: provider contract, Mailketing adapter, dispatcher, template management, i18n). This module is generic — analogous to `sync_storage`'s object storage: Mailketing is _one_ adapter, not a reason for the module to become domain-specific (see README §Relationship to historical issue #390).
 
-## Cara pakai (untuk modul domain turunan yang ingin kirim email)
+## How to use it (for a derived domain module that wants to send email)
 
-1. **Pastikan template ada** untuk kategori Anda — kategori base (6 fixed:
+1. **Make sure a template exists** for your category — the base categories (6 fixed:
    `auth.password_reset`, `system.announcement`, `system.security_notice`,
    `system.maintenance`, `workflow.task_assigned`,
-   `workflow.decision_required`) sudah punya allowlist variabel bawaan
+   `workflow.decision_required`) already have a built-in variable allowlist
    (`domain/email-template-categories.ts`'s `BASE_EMAIL_TEMPLATE_CATEGORIES`).
-   Kategori sendiri harus `derived.*` dan didaftarkan dulu:
+   Your own categories must be `derived.*` and must be registered first:
    ```ts
    registerDerivedEmailTemplateCategory("derived.order_confirmation", [
      "orderNumber",
@@ -22,102 +24,102 @@ Ikuti `src/modules/email/README.md` (arsitektur lengkap: kontrak provider, adapt
      "trackingUrl"
    ]);
    ```
-   Kategori yang tidak dikenal ditolak saat create template (fail-closed) —
-   **jangan** coba pakai kategori base yang sudah ada untuk kebutuhan lain,
-   daftar kategori `derived.*` baru sendiri.
-2. **Buat/pastikan template** via `POST /api/v1/email/templates`
+   Unknown categories are rejected at template create time (fail-closed) —
+   **do not** try to reuse an existing base category for something else,
+   register your own new `derived.*` category.
+2. **Create/ensure the template** via `POST /api/v1/email/templates`
    (`{templateKey, name, subjectTemplate: {en, id?}, textBodyTemplate?, htmlBodyTemplate?}`)
-   atau `seedDefaultEmailTemplates` untuk kategori base bawaan
+   or `seedDefaultEmailTemplates` for the built-in base categories
    (`bun run email:templates:seed-defaults -- --tenant=<id> --actor=<tenantUserId>`).
-3. **Enqueue** — dua opsi:
-   - **Bulk/announcement ke user/role/tenant** — pakai
-     `POST /api/v1/email/announcements` (Issue #497) alih-alih menulis
-     manual: sudah menangani targeting (`{type: "users"|"role"|"tenant"}`),
-     filter suppression list, ABAC dua-tingkat, `Idempotency-Key` wajib,
-     dan audit satu baris per request. `POST .../preview` untuk dry-run
-     (jumlah + sampel render, tidak pernah daftar penerima nyata).
-   - **Kasus lain (mis. modul domain turunan sendiri)** — INSERT langsung
-     ke `awcms_email_messages` (`sql/014`) di dalam transaksi bisnis
-     Anda sendiri (ADR-0006: pemanggilan provider **tidak boleh** di dalam
-     transaction — outbox pattern yang memisahkan ini). Isi
-     `to_address`/`to_address_hash`/`to_address_masked` pakai
+3. **Enqueue** — two options:
+   - **Bulk/announcement to users/role/tenant** — use
+     `POST /api/v1/email/announcements` (Issue #497) instead of writing it
+     by hand: it already handles targeting (`{type: "users"|"role"|"tenant"}`),
+     suppression-list filtering, two-level ABAC, a mandatory `Idempotency-Key`,
+     and one audit row per request. `POST .../preview` for a dry run
+     (count + render sample, never the real recipient list).
+   - **Other cases (e.g. your own derived domain module)** — INSERT directly
+     into `awcms_email_messages` (`sql/014`) inside your own business
+     transaction (ADR-0006: a provider call **must not** happen inside a
+     transaction — the outbox pattern is what separates them). Fill
+     `to_address`/`to_address_hash`/`to_address_masked` using
      `normalizeIdentifier("email", ...)`/`hashIdentifier`/`maskIdentifier`
-     (`profile-identity/domain/identifier.ts` — reuse, jangan bikin ulang),
-     `template_key` = kategori Anda, `variables` (jsonb) = hanya nilai yang
-     akan lolos allowlist kategori itu (nilai lain diam-diam tidak pernah
-     disubstitusi saat render), `subject` = subjek final
-     (dirender/ditentukan saat enqueue, bukan saat dispatch).
-4. **Dispatcher** (`bun run email:dispatch`, dijadwalkan cron/systemd
-   timer/k8s CronJob) yang mengirim sungguhan — Anda tidak pernah memanggil
-   provider langsung.
+     (`profile-identity/domain/identifier.ts` — reuse, do not rebuild),
+     `template_key` = your category, `variables` (jsonb) = only the values that
+     will pass that category's allowlist (any other value is silently never
+     substituted at render time), `subject` = the final subject
+     (rendered/decided at enqueue time, not at dispatch time).
+4. **The dispatcher** (`bun run email:dispatch`, scheduled by cron/systemd
+   timer/k8s CronJob) is what actually sends — you never call the
+   provider directly.
 
-## Aturan wajib
+## Mandatory rules
 
-- **Jangan** simpan raw secret/token jangka panjang di `variables` — token
-  reset password sendiri di-hash saat disimpan di tabel auth-nya (Issue
-  #496), bukan disimpan mentah di outbox.
-- **Jangan** buat adapter provider baru di luar `EmailProvider` port
-  (`domain/email-provider-contract.ts`) — provider baru (bila benar-benar
-  dibutuhkan) mengimplementasikan port yang sama, di-resolve lewat
-  `infrastructure/email-provider-resolver.ts`, tidak pernah di-import by
-  name di kode pemanggil.
-- **Jangan** panggil provider (Mailketing) di dalam DB transaction —
-  selalu lewat outbox + dispatcher terpisah.
-- Body template **tidak** disimpan rendered — dispatcher me-render dari
-  `template_key`+`variables` saat kirim; jangan menambah kolom
-  `rendered_html_body`/`rendered_text_body` ke `email_messages`.
-- Preview (`POST /api/v1/email/templates/{id}/preview`) hanya untuk admin
-  melihat hasil render dengan data sampel sintetis — jangan pernah kirim
-  alamat penerima nyata ke endpoint ini, dan endpoint ini sendiri **tidak**
-  menyentuh `email_messages`/antrean.
+- **Do not** store long-lived raw secrets/tokens in `variables` — the password
+  reset token itself is hashed when stored in its auth table (Issue
+  #496), not stored raw in the outbox.
+- **Do not** build a new provider adapter outside the `EmailProvider` port
+  (`domain/email-provider-contract.ts`) — a new provider (if genuinely
+  needed) implements that same port, is resolved via
+  `infrastructure/email-provider-resolver.ts`, and is never imported by
+  name in calling code.
+- **Do not** call the provider (Mailketing) inside a DB transaction —
+  always through the outbox + a separate dispatcher.
+- Template bodies are **not** stored rendered — the dispatcher renders from
+  `template_key`+`variables` at send time; do not add
+  `rendered_html_body`/`rendered_text_body` columns to `email_messages`.
+- Preview (`POST /api/v1/email/templates/{id}/preview`) exists only so an admin
+  can see the render result with synthetic sample data — never send a real
+  recipient address to this endpoint, and the endpoint itself **does not**
+  touch `email_messages`/the queue.
 
 ## Observability & ops (Issue #499)
 
-- **Antrean gagal/tertunda**: `GET /api/v1/email/messages?status=failed|retry_wait`
-  (permission `email.message.read`) — diagnostik admin, `to_address_masked`
-  saja, tidak pernah alamat mentah.
-- **Batalkan pesan yang belum terkirim**: `POST /api/v1/email/messages/{id}/cancel`
-  (permission `email.message.cancel`, diseed `sql/014`) — hanya
-  `queued`/`retry_wait` yang bisa dibatalkan; mitigasi teknis untuk
-  insiden "accidental bulk send".
-- **Kesehatan antrean**: `GET /api/v1/reports/email-health` — hitungan
+- **Failed/pending queue**: `GET /api/v1/email/messages?status=failed|retry_wait`
+  (permission `email.message.read`) — admin diagnostics, `to_address_masked`
+  only, never the raw address.
+- **Cancel a message that has not been sent**: `POST /api/v1/email/messages/{id}/cancel`
+  (permission `email.message.cancel`, seeded by `sql/014`) — only
+  `queued`/`retry_wait` can be cancelled; the technical mitigation for an
+  "accidental bulk send" incident.
+- **Queue health**: `GET /api/v1/reports/email-health` — counts of
   queued/retry_wait/failed/suppressed + `isHealthy`.
-- **Suppression list manual**: `GET/POST /api/v1/email/suppressions`,
-  `DELETE /api/v1/email/suppressions/{id}` (permission
-  `email.suppression.{read,create,delete}`, diseed `sql/014`,
-  endpoint-nya baru ada di Issue #499). Dispatcher juga re-check
-  suppression list tepat sebelum kirim (bukan hanya saat enqueue) —
-  penerima yang baru disuppress setelah enqueue tetap dikecualikan.
-- **Provider outage**: circuit breaker (`email-mailketing`) membuka
-  otomatis setelah 5 kegagalan beruntun, dispatcher berhenti meng-claim
-  (`email.dispatch.breaker_open` log) — tidak perlu intervensi manual.
-  `bun run security:readiness` memblokir go-live (critical) bila
-  `EMAIL_ENABLED=true` tapi config provider tidak lengkap
-  (`checkEmailProviderConfigReady`, reuse `validate-env.ts`'s
+- **Manual suppression list**: `GET/POST /api/v1/email/suppressions`,
+  `DELETE /api/v1/email/suppressions/{id}` (permissions
+  `email.suppression.{read,create,delete}`, seeded by `sql/014`,
+  the endpoints themselves only arrived in Issue #499). The dispatcher also
+  re-checks the suppression list right before sending (not only at enqueue) —
+  a recipient suppressed after enqueue is still excluded.
+- **Provider outage**: the circuit breaker (`email-mailketing`) opens
+  automatically after 5 consecutive failures, and the dispatcher stops claiming
+  (`email.dispatch.breaker_open` log) — no manual intervention needed.
+  `bun run security:readiness` blocks go-live (critical) when
+  `EMAIL_ENABLED=true` but the provider config is incomplete
+  (`checkEmailProviderConfigReady`, reusing `validate-env.ts`'s
   `checkEmailConfig`).
-- Runbook insiden lengkap (provider outage, rotasi kredensial, accidental
+- The full incident runbook (provider outage, credential rotation, accidental
   bulk send): `src/modules/email/README.md` §Incident response.
 
-## Verifikasi
+## Verification
 
-- Kirim dengan `EMAIL_PROVIDER=log` dulu (tanpa kredensial Mailketing) —
-  lihat log `email.log_provider.send` (alamat ter-mask) untuk konfirmasi
-  alur end-to-end sebelum menyalakan Mailketing nyata.
-- `bun run email:provider:health` — cek konektivitas Mailketing nyata
-  (live network call, jalankan manual/smoke-test, bukan bagian CI).
-- `bun test tests/integration/email-*.integration.test.ts` terhadap
-  Postgres nyata untuk regresi schema/dispatcher/template.
+- Send with `EMAIL_PROVIDER=log` first (no Mailketing credentials) —
+  look at the `email.log_provider.send` log (masked address) to confirm the
+  end-to-end flow before switching real Mailketing on.
+- `bun run email:provider:health` — check real Mailketing connectivity
+  (a live network call; run it manually/as a smoke test, not part of CI).
+- `bun test tests/integration/email-*.integration.test.ts` against a
+  real Postgres for schema/dispatcher/template regressions.
 
-## Skill terkait
+## Related skills
 
-`awcms-integration` (pola outbox/retry/circuit-breaker generik),
-`awcms-sensitive-data` (normalize/hash/mask alamat email),
-`awcms-idempotency` (`POST /email/announcements` mewajibkan
-`Idempotency-Key` di setiap request, bukan hanya bulk), `awcms-abac-guard`
-(permission `email.template.*`/`email.notification.create`/
+`awcms-integration` (generic outbox/retry/circuit-breaker patterns),
+`awcms-sensitive-data` (normalize/hash/mask an email address),
+`awcms-idempotency` (`POST /email/announcements` requires an
+`Idempotency-Key` on every request, not only bulk ones), `awcms-abac-guard`
+(permissions `email.template.*`/`email.notification.create`/
 `email.announcement.create`/`email.message.{read,cancel}`/
-`email.suppression.{read,create,delete}` sudah diseed — `announcement.create`
-**selalu tambahan** di atas `notification.create` untuk target role/tenant,
-contoh nyata pola "permission bertingkat untuk aksi bulk vs tunggal"),
-`awcms-observability` (`security:readiness` gate, structured log per
-tahap dispatch, `GET /reports/email-health`).
+`email.suppression.{read,create,delete}` are already seeded — `announcement.create`
+is **always additional** on top of `notification.create` for role/tenant targets,
+a real example of the "tiered permission for a bulk vs single action" pattern),
+`awcms-observability` (the `security:readiness` gate, structured logs per
+dispatch stage, `GET /reports/email-health`).

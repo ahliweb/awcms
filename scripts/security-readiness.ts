@@ -1455,7 +1455,35 @@ export const WORKER_ROLE_GRANTS: Record<string, string[]> = {
   // mailbox or rotate `token_hash` to a value it chose. The child
   // `awcms_invitation_policies` is deliberately absent: it goes with its parent
   // through `ON DELETE CASCADE`, which runs with the constraint owner's rights.
-  awcms_invitations: ["SELECT", "DELETE"]
+  awcms_invitations: ["SELECT", "DELETE"],
+  // identity_access — the same generic purge over partner support-access grants
+  // (`sql/117`). Added by `sql/129`, and found the way `awcms_invitations` above
+  // was NOT: by running the job. `bun run data-lifecycle:archive-purge
+  // --dry-run` against production answered `permission denied for table
+  // awcms_delegated_access_grants`, and because `archive-purge-job.ts` has no
+  // catch, that one missing grant took every other descriptor's purge down with
+  // it — the whole retention pass, not just this table.
+  //
+  // SELECT for the bounded cursor scan and the DELETE's own subquery; DELETE for
+  // the purge. No UPDATE: the descriptor is `hard_delete`, and a worker able to
+  // write here could extend a partner's reach into a tenant by moving
+  // `expires_at` or clearing `revoked_at`.
+  awcms_delegated_access_grants: ["SELECT", "DELETE"],
+  // data_lifecycle — the subject-request ledger (`sql/125`, ADR-0094). Same
+  // story, same migration, same discovery. SELECT+DELETE only; the rows are
+  // archived to JSONL before purge and the archive is written by the job, not
+  // by a second table this role would need to write.
+  awcms_subject_requests: ["SELECT", "DELETE"],
+  // domain_event_runtime — SELECT ONLY, and it is not a purge target at all.
+  // `domain-events:deliveries:purge` reads this table as an EXISTS guard so a
+  // delivery a replay row still points at is never deleted. It has no
+  // `dataLifecycle` descriptor and nothing purges it, so it is invisible to the
+  // registry-derived `data-lifecycle:worker-grants:check` — it surfaced only by
+  // running the job (`permission denied for table awcms_domain_event_replays`).
+  // Replay rows are WRITTEN on the request path as `awcms_app`; a worker with
+  // INSERT here could fabricate a replay that pins a delivery against retention
+  // forever.
+  awcms_domain_event_replays: ["SELECT"]
 };
 
 /**
