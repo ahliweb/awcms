@@ -132,14 +132,21 @@ export function extractTemplateText(source: string): string[] {
   }
 
   body = body
-    // `\s*` before the `>` is NOT cosmetic. HTML permits whitespace there, so
-    // `</script >` closes a script — but a pattern demanding `</script>` skips
-    // right past it and keeps consuming until the NEXT closing tag in the file,
-    // swallowing the real markup in between. In a COVERAGE gate that failure is
-    // silent and reads as good news: the literals inside the swallowed span are
-    // simply never counted. CodeQL `js/bad-tag-filter` caught this one.
-    .replace(/<style[\s\S]*?<\/style\s*>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script\s*>/gi, " ")
+    // What closes a `<script>` is wider than `</script>`. The HTML tokeniser
+    // ends the element at `</script` followed by whitespace or `/`, and then
+    // discards whatever precedes the `>` — so `</script >`, `</script\t\n bar>`
+    // and `</script/>` all close it, attributes on an end tag being ignored
+    // rather than rejected.
+    //
+    // Matching only the exact form is not a near-miss, because the quantifier
+    // is lazy: an unrecognised close does not fail locally, it keeps consuming
+    // until the NEXT close in the file and swallows every line between. On a
+    // COVERAGE gate that failure is silent AND flattering — the literals inside
+    // the swallowed span are not reported as errors, they are not reported at
+    // all, and the number goes down. CodeQL `js/bad-tag-filter` caught both the
+    // whitespace form and the attribute form here, one after the other.
+    .replace(/<style[\s\S]*?<\/style(?:[\s/][^>]*)?>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script(?:[\s/][^>]*)?>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     // JSX comments — `{/* … */}`. These are prose ABOUT the template and are
     // the single largest source of false positives here: several screens

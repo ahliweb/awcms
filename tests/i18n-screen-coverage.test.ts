@@ -25,30 +25,44 @@ describe("extractTemplateText — regions that must be stripped", () => {
   });
 
   /**
-   * CodeQL `js/bad-tag-filter`, high severity, caught on PR #564.
+   * CodeQL `js/bad-tag-filter`, high severity, twice on PR #564 — once for the
+   * whitespace form, then again for the attribute form.
    *
-   * HTML permits whitespace before the `>` of a closing tag, so `</script >`
-   * really does close a script. A pattern demanding `</script>` exactly does
-   * not merely fail to strip that one block — being lazy, it runs on to the
-   * NEXT closing tag in the file and swallows every line in between. The
-   * literals inside that swallowed span are then never counted, and the gate
-   * reports a smaller number with no indication that it stopped looking.
+   * What closes a `<script>` is wider than `</script>`: the HTML tokeniser ends
+   * the element at `</script` followed by whitespace or `/`, discarding
+   * whatever precedes the `>`. Attributes on an end tag are ignored, not
+   * rejected. So every form below really does close the script.
+   *
+   * Missing one is not a near-miss. The quantifier is lazy, so an unrecognised
+   * close does not fail locally — it runs on to the NEXT close in the file and
+   * swallows every line between. The literals in that span are then not
+   * reported at all, and the gate's number goes DOWN.
    */
-  test("a closing tag with whitespace before `>` still closes the block", () => {
+  test.each([
+    ["plain", "</script>"],
+    ["trailing space", "</script >"],
+    ["tab and newline", "</script\t\n >"],
+    ["ignored attribute", '</script\t\n bar="baz">'],
+    ["stray solidus", "</script/>"]
+  ])("a script closed by a %s end tag is stripped", (_name, close) => {
     const texts = extractTemplateText(
-      `${frontmatter}<script>const a = "Swallowed";</script >\n` +
-        `<p>Label after a spaced close</p>\n` +
+      `${frontmatter}<script>const a = "Swallowed";${close}\n` +
+        `<p>Label after the close</p>\n` +
         `<script>const b = "Also swallowed";</script>`
     );
 
-    expect(texts).toContain("Label after a spaced close");
+    expect(texts).toContain("Label after the close");
     expect(texts.join(" ")).not.toContain("Swallowed");
     expect(texts.join(" ")).not.toContain("Also swallowed");
   });
 
-  test("the same tolerance applies to `</style >`", () => {
+  test.each([
+    ["plain", "</style>"],
+    ["trailing space", "</style >"],
+    ["ignored attribute", '</style media="all">']
+  ])("a style closed by a %s end tag is stripped", (_name, close) => {
     const texts = extractTemplateText(
-      `${frontmatter}<style>.a { content: "Styled"; }</style >\n<p>Label after style</p>`
+      `${frontmatter}<style>.a { content: "Styled"; }${close}\n<p>Label after style</p>`
     );
 
     expect(texts).toContain("Label after style");

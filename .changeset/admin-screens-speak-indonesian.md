@@ -52,16 +52,28 @@ sumber yang rusak lolos typecheck dan hanya kompiler Astro yang melihatnya.
 Itu penegasan pelajaran "jalankan, jangan dibaca" yang sudah ada di memori
 proyek.
 
-Koreksi KEEMPAT datang dari CodeQL, bukan dari saya: `js/bad-tag-filter`,
-severity tinggi. Pola `<script[\s\S]*?</script>` tidak cocok dengan
-`</script >` — HTML mengizinkan spasi sebelum `>`. Karena polanya malas, ia
-tidak sekadar gagal membuang satu blok; ia LANJUT sampai penutup berikutnya di
-berkas yang sama dan menelan seluruh markup di antaranya. Pada gerbang CAKUPAN,
-kegagalan itu senyap dan terbaca sebagai kabar baik: literal di rentang yang
-tertelan tak pernah terhitung. Diperbaiki menjadi `</script\s*>` (dan
-`</style\s*>`), lalu dipagari `tests/i18n-screen-coverage.test.ts` — yang
-dibuktikan GAGAL lebih dulu terhadap pola lama, dengan `extractTemplateText`
-mengembalikan `[]` untuk berkas yang seharusnya punya satu label.
+Koreksi KEEMPAT dan KELIMA datang dari CodeQL, bukan dari saya:
+`js/bad-tag-filter`, severity tinggi, dua kali berturut-turut.
+
+Yang menutup sebuah `<script>` lebih luas daripada `</script>`. Tokeniser HTML
+mengakhiri elemennya pada `</script` yang diikuti spasi-putih atau `/`, lalu
+MEMBUANG apa pun sebelum `>` — jadi `</script >`, `</script\t\n bar="baz">`,
+dan `</script/>` semuanya menutup: atribut pada tag penutup DIABAIKAN, bukan
+ditolak. Perbaikan pertama saya hanya menambah `\s*` dan menutup satu bentuk;
+CodeQL langsung menunjuk bentuk berikutnya.
+
+Melewatkan satu bentuk bukan meleset tipis. Kuantifiernya malas, jadi penutup
+yang tak dikenali tidak gagal setempat — ia LANJUT sampai penutup berikutnya di
+berkas yang sama dan menelan tiap baris di antaranya. Pada gerbang CAKUPAN
+kegagalan itu senyap SEKALIGUS menyanjung: literal di rentang yang tertelan
+tidak dilaporkan sebagai error, melainkan tidak dilaporkan sama sekali, dan
+angkanya TURUN.
+
+Diperbaiki menjadi `</script(?:[\s/][^>]*)?>` (dan bentuk yang sama untuk
+`</style`), lalu dipagari `tests/i18n-screen-coverage.test.ts`: 13 test, dengan
+kelima bentuk penutup itu dijalankan sebagai tabel. Pola lama dibuktikan GAGAL
+lebih dulu — `extractTemplateText` mengembalikan `[]` untuk berkas yang
+seharusnya menghasilkan satu label.
 
 **Keterbatasan yang dinyatakan, bukan disembunyikan:** 12 dari 1.258 msgid
 (<1%) adalah PENGGALAN kalimat, karena kalimatnya terpotong oleh `<code>` atau
