@@ -227,8 +227,28 @@
   min-width: 0;
 }
 
-/* Circular avatar tile. Purely an identity marker — it is not a link, because
-   awcms has no /admin/profile page for it to lead to. */
+/* Circular avatar tile. Now the visible part of a LINK to /admin/account
+   (ADR-0096) — the comment here used to explain that awcms had no page for it to
+   lead to, which stopped being true when that screen landed. */
+.admin-avatar-link {
+  display: inline-flex;
+  border-radius: var(--radius-full);
+  /* The link wraps a decorative, aria-hidden glyph, so the focus ring has to be
+     on the link itself — the span inside is not focusable and would leave
+     keyboard users with no visible target. */
+  text-decoration: none;
+}
+
+.admin-avatar-link:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.admin-avatar-link:hover .admin-avatar {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
 .admin-avatar {
   display: inline-flex;
   align-items: center;

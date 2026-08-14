@@ -263,7 +263,42 @@ describe("the real repository", () => {
       // the list somewhere else.** An honest repeat is admissible once; a list
       // that only ever grows by honest repeats is the parking lot by another
       // route.
-      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(15);
+      //
+      // **16 since ADR-0095, and the bar is met by the FIRST branch — a fourth
+      // argument — though only just, so the reasoning is spelled out rather than
+      // asserted.**
+      //
+      // `awcms_principal_preferences` is bounded by its PRIMARY KEY: one row per
+      // principal, `principal_id` as the key itself, upserted and never appended.
+      // Superficially that is entry 13's schema argument again. It is not, and the
+      // difference is that a partial unique index caps the LIVE population while
+      // leaving disabled rows to accumulate — which is why entry 13 had to admit
+      // it was a hybrid and fall back on authorship for the remainder. Here there
+      // is no remainder to fall back on: the key is total, there is no status
+      // column, no second row can exist in any state, and `sql/128` withholds
+      // DELETE so the single row is never even churned. The ceiling is not "small"
+      // — it is exactly `count(awcms_principals)`, and that table is entry 11,
+      // already bounded by derivation from `awcms_identities`.
+      //
+      // So the fourth argument is: **the bound is TOTAL and enforced by the
+      // primary key, and its ceiling is another entry on this list.** No
+      // authorship assumption (a job could write it and the bound would hold), no
+      // application constant, no live/dead split. That is checkable by reading one
+      // CREATE TABLE, which is a stronger form of "disputable" than any entry
+      // above.
+      //
+      // The alternative is the same shape as it has been every time, and no less
+      // wrong: `executionMode: 'generic'` is age-only with no status predicate, so
+      // a descriptor here would delete the language a person chose two years ago
+      // and has been reading ever since, on the grounds that the row is OLD. Age
+      // says nothing about whether a preference is still wanted.
+      //
+      // The bar for the NEXT raise, hardened because this list is now at sixteen:
+      // **a net shrink is required, not an argument.** The three-plus-one argument
+      // classes are now enumerated, a fifth is unlikely to be real, and "I found a
+      // new way to say bounded" is the failure mode a list of arguments attracts
+      // once it has enough of them to pattern-match against.
+      expect(BOUNDED_BY_DESIGN.length).toBeLessThanOrEqual(16);
     });
 
     test("every entry names a table that really exists in sql/", () => {

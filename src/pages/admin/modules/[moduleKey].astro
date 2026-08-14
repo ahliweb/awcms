@@ -37,12 +37,14 @@ import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
 import {
   fetchModuleSettingsView,
   type ModuleSettingsView
 } from "../../../modules/module-management/application/module-settings";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 const moduleKey = Astro.params.moduleKey ?? "";
 
 const screen = await loadAdminScreen({
@@ -85,18 +87,20 @@ function pretty(value: Record<string, unknown>): string {
 
 <AdminLayout title={`Module settings — ${moduleKey}`}>
   <header class="page-header fade-in-up">
-    <h1 id="module-settings-heading">Module settings</h1>
+    <h1 id="module-settings-heading">{t("Module settings")}</h1>
     <p class="page-description">
-      Per-tenant overrides for <code>{moduleKey}</code>. The module ships
-      defaults in code; this tenant may override them key by key. What the rest
-      of the system reads is the two merged together.
+      {t("Per-tenant overrides for")}<code>{moduleKey}</code>{
+        t(
+          ". The module ships defaults in code; this tenant may override them key by key. What the rest of the system reads is the two merged together."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="module-settings-denied">
-        You do not have permission to view module settings.
+        {t("You do not have permission to view module settings.")}
       </p>
     )
   }
@@ -104,7 +108,7 @@ function pretty(value: Record<string, unknown>): string {
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="module-settings-load-error">
-        Could not load these settings. Please try again.
+        {t("Could not load these settings. Please try again.")}
       </p>
     )
   }
@@ -113,7 +117,7 @@ function pretty(value: Record<string, unknown>): string {
     canRead && !loadError && !view && (
       <p class="state-notice fade-in-up" id="module-settings-unknown">
         No module is registered under that key. Check the list on{" "}
-        <a href="/admin/modules">/admin/modules</a>.
+        <a href="/admin/modules">{t("/admin/modules")}</a>.
       </p>
     )
   }
@@ -132,9 +136,9 @@ function pretty(value: Record<string, unknown>): string {
           class="fade-in-up"
           aria-labelledby="module-settings-effective-heading"
         >
-          <h2 id="module-settings-effective-heading">In force now</h2>
+          <h2 id="module-settings-effective-heading">{t("In force now")}</h2>
           <p class="page-description">
-            Schema version {view.schemaVersion}.{" "}
+            {t("Schema version")} {view.schemaVersion}.{" "}
             {view.updatedAt
               ? `This tenant last changed it on ${view.updatedAt.slice(0, 10)}.`
               : "This tenant has never overridden anything — the defaults are in force."}
@@ -147,13 +151,15 @@ function pretty(value: Record<string, unknown>): string {
           aria-labelledby="module-settings-parts-heading"
         >
           <h2 id="module-settings-parts-heading">
-            Where those values come from
+            {t("Where those values come from")}
           </h2>
 
-          <h3>Defaults (from the module's code — not editable here)</h3>
+          <h3>
+            {t("Defaults (from the module's code \u2014 not editable here)")}
+          </h3>
           <pre id="module-settings-defaults">{pretty(view.defaults)}</pre>
 
-          <h3>This tenant's override</h3>
+          <h3>{t("This tenant's override")}</h3>
           <pre id="module-settings-override">{pretty(view.tenantOverride)}</pre>
         </section>
 
@@ -162,25 +168,26 @@ function pretty(value: Record<string, unknown>): string {
             class="fade-in-up"
             aria-labelledby="module-settings-patch-heading"
           >
-            <h2 id="module-settings-patch-heading">Change some keys</h2>
+            <h2 id="module-settings-patch-heading">{t("Change some keys")}</h2>
 
             <form id="module-settings-form" class="admin-form">
               <p class="page-description">
-                This is a PATCH, not a replacement. Keys you write here are
-                merged into the override above; keys you leave out are kept as
-                they are. <strong>Leaving a key out does not remove it</strong>—
-                there is no way to remove an override through the API yet, so to
-                undo one, set it back to the default value shown above.
+                {t(
+                  "This is a PATCH, not a replacement. Keys you write here are merged into the override above; keys you leave out are kept as they are."
+                )}
+                <strong>{t("Leaving a key out does not remove it")}</strong>
+                {t(
+                  "\u2014 there is no way to remove an override through the API yet, so to undo one, set it back to the default value shown above."
+                )}
               </p>
               <p class="page-description">
-                Secrets are refused, both by key name and by the shape of the
-                value. These settings are stored in the database and readable by
-                every admin who can see this page; a provider credential belongs
-                in an environment variable.
+                {t(
+                  "Secrets are refused, both by key name and by the shape of the value. These settings are stored in the database and readable by every admin who can see this page; a provider credential belongs in an environment variable."
+                )}
               </p>
 
               <label for="module-settings-patch">
-                Keys to set (JSON object)
+                {t("Keys to set (JSON object)")}
               </label>
               <textarea
                 id="module-settings-patch"
@@ -192,7 +199,7 @@ function pretty(value: Record<string, unknown>): string {
               />
 
               <button id="module-settings-submit" type="submit">
-                Apply changes
+                {t("Apply changes")}
               </button>
             </form>
           </section>

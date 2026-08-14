@@ -24,12 +24,17 @@
  *
  * WHAT WAS ADAPTED RATHER THAN COPIED
  * -----------------------------------
- *   - `LanguageSwitcher` -> `LocaleBadge`. awcms has no gettext catalog, so a
- *     `<select>` with one option would be a control that cannot do anything —
- *     the same fake-affordance mistake `TenantBadge`'s comment argues against.
- *     The badge fills the same slot and states the served language honestly.
  *   - The avatar is a plain tile, not a link: micro's points at
  *     `/admin/profile`, a page awcms does not have.
+ *
+ * SUPERSEDED: the language slot is a real switcher again (ADR-0095)
+ * -----------------------------------------------------------------
+ * This header used to record `LanguageSwitcher -> LocaleBadge`, on the grounds
+ * that a `<select>` with one option is a fake affordance. That was right, and it
+ * stopped being right the moment a catalog existed: `LocaleBadge` is deleted and
+ * `LanguageSwitcher` fills the slot. The shell's own strings now go through
+ * `t()`/`tx()`, and the sidebar is translated by passing its composed ENGLISH
+ * labels through the catalog — so no module descriptor changed to make this work.
  *
  * WHAT WAS DELIBERATELY NOT ADOPTED
  * ---------------------------------
@@ -69,7 +74,8 @@ import "../styles/admin.css";
 import TenantBadge from "../components/TenantBadge.astro";
 import ThemeToggle from "../components/ThemeToggle.astro";
 import SyncIndicator from "../components/SyncIndicator.astro";
-import LocaleBadge from "../components/LocaleBadge.astro";
+import LanguageSwitcher from "../components/LanguageSwitcher.astro";
+import { getTranslatorFor } from "../lib/i18n";
 import { getDatabaseClient } from "../lib/database/client";
 import { withTenantOrThrow } from "../lib/database/tenant-context";
 import { fetchSyncIndicatorActive } from "../modules/reporting/application/sync-indicator";
@@ -109,7 +115,37 @@ if (!ssr) {
   );
 }
 
-const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : "no roles";
+/**
+ * ADR-0095. `Astro.locals.locale` is set by the middleware for every request, so
+ * this never falls back in practice — `getTranslatorFor` tolerates absence only
+ * so a page rendered outside the middleware (a unit test) still renders English
+ * rather than throwing.
+ *
+ * `tx` is needed as well as `t` because this shell has two genuine collisions:
+ * "System" is both a colour-theme mode and a sidebar section, and "Admin" is both
+ * the brand-ish landmark name and a word that appears in module labels. Indonesian
+ * translates each differently ("Sistem" the theme vs "Sistem" the section happen
+ * to match; "Administrasi" the landmark does not), and without a context one of
+ * them would always be wrong.
+ */
+const { t, tx } = getTranslatorFor(Astro.locals.locale);
+
+const roles = ssr.roles.length > 0 ? ssr.roles.join(", ") : t("no roles");
+
+/**
+ * ADR-0095 — the tenant's default theme, handed to the head script through the
+ * `data-tenant-default-theme` attribute that `theme-init-script.ts` has always
+ * read but that nothing ever set.
+ *
+ * The order below is what makes a server-stored theme work WITHOUT changing the
+ * init script's bytes (and therefore without invalidating its CSP hash): the
+ * script prefers `localStorage`, falling back to this attribute. So on a device
+ * the reader has used, their local choice wins; on a NEW device, where
+ * `localStorage` is empty, the value stored against their principal applies. That
+ * is exactly the desired precedence, and it needed no new mechanism.
+ */
+const defaultThemeAttribute =
+  ssr.display.preferredTheme ?? ssr.display.tenantDefaultTheme ?? "system";
 
 /**
  * Topbar chrome: tenant name, whether any sync node is active, and which
@@ -229,7 +265,10 @@ const ICON_USER =
 ---
 
 <!doctype html>
-<html lang="en">
+<html
+  lang={Astro.locals.locale}
+  data-tenant-default-theme={defaultThemeAttribute}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -242,7 +281,7 @@ const ICON_USER =
     <script is:inline set:html={THEME_INIT_SCRIPT_BODY} />
   </head>
   <body class="admin-body">
-    <a class="skip-link" href="#admin-main">Skip to main content</a>
+    <a class="skip-link" href="#admin-main">{t("Skip to main content")}</a>
 
     <div class="admin-shell">
       {
@@ -255,30 +294,70 @@ const ICON_USER =
         type="checkbox"
         id="admin-nav-toggle"
         class="admin-nav-toggle-checkbox"
-        aria-label="Toggle navigation menu"
+        aria-label={t("Toggle navigation menu")}
       />
 
       <header class="admin-topbar">
         <label class="admin-nav-toggle" for="admin-nav-toggle">
           <span class="admin-nav-toggle-bars" aria-hidden="true"></span>
-          <span class="sr-only">Toggle navigation menu</span>
+          <span class="sr-only">{t("Toggle navigation menu")}</span>
         </label>
         <a href="/admin" class="admin-brand">AWCMS</a>
-        <TenantBadge tenantName={tenantName} />
+        <TenantBadge tenantName={tenantName} ariaLabel={t("Active tenant")} />
         <div class="admin-topbar-spacer"></div>
         <div class="admin-topbar-right">
-          <SyncIndicator active={syncActive} />
-          <ThemeToggle />
-          <LocaleBadge />
+          <SyncIndicator
+            active={syncActive}
+            activeLabel={t("Sync active")}
+            inactiveLabel={t("Sync inactive")}
+          />
+          <ThemeToggle
+            ariaLabel={t("Change colour theme")}
+            systemLabel={tx("theme", "System")}
+            lightLabel={tx("theme", "Light")}
+            darkLabel={tx("theme", "Dark")}
+          />
+          {
+            /* `persist` because this shell only ever renders inside a resolved
+              session (the middleware redirects to /login otherwise), so the
+              choice can be stored against the principal and not merely cookied. */
+          }
+          <LanguageSwitcher persist />
           <div class="admin-user-menu">
-            <span
-              class="admin-avatar"
-              aria-hidden="true"
-              set:html={ICON_USER}
-            />
+            {
+              /* ADR-0096 — the avatar is a LINK now. The header note above
+                recorded it as "a plain tile, not a link: micro's points at
+                `/admin/profile`, a page awcms does not have". That page exists,
+                as `/admin/account`. The glyph stays `aria-hidden`, so the
+                accessible name comes from the link's own label rather than from
+                decoration. */
+            }
+            <a
+              href="/admin/account"
+              class="admin-avatar-link"
+              aria-label={t("My account")}
+            >
+              <span
+                class="admin-avatar"
+                aria-hidden="true"
+                set:html={ICON_USER}
+              />
+            </a>
             <span class="admin-roles" id="admin-roles">{roles}</span>
-            <button type="button" id="admin-logout" class="admin-logout">
-              Log out
+            {
+              /* The busy label travels as a data attribute rather than a string
+                in the script: client code cannot reach the catalog (it is a
+                server module, and shipping it would send both languages to every
+                browser), and this is the same seam `ThemeToggle` uses for its
+                three mode labels. */
+            }
+            <button
+              type="button"
+              id="admin-logout"
+              class="admin-logout"
+              data-label-busy={t("Signing out…")}
+            >
+              {t("Log out")}
             </button>
           </div>
         </div>
@@ -288,20 +367,35 @@ const ICON_USER =
         <label class="admin-scrim" for="admin-nav-toggle" aria-hidden="true"
         ></label>
         <aside class="admin-sidebar" id="admin-sidebar">
-          <nav aria-label="Admin">
+          {
+            /* ADR-0095 — the sidebar is translated by passing the composed
+              ENGLISH labels through the catalog, because `msgid` is the English
+              source text. `SIDEBAR_LABELS` and `ModuleDescriptor.name` therefore
+              stay exactly as they are: no descriptor grows a label key, and no
+              registry gate has to learn about locales.
+
+              A tenant's own `labelOverride` (Issue #260) flows through here too
+              and simply misses the catalog, so it renders as the tenant wrote it
+              — which is correct: their words are not ours to translate.
+
+              Section labels take a context: "System" and "General" are also a
+              theme mode and a module group, and gettext has no other way to keep
+              three different translations of one English word apart. */
+          }
+          <nav aria-label={tx("landmark", "Admin")}>
             <ul class="admin-sidebar-groups">
               {
                 navSections.map((section) => (
                   <li class="admin-sidebar-group">
                     <span class="admin-sidebar-group-label">
-                      {section.label}
+                      {tx("menu-section", section.label)}
                     </span>
                     <ul class="admin-sidebar-modules">
                       {section.groups.map((group) => (
                         <li class="admin-sidebar-module">
                           {group.moduleLabel !== null && (
                             <span class="admin-sidebar-module-label">
-                              {group.moduleLabel}
+                              {t(group.moduleLabel)}
                             </span>
                           )}
                           <ul class="admin-sidebar-links">
@@ -313,7 +407,7 @@ const ICON_USER =
                                     entry.isCurrent ? "page" : undefined
                                   }
                                 >
-                                  {entry.label}
+                                  {t(entry.label)}
                                 </a>
                               </li>
                             ))}
@@ -328,14 +422,14 @@ const ICON_USER =
           </nav>
           <div class="admin-sidebar-footer">
             <span class="admin-sidebar-version">
-              Version
+              {t("Version")}
               <span class="admin-sidebar-version-value">v{appVersion}</span>
             </span>
           </div>
         </aside>
 
         <main class="admin-main" id="admin-main" tabindex="-1">
-          <nav class="admin-breadcrumb" aria-label="Breadcrumb">
+          <nav class="admin-breadcrumb" aria-label={t("Breadcrumb")}>
             <ol>
               <li><a href="/admin">AWCMS</a></li>
               <li aria-current="page">{title}</li>
@@ -358,7 +452,12 @@ const ICON_USER =
 
       logoutButton?.addEventListener("click", async () => {
         if (logoutButton.disabled) return;
-        lockElement(logoutButton, "Signing out…");
+        // Falls back to English if the attribute is somehow absent — a missing
+        // label must not stop the sign-out it labels.
+        lockElement(
+          logoutButton,
+          logoutButton.dataset.labelBusy ?? "Signing out…"
+        );
         try {
           await fetch("/api/v1/auth/logout", {
             method: "POST",

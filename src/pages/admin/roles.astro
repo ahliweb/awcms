@@ -26,6 +26,7 @@ import {
   type RoleView
 } from "../../modules/identity-access/application/access-directory";
 import { resolvePlatformTenant } from "../../lib/tenant/platform-tenant";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listDeletedRoles,
   listPermissionCatalog,
@@ -35,6 +36,7 @@ import {
 } from "../../modules/identity-access/application/role-admin";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 type RolePermRow = {
   role: RoleView;
@@ -127,17 +129,20 @@ const colCount = canConfigure ? 5 : 4;
 
 <AdminLayout title="Roles">
   <header class="page-header fade-in-up">
-    <h1 id="roles-heading">Roles</h1>
+    <h1 id="roles-heading">{t("Roles")}</h1>
     <p class="page-description">
-      RBAC roles for this tenant and the permissions granted to each. System
-      roles (such as <code>owner</code>) are protected and cannot be deleted.
+      {
+        t(
+          "RBAC roles for this tenant and the permissions granted to each. System roles (such as"
+        )
+      }<code>{t("owner")}</code>) are protected and cannot be deleted.
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="roles-denied">
-        You do not have permission to view roles.
+        {t("You do not have permission to view roles.")}
       </p>
     )
   }
@@ -145,7 +150,7 @@ const colCount = canConfigure ? 5 : 4;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="roles-error">
-        Roles could not be loaded right now. Please try again later.
+        {t("Roles could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -164,7 +169,7 @@ const colCount = canConfigure ? 5 : 4;
   {
     canConfigure && !loadError && (
       <form id="role-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">Create a role</p>
+        <p class="form-legend">{t("Create a role")}</p>
         <p
           id="role-create-error"
           class="admin-create-error"
@@ -172,7 +177,7 @@ const colCount = canConfigure ? 5 : 4;
           hidden
         />
 
-        <label for="role-code">Role code</label>
+        <label for="role-code">{t("Role code")}</label>
         <input
           id="role-code"
           name="roleCode"
@@ -181,7 +186,7 @@ const colCount = canConfigure ? 5 : 4;
           autocomplete="off"
         />
 
-        <label for="role-name">Role name</label>
+        <label for="role-name">{t("Role name")}</label>
         <input
           id="role-name"
           name="roleName"
@@ -191,7 +196,7 @@ const colCount = canConfigure ? 5 : 4;
         />
 
         <button type="submit" id="role-create-submit">
-          Create role
+          {t("Create role")}
         </button>
       </form>
     )
@@ -204,11 +209,11 @@ const colCount = canConfigure ? 5 : 4;
           <caption>{roles.length} role(s)</caption>
           <thead>
             <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Name</th>
-              <th scope="col">System</th>
-              <th scope="col">Permissions</th>
-              {canConfigure && <th scope="col">Actions</th>}
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("System")}</th>
+              <th scope="col">{t("Permissions")}</th>
+              {canConfigure && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -219,7 +224,7 @@ const colCount = canConfigure ? 5 : 4;
                     <span class="empty-state-icon" aria-hidden="true">
                       ◆
                     </span>
-                    <span class="empty-state-title">No roles yet</span>
+                    <span class="empty-state-title">{t("No roles yet")}</span>
                     <span class="empty-state-text">
                       {canConfigure
                         ? "Create the first role using the form above."
@@ -256,7 +261,7 @@ const colCount = canConfigure ? 5 : 4;
                           data-role-id={role.id}
                           data-role-name={role.roleName}
                         >
-                          Rename
+                          {t("Rename")}
                         </button>
                         {!role.isSystem && (
                           <button
@@ -266,7 +271,7 @@ const colCount = canConfigure ? 5 : 4;
                             data-role-id={role.id}
                             data-role-code={role.roleCode}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         )}
                       </div>
@@ -276,7 +281,7 @@ const colCount = canConfigure ? 5 : 4;
                           {granted.length === 0 ? (
                             <li>
                               <span class="cell-muted">
-                                No permissions granted.
+                                {t("No permissions granted.")}
                               </span>
                             </li>
                           ) : (
@@ -290,7 +295,7 @@ const colCount = canConfigure ? 5 : 4;
                                   data-role-id={role.id}
                                   data-permission-id={p.id}
                                 >
-                                  Remove
+                                  {t("Remove")}
                                 </button>
                               </li>
                             ))
@@ -303,14 +308,14 @@ const colCount = canConfigure ? 5 : 4;
                             data-role-id={role.id}
                           >
                             <label for={`grant-${role.id}`}>
-                              Add permission
+                              {t("Add permission")}
                             </label>
                             <select id={`grant-${role.id}`} name="permissionId">
                               {available.map((p) => (
                                 <option value={p.id}>{permLabel(p)}</option>
                               ))}
                             </select>
-                            <button type="submit">Add</button>
+                            <button type="submit">{t("Add")}</button>
                           </form>
                         )}
                       </details>
@@ -329,7 +334,7 @@ const colCount = canConfigure ? 5 : 4;
     canConfigure && !loadError && deletedRoles.length > 0 && (
       <section class="admin-section fade-in-up" id="deleted-roles">
         <h2 class="admin-section-title">
-          Deleted roles
+          {t("Deleted roles")}
           <span class="count-pill">{deletedRoles.length}</span>
         </h2>
         <div class="data-table-scroll">
@@ -337,9 +342,9 @@ const colCount = canConfigure ? 5 : 4;
             <caption>{deletedRoles.length} deleted role(s)</caption>
             <thead>
               <tr>
-                <th scope="col">Code</th>
-                <th scope="col">Name</th>
-                <th scope="col">Actions</th>
+                <th scope="col">{t("Code")}</th>
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -358,7 +363,7 @@ const colCount = canConfigure ? 5 : 4;
                         data-role-id={role.id}
                         data-role-code={role.roleCode}
                       >
-                        Restore
+                        {t("Restore")}
                       </button>
                     </div>
                   </td>

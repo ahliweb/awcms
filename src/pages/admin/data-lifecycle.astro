@@ -42,6 +42,7 @@ import { logAdminPageError } from "../../lib/logging/error-log";
 import { listModules } from "../../modules";
 import { collectHighVolumeTableDescriptors } from "../../modules/data-lifecycle/domain/lifecycle-registry";
 import { INFRASTRUCTURE_LIFECYCLE_DESCRIPTORS } from "../../modules/data-lifecycle/domain/infrastructure-lifecycle-registry";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listLegalHolds,
   type LegalHoldRow
@@ -56,6 +57,7 @@ import {
 } from "../../modules/data-lifecycle/domain/legal-hold";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -193,19 +195,22 @@ const hasTenantWideHold = holds.some(
 
 <AdminLayout title="Data lifecycle">
   <header class="page-header fade-in-up">
-    <h1 id="data-lifecycle-heading">Data lifecycle</h1>
+    <h1 id="data-lifecycle-heading">{t("Data lifecycle")}</h1>
     <p class="page-description">
-      Retention, archive and purge for the high-volume tables each module
-      declares — plus the legal holds that override them. Real archive and purge
-      run only as the scheduled <code>data-lifecycle:archive-purge</code> job; this
-      screen plans, records and holds, it never deletes.
+      {
+        t(
+          "Retention, archive and purge for the high-volume tables each module declares \u2014 plus the legal holds that override them. Real archive and purge run only as the scheduled"
+        )
+      }<code>{t("data-lifecycle:archive-purge")}</code>{
+        t("job; this screen plans, records and holds, it never deletes.")
+      }
     </p>
   </header>
 
   {
     !showAnything && (
       <p class="state-notice fade-in-up" id="data-lifecycle-denied">
-        You do not have permission to view the data lifecycle console.
+        {t("You do not have permission to view the data lifecycle console.")}
       </p>
     )
   }
@@ -213,8 +218,9 @@ const hasTenantWideHold = holds.some(
   {
     loadError && (
       <p class="state-notice fade-in-up" id="data-lifecycle-error">
-        The data lifecycle console could not be loaded right now. Please try
-        again later.
+        {t(
+          "The data lifecycle console could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -230,26 +236,28 @@ const hasTenantWideHold = holds.some(
   {
     canReadHolds && (
       <section class="admin-section fade-in-up" id="data-lifecycle-summary">
-        <h2 class="admin-section-title">Holds in force</h2>
+        <h2 class="admin-section-title">{t("Holds in force")}</h2>
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Active legal holds</span>
+            <span class="stat-label">{t("Active legal holds")}</span>
             <span class="stat-value">{activeHoldCount}</span>
             {hasTenantWideHold && (
-              <span class="stat-hint">One or more cover every table</span>
+              <span class="stat-hint">
+                {t("One or more cover every table")}
+              </span>
             )}
           </div>
           <div class="stat-card">
-            <span class="stat-label">Registered tables</span>
+            <span class="stat-label">{t("Registered tables")}</span>
             <span class="stat-value">{registryRows.length}</span>
             <span class="stat-hint">
               {tenantDescriptors.length} tenant-scoped
             </span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Recorded runs</span>
+            <span class="stat-label">{t("Recorded runs")}</span>
             <span class="stat-value">{canReadRuns ? runs.length : "—"}</span>
-            <span class="stat-hint">Newest 100</span>
+            <span class="stat-hint">{t("Newest 100")}</span>
           </div>
         </div>
       </section>
@@ -260,32 +268,34 @@ const hasTenantWideHold = holds.some(
     canReadRegistry && (
       <section class="admin-section fade-in-up" id="data-lifecycle-registry">
         <h2 class="admin-section-title">
-          Lifecycle registry
+          {t("Lifecycle registry")}
           <span class="count-pill">{registryRows.length}</span>
         </h2>
         <p class="page-description">
-          Declared by each owning module in its own <code>module.ts</code>, or —
-          for a table owned by <code>src/lib/</code> infrastructure with no
-          module to declare it — in the infrastructure registry (ADR-0076).
-          Code, not tenant configuration. Nothing here reveals row contents or
-          live counts.
+          {t("Declared by each owning module in its own")}
+          <code>{t("module.ts")}</code>
+          {t(", or \u2014 for a table owned by")}
+          <code>{t("src/lib/")}</code>
+          {t(
+            "infrastructure with no module to declare it \u2014 in the infrastructure registry (ADR-0076). Code, not tenant configuration. Nothing here reveals row contents or live counts."
+          )}
         </p>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Every registered high-volume table descriptor
+              {t("Every registered high-volume table descriptor")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Descriptor</th>
-                <th scope="col">Table</th>
-                <th scope="col">Owner</th>
-                <th scope="col">Scope</th>
-                <th scope="col">Retention (days)</th>
-                <th scope="col">Execution</th>
-                <th scope="col">Archive</th>
-                <th scope="col">Deletion</th>
-                <th scope="col">Legal hold</th>
+                <th scope="col">{t("Descriptor")}</th>
+                <th scope="col">{t("Table")}</th>
+                <th scope="col">{t("Owner")}</th>
+                <th scope="col">{t("Scope")}</th>
+                <th scope="col">{t("Retention (days)")}</th>
+                <th scope="col">{t("Execution")}</th>
+                <th scope="col">{t("Archive")}</th>
+                <th scope="col">{t("Deletion")}</th>
+                <th scope="col">{t("Legal hold")}</th>
               </tr>
             </thead>
             <tbody>
@@ -300,7 +310,7 @@ const hasTenantWideHold = holds.some(
                   <td data-label="Owner">
                     <span class="cell-code">{owner}</span>
                     {ownerKind === "infrastructure" && (
-                      <span class="cell-muted"> (infrastructure)</span>
+                      <span class="cell-muted">{t("(infrastructure)")}</span>
                     )}
                   </td>
                   <td data-label="Scope">{descriptor.scope}</td>
@@ -326,7 +336,7 @@ const hasTenantWideHold = holds.some(
                         {descriptor.legalHold.precedence}
                       </span>
                     ) : (
-                      <span class="cell-muted">not applicable</span>
+                      <span class="cell-muted">{t("not applicable")}</span>
                     )}
                   </td>
                 </tr>
@@ -341,12 +351,11 @@ const hasTenantWideHold = holds.some(
   {
     canPlan && (
       <section class="admin-section fade-in-up" id="data-lifecycle-plan">
-        <h2 class="admin-section-title">Dry-run plan</h2>
+        <h2 class="admin-section-title">{t("Dry-run plan")}</h2>
         <p class="page-description">
-          Counts what a purge WOULD do for one tenant-scoped table, right now.
-          Read-only by construction: it writes nothing, not even a run record,
-          and an active legal hold is applied before anything is reported
-          purgeable.
+          {t(
+            "Counts what a purge WOULD do for one tenant-scoped table, right now. Read-only by construction: it writes nothing, not even a run record, and an active legal hold is applied before anything is reported purgeable."
+          )}
         </p>
         <form id="data-lifecycle-plan-form" class="admin-create-form">
           <p
@@ -357,7 +366,7 @@ const hasTenantWideHold = holds.some(
           />
 
           <label for="plan-descriptor-key">
-            Table
+            {t("Table")}
             {canReadRegistry ? (
               <select id="plan-descriptor-key" name="descriptorKey" required>
                 {tenantDescriptors.map((descriptor) => (
@@ -380,7 +389,7 @@ const hasTenantWideHold = holds.some(
           </label>
 
           <label for="plan-retention-override">
-            Retention override (days, optional)
+            {t("Retention override (days, optional)")}
             <input
               type="number"
               id="plan-retention-override"
@@ -395,39 +404,41 @@ const hasTenantWideHold = holds.some(
             id="data-lifecycle-plan-submit"
             class="module-toggle"
           >
-            Run plan
+            {t("Run plan")}
           </button>
         </form>
 
         <div id="data-lifecycle-plan-result" hidden>
           <div class="stat-grid stagger-children">
             <div class="stat-card">
-              <span class="stat-label">Cutoff</span>
+              <span class="stat-label">{t("Cutoff")}</span>
               <span
                 class="stat-value stat-value--mono"
                 id="plan-result-cutoff"
               />
-              <span class="stat-hint">UTC — rows older than this</span>
+              <span class="stat-hint">
+                {t("UTC \u2014 rows older than this")}
+              </span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Eligible</span>
+              <span class="stat-label">{t("Eligible")}</span>
               <span class="stat-value" id="plan-result-eligible" />
             </div>
             <div class="stat-card">
-              <span class="stat-label">Held</span>
+              <span class="stat-label">{t("Held")}</span>
               <span class="stat-value" id="plan-result-held" />
-              <span class="stat-hint">Withheld by a legal hold</span>
+              <span class="stat-hint">{t("Withheld by a legal hold")}</span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Already archived</span>
+              <span class="stat-label">{t("Already archived")}</span>
               <span class="stat-value" id="plan-result-archived" />
             </div>
             <div class="stat-card">
-              <span class="stat-label">Purgeable</span>
+              <span class="stat-label">{t("Purgeable")}</span>
               <span class="stat-value" id="plan-result-purgeable" />
             </div>
             <div class="stat-card">
-              <span class="stat-label">Blocked</span>
+              <span class="stat-label">{t("Blocked")}</span>
               <span class="stat-value" id="plan-result-blocked" />
             </div>
           </div>
@@ -439,13 +450,11 @@ const hasTenantWideHold = holds.some(
   {
     canCreateHold && (
       <section class="admin-section fade-in-up" id="data-lifecycle-create-hold">
-        <h2 class="admin-section-title">Place a legal hold</h2>
+        <h2 class="admin-section-title">{t("Place a legal hold")}</h2>
         <p class="page-description">
-          A hold overrides ordinary retention and purge and cannot be bypassed
-          by tenant policy. Leave the table unset for a tenant-wide hold that
-          covers every registered table. Both the reason and the authority
-          reference are recorded as the evidence that later justifies
-          withholding this data.
+          {t(
+            "A hold overrides ordinary retention and purge and cannot be bypassed by tenant policy. Leave the table unset for a tenant-wide hold that covers every registered table. Both the reason and the authority reference are recorded as the evidence that later justifies withholding this data."
+          )}
         </p>
         <form id="data-lifecycle-hold-form" class="admin-create-form">
           <p
@@ -456,10 +465,10 @@ const hasTenantWideHold = holds.some(
           />
 
           <label for="hold-descriptor-key">
-            Table (optional)
+            {t("Table (optional)")}
             {canReadRegistry ? (
               <select id="hold-descriptor-key" name="descriptorKey">
-                <option value="">Every table (tenant-wide)</option>
+                <option value="">{t("Every table (tenant-wide)")}</option>
                 {holdTargetKeys.map((key) => (
                   <option value={key}>{key}</option>
                 ))}
@@ -475,7 +484,7 @@ const hasTenantWideHold = holds.some(
           </label>
 
           <label for="hold-scope-description">
-            Scope
+            {t("Scope")}
             <input
               type="text"
               id="hold-scope-description"
@@ -487,7 +496,7 @@ const hasTenantWideHold = holds.some(
           </label>
 
           <label for="hold-reason">
-            Reason
+            {t("Reason")}
             <textarea
               id="hold-reason"
               name="reason"
@@ -499,7 +508,7 @@ const hasTenantWideHold = holds.some(
           </label>
 
           <label for="hold-authority-reference">
-            Authority reference
+            {t("Authority reference")}
             <input
               type="text"
               id="hold-authority-reference"
@@ -511,7 +520,7 @@ const hasTenantWideHold = holds.some(
           </label>
 
           <label for="hold-ends-at">
-            Ends at (optional)
+            {t("Ends at (optional)")}
             <input type="date" id="hold-ends-at" name="endsAt" />
           </label>
 
@@ -520,7 +529,7 @@ const hasTenantWideHold = holds.some(
             id="data-lifecycle-hold-submit"
             class="module-toggle"
           >
-            Place hold
+            {t("Place hold")}
           </button>
         </form>
       </section>
@@ -531,23 +540,23 @@ const hasTenantWideHold = holds.some(
     canReadHolds && (
       <section class="admin-section fade-in-up" id="data-lifecycle-holds">
         <h2 class="admin-section-title">
-          Legal holds
+          {t("Legal holds")}
           <span class="count-pill">{holds.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Legal holds for this tenant, newest first
+              {t("Legal holds for this tenant, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Status</th>
-                <th scope="col">Table</th>
-                <th scope="col">Scope</th>
-                <th scope="col">Authority</th>
-                <th scope="col">Started</th>
-                <th scope="col">Ends</th>
-                <th scope="col">Detail</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Table")}</th>
+                <th scope="col">{t("Scope")}</th>
+                <th scope="col">{t("Authority")}</th>
+                <th scope="col">{t("Started")}</th>
+                <th scope="col">{t("Ends")}</th>
+                <th scope="col">{t("Detail")}</th>
               </tr>
             </thead>
             <tbody>
@@ -558,9 +567,13 @@ const hasTenantWideHold = holds.some(
                       <span class="empty-state-icon" aria-hidden="true">
                         ✓
                       </span>
-                      <span class="empty-state-title">No legal holds</span>
+                      <span class="empty-state-title">
+                        {t("No legal holds")}
+                      </span>
                       <span class="empty-state-text">
-                        Ordinary retention applies to every registered table.
+                        {t(
+                          "Ordinary retention applies to every registered table."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -583,7 +596,7 @@ const hasTenantWideHold = holds.some(
                     {hold.descriptorKey ? (
                       <span class="cell-code">{hold.descriptorKey}</span>
                     ) : (
-                      <span class="cell-muted">Every table</span>
+                      <span class="cell-muted">{t("Every table")}</span>
                     )}
                   </td>
                   <td data-label="Scope">{hold.scopeDescription}</td>
@@ -604,25 +617,25 @@ const hasTenantWideHold = holds.some(
                         HTML — the same treatment the audit-trail viewer gives
                         its payloads. */}
                     <details>
-                      <summary>Reason</summary>
+                      <summary>{t("Reason")}</summary>
                       <p>{hold.reason}</p>
                       {hold.releaseReason && (
                         <p>
-                          <strong>Released:</strong> {hold.releaseReason}
+                          <strong>{t("Released:")}</strong> {hold.releaseReason}
                         </p>
                       )}
                     </details>
 
                     {canReleaseHold && hold.status === "active" && (
                       <details class="hold-release">
-                        <summary>Release</summary>
+                        <summary>{t("Release")}</summary>
                         <form
                           class="admin-create-form"
                           data-release-form
                           data-hold-id={hold.id}
                         >
                           <label for={`release-reason-${hold.id}`}>
-                            Release reason
+                            {t("Release reason")}
                             <textarea
                               id={`release-reason-${hold.id}`}
                               name="releaseReason"
@@ -636,7 +649,7 @@ const hasTenantWideHold = holds.some(
                             type="submit"
                             class="btn-inline btn-inline--danger"
                           >
-                            Release hold
+                            {t("Release hold")}
                           </button>
                         </form>
                       </details>
@@ -655,29 +668,30 @@ const hasTenantWideHold = holds.some(
     canReadRuns && (
       <section class="admin-section fade-in-up" id="data-lifecycle-runs">
         <h2 class="admin-section-title">
-          Run history
+          {t("Run history")}
           <span class="count-pill">{runs.length}</span>
         </h2>
         <p class="page-description">
-          Aggregate counts only — what the scheduled job planned, archived or
-          purged, and when. This history is itself retention evidence.
+          {t(
+            "Aggregate counts only \u2014 what the scheduled job planned, archived or purged, and when. This history is itself retention evidence."
+          )}
         </p>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              The most recent lifecycle runs, newest first
+              {t("The most recent lifecycle runs, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Finished</th>
-                <th scope="col">Descriptor</th>
-                <th scope="col">Type</th>
-                <th scope="col">Status</th>
-                <th scope="col">Eligible</th>
-                <th scope="col">Held</th>
-                <th scope="col">Archived</th>
-                <th scope="col">Purged</th>
-                <th scope="col">Errors</th>
+                <th scope="col">{t("Finished")}</th>
+                <th scope="col">{t("Descriptor")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Eligible")}</th>
+                <th scope="col">{t("Held")}</th>
+                <th scope="col">{t("Archived")}</th>
+                <th scope="col">{t("Purged")}</th>
+                <th scope="col">{t("Errors")}</th>
               </tr>
             </thead>
             <tbody>
@@ -688,9 +702,13 @@ const hasTenantWideHold = holds.some(
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌛
                       </span>
-                      <span class="empty-state-title">No runs recorded</span>
+                      <span class="empty-state-title">
+                        {t("No runs recorded")}
+                      </span>
                       <span class="empty-state-text">
-                        The archive/purge job has not run for this tenant yet.
+                        {t(
+                          "The archive/purge job has not run for this tenant yet."
+                        )}
                       </span>
                     </div>
                   </td>

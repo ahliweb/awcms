@@ -41,12 +41,14 @@ import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { listRoles } from "../../modules/identity-access/application/access-directory";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listInvitations,
   type InvitationView
 } from "../../modules/identity-access/application/invitation-admin";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -130,18 +132,20 @@ function isPending(invitation: InvitationView): boolean {
 
 <AdminLayout title="Invitations">
   <header class="page-header fade-in-up">
-    <h1 id="invitations-heading">Invitations</h1>
+    <h1 id="invitations-heading">{t("Invitations")}</h1>
     <p class="page-description">
-      Offers of an account in this tenant. An invitation names the roles its
-      holder will get, and those roles stay inert until it is accepted — nothing
-      here grants anything on its own.
+      {
+        t(
+          "Offers of an account in this tenant. An invitation names the roles its holder will get, and those roles stay inert until it is accepted \u2014 nothing here grants anything on its own."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="invitations-denied">
-        You do not have permission to view invitations.
+        {t("You do not have permission to view invitations.")}
       </p>
     )
   }
@@ -149,7 +153,7 @@ function isPending(invitation: InvitationView): boolean {
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="invitations-load-error">
-        Could not load invitations. Please try again.
+        {t("Could not load invitations. Please try again.")}
       </p>
     )
   }
@@ -167,10 +171,12 @@ function isPending(invitation: InvitationView): boolean {
 
         {canCreate && (
           <section class="fade-in-up" aria-labelledby="invitations-new-heading">
-            <h2 id="invitations-new-heading">Invite somebody</h2>
+            <h2 id="invitations-new-heading">{t("Invite somebody")}</h2>
 
             <form id="create-invitation-form" class="admin-form">
-              <label for="create-invitation-address">Email address</label>
+              <label for="create-invitation-address">
+                {t("Email address")}
+              </label>
               <input
                 id="create-invitation-address"
                 name="loginIdentifier"
@@ -179,7 +185,7 @@ function isPending(invitation: InvitationView): boolean {
                 autocomplete="off"
               />
 
-              <label for="create-invitation-name">Display name</label>
+              <label for="create-invitation-name">{t("Display name")}</label>
               <input
                 id="create-invitation-name"
                 name="displayName"
@@ -191,7 +197,7 @@ function isPending(invitation: InvitationView): boolean {
               {canAssign ? (
                 <>
                   <label for="create-invitation-roles">
-                    Roles on acceptance
+                    {t("Roles on acceptance")}
                   </label>
                   <select
                     id="create-invitation-roles"
@@ -204,16 +210,16 @@ function isPending(invitation: InvitationView): boolean {
                     ))}
                   </select>
                   <p class="page-description">
-                    System roles are not offered: an invitation cannot grant
-                    one, and finding that out after composing the invitation is
-                    the worst moment to learn it.
+                    {t(
+                      "System roles are not offered: an invitation cannot grant one, and finding that out after composing the invitation is the worst moment to learn it."
+                    )}
                   </p>
                 </>
               ) : (
                 <p class="page-description" id="invitations-no-role-picker">
-                  You may invite people, but not choose their roles — granting a
-                  role is a separate permission. The invitation will carry none,
-                  and somebody with that permission can assign one afterwards.
+                  {t(
+                    "You may invite people, but not choose their roles \u2014 granting a role is a separate permission. The invitation will carry none, and somebody with that permission can assign one afterwards."
+                  )}
                 </p>
               )}
 
@@ -224,31 +230,31 @@ function isPending(invitation: InvitationView): boolean {
                     type="checkbox"
                     name="skipEmailConfirmation"
                   />
-                  Skip email confirmation
+                  {t("Skip email confirmation")}
                 </label>
               )}
               {canConfigure && (
                 <p class="page-description">
-                  Only for an address you have already proven belongs to this
-                  person. It mints an account with no evidence its holder
-                  controls the address.
+                  {t(
+                    "Only for an address you have already proven belongs to this person. It mints an account with no evidence its holder controls the address."
+                  )}
                 </p>
               )}
 
               <button id="create-invitation-submit" type="submit">
-                Send invitation
+                {t("Send invitation")}
               </button>
             </form>
           </section>
         )}
 
         <section class="fade-in-up" aria-labelledby="invitations-list-heading">
-          <h2 id="invitations-list-heading">Sent invitations</h2>
+          <h2 id="invitations-list-heading">{t("Sent invitations")}</h2>
 
           {invitations.length === 0 ? (
             <div class="empty-state">
               <p id="invitations-empty">
-                Nobody has been invited to this tenant yet.
+                {t("Nobody has been invited to this tenant yet.")}
               </p>
             </div>
           ) : (
@@ -256,13 +262,15 @@ function isPending(invitation: InvitationView): boolean {
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Address</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Roles</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Expires</th>
-                    <th scope="col">Resent</th>
-                    {(canCreate || canRevoke) && <th scope="col">Actions</th>}
+                    <th scope="col">{t("Address")}</th>
+                    <th scope="col">{t("Name")}</th>
+                    <th scope="col">{t("Roles")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Expires")}</th>
+                    <th scope="col">{t("Resent")}</th>
+                    {(canCreate || canRevoke) && (
+                      <th scope="col">{t("Actions")}</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -274,7 +282,7 @@ function isPending(invitation: InvitationView): boolean {
                       <td data-label="Name">{invitation.displayName}</td>
                       <td data-label="Roles">
                         {invitation.roleCodes.length === 0 ? (
-                          <span class="cell-muted">none</span>
+                          <span class="cell-muted">{t("none")}</span>
                         ) : (
                           invitation.roleCodes.join(", ")
                         )}
@@ -294,7 +302,7 @@ function isPending(invitation: InvitationView): boolean {
                                   class="js-resend-invitation"
                                   data-invitation-id={invitation.id}
                                 >
-                                  Resend
+                                  {t("Resend")}
                                 </button>
                               )}
                               {canRevoke && (
@@ -303,7 +311,7 @@ function isPending(invitation: InvitationView): boolean {
                                   class="js-revoke-invitation"
                                   data-invitation-id={invitation.id}
                                 >
-                                  Revoke
+                                  {t("Revoke")}
                                 </button>
                               )}
                             </>
@@ -321,8 +329,11 @@ function isPending(invitation: InvitationView): boolean {
 
           {hasMore && (
             <p class="page-description" id="invitations-more">
-              Showing the newest page. Older invitations are reachable through
-              <code>GET /api/v1/invitations</code> with its cursor.
+              {t(
+                "Showing the newest page. Older invitations are reachable through"
+              )}
+              <code>{t("GET /api/v1/invitations")}</code>
+              {t("with its cursor.")}
             </p>
           )}
         </section>

@@ -30,6 +30,7 @@ import "../../styles/admin-screens.css";
 import { getDatabaseClient } from "../../lib/database/client";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   resolvePlatformTenant,
   resolveTenancyMode,
@@ -37,6 +38,7 @@ import {
 } from "../../lib/tenant/platform-tenant";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -165,18 +167,20 @@ function statusVariant(status: string): string {
 
 <AdminLayout title="Tenants">
   <header class="page-header fade-in-up">
-    <h1 id="tenants-heading">Tenants</h1>
+    <h1 id="tenants-heading">{t("Tenants")}</h1>
     <p class="page-description">
-      Every party this deployment serves. Provisioning creates a tenant with its
-      head office and owner account in one transaction — the same code path the
-      setup wizard uses, so the two cannot drift.
+      {
+        t(
+          "Every party this deployment serves. Provisioning creates a tenant with its head office and owner account in one transaction \u2014 the same code path the setup wizard uses, so the two cannot drift."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && isPlatformTenant && (
       <p class="state-notice fade-in-up" id="tenants-denied">
-        You do not have permission to view the tenant directory.
+        {t("You do not have permission to view the tenant directory.")}
       </p>
     )
   }
@@ -200,8 +204,9 @@ function statusVariant(status: string): string {
   {
     loadError && (
       <p class="state-notice fade-in-up" id="tenants-error">
-        The tenant directory could not be loaded right now. Please try again
-        later.
+        {t(
+          "The tenant directory could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -212,10 +217,10 @@ function statusVariant(status: string): string {
   {
     canRead && (
       <section class="admin-section fade-in-up" id="tenants-summary">
-        <h2 class="admin-section-title">Deployment</h2>
+        <h2 class="admin-section-title">{t("Deployment")}</h2>
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Tenancy mode</span>
+            <span class="stat-label">{t("Tenancy mode")}</span>
             <span class="stat-value stat-value--mono">{tenancyMode}</span>
             <span class="stat-hint">
               {tenancyMode === "single"
@@ -224,15 +229,17 @@ function statusVariant(status: string): string {
             </span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Tenants listed</span>
+            <span class="stat-label">{t("Tenants listed")}</span>
             <span class="stat-value">{tenants.length}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Platform tenant</span>
+            <span class="stat-label">{t("Platform tenant")}</span>
             <span class="stat-value stat-value--mono">
               {platformTenantCode ?? "—"}
             </span>
-            <span class="stat-hint">holds platform-scoped permissions</span>
+            <span class="stat-hint">
+              {t("holds platform-scoped permissions")}
+            </span>
           </div>
         </div>
       </section>
@@ -242,12 +249,11 @@ function statusVariant(status: string): string {
   {
     canCreate && (
       <section class="admin-section fade-in-up" id="tenants-create">
-        <h2 class="admin-section-title">Provision a tenant</h2>
+        <h2 class="admin-section-title">{t("Provision a tenant")}</h2>
         <p class="page-description">
-          The owner account is created with the password you set here — it is
-          sent once and never stored by this screen. The new tenant receives the
-          tenant-scoped permission catalogue only; platform permissions are
-          never granted to a provisioned tenant.
+          {t(
+            "The owner account is created with the password you set here \u2014 it is sent once and never stored by this screen. The new tenant receives the tenant-scoped permission catalogue only; platform permissions are never granted to a provisioned tenant."
+          )}
         </p>
         <form id="tenants-create-form" class="admin-create-form">
           <p
@@ -258,27 +264,27 @@ function statusVariant(status: string): string {
           />
 
           <label for="tenant-code">
-            Tenant code
+            {t("Tenant code")}
             <input type="text" id="tenant-code" name="tenantCode" required />
           </label>
 
           <label for="tenant-name">
-            Tenant name
+            {t("Tenant name")}
             <input type="text" id="tenant-name" name="tenantName" required />
           </label>
 
           <label for="office-code">
-            Head office code
+            {t("Head office code")}
             <input type="text" id="office-code" name="officeCode" required />
           </label>
 
           <label for="office-name">
-            Head office name
+            {t("Head office name")}
             <input type="text" id="office-name" name="officeName" required />
           </label>
 
           <label for="owner-display-name">
-            Owner name
+            {t("Owner name")}
             <input
               type="text"
               id="owner-display-name"
@@ -288,7 +294,7 @@ function statusVariant(status: string): string {
           </label>
 
           <label for="owner-login-identifier">
-            Owner login identifier
+            {t("Owner login identifier")}
             <input
               type="text"
               id="owner-login-identifier"
@@ -298,7 +304,7 @@ function statusVariant(status: string): string {
           </label>
 
           <label for="owner-password">
-            Owner password
+            {t("Owner password")}
             <input
               type="password"
               id="owner-password"
@@ -314,7 +320,7 @@ function statusVariant(status: string): string {
             id="tenants-create-submit"
             class="module-toggle"
           >
-            Provision tenant
+            {t("Provision tenant")}
           </button>
         </form>
       </section>
@@ -325,20 +331,20 @@ function statusVariant(status: string): string {
     canRead && (
       <section class="admin-section fade-in-up" id="tenants-directory">
         <h2 class="admin-section-title">
-          Directory
+          {t("Directory")}
           <span class="count-pill">{tenants.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Every tenant on this deployment, newest first
+              {t("Every tenant on this deployment, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Code</th>
-                <th scope="col">Name</th>
-                <th scope="col">Status</th>
-                <th scope="col">Created</th>
+                <th scope="col">{t("Code")}</th>
+                <th scope="col">{t("Name")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Created")}</th>
               </tr>
             </thead>
             <tbody>
@@ -349,10 +355,13 @@ function statusVariant(status: string): string {
                       <span class="empty-state-icon" aria-hidden="true">
                         🏢
                       </span>
-                      <span class="empty-state-title">No tenants listed</span>
+                      <span class="empty-state-title">
+                        {t("No tenants listed")}
+                      </span>
                       <span class="empty-state-text">
-                        This should not happen — the platform tenant itself is a
-                        tenant. Check the server logs.
+                        {t(
+                          "This should not happen \u2014 the platform tenant itself is a tenant. Check the server logs."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -365,7 +374,7 @@ function statusVariant(status: string): string {
                     {tenant.tenantCode === platformTenantCode && (
                       <span class="status-badge" data-variant="info">
                         <span class="status-dot" aria-hidden="true" />
-                        platform
+                        {t("platform")}
                       </span>
                     )}
                   </td>

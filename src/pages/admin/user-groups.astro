@@ -23,12 +23,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listUserGroups,
   type UserGroupView
 } from "../../modules/identity-access/application/user-group-admin";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -87,18 +89,20 @@ const colCount = canMutate ? 6 : 5;
 
 <AdminLayout title="User groups">
   <header class="page-header fade-in-up">
-    <h1 id="user-groups-heading">User groups</h1>
+    <h1 id="user-groups-heading">{t("User groups")}</h1>
     <p class="page-description">
-      A group is a subject: it can hold role grants, and everyone in it holds
-      them too. Granting a group a role is done from the role assignment surface
-      — this screen manages who is in which group.
+      {
+        t(
+          "A group is a subject: it can hold role grants, and everyone in it holds them too. Granting a group a role is done from the role assignment surface \u2014 this screen manages who is in which group."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="user-groups-denied">
-        You do not have permission to view user groups.
+        {t("You do not have permission to view user groups.")}
       </p>
     )
   }
@@ -106,7 +110,9 @@ const colCount = canMutate ? 6 : 5;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="user-groups-error">
-        User groups could not be loaded right now. Please try again later.
+        {t(
+          "User groups could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -125,7 +131,7 @@ const colCount = canMutate ? 6 : 5;
   {
     canCreate && !loadError && (
       <form id="user-group-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">Create a group</p>
+        <p class="form-legend">{t("Create a group")}</p>
         <p
           id="user-group-create-error"
           class="admin-create-error"
@@ -133,7 +139,7 @@ const colCount = canMutate ? 6 : 5;
           hidden
         />
 
-        <label for="user-group-code">Group code</label>
+        <label for="user-group-code">{t("Group code")}</label>
         <input
           id="user-group-code"
           name="groupCode"
@@ -142,7 +148,7 @@ const colCount = canMutate ? 6 : 5;
           autocomplete="off"
         />
 
-        <label for="user-group-name">Group name</label>
+        <label for="user-group-name">{t("Group name")}</label>
         <input
           id="user-group-name"
           name="groupName"
@@ -152,7 +158,7 @@ const colCount = canMutate ? 6 : 5;
         />
 
         <button type="submit" id="user-group-create-submit">
-          Create group
+          {t("Create group")}
         </button>
       </form>
     )
@@ -165,12 +171,12 @@ const colCount = canMutate ? 6 : 5;
           <caption>{groups.length} group(s)</caption>
           <thead>
             <tr>
-              <th scope="col">Code</th>
-              <th scope="col">Name</th>
-              <th scope="col">Source</th>
-              <th scope="col">Members</th>
-              <th scope="col">Roles held</th>
-              {canMutate && <th scope="col">Actions</th>}
+              <th scope="col">{t("Code")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Source")}</th>
+              <th scope="col">{t("Members")}</th>
+              <th scope="col">{t("Roles held")}</th>
+              {canMutate && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -181,7 +187,7 @@ const colCount = canMutate ? 6 : 5;
                     <span class="empty-state-icon" aria-hidden="true">
                       ◆
                     </span>
-                    <span class="empty-state-title">No groups yet</span>
+                    <span class="empty-state-title">{t("No groups yet")}</span>
                     <span class="empty-state-text">
                       {canCreate
                         ? "Create the first group using the form above."
@@ -205,7 +211,9 @@ const colCount = canMutate ? 6 : 5;
                   {canMutate && (
                     <td data-label="Actions">
                       {group.source !== "local" ? (
-                        <span class="state-notice">Managed externally</span>
+                        <span class="state-notice">
+                          {t("Managed externally")}
+                        </span>
                       ) : (
                         <>
                           {canUpdate && (
@@ -215,7 +223,7 @@ const colCount = canMutate ? 6 : 5;
                               data-group-id={group.id}
                               data-group-name={group.groupName}
                             >
-                              Rename
+                              {t("Rename")}
                             </button>
                           )}
                           {canAssign && (
@@ -224,7 +232,7 @@ const colCount = canMutate ? 6 : 5;
                               data-action="add-member"
                               data-group-id={group.id}
                             >
-                              Add member
+                              {t("Add member")}
                             </button>
                           )}
                           {canAssign && group.memberCount > 0 && (
@@ -233,7 +241,7 @@ const colCount = canMutate ? 6 : 5;
                               data-action="remove-member"
                               data-group-id={group.id}
                             >
-                              Remove member
+                              {t("Remove member")}
                             </button>
                           )}
                         </>

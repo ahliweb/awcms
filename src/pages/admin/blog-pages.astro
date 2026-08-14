@@ -98,8 +98,10 @@ import {
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
 import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -296,20 +298,22 @@ const editingBodyText = editingPage
 
 <AdminLayout title="Blog pages">
   <header class="page-header fade-in-up">
-    <h1 id="pages-heading">Blog pages</h1>
+    <h1 id="pages-heading">{t("Blog pages")}</h1>
     <p class="page-description">
-      Standing site content — about, contact, policies. Pages have a narrower
-      lifecycle than posts: <strong>draft, published, archived</strong>, with no
-      review queue and no scheduling. Posts live on <a href="/admin/blog"
-        >the blog console</a
-      >.
+      {
+        t(
+          "Standing site content \u2014 about, contact, policies. Pages have a narrower lifecycle than posts:"
+        )
+      }<strong>{t("draft, published, archived")}</strong>{
+        t(", with no review queue and no scheduling. Posts live on")
+      }<a href="/admin/blog">{t("the blog console")}</a>.
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="pages-denied">
-        You do not have permission to view blog pages.
+        {t("You do not have permission to view blog pages.")}
       </p>
     )
   }
@@ -317,8 +321,9 @@ const editingBodyText = editingPage
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="pages-error">
-        Pages could not be loaded right now. This is a problem reading the list,
-        not an empty list — please try again later.
+        {t(
+          "Pages could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -337,7 +342,7 @@ const editingBodyText = editingPage
   {
     canRead && !loadError && (
       <form method="get" class="admin-toolbar fade-in-up" id="page-filter-form">
-        <label for="filter-search">Search titles</label>
+        <label for="filter-search">{t("Search titles")}</label>
         <input
           id="filter-search"
           name="search"
@@ -346,10 +351,10 @@ const editingBodyText = editingPage
           autocomplete="off"
         />
 
-        <label for="filter-status">Status</label>
+        <label for="filter-status">{t("Status")}</label>
         <select id="filter-status" name="status">
           <option value="" selected={statusFilter === undefined}>
-            Any status
+            {t("Any status")}
           </option>
           {/* The page lifecycle's three, not all five: offering `review` or
               `scheduled` would filter for states no page can reach. */}
@@ -360,10 +365,10 @@ const editingBodyText = editingPage
           ))}
         </select>
 
-        <label for="filter-page-type">Type</label>
+        <label for="filter-page-type">{t("Type")}</label>
         <select id="filter-page-type" name="pageType">
           <option value="" selected={pageTypeFilter === undefined}>
-            Any type
+            {t("Any type")}
           </option>
           {PAGE_TYPES.map((value) => (
             <option value={value} selected={pageTypeFilter === value}>
@@ -372,7 +377,7 @@ const editingBodyText = editingPage
           ))}
         </select>
 
-        <button type="submit">Apply filters</button>
+        <button type="submit">{t("Apply filters")}</button>
 
         {/* Carried across submit, so applying a filter does not silently
             bounce the operator out of the bin. */}
@@ -402,16 +407,16 @@ const editingBodyText = editingPage
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-pages-table">
             <caption class="sr-only">
-              Blog pages, most recently updated first.
+              {t("Blog pages, most recently updated first.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Status</th>
-                <th scope="col">Type</th>
-                <th scope="col">Menu order</th>
-                <th scope="col">Updated</th>
-                {showsRowActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Menu order")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {showsRowActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -485,7 +490,7 @@ const editingBodyText = editingPage
                               class="quick-link"
                               href={linkWith({ edit: entry.id })}
                             >
-                              Edit
+                              {t("Edit")}
                               <span class="quick-link-arrow" aria-hidden="true">
                                 →
                               </span>
@@ -502,7 +507,7 @@ const editingBodyText = editingPage
                                 class="btn-inline page-publish-btn"
                                 data-page-id={entry.id}
                               >
-                                Publish
+                                {t("Publish")}
                               </button>
                             )}
                           {canArchive &&
@@ -513,7 +518,7 @@ const editingBodyText = editingPage
                                 class="btn-inline page-archive-btn"
                                 data-page-id={entry.id}
                               >
-                                Archive
+                                {t("Archive")}
                               </button>
                             )}
                           {/* Restore undoes the BIN. Hanging it off
@@ -526,7 +531,7 @@ const editingBodyText = editingPage
                               class="btn-inline page-restore-btn"
                               data-page-id={entry.id}
                             >
-                              Restore
+                              {t("Restore")}
                             </button>
                           )}
                           {canDelete && !showsBin && (
@@ -536,7 +541,7 @@ const editingBodyText = editingPage
                               data-page-id={entry.id}
                               data-page-title={entry.title}
                             >
-                              Delete
+                              {t("Delete")}
                             </button>
                           )}
                           {/* `canPurgePage` accepts archived OR soft-deleted,
@@ -549,7 +554,7 @@ const editingBodyText = editingPage
                                 data-page-id={entry.id}
                                 data-page-title={entry.title}
                               >
-                                Purge
+                                {t("Purge")}
                               </button>
                             )}
                         </div>
@@ -569,18 +574,18 @@ const editingBodyText = editingPage
                 class="quick-link"
                 href={linkWith({ page: String(pageNumber - 1) })}
               >
-                ← Previous
+                {t("\u2190 Previous")}
               </a>
             )}
             <span class="cell-muted">
-              Page {pageNumber} of {lastPage}
+              {t("Page")} {pageNumber} of {lastPage}
             </span>
             {pageNumber < lastPage && (
               <a
                 class="quick-link"
                 href={linkWith({ page: String(pageNumber + 1) })}
               >
-                Next →
+                {t("Next \u2192")}
               </a>
             )}
           </div>
@@ -593,18 +598,18 @@ const editingBodyText = editingPage
     canUpdate && !loadError && editingPage && (
       <section class="admin-section fade-in-up" aria-labelledby="edit-title">
         <h2 class="admin-section-title" id="edit-title">
-          Edit page
+          {t("Edit page")}
         </h2>
         <form id="page-edit-form" class="admin-create-form">
           <p class="form-legend">
             <span class="cell-code">{editingPage.id}</span>
             {" · "}
-            <a href={linkWith({ edit: null })}>Close</a>
+            <a href={linkWith({ edit: null })}>{t("Close")}</a>
           </p>
           <p class="form-legend">
-            Title, address, menu placement and body. Re-parenting is not offered
-            here: it needs cycle detection the API does not perform, and a
-            control that can build a loop is worse than none.
+            {t(
+              "Title, address, menu placement and body. Re-parenting is not offered here: it needs cycle detection the API does not perform, and a control that can build a loop is worse than none."
+            )}
           </p>
           <p
             id="page-edit-error"
@@ -616,7 +621,7 @@ const editingBodyText = editingPage
           <input type="hidden" id="edit-page-id" value={editingPage.id} />
 
           <label for="edit-title-field">
-            Title
+            {t("Title")}
             {/* `maxlength` comes from the SAME constant the validator
                 enforces, so the browser cannot accept what the server
                 rejects. */}
@@ -632,7 +637,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="edit-slug">
-            Slug
+            {t("Slug")}
             <input
               type="text"
               id="edit-slug"
@@ -644,7 +649,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="edit-page-type">
-            Page type
+            {t("Page type")}
             <select id="edit-page-type" name="pageType">
               {PAGE_TYPES.map((value) => (
                 <option value={value} selected={editingPage.pageType === value}>
@@ -655,7 +660,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="edit-menu-order">
-            Menu order
+            {t("Menu order")}
             <input
               type="number"
               id="edit-menu-order"
@@ -666,7 +671,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="edit-excerpt">
-            Excerpt (optional)
+            {t("Excerpt (optional)")}
             <textarea
               id="edit-excerpt"
               name="excerpt"
@@ -678,14 +683,13 @@ const editingBodyText = editingPage
 
           {editingBodyText === null ? (
             <p class="form-legend">
-              The body of this page holds blocks this plain-text editor cannot
-              represent — an image gallery or a video embed. Structure and
-              excerpt are still editable; the body is left untouched, because
-              saving it from here would drop those blocks.
+              {t(
+                "The body of this page holds blocks this plain-text editor cannot represent \u2014 an image gallery or a video embed. Structure and excerpt are still editable; the body is left untouched, because saving it from here would drop those blocks."
+              )}
             </p>
           ) : (
             <label for="edit-body">
-              Body
+              {t("Body")}
               <textarea
                 id="edit-body"
                 name="body"
@@ -697,7 +701,7 @@ const editingBodyText = editingPage
           )}
 
           <button type="submit" id="page-edit-submit">
-            Save page
+            {t("Save page")}
           </button>
         </form>
       </section>
@@ -708,13 +712,15 @@ const editingBodyText = editingPage
     canCreate && !loadError && !showsBin && (
       <section class="admin-section fade-in-up" aria-labelledby="create-title">
         <h2 class="admin-section-title" id="create-title">
-          New page
+          {t("New page")}
         </h2>
         <form id="page-create-form" class="admin-create-form">
           <p class="form-legend">
-            Creates a draft. Separate paragraphs with a blank line — each one
-            becomes a <code>paragraph</code> block, the only block type this
-            editor writes.
+            {t(
+              "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
+            )}
+            <code>{t("paragraph")}</code>
+            {t("block, the only block type this editor writes.")}
           </p>
           <p
             id="page-create-error"
@@ -724,7 +730,7 @@ const editingBodyText = editingPage
           />
 
           <label for="create-title-field">
-            Title
+            {t("Title")}
             <input
               type="text"
               id="create-title-field"
@@ -736,7 +742,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-slug">
-            Slug
+            {t("Slug")}
             <input
               type="text"
               id="create-slug"
@@ -748,7 +754,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-locale">
-            Locale
+            {t("Locale")}
             <input
               type="text"
               id="create-locale"
@@ -759,7 +765,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-page-type">
-            Page type
+            {t("Page type")}
             <select id="create-page-type" name="pageType">
               {PAGE_TYPES.map((value) => (
                 <option value={value}>{value}</option>
@@ -768,7 +774,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-visibility">
-            Visibility
+            {t("Visibility")}
             <select id="create-visibility" name="visibility">
               {BLOG_CONTENT_VISIBILITIES.map((value) => (
                 <option value={value}>{value}</option>
@@ -777,7 +783,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-menu-order">
-            Menu order
+            {t("Menu order")}
             <input
               type="number"
               id="create-menu-order"
@@ -788,7 +794,7 @@ const editingBodyText = editingPage
           </label>
 
           <label for="create-excerpt">
-            Excerpt (optional)
+            {t("Excerpt (optional)")}
             <textarea
               id="create-excerpt"
               name="excerpt"
@@ -802,12 +808,12 @@ const editingBodyText = editingPage
               `maxlength` — the validator imposes no bound on the body, and a
               hand-typed one would be a limit no server enforces. */}
           <label for="create-body">
-            Body
+            {t("Body")}
             <textarea id="create-body" name="body" rows="14" required />
           </label>
 
           <button type="submit" id="page-create-submit">
-            Create draft
+            {t("Create draft")}
           </button>
         </form>
       </section>

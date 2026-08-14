@@ -1,0 +1,191 @@
+---
+/**
+ * LanguageSwitcher — replaces `LocaleBadge` (ADR-0095).
+ *
+ * `LocaleBadge`'s comment argued, correctly, that a `<select>` with one option is
+ * the worst kind of fake affordance: it looks switchable and is not. That
+ * argument held for exactly as long as there was nothing behind it. There now is,
+ * so the badge becomes the control it was always the placeholder for — and the
+ * props it already took (a locale rather than an assumption) are why this is a
+ * replacement rather than a rewrite.
+ *
+ * ## Why a form that submits, rather than a `<select>` driven by script
+ *
+ * The switch has to work on `/login` and on ADR-0088's tenant-selection screen —
+ * pages where there is no session, so no preference can be stored, and the
+ * cookie is the only place the choice can live. A plain form POST works there,
+ * works with script disabled, and needs no client bundle at all.
+ *
+ * The `<script>` below is a progressive ENHANCEMENT (submit on change, so the
+ * reader does not have to find a button), not the mechanism. It is
+ * import-bearing so Astro bundles it to an external module — an inline script
+ * would be blocked by this repo's `default-src 'self'` CSP, which admits exactly
+ * one inline script (the theme-init hash) and no others.
+ *
+ * ## Why it posts to an API route instead of setting the cookie in script
+ *
+ * Because a signed-in reader's choice must also PERSIST to their principal, and
+ * only the server can do that. A script-set cookie would work for the anonymous
+ * case and silently fail to follow the reader to their next device.
+ *
+ * ## Why there are TWO endpoints and the caller picks
+ *
+ * `POST /api/v1/auth/preferences` is a `defineSelfServiceTenantRoute`: it stores
+ * the choice against the principal AND sets the cookie, and it REQUIRES a bearer
+ * — answering 401 without one, by the factory's construction.
+ * `POST /api/v1/auth/preferences/locale` sets only the cookie and needs no
+ * session at all.
+ *
+ * Neither can serve both cases, so the page that knows whether a session exists
+ * chooses: `AdminLayout` passes `persist`, the unauthenticated screens do not.
+ * Defaulting to the anonymous route is the safe direction — a missing `persist`
+ * costs durability, while wrongly assuming a session would turn the switcher into
+ * a control that 401s.
+ */
+import { LOCALE_ENDONYM, LOCALE_FLAG, listLocales } from "../lib/i18n";
+import { getTranslatorFor } from "../lib/i18n";
+
+interface Props {
+  /** The locale actually being served, from `Astro.locals.locale`. */
+  locale?: string;
+  /**
+   * True when the page is rendered inside an authenticated session, so the
+   * choice can be stored against the principal rather than only cookied.
+   */
+  persist?: boolean;
+}
+
+const { locale, persist = false } = Astro.props;
+const current = locale ?? Astro.locals.locale;
+const { t } = getTranslatorFor(Astro.locals.locale);
+
+const action = persist
+  ? "/api/v1/auth/preferences"
+  : "/api/v1/auth/preferences/locale";
+
+/**
+ * Where to come back to after the switch. Taken from the SERVER's view of the
+ * current URL rather than from a form field, so the redirect target can never be
+ * attacker-supplied — an open redirect is exactly what a "return to where you
+ * were" parameter turns into when it is trusted.
+ */
+const returnPath = `${Astro.url.pathname}${Astro.url.search}`;
+---
+
+<form class="locale-switcher" method="post" action={action}>
+  <input type="hidden" name="return_to" value={returnPath} />
+  <label class="sr-only" for="locale-switcher-select">{t("Language")}</label>
+  <span class="locale-switcher-flag" aria-hidden="true">
+    {LOCALE_FLAG[current] ?? "🌐"}
+  </span>
+  <select
+    id="locale-switcher-select"
+    class="locale-switcher-select"
+    name="locale"
+    aria-label={t("Change language")}
+  >
+    {
+      listLocales().map((option) => (
+        <option value={option} selected={option === current} lang={option}>
+          {LOCALE_ENDONYM[option]}
+        </option>
+      ))
+    }
+  </select>
+  {
+    /* Shown only when script is unavailable — the enhancement below hides it.
+      A form with no visible submit and no script is a control that cannot be
+      operated, which is the very failure this component replaced. */
+  }
+  <button type="submit" class="locale-switcher-submit"
+    >{t("Change language")}</button
+  >
+</form>
+
+<style>
+  .locale-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--sp-1) var(--sp-2);
+    font-size: var(--fs-sm);
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+
+  .locale-switcher-select {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    /* Native arrow is enough; a custom one would need a background-image the
+       CSP's `img-src 'self'` would have to admit as a data: URI. */
+    padding-inline-end: var(--sp-1);
+  }
+
+  .locale-switcher-select:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  .locale-switcher-submit {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    padding: 0 var(--sp-2);
+  }
+
+  /* Hidden once the enhancement takes over. `[hidden]` alone loses to this
+     rule's `display` — the trap that made four auth forms inert — so the
+     attribute selector carries `!important` here. */
+  .locale-switcher-submit[hidden] {
+    display: none !important;
+  }
+
+  /* The flag is decoration; the language name carries the meaning. On phones the
+     topbar is already crowded, so keep the glyph and let the select shrink. */
+  @media (max-width: 767.98px) {
+    .locale-switcher {
+      min-height: 44px;
+    }
+  }
+</style>
+
+<script>
+  // Import-bearing so Astro emits an EXTERNAL module (CSP `script-src 'self'`).
+  import { LOCALE_COOKIE_NAME } from "../lib/i18n/request-locale";
+
+  const form = document.querySelector<HTMLFormElement>(".locale-switcher");
+  const select = form?.querySelector<HTMLSelectElement>(
+    ".locale-switcher-select"
+  );
+  const submit = form?.querySelector<HTMLButtonElement>(
+    ".locale-switcher-submit"
+  );
+
+  if (form && select) {
+    // Script is available, so the explicit button is redundant.
+    submit?.setAttribute("hidden", "hidden");
+
+    select.addEventListener("change", () => {
+      // `form.requestSubmit()` rather than `submit()`: the latter skips
+      // validation and, more importantly here, does not fire `submit` handlers —
+      // so anything added later would be silently bypassed.
+      form.requestSubmit();
+    });
+  }
+
+  // Referenced so the import is not elided by the bundler, and so this file
+  // fails to build if the cookie name is ever renamed out from under it — the
+  // endpoint and this component must agree on it.
+  if (typeof LOCALE_COOKIE_NAME !== "string") {
+    throw new Error("LOCALE_COOKIE_NAME must be a string");
+  }
+</script>

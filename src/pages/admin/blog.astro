@@ -122,8 +122,10 @@ import {
   MAX_TITLE_LENGTH
 } from "../../modules/blog-content/domain/content-validation";
 import { readParagraphBodyText } from "../../lib/ui/blog-body-editor";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 function readParam(name: string): string {
   return (Astro.url.searchParams.get(name) ?? "").trim();
@@ -366,19 +368,22 @@ const selectedPost = selectedPostId
 
 <AdminLayout title="Blog posts">
   <header class="page-header fade-in-up">
-    <h1 id="blog-heading">Blog posts</h1>
+    <h1 id="blog-heading">{t("Blog posts")}</h1>
     <p class="page-description">
-      The post lifecycle: draft, review, scheduled, published, archived. Pages,
-      taxonomy, presentation and homepage composition are separate screens.
-      Scheduled posts are published by <code>blog:publish:scheduled</code> — scheduling
-      sets the time, it does not publish.
+      {
+        t(
+          "The post lifecycle: draft, review, scheduled, published, archived. Pages, taxonomy, presentation and homepage composition are separate screens. Scheduled posts are published by"
+        )
+      }<code>{t("blog:publish:scheduled")}</code>{
+        t("\u2014 scheduling sets the time, it does not publish.")
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="blog-denied">
-        You do not have permission to view blog posts.
+        {t("You do not have permission to view blog posts.")}
       </p>
     )
   }
@@ -386,8 +391,9 @@ const selectedPost = selectedPostId
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="blog-error">
-        Posts could not be loaded right now. This is a problem reading the list,
-        not an empty list — please try again later.
+        {t(
+          "Posts could not be loaded right now. This is a problem reading the list, not an empty list \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -406,7 +412,7 @@ const selectedPost = selectedPostId
   {
     canRead && !loadError && (
       <form method="get" class="admin-toolbar fade-in-up" id="post-filter-form">
-        <label for="filter-search">Search titles</label>
+        <label for="filter-search">{t("Search titles")}</label>
         <input
           id="filter-search"
           name="search"
@@ -415,10 +421,10 @@ const selectedPost = selectedPostId
           autocomplete="off"
         />
 
-        <label for="filter-status">Status</label>
+        <label for="filter-status">{t("Status")}</label>
         <select id="filter-status" name="status">
           <option value="" selected={statusFilter === undefined}>
-            Any status
+            {t("Any status")}
           </option>
           {BLOG_CONTENT_STATUSES.map((value) => (
             <option value={value} selected={statusFilter === value}>
@@ -427,7 +433,7 @@ const selectedPost = selectedPostId
           ))}
         </select>
 
-        <button type="submit">Apply filters</button>
+        <button type="submit">{t("Apply filters")}</button>
 
         {/* Carried across submit, so applying a filter does not silently
             bounce the operator out of the bin. */}
@@ -457,16 +463,16 @@ const selectedPost = selectedPostId
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="blog-posts-table">
             <caption class="sr-only">
-              Blog posts, most recently updated first.
+              {t("Blog posts, most recently updated first.")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Status</th>
-                <th scope="col">Visibility</th>
-                <th scope="col">Published</th>
-                <th scope="col">Updated</th>
-                {showsRowActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Title")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Visibility")}</th>
+                <th scope="col">{t("Published")}</th>
+                <th scope="col">{t("Updated")}</th>
+                {showsRowActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -535,7 +541,7 @@ const selectedPost = selectedPostId
                               class="quick-link"
                               href={linkWith({ post: post.id })}
                             >
-                              Revisions
+                              {t("Revisions")}
                               <span class="quick-link-arrow" aria-hidden="true">
                                 →
                               </span>
@@ -549,7 +555,7 @@ const selectedPost = selectedPostId
                               class="quick-link"
                               href={linkWith({ edit: post.id })}
                             >
-                              Edit
+                              {t("Edit")}
                               <span class="quick-link-arrow" aria-hidden="true">
                                 →
                               </span>
@@ -563,7 +569,7 @@ const selectedPost = selectedPostId
                                 class="btn-inline post-submit-btn"
                                 data-post-id={post.id}
                               >
-                                Submit for review
+                                {t("Submit for review")}
                               </button>
                             )}
                           {canPublish &&
@@ -574,7 +580,7 @@ const selectedPost = selectedPostId
                                 class="btn-inline post-publish-btn"
                                 data-post-id={post.id}
                               >
-                                Publish
+                                {t("Publish")}
                               </button>
                             )}
                           {canSchedule &&
@@ -585,7 +591,7 @@ const selectedPost = selectedPostId
                                 class="btn-inline post-schedule-btn"
                                 data-post-id={post.id}
                               >
-                                Schedule
+                                {t("Schedule")}
                               </button>
                             )}
                           {canArchive &&
@@ -596,7 +602,7 @@ const selectedPost = selectedPostId
                                 class="btn-inline post-archive-btn"
                                 data-post-id={post.id}
                               >
-                                Archive
+                                {t("Archive")}
                               </button>
                             )}
                           {/* Restore undoes the BIN, so it belongs to rows in
@@ -608,7 +614,7 @@ const selectedPost = selectedPostId
                               class="btn-inline post-restore-btn"
                               data-post-id={post.id}
                             >
-                              Restore
+                              {t("Restore")}
                             </button>
                           )}
                           {canDelete && !showsBin && (
@@ -618,7 +624,7 @@ const selectedPost = selectedPostId
                               data-post-id={post.id}
                               data-post-title={post.title}
                             >
-                              Delete
+                              {t("Delete")}
                             </button>
                           )}
                           {/* `canPurgePost` accepts archived OR soft-deleted,
@@ -631,7 +637,7 @@ const selectedPost = selectedPostId
                                 data-post-id={post.id}
                                 data-post-title={post.title}
                               >
-                                Purge
+                                {t("Purge")}
                               </button>
                             )}
                         </div>
@@ -654,18 +660,18 @@ const selectedPost = selectedPostId
                 class="quick-link"
                 href={linkWith({ page: String(pageNumber - 1) })}
               >
-                ← Previous
+                {t("\u2190 Previous")}
               </a>
             )}
             <span class="cell-muted">
-              Page {pageNumber} of {lastPage}
+              {t("Page")} {pageNumber} of {lastPage}
             </span>
             {pageNumber < lastPage && (
               <a
                 class="quick-link"
                 href={linkWith({ page: String(pageNumber + 1) })}
               >
-                Next →
+                {t("Next \u2192")}
               </a>
             )}
           </div>
@@ -682,7 +688,7 @@ const selectedPost = selectedPostId
         id="blog-revisions"
       >
         <h2 class="admin-section-title" id="revisions-title">
-          Revisions
+          {t("Revisions")}
           <span class="count-pill">{revisions.length}</span>
         </h2>
         <p class="page-description">
@@ -691,20 +697,22 @@ const selectedPost = selectedPostId
             <span class="cell-muted"> · {selectedPost.title}</span>
           )}
           {" · "}
-          <a href={linkWith({ post: null })}>Close</a>
+          <a href={linkWith({ post: null })}>{t("Close")}</a>
         </p>
 
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
-            <caption class="sr-only">Revisions for the selected post.</caption>
+            <caption class="sr-only">
+              {t("Revisions for the selected post.")}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">#</th>
-                <th scope="col">Title at revision</th>
-                <th scope="col">Status</th>
-                <th scope="col">Note</th>
-                <th scope="col">Created</th>
-                {canRestoreRevisions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Title at revision")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Note")}</th>
+                <th scope="col">{t("Created")}</th>
+                {canRestoreRevisions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -718,10 +726,11 @@ const selectedPost = selectedPostId
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌸
                       </span>
-                      <span class="empty-state-title">No revisions</span>
+                      <span class="empty-state-title">{t("No revisions")}</span>
                       <span class="empty-state-text">
-                        A revision is recorded when a post is edited — or the id
-                        does not name a post in this tenant.
+                        {t(
+                          "A revision is recorded when a post is edited \u2014 or the id does not name a post in this tenant."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -759,7 +768,7 @@ const selectedPost = selectedPostId
                               revision.revisionNumber
                             )}
                           >
-                            Restore
+                            {t("Restore")}
                           </button>
                         </div>
                       </td>
@@ -778,18 +787,18 @@ const selectedPost = selectedPostId
     canUpdate && !loadError && editingPost && (
       <section class="admin-section fade-in-up" aria-labelledby="edit-title">
         <h2 class="admin-section-title" id="edit-title">
-          Edit post
+          {t("Edit post")}
         </h2>
         <form id="post-edit-form" class="admin-create-form">
           <p class="form-legend">
             <span class="cell-code">{editingPost.id}</span>
             {" · "}
-            <a href={linkWith({ edit: null })}>Close</a>
+            <a href={linkWith({ edit: null })}>{t("Close")}</a>
           </p>
           <p class="form-legend">
-            A partial update: only the fields below are sent, so a change made
-            elsewhere to the SEO fields, terms or featured media is not
-            clobbered by a stale copy of them.
+            {t(
+              "A partial update: only the fields below are sent, so a change made elsewhere to the SEO fields, terms or featured media is not clobbered by a stale copy of them."
+            )}
           </p>
           <p
             id="post-edit-error"
@@ -801,7 +810,7 @@ const selectedPost = selectedPostId
           <input type="hidden" id="edit-post-id" value={editingPost.id} />
 
           <label for="edit-title-field">
-            Title
+            {t("Title")}
             <input
               type="text"
               id="edit-title-field"
@@ -814,7 +823,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="edit-slug">
-            Slug
+            {t("Slug")}
             <input
               type="text"
               id="edit-slug"
@@ -826,7 +835,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="edit-visibility">
-            Visibility
+            {t("Visibility")}
             <select id="edit-visibility" name="visibility">
               {BLOG_CONTENT_VISIBILITIES.map((value) => (
                 <option
@@ -840,7 +849,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="edit-excerpt">
-            Excerpt (optional)
+            {t("Excerpt (optional)")}
             <textarea
               id="edit-excerpt"
               name="excerpt"
@@ -852,14 +861,13 @@ const selectedPost = selectedPostId
 
           {editingBodyText === null ? (
             <p class="form-legend">
-              The body of this post holds blocks this plain-text editor cannot
-              represent — an image gallery or a video embed. Title, slug,
-              visibility and excerpt are still editable; the body is left
-              untouched, because saving it from here would drop those blocks.
+              {t(
+                "The body of this post holds blocks this plain-text editor cannot represent \u2014 an image gallery or a video embed. Title, slug, visibility and excerpt are still editable; the body is left untouched, because saving it from here would drop those blocks."
+              )}
             </p>
           ) : (
             <label for="edit-body">
-              Body
+              {t("Body")}
               <textarea
                 id="edit-body"
                 name="body"
@@ -871,7 +879,7 @@ const selectedPost = selectedPostId
           )}
 
           <button type="submit" id="post-edit-submit">
-            Save post
+            {t("Save post")}
           </button>
         </form>
       </section>
@@ -882,13 +890,15 @@ const selectedPost = selectedPostId
     canCreate && !loadError && (
       <section class="admin-section fade-in-up" aria-labelledby="create-title">
         <h2 class="admin-section-title" id="create-title">
-          New draft
+          {t("New draft")}
         </h2>
         <form id="post-create-form" class="admin-create-form">
           <p class="form-legend">
-            Creates a draft. Separate paragraphs with a blank line — each one
-            becomes a <code>paragraph</code> block, the only block type this
-            editor writes.
+            {t(
+              "Creates a draft. Separate paragraphs with a blank line \u2014 each one becomes a"
+            )}
+            <code>{t("paragraph")}</code>
+            {t("block, the only block type this editor writes.")}
           </p>
           <p
             id="post-create-error"
@@ -898,7 +908,7 @@ const selectedPost = selectedPostId
           />
 
           <label for="create-title-field">
-            Title
+            {t("Title")}
             {/* `maxlength` comes from the SAME constant the validator
                 enforces, so the browser cannot accept what the server
                 rejects. */}
@@ -913,7 +923,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="create-slug">
-            Slug
+            {t("Slug")}
             <input
               type="text"
               id="create-slug"
@@ -925,7 +935,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="create-locale">
-            Locale
+            {t("Locale")}
             <input
               type="text"
               id="create-locale"
@@ -936,7 +946,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="create-visibility">
-            Visibility
+            {t("Visibility")}
             <select id="create-visibility" name="visibility">
               {BLOG_CONTENT_VISIBILITIES.map((value) => (
                 <option value={value}>{value}</option>
@@ -945,7 +955,7 @@ const selectedPost = selectedPostId
           </label>
 
           <label for="create-excerpt">
-            Excerpt (optional)
+            {t("Excerpt (optional)")}
             <textarea
               id="create-excerpt"
               name="excerpt"
@@ -959,12 +969,12 @@ const selectedPost = selectedPostId
               `maxlength` — the validator imposes no bound on the body, and a
               hand-typed one would be a limit no server enforces. */}
           <label for="create-body">
-            Body
+            {t("Body")}
             <textarea id="create-body" name="body" rows="14" required />
           </label>
 
           <button type="submit" id="post-create-submit">
-            Create draft
+            {t("Create draft")}
           </button>
         </form>
       </section>

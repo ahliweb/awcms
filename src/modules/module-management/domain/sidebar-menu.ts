@@ -137,32 +137,59 @@ export const DEFAULT_MODULE_TYPE: Readonly<Record<string, string>> = {
 /**
  * Admin items owned by no module.
  *
- * One entry, where awcms-micro has five: `/admin/access-users`, `/admin/sync`,
- * `/admin/settings` and `/admin/profile` are pages this base does not have.
- * Listing them would put four permanent 404s in the sidebar — the exact defect
- * this change removes — so they arrive if and when their pages do.
+ * Two entries, where awcms-micro has five. `/admin/access-users`,
+ * `/admin/sync` and `/admin/settings` remain pages this base does not have;
+ * listing them would put permanent 404s in the sidebar — the exact defect this
+ * change removed — so they arrive if and when their pages do.
  *
- * The dashboard is ungated on purpose. `/admin/index.astro` already renders
- * without `reporting.dashboard.read`, degrading to an empty-state instead of a
- * denial, so gating the link would hide a page the user can still open.
+ * micro's `/admin/profile` DID arrive, as `/admin/account` (ADR-0096). The name
+ * differs on purpose: `profile_identity` owns a `Profiles` screen about parties
+ * in general, and two sidebar items both called some form of "profile" would be
+ * two different things wearing one word.
+ *
+ * Both entries are ungated on purpose. `/admin/index.astro` renders without
+ * `reporting.dashboard.read`, degrading to an empty state instead of a denial,
+ * so gating the link would hide a page the user can still open; `/admin/account`
+ * carries no permission at all, because its subject is the caller (ADR-0096).
  */
 export const CORE_NAV_ENTRIES: readonly {
   path: string;
   labelKey: string;
   order: number;
-}[] = [{ path: "/admin", labelKey: "admin.layout.nav_dashboard", order: 0 }];
+}[] = [
+  { path: "/admin", labelKey: "admin.layout.nav_dashboard", order: 0 },
+  // ADR-0096. The comment above named `/admin/profile` as one of the pages this
+  // base "does not have … they arrive if and when their pages do". This is that
+  // arrival, under the name the screen actually uses.
+  //
+  // Core rather than `identity_access`, and ungated for the same reason the
+  // dashboard is: every signed-in person has an account, the screen carries no
+  // `requiredPermission`, and `identity_access`'s own entries (Users, Roles,
+  // Invitations) are administrative screens about OTHER people. Filing it there
+  // would group it with things it is not, under a heading that implies authority
+  // over someone else.
+  { path: "/admin/account", labelKey: "admin.layout.nav_account", order: 1 }
+];
 
 /**
  * `labelKey` -> the English string actually rendered.
  *
- * This base has no gettext catalog (`LocaleBadge` exists precisely because a
- * language switcher with one language is a fake affordance), yet descriptors
- * have always carried `labelKey` — and, until now, nothing rendered it. A key
- * with no resolver is how `admin.layout.nav_blog` sat in the registry unnoticed
- * while pointing at a missing page.
+ * Descriptors have always carried `labelKey` — and, for a long time, nothing
+ * rendered it. A key with no resolver is how `admin.layout.nav_blog` sat in the
+ * registry unnoticed while pointing at a missing page. So: one table, gated for
+ * completeness in both directions.
  *
- * So: one table, gated for completeness in both directions. When a real
- * catalog lands this becomes its seed rather than a thing to unpick.
+ * ADR-0095 landed the catalog this comment used to anticipate, and it is the
+ * SEED that was predicted rather than a thing that had to be unpicked — but note
+ * carefully what did NOT happen. The catalog is keyed on the English STRING, not
+ * on `labelKey`, so this table is unchanged and `AdminLayout` translates its
+ * output (`t(entry.label)`). Two consequences worth stating:
+ *
+ *   - The values below are `msgid`s. Rewording one silently detaches its
+ *     translation, and `i18n:catalog:check` is what makes that visible.
+ *   - `tests/i18n-sidebar-labels.test.ts` asserts every value here exists in the
+ *     catalogs. That check reads this table rather than call syntax, which is why
+ *     `AdminLayout` is exempt from the gate's literal-msgid harvest.
  */
 export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.menu_type.system": "System",
@@ -173,6 +200,7 @@ export const SIDEBAR_LABELS: Readonly<Record<string, string>> = {
   "admin.menu_type.identity": "Identity",
   "admin.menu_type.general": "General",
   "admin.layout.nav_dashboard": "Dashboard",
+  "admin.layout.nav_account": "My account",
   "admin.layout.nav_tenants": "Tenants",
   "admin.layout.nav_offices": "Offices",
   "admin.layout.nav_tenant_domains": "Tenant domains",

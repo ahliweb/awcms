@@ -46,8 +46,10 @@ import {
   type DatasetSummary
 } from "../../modules/idn-admin-regions/application/dataset-lifecycle";
 import { IDN_ADMIN_REGIONS_PROVENANCE } from "../../modules/idn-admin-regions/domain/source-provenance";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -165,19 +167,20 @@ const numberFormatter = new Intl.NumberFormat("en-US");
 
 <AdminLayout title="Region datasets">
   <header class="page-header fade-in-up">
-    <h1 id="idn-regions-heading">Region datasets</h1>
+    <h1 id="idn-regions-heading">{t("Region datasets")}</h1>
     <p class="page-description">
-      The Indonesia administrative-region hierarchy (province, regency/city,
-      district, village) that address forms and regional reports read from.
-      Versions are imported on deploy; exactly one is served at a time, to every
-      tenant.
+      {
+        t(
+          "The Indonesia administrative-region hierarchy (province, regency/city, district, village) that address forms and regional reports read from. Versions are imported on deploy; exactly one is served at a time, to every tenant."
+        )
+      }
     </p>
   </header>
 
   {
     !canReadDatasets && (
       <p class="state-notice fade-in-up" id="idn-regions-denied">
-        You do not have permission to view region datasets.
+        {t("You do not have permission to view region datasets.")}
       </p>
     )
   }
@@ -185,8 +188,9 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {
     loadError && (
       <p class="state-notice fade-in-up" id="idn-regions-error">
-        The dataset console could not be loaded right now. Please try again
-        later.
+        {t(
+          "The dataset console could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -202,10 +206,10 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {
     canReadDatasets && (
       <section class="admin-section fade-in-up" id="idn-regions-summary">
-        <h2 class="admin-section-title">Currently served</h2>
+        <h2 class="admin-section-title">{t("Currently served")}</h2>
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Active version</span>
+            <span class="stat-label">{t("Active version")}</span>
             <span class="stat-value stat-value--mono">
               {activeDataset ? activeDataset.datasetCode : "none"}
             </span>
@@ -216,7 +220,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
             )}
           </div>
           <div class="stat-card">
-            <span class="stat-label">Regions in this version</span>
+            <span class="stat-label">{t("Regions in this version")}</span>
             <span class="stat-value">
               {activeDataset
                 ? numberFormatter.format(activeDataset.rowCount)
@@ -224,11 +228,11 @@ const numberFormatter = new Intl.NumberFormat("en-US");
             </span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Imported versions</span>
+            <span class="stat-label">{t("Imported versions")}</span>
             <span class="stat-value">{datasets.length}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Deployment</span>
+            <span class="stat-label">{t("Deployment")}</span>
             <span class="stat-value stat-value--mono">{tenancyMode}</span>
             <span class="stat-hint">
               {tenancyMode === "single"
@@ -244,7 +248,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {
     withheldByPlatformScope && (
       <section class="admin-section fade-in-up" id="idn-regions-scope-notice">
-        <h2 class="admin-section-title">Read-only here</h2>
+        <h2 class="admin-section-title">{t("Read-only here")}</h2>
         <p class="page-description">
           Changing the served version affects every tenant, so it can only be
           done from the platform tenant
@@ -264,7 +268,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {
     (canActivate || canRollback) && (
       <section class="admin-section fade-in-up" id="idn-regions-actions">
-        <h2 class="admin-section-title">Serve a different version</h2>
+        <h2 class="admin-section-title">{t("Serve a different version")}</h2>
         <p class="page-description">
           {tenancyMode === "multi"
             ? "This deployment serves more than one tenant. A change here reaches all of them at once."
@@ -278,7 +282,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
               class="btn-inline btn-inline--danger"
               disabled={!hasPreviousDataset}
             >
-              Roll back to previous version
+              {t("Roll back to previous version")}
             </button>
             {!hasPreviousDataset && (
               <span class="cell-muted">
@@ -295,23 +299,23 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     canReadDatasets && (
       <section class="admin-section fade-in-up" id="idn-regions-datasets">
         <h2 class="admin-section-title">
-          Imported versions
+          {t("Imported versions")}
           <span class="count-pill">{datasets.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Every imported dataset version, newest first
+              {t("Every imported dataset version, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Version</th>
-                <th scope="col">Status</th>
-                <th scope="col">Regions</th>
-                <th scope="col">Imported</th>
-                <th scope="col">Activated</th>
-                <th scope="col">Provenance</th>
-                {canActivate && <th scope="col">Action</th>}
+                <th scope="col">{t("Version")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Regions")}</th>
+                <th scope="col">{t("Imported")}</th>
+                <th scope="col">{t("Activated")}</th>
+                <th scope="col">{t("Provenance")}</th>
+                {canActivate && <th scope="col">{t("Action")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -323,10 +327,13 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                         📦
                       </span>
                       <span class="empty-state-title">
-                        No versions imported
+                        {t("No versions imported")}
                       </span>
                       <span class="empty-state-text">
-                        Run <code>bun run idn-regions:import -- --commit</code>{" "}
+                        {t("Run")}
+                        <code>
+                          {t("bun run idn-regions:import -- --commit")}
+                        </code>{" "}
                         on the deployment to import the vendored dataset.
                       </span>
                     </div>
@@ -364,26 +371,28 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                     {/* Operator-facing evidence, rendered as escaped TEXT
                         inside `<details>` — never as HTML. */}
                     <details>
-                      <summary>Source</summary>
+                      <summary>{t("Source")}</summary>
                       <p>
-                        <strong>Repository:</strong> {dataset.sourceRepository}
+                        <strong>{t("Repository:")}</strong>{" "}
+                        {dataset.sourceRepository}
                       </p>
                       <p>
-                        <strong>Commit:</strong>{" "}
+                        <strong>{t("Commit:")}</strong>{" "}
                         <span class="cell-code">{dataset.sourceCommitSha}</span>
                       </p>
                       <p>
-                        <strong>File SHA-256:</strong>{" "}
+                        <strong>{t("File SHA-256:")}</strong>{" "}
                         <span class="cell-code">
                           {dataset.sourceFileSha256}
                         </span>
                       </p>
                       <p>
-                        <strong>License:</strong> {dataset.sourceLicense}
+                        <strong>{t("License:")}</strong> {dataset.sourceLicense}
                       </p>
                       {dataset.sourceReference && (
                         <p>
-                          <strong>Decree:</strong> {dataset.sourceReference}
+                          <strong>{t("Decree:")}</strong>{" "}
+                          {dataset.sourceReference}
                         </p>
                       )}
                     </details>
@@ -397,7 +406,7 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                           data-activate-dataset={dataset.id}
                           data-dataset-code={dataset.datasetCode}
                         >
-                          Serve this version
+                          {t("Serve this version")}
                         </button>
                       ) : (
                         <span class="cell-muted">—</span>
@@ -416,16 +425,20 @@ const numberFormatter = new Intl.NumberFormat("en-US");
   {
     canReadDatasets && (
       <section class="admin-section fade-in-up" id="idn-regions-caveat">
-        <h2 class="admin-section-title">What this data is, and is not</h2>
+        <h2 class="admin-section-title">
+          {t("What this data is, and is not")}
+        </h2>
         <p class="page-description">
           {IDN_ADMIN_REGIONS_PROVENANCE.officialReferenceCaveat}
         </p>
         <p class="page-description">
-          New versions arrive by deploy, not from this screen:
-          <code>bun run idn-regions:import -- --commit</code> parses the dump
-          vendored in the repository. Importing never activates — a new version
-          lands as <span class="cell-code">validated</span> and is served only
-          when someone chooses it here.
+          {t("New versions arrive by deploy, not from this screen:")}
+          <code>{t("bun run idn-regions:import -- --commit")}</code>
+          {t(
+            "parses the dump vendored in the repository. Importing never activates \u2014 a new version lands as"
+          )}
+          <span class="cell-code">{t("validated")}</span>
+          {t("and is served only when someone chooses it here.")}
         </p>
       </section>
     )

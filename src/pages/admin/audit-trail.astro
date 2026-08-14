@@ -37,12 +37,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listAuditEvents,
   type AuditEventRecord
 } from "../../modules/logging/application/audit-log";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -134,18 +136,20 @@ function severityVariant(severity: string): string {
 
 <AdminLayout title="Audit trail">
   <header class="page-header fade-in-up">
-    <h1 id="audit-trail-heading">Audit trail</h1>
+    <h1 id="audit-trail-heading">{t("Audit trail")}</h1>
     <p class="page-description">
-      Append-only record of high-risk actions taken in this tenant — who did
-      what, to which resource, and when. Sensitive values are redacted before an
-      event is ever stored, so nothing here can be un-redacted.
+      {
+        t(
+          "Append-only record of high-risk actions taken in this tenant \u2014 who did what, to which resource, and when. Sensitive values are redacted before an event is ever stored, so nothing here can be un-redacted."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="audit-trail-denied">
-        You do not have permission to view the audit trail.
+        {t("You do not have permission to view the audit trail.")}
       </p>
     )
   }
@@ -153,7 +157,9 @@ function severityVariant(severity: string): string {
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="audit-trail-error">
-        The audit trail could not be loaded right now. Please try again later.
+        {t(
+          "The audit trail could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -164,10 +170,10 @@ function severityVariant(severity: string): string {
         {/* A GET form: it navigates with query params, so the filter works
             with JavaScript disabled and ships no bundle. */}
         <form class="admin-create-form fade-in-up" method="get" role="search">
-          <p class="form-legend">Filter</p>
+          <p class="form-legend">{t("Filter")}</p>
 
           <label for="filter-resource-type">
-            Resource type
+            {t("Resource type")}
             <input
               type="text"
               id="filter-resource-type"
@@ -196,37 +202,37 @@ function severityVariant(severity: string): string {
           </label>
 
           <button type="submit" class="module-toggle">
-            Apply filter
+            {t("Apply filter")}
           </button>
           {(resourceTypeFilter !== "" || limit !== DEFAULT_LIMIT) && (
             <a class="btn-inline" href="/admin/audit-trail">
-              Clear filter
+              {t("Clear filter")}
             </a>
           )}
         </form>
 
         <section class="admin-section fade-in-up" id="audit-trail-events">
           <h2 class="admin-section-title">
-            Events
+            {t("Events")}
             <span class="count-pill">{events.length}</span>
           </h2>
 
           <div class="data-table-scroll">
             <table class="data-table data-table--stack">
               <caption class="sr-only">
-                Audit events, newest first
+                {t("Audit events, newest first")}
                 {resourceTypeFilter !== "" &&
                   `, filtered to resource type ${resourceTypeFilter}`}
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">When (UTC)</th>
-                  <th scope="col">Severity</th>
-                  <th scope="col">Module</th>
-                  <th scope="col">Action</th>
-                  <th scope="col">Resource</th>
-                  <th scope="col">Message</th>
-                  <th scope="col">Detail</th>
+                  <th scope="col">{t("When (UTC)")}</th>
+                  <th scope="col">{t("Severity")}</th>
+                  <th scope="col">{t("Module")}</th>
+                  <th scope="col">{t("Action")}</th>
+                  <th scope="col">{t("Resource")}</th>
+                  <th scope="col">{t("Message")}</th>
+                  <th scope="col">{t("Detail")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -289,10 +295,10 @@ function severityVariant(severity: string): string {
                         <span class="cell-muted">—</span>
                       ) : (
                         <details>
-                          <summary>View</summary>
+                          <summary>{t("View")}</summary>
                           {event.correlationId !== null && (
                             <p class="cell-muted">
-                              Correlation:{" "}
+                              {t("Correlation:")}{" "}
                               <span class="cell-code">
                                 {event.correlationId}
                               </span>

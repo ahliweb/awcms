@@ -62,8 +62,10 @@ import {
   type ThemeConfig
 } from "../../modules/theming/domain/theme-config";
 import { listThemeDescriptors } from "../../modules/theming/theme-registry";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -186,22 +188,20 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
 
 <AdminLayout title="Theming">
   <header class="page-header fade-in-up">
-    <h1 id="theming-heading">Theming</h1>
+    <h1 id="theming-heading">{t("Theming")}</h1>
     <p class="page-description">
-      Choose one of the reviewed, built-in themes and configure it by data —
-      design tokens, layout slots, media asset ids, section order and nav
-      placement. There is no uploaded code and no raw CSS: every value is
-      validated against the theme's own declared grammar before it can reach the
-      published stylesheet. The lifecycle is draft → validate → preview →
-      publish, with rollback and retire moving the live pointer only; published
-      versions are immutable.
+      {
+        t(
+          "Choose one of the reviewed, built-in themes and configure it by data \u2014 design tokens, layout slots, media asset ids, section order and nav placement. There is no uploaded code and no raw CSS: every value is validated against the theme's own declared grammar before it can reach the published stylesheet. The lifecycle is draft \u2192 validate \u2192 preview \u2192 publish, with rollback and retire moving the live pointer only; published versions are immutable."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="theming-denied">
-        You do not have permission to view the theming console.
+        {t("You do not have permission to view the theming console.")}
       </p>
     )
   }
@@ -209,8 +209,9 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="theming-error">
-        The theming console could not be loaded right now. Please try again
-        later.
+        {t(
+          "The theming console could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -221,21 +222,21 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {
     canRead && !loadError && (
       <section class="admin-section fade-in-up" id="theming-state">
-        <h2 class="admin-section-title">Current state</h2>
+        <h2 class="admin-section-title">{t("Current state")}</h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              The tenant's active theme pointer and saved draft
+              {t("The tenant's active theme pointer and saved draft")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">What</th>
-                <th scope="col">Value</th>
+                <th scope="col">{t("What")}</th>
+                <th scope="col">{t("Value")}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td data-label="What">Live theme</td>
+                <td data-label="What">{t("Live theme")}</td>
                 <td data-label="Value">
                   {state?.activeThemeKey ? (
                     <span class="status-badge" data-variant="success">
@@ -245,13 +246,13 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                   ) : (
                     <span class="status-badge" data-variant="neutral">
                       <span class="status-dot" aria-hidden="true" />
-                      none — falling back to the default theme
+                      {t("none \u2014 falling back to the default theme")}
                     </span>
                   )}
                 </td>
               </tr>
               <tr>
-                <td data-label="What">Live version</td>
+                <td data-label="What">{t("Live version")}</td>
                 <td data-label="Value">
                   {state?.activeVersionId ? (
                     <span class="cell-code">{state.activeVersionId}</span>
@@ -261,7 +262,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                 </td>
               </tr>
               <tr>
-                <td data-label="What">Saved draft</td>
+                <td data-label="What">{t("Saved draft")}</td>
                 <td data-label="Value">
                   {draft ? (
                     <span class="status-badge" data-variant="info">
@@ -269,7 +270,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                       {draft.themeKey}
                     </span>
                   ) : (
-                    <span class="cell-muted">no draft saved yet</span>
+                    <span class="cell-muted">{t("no draft saved yet")}</span>
                   )}
                 </td>
               </tr>
@@ -283,15 +284,15 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {
     canRead && !loadError && selectedTheme && (
       <section class="admin-section fade-in-up" id="theming-picker-section">
-        <h2 class="admin-section-title">Theme</h2>
+        <h2 class="admin-section-title">{t("Theme")}</h2>
         <p class="page-description">
-          Each theme declares its own tokens, slots and sections, so switching
-          reloads the editor for that theme and discards any unsaved edits on
-          this page.
+          {t(
+            "Each theme declares its own tokens, slots and sections, so switching reloads the editor for that theme and discards any unsaved edits on this page."
+          )}
         </p>
         <div class="admin-toolbar">
           <label for="theming-theme-picker">
-            <span class="sr-only">Theme</span>
+            <span class="sr-only">{t("Theme")}</span>
             <select id="theming-theme-picker">
               {themes.map((theme) => (
                 <option
@@ -316,10 +317,11 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           <span class="empty-state-icon" aria-hidden="true">
             ◻
           </span>
-          <span class="empty-state-title">No themes are registered</span>
+          <span class="empty-state-title">{t("No themes are registered")}</span>
           <span class="empty-state-text">
-            This build ships no theme descriptors, so there is nothing to
-            configure.
+            {t(
+              "This build ships no theme descriptors, so there is nothing to configure."
+            )}
           </span>
         </div>
       </section>
@@ -329,7 +331,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {
     canRead && !loadError && selectedTheme && (
       <section class="admin-section fade-in-up" id="theming-draft-section">
-        <h2 class="admin-section-title">Draft configuration</h2>
+        <h2 class="admin-section-title">{t("Draft configuration")}</h2>
         <form
           id="theming-draft-form"
           class="admin-create-form"
@@ -446,7 +448,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           ))}
 
           <label for="theming-section-order">
-            Section order
+            {t("Section order")}
             <input
               type="text"
               id="theming-section-order"
@@ -461,7 +463,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           </label>
 
           <label for="theming-nav-placement">
-            Navigation placement
+            {t("Navigation placement")}
             <select id="theming-nav-placement" disabled={!canUpdate}>
               {selectedTheme.navPlacements.map((placement) => (
                 <option
@@ -475,7 +477,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           </label>
 
           <p class="form-legend">
-            Sections, comma-separated, in the order they should render:{" "}
+            {t("Sections, comma-separated, in the order they should render:")}{" "}
             {selectedTheme.contentSections
               .map((section) => `${section.label} (${section.key})`)
               .join(", ")}
@@ -490,11 +492,11 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                 id="theming-draft-submit"
                 class="module-toggle"
               >
-                Save draft
+                {t("Save draft")}
               </button>
             )}
             <button type="button" id="theming-validate" class="btn-inline">
-              Validate
+              {t("Validate")}
             </button>
           </div>
         </form>
@@ -515,23 +517,21 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
   {
     canRead && !loadError && selectedTheme && showLifecycleActions && (
       <section class="admin-section fade-in-up" id="theming-lifecycle">
-        <h2 class="admin-section-title">Lifecycle</h2>
+        <h2 class="admin-section-title">{t("Lifecycle")}</h2>
         <p class="page-description">
-          Preview mints a short-lived, non-indexable link to the saved draft.
-          Publish promotes the saved draft to a new immutable version and makes
-          it the live look. Retire clears the live pointer so the site falls
-          back to the default theme; published versions stay intact and can be
-          rolled back to.
+          {t(
+            "Preview mints a short-lived, non-indexable link to the saved draft. Publish promotes the saved draft to a new immutable version and makes it the live look. Retire clears the live pointer so the site falls back to the default theme; published versions stay intact and can be rolled back to."
+          )}
         </p>
         <div class="admin-toolbar">
           {canPreview && (
             <button type="button" id="theming-preview" class="module-toggle">
-              Create preview link
+              {t("Create preview link")}
             </button>
           )}
           {canPublish && (
             <button type="button" id="theming-publish" class="module-toggle">
-              Publish draft
+              {t("Publish draft")}
             </button>
           )}
           {canRetire && (
@@ -540,7 +540,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
               id="theming-retire"
               class="btn-inline btn-inline--danger"
             >
-              Retire live theme
+              {t("Retire live theme")}
             </button>
           )}
         </div>
@@ -557,7 +557,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
             rel="noopener noreferrer"
             target="_blank"
           >
-            Open the preview
+            {t("Open the preview")}
           </a>
           <span id="theming-preview-expiry" class="cell-muted" />
         </p>
@@ -569,22 +569,22 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
     canRead && !loadError && (
       <section class="admin-section fade-in-up" id="theming-versions">
         <h2 class="admin-section-title">
-          Published versions
+          {t("Published versions")}
           <span class="count-pill">{versions.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              The 50 most recent published theme versions, newest first
+              {t("The 50 most recent published theme versions, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Version</th>
-                <th scope="col">Theme</th>
-                <th scope="col">Config hash</th>
-                <th scope="col">Published</th>
-                <th scope="col">Status</th>
-                {canRollback && <th scope="col">Actions</th>}
+                <th scope="col">{t("Version")}</th>
+                <th scope="col">{t("Theme")}</th>
+                <th scope="col">{t("Config hash")}</th>
+                <th scope="col">{t("Published")}</th>
+                <th scope="col">{t("Status")}</th>
+                {canRollback && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -596,11 +596,12 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                         ⌛
                       </span>
                       <span class="empty-state-title">
-                        Nothing published yet
+                        {t("Nothing published yet")}
                       </span>
                       <span class="empty-state-text">
-                        Save a draft and publish it to create the first
-                        immutable version.
+                        {t(
+                          "Save a draft and publish it to create the first immutable version."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -626,12 +627,12 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                     {state?.activeVersionId === version.id ? (
                       <span class="status-badge" data-variant="success">
                         <span class="status-dot" aria-hidden="true" />
-                        live
+                        {t("live")}
                       </span>
                     ) : (
                       <span class="status-badge" data-variant="neutral">
                         <span class="status-dot" aria-hidden="true" />
-                        published
+                        {t("published")}
                       </span>
                     )}
                   </td>
@@ -639,7 +640,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                     <td data-label="Actions">
                       <div class="row-actions">
                         {state?.activeVersionId === version.id ? (
-                          <span class="cell-muted">already live</span>
+                          <span class="cell-muted">{t("already live")}</span>
                         ) : (
                           <button
                             type="button"
@@ -649,7 +650,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                               version.versionNumber ?? ""
                             )}
                           >
-                            Roll back
+                            {t("Roll back")}
                           </button>
                         )}
                       </div>

@@ -1437,6 +1437,131 @@ On success the password is replaced, the lockout counters are cleared, the token
 | 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many password reset attempts from this source. | [`ApiError`](#standard-error-envelope) |
 
+### `GET /api/v1/auth/preferences` — The caller's own UI locale and colour theme (self-service, no permission).
+
+- **operationId**: `getOwnDisplayPreferences`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0095. Self-service by construction — the subject is the session bearer and the route accepts no tenantUserId, so there is nobody else it could be pointed at. Deliberately UNPERMISSIONED, like GET /api/v1/auth/sessions: inventing a permission for "read your own language" would wall off the feature and install the latent-authz trap (an action nothing seeds denies everyone, tenant owner included).
+Both fields are nullable, and null means "not chosen" rather than a default: a null locale falls through to awcms_tenants.default_locale and then to Accept-Language, so a reader who never opened the switcher still gets the language their browser asked for. `storable` is false when the identity has no linked principal (sql/112 leaves that legal), which is the one case where a choice cannot be made durable.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                              | Schema                                 |
+| ------ | ---------------------------------------- | -------------------------------------- |
+| 200    | The caller's stored display preferences. | object                                 |
+| 400    | Validation error.                        | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.              | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/preferences` — Store the caller's UI locale / colour theme (self-service, no permission).
+
+- **operationId**: `updateOwnDisplayPreferences`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0095. Writes the durable copy against the caller's PRINCIPAL — the global person behind every tenant membership — and additionally sets the awcms_locale cookie, which outranks the stored value so the change is visible on the next render rather than the next login.
+A field that is ABSENT is left alone; a field explicitly null is RESET to "not chosen". The two cannot collapse: sql/128 withholds DELETE so a reset must be expressible as null, while a request mentioning only `locale` must not thereby wipe `theme`. Read and write happen in one transaction, so the unmentioned axis is carried forward rather than lost to an interleaving.
+Accepts JSON or application/x-www-form-urlencoded; the form variant answers 303 back to `return_to`, which is validated as a path-absolute same-origin reference and otherwise replaced with /admin.
+Unpermissioned for the same reason as GET above. Changing somebody ELSE's language is not a feature, so there is no permissioned sibling.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (optional): object
+
+**Responses**
+
+| Status | Description                                                           | Schema                                 |
+| ------ | --------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The preferences now in effect.                                        | object                                 |
+| 303    | Form submission accepted; redirect back to the validated return path. |                                        |
+| 400    | Validation error.                                                     | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                                           | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many preference updates from this source.                         | [`ApiError`](#standard-error-envelope) |
+
+### `POST /api/v1/auth/preferences/locale` — Switch UI language for this browser only — works UNAUTHENTICATED.
+
+- **operationId**: `setDisplayLocaleCookie`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0095. Sets the awcms_locale cookie and touches no database at all.
+It exists separately from POST /api/v1/auth/preferences because the language switch has to work on /login and on the tenant-selection screen (ADR-0088) — the two places a reader most often discovers they are being shown the wrong language, and the two places where no session exists to hang a preference on. The self-service route requires a bearer and answers 401 without one, so it cannot serve that caller; this one can, and pays for it by never persisting (`persisted` is always false).
+Accepts JSON or application/x-www-form-urlencoded; the form variant answers 303 back to `return_to`, validated as a path-absolute same-origin reference and otherwise replaced with /admin.
+No CSRF token, deliberately: the whole effect is which of two message catalogs a reader is shown — cosmetic, immediately visible, reversible in one click — and the cookie is not HttpOnly, so same-origin script could set it anyway. There is no server state to corrupt.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                                           | Schema                                 |
+| ------ | --------------------------------------------------------------------- | -------------------------------------- |
+| 200    | The cookie was set for this browser.                                  | object                                 |
+| 303    | Form submission accepted; redirect back to the validated return path. |                                        |
+| 400    | Validation error.                                                     | [`ApiError`](#standard-error-envelope) |
+
+### `GET /api/v1/auth/profile` — The caller's own display name and sign-in address (self-service).
+
+- **operationId**: `getOwnProfile`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0096. Self-service by construction — it accepts no id, so the profile it reads is the one behind the calling session and there is nobody else it could be pointed at. Unpermissioned for the reason its siblings state: inventing a permission for "read your own name" would install the latent-authz trap (an action nothing seeds denies everyone, tenant owner included).
+`loginIdentifier` is returned unmasked. It is the caller's OWN address — the one they type to sign in — so masking it would disclose nothing and would make "am I signed in as the right account" unanswerable.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Responses**
+
+| Status | Description                 | Schema                                 |
+| ------ | --------------------------- | -------------------------------------- |
+| 200    | The caller's own profile.   | object                                 |
+| 400    | Validation error.           | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session. | [`ApiError`](#standard-error-envelope) |
+
+### `PATCH /api/v1/auth/profile` — Change the caller's own display name (self-service, no permission).
+
+- **operationId**: `updateOwnProfile`
+- **Security**: bearerAuth + tenantHeader
+
+ADR-0096. Writes ONLY `display_name`, and only on the profile behind the calling session — the profile id is never accepted from the caller, so there is no id to tamper with and no ownership check that could be forgotten.
+Deliberately cannot change `legal_name` (a verification-relevant field: `verification_status` exists because a legal name is asserted and then checked, so letting the subject rewrite it would make the verification meaningless), `status`, `verification_status`, `risk_level`, or the identifiers. Those are administrative fields that happen to live on the same row, and a self-service endpoint that wrote them would be a privilege escalation wearing a profile editor's clothes.
+Changing the sign-in address is NOT here: that is account recovery and needs proof the new address is the caller's.
+This is a SEPARATE route from the permissioned `PATCH /api/v1/profiles/{id}` rather than a relaxed guard on it — an endpoint with two authorization modes forces every reader to prove which branch applies before they can say anything about its security.
+
+**Parameters**
+
+| Name               | In     | Required | Type   | Description |
+| ------------------ | ------ | -------- | ------ | ----------- |
+| `X-Correlation-ID` | header | no       | string |             |
+
+**Request body** (required): object
+
+**Responses**
+
+| Status | Description                                | Schema                                 |
+| ------ | ------------------------------------------ | -------------------------------------- |
+| 200    | The stored display name.                   | object                                 |
+| 400    | Validation error.                          | [`ApiError`](#standard-error-envelope) |
+| 401    | Missing or invalid session.                | [`ApiError`](#standard-error-envelope) |
+| 429    | Too many profile updates from this source. | [`ApiError`](#standard-error-envelope) |
+
 ### `POST /api/v1/auth/register` — Submit a self-registration request for admin review.
 
 - **operationId**: `postAuthRegister`

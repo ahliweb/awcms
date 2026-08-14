@@ -35,6 +35,7 @@ import {
   type IndexStatus
 } from "../../modules/site-search/application/search-diagnostics";
 import { fetchSiteSearchSettings } from "../../modules/site-search/application/search-settings-directory";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   MIN_QUERY_LENGTH_MAX,
   MIN_QUERY_LENGTH_MIN,
@@ -46,6 +47,7 @@ import {
 } from "../../modules/site-search/domain/search-settings";
 
 const ssr = Astro.locals.ssrContext;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 if (!ssr) {
   throw new Error(
@@ -157,19 +159,20 @@ const showIndexActions = canReconcile || canRebuild;
 
 <AdminLayout title="Site search">
   <header class="page-header fade-in-up">
-    <h1 id="site-search-heading">Site search</h1>
+    <h1 id="site-search-heading">{t("Site search")}</h1>
     <p class="page-description">
-      The tenant's full-text search index over published content: how fresh it
-      is, what it contains, the last runs, and the items that failed to index.
-      The index is a projection of public content only — it is never an
-      authorization source.
+      {
+        t(
+          "The tenant's full-text search index over published content: how fresh it is, what it contains, the last runs, and the items that failed to index. The index is a projection of public content only \u2014 it is never an authorization source."
+        )
+      }
     </p>
   </header>
 
   {
     !canReadIndex && !canReadSettings && !canReadDiagnostics && (
       <p class="state-notice fade-in-up" id="site-search-denied">
-        You do not have permission to view the search console.
+        {t("You do not have permission to view the search console.")}
       </p>
     )
   }
@@ -177,8 +180,9 @@ const showIndexActions = canReconcile || canRebuild;
   {
     loadError && (
       <p class="state-notice fade-in-up" id="site-search-error">
-        The search console could not be loaded right now. Please try again
-        later.
+        {t(
+          "The search console could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -194,28 +198,28 @@ const showIndexActions = canReconcile || canRebuild;
   {
     canReadIndex && status && (
       <section class="admin-section fade-in-up" id="site-search-status">
-        <h2 class="admin-section-title">Index status</h2>
+        <h2 class="admin-section-title">{t("Index status")}</h2>
         <div class="stat-grid stagger-children">
           <div class="stat-card">
-            <span class="stat-label">Documents indexed</span>
+            <span class="stat-label">{t("Documents indexed")}</span>
             <span class="stat-value">{status.documentCount}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Last indexed</span>
+            <span class="stat-label">{t("Last indexed")}</span>
             <span class="stat-value stat-value--mono">
               {formatTimestamp(status.latestIndexedAt)}
             </span>
-            <span class="stat-hint">UTC</span>
+            <span class="stat-hint">{t("UTC")}</span>
           </div>
           <div class="stat-card">
-            <span class="stat-label">Open failures</span>
+            <span class="stat-label">{t("Open failures")}</span>
             <span class="stat-value">{status.openFailureCount}</span>
             {status.openFailureCount > 0 && (
-              <span class="stat-hint">See diagnostics below</span>
+              <span class="stat-hint">{t("See diagnostics below")}</span>
             )}
           </div>
           <div class="stat-card">
-            <span class="stat-label">Last run</span>
+            <span class="stat-label">{t("Last run")}</span>
             <span class="stat-value stat-value--mono">
               {status.lastRun ? status.lastRun.runType : "—"}
             </span>
@@ -230,11 +234,11 @@ const showIndexActions = canReconcile || canRebuild;
         {status.byResourceType.length > 0 && (
           <div class="data-table-scroll">
             <table class="data-table data-table--stack">
-              <caption>Documents by resource type</caption>
+              <caption>{t("Documents by resource type")}</caption>
               <thead>
                 <tr>
-                  <th scope="col">Resource type</th>
-                  <th scope="col">Documents</th>
+                  <th scope="col">{t("Resource type")}</th>
+                  <th scope="col">{t("Documents")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -257,11 +261,11 @@ const showIndexActions = canReconcile || canRebuild;
   {
     showIndexActions && (
       <section class="admin-section fade-in-up" id="site-search-actions">
-        <h2 class="admin-section-title">Index operations</h2>
+        <h2 class="admin-section-title">{t("Index operations")}</h2>
         <p class="page-description">
-          Reconcile upserts current public documents and removes stale ones.
-          Rebuild deletes every document and re-extracts from scratch — slower,
-          and the public search surface is degraded while it runs.
+          {t(
+            "Reconcile upserts current public documents and removes stale ones. Rebuild deletes every document and re-extracts from scratch \u2014 slower, and the public search surface is degraded while it runs."
+          )}
         </p>
         <div class="admin-toolbar">
           {canReconcile && (
@@ -270,7 +274,7 @@ const showIndexActions = canReconcile || canRebuild;
               id="site-search-reconcile"
               class="module-toggle"
             >
-              Reconcile index
+              {t("Reconcile index")}
             </button>
           )}
           {canRebuild && (
@@ -279,7 +283,7 @@ const showIndexActions = canReconcile || canRebuild;
               id="site-search-rebuild"
               class="btn-inline btn-inline--danger"
             >
-              Rebuild index
+              {t("Rebuild index")}
             </button>
           )}
         </div>
@@ -290,7 +294,7 @@ const showIndexActions = canReconcile || canRebuild;
   {
     canReadSettings && settings && (
       <section class="admin-section fade-in-up" id="site-search-settings">
-        <h2 class="admin-section-title">Search configuration</h2>
+        <h2 class="admin-section-title">{t("Search configuration")}</h2>
         <form id="site-search-settings-form" class="admin-create-form">
           <p class="form-legend">
             {canUpdateSettings
@@ -312,7 +316,7 @@ const showIndexActions = canReconcile || canRebuild;
               checked={settings.enabled}
               disabled={!canUpdateSettings}
             />
-            Search enabled
+            {t("Search enabled")}
           </label>
 
           <label for="setting-suggestions-enabled">
@@ -323,7 +327,7 @@ const showIndexActions = canReconcile || canRebuild;
               checked={settings.suggestionsEnabled}
               disabled={!canUpdateSettings}
             />
-            Suggestions enabled
+            {t("Suggestions enabled")}
           </label>
 
           <label for="setting-analytics-enabled">
@@ -334,11 +338,11 @@ const showIndexActions = canReconcile || canRebuild;
               checked={settings.analyticsEnabled}
               disabled={!canUpdateSettings}
             />
-            Query analytics (opt-in, stores query hashes and counts only)
+            {t("Query analytics (opt-in, stores query hashes and counts only)")}
           </label>
 
           <label for="setting-result-limit">
-            Result limit
+            {t("Result limit")}
             <input
               type="number"
               id="setting-result-limit"
@@ -351,7 +355,7 @@ const showIndexActions = canReconcile || canRebuild;
           </label>
 
           <label for="setting-min-query-length">
-            Minimum query length
+            {t("Minimum query length")}
             <input
               type="number"
               id="setting-min-query-length"
@@ -364,7 +368,7 @@ const showIndexActions = canReconcile || canRebuild;
           </label>
 
           <label for="setting-suggestion-limit">
-            Suggestion limit
+            {t("Suggestion limit")}
             <input
               type="number"
               id="setting-suggestion-limit"
@@ -377,7 +381,7 @@ const showIndexActions = canReconcile || canRebuild;
           </label>
 
           <label for="setting-resource-types">
-            Indexed resource types
+            {t("Indexed resource types")}
             <input
               type="text"
               id="setting-resource-types"
@@ -394,7 +398,7 @@ const showIndexActions = canReconcile || canRebuild;
               id="site-search-settings-submit"
               class="module-toggle"
             >
-              Save configuration
+              {t("Save configuration")}
             </button>
           )}
         </form>
@@ -406,21 +410,23 @@ const showIndexActions = canReconcile || canRebuild;
     canReadIndex && (
       <section class="admin-section fade-in-up" id="site-search-runs">
         <h2 class="admin-section-title">
-          Recent index runs
+          {t("Recent index runs")}
           <span class="count-pill">{recentRuns.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
-            <caption class="sr-only">The ten most recent index runs</caption>
+            <caption class="sr-only">
+              {t("The ten most recent index runs")}
+            </caption>
             <thead>
               <tr>
-                <th scope="col">Started</th>
-                <th scope="col">Type</th>
-                <th scope="col">Status</th>
-                <th scope="col">Indexed</th>
-                <th scope="col">Updated</th>
-                <th scope="col">Removed</th>
-                <th scope="col">Failures</th>
+                <th scope="col">{t("Started")}</th>
+                <th scope="col">{t("Type")}</th>
+                <th scope="col">{t("Status")}</th>
+                <th scope="col">{t("Indexed")}</th>
+                <th scope="col">{t("Updated")}</th>
+                <th scope="col">{t("Removed")}</th>
+                <th scope="col">{t("Failures")}</th>
               </tr>
             </thead>
             <tbody>
@@ -431,9 +437,13 @@ const showIndexActions = canReconcile || canRebuild;
                       <span class="empty-state-icon" aria-hidden="true">
                         ⌛
                       </span>
-                      <span class="empty-state-title">No index runs yet</span>
+                      <span class="empty-state-title">
+                        {t("No index runs yet")}
+                      </span>
                       <span class="empty-state-text">
-                        Run a reconcile to build the index for the first time.
+                        {t(
+                          "Run a reconcile to build the index for the first time."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -479,22 +489,22 @@ const showIndexActions = canReconcile || canRebuild;
     canReadDiagnostics && (
       <section class="admin-section fade-in-up" id="site-search-failures">
         <h2 class="admin-section-title">
-          Failed items
+          {t("Failed items")}
           <span class="count-pill">{failures.length}</span>
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack">
             <caption class="sr-only">
-              Items that could not be indexed, most recent first
+              {t("Items that could not be indexed, most recent first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Source</th>
-                <th scope="col">Resource</th>
-                <th scope="col">Locale</th>
-                <th scope="col">Error</th>
-                <th scope="col">Seen</th>
-                <th scope="col">Last seen</th>
+                <th scope="col">{t("Source")}</th>
+                <th scope="col">{t("Resource")}</th>
+                <th scope="col">{t("Locale")}</th>
+                <th scope="col">{t("Error")}</th>
+                <th scope="col">{t("Seen")}</th>
+                <th scope="col">{t("Last seen")}</th>
               </tr>
             </thead>
             <tbody>
@@ -505,9 +515,11 @@ const showIndexActions = canReconcile || canRebuild;
                       <span class="empty-state-icon" aria-hidden="true">
                         ✓
                       </span>
-                      <span class="empty-state-title">No failed items</span>
+                      <span class="empty-state-title">
+                        {t("No failed items")}
+                      </span>
                       <span class="empty-state-text">
-                        Every source item indexed cleanly.
+                        {t("Every source item indexed cleanly.")}
                       </span>
                     </div>
                   </td>

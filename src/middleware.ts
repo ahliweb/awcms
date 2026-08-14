@@ -2,6 +2,10 @@ import { defineMiddleware } from "astro:middleware";
 
 import { resolveSsrContext } from "./lib/auth/ssr-session";
 import { annotateEdgeCache } from "./lib/edge-cache/runtime";
+import {
+  LOCALE_COOKIE_NAME,
+  resolveRequestLocale
+} from "./lib/i18n/request-locale";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
 import {
@@ -53,6 +57,22 @@ function applyResponseHeaders(
  */
 export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.correlationId = resolveCorrelationId(context.request);
+
+  /**
+   * Provisional locale (ADR-0095 §"Keputusan 5"), set BEFORE any branch below so
+   * that no route can observe `locals.locale` as undefined — including the two
+   * branches that return early (body-size rejection, public redirect).
+   *
+   * Cookie and `Accept-Language` only at this point. The stored principal
+   * preference needs a resolved session, which only the `/admin` branch has, so
+   * that branch refines this value once it does. Doing it in two steps rather
+   * than one is what keeps the cost of a locale off the public path: a public
+   * request performs no extra query to know its language.
+   */
+  context.locals.locale = resolveRequestLocale({
+    cookieValue: context.cookies.get(LOCALE_COOKIE_NAME)?.value ?? null,
+    acceptLanguage: context.request.headers.get("accept-language")
+  });
 
   const startedAtMs = performance.now();
 
@@ -111,8 +131,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // FAIL-OPEN by construction: `resolvePublicRedirectForRequest` swallows every
   // fault to `null` (a redirect-subsystem error never becomes a 500 or blocks a
   // page), and the 404 capture runs AFTER the response is produced and never
-  // throws. awcms has NO i18n/locale seam, so `locale` is `null`. The `/admin`
-  // guard and the API body-ceiling above are untouched.
+  // throws. The `/admin` guard and the API body-ceiling above are untouched.
+  //
+  // `locale` stays `null` here, and the reason has CHANGED: a locale seam now
+  // exists (ADR-0095 sets `locals.locale` above), so this is no longer "there is
+  // nothing to pass". It is a deliberate refusal to make a PUBLIC response vary
+  // by locale before the edge-cache key carries one. Varnish keys on the URL;
+  // handing a locale to redirect matching here would let the first reader's
+  // language decide which redirect every later reader gets. Passing the resolved
+  // locale is a one-line change that must wait for that key (ADR-0095
+  // §"Keputusan 5" lists it as the prerequisite).
   if (!context.url.pathname.startsWith(PROTECTED_PREFIX)) {
     const redirectResult = await resolvePublicRedirectForRequest(
       context.request,
@@ -145,6 +173,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   context.locals.ssrContext = ssrContext;
+
+  /**
+   * Refine the provisional locale now that a session exists (ADR-0095
+   * §"Keputusan 5"). The cookie still wins — an explicit switch must take effect
+   * on this device immediately, even when it disagrees with what is stored —
+   * but a reader on a NEW device, with no cookie yet, now gets the language they
+   * chose somewhere else, and a reader who chose nothing gets their tenant's
+   * default before `Accept-Language` is consulted.
+   */
+  context.locals.locale = resolveRequestLocale({
+    cookieValue: context.cookies.get(LOCALE_COOKIE_NAME)?.value ?? null,
+    storedPreference: ssrContext.display.preferredLocale,
+    tenantDefault: ssrContext.display.tenantDefaultLocale,
+    acceptLanguage: context.request.headers.get("accept-language")
+  });
 
   return finalize(await next());
 });

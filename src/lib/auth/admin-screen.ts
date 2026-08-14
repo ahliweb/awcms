@@ -264,3 +264,82 @@ export async function loadAdminScreen<TData>(
     return { state: "error" };
   }
 }
+
+/**
+ * A screen whose subject IS the caller, and which therefore has no entry
+ * permission to evaluate (ADR-0096 §1).
+ *
+ * ## Why this is a separate function and not a flag on `loadAdminScreen`
+ *
+ * A boolean like `authorize: "none"` would make the AUTHORIZING helper
+ * sometimes not authorize, and every reader of every screen would then have to
+ * check which mode a given call is in before believing anything about it. The
+ * two operations are genuinely different — one decides access, this one has no
+ * access decision to make — so they get different names.
+ *
+ * `authorize: []` is not the answer either: `selectEntryOutcome` DENIES an empty
+ * list, fail-closed and deliberately ("no request authorizes this page" must
+ * never read as "any request does"). That rule stays exactly as it is.
+ *
+ * ## Why not just invent a permission
+ *
+ * That is the trap ADR-0058 §E names. `identity_access.own_account.read` would
+ * be an action no migration seeds, so it would deny EVERYONE — tenant owner
+ * included — while the call site read as correctly guarded. A person locked out
+ * of their own password-change screen is the worst possible place to discover
+ * it.
+ *
+ * ## What this still does
+ *
+ * Everything except the decision: opens ONE tenant transaction under a declared
+ * work class, so RLS applies and the screen cannot open its own; funnels errors
+ * through `onError`; and returns the same `error` state so callers degrade
+ * identically. There is no `denied` state, because nothing here can deny.
+ *
+ * ## The bound on its use
+ *
+ * `tests/admin-screen-self-service.test.ts` enumerates the screens allowed to
+ * call it, with a reason each. That list is the control: without it, this
+ * function is a way to put an unauthorized screen under `/admin` and still
+ * satisfy `access:chokepoint:check`. It is meant to stay one entry long.
+ */
+export type SelfServiceScreenConfig<TData> = {
+  ssr: SsrContext;
+  workClass: WorkClass;
+  queueTimeoutMs?: number;
+  /**
+   * Why this screen has no entry permission. REQUIRED, and required to be
+   * non-trivial by the test above: a bare flag would let the next caller skip
+   * authorization without ever writing down why they may.
+   */
+  selfServiceReason: string;
+  load: (context: { tx: Bun.TransactionSQL }) => Promise<TData>;
+  onError: (error: unknown) => void;
+  sql?: Bun.SQL;
+  now?: Date;
+};
+
+export type SelfServiceScreenOutcome<TData> =
+  { state: "allowed"; data: TData } | { state: "error" };
+
+export async function loadSelfServiceScreen<TData>(
+  config: SelfServiceScreenConfig<TData>
+): Promise<SelfServiceScreenOutcome<TData>> {
+  const sql = config.sql ?? getDatabaseClient();
+
+  try {
+    return await withTenantOrThrow(
+      sql,
+      config.ssr.tenantId,
+      async (tx): Promise<SelfServiceScreenOutcome<TData>> => ({
+        state: "allowed",
+        data: await config.load({ tx })
+      }),
+      { workClass: config.workClass, queueTimeoutMs: config.queueTimeoutMs }
+    );
+  } catch (error) {
+    config.onError(error);
+
+    return { state: "error" };
+  }
+}

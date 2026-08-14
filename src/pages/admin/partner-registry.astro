@@ -43,12 +43,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listPartners,
   type PartnerSummary
 } from "../../modules/identity-access/application/partner-registry-store";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -101,20 +103,22 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
 
 <AdminLayout title="Partner registry">
   <header class="page-header fade-in-up">
-    <h1 id="partner-registry-heading">Partner registry</h1>
+    <h1 id="partner-registry-heading">{t("Partner registry")}</h1>
     <p class="page-description">
-      Which tenants on this deployment may be engaged as partners. A row here
-      grants nothing — it is the precondition a customer's engagement checks.
-      Whether a partner actually reaches a customer is that customer's decision,
-      taken on their own Partner access screen.
+      {
+        t(
+          "Which tenants on this deployment may be engaged as partners. A row here grants nothing \u2014 it is the precondition a customer's engagement checks. Whether a partner actually reaches a customer is that customer's decision, taken on their own Partner access screen."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="partner-registry-denied">
-        You do not have permission to view the partner registry. It is
-        platform-scoped: only the platform tenant can reach it.
+        {t(
+          "You do not have permission to view the partner registry. It is platform-scoped: only the platform tenant can reach it."
+        )}
       </p>
     )
   }
@@ -122,7 +126,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="partner-registry-load-error">
-        Could not load the partner registry. Please try again.
+        {t("Could not load the partner registry. Please try again.")}
       </p>
     )
   }
@@ -142,17 +146,18 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
             class="fade-in-up"
             aria-labelledby="partner-registry-add-heading"
           >
-            <h2 id="partner-registry-add-heading">Register a partner</h2>
+            <h2 id="partner-registry-add-heading">{t("Register a partner")}</h2>
 
             <form id="register-partner-form" class="admin-form">
               <p class="page-description">
-                The tenant must already exist — this does not create one. There
-                is no picker on purpose: a selectable list of every tenant is
-                the directory this design declines to hand out. Look the id up
-                on the Tenants screen if you need it.
+                {t(
+                  "The tenant must already exist \u2014 this does not create one. There is no picker on purpose: a selectable list of every tenant is the directory this design declines to hand out. Look the id up on the Tenants screen if you need it."
+                )}
               </p>
 
-              <label for="register-partner-tenant-id">Partner tenant id</label>
+              <label for="register-partner-tenant-id">
+                {t("Partner tenant id")}
+              </label>
               <input
                 id="register-partner-tenant-id"
                 name="partnerTenantId"
@@ -162,7 +167,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
                 placeholder="00000000-0000-0000-0000-000000000000"
               />
 
-              <label for="register-partner-code">Partner code</label>
+              <label for="register-partner-code">{t("Partner code")}</label>
               <input
                 id="register-partner-code"
                 name="partnerCode"
@@ -173,13 +178,12 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
                 placeholder="acme-digital"
               />
               <p class="page-description">
-                Lower-case letters, digits and hyphens, unique across the
-                deployment. Case matters to the index and not to a human, so a
-                stray capital would make a second partner that reads like the
-                first one.
+                {t(
+                  "Lower-case letters, digits and hyphens, unique across the deployment. Case matters to the index and not to a human, so a stray capital would make a second partner that reads like the first one."
+                )}
               </p>
 
-              <label for="register-partner-name">Display name</label>
+              <label for="register-partner-name">{t("Display name")}</label>
               <input
                 id="register-partner-name"
                 name="displayName"
@@ -189,7 +193,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
               />
 
               <button id="register-partner-submit" type="submit">
-                Register partner
+                {t("Register partner")}
               </button>
             </form>
           </section>
@@ -199,13 +203,14 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
           class="fade-in-up"
           aria-labelledby="partner-registry-list-heading"
         >
-          <h2 id="partner-registry-list-heading">Registered partners</h2>
+          <h2 id="partner-registry-list-heading">{t("Registered partners")}</h2>
 
           {partners.length === 0 ? (
             <div class="empty-state">
               <p id="partner-registry-empty">
-                No tenant on this deployment is registered as a partner. Nobody
-                can be engaged until one is.
+                {t(
+                  "No tenant on this deployment is registered as a partner. Nobody can be engaged until one is."
+                )}
               </p>
             </div>
           ) : (
@@ -213,12 +218,14 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Partner code</th>
-                    <th scope="col">Display name</th>
-                    <th scope="col">Tenant</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Registered</th>
-                    {(canSuspend || canReinstate) && <th scope="col">Reach</th>}
+                    <th scope="col">{t("Partner code")}</th>
+                    <th scope="col">{t("Display name")}</th>
+                    <th scope="col">{t("Tenant")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Registered")}</th>
+                    {(canSuspend || canReinstate) && (
+                      <th scope="col">{t("Reach")}</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -244,7 +251,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
                               data-partner-tenant-id={partner.partnerTenantId}
                               data-partner-code={partner.partnerCode}
                             >
-                              Suspend
+                              {t("Suspend")}
                             </button>
                           )}
                           {partner.status === "suspended" && canReinstate && (
@@ -254,7 +261,7 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
                               data-partner-tenant-id={partner.partnerTenantId}
                               data-partner-code={partner.partnerCode}
                             >
-                              Reinstate
+                              {t("Reinstate")}
                             </button>
                           )}
                         </td>
@@ -267,14 +274,9 @@ const canReinstate = screen.state === "allowed" && screen.data.canReinstate;
           )}
 
           <p class="page-description">
-            There is no way to REMOVE a partner here, and that is deliberate:
-            engagements and delegated grants reference these rows, and grants
-            are built to outlive the partnership that produced them. Suspending
-            is the retirement path, and it removes nothing — every grant row
-            survives as the record of who could reach which customer and until
-            when. What stops is the reach: each delegated actor the partner
-            placed is refused at their next request, in every customer tenant,
-            and reinstating restores all of it without anybody rewriting a row.
+            {t(
+              "There is no way to REMOVE a partner here, and that is deliberate: engagements and delegated grants reference these rows, and grants are built to outlive the partnership that produced them. Suspending is the retirement path, and it removes nothing \u2014 every grant row survives as the record of who could reach which customer and until when. What stops is the reach: each delegated actor the partner placed is refused at their next request, in every customer tenant, and reinstating restores all of it without anybody rewriting a row."
+            )}
           </p>
         </section>
       </>

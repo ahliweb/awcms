@@ -35,8 +35,10 @@ import { logAdminPageError } from "../../lib/logging/error-log";
 import { listModerationQueue } from "../../modules/comments/application/comment-moderation";
 import type { ModerationQueueItem } from "../../modules/comments/application/comment-moderation";
 import type { CommentStatus } from "../../modules/comments/domain/comment-status";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const STATUS_TABS: readonly { value: CommentStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -125,19 +127,23 @@ function formatTimestamp(value: string): string {
 ---
 
 <AdminLayout title="Comments">
-  <h1>Comment moderation</h1>
+  <h1>{t("Comment moderation")}</h1>
   <p class="page-description">
-    Review comments submitted against published content. Every decision here is
-    audited with its reason code and re-checked against your permissions on the
-    server.
+    {
+      t(
+        "Review comments submitted against published content. Every decision here is audited with its reason code and re-checked against your permissions on the server."
+      )
+    }
   </p>
 
   {
     !canRead && (
       <div class="state-notice state-notice--denied" role="status">
         <p>
-          <strong>Access denied.</strong> You do not have the
-          <code>comments.moderation.read</code> permission for this tenant.
+          <strong>{t("Access denied.")}</strong>
+          {t("You do not have the")}
+          <code>{t("comments.moderation.read")}</code>
+          {t("permission for this tenant.")}
         </p>
       </div>
     )
@@ -159,7 +165,7 @@ function formatTimestamp(value: string): string {
 
         {loadFailed && (
           <div class="state-notice state-notice--error" role="alert">
-            <p>The moderation queue could not be loaded. Try again.</p>
+            <p>{t("The moderation queue could not be loaded. Try again.")}</p>
           </div>
         )}
 
@@ -185,12 +191,12 @@ function formatTimestamp(value: string): string {
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Comment</th>
-                  <th scope="col">Author</th>
-                  <th scope="col">Resource</th>
-                  <th scope="col">Reports</th>
-                  <th scope="col">Submitted</th>
-                  <th scope="col">Actions</th>
+                  <th scope="col">{t("Comment")}</th>
+                  <th scope="col">{t("Author")}</th>
+                  <th scope="col">{t("Resource")}</th>
+                  <th scope="col">{t("Reports")}</th>
+                  <th scope="col">{t("Submitted")}</th>
+                  <th scope="col">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,27 +226,27 @@ function formatTimestamp(value: string): string {
                     <td class="cell-actions">
                       {canApprove && item.status !== "approved" && (
                         <button type="button" data-action="approve">
-                          Approve
+                          {t("Approve")}
                         </button>
                       )}
                       {canReject && item.status !== "rejected" && (
                         <button type="button" data-action="reject">
-                          Reject
+                          {t("Reject")}
                         </button>
                       )}
                       {canReject && item.status !== "spam" && (
                         <button type="button" data-action="spam">
-                          Spam
+                          {t("Spam")}
                         </button>
                       )}
                       {canArchive && item.status === "approved" && (
                         <button type="button" data-action="archive">
-                          Archive
+                          {t("Archive")}
                         </button>
                       )}
                       {canRestore && item.status !== "pending" && (
                         <button type="button" data-action="restore">
-                          Restore
+                          {t("Restore")}
                         </button>
                       )}
                     </td>

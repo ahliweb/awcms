@@ -19,6 +19,7 @@ import AdminLayout from "../../../layouts/AdminLayout.astro";
 import "../../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../../lib/logging/error-log";
+import { getTranslatorFor } from "../../../lib/i18n";
 import {
   listTenantDomains,
   type TenantDomainView
@@ -30,6 +31,7 @@ import {
 } from "../../../modules/tenant-domain/domain/tenant-domain-validation";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. Five write affordances are decided the same
@@ -104,18 +106,20 @@ function statusVariant(status: string): string {
 
 <AdminLayout title="Tenant domains">
   <header class="page-header fade-in-up">
-    <h1 id="tenant-domains-heading">Tenant domains</h1>
+    <h1 id="tenant-domains-heading">{t("Tenant domains")}</h1>
     <p class="page-description">
-      Hostname/subdomain mappings for this tenant. Add a mapping, verify
-      ownership (manual-first), and choose one active primary. Deleting a
-      mapping frees its hostname for reuse.
+      {
+        t(
+          "Hostname/subdomain mappings for this tenant. Add a mapping, verify ownership (manual-first), and choose one active primary. Deleting a mapping frees its hostname for reuse."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="tenant-domains-denied">
-        You do not have permission to view tenant domains.
+        {t("You do not have permission to view tenant domains.")}
       </p>
     )
   }
@@ -123,7 +127,9 @@ function statusVariant(status: string): string {
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="tenant-domains-error">
-        Tenant domains could not be loaded right now. Please try again later.
+        {t(
+          "Tenant domains could not be loaded right now. Please try again later."
+        )}
       </p>
     )
   }
@@ -131,7 +137,7 @@ function statusVariant(status: string): string {
   {
     canCreate && (
       <form id="domain-create-form" class="admin-create-form fade-in-up">
-        <p class="form-legend">Add a domain</p>
+        <p class="form-legend">{t("Add a domain")}</p>
         <p
           id="domain-create-error"
           class="admin-create-error"
@@ -139,7 +145,7 @@ function statusVariant(status: string): string {
           hidden
         />
 
-        <label for="domain-hostname">Hostname</label>
+        <label for="domain-hostname">{t("Hostname")}</label>
         <input
           id="domain-hostname"
           name="hostname"
@@ -149,7 +155,7 @@ function statusVariant(status: string): string {
           placeholder="tenant.example.com"
         />
 
-        <label for="domain-type">Domain type</label>
+        <label for="domain-type">{t("Domain type")}</label>
         <select id="domain-type" name="domainType">
           {TENANT_DOMAIN_TYPES.map((value) => (
             <option value={value} selected={value === "custom_domain"}>
@@ -158,7 +164,7 @@ function statusVariant(status: string): string {
           ))}
         </select>
 
-        <label for="domain-route-mode">Route mode</label>
+        <label for="domain-route-mode">{t("Route mode")}</label>
         <select id="domain-route-mode" name="routeMode">
           {TENANT_DOMAIN_ROUTE_MODES.map((value) => (
             <option value={value} selected={value === "canonical"}>
@@ -167,16 +173,18 @@ function statusVariant(status: string): string {
           ))}
         </select>
 
-        <label for="domain-verification-method">Verification method</label>
+        <label for="domain-verification-method">
+          {t("Verification method")}
+        </label>
         <select id="domain-verification-method" name="verificationMethod">
-          <option value="">(none yet)</option>
+          <option value="">{t("(none yet)")}</option>
           {TENANT_DOMAIN_VERIFICATION_METHODS.map((value) => (
             <option value={value}>{value}</option>
           ))}
         </select>
 
         <button type="submit" id="domain-create-submit">
-          Add domain
+          {t("Add domain")}
         </button>
       </form>
     )
@@ -200,12 +208,12 @@ function statusVariant(status: string): string {
           <caption>{domains.length} domain(s)</caption>
           <thead>
             <tr>
-              <th scope="col">Hostname</th>
-              <th scope="col">Type</th>
-              <th scope="col">Route mode</th>
-              <th scope="col">Status</th>
-              <th scope="col">Primary</th>
-              {showActions && <th scope="col">Actions</th>}
+              <th scope="col">{t("Hostname")}</th>
+              <th scope="col">{t("Type")}</th>
+              <th scope="col">{t("Route mode")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Primary")}</th>
+              {showActions && <th scope="col">{t("Actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -216,7 +224,7 @@ function statusVariant(status: string): string {
                     <span class="empty-state-icon" aria-hidden="true">
                       ⌂
                     </span>
-                    <span class="empty-state-title">No domains yet</span>
+                    <span class="empty-state-title">{t("No domains yet")}</span>
                     <span class="empty-state-text">
                       {canCreate
                         ? "Add your first domain mapping using the form above."
@@ -258,7 +266,7 @@ function statusVariant(status: string): string {
                               class="module-toggle domain-verify-btn"
                               data-domain-id={domain.id}
                             >
-                              Verify
+                              {t("Verify")}
                             </button>
                           )}
                         {canSetPrimary &&
@@ -269,7 +277,7 @@ function statusVariant(status: string): string {
                               class="module-toggle domain-primary-btn"
                               data-domain-id={domain.id}
                             >
-                              Set primary
+                              {t("Set primary")}
                             </button>
                           )}
                         {canDelete && (
@@ -279,7 +287,7 @@ function statusVariant(status: string): string {
                             data-domain-id={domain.id}
                             data-domain-host={domain.hostname}
                           >
-                            Delete
+                            {t("Delete")}
                           </button>
                         )}
                       </div>

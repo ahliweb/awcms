@@ -85,6 +85,11 @@ export const BOUNDED_BY_DESIGN: readonly {
   reason: string;
 }[] = [
   {
+    table: "awcms_principal_preferences",
+    reason:
+      "ADR-0095. At most ONE row per principal, by primary key — the row is upserted, never appended, so the table's ceiling IS the number of humans who have ever opened the language switcher, and it cannot exceed `awcms_principals`. Nothing in the request path inserts a second row and no job writes here at all (sql/128 grants `awcms_worker` nothing). An age-based purge would be actively wrong rather than merely unnecessary: `executionMode: 'generic'` deletes by age with no status predicate, so a reader who set Indonesian two years ago and has been happily reading it since would have their choice deleted for being OLD — the row has no natural expiry, and its age says nothing about whether it is still wanted. Erasure is answered instead by the `subjectData` descriptor in `identity_access`, on the same per-tenant boundary as `awcms_principals` itself."
+  },
+  {
     table: "awcms_access_policies",
     reason:
       "ADR-0078. Every row is created by an ADMINISTRATOR granting a role at a scope, never by traffic, and the active partial unique index means a subject can hold a given (role, scope) at most once at a time — so the ordinary ceiling is users x roles x scopes, all human-authored. Growth past that requires somebody granting and revoking the same thing repeatedly, which is an audit signal rather than load. An age-based purge would be actively WRONG here: `executionMode: 'generic'` deletes purely by age with no status predicate, so it would delete LIVE grants, and a revoked row is the only record that answers 'did this person have access last March' — the question an audit actually asks. Its two siblings `awcms_access_assignments` and `awcms_business_scope_assignments` sit on the predating ledger for want of the same answer; this one states it."

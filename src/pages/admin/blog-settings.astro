@@ -61,12 +61,14 @@ import AdminLayout from "../../layouts/AdminLayout.astro";
 import "../../styles/admin-screens.css";
 import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   fetchBlogSettings,
   type BlogSettingsView
 } from "../../modules/blog-content/application/blog-settings-directory";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's rather than `ssr.permissions.has()`, so a tenant
@@ -113,12 +115,13 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
 ---
 
 <AdminLayout title="Blog settings">
-  <h1>Blog settings</h1>
+  <h1>{t("Blog settings")}</h1>
 
   {
     !canRead && (
       <p class="admin-empty">
-        Anda tidak punya permission <code>blog_content.settings.read</code>.
+        {t("Anda tidak punya permission")}
+        <code>{t("blog_content.settings.read")}</code>.
       </p>
     )
   }
@@ -131,21 +134,21 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
         {!canConfigure && (
           <p class="admin-note">
             Hanya baca — mengubah butuh{" "}
-            <code>blog_content.settings.configure</code>.
+            <code>{t("blog_content.settings.configure")}</code>.
           </p>
         )}
 
         <p class="admin-error" id="settings-error" hidden />
         <p class="admin-note" id="settings-ok" hidden>
-          Tersimpan.
+          {t("Tersimpan.")}
         </p>
 
         <form id="blog-settings-form" class="admin-form">
           <fieldset disabled={!canConfigure}>
-            <legend>Identitas</legend>
+            <legend>{t("Identitas")}</legend>
 
             <label>
-              Judul blog
+              {t("Judul blog")}
               <input
                 type="text"
                 name="blogTitle"
@@ -156,16 +159,16 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              Deskripsi
+              {t("Deskripsi")}
               <textarea name="blogDescription" maxlength="500" rows="3">
                 {settings.blogDescription ?? ""}
               </textarea>
             </label>
 
-            <legend>Daftar</legend>
+            <legend>{t("Daftar")}</legend>
 
             <label>
-              Post per halaman
+              {t("Post per halaman")}
               <input
                 type="number"
                 name="postsPerPage"
@@ -177,7 +180,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              Locale bawaan
+              {t("Locale bawaan")}
               <input
                 type="text"
                 name="defaultLocale"
@@ -187,7 +190,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              Visibilitas bawaan
+              {t("Visibilitas bawaan")}
               <select name="defaultVisibility">
                 {VISIBILITY_OPTIONS.map((option) => (
                   <option
@@ -200,7 +203,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
               </select>
             </label>
 
-            <legend>Discovery</legend>
+            <legend>{t("Discovery")}</legend>
 
             {/*
               These two decide whether `seo_distribution` serves this tenant's
@@ -212,7 +215,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 name="rssEnabled"
                 checked={settings.rssEnabled}
               />
-              RSS aktif
+              {t("RSS aktif")}
             </label>
 
             <label class="admin-checkbox">
@@ -221,13 +224,13 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 name="sitemapEnabled"
                 checked={settings.sitemapEnabled}
               />
-              Sitemap aktif
+              {t("Sitemap aktif")}
             </label>
 
-            <legend>SEO bawaan</legend>
+            <legend>{t("SEO bawaan")}</legend>
 
             <label>
-              Judul SEO bawaan
+              {t("Judul SEO bawaan")}
               <input
                 type="text"
                 name="seoDefaultTitle"
@@ -237,25 +240,29 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              Deskripsi SEO bawaan
+              {t("Deskripsi SEO bawaan")}
               <textarea name="seoDefaultDescription" maxlength="300" rows="2">
                 {settings.seoDefaultDescription ?? ""}
               </textarea>
             </label>
 
             <button type="submit" id="blog-settings-save">
-              Simpan
+              {t("Simpan")}
             </button>
           </fieldset>
         </form>
 
         <p class="admin-note">
-          Saklar rute publik <code>legacyTenantRouteEnabled</code> BUKAN di sini
-          — ia setting modul, disimpan di <code>awcms_module_settings</code> dan
-          diedit lewat{" "}
-          <a href="/admin/modules/blog_content">/admin/modules/blog_content</a>.
-          Dicantumkan sebagai tautan, bukan disalin ke form ini: field yang
-          dicerminkan dua layar adalah field yang basi diam-diam.
+          {t("Saklar rute publik")}
+          <code>{t("legacyTenantRouteEnabled")}</code>
+          {t("BUKAN di sini \u2014 ia setting modul, disimpan di")}
+          <code>{t("awcms_module_settings")}</code> dan diedit lewat{" "}
+          <a href="/admin/modules/blog_content">
+            {t("/admin/modules/blog_content")}
+          </a>
+          {t(
+            ". Dicantumkan sebagai tautan, bukan disalin ke form ini: field yang dicerminkan dua layar adalah field yang basi diam-diam."
+          )}
         </p>
       </>
     )

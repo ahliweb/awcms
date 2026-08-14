@@ -51,8 +51,10 @@ import {
 } from "../../modules/push-delivery/application/subscription-directory";
 import { isPushEnabled } from "../../modules/push-delivery/domain/push-config";
 import { parseVapidConfig } from "../../modules/push-delivery/domain/vapid-config";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const statusRaw = (Astro.url.searchParams.get("status") ?? "").trim();
 // An unknown status is dropped rather than forwarded: a hand-edited query
@@ -150,20 +152,24 @@ const messageColumns = canCancel ? 8 : 7;
 
 <AdminLayout title="Push notifications">
   <header class="page-header fade-in-up">
-    <h1 id="push-notifications-heading">Push notifications</h1>
+    <h1 id="push-notifications-heading">{t("Push notifications")}</h1>
     <p class="page-description">
-      The device push outbox. A notification is queued in the same transaction
-      as the thing that caused it; delivery happens afterwards, on the <code
-        >push:dispatch</code
-      > schedule. A subscription the push service reports as gone is disabled rather
-      than deleted, so it can still answer &quot;why did this user stop getting notifications&quot;.
+      {
+        t(
+          "The device push outbox. A notification is queued in the same transaction as the thing that caused it; delivery happens afterwards, on the"
+        )
+      }<code>{t("push:dispatch")}</code>{
+        t(
+          "schedule. A subscription the push service reports as gone is disabled rather than deleted, so it can still answer &quot;why did this user stop getting notifications&quot;."
+        )
+      }
     </p>
   </header>
 
   {
     !canSeeAnything && (
       <p class="state-notice fade-in-up" id="push-notifications-denied">
-        You do not have permission to view the push notification console.
+        {t("You do not have permission to view the push notification console.")}
       </p>
     )
   }
@@ -171,8 +177,9 @@ const messageColumns = canCancel ? 8 : 7;
   {
     canSeeAnything && loadError && (
       <p class="state-notice fade-in-up" id="push-notifications-error">
-        The push console could not be loaded right now. This is a problem
-        reading it, not an idle queue — please try again later.
+        {t(
+          "The push console could not be loaded right now. This is a problem reading it, not an idle queue \u2014 please try again later."
+        )}
       </p>
     )
   }
@@ -195,29 +202,34 @@ const messageColumns = canCancel ? 8 : 7;
           data-web-push-ready={webPushReady ? "true" : "false"}
         >
           <h2 class="admin-section-title" id="push-device-title">
-            Notifications on this device
+            {t("Notifications on this device")}
           </h2>
 
           {!pushEnabled && (
             <p class="state-notice" id="push-notifications-disabled">
-              Push delivery is switched off on this deployment (
-              <code>PUSH_ENABLED</code> is not <code>true</code>), so the
-              dispatcher claims nothing and no notification will be sent. This
-              is the expected state on an offline/LAN deployment.
+              {t("Push delivery is switched off on this deployment (")}
+              <code>{t("PUSH_ENABLED")}</code>
+              {t("is not")}
+              <code>{t("true")}</code>), so the dispatcher claims nothing and no
+              notification will be sent. This is the expected state on an
+              offline/LAN deployment.
             </p>
           )}
 
           {pushEnabled && !vapid.ok && (
             <p class="state-notice" id="push-notifications-unconfigured">
-              Push is enabled but no valid VAPID key pair is configured, so a
-              browser cannot subscribe. Generate one with
-              <code>bun run push:vapid:generate</code> and set the three
-              <code>PUSH_VAPID_*</code> variables.
+              {t(
+                "Push is enabled but no valid VAPID key pair is configured, so a browser cannot subscribe. Generate one with"
+              )}
+              <code>{t("bun run push:vapid:generate")}</code>
+              {t("and set the three")}
+              <code>{t("PUSH_VAPID_*")}</code>
+              {t("variables.")}
             </p>
           )}
 
           <p class="page-description" id="push-device-state">
-            Checking this browser…
+            {t("Checking this browser\u2026")}
           </p>
 
           <div class="admin-actions">
@@ -227,7 +239,7 @@ const messageColumns = canCancel ? 8 : 7;
               id="push-enable-button"
               hidden
             >
-              Enable on this device
+              {t("Enable on this device")}
             </button>
             <button
               type="button"
@@ -236,7 +248,7 @@ const messageColumns = canCancel ? 8 : 7;
               data-subscription-id=""
               hidden
             >
-              Turn off on this device
+              {t("Turn off on this device")}
             </button>
             {canSendTest && (
               <button
@@ -244,7 +256,7 @@ const messageColumns = canCancel ? 8 : 7;
                 class="btn btn-secondary"
                 id="push-test-button"
               >
-                Send a test notification
+                {t("Send a test notification")}
               </button>
             )}
           </div>
@@ -256,9 +268,9 @@ const messageColumns = canCancel ? 8 : 7;
           id="push-notifications-queue"
         >
           <h2 class="admin-section-title" id="push-queue-title">
-            Queue
+            {t("Queue")}
             <span class="count-pill" id="push-queue-live" hidden>
-              live
+              {t("live")}
             </span>
           </h2>
 
@@ -276,13 +288,13 @@ const messageColumns = canCancel ? 8 : 7;
               </div>
             ))}
             <div class="stat-card">
-              <span class="stat-label">Active devices</span>
+              <span class="stat-label">{t("Active devices")}</span>
               <span class="stat-value" data-push-count="activeSubscriptions">
                 {summary?.activeSubscriptions ?? 0}
               </span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Disabled devices</span>
+              <span class="stat-label">{t("Disabled devices")}</span>
               <span class="stat-value" data-push-count="disabledSubscriptions">
                 {summary?.disabledSubscriptions ?? 0}
               </span>
@@ -290,7 +302,7 @@ const messageColumns = canCancel ? 8 : 7;
           </div>
 
           <p class="page-description">
-            Oldest still waiting:{" "}
+            {t("Oldest still waiting:")}{" "}
             <strong data-push-time="oldestPendingAt">
               {formatTimestamp(summary?.oldestPendingAt ?? null)}
             </strong>
@@ -307,15 +319,15 @@ const messageColumns = canCancel ? 8 : 7;
           id="push-notifications-messages"
         >
           <h2 class="admin-section-title" id="push-messages-title">
-            Recent messages
+            {t("Recent messages")}
             <span class="count-pill">{messages.length}</span>
           </h2>
 
           <form method="get" class="admin-filter-form">
             <label class="admin-field">
-              <span>Status</span>
+              <span>{t("Status")}</span>
               <select name="status">
-                <option value="">All</option>
+                <option value="">{t("All")}</option>
                 {PUSH_MESSAGE_STATUSES.map((status) => (
                   <option value={status} selected={statusFilter === status}>
                     {status}
@@ -324,7 +336,7 @@ const messageColumns = canCancel ? 8 : 7;
               </select>
             </label>
             <button type="submit" class="btn btn-secondary">
-              Filter
+              {t("Filter")}
             </button>
           </form>
 
@@ -332,21 +344,21 @@ const messageColumns = canCancel ? 8 : 7;
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Category</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Title</th>
-                  <th scope="col">Device</th>
-                  <th scope="col">Retries</th>
-                  <th scope="col">Last error</th>
-                  <th scope="col">Queued</th>
-                  {canCancel && <th scope="col">Action</th>}
+                  <th scope="col">{t("Category")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Title")}</th>
+                  <th scope="col">{t("Device")}</th>
+                  <th scope="col">{t("Retries")}</th>
+                  <th scope="col">{t("Last error")}</th>
+                  <th scope="col">{t("Queued")}</th>
+                  {canCancel && <th scope="col">{t("Action")}</th>}
                 </tr>
               </thead>
               <tbody>
                 {messages.length === 0 && (
                   <tr>
                     <td colspan={messageColumns} class="table-empty">
-                      No push messages recorded.
+                      {t("No push messages recorded.")}
                     </td>
                   </tr>
                 )}
@@ -378,7 +390,7 @@ const messageColumns = canCancel ? 8 : 7;
                             class="btn btn-secondary push-cancel"
                             data-message-id={message.id}
                           >
-                            Cancel
+                            {t("Cancel")}
                           </button>
                         )}
                       </td>
@@ -396,33 +408,32 @@ const messageColumns = canCancel ? 8 : 7;
           id="push-notifications-attempts"
         >
           <h2 class="admin-section-title" id="push-attempts-title">
-            Recent delivery attempts
+            {t("Recent delivery attempts")}
             <span class="count-pill">{attempts.length}</span>
           </h2>
 
           <p class="page-description">
-            Successes as well as failures. A provider that started answering
-            slowly, or one that changed which endpoints it accepts, is a pattern
-            across both — a failures-only list answers &quot;what broke&quot;
-            and never &quot;since when&quot;.
+            {t(
+              "Successes as well as failures. A provider that started answering slowly, or one that changed which endpoints it accepts, is a pattern across both \u2014 a failures-only list answers &quot;what broke&quot; and never &quot;since when&quot;."
+            )}
           </p>
 
           <div class="table-scroll">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">When</th>
-                  <th scope="col">Attempt</th>
-                  <th scope="col">Outcome</th>
-                  <th scope="col">Provider</th>
-                  <th scope="col">Reply</th>
+                  <th scope="col">{t("When")}</th>
+                  <th scope="col">{t("Attempt")}</th>
+                  <th scope="col">{t("Outcome")}</th>
+                  <th scope="col">{t("Provider")}</th>
+                  <th scope="col">{t("Reply")}</th>
                 </tr>
               </thead>
               <tbody>
                 {attempts.length === 0 && (
                   <tr>
                     <td colspan={5} class="table-empty">
-                      No delivery attempts recorded.
+                      {t("No delivery attempts recorded.")}
                     </td>
                   </tr>
                 )}
@@ -456,7 +467,7 @@ const messageColumns = canCancel ? 8 : 7;
           id="push-notifications-devices"
         >
           <h2 class="admin-section-title" id="push-devices-title">
-            Registered devices
+            {t("Registered devices")}
             <span class="count-pill">{subscriptions.length}</span>
           </h2>
 
@@ -464,19 +475,19 @@ const messageColumns = canCancel ? 8 : 7;
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th scope="col">Endpoint</th>
-                  <th scope="col">Transport</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Why disabled</th>
-                  <th scope="col">Last delivered</th>
-                  <th scope="col">Registered</th>
+                  <th scope="col">{t("Endpoint")}</th>
+                  <th scope="col">{t("Transport")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Why disabled")}</th>
+                  <th scope="col">{t("Last delivered")}</th>
+                  <th scope="col">{t("Registered")}</th>
                 </tr>
               </thead>
               <tbody>
                 {subscriptions.length === 0 && (
                   <tr>
                     <td colspan={6} class="table-empty">
-                      No devices registered in this tenant.
+                      {t("No devices registered in this tenant.")}
                     </td>
                   </tr>
                 )}

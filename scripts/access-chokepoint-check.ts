@@ -186,8 +186,21 @@ export function sliceScreen(
     // so its presence covers the file — the same reasoning `defineTenantRoute`
     // gets above. A screen that calls `authorizeInTransaction` by hand is
     // covered too; it did the work, just without the helper.
+    // `loadSelfServiceScreen` counts too, and the reason it is SAFE to count is
+    // not that it authorizes — it does not — but that it is the only other way
+    // to open a screen's transaction, and it cannot be reached by accident: it
+    // demands a written `selfServiceReason`, and
+    // `tests/admin-screen-self-service.test.ts` enumerates the screens allowed
+    // to call it at all (ADR-0096 §1).
+    //
+    // Without it, a screen whose subject IS the caller — with no entry
+    // permission that could honestly be evaluated — would have to invent one,
+    // which is the ADR-0058 §E latent-authz trap: an action nothing seeds denies
+    // everyone including the tenant owner, while the call site reads as guarded.
     usesChokepoint:
-      /loadAdminScreen\(/.test(code) || /authorizeInTransaction\(/.test(code)
+      /loadAdminScreen\(/.test(code) ||
+      /loadSelfServiceScreen\(/.test(code) ||
+      /authorizeInTransaction\(/.test(code)
   };
 }
 

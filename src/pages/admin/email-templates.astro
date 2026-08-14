@@ -20,6 +20,7 @@ import { loadAdminScreen } from "../../lib/auth/admin-screen";
 import { logAdminPageError } from "../../lib/logging/error-log";
 import { listEmailTemplates } from "../../modules/email/application/email-template-directory";
 import { BASE_EMAIL_TEMPLATE_CATEGORIES } from "../../modules/email/domain/email-template-categories";
+import { getTranslatorFor } from "../../lib/i18n";
 
 type TemplateRow = {
   id: string;
@@ -30,6 +31,7 @@ type TemplateRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 // R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
 // same transaction. The previous `result instanceof Response` branch was dead:
@@ -66,18 +68,22 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
 
 <AdminLayout title="Email templates">
   <header class="page-header fade-in-up">
-    <h1 id="email-templates-heading">Email templates</h1>
+    <h1 id="email-templates-heading">{t("Email templates")}</h1>
     <p class="page-description">
-      Transactional email templates for this tenant, including inactive ones.
-      Subject and body are captured for the <code>en</code> locale; the endpoint validates
-      and escapes the content.
+      {
+        t(
+          "Transactional email templates for this tenant, including inactive ones. Subject and body are captured for the"
+        )
+      }<code>en</code>{
+        t("locale; the endpoint validates and escapes the content.")
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="email-templates-denied">
-        You do not have permission to view email templates.
+        {t("You do not have permission to view email templates.")}
       </p>
     )
   }
@@ -85,7 +91,7 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="email-templates-error">
-        Templates could not be loaded right now. Please try again later.
+        {t("Templates could not be loaded right now. Please try again later.")}
       </p>
     )
   }
@@ -96,7 +102,7 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
         id="email-template-create-form"
         class="admin-create-form fade-in-up"
       >
-        <p class="form-legend">Create a template</p>
+        <p class="form-legend">{t("Create a template")}</p>
         <p
           id="email-template-create-error"
           class="admin-create-error"
@@ -104,14 +110,14 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           hidden
         />
 
-        <label for="email-template-key">Template key</label>
+        <label for="email-template-key">{t("Template key")}</label>
         <select id="email-template-key" name="templateKey">
           {BASE_EMAIL_TEMPLATE_CATEGORIES.map((category) => (
             <option value={category}>{category}</option>
           ))}
         </select>
 
-        <label for="email-template-name">Name</label>
+        <label for="email-template-name">{t("Name")}</label>
         <input
           id="email-template-name"
           name="name"
@@ -120,7 +126,7 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           autocomplete="off"
         />
 
-        <label for="email-template-subject">Subject (en)</label>
+        <label for="email-template-subject">{t("Subject (en)")}</label>
         <input
           id="email-template-subject"
           name="subject"
@@ -129,11 +135,11 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           autocomplete="off"
         />
 
-        <label for="email-template-body">Text body (en)</label>
+        <label for="email-template-body">{t("Text body (en)")}</label>
         <textarea id="email-template-body" name="body" rows="3" required />
 
         <button type="submit" id="email-template-create-submit">
-          Create template
+          {t("Create template")}
         </button>
       </form>
     )
@@ -146,9 +152,9 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
           <caption>{templates.length} template(s)</caption>
           <thead>
             <tr>
-              <th scope="col">Key</th>
-              <th scope="col">Name</th>
-              <th scope="col">Active</th>
+              <th scope="col">{t("Key")}</th>
+              <th scope="col">{t("Name")}</th>
+              <th scope="col">{t("Active")}</th>
             </tr>
           </thead>
           <tbody>
@@ -159,7 +165,9 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
                     <span class="empty-state-icon" aria-hidden="true">
                       ✉
                     </span>
-                    <span class="empty-state-title">No templates yet</span>
+                    <span class="empty-state-title">
+                      {t("No templates yet")}
+                    </span>
                     <span class="empty-state-text">
                       {canCreate
                         ? "Create your first email template using the form above."

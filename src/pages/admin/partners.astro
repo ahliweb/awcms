@@ -40,8 +40,10 @@ import {
   type DelegatedGrantSummary
 } from "../../modules/identity-access/application/delegated-access-store";
 import { DELEGATED_ACCESS_MAX_TTL_DAYS } from "../../modules/identity-access/domain/delegated-access";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -124,18 +126,20 @@ const maxExpiry = new Date(
 
 <AdminLayout title="Partner access">
   <header class="page-header fade-in-up">
-    <h1 id="partners-heading">Partner access</h1>
+    <h1 id="partners-heading">{t("Partner access")}</h1>
     <p class="page-description">
-      Who from outside this organisation can reach this tenant, and until when.
-      Severing a partnership revokes every grant under it — memberships
-      deactivated, sessions killed — in one step.
+      {
+        t(
+          "Who from outside this organisation can reach this tenant, and until when. Severing a partnership revokes every grant under it \u2014 memberships deactivated, sessions killed \u2014 in one step."
+        )
+      }
     </p>
   </header>
 
   {
     !canRead && (
       <p class="state-notice fade-in-up" id="partners-denied">
-        You do not have permission to view partner access.
+        {t("You do not have permission to view partner access.")}
       </p>
     )
   }
@@ -143,7 +147,7 @@ const maxExpiry = new Date(
   {
     canRead && loadError && (
       <p class="state-notice fade-in-up" id="partners-load-error">
-        Could not load partner access. Please try again.
+        {t("Could not load partner access. Please try again.")}
       </p>
     )
   }
@@ -162,17 +166,18 @@ const maxExpiry = new Date(
           class="fade-in-up"
           aria-labelledby="partners-engagements-heading"
         >
-          <h2 id="partners-engagements-heading">Partnerships</h2>
+          <h2 id="partners-engagements-heading">{t("Partnerships")}</h2>
 
           {canConfigure && (
             <form id="engage-partner-form" class="admin-form">
               <p class="page-description">
-                There is no partner directory to pick from, on purpose: a list
-                of every partnership on this platform is exactly the
-                cross-tenant artefact this design refuses to build. Ask your
-                partner for their tenant id.
+                {t(
+                  "There is no partner directory to pick from, on purpose: a list of every partnership on this platform is exactly the cross-tenant artefact this design refuses to build. Ask your partner for their tenant id."
+                )}
               </p>
-              <label for="engage-partner-tenant-id">Partner tenant id</label>
+              <label for="engage-partner-tenant-id">
+                {t("Partner tenant id")}
+              </label>
               <input
                 id="engage-partner-tenant-id"
                 name="partnerTenantId"
@@ -182,25 +187,27 @@ const maxExpiry = new Date(
                 placeholder="00000000-0000-0000-0000-000000000000"
               />
               <button type="submit" id="engage-partner-submit">
-                Engage partner
+                {t("Engage partner")}
               </button>
             </form>
           )}
 
           {engagements.length === 0 ? (
             <div class="empty-state" id="partners-engagements-empty">
-              <p class="empty-state-title">Nobody from outside</p>
-              <p class="empty-state-text">No partner reaches this tenant.</p>
+              <p class="empty-state-title">{t("Nobody from outside")}</p>
+              <p class="empty-state-text">
+                {t("No partner reaches this tenant.")}
+              </p>
             </div>
           ) : (
             <div class="data-table-scroll">
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Partner</th>
-                    <th scope="col">Tenant id</th>
-                    <th scope="col">Engaged</th>
-                    {canConfigure && <th scope="col">Actions</th>}
+                    <th scope="col">{t("Partner")}</th>
+                    <th scope="col">{t("Tenant id")}</th>
+                    <th scope="col">{t("Engaged")}</th>
+                    {canConfigure && <th scope="col">{t("Actions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -222,7 +229,7 @@ const maxExpiry = new Date(
                             class="js-sever-engagement"
                             data-engagement-id={entry.id}
                           >
-                            Sever
+                            {t("Sever")}
                           </button>
                         </td>
                       )}
@@ -235,7 +242,7 @@ const maxExpiry = new Date(
         </section>
 
         <section class="fade-in-up" aria-labelledby="partners-grants-heading">
-          <h2 id="partners-grants-heading">Delegated access</h2>
+          <h2 id="partners-grants-heading">{t("Delegated access")}</h2>
 
           <div
             id="partners-access-code"
@@ -252,7 +259,7 @@ const maxExpiry = new Date(
                 {DELEGATED_ACCESS_MAX_TTL_DAYS} days.
               </p>
 
-              <label for="approve-partner">Partner</label>
+              <label for="approve-partner">{t("Partner")}</label>
               <select id="approve-partner" name="partnerTenantId" required>
                 {engagements.map((entry) => (
                   <option value={entry.partnerTenantId}>
@@ -261,14 +268,14 @@ const maxExpiry = new Date(
                 ))}
               </select>
 
-              <label for="approve-role">Role they will hold</label>
+              <label for="approve-role">{t("Role they will hold")}</label>
               <select id="approve-role" name="roleId" required>
                 {roles.map((role) => (
                   <option value={role.id}>{role.roleCode}</option>
                 ))}
               </select>
 
-              <label for="approve-purpose">Why</label>
+              <label for="approve-purpose">{t("Why")}</label>
               <input
                 id="approve-purpose"
                 name="purpose"
@@ -278,7 +285,7 @@ const maxExpiry = new Date(
                 placeholder="Incident 4711 — checkout errors"
               />
 
-              <label for="approve-expires">Until</label>
+              <label for="approve-expires">{t("Until")}</label>
               <input
                 id="approve-expires"
                 name="expiresAt"
@@ -288,16 +295,16 @@ const maxExpiry = new Date(
               />
 
               <button type="submit" id="approve-grant-submit">
-                Approve access
+                {t("Approve access")}
               </button>
             </form>
           )}
 
           {grants.length === 0 ? (
             <div class="empty-state" id="partners-grants-empty">
-              <p class="empty-state-title">No access granted</p>
+              <p class="empty-state-title">{t("No access granted")}</p>
               <p class="empty-state-text">
-                Nobody outside this organisation has been given a way in.
+                {t("Nobody outside this organisation has been given a way in.")}
               </p>
             </div>
           ) : (
@@ -305,11 +312,11 @@ const maxExpiry = new Date(
               <table class="data-table data-table--stack">
                 <thead>
                   <tr>
-                    <th scope="col">Partner</th>
-                    <th scope="col">Why</th>
-                    <th scope="col">Until</th>
-                    <th scope="col">State</th>
-                    {canAssign && <th scope="col">Actions</th>}
+                    <th scope="col">{t("Partner")}</th>
+                    <th scope="col">{t("Why")}</th>
+                    <th scope="col">{t("Until")}</th>
+                    <th scope="col">{t("State")}</th>
+                    {canAssign && <th scope="col">{t("Actions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -332,7 +339,7 @@ const maxExpiry = new Date(
                               class="js-revoke-grant"
                               data-grant-id={grant.id}
                             >
-                              Revoke
+                              {t("Revoke")}
                             </button>
                           ) : (
                             <span class="cell-muted">—</span>

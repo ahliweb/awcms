@@ -44,8 +44,10 @@ import { fetchSyncHealthReport } from "../../modules/reporting/application/sync-
 import { classifySyncHealthDisplay } from "../../modules/reporting/domain/sync-health";
 import { fetchModuleUsageReport } from "../../modules/reporting/application/module-usage-report";
 import { logAdminPageError } from "../../lib/logging/error-log";
+import { getTranslatorFor } from "../../lib/i18n";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 const permissionCount = ssr.permissions.size;
 const roleCount = ssr.roles.length;
 const roleSummary = roleCount > 0 ? ssr.roles.join(", ") : "—";
@@ -124,15 +126,15 @@ const ICON_MODULES =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>';
 ---
 
-<AdminLayout title="Dashboard">
-  <h1 id="admin-dashboard-heading" class="sr-only">Dashboard</h1>
+<AdminLayout title={t("Dashboard")}>
+  <h1 id="admin-dashboard-heading" class="sr-only">{t("Dashboard")}</h1>
 
   {
     !hasDashboardAccess && (
       <p class="state-notice fade-in-up" id="dashboard-denied">
-        You do not have permission to view the tenant dashboard reports (
-        <code>{DASHBOARD_PERMISSION}</code>). Your session details are shown
-        below.
+        {t("You do not have permission to view the tenant dashboard reports")} (
+        <code>{DASHBOARD_PERMISSION}</code>).{" "}
+        {t("Your session details are shown below.")}
       </p>
     )
   }
@@ -140,8 +142,9 @@ const ICON_MODULES =
   {
     loadError && (
       <p class="state-notice fade-in-up" id="dashboard-error">
-        The dashboard reports could not be loaded right now. Your session
-        details are shown below; try again shortly.
+        {t(
+          "The dashboard reports could not be loaded right now. Your session details are shown below; try again shortly."
+        )}
       </p>
     )
   }
@@ -155,7 +158,7 @@ const ICON_MODULES =
             <span class="kpi-value">
               {dashboard.tenantActivity.activeUserCount}
             </span>
-            <span class="kpi-label">Active users</span>
+            <span class="kpi-label">{t("Active users")}</span>
           </article>
 
           <article class="kpi kpi--info fade-in-up">
@@ -163,14 +166,16 @@ const ICON_MODULES =
             <span class="kpi-value">
               {dashboard.tenantActivity.activeOfficeCount}
             </span>
-            <span class="kpi-label">Active offices</span>
+            <span class="kpi-label">{t("Active offices")}</span>
           </article>
 
           <article class="kpi kpi--success fade-in-up">
             <span class="kpi-icon" set:html={ICON_SHIELD} />
             <span class="kpi-value">{dashboard.accessAudit.allowCount}</span>
             <span class="kpi-label">
-              Allow ({dashboard.accessAudit.decisionWindowDays} days)
+              {t("Allow ({days} days)", {
+                days: dashboard.accessAudit.decisionWindowDays
+              })}
             </span>
           </article>
 
@@ -186,15 +191,15 @@ const ICON_MODULES =
               {dashboard.syncHealth.activeNodeCount}/
               {dashboard.syncHealth.totalNodeCount}
             </span>
-            <span class="kpi-label">Active nodes</span>
+            <span class="kpi-label">{t("Active nodes")}</span>
             {syncNeedsAttention && (
               <span class="kpi-status">
-                <span class="badge badge--warning">Needs attention</span>
+                <span class="badge badge--warning">{t("Needs attention")}</span>
               </span>
             )}
             {syncNotConfigured && (
               <span class="kpi-status">
-                <span class="badge badge--muted">Not configured</span>
+                <span class="badge badge--muted">{t("Not configured")}</span>
               </span>
             )}
           </article>
@@ -204,11 +209,11 @@ const ICON_MODULES =
           <section class="dashboard-card fade-in-up">
             <header class="card-header">
               <span class="card-icon" set:html={ICON_USERS} />
-              <h2>Tenant Activity</h2>
+              <h2>{t("Tenant Activity")}</h2>
             </header>
             <dl>
               <div class="row">
-                <dt>Tenant</dt>
+                <dt>{t("Tenant")}</dt>
                 <dd>
                   {dashboard.tenantActivity.tenantName}
                   <span class="badge badge--muted">
@@ -217,15 +222,15 @@ const ICON_MODULES =
                 </dd>
               </div>
               <div class="row">
-                <dt>Active users</dt>
+                <dt>{t("Active users")}</dt>
                 <dd>{dashboard.tenantActivity.activeUserCount}</dd>
               </div>
               <div class="row">
-                <dt>Active offices</dt>
+                <dt>{t("Active offices")}</dt>
                 <dd>{dashboard.tenantActivity.activeOfficeCount}</dd>
               </div>
               <div class="row">
-                <dt>Last login</dt>
+                <dt>{t("Last login")}</dt>
                 <dd>{dashboard.tenantActivity.mostRecentLoginAt ?? "—"}</dd>
               </div>
             </dl>
@@ -234,15 +239,23 @@ const ICON_MODULES =
           <section class="dashboard-card fade-in-up">
             <header class="card-header">
               <span class="card-icon" set:html={ICON_SHIELD} />
-              <h2>Access &amp; Audit</h2>
+              <h2>{t("Access & Audit")}</h2>
             </header>
             <dl>
               <div class="row">
-                <dt>Allow ({dashboard.accessAudit.decisionWindowDays} days)</dt>
+                <dt>
+                  {t("Allow ({days} days)", {
+                    days: dashboard.accessAudit.decisionWindowDays
+                  })}
+                </dt>
                 <dd>{dashboard.accessAudit.allowCount}</dd>
               </div>
               <div class="row">
-                <dt>Deny ({dashboard.accessAudit.decisionWindowDays} days)</dt>
+                <dt>
+                  {t("Deny ({days} days)", {
+                    days: dashboard.accessAudit.decisionWindowDays
+                  })}
+                </dt>
                 <dd
                   class={
                     dashboard.accessAudit.denyCount > 0 ? "dd-alert" : undefined
@@ -252,11 +265,11 @@ const ICON_MODULES =
                 </dd>
               </div>
               <div class="row">
-                <dt>Total decision logs</dt>
+                <dt>{t("Total decision logs")}</dt>
                 <dd>{dashboard.accessAudit.totalDecisionCount}</dd>
               </div>
               <div class="row">
-                <dt>Audit events</dt>
+                <dt>{t("Audit events")}</dt>
                 <dd>{dashboard.accessAudit.auditEventCount}</dd>
               </div>
             </dl>
@@ -265,28 +278,30 @@ const ICON_MODULES =
           <section class="dashboard-card fade-in-up">
             <header class="card-header">
               <span class="card-icon" set:html={ICON_SYNC} />
-              <h2>Sync Health</h2>
+              <h2>{t("Sync Health")}</h2>
               {syncNeedsAttention && (
                 <span class="card-header-badge">
-                  <span class="badge badge--warning">Needs attention</span>
+                  <span class="badge badge--warning">
+                    {t("Needs attention")}
+                  </span>
                 </span>
               )}
               {syncNotConfigured && (
                 <span class="card-header-badge">
-                  <span class="badge badge--muted">Not configured</span>
+                  <span class="badge badge--muted">{t("Not configured")}</span>
                 </span>
               )}
             </header>
             <dl>
               <div class="row">
-                <dt>Active nodes</dt>
+                <dt>{t("Active nodes")}</dt>
                 <dd>
                   {dashboard.syncHealth.activeNodeCount} /{" "}
                   {dashboard.syncHealth.totalNodeCount}
                 </dd>
               </div>
               <div class="row">
-                <dt>Open conflicts</dt>
+                <dt>{t("Open conflicts")}</dt>
                 <dd
                   class={
                     dashboard.syncHealth.hasOpenConflicts
@@ -298,11 +313,11 @@ const ICON_MODULES =
                 </dd>
               </div>
               <div class="row">
-                <dt>Pending objects</dt>
+                <dt>{t("Pending objects")}</dt>
                 <dd>{dashboard.syncHealth.pendingObjectCount}</dd>
               </div>
               <div class="row">
-                <dt>Failed objects</dt>
+                <dt>{t("Failed objects")}</dt>
                 <dd
                   class={
                     dashboard.syncHealth.hasFailedObjects
@@ -320,16 +335,16 @@ const ICON_MODULES =
         <section class="dashboard-card dashboard-card--wide fade-in-up">
           <header class="card-header">
             <span class="card-icon" set:html={ICON_MODULES} />
-            <h2>Module Usage</h2>
+            <h2>{t("Module Usage")}</h2>
           </header>
           <div class="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Module</th>
-                  <th scope="col">Metric</th>
+                  <th scope="col">{t("Module")}</th>
+                  <th scope="col">{t("Metric")}</th>
                   <th scope="col" class="num">
-                    Count
+                    {t("Count")}
                   </th>
                 </tr>
               </thead>
@@ -349,27 +364,27 @@ const ICON_MODULES =
     )
   }
 
-  <section class="admin-section" aria-label="Session">
-    <h2 class="admin-section-title">Your session</h2>
+  <section class="admin-section" aria-label={t("Session")}>
+    <h2 class="admin-section-title">{t("Your session")}</h2>
     <ul class="stat-grid">
       <li class="stat-card">
-        <div class="stat-label">Tenant</div>
+        <div class="stat-label">{t("Tenant")}</div>
         <div class="stat-value stat-value--mono" id="dashboard-tenant-id">
           {ssr.tenantId}
         </div>
-        <div class="stat-hint">Active tenant context</div>
+        <div class="stat-hint">{t("Active tenant context")}</div>
       </li>
       <li class="stat-card">
-        <div class="stat-label">Roles</div>
+        <div class="stat-label">{t("Roles")}</div>
         <div class="stat-value">{roleCount}</div>
         <div class="stat-hint">{roleSummary}</div>
       </li>
       <li class="stat-card">
-        <div class="stat-label">Granted permissions</div>
+        <div class="stat-label">{t("Granted permissions")}</div>
         <div class="stat-value" id="dashboard-permission-count">
           {permissionCount}
         </div>
-        <div class="stat-hint">Across all assigned roles</div>
+        <div class="stat-hint">{t("Across all assigned roles")}</div>
       </li>
     </ul>
   </section>

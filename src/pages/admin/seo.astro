@@ -69,6 +69,7 @@ import {
   type RedirectRecord
 } from "../../modules/seo-distribution/application/redirect-directory";
 import { fetchRedirectSettings } from "../../modules/seo-distribution/application/redirect-settings-directory";
+import { getTranslatorFor } from "../../lib/i18n";
 import {
   listNotFoundObservations,
   type NotFoundObservation
@@ -88,6 +89,7 @@ import {
 } from "../../modules/seo-distribution/domain/redirect-rule";
 
 const ssr = Astro.locals.ssrContext!;
+const { t } = getTranslatorFor(Astro.locals.locale);
 
 const showRedirectActions = canUpdateRedirect || canDeleteRedirect;
 const showNotFoundActions = canUpdateNotFound;
@@ -258,23 +260,26 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
 
 <AdminLayout title="SEO & Distribution">
   <header class="page-header fade-in-up">
-    <h1 id="seo-heading">SEO &amp; distribution</h1>
+    <h1 id="seo-heading">{t("SEO & distribution")}</h1>
     <p class="page-description">
-      This tenant's public metadata defaults, discovery surfaces (robots.txt,
-      sitemap, feeds), redirect rules, and the privacy-minimized 404 log. Bulk
-      import and automatic URL-change capture are API-only; the redirect policy
-      below governs the latter.
+      {
+        t(
+          "This tenant's public metadata defaults, discovery surfaces (robots.txt, sitemap, feeds), redirect rules, and the privacy-minimized 404 log. Bulk import and automatic URL-change capture are API-only; the redirect policy below governs the latter."
+        )
+      }
     </p>
   </header>
 
   <!-- ================= Tenant SEO defaults ================= -->
   <section class="admin-section fade-in-up" aria-labelledby="seo-config-title">
-    <h2 class="admin-section-title" id="seo-config-title">SEO defaults</h2>
+    <h2 class="admin-section-title" id="seo-config-title">
+      {t("SEO defaults")}
+    </h2>
 
     {
       !canReadConfig && (
         <p class="state-notice" id="seo-config-denied">
-          You do not have permission to view this tenant's SEO defaults.
+          {t("You do not have permission to view this tenant's SEO defaults.")}
         </p>
       )
     }
@@ -282,7 +287,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadConfig && loadError && (
         <p class="state-notice" id="seo-config-error">
-          SEO defaults could not be loaded right now. Please try again later.
+          {t(
+            "SEO defaults could not be loaded right now. Please try again later."
+          )}
         </p>
       )
     }
@@ -292,23 +299,23 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="seo-config-table">
             <caption class="sr-only">
-              Current SEO defaults for this tenant (read-only)
+              {t("Current SEO defaults for this tenant (read-only)")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Setting</th>
-                <th scope="col">Value</th>
+                <th scope="col">{t("Setting")}</th>
+                <th scope="col">{t("Value")}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td data-label="Setting">Site name</td>
+                <td data-label="Setting">{t("Site name")}</td>
                 <td data-label="Value">
                   {seoConfig.siteName ?? <span class="cell-muted">—</span>}
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Default meta description</td>
+                <td data-label="Setting">{t("Default meta description")}</td>
                 <td data-label="Value">
                   {seoConfig.defaultMetaDescription ?? (
                     <span class="cell-muted">—</span>
@@ -316,7 +323,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Twitter site handle</td>
+                <td data-label="Setting">{t("Twitter site handle")}</td>
                 <td data-label="Value">
                   {seoConfig.twitterSiteHandle ?? (
                     <span class="cell-muted">—</span>
@@ -324,7 +331,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Organization name</td>
+                <td data-label="Setting">{t("Organization name")}</td>
                 <td data-label="Value">
                   {seoConfig.organizationName ?? (
                     <span class="cell-muted">—</span>
@@ -332,7 +339,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Site-wide noindex</td>
+                <td data-label="Setting">{t("Site-wide noindex")}</td>
                 <td data-label="Value">
                   <span
                     class="status-badge"
@@ -346,26 +353,26 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Sitemap served</td>
+                <td data-label="Setting">{t("Sitemap served")}</td>
                 <td data-label="Value">
                   {seoConfig.sitemapEnabled ? "Yes" : "No"}
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Feeds served</td>
+                <td data-label="Setting">{t("Feeds served")}</td>
                 <td data-label="Value">
                   {seoConfig.feedsEnabled ? "Yes" : "No"}
                 </td>
               </tr>
               <tr>
-                <td data-label="Setting">Feed item limit</td>
+                <td data-label="Setting">{t("Feed item limit")}</td>
                 <td data-label="Value">{seoConfig.feedItemLimit}</td>
               </tr>
               <tr>
-                <td data-label="Setting">Included resource types</td>
+                <td data-label="Setting">{t("Included resource types")}</td>
                 <td data-label="Value">
                   {includedTypesValue === "" ? (
-                    <span class="cell-muted">all eligible types</span>
+                    <span class="cell-muted">{t("all eligible types")}</span>
                   ) : (
                     <span class="cell-code">{includedTypesValue}</span>
                   )}
@@ -381,7 +388,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
       canReadConfig && !loadError && canUpdateConfig && (
         <form id="seo-config-form" class="admin-create-form">
           <p class="form-legend">
-            Edit SEO defaults (a full replace — every field below is sent)
+            {t(
+              "Edit SEO defaults (a full replace \u2014 every field below is sent)"
+            )}
           </p>
           <p
             id="seo-config-form-error"
@@ -390,7 +399,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             hidden
           />
 
-          <label for="seo-site-name">Site name</label>
+          <label for="seo-site-name">{t("Site name")}</label>
           <input
             id="seo-site-name"
             name="siteName"
@@ -399,7 +408,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.siteName ?? ""}
           />
 
-          <label for="seo-meta-description">Default meta description</label>
+          <label for="seo-meta-description">
+            {t("Default meta description")}
+          </label>
           <input
             id="seo-meta-description"
             name="defaultMetaDescription"
@@ -408,7 +419,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.defaultMetaDescription ?? ""}
           />
 
-          <label for="seo-twitter-handle">Twitter site handle</label>
+          <label for="seo-twitter-handle">{t("Twitter site handle")}</label>
           <input
             id="seo-twitter-handle"
             name="twitterSiteHandle"
@@ -417,7 +428,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.twitterSiteHandle ?? ""}
           />
 
-          <label for="seo-organization-name">Organization name</label>
+          <label for="seo-organization-name">{t("Organization name")}</label>
           <input
             id="seo-organization-name"
             name="organizationName"
@@ -427,7 +438,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           />
 
           <label for="seo-social-media-id">
-            Default social image (media object UUID)
+            {t("Default social image (media object UUID)")}
           </label>
           <input
             id="seo-social-media-id"
@@ -438,7 +449,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           />
 
           <label for="seo-org-logo-media-id">
-            Organization logo (media object UUID)
+            {t("Organization logo (media object UUID)")}
           </label>
           <input
             id="seo-org-logo-media-id"
@@ -448,7 +459,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.organizationLogoMediaId ?? ""}
           />
 
-          <label for="seo-feed-title">Feed title</label>
+          <label for="seo-feed-title">{t("Feed title")}</label>
           <input
             id="seo-feed-title"
             name="feedTitle"
@@ -457,7 +468,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.feedTitle ?? ""}
           />
 
-          <label for="seo-feed-description">Feed description</label>
+          <label for="seo-feed-description">{t("Feed description")}</label>
           <input
             id="seo-feed-description"
             name="feedDescription"
@@ -467,7 +478,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           />
 
           <label for="seo-feed-logo-media-id">
-            Feed logo (media object UUID)
+            {t("Feed logo (media object UUID)")}
           </label>
           <input
             id="seo-feed-logo-media-id"
@@ -477,7 +488,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={seoConfig.feedLogoMediaId ?? ""}
           />
 
-          <label for="seo-feed-item-limit">Feed item limit (1–200)</label>
+          <label for="seo-feed-item-limit">
+            {t("Feed item limit (1\u2013200)")}
+          </label>
           <input
             id="seo-feed-item-limit"
             name="feedItemLimit"
@@ -488,7 +501,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           />
 
           <label for="seo-included-types">
-            Included resource types (comma separated; blank = all)
+            {t("Included resource types (comma separated; blank = all)")}
           </label>
           <input
             id="seo-included-types"
@@ -498,30 +511,30 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={includedTypesValue}
           />
 
-          <label for="seo-noindex">Site-wide noindex</label>
+          <label for="seo-noindex">{t("Site-wide noindex")}</label>
           <select id="seo-noindex" name="defaultRobotsNoindex">
             <option value="false" selected={!seoConfig.defaultRobotsNoindex}>
-              indexable
+              {t("indexable")}
             </option>
             <option value="true" selected={seoConfig.defaultRobotsNoindex}>
-              noindex (hide the whole site from crawlers)
+              {t("noindex (hide the whole site from crawlers)")}
             </option>
           </select>
 
-          <label for="seo-sitemap-enabled">Serve sitemap</label>
+          <label for="seo-sitemap-enabled">{t("Serve sitemap")}</label>
           <select id="seo-sitemap-enabled" name="sitemapEnabled">
             <option value="true" selected={seoConfig.sitemapEnabled}>
-              yes
+              {t("yes")}
             </option>
             <option value="false" selected={!seoConfig.sitemapEnabled}>
               no
             </option>
           </select>
 
-          <label for="seo-feeds-enabled">Serve feeds</label>
+          <label for="seo-feeds-enabled">{t("Serve feeds")}</label>
           <select id="seo-feeds-enabled" name="feedsEnabled">
             <option value="true" selected={seoConfig.feedsEnabled}>
-              yes
+              {t("yes")}
             </option>
             <option value="false" selected={!seoConfig.feedsEnabled}>
               no
@@ -529,7 +542,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           </select>
 
           <button type="submit" id="seo-config-submit">
-            Save SEO defaults
+            {t("Save SEO defaults")}
           </button>
         </form>
       )
@@ -542,13 +555,15 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     aria-labelledby="redirect-policy-title"
   >
     <h2 class="admin-section-title" id="redirect-policy-title">
-      Redirect policy
+      {t("Redirect policy")}
     </h2>
 
     {
       !canReadRedirect && (
         <p class="state-notice" id="redirect-policy-denied">
-          You do not have permission to view this tenant's redirect policy.
+          {t(
+            "You do not have permission to view this tenant's redirect policy."
+          )}
         </p>
       )
     }
@@ -556,8 +571,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadRedirect && loadError && (
         <p class="state-notice" id="redirect-policy-error">
-          The redirect policy could not be loaded right now. Please try again
-          later.
+          {t(
+            "The redirect policy could not be loaded right now. Please try again later."
+          )}
         </p>
       )
     }
@@ -570,17 +586,17 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             id="redirect-policy-table"
           >
             <caption class="sr-only">
-              Current redirect policy for this tenant (read-only)
+              {t("Current redirect policy for this tenant (read-only)")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Policy</th>
-                <th scope="col">Value</th>
+                <th scope="col">{t("Policy")}</th>
+                <th scope="col">{t("Value")}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td data-label="Policy">URL-change capture</td>
+                <td data-label="Policy">{t("URL-change capture")}</td>
                 <td data-label="Value">
                   <span class="cell-code">
                     {redirectSettings.urlChangeAutoPolicy}
@@ -588,7 +604,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 </td>
               </tr>
               <tr>
-                <td data-label="Policy">Legacy /blog redirect</td>
+                <td data-label="Policy">{t("Legacy /blog redirect")}</td>
                 <td data-label="Value">
                   {redirectSettings.legacyBlogRedirectEnabled
                     ? "enabled"
@@ -604,7 +620,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadRedirect && !loadError && canUpdateRedirect && (
         <form id="redirect-settings-form" class="admin-create-form">
-          <p class="form-legend">Edit redirect policy</p>
+          <p class="form-legend">{t("Edit redirect policy")}</p>
           <p
             id="redirect-settings-error"
             class="admin-create-error"
@@ -613,7 +629,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           />
 
           <label for="redirect-url-change-policy">
-            When a resource's URL changes
+            {t("When a resource's URL changes")}
           </label>
           <select id="redirect-url-change-policy" name="urlChangeAutoPolicy">
             {URL_CHANGE_AUTO_POLICIES.map((value) => (
@@ -627,25 +643,27 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           </select>
 
           <label for="redirect-legacy-blog">
-            Legacy /blog redirect (inert in this base — no /news routes)
+            {t(
+              "Legacy /blog redirect (inert in this base \u2014 no /news routes)"
+            )}
           </label>
           <select id="redirect-legacy-blog" name="legacyBlogRedirectEnabled">
             <option
               value="false"
               selected={!redirectSettings.legacyBlogRedirectEnabled}
             >
-              disabled
+              {t("disabled")}
             </option>
             <option
               value="true"
               selected={redirectSettings.legacyBlogRedirectEnabled}
             >
-              enabled
+              {t("enabled")}
             </option>
           </select>
 
           <button type="submit" id="redirect-settings-submit">
-            Save redirect policy
+            {t("Save redirect policy")}
           </button>
         </form>
       )
@@ -658,14 +676,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     aria-labelledby="redirect-rules-title"
   >
     <h2 class="admin-section-title">
-      <span id="redirect-rules-title">Redirect rules</span>
+      <span id="redirect-rules-title">{t("Redirect rules")}</span>
       <span class="count-pill">{redirects.length}</span>
     </h2>
 
     {
       !canReadRedirect && (
         <p class="state-notice" id="redirect-rules-denied">
-          You do not have permission to view redirect rules.
+          {t("You do not have permission to view redirect rules.")}
         </p>
       )
     }
@@ -673,7 +691,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadRedirect && loadError && (
         <p class="state-notice" id="redirect-rules-error">
-          Redirect rules could not be loaded right now. Please try again later.
+          {t(
+            "Redirect rules could not be loaded right now. Please try again later."
+          )}
         </p>
       )
     }
@@ -681,7 +701,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadRedirect && !loadError && (
         <form method="get" class="admin-toolbar" id="redirect-filter-form">
-          <label for="redirect-filter-q">Source contains</label>
+          <label for="redirect-filter-q">{t("Source contains")}</label>
           <input
             id="redirect-filter-q"
             name="q"
@@ -690,9 +710,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             value={qFilter}
           />
 
-          <label for="redirect-filter-state">State</label>
+          <label for="redirect-filter-state">{t("State")}</label>
           <select id="redirect-filter-state" name="state">
-            <option value="">any</option>
+            <option value="">{t("any")}</option>
             {REDIRECT_STATE_FILTERS.map((value) => (
               <option value={value} selected={value === stateFilter}>
                 {value}
@@ -700,9 +720,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             ))}
           </select>
 
-          <label for="redirect-filter-target-type">Target type</label>
+          <label for="redirect-filter-target-type">{t("Target type")}</label>
           <select id="redirect-filter-target-type" name="targetType">
-            <option value="">any</option>
+            <option value="">{t("any")}</option>
             {REDIRECT_TARGET_TYPES.map((value) => (
               <option value={value} selected={value === targetTypeFilter}>
                 {value}
@@ -717,7 +737,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             <input type="hidden" name="unresolvedOnly" value="true" />
           )}
 
-          <button type="submit">Apply filters</button>
+          <button type="submit">{t("Apply filters")}</button>
         </form>
       )
     }
@@ -725,7 +745,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canCreateRedirect && (
         <form id="redirect-create-form" class="admin-create-form">
-          <p class="form-legend">Create a redirect rule</p>
+          <p class="form-legend">{t("Create a redirect rule")}</p>
           <p
             id="redirect-create-error"
             class="admin-create-error"
@@ -739,7 +759,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             hidden
           />
 
-          <label for="redirect-source-path">Source path</label>
+          <label for="redirect-source-path">{t("Source path")}</label>
           <input
             id="redirect-source-path"
             name="sourcePath"
@@ -749,7 +769,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             placeholder="/old-page"
           />
 
-          <label for="redirect-target">Target</label>
+          <label for="redirect-target">{t("Target")}</label>
           <input
             id="redirect-target"
             name="target"
@@ -759,7 +779,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             placeholder="/new-page or https://verified-host/new-page"
           />
 
-          <label for="redirect-status-code">Status code</label>
+          <label for="redirect-status-code">{t("Status code")}</label>
           <select id="redirect-status-code" name="statusCode">
             {ALLOWED_REDIRECT_STATUS_CODES.map((value) => (
               <option value={String(value)} selected={value === 301}>
@@ -768,7 +788,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             ))}
           </select>
 
-          <label for="redirect-state">Initial state</label>
+          <label for="redirect-state">{t("Initial state")}</label>
           <select id="redirect-state" name="state">
             {ALLOWED_REDIRECT_STATES.map((value) => (
               <option value={value} selected={value === "active"}>
@@ -778,7 +798,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
           </select>
 
           <label for="redirect-domain-scope">
-            Host scope (one of this tenant's verified domains; blank = all)
+            {t(
+              "Host scope (one of this tenant's verified domains; blank = all)"
+            )}
           </label>
           <input
             id="redirect-domain-scope"
@@ -787,15 +809,17 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             autocomplete="off"
           />
 
-          <label for="redirect-preserve-query">Preserve query string</label>
+          <label for="redirect-preserve-query">
+            {t("Preserve query string")}
+          </label>
           <select id="redirect-preserve-query" name="preserveQuery">
             <option value="false" selected>
               no
             </option>
-            <option value="true">yes</option>
+            <option value="true">{t("yes")}</option>
           </select>
 
-          <label for="redirect-reason">Reason (optional)</label>
+          <label for="redirect-reason">{t("Reason (optional)")}</label>
           <input
             id="redirect-reason"
             name="reason"
@@ -809,10 +833,10 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 holder of `redirect.create` necessarily needs to reach this
                 panel, and it sends NO Idempotency-Key (nothing is stored). */}
             <button type="button" class="btn-inline" id="redirect-validate-btn">
-              Dry run
+              {t("Dry run")}
             </button>
             <button type="submit" id="redirect-create-submit">
-              Create rule
+              {t("Create rule")}
             </button>
           </div>
         </form>
@@ -835,17 +859,17 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="redirect-rules-table">
             <caption class="sr-only">
-              Redirect rules for this tenant, newest first
+              {t("Redirect rules for this tenant, newest first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Source</th>
-                <th scope="col">Target</th>
-                <th scope="col">Code</th>
-                <th scope="col">State</th>
-                <th scope="col">Query</th>
-                <th scope="col">Hits</th>
-                {showRedirectActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Source")}</th>
+                <th scope="col">{t("Target")}</th>
+                <th scope="col">{t("Code")}</th>
+                <th scope="col">{t("State")}</th>
+                <th scope="col">{t("Query")}</th>
+                <th scope="col">{t("Hits")}</th>
+                {showRedirectActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -860,7 +884,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                         ↪
                       </span>
                       <span class="empty-state-title">
-                        No redirect rules match
+                        {t("No redirect rules match")}
                       </span>
                       <span class="empty-state-text">
                         {canCreateRedirect
@@ -946,7 +970,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                             no
                           </option>
                           <option value="true" selected={rule.preserveQuery}>
-                            yes
+                            {t("yes")}
                           </option>
                         </select>
                       ) : rule.preserveQuery ? (
@@ -967,7 +991,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                               class="module-toggle redirect-save-btn"
                               data-redirect-id={rule.id}
                             >
-                              Save
+                              {t("Save")}
                             </button>
                           )}
                           {/* activate/deactivate/archive/restore all resolve to
@@ -979,7 +1003,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                               data-redirect-id={rule.id}
                               data-lifecycle-action="activate"
                             >
-                              Activate
+                              {t("Activate")}
                             </button>
                           )}
                           {canUpdateRedirect && rule.state === "active" && (
@@ -989,7 +1013,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                               data-redirect-id={rule.id}
                               data-lifecycle-action="deactivate"
                             >
-                              Deactivate
+                              {t("Deactivate")}
                             </button>
                           )}
                           {canUpdateRedirect && rule.state !== "archived" && (
@@ -1000,7 +1024,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                               data-lifecycle-action="archive"
                               data-lifecycle-confirm={`Archive ${rule.normalizedSourcePath}? It stops redirecting immediately.`}
                             >
-                              Archive
+                              {t("Archive")}
                             </button>
                           )}
                           {canDeleteRedirect && (
@@ -1010,7 +1034,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                               data-redirect-id={rule.id}
                               data-redirect-source={rule.normalizedSourcePath}
                             >
-                              Delete
+                              {t("Delete")}
                             </button>
                           )}
                         </div>
@@ -1032,7 +1056,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
               page is a plain GET (bookmarkable, back-button safe) rather than
               client state. */}
           <a class="btn-inline" href={nextPageHref(nextCursor)} rel="next">
-            Next page
+            {t("Next page")}
           </a>
         </p>
       )
@@ -1047,15 +1071,15 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
         aria-labelledby="redirect-recover-title"
       >
         <h2 class="admin-section-title" id="redirect-recover-title">
-          Recover a deleted rule
+          {t("Recover a deleted rule")}
         </h2>
         <p class="page-description">
-          Soft-deleted rules are excluded from the list above, so restore and
-          purge are addressed by rule id. Deleting a rule on this page sends you
-          back here with its id filled in.
+          {t(
+            "Soft-deleted rules are excluded from the list above, so restore and purge are addressed by rule id. Deleting a rule on this page sends you back here with its id filled in."
+          )}
         </p>
         <form id="redirect-recover-form" class="admin-create-form">
-          <p class="form-legend">Rule id</p>
+          <p class="form-legend">{t("Rule id")}</p>
           <p
             id="redirect-recover-error"
             class="admin-create-error"
@@ -1063,7 +1087,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             hidden
           />
 
-          <label for="redirect-recover-id">Deleted rule id (UUID)</label>
+          <label for="redirect-recover-id">{t("Deleted rule id (UUID)")}</label>
           <input
             id="redirect-recover-id"
             name="recoverId"
@@ -1080,7 +1104,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 id="redirect-restore-btn"
                 data-lifecycle-action="restore"
               >
-                Restore
+                {t("Restore")}
               </button>
             )}
             {/* Purge is the ONE lifecycle action the endpoint gates on
@@ -1093,7 +1117,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                 id="redirect-purge-btn"
                 data-lifecycle-action="purge"
               >
-                Purge permanently
+                {t("Purge permanently")}
               </button>
             )}
           </div>
@@ -1105,14 +1129,14 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
   <!-- ================= 404 governance ================= -->
   <section class="admin-section fade-in-up" aria-labelledby="not-found-title">
     <h2 class="admin-section-title">
-      <span id="not-found-title">Broken links (404)</span>
+      <span id="not-found-title">{t("Broken links (404)")}</span>
       <span class="count-pill">{observations.length}</span>
     </h2>
 
     {
       !canReadNotFound && (
         <p class="state-notice" id="not-found-denied">
-          You do not have permission to view the 404 log.
+          {t("You do not have permission to view the 404 log.")}
         </p>
       )
     }
@@ -1120,7 +1144,9 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadNotFound && loadError && (
         <p class="state-notice" id="not-found-error">
-          The 404 log could not be loaded right now. Please try again later.
+          {t(
+            "The 404 log could not be loaded right now. Please try again later."
+          )}
         </p>
       )
     }
@@ -1128,13 +1154,13 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
     {
       canReadNotFound && !loadError && (
         <form method="get" class="admin-toolbar" id="not-found-filter-form">
-          <label for="not-found-unresolved">Show</label>
+          <label for="not-found-unresolved">{t("Show")}</label>
           <select id="not-found-unresolved" name="unresolvedOnly">
             <option value="" selected={!unresolvedOnly}>
-              all observations
+              {t("all observations")}
             </option>
             <option value="true" selected={unresolvedOnly}>
-              unresolved only
+              {t("unresolved only")}
             </option>
           </select>
 
@@ -1150,7 +1176,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
             <input type="hidden" name="targetType" value={targetTypeFilter} />
           )}
 
-          <button type="submit">Apply</button>
+          <button type="submit">{t("Apply")}</button>
         </form>
       )
     }
@@ -1171,16 +1197,16 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="not-found-table">
             <caption class="sr-only">
-              Privacy-minimized 404 observations, most-hit first
+              {t("Privacy-minimized 404 observations, most-hit first")}
             </caption>
             <thead>
               <tr>
-                <th scope="col">Path</th>
-                <th scope="col">Referrer</th>
-                <th scope="col">Hits</th>
-                <th scope="col">Last seen</th>
-                <th scope="col">Status</th>
-                {showNotFoundActions && <th scope="col">Actions</th>}
+                <th scope="col">{t("Path")}</th>
+                <th scope="col">{t("Referrer")}</th>
+                <th scope="col">{t("Hits")}</th>
+                <th scope="col">{t("Last seen")}</th>
+                <th scope="col">{t("Status")}</th>
+                {showNotFoundActions && <th scope="col">{t("Actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -1194,10 +1220,13 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                       <span class="empty-state-icon" aria-hidden="true">
                         ✓
                       </span>
-                      <span class="empty-state-title">No 404s recorded</span>
+                      <span class="empty-state-title">
+                        {t("No 404s recorded")}
+                      </span>
                       <span class="empty-state-text">
-                        Broken links visitors hit on this tenant's public site
-                        will be aggregated here.
+                        {t(
+                          "Broken links visitors hit on this tenant's public site will be aggregated here."
+                        )}
                       </span>
                     </div>
                   </td>
@@ -1243,7 +1272,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                             class="module-toggle observation-resolve-btn"
                             data-observation-id={row.id}
                           >
-                            Resolve
+                            {t("Resolve")}
                           </button>
                           <button
                             type="button"
@@ -1251,7 +1280,7 @@ const includedTypesValue = (seoConfig.includedResourceTypes ?? []).join(", ");
                             data-observation-id={row.id}
                             data-observation-path={row.normalizedPath}
                           >
-                            Dismiss
+                            {t("Dismiss")}
                           </button>
                         </div>
                       </td>
