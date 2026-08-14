@@ -23,7 +23,7 @@ lalu membangun duplikatnya.
 
 <!-- Dihasilkan `bun run scripts:inventory:generate`. JANGAN diedit tangan. -->
 
-104 target menjalankan berkas di `scripts/`; 45 di antaranya
+105 target menjalankan berkas di `scripts/`; 46 di antaranya
 ada di rantai `bun run check` (kolom **Gate**), sisanya dijalankan manual,
 terjadwal, atau oleh workflow CI tertentu.
 
@@ -59,6 +59,7 @@ terjadwal, atau oleh workflow CI tertentu.
 | `data-lifecycle:archive-purge` | `data-lifecycle-archive-purge.ts` | — |
 | `data-lifecycle:registry:check` | `data-lifecycle-registry-check.ts` | ✅ |
 | `data-lifecycle:table-coverage:check` | `data-lifecycle-table-coverage-check.ts` | ✅ |
+| `data-lifecycle:worker-grants:check` | `data-lifecycle-worker-grants-check.ts` | ✅ |
 | `db:fk-index:check` | `db-fk-index-check.ts` | ✅ |
 | `db:migrate` | `db-migrate.ts` | — |
 | `db:pool:health` | `db-pool-health.ts` | — |

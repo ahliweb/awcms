@@ -162,6 +162,16 @@ export function renderCrontab(jobs: ScheduledJob[]): string {
     "",
     "AWCMS_RUN_JOB=/home/admin1/awcms-jobs/run-job.sh",
     "AWCMS_JOB_LOG=/home/admin1/awcms-jobs/logs",
+    "AWCMS_LOCK=/home/admin1/awcms-jobs/locks",
+    "",
+    "# Every line is wrapped in `flock -n`, matching the convention already used by",
+    "# the other services on this host. The job runner takes an advisory lock in",
+    "# Postgres, so overlapping runs cannot corrupt anything — but a job on a */2",
+    "# schedule that occasionally takes longer than two minutes would still stack up",
+    "# `docker run` processes, each pulling env and starting a container, until the",
+    "# host feels it. `-n` means a tick that finds the lock held simply does not run,",
+    "# which is the correct behaviour for every job here: they are all resumable and",
+    "# the next tick is at most a few minutes away.",
     "",
     "# ===========================================================================",
     "# ACTIVE — the first run costs no more than any later run.",
@@ -172,7 +182,7 @@ export function renderCrontab(jobs: ScheduledJob[]): string {
     out.push("");
     out.push(...commentWrap(`${job.moduleKey} — ${job.purpose}`, "# "));
     out.push(
-      `${job.schedule.expression} $AWCMS_RUN_JOB ${job.target} >> $AWCMS_JOB_LOG/${logName(job.target)}.log 2>&1`
+      `${job.schedule.expression} /usr/bin/flock -n $AWCMS_LOCK/${logName(job.target)}.lock $AWCMS_RUN_JOB ${job.target} >> $AWCMS_JOB_LOG/${logName(job.target)}.log 2>&1`
     );
   }
 
@@ -192,7 +202,7 @@ export function renderCrontab(jobs: ScheduledJob[]): string {
     out.push(...commentWrap(`${job.moduleKey} — ${job.purpose}`, "# "));
     out.push(...commentWrap(`FIRST RUN: ${job.schedule.backlogNote}`, "#   "));
     out.push(
-      `# ${job.schedule.expression} $AWCMS_RUN_JOB ${job.target} >> $AWCMS_JOB_LOG/${logName(job.target)}.log 2>&1`
+      `# ${job.schedule.expression} /usr/bin/flock -n $AWCMS_LOCK/${logName(job.target)}.lock $AWCMS_RUN_JOB ${job.target} >> $AWCMS_JOB_LOG/${logName(job.target)}.log 2>&1`
     );
   }
 

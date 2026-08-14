@@ -8,11 +8,11 @@
 | Aspek | Nilai |
 | ----- | ----- |
 | Modul terdaftar | 22 |
-| Migrasi | 128 |
+| Migrasi | 129 |
 | Tabel `awcms_*` | 148 |
 | Tabel dengan `FORCE` RLS | 130 |
 | Tabel RLS-free (global, by design) | 18 |
-| Berkas test | 391 |
+| Berkas test | 392 |
 | Berkas route | 361 |
 | ADR | 99 |
 
@@ -175,6 +175,7 @@
 | 126 | `sql/126_awcms_subject_request_permissions.sql` |
 | 127 | `sql/127_awcms_worker_on_conflict_select_grants.sql` |
 | 128 | `sql/128_awcms_principal_preferences.sql` |
+| 129 | `sql/129_awcms_worker_lifecycle_purge_grants.sql` |
 
 ### Tabel & Row-Level Security
 
@@ -333,7 +334,7 @@
 
 | Direktori | Test files |
 | --------- | ---------- |
-| `(root)` | 336 |
+| `(root)` | 337 |
 | `e2e` | 12 |
 | `integration` | 42 |
 | `unit` | 1 |
