@@ -5,6 +5,9 @@ import { withTenantOrThrow } from "../../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../../lib/http/site-origin";
+import { DEFAULT_LOCALE } from "../../../../lib/i18n/locales";
+import { coerceLocale } from "../../../../lib/i18n/negotiate";
+import { buildLocalisedPublicUrls } from "../../../../lib/i18n/public-locale-path";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -18,12 +21,12 @@ import {
 import { isLegacyTenantRouteEnabled } from "../../../../modules/blog-content/application/public-route-settings";
 import {
   renderPaginationNavHtml,
-  renderPostSummaryListHtml,
+  renderPostSummaryListHtmlAtBasePath,
   renderPublicPageShell
 } from "../../../../modules/blog-content/domain/public-page-rendering";
 
 /** `GET /blog/{tenantCode}/category/{slug}` (Issue #540) — same listing predicate as the index, scoped to posts assigned this category. 404 for an unknown or soft-deleted category, or (Issue #564) when `legacyTenantRouteEnabled` is `false`. */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const tenantCode = params.tenantCode;
   const slug = params.slug;
 
@@ -66,15 +69,32 @@ export const GET: APIRoute = async ({ params, request, url }) => {
         }
       );
 
+      // ADR-0098 — canonical, hreflang and every in-page link are built from the
+      // PREFIXED path. `postsBasePath` is the listing root each post link hangs
+      // off, which is the tenant's blog root rather than this archive.
+      const urls = buildLocalisedPublicUrls(
+        resolveRequestOrigin(url, request),
+        `/blog/${tenantCode}/category/${term.slug}`,
+        locals.locale,
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
+      );
+      const postsBasePath = buildLocalisedPublicUrls(
+        resolveRequestOrigin(url, request),
+        `/blog/${tenantCode}`,
+        locals.locale,
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
+      ).basePath;
+
       const bodyHtml = `<h1>Category: ${escapeHtml(term.name)}</h1>
-<div class="posts">${renderPostSummaryListHtml(tenantCode, result.items, "No posts in this category yet.")}</div>
-${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}/category/${term.slug}`)}`;
+<div class="posts">${renderPostSummaryListHtmlAtBasePath(postsBasePath, result.items, "No posts in this category yet.")}</div>
+${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
 
       const html = renderPublicPageShell({
         title: `${term.name} — ${tenant.tenantName} Blog`,
         description:
           term.description ?? `Posts categorized under ${term.name}.`,
-        canonicalUrl: `${resolveRequestOrigin(url, request)}/blog/${tenantCode}/category/${term.slug}`,
+        canonicalUrl: urls.canonicalUrl,
+        hreflangAlternates: urls.hreflangAlternates,
         bodyHtml,
         locale: tenant.defaultLocale,
         variant: "list"

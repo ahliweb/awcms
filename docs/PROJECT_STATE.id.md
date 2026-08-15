@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:d4ae1e9af757a55872933fcf66162a832dd9edf58ee27950542399bc2ebeed06 -->
+<!-- i18n-source-hash: sha256:c17f38815554b6f323b9b98d6b886625ea44dce4281878302609d2e85dec518c -->
 
 # AWCMS — Project State & Continuation
 
@@ -688,18 +688,52 @@ Accept-Language` membatasi fan-out pada dua tetapi tak bisa melihat klik
   sesi lain dan setiap token reset yang beredar, dan keunikan diperiksa saat
   konfirmasi agar formulirnya bukan orakel keberadaan akun.
 
-  3. **Locale untuk permukaan PUBLIK — DIPUTUSKAN oleh ADR-0098; sebelumnya terblokir oleh pertanyaan kunci cache,
-     dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
-     yang badannya berubah menurut cookie locale berarti pembaca Inggris
-     disajikan halaman Indonesia dari cache. ADR-0095 §"Keputusan 5" karena itu
-     TIDAK melokalkan satu pun surface publik dan mendaftarkannya sebagai
-     prasyarat: kunci cache harus membawa locale lebih dulu, dan itu ADR-nya
-     sendiri. Yang menunggu di belakangnya: `hreflang` yang benar
-     (`src/middleware.ts` masih meneruskan `locale: null` ke resolusi redirect
-     — dengan komentar yang menjelaskan bahwa ini kini PENOLAKAN yang disengaja,
-     bukan ketiadaan seam), dan field konten multi-bahasa untuk `blog_content`.
-     **Langkah 4 DITUTUP — `awcms_principal_preferences.time_zone`, sql/130.
+  3. **Langkah 3 DITUTUP — locale ada di PATH, ADR-0098 kini `Accepted`.
      15 Agustus 2026.**
+
+  `src/lib/i18n/public-locale-path.ts` adalah keputusan itu dijadikan eksekutabel:
+  sebuah path masuk, sebuah keputusan routing keluar, dan ia tidak bisa membaca
+  header apa pun. `/blog/…` menjawab `307 private, no-store` ke `/en/…` atau
+  `/id/…`; URL ber-prefiks di-rewrite kembali ke rute yang sudah ada, jadi tidak
+  ada pohon halaman `[locale]` yang diduplikasi. Pada URL ber-prefiks, PATH-lah
+  yang menetapkan `locals.locale` dan ia MENGALAHKAN cookie — inversi itulah
+  seluruh properti keamanannya, karena URL adalah kunci cache dan kuncilah yang
+  harus menentukan badannya.
+
+  Tiga hal layak dibawa ke depan. **Prefiks hanya untuk HTML yang CACHEABLE**,
+  bukan untuk setiap URL publik: `/admin`, `/login`, dan `/blog/{t}/search`
+  bersifat `private, no-store` dan melokalkan dari cookie persis seperti yang
+  diizinkan ADR-0098 keputusan 6 untuk `/admin`, jadi memberi mereka prefiks
+  hanya menambah satu redirect tanpa membeli apa pun; `robots.txt` terpaku pada
+  lokasi protokolnya dan feed sudah membawa `?locale=`, yang merupakan kunci yang
+  sama dengan ejaan berbeda. **`matchPublicCacheSurface` butuh percobaan
+  pencocokan KEDUA** atau setiap URL ber-prefiks akan meleset dari registry dan
+  distempel tidak-cacheable — ADR-nya akan memindahkan locale ke dalam kunci
+  sambil mematikan cacheability seluruh permukaan publik, regresi yang terbaca
+  sebagai bug caching alih-alih bug routing. Dan **sitemap harus ikut pindah
+  bersama canonical**: `<loc>` yang menyebut path telanjang sementara
+  `<link rel="canonical">` halamannya menyebut yang ber-prefiks adalah
+  ketidaksepakatan yang diselesaikan mesin pencari dengan tidak mempercayai
+  keduanya.
+
+  Keputusan 2 ditegakkan dua kali, bukan didokumentasikan sekali.
+  `decideCacheability` MENOLAK respons yang `Vary` pada `Cookie` atau
+  `Accept-Language` (menolak, bukan membuang — membuangnya berarti meng-cache
+  badan yang penulisnya sendiri bilang bervariasi), dan
+  `edge-cache:surfaces:check` menggagalkan build atas dua nama yang sama di mana
+  pun di bawah `src/`. Keduanya dibuktikan dengan MENANAM cacatnya: tiga ejaan
+  `Vary` terlarang, satu machine surface yang diberi alias ber-prefiks, dan satu
+  flag `localePrefixed` yang dibalik sehingga tidak lagi sepakat dengan pola
+  path-nya.
+
+  Yang masih terbuka di belakangnya: field konten multi-bahasa untuk
+  `blog_content` (bahasa antarmuka pembaca dan bahasa POST-nya adalah dua sumbu
+  berbeda — `<html lang>` masih berasal dari `post.locale`), dan chrome publiknya
+  sendiri belum diterjemahkan, jadi `/en/…` dan `/id/…` hari ini hanya berbeda
+  pada `hreflang` dan canonical-nya.
+
+  **Langkah 4 DITUTUP — `awcms_principal_preferences.time_zone`, sql/130.
+  15 Agustus 2026.**
 
   `/admin/account` merender setiap stempel waktu dalam zona pilihan pembacanya,
   dan fallback-nya tetap UTC alih-alih zona host — alasan aslinya ("menebak zona

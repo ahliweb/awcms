@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 
 import { getDatabaseClient } from "../../../lib/database/client";
+import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
@@ -12,7 +13,7 @@ import { log } from "../../../lib/logging/logger";
 import { searchPublicBlogContent } from "../../../modules/blog-content/application/blog-search";
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import {
-  renderPostSummaryListHtml,
+  renderPostSummaryListHtmlAtBasePath,
   renderPublicPageShell
 } from "../../../modules/blog-content/domain/public-page-rendering";
 import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
@@ -26,7 +27,7 @@ import { decodeKeysetCursor } from "../../../modules/_shared/keyset-pagination";
  * a browsable public page, not a JSON API. Issue #564: 404s (same generic
  * shape) when `legacyTenantRouteEnabled` is `false`.
  */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ locals, params, url }) => {
   const tenantCode = params.tenantCode;
 
   if (!tenantCode) {
@@ -64,6 +65,16 @@ export const GET: APIRoute = async ({ params, url }) => {
           ? `<a href="?q=${encodeURIComponent(query)}&cursor=${encodeURIComponent(result.nextCursor)}">Next</a>`
           : "";
 
+      // ADR-0098 — search itself is NOT locale-prefixed: it is `private,
+      // no-store` (an unbounded query key space, refused by the surface
+      // registry), so it localises from the cookie exactly as `/admin` does and
+      // needs no second URL. Its RESULTS, though, link into the prefixed blog,
+      // so the base path carries the reader's locale forward.
+      const postsBasePath = withPublicLocalePrefix(
+        `/blog/${tenantCode}`,
+        locals.locale
+      );
+
       const bodyHtml = `<h1>Search ${escapeHtml(tenant.tenantName)} Blog</h1>
 <form method="get" action="/blog/${escapeHtml(tenantCode)}/search">
   <input type="text" name="q" value="${escapeHtml(query)}" aria-label="Search" />
@@ -72,8 +83,8 @@ export const GET: APIRoute = async ({ params, url }) => {
 <div class="posts">${
         query.length === 0
           ? "<p>Enter a search term above.</p>"
-          : renderPostSummaryListHtml(
-              tenantCode,
+          : renderPostSummaryListHtmlAtBasePath(
+              postsBasePath,
               result.items,
               "No results found."
             )

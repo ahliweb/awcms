@@ -5,6 +5,12 @@ import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
+import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
+import { coerceLocale } from "../../../lib/i18n/negotiate";
+import {
+  buildHreflangAlternates,
+  withPublicLocalePrefix
+} from "../../../lib/i18n/public-locale-path";
 import {
   notFoundXmlResponse,
   serverErrorXmlResponse
@@ -52,13 +58,37 @@ export const GET: APIRoute = async ({ params, request, url }) => {
       }
 
       const posts = await listPublicBlogPostsForFeed(tx, tenant.tenantId);
-      const channelLink = `${resolveRequestOrigin(url, request)}/blog/${tenantCode}`;
+      // ADR-0098 — a sitemap must list the CANONICAL URL, and after this ADR the
+      // canonical URL of every blog page carries a locale. Listing the bare path
+      // would tell a crawler that the real document is the alias answering
+      // `307`, contradicting the `<link rel="canonical">` on the page it points
+      // at — the two would disagree, and search engines resolve that
+      // disagreement by trusting neither.
+      //
+      // `<loc>` names the tenant default's spelling and the `xhtml:link`
+      // alternates name every locale, which is the sitemap half of the same
+      // `hreflang` set the page emits in its head.
+      const origin = resolveRequestOrigin(url, request);
+      const tenantDefaultLocale =
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE;
+      const localisedUrl = (barePath: string): string =>
+        `${origin}${withPublicLocalePrefix(barePath, tenantDefaultLocale)}`;
+      const alternatesXml = (barePath: string): string =>
+        buildHreflangAlternates(barePath, tenantDefaultLocale)
+          .map(
+            (alternate) =>
+              `<xhtml:link rel="alternate" hreflang="${escapeHtml(alternate.hreflang)}" href="${escapeHtml(origin + alternate.pathname)}" />`
+          )
+          .join("\n");
+      const channelPath = `/blog/${tenantCode}`;
+      const channelLink = localisedUrl(channelPath);
 
       // Issue #649 — see `/news/sitemap-news.xml.ts`'s identical comment:
       // resolved sequentially, one query at a time on the shared transaction.
       const urlParts: string[] = [];
       for (const post of posts) {
-        const link = `${channelLink}/${post.slug}`;
+        const postPath = `${channelPath}/${post.slug}`;
+        const link = localisedUrl(postPath);
         const previewImage = await resolveNewsArticlePreviewImage(
           tx,
           tenant.tenantId,
@@ -72,6 +102,7 @@ export const GET: APIRoute = async ({ params, request, url }) => {
 
         urlParts.push(`<url>
 <loc>${escapeHtml(link)}</loc>
+${alternatesXml(postPath)}
 <lastmod>${post.publishedAt.toISOString()}</lastmod>
 ${imageTag}
 </url>`);
@@ -80,9 +111,10 @@ ${imageTag}
       const urls = urlParts.join("\n");
 
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 <url>
 <loc>${escapeHtml(channelLink)}</loc>
+${alternatesXml(channelPath)}
 </url>
 ${urls}
 </urlset>`;

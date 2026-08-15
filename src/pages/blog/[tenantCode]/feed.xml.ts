@@ -5,6 +5,9 @@ import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
+import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
+import { coerceLocale } from "../../../lib/i18n/negotiate";
+import { withPublicLocalePrefix } from "../../../lib/i18n/public-locale-path";
 import {
   notFoundXmlResponse,
   serverErrorXmlResponse
@@ -57,7 +60,12 @@ export const GET: APIRoute = async ({ params, request, url }) => {
       }
 
       const posts = await listPublicBlogPostsForFeed(tx, tenant.tenantId);
-      const channelLink = `${resolveRequestOrigin(url, request)}/blog/${tenantCode}`;
+      // ADR-0098 — feed item links point at the canonical (prefixed) document,
+      // for the same reason the sitemap does. The feed URL itself stays bare:
+      // it already carries its locale as an allow-listed `?locale=` parameter,
+      // and moving it would break every existing subscription.
+      const feedLocale = coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE;
+      const channelLink = `${resolveRequestOrigin(url, request)}${withPublicLocalePrefix(`/blog/${tenantCode}`, feedLocale)}`;
 
       // Issue #649 — see `/news/feed.xml.ts`'s identical comment: resolved
       // sequentially, one query at a time on the shared transaction.

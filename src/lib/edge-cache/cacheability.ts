@@ -71,6 +71,7 @@ export type CacheSkipReason =
   | "response_sets_cookie"
   | "response_declares_private"
   | "response_varies_on_everything"
+  | "response_varies_on_forbidden_header"
   | "tenant_unresolved"
   | "query_not_allowed";
 
@@ -102,6 +103,29 @@ export type CacheabilityInput = {
    */
   effectiveTtlSeconds: number;
 };
+
+/**
+ * Headers a cacheable public response may never `Vary` on (ADR-0098 §2).
+ *
+ * `Cookie` multiplies objects by distinct cookie STRINGS — session ids,
+ * analytics ids, CSRF tokens — so nearly every reader gets a private copy of a
+ * public page, and it puts a credential-bearing header into the cache key.
+ * `Accept-Language` bounds the fan-out but cannot see an explicit click, which
+ * is what would make the language switcher decorative on the public surface.
+ */
+const FORBIDDEN_VARY_HEADERS = new Set(["cookie", "accept-language"]);
+
+/** True when a `Vary` value names any header ADR-0098 forbids. */
+export function variesOnForbiddenHeader(vary: string | null): boolean {
+  if (!vary) {
+    return false;
+  }
+
+  return vary
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .some((name) => FORBIDDEN_VARY_HEADERS.has(name));
+}
 
 /** True when any request cookie is identity-bearing. */
 export function hasIdentityCookie(cookieHeader: string | null): boolean {
@@ -164,6 +188,26 @@ export function decideCacheability(input: CacheabilityInput): CacheDecision {
 
   if (input.responseHeaders.get("vary")?.trim() === "*") {
     return { cacheable: false, reason: "response_varies_on_everything" };
+  }
+
+  /**
+   * ADR-0098 decision 2, enforced at run time.
+   *
+   * `Vary: Cookie` and `Vary: Accept-Language` are the two mechanisms the ADR
+   * examined and rejected, and rejecting a design is worth nothing if the
+   * rejected design still works when somebody reaches for it. Both are refused
+   * here rather than merely absent, so the failure is "this response was not
+   * cached" instead of "this response was cached under a key that disagrees
+   * with its body".
+   *
+   * Refusing is deliberately not the same as stripping. Stripping the header
+   * would cache a body that its own author said varies — the misdelivery in its
+   * purest form. The author is taken at their word and the object is left
+   * uncached; `edge-cache:surfaces:check` then fails the build so the word gets
+   * corrected rather than silently costing hit rate.
+   */
+  if (variesOnForbiddenHeader(input.responseHeaders.get("vary"))) {
+    return { cacheable: false, reason: "response_varies_on_forbidden_header" };
   }
 
   // An object with no tenant key cannot be reached by any purge, so it would go

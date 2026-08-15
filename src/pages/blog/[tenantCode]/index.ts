@@ -5,6 +5,9 @@ import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
+import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
+import { coerceLocale } from "../../../lib/i18n/negotiate";
+import { buildLocalisedPublicUrls } from "../../../lib/i18n/public-locale-path";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -18,7 +21,7 @@ import {
 import { isLegacyTenantRouteEnabled } from "../../../modules/blog-content/application/public-route-settings";
 import {
   renderPaginationNavHtml,
-  renderPostSummaryListHtml,
+  renderPostSummaryListHtmlAtBasePath,
   renderPublicPageShell
 } from "../../../modules/blog-content/domain/public-page-rendering";
 
@@ -42,7 +45,7 @@ import {
  * routes — see `src/modules/blog-content/README.md` §Public route
  * settings.
  */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const tenantCode = params.tenantCode;
 
   if (!tenantCode) {
@@ -70,16 +73,30 @@ export const GET: APIRoute = async ({ params, request, url }) => {
         pageSize: settings.postsPerPage
       });
 
+      // ADR-0098 — every in-page link is built from the PREFIXED base path, so
+      // a reader who arrived on `/id/…` stays there. Building them from
+      // `/blog/{code}` instead would drop each reader back onto the bare alias
+      // on their very next click, and the `307` would then re-derive a locale
+      // from their cookie — correct by luck, and wrong the moment the cookie
+      // disagrees with the URL they were reading.
+      const urls = buildLocalisedPublicUrls(
+        resolveRequestOrigin(url, request),
+        `/blog/${tenantCode}`,
+        locals.locale,
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
+      );
+
       const bodyHtml = `<h1>${escapeHtml(tenant.tenantName)} Blog</h1>
-<div class="posts">${renderPostSummaryListHtml(tenantCode, result.items, "No posts yet.")}</div>
-${renderPaginationNavHtml(page, result.hasNextPage, `/blog/${tenantCode}`)}`;
+<div class="posts">${renderPostSummaryListHtmlAtBasePath(urls.basePath, result.items, "No posts yet.")}</div>
+${renderPaginationNavHtml(page, result.hasNextPage, urls.basePath)}`;
 
       const html = renderPublicPageShell({
         title: settings.seoDefaultTitle ?? `${tenant.tenantName} Blog`,
         description:
           settings.seoDefaultDescription ??
           `Latest posts from ${tenant.tenantName}.`,
-        canonicalUrl: `${resolveRequestOrigin(url, request)}/blog/${tenantCode}`,
+        canonicalUrl: urls.canonicalUrl,
+        hreflangAlternates: urls.hreflangAlternates,
         bodyHtml,
         locale: tenant.defaultLocale,
         variant: "list"
