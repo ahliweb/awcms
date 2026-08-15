@@ -26,20 +26,95 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # ACTIVE — the first run costs no more than any later run.
 # ===========================================================================
 
+# visitor_analytics — Delete/clear visitor analytics data past its retention
+# windows (events, session raw detail, sessions, rollups), per active tenant.
+45 3 * * * /usr/bin/flock -n $AWCMS_LOCK/analytics-purge.lock $AWCMS_RUN_JOB analytics:purge >> $AWCMS_JOB_LOG/analytics-purge.log 2>&1
+
 # visitor_analytics — Recompute the previous day's awcms_visitor_daily_rollups
 # from raw awcms_visit_events, per active tenant. Idempotent (full UPSERT
 # recompute).
 15 0 * * * /usr/bin/flock -n $AWCMS_LOCK/analytics-rollup.lock $AWCMS_RUN_JOB analytics:rollup >> $AWCMS_JOB_LOG/analytics-rollup.log 2>&1
 
+# blog_content — Publish every due `status='scheduled'` blog post
+# (scheduled_at <= now()) for every active tenant. Idempotent — a post already
+# published, or still in the future, is a no-op on re-run.
+*/5 * * * * /usr/bin/flock -n $AWCMS_LOCK/blog-publish-scheduled.lock $AWCMS_RUN_JOB blog:publish:scheduled >> $AWCMS_JOB_LOG/blog-publish-scheduled.log 2>&1
+
+# comments — Bounded, per-tenant retention/anonymization sweep: NULL author
+# identity fields on comments older than the retention cutoff (retaining row +
+# body + append-only moderation history), and delete unconfirmed reply
+# subscriptions past the confirmation window. Skips a tenant whose comment
+# content descriptor is under an active legal hold (legal hold overrides
+# retention).
+0 4 * * * /usr/bin/flock -n $AWCMS_LOCK/comments-retention.lock $AWCMS_RUN_JOB comments:retention >> $AWCMS_JOB_LOG/comments-retention.log 2>&1
+
+# data_lifecycle — Archive (where applicable) and purge rows past retention
+# for every registered generic-execution descriptor; record a dry-run backlog
+# snapshot for every delegated (existing-adopter) descriptor.
+30 3 * * * /usr/bin/flock -n $AWCMS_LOCK/data-lifecycle-archive-purge.lock $AWCMS_RUN_JOB data-lifecycle:archive-purge >> $AWCMS_JOB_LOG/data-lifecycle-archive-purge.log 2>&1
+
+# domain_event_runtime — Delete settled (`delivered`/`skipped`) delivery rows
+# past their retention window, never dead-lettered ones and never a row a
+# replay still references (legal-hold gated, bounded batches).
+25 3 * * * /usr/bin/flock -n $AWCMS_LOCK/domain-events-deliveries-purge.lock $AWCMS_RUN_JOB domain-events:deliveries:purge >> $AWCMS_JOB_LOG/domain-events-deliveries-purge.log 2>&1
+
+# domain_event_runtime — Claim/execute/finalize due
+# awcms_domain_event_deliveries rows for every active tenant and every
+# registered consumer, applying per-order-key ordering, exponential backoff,
+# and dead-letter transitions. A no-op tick when there is no due backlog.
+* * * * * /usr/bin/flock -n $AWCMS_LOCK/domain-events-dispatch.lock $AWCMS_RUN_JOB domain-events:dispatch >> $AWCMS_JOB_LOG/domain-events-dispatch.log 2>&1
+
 # email — Drain the due email delivery queue (claim-lease, retry/backoff,
 # circuit breaker) for every active tenant.
 */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/email-dispatch.lock $AWCMS_RUN_JOB email:dispatch >> $AWCMS_JOB_LOG/email-dispatch.log 2>&1
+
+# email — Delete terminal email queue rows and spent delivery attempts past
+# their retention windows (legal-hold gated, bounded batches).
+20 3 * * * /usr/bin/flock -n $AWCMS_LOCK/email-queue-purge.lock $AWCMS_RUN_JOB email:queue:purge >> $AWCMS_JOB_LOG/email-queue-purge.log 2>&1
+
+# form_drafts — Expire overdue draft rows, then physically delete
+# expired/abandoned drafts past the retention cutoff, for every active tenant.
+15 3 * * * /usr/bin/flock -n $AWCMS_LOCK/form-drafts-purge.lock $AWCMS_RUN_JOB form-drafts:purge >> $AWCMS_JOB_LOG/form-drafts-purge.log 2>&1
+
+# identity_access — Transitions business-scope assignments and SoD conflict
+# exceptions past their effective_to to expired, recording append-only
+# lifecycle events and an aggregate audit entry per tenant (per-exception
+# audit for exceptions).
+5 * * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-business-scope-expiry.lock $AWCMS_RUN_JOB identity-access:business-scope:expiry >> $AWCMS_JOB_LOG/identity-access-business-scope-expiry.log 2>&1
+
+# identity_access — Walks each tenant's subscription one rung down the
+# trialing -> active -> past_due -> grace -> suspended ladder when its own
+# dates say so (ADR-0084), auditing every transition in that tenant's own
+# trail. Never moves a subscription up — restoring service is a payment event,
+# not a clock event — and never writes awcms_tenants: a run that would cost
+# more than MAX_ENTITLEMENT_LOSSES_PER_RUN tenants their plan entitlements
+# applies none of them and reports instead.
+30 2 * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-subscription-lifecycle.lock $AWCMS_RUN_JOB identity-access:subscription-lifecycle >> $AWCMS_JOB_LOG/identity-access-subscription-lifecycle.log 2>&1
+
+# logging — Delete awcms_audit_events rows past retention
+# (AUDIT_LOG_RETENTION_DAYS, default 730 days) for every active tenant, in
+# bounded batches, recording each purge as its own audit event.
+0 3 * * * /usr/bin/flock -n $AWCMS_LOCK/logs-audit-purge.lock $AWCMS_RUN_JOB logs:audit:purge >> $AWCMS_JOB_LOG/logs-audit-purge.log 2>&1
 
 # media_library — Reconcile awcms_news_media_objects metadata against the real
 # R2 bucket contents; clean up expired pending uploads and
 # grace-period-expired orphans in bounded, race-safe batches (dry-run
 # supported).
 0 2 * * * /usr/bin/flock -n $AWCMS_LOCK/news-media-reconcile.lock $AWCMS_RUN_JOB news-media:reconcile >> $AWCMS_JOB_LOG/news-media-reconcile.log 2>&1
+
+# push_delivery — Drain the due push delivery queue (claim-lease,
+# retry/backoff, circuit breaker, dead-subscription disabling) for every
+# active tenant.
+*/2 * * * * /usr/bin/flock -n $AWCMS_LOCK/push-dispatch.lock $AWCMS_RUN_JOB push:dispatch >> $AWCMS_JOB_LOG/push-dispatch.log 2>&1
+
+# push_delivery — Delete terminal push queue rows, spent delivery attempts,
+# and long-disabled subscriptions past their retention windows (legal-hold
+# gated, bounded batches).
+40 3 * * * /usr/bin/flock -n $AWCMS_LOCK/push-queue-purge.lock $AWCMS_RUN_JOB push:queue:purge >> $AWCMS_JOB_LOG/push-queue-purge.log 2>&1
+
+# reporting — Generate a fresh export artifact for every enabled scheduled
+# export config whose interval has elapsed, for every active tenant.
+*/15 * * * * /usr/bin/flock -n $AWCMS_LOCK/reporting-exports-dispatch.lock $AWCMS_RUN_JOB reporting:exports:dispatch >> $AWCMS_JOB_LOG/reporting-exports-dispatch.log 2>&1
 
 # reporting — Incrementally update every `cursor_table`-strategy projection
 # for every active tenant (bounded cursor re-scan of each projection's
@@ -55,6 +130,26 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # authoritative backbone.
 */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/site-search-reconcile.lock $AWCMS_RUN_JOB site-search:reconcile >> $AWCMS_JOB_LOG/site-search-reconcile.log 2>&1
 
+# sync_storage — Drain the due object sync upload queue (claim-lease,
+# retry/backoff, circuit breaker) for every active tenant.
+*/2 * * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-dispatch.lock $AWCMS_RUN_JOB sync:objects:dispatch >> $AWCMS_JOB_LOG/sync-objects-dispatch.log 2>&1
+
+# sync_storage — Delete terminal object sync queue rows past their retention
+# window (legal-hold gated, bounded batches).
+35 3 * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-purge.lock $AWCMS_RUN_JOB sync:objects:purge >> $AWCMS_JOB_LOG/sync-objects-purge.log 2>&1
+
+# tenant_domain — Reconciles pending/active domain rows against the configured
+# DNS provider so a verification record that was created but never propagated
+# does not leave a tenant stuck at pending_verification forever. Read-only
+# against the provider unless TENANT_DOMAIN_DNS_PROVIDER names a real adapter;
+# with the default 'manual' it makes no outbound call at all.
+*/15 * * * * /usr/bin/flock -n $AWCMS_LOCK/tenant-domain-dns-sync.lock $AWCMS_RUN_JOB tenant-domain:dns:sync >> $AWCMS_JOB_LOG/tenant-domain-dns-sync.log 2>&1
+
+# workflow — Escalate awcms_workflow_tasks rows past their due_at for every
+# active tenant (bounded batch, advisory lock, idempotent per escalation
+# step).
+*/5 * * * * /usr/bin/flock -n $AWCMS_LOCK/workflow-escalations-dispatch.lock $AWCMS_RUN_JOB workflow:escalations:dispatch >> $AWCMS_JOB_LOG/workflow-escalations-dispatch.log 2>&1
+
 # ===========================================================================
 # DISABLED PENDING A FIRST-RUN REVIEW.
 #
@@ -62,158 +157,6 @@ AWCMS_LOCK=/home/admin1/awcms-jobs/locks
 # never run on this deployment. Uncomment ONE at a time, after running it with
 # --dry-run and reading the counts. The reason is on every entry.
 # ===========================================================================
-
-# visitor_analytics — Delete/clear visitor analytics data past its retention
-# windows (events, session raw detail, sessions, rollups), per active tenant.
-#   FIRST RUN: Deletes analytics rows past retention — the whole accumulated
-#   excess on the first pass. Dry-run and read the count.
-# 45 3 * * * /usr/bin/flock -n $AWCMS_LOCK/analytics-purge.lock $AWCMS_RUN_JOB analytics:purge >> $AWCMS_JOB_LOG/analytics-purge.log 2>&1
-
-# blog_content — Publish every due `status='scheduled'` blog post
-# (scheduled_at <= now()) for every active tenant. Idempotent — a post already
-# published, or still in the future, is a no-op on re-run.
-#   FIRST RUN: Publishes every post whose scheduled time has passed. This is
-#   OUTWARD-FACING and hard to undo: posts scheduled months ago all go live in
-#   one pass, in the wrong order relative to the news cycle. List them before
-#   enabling.
-# */5 * * * * /usr/bin/flock -n $AWCMS_LOCK/blog-publish-scheduled.lock $AWCMS_RUN_JOB blog:publish:scheduled >> $AWCMS_JOB_LOG/blog-publish-scheduled.log 2>&1
-
-# comments — Bounded, per-tenant retention/anonymization sweep: NULL author
-# identity fields on comments older than the retention cutoff (retaining row +
-# body + append-only moderation history), and delete unconfirmed reply
-# subscriptions past the confirmation window. Skips a tenant whose comment
-# content descriptor is under an active legal hold (legal hold overrides
-# retention).
-#   FIRST RUN: Deletes comment data past retention — the whole accumulated
-#   excess on the first pass. This is user-authored content. Dry-run and read
-#   the count.
-# 0 4 * * * /usr/bin/flock -n $AWCMS_LOCK/comments-retention.lock $AWCMS_RUN_JOB comments:retention >> $AWCMS_JOB_LOG/comments-retention.log 2>&1
-
-# data_lifecycle — Archive (where applicable) and purge rows past retention
-# for every registered generic-execution descriptor; record a dry-run backlog
-# snapshot for every delegated (existing-adopter) descriptor.
-#   FIRST RUN: Archives and purges per the lifecycle registry. The first pass
-#   covers every row that has been eligible since the registry landed. Dry-run
-#   and read the per-descriptor counts.
-# 30 3 * * * /usr/bin/flock -n $AWCMS_LOCK/data-lifecycle-archive-purge.lock $AWCMS_RUN_JOB data-lifecycle:archive-purge >> $AWCMS_JOB_LOG/data-lifecycle-archive-purge.log 2>&1
-
-# domain_event_runtime — Delete settled (`delivered`/`skipped`) delivery rows
-# past their retention window, never dead-lettered ones and never a row a
-# replay still references (legal-hold gated, bounded batches).
-#   FIRST RUN: Deletes delivery records past retention. Run it only AFTER
-#   `domain-events:dispatch` has drained the backlog — purging first destroys
-#   the record of what was never delivered.
-# 25 3 * * * /usr/bin/flock -n $AWCMS_LOCK/domain-events-deliveries-purge.lock $AWCMS_RUN_JOB domain-events:deliveries:purge >> $AWCMS_JOB_LOG/domain-events-deliveries-purge.log 2>&1
-
-# domain_event_runtime — Claim/execute/finalize due
-# awcms_domain_event_deliveries rows for every active tenant and every
-# registered consumer, applying per-order-key ordering, exponential backoff,
-# and dead-letter transitions. A no-op tick when there is no due backlog.
-#   FIRST RUN: Drains the domain-event outbox. It has never run on this
-#   deployment, so the first pass delivers every event accumulated since the
-#   module landed — fanning out to every registered consumer at once. Dry-run
-#   and read the pending count first.
-# * * * * * /usr/bin/flock -n $AWCMS_LOCK/domain-events-dispatch.lock $AWCMS_RUN_JOB domain-events:dispatch >> $AWCMS_JOB_LOG/domain-events-dispatch.log 2>&1
-
-# email — Delete terminal email queue rows and spent delivery attempts past
-# their retention windows (legal-hold gated, bounded batches).
-#   FIRST RUN: Deletes sent/failed email rows past retention, including the
-#   delivery-attempt trail used to debug provider problems. Dry-run and read the
-#   count.
-# 20 3 * * * /usr/bin/flock -n $AWCMS_LOCK/email-queue-purge.lock $AWCMS_RUN_JOB email:queue:purge >> $AWCMS_JOB_LOG/email-queue-purge.log 2>&1
-
-# form_drafts — Expire overdue draft rows, then physically delete
-# expired/abandoned drafts past the retention cutoff, for every active tenant.
-#   FIRST RUN: Deletes abandoned form drafts past retention — the whole
-#   accumulated excess on the first pass. Dry-run and read the count.
-# 15 3 * * * /usr/bin/flock -n $AWCMS_LOCK/form-drafts-purge.lock $AWCMS_RUN_JOB form-drafts:purge >> $AWCMS_JOB_LOG/form-drafts-purge.log 2>&1
-
-# identity_access — Transitions business-scope assignments and SoD conflict
-# exceptions past their effective_to to expired, recording append-only
-# lifecycle events and an aggregate audit entry per tenant (per-exception
-# audit for exceptions).
-#   FIRST RUN: Revokes business-scope access past its expiry. Because this never
-#   ran, access has been outliving its validity — so the first pass is a MASS
-#   REVOCATION of everything already expired. That is the correct end state and
-#   it will lock people out mid-session; run it dry, tell the affected tenants,
-#   then enable.
-# 5 * * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-business-scope-expiry.lock $AWCMS_RUN_JOB identity-access:business-scope:expiry >> $AWCMS_JOB_LOG/identity-access-business-scope-expiry.log 2>&1
-
-# identity_access — Walks each tenant's subscription one rung down the
-# trialing -> active -> past_due -> grace -> suspended ladder when its own
-# dates say so (ADR-0084), auditing every transition in that tenant's own
-# trail. Never moves a subscription up — restoring service is a payment event,
-# not a clock event — and never writes awcms_tenants: a run that would cost
-# more than MAX_ENTITLEMENT_LOSSES_PER_RUN tenants their plan entitlements
-# applies none of them and reports instead.
-#   FIRST RUN: Same shape as business-scope expiry: the first pass transitions
-#   every subscription already past its boundary. Dry-run, read the counts, then
-#   enable.
-# 30 2 * * * /usr/bin/flock -n $AWCMS_LOCK/identity-access-subscription-lifecycle.lock $AWCMS_RUN_JOB identity-access:subscription-lifecycle >> $AWCMS_JOB_LOG/identity-access-subscription-lifecycle.log 2>&1
-
-# logging — Delete awcms_audit_events rows past retention
-# (AUDIT_LOG_RETENTION_DAYS, default 730 days) for every active tenant, in
-# bounded batches, recording each purge as its own audit event.
-#   FIRST RUN: Deletes audit rows past retention. The first run deletes the
-#   entire accumulated excess in one pass, and audit data is exactly what you
-#   want when investigating why something was deleted. Take a backup, dry-run,
-#   read the count.
-# 0 3 * * * /usr/bin/flock -n $AWCMS_LOCK/logs-audit-purge.lock $AWCMS_RUN_JOB logs:audit:purge >> $AWCMS_JOB_LOG/logs-audit-purge.log 2>&1
-
-# push_delivery — Drain the due push delivery queue (claim-lease,
-# retry/backoff, circuit breaker, dead-subscription disabling) for every
-# active tenant.
-#   FIRST RUN: Sends REAL push notifications to REAL devices. Every notification
-#   queued since push_delivery shipped is still pending; enabling this without
-#   draining or expiring the backlog first notifies every subscriber about
-#   things that happened weeks ago.
-# */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/push-dispatch.lock $AWCMS_RUN_JOB push:dispatch >> $AWCMS_JOB_LOG/push-dispatch.log 2>&1
-
-# push_delivery — Delete terminal push queue rows, spent delivery attempts,
-# and long-disabled subscriptions past their retention windows (legal-hold
-# gated, bounded batches).
-#   FIRST RUN: Deletes push-queue rows past retention. Running this BEFORE
-#   `push:dispatch` is drained is arguably the kinder order here — it discards a
-#   stale backlog instead of delivering it — but that is a decision to take
-#   deliberately, not by cron ordering.
-# 40 3 * * * /usr/bin/flock -n $AWCMS_LOCK/push-queue-purge.lock $AWCMS_RUN_JOB push:queue:purge >> $AWCMS_JOB_LOG/push-queue-purge.log 2>&1
-
-# reporting — Generate a fresh export artifact for every enabled scheduled
-# export config whose interval has elapsed, for every active tenant.
-#   FIRST RUN: Dispatches every export queued since the module landed. Harmless
-#   per item, unbounded in aggregate — size the queue first.
-# */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/reporting-exports-dispatch.lock $AWCMS_RUN_JOB reporting:exports:dispatch >> $AWCMS_JOB_LOG/reporting-exports-dispatch.log 2>&1
-
-# sync_storage — Drain the due object sync upload queue (claim-lease,
-# retry/backoff, circuit breaker) for every active tenant.
-#   FIRST RUN: Uploads the whole queued object backlog to R2 in bounded batches,
-#   but starting from a backlog nobody has sized. Check the queue depth and the
-#   R2 bill implications before enabling.
-# */2 * * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-dispatch.lock $AWCMS_RUN_JOB sync:objects:dispatch >> $AWCMS_JOB_LOG/sync-objects-dispatch.log 2>&1
-
-# sync_storage — Delete terminal object sync queue rows past their retention
-# window (legal-hold gated, bounded batches).
-#   FIRST RUN: Deletes completed/failed object-queue rows past retention. Run it
-#   only AFTER `sync:objects:dispatch` has drained the backlog.
-# 35 3 * * * /usr/bin/flock -n $AWCMS_LOCK/sync-objects-purge.lock $AWCMS_RUN_JOB sync:objects:purge >> $AWCMS_JOB_LOG/sync-objects-purge.log 2>&1
-
-# tenant_domain — Reconciles pending/active domain rows against the configured
-# DNS provider so a verification record that was created but never propagated
-# does not leave a tenant stuck at pending_verification forever. Read-only
-# against the provider unless TENANT_DOMAIN_DNS_PROVIDER names a real adapter;
-# with the default 'manual' it makes no outbound call at all.
-#   FIRST RUN: Reaches OUT to the DNS provider and changes records. A first run
-#   reconciles every drifted domain at once against an API with its own rate
-#   limits and its own blast radius. Dry-run and read the planned changes.
-# */15 * * * * /usr/bin/flock -n $AWCMS_LOCK/tenant-domain-dns-sync.lock $AWCMS_RUN_JOB tenant-domain:dns:sync >> $AWCMS_JOB_LOG/tenant-domain-dns-sync.log 2>&1
-
-# workflow — Escalate awcms_workflow_tasks rows past their due_at for every
-# active tenant (bounded batch, advisory lock, idempotent per escalation
-# step).
-#   FIRST RUN: Escalates every approval task already past its timeout. On a
-#   system where this never ran, that is every overdue task at once, each one
-#   notifying a human.
-# */5 * * * * /usr/bin/flock -n $AWCMS_LOCK/workflow-escalations-dispatch.lock $AWCMS_RUN_JOB workflow:escalations:dispatch >> $AWCMS_JOB_LOG/workflow-escalations-dispatch.log 2>&1
 
 # ===========================================================================
 # NOT SCHEDULED — structurally operator-run. Listed so that the absence is a

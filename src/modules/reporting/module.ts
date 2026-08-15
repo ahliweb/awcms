@@ -227,9 +227,7 @@ export const reportingModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "*/15 * * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Dispatches every export queued since the module landed. Harmless per item, unbounded in aggregate — size the queue first."
+        backlog: "bounded"
       },
       purpose:
         "Generate a fresh export artifact for every enabled scheduled export config whose interval has elapsed, for every active tenant.",

@@ -94,9 +94,7 @@ export const pushDeliveryModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "*/2 * * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Sends REAL push notifications to REAL devices. Every notification queued since push_delivery shipped is still pending; enabling this without draining or expiring the backlog first notifies every subscriber about things that happened weeks ago."
+        backlog: "bounded"
       },
       purpose:
         "Drain the due push delivery queue (claim-lease, retry/backoff, circuit breaker, dead-subscription disabling) for every active tenant.",
@@ -110,9 +108,7 @@ export const pushDeliveryModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "40 3 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Deletes push-queue rows past retention. Running this BEFORE `push:dispatch` is drained is arguably the kinder order here — it discards a stale backlog instead of delivering it — but that is a decision to take deliberately, not by cron ordering."
+        backlog: "bounded"
       },
       purpose:
         "Delete terminal push queue rows, spent delivery attempts, and long-disabled subscriptions past their retention windows (legal-hold gated, bounded batches).",

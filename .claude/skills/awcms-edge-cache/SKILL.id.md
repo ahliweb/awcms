@@ -5,7 +5,7 @@ description: Lapisan cache tepi Varnish SUDAH ADA di repo ini (ADR-0042; `src/li
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:201153701bd8554e19dfc941b96f14dc235a5e536acfe1eab00138c55f801123 -->
+<!-- i18n-source-hash: sha256:bd5fe5eb1aa80dada4ab33ef7bdb3fb24159d92d147d8169c696503a6c21c215 -->
 
 # AWCMS — Edge cache (Varnish)
 
@@ -87,6 +87,22 @@ ketiga yang senyap.
   **`POST /__edge-cache-purge`**; VCL tetap menerima `BAN` asli untuk
   `curl -X BAN` manual. Method tidak pernah jadi kontrol keamanan — ACL, token,
   dan validasi charset key yang menjaganya, dan ketiganya berlaku di kedua pintu.
+- **ACL `purge_clients` di VCL bukan kontrol nyata ketika Varnish berada di belakang reverse proxy
+  pada jaringan privat yang sama — ditemukan langsung di deployment produksi.** ACL ini
+  meng-allowlist loopback plus rentang RFC1918, dengan asumsi pemanggil dari internet publik bisa
+  dibedakan dari panggilan purge internal origin lewat `client.ip`. Nyatanya tidak bisa: Traefik
+  (atau proxy apa pun di depan Varnish) juga hidup di jaringan privat itu, jadi `client.ip` untuk
+  request yang direlai Traefik dari internet publik adalah alamat container Traefik sendiri — masuk
+  rentang "terpercaya" yang sama dengan pemanggil internal yang sah. Keduanya tak terbedakan bagi
+  VCL. **Token akhirnya jadi satu-satunya kontrol nyata**, persis titik kegagalan tunggal yang
+  disangkal komentar ACL itu. Perbaikannya bukan di VCL — tidak bisa, informasi yang dibutuhkan
+  tidak sampai ke sana — melainkan di batas kepercayaan yang sesungguhnya: kecualikan
+  `/__edge-cache-purge` dan method `BAN` dari rule router publik sepenuhnya
+  (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))`untuk Traefik), sehingga
+request publik tidak pernah mencapai Varnish sama sekali. Pastikan`EDGE_CACHE_PURGE_ENDPOINT`
+deployment menunjuk langsung ke Varnish lewat jaringan internal (`http://<varnish-service>:80`,
+  jangan pernah lewat domain publik) sebelum mengandalkan ini — jika origin sendiri memanggil keluar
+  lewat edge, pengecualian ini justru merusak jalur yang sah.
 - **Mock `fetchImpl` TIDAK bisa menangkap kelas bug ini.** Ia memeriksa argumen,
   bukan kabel, jadi ia akan menyatakan `method === "BAN"` dan lulus selamanya.
   `tests/edge-cache-purge-client.test.ts` menegakkan `request.method` seperti

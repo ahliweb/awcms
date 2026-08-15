@@ -726,9 +726,7 @@ export const blogContentModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "*/5 * * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Publishes every post whose scheduled time has passed. This is OUTWARD-FACING and hard to undo: posts scheduled months ago all go live in one pass, in the wrong order relative to the news cycle. List them before enabling."
+        backlog: "bounded"
       },
       purpose:
         "Publish every due `status='scheduled'` blog post (scheduled_at <= now()) for every active tenant. Idempotent — a post already published, or still in the future, is a no-op on re-run.",

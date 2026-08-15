@@ -125,9 +125,7 @@ export const dataLifecycleModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "30 3 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Archives and purges per the lifecycle registry. The first pass covers every row that has been eligible since the registry landed. Dry-run and read the per-descriptor counts."
+        backlog: "bounded"
       },
       purpose:
         "Archive (where applicable) and purge rows past retention for every registered generic-execution descriptor; record a dry-run backlog snapshot for every delegated (existing-adopter) descriptor.",

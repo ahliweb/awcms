@@ -198,9 +198,7 @@ export const emailModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "20 3 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Deletes sent/failed email rows past retention, including the delivery-attempt trail used to debug provider problems. Dry-run and read the count."
+        backlog: "bounded"
       },
       purpose:
         "Delete terminal email queue rows and spent delivery attempts past their retention windows (legal-hold gated, bounded batches).",

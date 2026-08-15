@@ -173,9 +173,7 @@ export const visitorAnalyticsModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "45 3 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Deletes analytics rows past retention — the whole accumulated excess on the first pass. Dry-run and read the count."
+        backlog: "bounded"
       },
       purpose:
         "Delete/clear visitor analytics data past its retention windows (events, session raw detail, sessions, rollups), per active tenant.",

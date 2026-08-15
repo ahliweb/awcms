@@ -211,9 +211,7 @@ export const identityAccessModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "5 * * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Revokes business-scope access past its expiry. Because this never ran, access has been outliving its validity — so the first pass is a MASS REVOCATION of everything already expired. That is the correct end state and it will lock people out mid-session; run it dry, tell the affected tenants, then enable."
+        backlog: "bounded"
       },
       purpose:
         "Transitions business-scope assignments and SoD conflict exceptions past their effective_to to expired, recording append-only lifecycle events and an aggregate audit entry per tenant (per-exception audit for exceptions).",
@@ -242,9 +240,7 @@ export const identityAccessModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "30 2 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Same shape as business-scope expiry: the first pass transitions every subscription already past its boundary. Dry-run, read the counts, then enable."
+        backlog: "bounded"
       },
       purpose:
         "Walks each tenant's subscription one rung down the trialing -> active -> past_due -> grace -> suspended ladder when its own dates say so (ADR-0084), auditing every transition in that tenant's own trail. Never moves a subscription up — restoring service is a payment event, not a clock event — and never writes awcms_tenants: a run that would cost more than MAX_ENTITLEMENT_LOSSES_PER_RUN tenants their plan entitlements applies none of them and reports instead.",

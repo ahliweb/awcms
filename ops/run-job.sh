@@ -85,7 +85,7 @@ trap 'rm -f "$ENVFILE"' EXIT
 # takes effect on the next run. The container name changes on every deploy, so it
 # is resolved above and never hardcoded.
 docker exec "$APP" printenv \
-  | grep -E '^(DATABASE_URL|WORKER_DATABASE_URL|SETUP_DATABASE_URL|EMAIL_|APP_URL|APP_ENV|LOG_LEVEL|AUTH_|REDIS_|R2_|NEWS_MEDIA_|PUSH_|VAPID_|FCM_|COMMENTS_|CLOUDFLARE_)' \
+  | grep -E '^(DATABASE_URL|WORKER_DATABASE_URL|SETUP_DATABASE_URL|EMAIL_|APP_URL|APP_ENV|LOG_LEVEL|AUTH_|REDIS_|R2_|NEWS_MEDIA_|PUSH_|VAPID_|FCM_|COMMENTS_|CLOUDFLARE_|EDGE_CACHE_)' \
   > "$ENVFILE"
 
 log "$JOB $* (image=$IMAGE app=$APP)"
