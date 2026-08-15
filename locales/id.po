@@ -609,6 +609,9 @@ msgstr "Akses ditolak."
 msgid "Accounts that keep password sign-in even when SSO is required. Turning off password sign-in, or requiring SSO, is refused server-side unless at least one of these is still active — that is what stops an identity-provider outage from locking everyone out of the tenant permanently."
 msgstr "Akun yang tetap bisa masuk dengan kata sandi meski SSO diwajibkan. Mematikan masuk dengan kata sandi, atau mewajibkan SSO, ditolak di sisi server kecuali setidaknya satu akun seperti ini masih aktif — itulah yang mencegah gangguan penyedia identitas mengunci semua orang keluar dari tenant secara permanen."
 
+msgid "A credential that can change data is bound to an address range and expires within {days} days. Leave this empty for the read-only credential."
+msgstr "Kredensial yang bisa mengubah data terikat pada rentang alamat dan kedaluwarsa dalam {days} hari. Biarkan kosong untuk kredensial hanya-baca."
+
 msgid "Action"
 msgstr "Tindakan"
 
@@ -665,9 +668,6 @@ msgstr "Delegasi membuat penerima delegasi bisa memutuskan atas nama pemberi del
 
 msgid "/admin/modules"
 msgstr "/admin/modules"
-
-msgid "/admin/modules/blog_content"
-msgstr "/admin/modules/blog_content"
 
 msgid "Admin unique users"
 msgstr "Pengguna unik admin"
@@ -834,9 +834,6 @@ msgstr "Percobaan"
 msgid "Audit events, newest first"
 msgstr "Event audit, terbaru dulu"
 
-msgid "AUTH_MFA_ENABLED=false"
-msgstr "AUTH_MFA_ENABLED=false"
-
 msgid "Author"
 msgstr "Penulis"
 
@@ -845,9 +842,6 @@ msgstr "Otoritas"
 
 msgid "Authority reference"
 msgstr "Rujukan otoritas"
-
-msgid "AUTH_SELF_REGISTRATION_ENABLED"
-msgstr "AUTH_SELF_REGISTRATION_ENABLED"
 
 msgid "AUTH_SSO_ENABLED"
 msgstr "AUTH_SSO_ENABLED"
@@ -861,9 +855,6 @@ msgstr "Menunggu keputusan"
 msgid "Awaiting retry"
 msgstr "Menunggu percobaan ulang"
 
-msgid "awcms_module_settings"
-msgstr "awcms_module_settings"
-
 msgid "Bearers for callers with no human behind them — build feeds, deploy hooks, integrations. A credential authenticates only: every request it makes still passes the same permission and policy checks a person's would. Revoking one takes effect on its next request."
 msgstr "Pembawa untuk pemanggil tanpa manusia di belakangnya — feed build, hook deploy, integrasi. Kredensial hanya mengautentikasi: setiap permintaan yang dibuatnya tetap melewati pemeriksaan izin dan kebijakan yang sama seperti milik orang. Mencabutnya berlaku pada permintaan berikutnya."
 
@@ -875,9 +866,6 @@ msgstr "blok, satu-satunya tipe blok yang ditulis editor ini."
 
 msgid "Blog categories and tags, by name."
 msgstr "Kategori dan tag blog, menurut nama."
-
-msgid "blog_content.settings.configure"
-msgstr "blog_content.settings.configure"
 
 msgid "Blog identity"
 msgstr "Identitas blog"
@@ -957,9 +945,6 @@ msgstr "· membatalkan"
 msgid "Cancel rebuild"
 msgstr "Batalkan pembangunan ulang"
 
-msgid "cannot be removed"
-msgstr "tidak bisa dihapus"
-
 msgid "Categories and tags"
 msgstr "Kategori dan tag"
 
@@ -980,6 +965,12 @@ msgstr "Kategori"
 
 msgid "Change some keys"
 msgstr "Ubah sebagian kunci"
+
+msgid "Changing the served version affects every tenant, so it can only be done from the platform tenant ({code}) — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
+msgstr "Mengubah versi yang disajikan berdampak pada setiap tenant, jadi ia hanya bisa dilakukan dari tenant platform ({code}) — bukan dari tenant ini. Peran Anda membawa izinnya; tindakan ini ditolak karena DI MANA ia dilakukan, bukan siapa yang melakukannya."
+
+msgid "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
+msgstr "Mengubah versi yang disajikan berdampak pada setiap tenant, jadi ia hanya bisa dilakukan dari tenant platform — bukan dari tenant ini. Peran Anda membawa izinnya; tindakan ini ditolak karena DI MANA ia dilakukan, bukan siapa yang melakukannya."
 
 msgid "Checking this browser…"
 msgstr "Memeriksa peramban ini…"
@@ -1095,14 +1086,68 @@ msgstr "Tidak dapat memuat daftar penyaringan. Silakan coba lagi."
 msgid "Could not save these settings. Please try again."
 msgstr "Tidak dapat menyimpan pengaturan ini. Silakan coba lagi."
 
+msgid "{count} office"
+msgid_plural "{count} offices"
+msgstr[0] "{count} kantor"
+
+msgid "{count} deleted office"
+msgid_plural "{count} deleted offices"
+msgstr[0] "{count} kantor terhapus"
+
+msgid "{count} module"
+msgid_plural "{count} modules"
+msgstr[0] "{count} modul"
+
+msgid "{count} deleted role"
+msgid_plural "{count} deleted roles"
+msgstr[0] "{count} peran terhapus"
+
+msgid "{count} group"
+msgid_plural "{count} groups"
+msgstr[0] "{count} grup"
+
+msgid "{count} account configured."
+msgid_plural "{count} accounts configured."
+msgstr[0] "{count} akun dikonfigurasi."
+
+msgid "{count} domain"
+msgid_plural "{count} domains"
+msgstr[0] "{count} domain"
+
+msgid "{count} per page"
+msgstr "{count} per halaman"
+
+msgid "{count} policy"
+msgid_plural "{count} policies"
+msgstr[0] "{count} kebijakan"
+
+msgid "{count} profile"
+msgid_plural "{count} profiles"
+msgstr[0] "{count} profil"
+
 msgid "Countries"
 msgstr "Negara"
+
+msgid "{count} role"
+msgid_plural "{count} roles"
+msgstr[0] "{count} peran"
 
 msgid "Country"
 msgstr "Negara"
 
 msgid "Counts what a purge WOULD do for one tenant-scoped table, right now. Read-only by construction: it writes nothing, not even a run record, and an active legal hold is applied before anything is reported purgeable."
 msgstr "Menghitung apa yang AKAN dilakukan pembersihan untuk satu tabel selingkup tenant, saat ini juga. Hanya-baca secara konstruksi: ia tidak menulis apa pun, bahkan bukan catatan eksekusi, dan penahanan hukum yang aktif diterapkan sebelum apa pun dilaporkan bisa dibersihkan."
+
+msgid "{count} template"
+msgid_plural "{count} templates"
+msgstr[0] "{count} templat"
+
+msgid "{count} tenant-scoped"
+msgstr "{count} selingkup tenant"
+
+msgid "{count} user"
+msgid_plural "{count} users"
+msgstr[0] "{count} pengguna"
 
 msgid "Create a group"
 msgstr "Buat grup"
@@ -1184,9 +1229,6 @@ msgstr "Buat istilah"
 
 msgid "csv"
 msgstr "csv"
-
-msgid "current"
-msgstr "terkini"
 
 msgid "Currently served"
 msgstr "Sedang disajikan"
@@ -1340,9 +1382,6 @@ msgstr "Detail"
 
 msgid "Device type"
 msgstr "Tipe perangkat"
-
-msgid "different"
-msgstr "berbeda"
 
 msgid "Dimensions"
 msgstr "Dimensi"
@@ -1632,14 +1671,11 @@ msgstr "Draf formulir, terbaru dulu, dibatasi 100 baris."
 msgid "form-drafts:purge"
 msgstr "form-drafts:purge"
 
-msgid "Freshness is computed live from the last successful update, never read back from a stored column — a projection whose updater stopped running ages into"
-msgstr "Kesegaran dihitung langsung dari pembaruan sukses terakhir, tidak pernah dibaca ulang dari kolom tersimpan — proyeksi yang pembaruinya berhenti berjalan akan menua menjadi"
+msgid "Freshness is computed live from the last successful update, never read back from a stored column — a projection whose updater stopped running ages into {stale} on its own rather than staying frozen at {current}."
+msgstr "Kesegaran dihitung langsung dari pembaruan sukses terakhir, tidak pernah dibaca ulang dari kolom tersimpan — proyeksi yang pembaruinya berhenti berjalan akan menua sendiri menjadi {stale} alih-alih membeku di {current}."
 
 msgid "From"
 msgstr "Dari"
-
-msgid "from here — the API has no way to clear it, only to change it. Until one is set, the blog follows the tenant default."
-msgstr "dari sini — API tidak punya cara untuk mengosongkannya, hanya mengubahnya. Sampai satu disetel, blog mengikuti default tenant."
 
 msgid "Generated by"
 msgstr "Dihasilkan oleh"
@@ -1776,9 +1812,6 @@ msgstr "Undang seseorang"
 msgid "IP hash"
 msgstr "Hash IP"
 
-msgid "is not"
-msgstr "bukan"
-
 msgid "Issue a credential"
 msgstr "Terbitkan kredensial"
 
@@ -1869,9 +1902,6 @@ msgstr "Redirect /blog warisan"
 msgid "Legacy /blog redirect (inert in this base — no /news routes)"
 msgstr "Redirect /blog warisan (inert di basis ini — tidak ada rute /news)"
 
-msgid "legacyTenantRouteEnabled"
-msgstr "legacyTenantRouteEnabled"
-
 msgid "Legal hold"
 msgstr "Penahanan hukum"
 
@@ -1941,8 +1971,8 @@ msgstr "Menu"
 msgid "Message"
 msgstr "Pesan"
 
-msgid "MFA is enforced for this tenant, but enrolment is closed for this deployment ("
-msgstr "MFA ditegakkan untuk tenant ini, tetapi pendaftarannya ditutup untuk deployment ini ("
+msgid "MFA is enforced for this tenant, but enrolment is closed for this deployment ({setting}). A user without a factor cannot enrol one, and cannot sign in."
+msgstr "MFA ditegakkan untuk tenant ini, tetapi pendaftarannya ditutup untuk deployment ini ({setting}). Pengguna tanpa faktor tidak bisa mendaftarkannya, dan tidak bisa masuk."
 
 msgid "Mime type"
 msgstr "Tipe MIME"
@@ -1965,6 +1995,9 @@ msgstr "Pengaturan modul"
 msgid "module.ts"
 msgstr "module.ts"
 
+msgid "Most recent reconciliation of {projection}."
+msgstr "Rekonsiliasi terkini untuk {projection}."
+
 msgid "Multi-factor authentication"
 msgstr "Autentikasi multifaktor"
 
@@ -1973,9 +2006,6 @@ msgstr "Nama"
 
 msgid "Navigation placement"
 msgstr "Penempatan navigasi"
-
-msgid ". Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
-msgstr ". Keduanya tidak bisa diubah setelah dibuat: API tidak melakukan deteksi siklus, jadi mengubah induk di sini bisa menciptakan lingkaran yang tak bisa dilepaskan pembaca mana pun. Hapus istilah itu lalu buat lagi sebagai gantinya."
 
 msgid "never"
 msgstr "tidak pernah"
@@ -2009,6 +2039,9 @@ msgstr "Halaman berikutnya"
 
 msgid "Next retry"
 msgstr "Percobaan ulang berikutnya"
+
+msgid "· next retry due:"
+msgstr "· percobaan ulang berikutnya:"
 
 msgid "No 404s recorded"
 msgstr "Tidak ada 404 tercatat"
@@ -2109,6 +2142,9 @@ msgstr "Tidak ada objek media yang cocok dengan filter ini."
 msgid "No menus yet"
 msgstr "Belum ada menu"
 
+msgid "No module is registered under that key. Check the list on"
+msgstr "Tidak ada modul terdaftar dengan kunci itu. Periksa daftarnya di"
+
 msgid "No modules"
 msgstr "Tidak ada modul"
 
@@ -2177,6 +2213,9 @@ msgstr "Tidak ada ekspor terjadwal"
 
 msgid "No sessions yet."
 msgstr "Belum ada sesi."
+
+msgid "No {status} comments."
+msgstr "Tidak ada komentar {status}."
 
 msgid "No subject request has been made in this tenant."
 msgstr "Belum ada permintaan subjek data yang diajukan di tenant ini."
@@ -2346,9 +2385,6 @@ msgstr "terlambat"
 msgid "Overdue only"
 msgstr "Hanya yang terlambat"
 
-msgid "owner"
-msgstr "owner"
-
 msgid "Owner"
 msgstr "Pemilik"
 
@@ -2406,6 +2442,9 @@ msgstr "Konsumen yang dijeda"
 msgid "Payload"
 msgstr "Payload"
 
+msgid "Payload ({summary})"
+msgstr "Payload ({summary})"
+
 msgid "Pending"
 msgstr "Tertunda"
 
@@ -2420,6 +2459,9 @@ msgstr "izin untuk tenant ini."
 
 msgid "Permissions"
 msgstr "Izin"
+
+msgid "Permissions ({count})"
+msgstr "Izin ({count})"
 
 msgid "Per-module enablement for this tenant. Core modules cannot be disabled, and a module other enabled modules depend on will refuse to turn off."
 msgstr "Pengaktifan per modul untuk tenant ini. Modul inti tidak bisa dinonaktifkan, dan modul yang menjadi dependensi modul aktif lain akan menolak dimatikan."
@@ -2553,14 +2595,11 @@ msgstr "Dibersihkan"
 msgid "Purge permanently"
 msgstr "Bersihkan permanen"
 
-msgid "Push delivery is switched off on this deployment ("
-msgstr "Pengiriman push dimatikan pada deployment ini ("
+msgid "Push delivery is switched off on this deployment ({setting} is not {value}), so the dispatcher claims nothing and no notification will be sent. This is the expected state on an offline/LAN deployment."
+msgstr "Pengiriman push dimatikan pada deployment ini ({setting} bukan {value}), jadi dispatcher tidak mengklaim apa pun dan tidak ada notifikasi yang akan dikirim. Ini keadaan yang diharapkan pada deployment offline/LAN."
 
 msgid "push:dispatch"
 msgstr "push:dispatch"
-
-msgid "PUSH_ENABLED"
-msgstr "PUSH_ENABLED"
 
 msgid "Push is enabled but no valid VAPID key pair is configured, so a browser cannot subscribe. Generate one with"
 msgstr "Push aktif tetapi tidak ada pasangan kunci VAPID valid yang dikonfigurasi, sehingga peramban tidak bisa berlangganan. Hasilkan satu dengan"
@@ -2589,8 +2628,8 @@ msgstr "Kuorum"
 msgid "Raised"
 msgstr "Diajukan"
 
-msgid "RBAC roles for this tenant and the permissions granted to each. System roles (such as"
-msgstr "Peran RBAC untuk tenant ini dan izin yang diberikan pada masing-masing. Peran sistem (seperti"
+msgid "RBAC roles for this tenant and the permissions granted to each. System roles (such as {role}) are protected and cannot be deleted."
+msgstr "Peran RBAC untuk tenant ini dan izin yang diberikan pada masing-masing. Peran sistem (seperti {role}) dilindungi dan tidak bisa dihapus."
 
 msgid "Reach"
 msgstr "Jangkauan"
@@ -2787,8 +2826,8 @@ msgstr "Diminta oleh"
 msgid "Request erasure"
 msgstr "Ajukan penghapusan"
 
-msgid "Requesting does not erase anything. A"
-msgstr "Mengajukan tidak menghapus apa pun. Sebuah"
+msgid "Requesting does not erase anything. A DIFFERENT person holding the approval permission must decide — the two permissions are a segregation-of-duties conflict, so you will not normally be able to do both."
+msgstr "Mengajukan tidak menghapus apa pun. Orang yang BERBEDA dan memegang izin persetujuan harus memutuskannya — kedua izin itu adalah konflik pemisahan tugas, jadi Anda biasanya tidak akan bisa melakukan keduanya."
 
 msgid "Request log"
 msgstr "Log permintaan"
@@ -2907,6 +2946,9 @@ msgstr "Mode rute"
 msgid "Rows"
 msgstr "Baris"
 
+msgid "Rows (max {max})"
+msgstr "Baris (maks {max})"
+
 msgid "RSS enabled"
 msgstr "RSS aktif"
 
@@ -2921,6 +2963,9 @@ msgstr "Jalankan"
 
 msgid "Run a reconcile to build the index for the first time."
 msgstr "Jalankan rekonsiliasi untuk membangun indeks pertama kali."
+
+msgid "Run {command} on the deployment to import the vendored dataset."
+msgstr "Jalankan {command} di deployment untuk mengimpor dataset yang di-vendor."
 
 msgid "Run history"
 msgstr "Riwayat eksekusi"
@@ -3042,8 +3087,8 @@ msgstr "Urutan seksi"
 msgid "Sections"
 msgstr "Bagian"
 
-msgid "Sections, comma-separated, in the order they should render:"
-msgstr "Seksi, dipisah koma, dalam urutan render yang diinginkan:"
+msgid "Sections, comma-separated, in the order they should render: {sections}. Leave a token empty to inherit the theme default shown as its placeholder."
+msgstr "Seksi, dipisah koma, dalam urutan render yang diinginkan: {sections}. Biarkan sebuah token kosong untuk mewarisi default tema yang ditampilkan sebagai placeholder-nya."
 
 msgid "See diagnostics below"
 msgstr "Lihat diagnostik di bawah"
@@ -3051,8 +3096,8 @@ msgstr "Lihat diagnostik di bawah"
 msgid "Seen"
 msgstr "Terlihat"
 
-msgid "Self-registration is switched off for this deployment ("
-msgstr "Pendaftaran mandiri dimatikan untuk deployment ini ("
+msgid "Self-registration is switched off for this deployment ({setting}), so no new request can arrive. Anything already queued below can still be reviewed."
+msgstr "Pendaftaran mandiri dimatikan untuk deployment ini ({setting}), jadi tidak ada permintaan baru yang bisa masuk. Yang sudah mengantre di bawah tetap bisa ditinjau."
 
 msgid "Send a test notification"
 msgstr "Kirim notifikasi uji"
@@ -3099,6 +3144,9 @@ msgstr "Jadikan primer"
 msgid "Setting"
 msgstr "Setelan"
 
+msgid "Setting a blog theme creates an override that cannot be removed from here — the API has no way to clear it, only to change it. Until one is set, the blog follows the tenant default."
+msgstr "Menyetel tema blog membuat penimpaan yang tidak bisa dihapus dari sini — API tidak punya cara untuk mengosongkannya, hanya mengubahnya. Sampai satu disetel, blog mengikuti default tenant."
+
 msgid "Sever"
 msgstr "Putuskan"
 
@@ -3114,11 +3162,17 @@ msgstr "Menampilkan 100 istilah pertama menurut nama. Filter berdasarkan tipe un
 msgid "Showing the newest page. Older invitations are reachable through"
 msgstr "Menampilkan halaman terbaru. Undangan yang lebih lama bisa dijangkau lewat"
 
+msgid "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy."
+msgstr "Menampilkan {shown} event terkini yang cocok. Tampilan ini dibatasi {max} baris dan tidak bisa menelusuri lebih jauh ke belakang — event yang lebih lama tetap ada dan disimpan sesuai kebijakan retensi audit."
+
 msgid "Sidebar"
 msgstr "Menu samping"
 
 msgid "Sign-in methods"
 msgstr "Metode masuk"
+
+msgid "since {timestamp} UTC"
+msgstr "sejak {timestamp} UTC"
 
 msgid "Sitemap enabled"
 msgstr "Sitemap aktif"
@@ -3137,6 +3191,9 @@ msgstr "Ukuran"
 
 msgid "Skip email confirmation"
 msgstr "Lewati konfirmasi email"
+
+msgid "{slot} media id"
+msgstr "id media {slot}"
 
 msgid "Slug"
 msgstr "Slug"
@@ -3171,9 +3228,6 @@ msgstr "SSO diwajibkan untuk tenant ini, tetapi masuk dengan SSO dimatikan untuk
 msgid "Stable identifier. Cannot be changed after creation."
 msgstr "Pengenal stabil. Tidak bisa diubah setelah dibuat."
 
-msgid "stale"
-msgstr "stale"
-
 msgid "Standing site content — about, contact, policies. Pages have a narrower lifecycle than posts:"
 msgstr "Konten situs yang tetap — tentang, kontak, kebijakan. Halaman punya siklus hidup yang lebih sempit daripada post:"
 
@@ -3188,6 +3242,9 @@ msgstr "Status"
 
 msgid "Status code"
 msgstr "Kode status"
+
+msgid "{status} comments awaiting moderation"
+msgstr "komentar {status} menunggu moderasi"
 
 msgid "Step"
 msgstr "Langkah"
@@ -3300,6 +3357,9 @@ msgstr "Tenant terdaftar"
 msgid "Tenant user id"
 msgstr "Id pengguna tenant"
 
+msgid "Tenant users, their status, and their assigned roles. Login identifiers are masked here — they are personal data and are never shown in full in a list view."
+msgstr "Pengguna tenant, statusnya, dan peran yang ditetapkan padanya. Pengenal login disamarkan di sini — ia data pribadi dan tidak pernah ditampilkan utuh dalam tampilan daftar."
+
 msgid "Terms"
 msgstr "Istilah"
 
@@ -3336,6 +3396,9 @@ msgstr "Isi post ini memuat blok yang tidak bisa diwakili editor teks polos ini 
 msgid "The built-in role/permission rules apply. Add a custom policy to extend or override them for this tenant."
 msgstr "Aturan peran/izin bawaan berlaku. Tambahkan kebijakan kustom untuk memperluas atau menimpanya bagi tenant ini."
 
+msgid "The code appears once, on this page, and cannot be read again. Hand it to your partner out of band. Access lasts at most {days} days."
+msgstr "Kode ini muncul sekali, di halaman ini, dan tidak bisa dibaca lagi. Serahkan kepada mitra Anda lewat jalur terpisah. Akses berlaku paling lama {days} hari."
+
 msgid "The credential acts AS this account. It can never do more than the account can — the permissions below narrow that, they never widen it."
 msgstr "Kredensial bertindak SEBAGAI akun ini. Ia tidak pernah bisa melakukan lebih dari yang bisa dilakukan akun itu — izin di bawah mempersempitnya, tidak pernah melebarkannya."
 
@@ -3362,6 +3425,9 @@ msgstr "Daftar di bawah hanya menampilkan alamat yang disamarkan, jadi ia tidak 
 
 msgid "Theme"
 msgstr "Tema"
+
+msgid "Theme default ({value})"
+msgstr "Default tema ({value})"
 
 msgid "The media library could not be loaded right now. This is a problem reading it, not an empty library — please try again later."
 msgstr "Pustaka media tidak dapat dimuat saat ini. Ini masalah membacanya, bukan pustaka yang kosong — silakan coba lagi nanti."
@@ -3410,6 +3476,12 @@ msgstr "Konsol pencarian tidak dapat dimuat saat ini. Silakan coba lagi nanti."
 
 msgid "The sync console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
 msgstr "Konsol sinkronisasi tidak dapat dimuat saat ini. Ini masalah membacanya, bukan kesunyian yang sehat — silakan coba lagi nanti."
+
+msgid "The tenant directory belongs to the platform tenant ({code}), not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+msgstr "Direktori tenant milik tenant platform ({code}), bukan milik tenant ini. Penolakannya soal DI MANA tindakan itu dilakukan, bukan siapa yang melakukannya — tidak ada grant di tenant ini yang bisa membukanya."
+
+msgid "The tenant directory belongs to the platform tenant, not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+msgstr "Direktori tenant milik tenant platform, bukan milik tenant ini. Penolakannya soal DI MANA tindakan itu dilakukan, bukan siapa yang melakukannya — tidak ada grant di tenant ini yang bisa membukanya."
 
 msgid "The tenant directory could not be loaded right now. Please try again later."
 msgstr "Direktori tenant tidak dapat dimuat saat ini. Silakan coba lagi nanti."
@@ -3492,9 +3564,6 @@ msgstr "Transport"
 msgid "Trigger"
 msgstr "Pemicu"
 
-msgid "true"
-msgstr "true"
-
 msgid "Turn off on this device"
 msgstr "Matikan di perangkat ini"
 
@@ -3504,8 +3573,8 @@ msgstr "Handle situs Twitter"
 msgid "Type"
 msgstr "Tipe"
 
-msgid "Type is"
-msgstr "Tipenya"
+msgid "Type is {type} and parent is {parent}. Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
+msgstr "Tipenya {type} dan induknya {parent}. Keduanya tidak bisa diubah setelah dibuat: API tidak melakukan deteksi siklus, jadi mengubah induk di sini bisa menciptakan lingkaran yang tak bisa dilepaskan pembaca mana pun. Hapus istilah itu lalu buat lagi sebagai gantinya."
 
 msgid "UA hash"
 msgstr "Hash UA"
@@ -3563,6 +3632,9 @@ msgstr "Visibilitas"
 
 msgid "Visitor analytics collection is disabled (VISITOR_ANALYTICS_ENABLED=false). Figures below reflect only data collected while it was enabled."
 msgstr "Pengumpulan analitik pengunjung dinonaktifkan (VISITOR_ANALYTICS_ENABLED=false). Angka di bawah hanya mencerminkan data yang dikumpulkan saat ia aktif."
+
+msgid "Waiting for a decision ({count})"
+msgstr "Menunggu keputusan ({count})"
 
 msgid "warehouse"
 msgstr "gudang"

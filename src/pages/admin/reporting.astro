@@ -386,10 +386,9 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
         </h2>
         <p class="page-description">
           {t(
-            "Freshness is computed live from the last successful update, never read back from a stored column \u2014 a projection whose updater stopped running ages into"
+            "Freshness is computed live from the last successful update, never read back from a stored column \u2014 a projection whose updater stopped running ages into {stale} on its own rather than staying frozen at {current}.",
+            { stale: "stale", current: "current" }
           )}
-          <code>{t("stale")}</code> on its own rather than staying frozen at{" "}
-          <code>{t("current")}</code>.
         </p>
 
         {projections.length === 0 ? (
@@ -487,7 +486,9 @@ const exportConfigColumns = canConfigureExports ? 6 : 5;
                       </summary>
                       <table class="data-table data-table--stack">
                         <caption class="sr-only">
-                          Most recent reconciliation of {projection.key}.
+                          {t("Most recent reconciliation of {projection}.", {
+                            projection: projection.key
+                          })}
                         </caption>
                         <thead>
                           <tr>

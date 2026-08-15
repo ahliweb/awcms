@@ -410,18 +410,19 @@ const hasFilter = typeFilter !== undefined;
               category with children flipping to `tag` would violate
               `awcms_blog_terms_tag_no_parent_check` for its children, which
               the API cannot express as one atomic edit. */}
+          {/* ONE msgid, not four fragments around two `<strong>`s. Indonesian
+              puts "type" and "parent" in a different order from English, which
+              a translator cannot express while each half is a separate entry.
+              The emphasis is the cost of saying it in one sentence. */}
           <p class="form-hint" id="term-edit-immutable-hint">
-            {t("Type is")}
-            <strong set:text={editingTerm.taxonomyType} /> and parent is{" "}
-            <strong
-              set:text={
-                editingTerm.parentId
+            {t(
+              "Type is {type} and parent is {parent}. Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead.",
+              {
+                type: editingTerm.taxonomyType,
+                parent: editingTerm.parentId
                   ? (nameById.get(editingTerm.parentId) ?? "—")
                   : "none"
               }
-            />
-            {t(
-              ". Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
             )}
           </p>
 

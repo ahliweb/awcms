@@ -30,7 +30,7 @@ import {
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. Note what that closes HERE in particular: this
@@ -162,7 +162,11 @@ const canUpdate = canConfigure;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="abac-policies-table">
-          <caption>{policies.length} policy(ies)</caption>
+          <caption>
+            {tn("{count} policy", "{count} policies", policies.length, {
+              count: policies.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Code")}</th>

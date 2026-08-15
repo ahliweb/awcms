@@ -62,7 +62,7 @@ import {
 } from "../../modules/identity-access/application/tenant-mfa-policy";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 const deployment = {
   onlineSecurityActive: isFullOnlineSecurityActive(),
@@ -417,7 +417,12 @@ const mfaContradiction =
 
               {!canUpdatePolicy && (
                 <p class="page-description" id="security-break-glass-count">
-                  {policy.breakGlassIdentityIds.length} account(s) configured.
+                  {tn(
+                    "{count} account configured.",
+                    "{count} accounts configured.",
+                    policy.breakGlassIdentityIds.length,
+                    { count: policy.breakGlassIdentityIds.length }
+                  )}
                 </p>
               )}
 
@@ -437,10 +442,9 @@ const mfaContradiction =
             {mfaContradiction && (
               <p class="state-notice" id="security-mfa-contradiction">
                 {t(
-                  "MFA is enforced for this tenant, but enrolment is closed for this deployment ("
+                  "MFA is enforced for this tenant, but enrolment is closed for this deployment ({setting}). A user without a factor cannot enrol one, and cannot sign in.",
+                  { setting: "AUTH_MFA_ENABLED=false" }
                 )}
-                <code>{t("AUTH_MFA_ENABLED=false")}</code>). A user without a
-                factor cannot enrol one, and cannot sign in.
               </p>
             )}
 

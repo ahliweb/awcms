@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **129** (`sql/001`–`129`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0097** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **43** `.astro` files in `src/pages/admin/`; **0 of 22** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **56** (30.063 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **56** (30.144 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **50** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -595,7 +595,7 @@ pending_verification`.
 
   | Ledger                                               | Now             | What it means                                        |
   | ---------------------------------------------------- | --------------- | ---------------------------------------------------- |
-  | `i18n:screens:check`                                 | 17 screens      | still render 23 English literals in total            |
+  | `i18n:screens:check`                                 | **0** (was 18)  | screens still rendering English template literals    |
   | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | **0** (was 718) | msgids declared but the `id` `msgstr` is still empty |
 
   **Step 1 is CLOSED — 718 → 0, and the count was hiding a defect. 15 August 2026.**
@@ -624,31 +624,52 @@ pending_verification`.
   lost its number; an invented one is printed verbatim by `interpolate()`.
   Proven against both shapes, not merely green.
 
-  2. **Finish the 17 screens** in the `i18n:screens:check` ledger.
-     `blog-settings.astro` came OFF it in the same pass and is the worked example:
-     the literals that remain are the cases the migration tool deliberately did not
-     touch — a sentence split in the middle by `<code>`/`<strong>`. The fix is to
-     merge them into ONE msgid with a placeholder
-     (`t("… {code} …", { code })`), not to wrap each fragment. Note what merging
-     costs: `t()` returns a STRING, so the `<code>` element around the placeholder
-     is lost. Keep a real `<a>` as its own label rather than folding a link into
-     the sentence.
-  3. **Locale for the PUBLIC surface — BLOCKED by the cache-key decision,
-     and the block is real.** Varnish keys on the URL (ADR-0042). One public URL
-     whose body changes according to a locale cookie means an English reader is
-     served the Indonesian page from the cache. ADR-0095 §"Decision 5" therefore
-     localises NO public surface at all and registers this as a
-     prerequisite: the cache key must carry the locale first, and that is an ADR of its
-     own. What waits behind it: correct `hreflang`
-     (`src/middleware.ts` still passes `locale: null` into redirect resolution
-     — with a comment explaining that this is now a deliberate REFUSAL,
-     not a missing seam), and multi-language content fields for `blog_content`.
-  4. **Per-user time zone.** `/admin/account` renders timestamps in
-     UTC and says so; guessing the server's zone would make "last seen"
-     wrong with nobody able to detect it. It belongs to the preferences table
-     ADR-0095 already created.
-  5. **Changing the login address.** Deliberately OUTSIDE ADR-0096: that is account recovery,
-     not profile editing, and it demands proof of ownership of the new address.
+  **Step 2 is CLOSED — 18 screens → 0, and the gate could not see a third of the
+  work. 15 August 2026.**
+
+  The 23 ledgered literals were the split-sentence class, merged into whole
+  msgids with placeholders. Two costs are worth recording because the next
+  merge pays them again: `t()` returns a STRING, so a `<code>`/`<strong>` around
+  a placeholder is lost (keep a real `<a>` as its own label rather than folding
+  a link into a sentence); and where the interpolated value is OPTIONAL, one
+  `{code}` msgid renders "platform tenant ()" — so that shape needs TWO whole
+  msgids, one per branch.
+
+  **What the ledger did not count, and nothing would have:** the scanner reads
+  template text only where it follows a TAG. Text after an EXPRESSION —
+  `<caption>{roles.length} role(s)</caption>` — is invisible. Nineteen such
+  strings were found by hand across 15 screens the gate already called
+  finished, every one of them rendering English to an Indonesian reader. They
+  are fixed (the `{n} thing(s)` captions became real `tn()` plurals, which is
+  also the first use of the plural path through the `.po` round-trip). The
+  SCANNER still cannot see the class: widening it would start capturing
+  template literals and chained ternaries as prose, which is the false-positive
+  failure `CODE_SHAPED` exists to hold back, so that widening is its own change
+  with its own mutation test. Until then an empty ledger means "no untranslated
+  text after a tag", which is less than "nothing untranslated" — the limitation
+  is written into the gate's header rather than left for the next reader to
+  discover.
+
+  **And the catalogue gate was blind to 86 msgids.** Its literal harvester
+  excluded any string containing a backslash, and prettier rewrites an em dash
+  inside `t()` as `—` — so the longest, most prose-like msgids were never
+  REQUIRED to exist. Consequence: `users.astro` had been calling `t()` on a
+  sentence declared in neither catalogue, rendering English in every locale,
+  with both ledgers reading 0. The harvester now decodes escapes; proven by
+  deleting one escaped msgid and watching the old pattern pass it silently. 3. **Locale for the PUBLIC surface — BLOCKED by the cache-key decision,
+  and the block is real.** Varnish keys on the URL (ADR-0042). One public URL
+  whose body changes according to a locale cookie means an English reader is
+  served the Indonesian page from the cache. ADR-0095 §"Decision 5" therefore
+  localises NO public surface at all and registers this as a
+  prerequisite: the cache key must carry the locale first, and that is an ADR of its
+  own. What waits behind it: correct `hreflang`
+  (`src/middleware.ts` still passes `locale: null` into redirect resolution
+  — with a comment explaining that this is now a deliberate REFUSAL,
+  not a missing seam), and multi-language content fields for `blog_content`. 4. **Per-user time zone.** `/admin/account` renders timestamps in
+  UTC and says so; guessing the server's zone would make "last seen"
+  wrong with nobody able to detect it. It belongs to the preferences table
+  ADR-0095 already created. 5. **Changing the login address.** Deliberately OUTSIDE ADR-0096: that is account recovery,
+  not profile editing, and it demands proof of ownership of the new address.
 
 - **OPERATIONAL BLOCKER — the production image CANNOT run a single one of the
   29 registered jobs. Found on 14 August 2026 while deploying v9.0.0.**

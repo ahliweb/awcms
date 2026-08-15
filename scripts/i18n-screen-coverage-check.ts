@@ -41,6 +41,27 @@
  * bulk migration, not perfection, and claiming otherwise would be the "green
  * while every answer is wrong" failure it was written to avoid.
  *
+ * ## A THIRD blind spot, and it matters more now the ledger is empty
+ *
+ * Text that follows an EXPRESSION rather than a tag is not scanned. `afterTag`
+ * below is cleared on `{` and `}`, so in
+ *
+ *   <caption>{roles.length} role(s)</caption>
+ *
+ * the words ` role(s)` are invisible. Nineteen such strings were found BY HAND
+ * when this ledger reached zero — table captions, `{n} per page`, a
+ * `{label} media id` — and every one of them was rendering English to an
+ * Indonesian reader while this gate reported the screen finished. They are
+ * fixed; the scanner still cannot see the class, so a NEW one would be silent.
+ *
+ * Extending `afterTag` to survive a closing `}` is the obvious fix and is NOT
+ * free: template literals and chained ternaries would start being captured as
+ * prose (`` ` : "other" `` after a `${…}`), which is the false-positive failure
+ * `CODE_SHAPED` already exists to hold back. That widening deserves its own
+ * change, with its own mutation test, rather than riding along with a ledger
+ * that was being emptied. Until then: an empty ledger means "no untranslated
+ * text after a TAG", which is less than "nothing untranslated".
+ *
  * Pure: reads source text. No database, no network.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -60,26 +81,21 @@ const SCREENS_ROOT = join(REPO_ROOT, "src", "pages", "admin");
  *
  * A NEW screen may not be added here. That is the point: the migration is
  * finite, and the way it stays finite is that nothing new joins it.
+ *
+ * **IT IS NOW EMPTY, AND THAT IS THE END STATE.** All 43 screens render their
+ * template text through `t()`. The list stays rather than being deleted because
+ * emptiness is what makes the gate absolute: with no entries, the FIRST
+ * untranslated literal on any screen fails the build, and there is no existing
+ * row for it to hide behind.
+ *
+ * What the last 23 literals had in common is worth keeping: every one was a
+ * sentence split by an interpolated value or a `<code>`/`<strong>` — the shape
+ * the bulk migration could not mechanise. They are merged into whole msgids
+ * with placeholders. Where the value is OPTIONAL (a tenant code that may not
+ * resolve) that means TWO msgids, one per branch, because a single `{code}`
+ * entry renders "platform tenant ()" when it is absent.
  */
-export const SCREENS_AWAITING_TRANSLATION: readonly string[] = [
-  "audit-trail.astro",
-  "blog-presentation.astro",
-  "blog-taxonomy.astro",
-  "business-scope.astro",
-  "form-drafts.astro",
-  "idn-regions.astro",
-  "machine-credentials.astro",
-  "modules/[moduleKey].astro",
-  "partners.astro",
-  "push-notifications.astro",
-  "registrations.astro",
-  "reporting.astro",
-  "roles.astro",
-  "security.astro",
-  "subject-requests.astro",
-  "tenants.astro",
-  "theming.astro"
-];
+export const SCREENS_AWAITING_TRANSLATION: readonly string[] = [];
 
 interface Finding {
   readonly screen: string;
@@ -282,9 +298,21 @@ export function extractTemplateText(source: string): string[] {
  * The direction of the error matters and is the safe one: this can only cause
  * an UNDER-count of untranslated strings on a screen already on the ledger,
  * never a false accusation against a screen that is finished.
+ *
+ * `===`/`!==` were added when the ledger reached its last screen. A CHAINED
+ * ternary between two elements —
+ *
+ *   ) : token.kind === "number" ? (
+ *
+ * — is not caught by `\)\s*:\s*\(`, because the comparison sits between the
+ * colon and the paren. It was the only thing standing between `theming.astro`
+ * and a finished ledger, and "a screen that cannot be finished" is where a
+ * heuristic stops being conservative and starts being wrong: the under-count
+ * argument above holds only while a screen is ON the ledger. Neither operator
+ * can appear in a UI sentence.
  */
 const CODE_SHAPED =
-  /=>|&&|\|\||\.map\(|\?\.|\);|\)\s*:\s*\(|\.join\(|\bconst\b|\breturn\b/;
+  /=>|&&|\|\||\.map\(|\?\.|\);|\)\s*:\s*\(|\.join\(|\bconst\b|\breturn\b|===|!==/;
 
 /** Text that looks like a sentence a reader would see, not markup residue. */
 export function isTranslatableText(text: string): boolean {

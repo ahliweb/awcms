@@ -254,9 +254,10 @@ const maxExpiry = new Date(
           {canAssign && engagements.length > 0 && roles.length > 0 && (
             <form id="approve-grant-form" class="admin-form">
               <p class="page-description">
-                The code appears once, on this page, and cannot be read again.
-                Hand it to your partner out of band. Access lasts at most{" "}
-                {DELEGATED_ACCESS_MAX_TTL_DAYS} days.
+                {t(
+                  "The code appears once, on this page, and cannot be read again. Hand it to your partner out of band. Access lasts at most {days} days.",
+                  { days: DELEGATED_ACCESS_MAX_TTL_DAYS }
+                )}
               </p>
 
               <label for="approve-partner">{t("Partner")}</label>

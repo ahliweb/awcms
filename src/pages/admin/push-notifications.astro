@@ -205,14 +205,16 @@ const messageColumns = canCancel ? 8 : 7;
             {t("Notifications on this device")}
           </h2>
 
+          {/* One sentence, one msgid. This used to be three fragments around
+              two `<code>`s, which asks a translator to reorder a sentence they
+              can only see in pieces — and left the tail untranslated entirely,
+              so an Indonesian reader got half a paragraph in English. */}
           {!pushEnabled && (
             <p class="state-notice" id="push-notifications-disabled">
-              {t("Push delivery is switched off on this deployment (")}
-              <code>{t("PUSH_ENABLED")}</code>
-              {t("is not")}
-              <code>{t("true")}</code>), so the dispatcher claims nothing and no
-              notification will be sent. This is the expected state on an
-              offline/LAN deployment.
+              {t(
+                "Push delivery is switched off on this deployment ({setting} is not {value}), so the dispatcher claims nothing and no notification will be sent. This is the expected state on an offline/LAN deployment.",
+                { setting: "PUSH_ENABLED", value: "true" }
+              )}
             </p>
           )}
 
@@ -306,7 +308,7 @@ const messageColumns = canCancel ? 8 : 7;
             <strong data-push-time="oldestPendingAt">
               {formatTimestamp(summary?.oldestPendingAt ?? null)}
             </strong>
-            · next retry due:{" "}
+            {t("· next retry due:")}{" "}
             <strong data-push-time="nextAttemptAt">
               {formatTimestamp(summary?.nextAttemptAt ?? null)}
             </strong>

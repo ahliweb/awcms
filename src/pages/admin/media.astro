@@ -270,7 +270,9 @@ const columnCount = canActOnAny ? 8 : 7;
           <div class="stat-card">
             <span class="stat-label">{t("On this page")}</span>
             <span class="stat-value">{objects.length}</span>
-            <span class="stat-hint">{MEDIA_OBJECT_LIST_LIMIT} per page</span>
+            <span class="stat-hint">
+              {t("{count} per page", { count: MEDIA_OBJECT_LIST_LIMIT })}
+            </span>
           </div>
           <div class="stat-card">
             <span class="stat-label">{t("Not publicly referenceable")}</span>
