@@ -5,7 +5,7 @@ description: Pilih dan jalankan profil deployment AWCMS (development/production/
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:42230742a9d8e2f8bcb32bce2cf1923d529eb928edcee9fc3644cd228d8c244a -->
+<!-- i18n-source-hash: sha256:395c49cbfd86e953611b94656698ac819c237f3972d9989cf92b3e288835de22 -->
 
 # AWCMS — Deployment Profile & Execution
 
@@ -119,6 +119,28 @@ bun run db:pool:health    # pool sehat terhadap DB target
 > rilis** — auto-rebuild memperbaiki penghapusan, bukan keusangan, dan versi
 > job yang tertinggal akan menjalankan kode LAMA terhadap skema BARU tanpa
 > suara. Detail + utang yang tersisa: `docs/PROJECT_STATE.md` §4.
+
+> **Whitelist env `run-job.sh` adalah allowlist, bukan passthrough — family env var `<PREFIX>_*`
+> baru butuh entri sendiri atau job diam-diam jalan tanpa konfigurasi.** Ditemukan langsung di
+> produksi: `EDGE_CACHE_MODE`/`EDGE_CACHE_PURGE_ENDPOINT`/`EDGE_CACHE_PURGE_TOKEN` semuanya sudah
+> diset benar di container app, tapi `edge-cache:purge` melaporkan `mode=off
+> endpointConfigured=false` saat dijalankan lewat `run-job.sh` — whitelist `grep -E`
+> (`^(DATABASE_URL|...|CLOUDFLARE_)`) memang tak pernah mencantumkan `EDGE_CACHE_`. Tak ada error,
+> tak ada log yang mengarah ke situ — pesan sukses yang TERLIHAT seperti konfigurasi
+> (`skipped — mode=off`) terbaca sebagai "memang sengaja dimatikan", bukan "salah konfigurasi".
+> Periksa whitelist ini duluan setiap kali sebuah job berperilaku seolah seluruh family env var yang
+> jelas seharusnya ia lihat malah unset.
+
+> **`edge-cache:purge` sama sekali tak terlihat oleh `jobs:crontab:generate`/`jobs:crontab:check` —
+> ia satu-satunya entri `DOCUMENTED_EXCEPTIONS` di `scripts/module-job-registry-check.ts`**, karena
+> ia infrastruktur di `src/lib/edge-cache/` tanpa modul pemilik (ADR-0043) untuk menampung
+> descriptor. Artinya tak ada apa pun di crontab hasil generate atau gate check-nya yang akan pernah
+> menangkap job ini tidak terjadwal — terverifikasi di deployment nyata di mana job ini diam-diam
+> sama sekali tak punya runner yang bekerja. Jadwalnya (setiap 10-30 detik, sesuai header skrip-nya
+> sendiri + `docs/awcms/deployment-profiles.md`) harus dijaga manual, di luar `ops/awcms-jobs.crontab`,
+> sebagai beberapa baris cron `* * * * *`/`sleep N &&` yang di-stagger — aman menjalankan instance
+> yang overlap (claim-lease per-row, `FOR UPDATE SKIP LOCKED`), jadi tanpa wrapper `flock`, berbeda
+> dari setiap job hasil generate di atasnya.
 
 **Setelah deploy rilis yang menambah modul/permission BARU, jalankan
 backfill permission:**

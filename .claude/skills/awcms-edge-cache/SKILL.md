@@ -85,6 +85,21 @@ third state.
   **`POST /__edge-cache-purge`**; the VCL still accepts a real `BAN` for
   a manual `curl -X BAN`. The method was never a security control — the ACL, the token,
   and the key charset validation are what guard it, and all three apply at both doors.
+- **The VCL's `purge_clients` ACL is not a real control when Varnish sits behind a reverse proxy on
+  the same private network — found live on a production deployment.** The ACL allowlists loopback
+  plus RFC1918 ranges, on the theory that a public-internet caller can be told apart from the
+  origin's own internal purge call by `client.ip`. It can't: Traefik (or any proxy in front of
+  Varnish) also lives on that private network, so `client.ip` for a request Traefik relayed from
+  the public internet is Traefik's own container address — inside the same "trusted" range as a
+  genuinely internal caller. The two are indistinguishable to the VCL. **The token ends up being the
+  only real control**, exactly the single-point-of-failure the ACL comment claims it isn't. The fix
+  is not in the VCL — it can't be, the information needed doesn't reach it — it's at the actual
+  trust boundary: exclude `/__edge-cache-purge` and method `BAN` from the public router's rule
+  entirely (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))` for Traefik), so a
+  public request never reaches Varnish at all. Confirm the deployment's `EDGE_CACHE_PURGE_ENDPOINT`
+  points at Varnish directly over the internal network (`http://<varnish-service>:80`, never through
+  the public domain) before relying on this — if the origin itself calls out through the edge, the
+  exclusion breaks the legitimate path too.
 - **A mock `fetchImpl` CANNOT catch this class of bug.** It inspects arguments,
   not the wire, so it will assert `method === "BAN"` and pass forever.
   `tests/edge-cache-purge-client.test.ts` enforces `request.method` as

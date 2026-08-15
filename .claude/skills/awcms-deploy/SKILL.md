@@ -118,6 +118,25 @@ bun run db:pool:health    # pool healthy against the target DB
 > left behind will run OLD code against a NEW schema silently. Details +
 > remaining debt: `docs/PROJECT_STATE.md` §4.
 
+> **`run-job.sh`'s env whitelist is an allowlist, not a passthrough — a new `<PREFIX>_*` env var
+> family needs its own entry or the job silently runs unconfigured.** Found live: `EDGE_CACHE_MODE`/
+> `EDGE_CACHE_PURGE_ENDPOINT`/`EDGE_CACHE_PURGE_TOKEN` were all set correctly on the app container,
+> but `edge-cache:purge` reported `mode=off endpointConfigured=false` when run via `run-job.sh` —
+> the `grep -E` whitelist (`^(DATABASE_URL|...|CLOUDFLARE_)`) simply never listed `EDGE_CACHE_`. No
+> error, no log line hinting at it — a config-looking success message (`skipped — mode=off`) that
+> reads as "correctly disabled" rather than "misconfigured". Check this whitelist first whenever a
+> job behaves as if a whole env-var family it clearly should see is unset.
+
+> **`edge-cache:purge` is invisible to `jobs:crontab:generate`/`jobs:crontab:check` entirely — it is
+> the one `DOCUMENTED_EXCEPTIONS` entry in `scripts/module-job-registry-check.ts`**, since it's
+> infrastructure under `src/lib/edge-cache/` with no owning module (ADR-0043) to carry a descriptor.
+> That means nothing in the generated crontab or its check gate will ever catch this job being
+> unscheduled — verified on a real deployment where it had silently had no working runner at all.
+> Its schedule (every 10-30s, per its own script header + `docs/awcms/deployment-profiles.md`) has
+> to be maintained by hand, outside `ops/awcms-jobs.crontab`, as a small set of staggered
+> `* * * * *`/`sleep N &&` cron lines — it's safe to run overlapping instances (per-row claim-lease,
+> `FOR UPDATE SKIP LOCKED`), so no `flock` wrapper, unlike every generated job above it.
+
 **After deploying a release that adds NEW modules/permissions, run the
 permission backfill:**
 
