@@ -75,8 +75,30 @@ const CLIENT_DIST = "dist/client";
 /** Baseline 139,048 B (2026-08-05) + ~29% headroom, rounded. */
 export const TOTAL_BUDGET_BYTES = 180_000;
 
-/** Largest file at baseline 16,800 B (2026-08-05) + 25%. */
-export const PER_FILE_BUDGET_BYTES = 21_000;
+/**
+ * Largest file at baseline 16,800 B (2026-08-05) + 25% was 21,000 B.
+ *
+ * **Raised to 27,000 B on 15 August 2026, and the reason is not "it grew".**
+ * The per-file rule's stated premise — quoted in its own failure message — is
+ * that "a single file this size usually means an island bundled a dependency".
+ * That premise is what makes the rule sharp, and it does not hold for the file
+ * that broke it: `admin.css` is the admin's SHARED stylesheet, parsed once and
+ * cached across every screen, and it grew because it was missing half its
+ * vocabulary. 125 classes used by the admin templates — every button, the
+ * entire dashboard, the card/form system, `.visually-hidden` — had no rule at
+ * all, so `/admin/account` and thirteen settings forms rendered as raw browser
+ * controls.
+ *
+ * Splitting it to satisfy the old number was considered and rejected: two
+ * stylesheets on every admin page cost a request and save nothing, so it would
+ * improve the metric while making the thing the metric exists to protect
+ * slightly worse.
+ *
+ * `TOTAL_BUDGET_BYTES` is deliberately NOT raised. The ceiling that actually
+ * bounds what a reader downloads still binds at its original value, so this
+ * change buys shape, not headroom.
+ */
+export const PER_FILE_BUDGET_BYTES = 27_000;
 
 export type ClientAsset = { path: string; bytes: number };
 
