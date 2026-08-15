@@ -1437,13 +1437,13 @@ On success the password is replaced, the lockout counters are cleared, the token
 | 400    | Validation error.                                  | [`ApiError`](#standard-error-envelope) |
 | 429    | Too many password reset attempts from this source. | [`ApiError`](#standard-error-envelope) |
 
-### `GET /api/v1/auth/preferences` — The caller's own UI locale and colour theme (self-service, no permission).
+### `GET /api/v1/auth/preferences` — The caller's own UI locale, colour theme and time zone (self-service, no permission).
 
 - **operationId**: `getOwnDisplayPreferences`
 - **Security**: bearerAuth + tenantHeader
 
 ADR-0095. Self-service by construction — the subject is the session bearer and the route accepts no tenantUserId, so there is nobody else it could be pointed at. Deliberately UNPERMISSIONED, like GET /api/v1/auth/sessions: inventing a permission for "read your own language" would wall off the feature and install the latent-authz trap (an action nothing seeds denies everyone, tenant owner included).
-Both fields are nullable, and null means "not chosen" rather than a default: a null locale falls through to awcms_tenants.default_locale and then to Accept-Language, so a reader who never opened the switcher still gets the language their browser asked for. `storable` is false when the identity has no linked principal (sql/112 leaves that legal), which is the one case where a choice cannot be made durable.
+All three fields are nullable, and null means "not chosen" rather than a default: a null locale falls through to awcms_tenants.default_locale and then to Accept-Language, so a reader who never opened the switcher still gets the language their browser asked for, and a null timeZone renders UTC. `storable` is false when the identity has no linked principal (sql/112 leaves that legal), which is the one case where a choice cannot be made durable.
 
 **Parameters**
 

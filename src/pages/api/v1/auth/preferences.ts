@@ -46,6 +46,7 @@ import { coerceLocale } from "../../../../lib/i18n/negotiate";
 import { sameOriginPathOr } from "../../../../lib/security/same-origin-path";
 import {
   coerceThemeMode,
+  coerceTimeZone,
   readPreferences,
   resolvePrincipalIdForIdentity,
   writePreferences,
@@ -95,6 +96,7 @@ interface SubmittedPreferences {
   /** Absent = "not submitted, leave alone"; null = "reset to not chosen". */
   readonly locale?: Locale | null;
   readonly theme?: ThemeMode | null;
+  readonly timeZone?: string | null;
   readonly wantsRedirect: boolean;
   readonly returnTo: string | null;
 }
@@ -162,6 +164,7 @@ async function readSubmission(
     const submission: {
       locale?: Locale | null;
       theme?: ThemeMode | null;
+      timeZone?: string | null;
     } = {};
 
     if ("locale" in body) {
@@ -210,6 +213,33 @@ async function readSubmission(
       }
     }
 
+    if ("timeZone" in body) {
+      const value = body.timeZone;
+
+      if (value === null) {
+        submission.timeZone = null;
+      } else {
+        // `Intl` is the oracle, not a list this file keeps. sql/130 explains
+        // why: the IANA database ships with the runtime and changes several
+        // times a year, so any enumeration here would start refusing valid
+        // zones within months.
+        const timeZone = coerceTimeZone(value);
+
+        if (!timeZone) {
+          return fail(
+            400,
+            "UNSUPPORTED_TIME_ZONE",
+            "Time zone must be an IANA zone this deployment can render.",
+            {},
+            undefined,
+            NO_STORE_HEADERS
+          );
+        }
+
+        submission.timeZone = timeZone;
+      }
+    }
+
     return { ...submission, wantsRedirect: false, returnTo: null };
   } catch {
     return fail(
@@ -245,6 +275,7 @@ export const GET = defineSelfServiceTenantRoute({
         data: {
           locale: preferences.locale,
           theme: preferences.theme,
+          timeZone: preferences.timeZone,
           // Stated so a client can render "follow tenant default (Indonesian)"
           // rather than an empty control it cannot explain.
           storable: principalId !== null
@@ -295,12 +326,14 @@ export const POST = defineSelfServiceTenantRoute<SubmittedPreferences>({
     // the upsert, and the read that feeds it is in the same transaction.
     const existing = principalId
       ? await readPreferences(tx, principalId)
-      : { locale: null, theme: null };
+      : { locale: null, theme: null, timeZone: null };
 
     const nextLocale =
       "locale" in prepared ? (prepared.locale ?? null) : existing.locale;
     const nextTheme =
       "theme" in prepared ? (prepared.theme ?? null) : existing.theme;
+    const nextTimeZone =
+      "timeZone" in prepared ? (prepared.timeZone ?? null) : existing.timeZone;
 
     // An identity with no principal (sql/112 §3 leaves that legal) has nowhere
     // durable to write. The cookie below still applies, so the switch works for
@@ -308,7 +341,8 @@ export const POST = defineSelfServiceTenantRoute<SubmittedPreferences>({
     if (principalId) {
       await writePreferences(tx, principalId, {
         locale: nextLocale,
-        theme: nextTheme
+        theme: nextTheme,
+        timeZone: nextTimeZone
       });
     }
 

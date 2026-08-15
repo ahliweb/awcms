@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:3b4b2dd599b5e00ce01512909f8f8f3c11a0ce820a947760556018635363bdef -->
+<!-- i18n-source-hash: sha256:5264ff45a0c9aa2a6c9e98c20129f2711a54517e218055c2e288037402ff55e4 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,10 +111,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **129** (`sql/001`–`129`)                                                             | `ls sql/`                                                                               |
+| Migrasi                            | **130** (`sql/001`–`130`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.063 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **56** (30.131 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -646,12 +646,25 @@ pending_verification`.
      (`src/middleware.ts` masih meneruskan `locale: null` ke resolusi redirect
      — dengan komentar yang menjelaskan bahwa ini kini PENOLAKAN yang disengaja,
      bukan ketiadaan seam), dan field konten multi-bahasa untuk `blog_content`.
-  4. **Zona waktu per-pengguna.** `/admin/account` merender stempel waktu dalam
-     UTC dan mengatakannya; menebak zona server akan membuat "terakhir dilihat"
-     salah tanpa ada yang bisa mendeteksinya. Ia milik tabel preferensi yang
-     sudah dibuat ADR-0095.
-  5. **Penggantian alamat login.** Sengaja DI LUAR ADR-0096: ia pemulihan akun,
-     bukan penyuntingan profil, dan menuntut pembuktian kepemilikan alamat baru.
+     **Langkah 4 DITUTUP — `awcms_principal_preferences.time_zone`, sql/130.
+     15 Agustus 2026.**
+
+  `/admin/account` merender setiap stempel waktu dalam zona pilihan pembacanya,
+  dan fallback-nya tetap UTC alih-alih zona host — alasan aslinya ("menebak zona
+  server akan membuat 'terakhir dilihat' salah tanpa ada yang bisa
+  mendeteksinya") justru itulah sebabnya. Yang berubah: kini ada preferensi
+  tersurat untuk dibaca, bukan tebakan untuk dibuat.
+
+  Dua hal layak dibawa ke depan. CHECK-nya adalah cek BENTUK dan migrasinya
+  menyatakannya: 445 zona, daftar milik tzdata yang berubah beberapa kali
+  setahun, berarti constraint yang mengenumerasi akan mulai MENOLAK nilai sah
+  dalam hitungan bulan — dan CHECK tidak boleh membaca `pg_timezone_names`.
+  Otoritas soal bisa-dirender adalah `Intl.DateTimeFormat`, yang melempar untuk
+  zona tak dikenal. Dan karena ia melempar, `readPreferences` melakukan koersi
+  saat KELUAR: zona yang dibuang tzdata baru harus terbaca "tidak dipilih", atau
+  layar akun 500 tepat pada hari seseorang membukanya untuk memeriksa dugaan
+  pembobolan. 5. **Penggantian alamat login.** Sengaja DI LUAR ADR-0096: ia pemulihan akun,
+  bukan penyuntingan profil, dan menuntut pembuktian kepemilikan alamat baru.
 
 - **PEMBLOKIR OPERASIONAL — image produksi TIDAK BISA menjalankan satu pun dari
   29 job terdaftar. Ditemukan 14 Agustus 2026 saat men-deploy v9.0.0.**

@@ -111,10 +111,10 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Pending changesets (by bump type) | _run the command in the right-hand column_                                             | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commits since the last release    | _run the command in the right-hand column_                                             | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Base modules                      | **22** (see the list in ARCHITECTURE.md)                                               | `src/modules/index.ts`                                                                  |
-| Migrations                        | **129** (`sql/001`–`129`)                                                              | `ls sql/`                                                                               |
+| Migrations                        | **130** (`sql/001`–`130`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0097** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **43** `.astro` files in `src/pages/admin/`; **0 of 22** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **56** (30.063 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **56** (30.131 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **50** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -643,12 +643,24 @@ pending_verification`.
      (`src/middleware.ts` still passes `locale: null` into redirect resolution
      — with a comment explaining that this is now a deliberate REFUSAL,
      not a missing seam), and multi-language content fields for `blog_content`.
-  4. **Per-user time zone.** `/admin/account` renders timestamps in
-     UTC and says so; guessing the server's zone would make "last seen"
-     wrong with nobody able to detect it. It belongs to the preferences table
-     ADR-0095 already created.
-  5. **Changing the login address.** Deliberately OUTSIDE ADR-0096: that is account recovery,
-     not profile editing, and it demands proof of ownership of the new address.
+     **Step 4 is CLOSED — `awcms_principal_preferences.time_zone`, sql/130.
+     15 August 2026.**
+
+  `/admin/account` renders every timestamp in the reader's chosen zone, and the
+  fallback stays UTC rather than the host's — the original reasoning ("guessing
+  the server's zone would make 'last seen' wrong with nobody able to detect it")
+  is exactly why. What changed is that there is a stated preference to read
+  instead of a guess to make.
+
+  Two things are worth carrying forward. The CHECK is a SHAPE check and the
+  migration says so: 445 zones, a list that is tzdata's and changes several
+  times a year, means an enumerating constraint would start REFUSING valid
+  values within months — and a CHECK may not read `pg_timezone_names`. The
+  authority on renderability is `Intl.DateTimeFormat`, which throws on an
+  unknown zone. And because it throws, `readPreferences` coerces on the way OUT:
+  a zone dropped by a newer tzdata must read as "not chosen", or the account
+  screen 500s on the day somebody opens it to check a suspected breach. 5. **Changing the login address.** Deliberately OUTSIDE ADR-0096: that is account recovery,
+  not profile editing, and it demands proof of ownership of the new address.
 
 - **OPERATIONAL BLOCKER — the production image CANNOT run a single one of the
   29 registered jobs. Found on 14 August 2026 while deploying v9.0.0.**
