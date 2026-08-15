@@ -332,7 +332,7 @@ const decidedColumns = canRevokeException ? 7 : 6;
             aria-labelledby="business-scope-inbox-heading"
           >
             <h2 id="business-scope-inbox-heading">
-              Waiting for a decision ({pending.length})
+              {t("Waiting for a decision ({count})", { count: pending.length })}
             </h2>
             <p class="page-description">
               {t(

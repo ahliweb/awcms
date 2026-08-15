@@ -179,7 +179,7 @@ function formatTimestamp(value: string): string {
 
         {!loadFailed && items.length === 0 && (
           <div class="state-notice" role="status">
-            <p>No {activeStatus} comments.</p>
+            <p>{t("No {status} comments.", { status: activeStatus })}</p>
           </div>
         )}
 
@@ -187,7 +187,9 @@ function formatTimestamp(value: string): string {
           <div class="table-scroll">
             <table class="data-table" data-comments-queue>
               <caption class="sr-only">
-                {activeStatus} comments awaiting moderation
+                {t("{status} comments awaiting moderation", {
+                  status: activeStatus
+                })}
               </caption>
               <thead>
                 <tr>

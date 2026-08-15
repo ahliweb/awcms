@@ -361,11 +361,12 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
                   disabled={!canUpdate}
                 >
                   <option value="">
-                    Theme default (
-                    {selectedTheme.fontFamilies.find(
-                      (family) => family.key === token.default
-                    )?.label ?? token.default}
-                    )
+                    {t("Theme default ({value})", {
+                      value:
+                        selectedTheme.fontFamilies.find(
+                          (family) => family.key === token.default
+                        )?.label ?? token.default
+                    })}
                   </option>
                   {selectedTheme.fontFamilies.map((family) => (
                     <option
@@ -433,7 +434,7 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
 
           {selectedTheme.assetSlots.map((assetSlot) => (
             <label for={`theming-asset-${assetSlot.key}`}>
-              {assetSlot.label} media id
+              {t("{slot} media id", { slot: assetSlot.label })}
               <input
                 type="text"
                 id={`theming-asset-${assetSlot.key}`}
@@ -477,12 +478,14 @@ const showLifecycleActions = canPublish || canRetire || canPreview;
           </label>
 
           <p class="form-legend">
-            {t("Sections, comma-separated, in the order they should render:")}{" "}
-            {selectedTheme.contentSections
-              .map((section) => `${section.label} (${section.key})`)
-              .join(", ")}
-            . Leave a token empty to inherit the theme default shown as its
-            placeholder.
+            {t(
+              "Sections, comma-separated, in the order they should render: {sections}. Leave a token empty to inherit the theme default shown as its placeholder.",
+              {
+                sections: selectedTheme.contentSections
+                  .map((section) => `${section.label} (${section.key})`)
+                  .join(", ")
+              }
+            )}
           </p>
 
           <div class="admin-toolbar">

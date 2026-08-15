@@ -41,7 +41,7 @@ type OfficeRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 const OFFICE_STATUS_OPTIONS = ["active", "inactive"];
 
@@ -200,7 +200,11 @@ const showActions = canUpdate || canDelete;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="offices-table">
-          <caption>{offices.length} office(s)</caption>
+          <caption>
+            {tn("{count} office", "{count} offices", offices.length, {
+              count: offices.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Code")}</th>
@@ -329,7 +333,14 @@ const showActions = canUpdate || canDelete;
             class="data-table data-table--stack"
             id="deleted-offices-table"
           >
-            <caption>{deletedOffices.length} deleted office(s)</caption>
+            <caption>
+              {tn(
+                "{count} deleted office",
+                "{count} deleted offices",
+                deletedOffices.length,
+                { count: deletedOffices.length }
+              )}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Code")}</th>

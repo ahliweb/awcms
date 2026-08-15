@@ -114,9 +114,13 @@ function pretty(value: Record<string, unknown>): string {
   }
 
   {
+    /* The link keeps its own label — a link is a control, not a phrase, and
+      folding it into the sentence would cost the anchor. */
+  }
+  {
     canRead && !loadError && !view && (
       <p class="state-notice fade-in-up" id="module-settings-unknown">
-        No module is registered under that key. Check the list on{" "}
+        {t("No module is registered under that key. Check the list on")}{" "}
         <a href="/admin/modules">{t("/admin/modules")}</a>.
       </p>
     )

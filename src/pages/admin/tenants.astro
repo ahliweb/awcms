@@ -186,17 +186,21 @@ function statusVariant(status: string): string {
   }
 
   {
+    /* Two whole msgids, not one sentence with an optional fragment spliced into
+      its middle — the code is not always resolvable, and a single `{code}`
+      msgid would render "platform tenant (), not to this one". */
+  }
+  {
     withheldByPlatformScope && (
       <p class="state-notice fade-in-up" id="tenants-scope-notice">
-        The tenant directory belongs to the platform tenant
-        {platformTenantCode && (
-          <>
-            {" "}
-            (<span class="cell-code">{platformTenantCode}</span>)
-          </>
-        )}
-        , not to this one. The refusal is about WHERE the action is being made,
-        not who is making it — no grant on this tenant can unlock it.
+        {platformTenantCode
+          ? t(
+              "The tenant directory belongs to the platform tenant ({code}), not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it.",
+              { code: platformTenantCode }
+            )
+          : t(
+              "The tenant directory belongs to the platform tenant, not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+            )}
       </p>
     )
   }

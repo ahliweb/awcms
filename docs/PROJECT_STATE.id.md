@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:5264ff45a0c9aa2a6c9e98c20129f2711a54517e218055c2e288037402ff55e4 -->
+<!-- i18n-source-hash: sha256:4a5681c7baffb13a196f7b1029f9505f7d64184ddb8371ed68182bd04d089b45 -->
 
 # AWCMS — Project State & Continuation
 
@@ -114,7 +114,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **130** (`sql/001`–`130`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.131 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **56** (30.144 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -595,7 +595,7 @@ pending_verification`.
 
   | Ledger                                               | Sekarang         | Artinya                                                |
   | ---------------------------------------------------- | ---------------- | ------------------------------------------------------ |
-  | `i18n:screens:check`                                 | 17 layar         | masih merender total 23 literal Inggris                |
+  | `i18n:screens:check`                                 | **0** (dulu 18)  | layar yang masih merender literal template Inggris     |
   | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | **0** (dulu 718) | msgid dideklarasikan tetapi `msgstr` `id` masih kosong |
 
   **Langkah 1 DITUTUP — 718 → 0, dan angkanya menyembunyikan satu cacat. 15 Agustus 2026.**
@@ -627,15 +627,42 @@ pending_verification`.
   diada-adakan dicetak apa adanya oleh `interpolate()`. Dibuktikan pada kedua
   bentuknya, bukan sekadar hijau.
 
-  2. **Selesaikan 17 layar** di ledger `i18n:screens:check`.
-     `blog-settings.astro` KELUAR dari ledger itu pada pass yang sama dan menjadi
-     contoh kerjanya: sisa literalnya adalah kasus yang alat migrasi sengaja tidak
-     sentuh — kalimat yang terbelah oleh `<code>`/`<strong>` di tengah.
-     Perbaikannya adalah menggabungkannya jadi SATU msgid ber-placeholder
-     (`t("… {code} …", { code })`), bukan membungkus tiap penggalan. Perhatikan
-     ongkos penggabungan: `t()` mengembalikan STRING, jadi elemen `<code>` di
-     sekeliling placeholder-nya hilang. Pertahankan `<a>` sungguhan sebagai label
-     tersendiri alih-alih melipat tautan ke dalam kalimat.
+  **Langkah 2 DITUTUP — 18 layar → 0, dan gerbangnya tidak bisa melihat
+  sepertiga pekerjaannya. 15 Agustus 2026.**
+
+  Ke-23 literal ber-ledger itu adalah kelas kalimat-terbelah, digabungkan jadi
+  msgid utuh ber-placeholder. Dua ongkos layak dicatat karena penggabungan
+  berikutnya akan membayarnya lagi: `t()` mengembalikan STRING, jadi
+  `<code>`/`<strong>` di sekeliling placeholder hilang (pertahankan `<a>`
+  sungguhan sebagai label tersendiri alih-alih melipat tautan ke dalam kalimat);
+  dan bila nilai yang disisipkan OPSIONAL, satu msgid `{code}` akan merender
+  "tenant platform ()" — bentuk itu butuh DUA msgid utuh, satu per cabang.
+
+  **Yang tidak dihitung ledger, dan tak ada yang akan menghitungnya:** pemindai
+  hanya membaca teks template yang mengikuti sebuah TAG. Teks setelah EKSPRESI —
+  `<caption>{roles.length} role(s)</caption>` — tidak terlihat. Sembilan belas
+  string seperti itu ditemukan dengan tangan di 15 layar yang sudah disebut
+  selesai oleh gerbangnya, semuanya merender bahasa Inggris kepada pembaca
+  Indonesia. Semuanya diperbaiki (caption `{n} thing(s)` menjadi plural `tn()`
+  sungguhan — sekaligus pemakaian pertama jalur plural lewat perjalanan
+  bolak-balik `.po`). PEMINDAINYA tetap tidak bisa melihat kelas ini:
+  melebarkannya akan mulai menangkap template literal dan ternary berantai
+  sebagai prosa, yaitu kegagalan false-positive yang ditahan `CODE_SHAPED`, jadi
+  pelebaran itu jadi perubahan tersendiri dengan mutation test-nya sendiri.
+  Sampai saat itu, ledger kosong berarti "tidak ada teks tak-diterjemahkan
+  setelah sebuah tag", yang lebih sempit daripada "tidak ada yang
+  tak-diterjemahkan" — batasannya ditulis di header gerbangnya, bukan
+  ditinggalkan untuk ditemukan pembaca berikutnya.
+
+  **Dan gerbang katalog buta terhadap 86 msgid.** Pemanen literalnya
+  mengecualikan string apa pun yang memuat backslash, sedangkan prettier menulis
+  ulang em dash di dalam `t()` menjadi `\u2014` — sehingga msgid terpanjang dan
+  paling mirip prosa tidak pernah DIWAJIBKAN ada. Akibatnya: `users.astro`
+  memanggil `t()` pada kalimat yang tidak dideklarasikan di katalog mana pun,
+  merender bahasa Inggris di setiap locale, sementara kedua ledger membaca 0.
+  Pemanennya kini mendekode escape; dibuktikan dengan menghapus satu msgid
+  ber-escape lalu melihat pola lama meloloskannya diam-diam.
+
   3. **Locale untuk permukaan PUBLIK — TERBLOKIR oleh keputusan kunci cache,
      dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
      yang badannya berubah menurut cookie locale berarti pembaca Inggris
