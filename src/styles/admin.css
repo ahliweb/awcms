@@ -893,3 +893,617 @@
     transition: none;
   }
 }
+
+/* ---- Card / stacked-form vocabulary -------------------------------- */
+/*
+ * The SECOND class vocabulary this admin grew, and until now the unstyled one.
+ *
+ * `.admin-create-form` above styles the horizontal "add a row" strip that 18
+ * list screens use. A later wave — ADR-0096's `/admin/account`, then thirteen
+ * screens with a settings form — reached for `.admin-card` / `.admin-form` /
+ * `.admin-field` instead, and NOTHING ever defined them. Those screens have
+ * been shipping raw browser controls: labels butted against inputs, no card,
+ * no spacing, default `<select>` chrome. `/admin/account` rendered as an
+ * unstyled document end to end.
+ *
+ * It lives in `admin.css` rather than `admin-screens.css` deliberately.
+ * `AdminLayout` always loads this file, while `admin-screens.css` is a
+ * per-screen import — and `/admin/account` never added it, which is exactly how
+ * a vocabulary goes missing for a whole wave of screens. A class the layout
+ * guarantees cannot be forgotten by the next page.
+ *
+ * Every value below is a token, and the control metrics match
+ * `.admin-create-form` (44px touch target, `--radius-sm`, focus-visible border)
+ * so the two vocabularies are visibly the same product rather than two eras of
+ * it.
+ */
+
+.admin-card {
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.admin-card > h2 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+
+/* Intro text under a card heading, and help text under one control. Same
+   treatment because they answer the same question at two scales. */
+.admin-card-hint,
+.admin-field-hint {
+  margin: 0 0 var(--sp-3);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.admin-field-hint {
+  margin: var(--sp-1) 0 0;
+}
+
+/* Vertical counterpart to `.admin-create-form`: one control per row, because
+   these are settings a reader works down rather than a filter strip. */
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 42rem;
+}
+
+.admin-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A disabled fieldset is the read-only state (`disabled={!canConfigure}`), and
+   it must LOOK unavailable rather than merely refuse input. */
+.admin-form fieldset:disabled {
+  opacity: 0.6;
+}
+
+.admin-form legend {
+  padding: 0;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.admin-field,
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.admin-field > label {
+  padding: 0;
+  color: inherit;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea,
+.admin-field input,
+.admin-field select,
+.admin-field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.admin-form input:focus-visible,
+.admin-form select:focus-visible,
+.admin-form textarea:focus-visible,
+.admin-field input:focus-visible,
+.admin-field select:focus-visible,
+.admin-field textarea:focus-visible {
+  border-color: var(--color-focus);
+}
+
+.admin-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+/* Checkbox rows read left-to-right; the column stack above would put the box
+   on its own line above its own label. */
+.admin-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--color-text);
+}
+
+.admin-checkbox input {
+  width: auto;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/*
+ * Message boxes.
+ *
+ * `display` here is safe ONLY because `tokens.css` carries a global
+ * `[hidden] { display: none !important }`. Every one of these renders with the
+ * `hidden` attribute and is revealed by script; without that rule this block
+ * would pin twelve error boxes permanently open — the exact defect this repo
+ * recorded when `.auth-form { display: flex }` made `form.hidden` inert on four
+ * auth pages.
+ */
+.admin-note,
+.admin-empty,
+.admin-error,
+.form-error {
+  display: block;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.admin-note {
+  border-left-color: var(--color-info);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.admin-empty {
+  border-left-color: var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.admin-error,
+.form-error {
+  border-left-color: var(--color-danger);
+  background: var(--color-surface);
+  color: var(--color-danger-strong);
+}
+
+/* ---- Buttons ------------------------------------------------------- */
+/*
+ * `.btn-primary`, `.btn-secondary`, `.btn-danger` and `.btn-small` were used by
+ * `/admin/account`, `/admin/media` and `/admin/push-notifications` with NO rule
+ * anywhere — so every one of them rendered as a default browser button. The
+ * design system document describes a button; the stylesheet never had one.
+ *
+ * Solid fills use the `-strong` tokens, not the plain ones. `tokens.css` states
+ * why at length: the plain values are tuned for text/border use, and white text
+ * on them measures below 4.5:1. This is exactly the "solid fill with
+ * `--color-primary-contrast` on top" case that comment names.
+ */
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-snug);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+
+.btn-primary {
+  background: var(--color-primary-strong);
+  color: var(--color-primary-contrast);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn,
+.btn-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+.btn:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.btn-danger {
+  background: var(--color-danger-strong);
+  color: var(--color-primary-contrast);
+}
+
+.btn:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-small {
+  min-height: 32px;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-xs);
+}
+
+/* A button that must READ as a link — used for the in-table session toggle. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- Dashboard (/admin) -------------------------------------------- */
+/*
+ * The landing page of the whole admin, and NONE of its classes were defined —
+ * `dashboard-grid`, `kpi`, `card-header` and the rest rendered as bare blocks.
+ * It is the first screen every operator sees.
+ */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.kpi-grid,
+.dashboard-grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+}
+
+.kpi,
+.dashboard-card {
+  padding: var(--sp-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+/* A card that carries a table rather than a number spans the grid. */
+.dashboard-card--wide {
+  grid-column: 1 / -1;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  /* The accent is a LEFT border rather than a fill: these sit next to each
+     other, and four saturated panels compete with the content below them. */
+  border-left: 3px solid var(--color-border);
+}
+.kpi--primary {
+  border-left-color: var(--color-primary);
+}
+.kpi--success {
+  border-left-color: var(--color-success);
+}
+.kpi--info {
+  border-left-color: var(--color-info);
+}
+
+.kpi-label {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.kpi-value,
+.num {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-status {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.kpi-icon,
+.card-icon {
+  color: var(--color-text-muted);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* ---- Badges, pills, chips ------------------------------------------ */
+.badge,
+.badge-current,
+.status-pill,
+.role-chip,
+.card-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+
+.badge--warning {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.badge--muted {
+  color: var(--color-text-muted);
+}
+.badge-current {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.role-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Tables (second vocabulary) ------------------------------------ */
+/*
+ * `.data-table` is styled (33 rules); `.admin-table` is the name four screens
+ * actually used, and it had none. Rather than restyle it from scratch the
+ * shared metrics are declared once for both, so the two names cannot drift into
+ * two different tables.
+ */
+.admin-table-wrap,
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+.table-empty {
+  padding: var(--sp-5);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.cell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+
+.cell-body {
+  max-width: 42ch;
+}
+
+.cell-strong {
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Filter / row form variants ------------------------------------ */
+.admin-filter-form,
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.admin-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.admin-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.form-hint {
+  margin: var(--sp-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.form-banner {
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-info);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-size: var(--fs-sm);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.field-label {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.field-input {
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+/* ---- Remaining one-off vocabulary ---------------------------------- */
+.admin-muted,
+.admin-section-lead {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+}
+
+.admin-secondary {
+  color: var(--color-text-muted);
+}
+
+.admin-sidebar-group,
+.admin-sidebar-module {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.state-notice--denied {
+  border-left-color: var(--color-warning);
+}
+.state-notice--error {
+  border-left-color: var(--color-danger);
+}
+
+.session-list,
+.audit-attributes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.session-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.assign-role-control,
+.policy-edit,
+.policy-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Recovery codes are read aloud and typed by hand — monospace, and never
+   wrapped mid-code. */
+.account-recovery-codes,
+.account-secret {
+  display: block;
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  word-break: break-all;
+}
+
+.account-recovery-codes {
+  margin: 0;
+  list-style: none;
+  line-height: var(--lh-relaxed);
+}

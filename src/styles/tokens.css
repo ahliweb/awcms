@@ -246,7 +246,16 @@ a {
   outline-offset: 2px;
 }
 
-.sr-only {
+/*
+ * `.visually-hidden` is the SAME rule, not a second implementation.
+ *
+ * `users.astro` reached for this name and nothing defined it, so its
+ * screen-reader-only text rendered VISIBLY — the failure mode of an undefined
+ * a11y utility is the opposite of silent. Aliasing rather than re-declaring
+ * keeps one definition: two that drift is how one of them stops clipping.
+ */
+.sr-only,
+.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
