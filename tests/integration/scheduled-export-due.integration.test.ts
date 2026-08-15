@@ -97,12 +97,15 @@ describeIntegration("listDueScheduledExports (real PostgreSQL)", () => {
   });
 
   test("an enabled config with no prior run is DUE", async () => {
-    const owner = getOwnerSql();
-    await owner`
+    await withTenantOrThrow(
+      getOwnerSql(),
+      TENANT_A,
+      (owner) => owner`
       INSERT INTO awcms_reporting_scheduled_exports
         (tenant_id, projection_key, format, schedule_interval_minutes, enabled)
       VALUES (${TENANT_A}, 'reporting.tenant_activity', 'csv', 60, true)
-    `;
+    `
+    );
 
     const rows = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       listDueScheduledExports(tx, TENANT_A, new Date())
@@ -113,21 +116,22 @@ describeIntegration("listDueScheduledExports (real PostgreSQL)", () => {
   });
 
   test("a run INSIDE the interval suppresses it; one outside does not", async () => {
-    const owner = getOwnerSql();
-    const [config] = (await owner`
-      INSERT INTO awcms_reporting_scheduled_exports
-        (tenant_id, projection_key, format, schedule_interval_minutes, enabled)
-      VALUES (${TENANT_A}, 'reporting.tenant_activity', 'csv', 60, true)
-      RETURNING id
-    `) as { id: string }[];
+    await withTenantOrThrow(getOwnerSql(), TENANT_A, async (owner) => {
+      const [row] = (await owner`
+          INSERT INTO awcms_reporting_scheduled_exports
+            (tenant_id, projection_key, format, schedule_interval_minutes, enabled)
+          VALUES (${TENANT_A}, 'reporting.tenant_activity', 'csv', 60, true)
+          RETURNING id
+        `) as { id: string }[];
 
-    // 10 minutes ago, well inside a 60-minute interval.
-    await owner`
-      INSERT INTO awcms_reporting_export_runs
-        (tenant_id, scheduled_export_id, projection_key, format, status, created_at)
-      VALUES (${TENANT_A}, ${config!.id}, 'reporting.tenant_activity', 'csv',
-              'completed', now() - make_interval(mins => 10))
-    `;
+      // 10 minutes ago, well inside a 60-minute interval.
+      await owner`
+          INSERT INTO awcms_reporting_export_runs
+            (tenant_id, scheduled_export_id, projection_key, format, status, created_at)
+          VALUES (${TENANT_A}, ${row!.id}, 'reporting.tenant_activity', 'csv',
+                  'completed', now() - make_interval(mins => 10))
+        `;
+    });
 
     const suppressed = await withTenantOrThrow(
       getRuntimeSql(),
@@ -140,11 +144,15 @@ describeIntegration("listDueScheduledExports (real PostgreSQL)", () => {
     // did not merely make the statement runnable but left it comparing the
     // wrong things: with `now` inferred as anything but a timestamptz, this
     // boundary cannot be evaluated at all.
-    await owner`
-      UPDATE awcms_reporting_export_runs
-      SET created_at = now() - make_interval(mins => 120)
-      WHERE tenant_id = ${TENANT_A}
-    `;
+    await withTenantOrThrow(
+      getOwnerSql(),
+      TENANT_A,
+      (owner) => owner`
+        UPDATE awcms_reporting_export_runs
+        SET created_at = now() - make_interval(mins => 120)
+        WHERE tenant_id = ${TENANT_A}
+      `
+    );
 
     const due = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       listDueScheduledExports(tx, TENANT_A, new Date())
@@ -153,12 +161,15 @@ describeIntegration("listDueScheduledExports (real PostgreSQL)", () => {
   });
 
   test("a disabled config is never due", async () => {
-    const owner = getOwnerSql();
-    await owner`
+    await withTenantOrThrow(
+      getOwnerSql(),
+      TENANT_A,
+      (owner) => owner`
       INSERT INTO awcms_reporting_scheduled_exports
         (tenant_id, projection_key, format, schedule_interval_minutes, enabled)
       VALUES (${TENANT_A}, 'reporting.tenant_activity', 'csv', 60, false)
-    `;
+    `
+    );
 
     const rows = await withTenantOrThrow(getRuntimeSql(), TENANT_A, (tx) =>
       listDueScheduledExports(tx, TENANT_A, new Date())
