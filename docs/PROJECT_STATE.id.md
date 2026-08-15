@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:4a5681c7baffb13a196f7b1029f9505f7d64184ddb8371ed68182bd04d089b45 -->
+<!-- i18n-source-hash: sha256:d4ae1e9af757a55872933fcf66162a832dd9edf58ee27950542399bc2ebeed06 -->
 
 # AWCMS — Project State & Continuation
 
@@ -663,7 +663,32 @@ pending_verification`.
   Pemanennya kini mendekode escape; dibuktikan dengan menghapus satu msgid
   ber-escape lalu melihat pola lama meloloskannya diam-diam.
 
-  3. **Locale untuk permukaan PUBLIK — TERBLOKIR oleh keputusan kunci cache,
+  **Langkah 3 dan 5 sudah DIPUTUSKAN — [ADR-0098](adr/0098-the-cache-key-carries-the-locale-in-the-path.id.md)
+  dan [ADR-0099](adr/0099-changing-the-login-address-is-account-recovery.id.md),
+  15 Agustus 2026. Keduanya `Accepted (belum diimplementasikan)`, terikat pada
+  artefak yang dijanjikannya oleh `tests/adr-implementation-status.test.ts`.**
+
+  **Langkah 3 — locale masuk ke PATH, dan kunci cache tidak disentuh.**
+  `Vary: Cookie` melipatgandakan objek cache menurut banyaknya string cookie
+  berbeda dan memasukkan header pembawa kredensial ke kuncinya; `Vary:
+Accept-Language` membatasi fan-out pada dua tetapi tak bisa melihat klik
+  eksplisit, yang akan menjadikan pengalih bahasa dekoratif tepat di permukaan
+  yang dilihat paling banyak pembaca. `/en/…` dan `/id/…` sudah menjadi objek
+  berbeda di bawah kunci yang ada, jadi hit rate tidak berubah dan tidak ada
+  header request yang masuk ke kunci sama sekali. Pemilihannya lewat 307
+  ber-`private, no-store`, jadi cookie dihormati tanpa pernah mencapai cache.
+
+  **Langkah 5 — alamat login ADALAH akun itu, jadi alurnya dibangun seperti
+  pemulihan.** Kedua alamat dibuktikan secara berbeda: yang baru lewat token
+  sekali pakai, berumur pendek, di-hash, dan TERIKAT; yang lama diberi tahu
+  dengan tautan batal yang berlaku LEBIH LAMA daripada jendela konfirmasi,
+  karena pemberitahuan itulah satu-satunya bagian desain yang menolong orang
+  yang sudah dikompromikan. Otentikasi ulang yang segar diwajibkan (sesi saja
+  bukan wewenang untuk memindahkan kanal pemulihan), konfirmasi mencabut setiap
+  sesi lain dan setiap token reset yang beredar, dan keunikan diperiksa saat
+  konfirmasi agar formulirnya bukan orakel keberadaan akun.
+
+  3. **Locale untuk permukaan PUBLIK — DIPUTUSKAN oleh ADR-0098; sebelumnya terblokir oleh pertanyaan kunci cache,
      dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
      yang badannya berubah menurut cookie locale berarti pembaca Inggris
      disajikan halaman Indonesia dari cache. ADR-0095 §"Keputusan 5" karena itu
