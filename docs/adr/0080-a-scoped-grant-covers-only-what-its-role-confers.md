@@ -1,122 +1,121 @@
-# ADR-0080 — Sebuah grant ber-scope hanya mencakup apa yang diberikan perannya
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0080-a-scoped-grant-covers-only-what-its-role-confers.id.md)
 
-- **Status:** Diterima (2026-08-10).
-- **Konteks:** Issue #423 Gelombang 3 PR 3.4. Tanpa migrasi.
-- **Membangun di atas:** [ADR-0078](0078-a-grant-carries-its-own-scope.md) (grant
-  membawa scope-nya) dan [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)
-  (satu sumber grant). Melebarkan lapisan business-scope
-  [ADR-0060](0060-business-scope-hierarchy-provided-by-tenant-admin.md) tanpa
-  mengubah kontrak #180.
+# ADR-0080 — A scoped grant covers only what its role confers
 
-## Keputusan
+- **Status:** Accepted (2026-08-10).
+- **Context:** Issue #423 Wave 3 PR 3.4. No migration.
+- **Builds on:** [ADR-0078](0078-a-grant-carries-its-own-scope.md) (a grant
+  carries its own scope) and [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)
+  (one source of grants). Widens the business-scope layer of
+  [ADR-0060](0060-business-scope-hierarchy-provided-by-tenant-admin.md) without
+  changing the #180 contract.
 
-`BusinessScopeFact` mendapat satu field opsional, `permissionKeys`, dan predikat
-cakupan `evaluateAccess` mendapat satu klausa:
+## Decision
+
+`BusinessScopeFact` gains one optional field, `permissionKeys`, and the coverage
+predicate in `evaluateAccess` gains one clause:
 
 ```ts
 if (!scopeFactQualifies(fact, requiredKey)) return false;
 ```
 
-Sebuah baris `awcms_access_policies` yang `scope_type`-nya BUKAN tenant-wide kini
-melahirkan sebuah fakta ber-scope, membawa persis permission key yang diberikan
-perannya. Fakta yang berasal dari `awcms_business_scope_assignments` membawa
-`permissionKeys: undefined` dan berperilaku persis seperti sebelumnya.
+A row in `awcms_access_policies` whose `scope_type` is NOT tenant-wide now
+produces a scoped fact, carrying exactly the permission keys its role confers. A
+fact originating from `awcms_business_scope_assignments` carries
+`permissionKeys: undefined` and behaves exactly as before.
 
-## Seluruh argumen keamanannya muat di empat baris
+## The whole security argument fits in four lines
 
-`scopeFactQualifies` tidak punya cabang yang menghasilkan cakupan. Satu-satunya
-nilai yang bisa disumbangkannya adalah `false`. Karena itu **tidak ada input,
-dalam urutan apa pun, yang bisa mengubah deny menjadi allow lewat field ini** —
-dan itu bisa diperiksa dengan membaca, bukan dengan mempercayai.
+`scopeFactQualifies` has no branch that produces coverage. The only value it can
+contribute is `false`. Therefore **no input, in any order, can turn a deny into
+an allow through this field** — and that can be checked by reading, not by
+trusting.
 
-Sisanya dibuktikan sebagai properti, bukan contoh: `tests/scope-narrowing.test.ts`
-menjalankan korpus (6 bentuk fakta × 5 himpunan relasi × 2 aksi × 4 himpunan
-kunci) dan meng-assert bahwa jawaban ber-kualifikasi tak pernah `true` di mana
-jawaban tanpa-kualifikasi `false` — plus satu assertion bahwa korpusnya **tidak
-hampa**, karena klausa yang tak melakukan apa-apa memuaskan properti pertama
-dengan sempurna.
+The rest is proved as a property, not by example: `tests/scope-narrowing.test.ts`
+runs a corpus (6 fact shapes × 5 relation sets × 2 actions × 4 key sets) and
+asserts that the qualified answer is never `true` where the unqualified answer is
+`false` — plus one assertion that the corpus is **not vacuous**, because a clause
+that does nothing satisfies the first property perfectly.
 
-## Klausanya PERTAMA, sebelum `tenantWide`
+## The clause comes FIRST, before `tenantWide`
 
-Sebuah fakta tenant-wide mencakup setiap scope yang diminta. Kalau klausanya
-diletakkan sesudahnya, fakta tenant-wide yang membawa kunci akan mencakup
-permission yang tidak diberikan perannya — hanya karena ia mencakup semua scope.
-Urutan, bukan penyaringan, yang membuat itu benar, jadi ia di-assert dan tidak
-diserahkan ke pembaca.
+A tenant-wide fact covers every requested scope. If the clause were placed after
+it, a tenant-wide fact carrying keys would cover permissions its role does not
+confer — merely because it covers all scopes. It is ordering, not filtering, that
+makes this correct, so it is asserted rather than left to the reader.
 
-## Grant tenant-wide TIDAK melahirkan fakta
+## A tenant-wide grant does NOT produce a fact
 
-Ini arah yang akan menjadi pelebaran menyeluruh kalau salah. Grant tenant-wide
-adalah **ketiadaan** pengurungan scope, bukan pengurungan ke scope bernama
-"tenant". Melahirkan fakta `tenantWide` darinya berarti memberikan jawaban
-gerbang #180 kepada setiap orang yang memegang peran apa pun.
+This is the direction that becomes a blanket widening if it is wrong. A
+tenant-wide grant is the **absence** of a scope confinement, not a confinement to
+a scope named "tenant". Producing a `tenantWide` fact from it would hand the #180
+gate's answer to everyone holding any role at all.
 
-Yang dilakukan grant tenant-wide terhadap pemeriksaan required-scope tetap sama
-dengan hari ini: tidak ada. `tests/integration/scope-qualification` meng-assert
-itu sebagai test pertamanya.
+What a tenant-wide grant does to a required-scope check stays what it is today:
+nothing. `tests/integration/scope-qualification` asserts that as its first test.
 
-## Kill switch build-time, bukan env var
+## A build-time kill switch, not an env var
 
-Dua instance dari satu deployment yang membaca env var yang sama tetap bisa
-berbeda pendapat — restart bergulir, container basi, `--env-file` yang terlupa —
-dan aturan otorisasi yang menyala di satu pod dan mati di pod lain adalah aturan
-yang jawabannya bergantung pada socket mana yang menerima request. Cache policy
-sudah per-proses justru karena alasan ini.
+Two instances of one deployment reading the same env var can still disagree —
+rolling restarts, a stale container, a forgotten `--env-file` — and an
+authorization rule that is on in one pod and off in another is a rule whose
+answer depends on which socket received the request. The policy cache is already
+per-process for exactly this reason.
 
-`SCOPE_NARROWING_ENABLED` karenanya adalah konstanta build-time. Membaliknya
-berarti perubahan kode dan redeploy — itulah maksudnya: ia bukan tombol
-operasional, ia rollback yang meninggalkan commit.
+`SCOPE_NARROWING_ENABLED` is therefore a build-time constant. Flipping it means a
+code change and a redeploy — which is the point: it is not an operational knob,
+it is a rollback that leaves a commit behind.
 
-Kedua keadaannya DIUJI (`scopeFactQualifies` menerima flag-nya sebagai
-parameter), sehingga keadaan yang mati bukan keadaan yang belum pernah dijalankan.
+Both of its states are TESTED (`scopeFactQualifies` takes the flag as a
+parameter), so the off state is not a state that has never been run.
 
-## Batas yang HARUS dibaca sebelum permukaan penulisnya dibangun
+## The limit that MUST be read before its writer surface is built
 
-Kualifikasi scope hanya sekuat rute yang **menyatakan** required scope.
+Scope qualification is only as strong as the routes that **declare** a required
+scope.
 
-`fetchGrantedPermissionKeys` mengembalikan kunci dari SEMUA grant, termasuk yang
-ber-scope, dan memang harus begitu: gerbang RBAC berjalan lebih dulu, jadi kunci
-yang tidak ada di sana membuat jalur ber-scope tak pernah terjangkau. Akibatnya,
-pada rute yang tidak menyatakan scope, sebuah grant ber-scope memberi permission
-itu di seluruh tenant.
+`fetchGrantedPermissionKeys` returns keys from ALL grants, including scoped ones,
+and it has to: the RBAC gate runs first, so a key that is not there makes the
+scoped path unreachable. The consequence is that on a route that declares no
+scope, a scoped grant confers that permission across the whole tenant.
 
-Hari ini itu inert — tak ada yang menulis grant ber-scope. Tetapi PR yang
-membangun permukaan admin untuk menulisnya **tidak boleh mendarat tanpa
-menjawab** pertanyaan itu, karena seorang admin yang membuat "editor satu
-kantor" akan mengira ia sudah mengurung orangnya, dan pada setiap rute yang tak
-menyatakan scope ia belum. Itulah sebabnya rencana program menempatkan resolver
-SEBELUM penulisnya, dan sebabnya urutan itu dipertahankan di sini.
+Today that is inert — nothing writes scoped grants. But the PR that builds the
+admin surface to write them **must not land without answering** that question,
+because an admin creating a "one-office editor" will believe they have confined
+that person, and on every route that declares no scope they have not. That is why
+the programme plan puts the resolver BEFORE the writers, and why that ordering is
+kept here.
 
-## Yang DITOLAK
+## What was REJECTED
 
-1. **Mengubah tipe kembalian `fetchGrantedPermissionKeys` menjadi
-   `{ keys, scopes }`** seperti rencana program. Peta itu akan menduplikasi apa
-   yang sudah dijawab `resolveBusinessScopeFacts` dari sumber yang sama, dan dua
-   turunan satu nilai adalah cara keduanya mulai berbeda pendapat (persis
-   pelajaran ADR-0079). Ia juga akan mengaduk sebelas call site untuk field yang
-   hanya dibaca satu.
-2. **Menyaring grant ber-scope keluar dari `fetchGrantedPermissionKeys`** supaya
-   ia "hanya berlaku di scope-nya". Gerbang RBAC berjalan lebih dulu, jadi ini
-   membuat jalur ber-scope mustahil dijangkau — grant ber-scope akan menolak
-   segalanya, termasuk di scope-nya sendiri.
-3. **Membiarkan fakta ber-scope dan fakta assignment saling menimpa** pada scope
-   yang sama. Keduanya dilahirkan; `evaluateAccess` memakai `.some()`, jadi
-   jawaban yang lebih luas menang — dan jawaban yang lebih luas itu **jawaban
-   hari ini**, sehingga menambahkan grant tidak mengambil apa pun dari siapa pun.
-4. **Env var untuk kill switch** — lihat di atas.
-5. **Menunda klausanya sampai ada penulis grant ber-scope.** Mekanisme yang
-   mendarat bersama produsen pertamanya adalah mekanisme yang tak pernah
-   dijalankan sendirian; memisahkannya membuat "inert hari ini" menjadi sesuatu
-   yang bisa DI-ASSERT terhadap basis data, bukan sesuatu yang diargumentasikan.
+1. **Changing the return type of `fetchGrantedPermissionKeys` to
+   `{ keys, scopes }`** as the programme plan had it. That map would duplicate
+   what `resolveBusinessScopeFacts` already answers from the same source, and two
+   derivations of one value are how the two start to disagree (exactly the
+   ADR-0079 lesson). It would also churn eleven call sites for a field only one
+   of them reads.
+2. **Filtering scoped grants out of `fetchGrantedPermissionKeys`** so that they
+   "only apply within their scope". The RBAC gate runs first, so this makes the
+   scoped path impossible to reach — a scoped grant would deny everything,
+   including within its own scope.
+3. **Letting a scoped fact and an assignment fact overwrite each other** on the
+   same scope. Both are produced; `evaluateAccess` uses `.some()`, so the broader
+   answer wins — and that broader answer is **today's answer**, so adding a grant
+   takes nothing away from anyone.
+4. **An env var for the kill switch** — see above.
+5. **Deferring the clause until there is a writer of scoped grants.** A mechanism
+   that lands together with its first producer is a mechanism that has never been
+   run on its own; separating them turns "inert today" into something that can be
+   ASSERTED against the database, rather than something argued.
 
-## Konsekuensi
+## Consequences
 
-- Satu query tambahan di `resolveBusinessScopeFacts`, dan hanya pada rute yang
-  menyatakan required scope (guard baru memanggil resolver ketika sebuah rute
-  ikut serta). Nol query saat kill switch mati — flag dibaca sebelum query.
-- Jumlah query tetap terbatas: satu, apa pun banyaknya scope atau permission
-  yang dipegang subjek.
-- `activeRoleGrants` kini memproyeksikan `scope_type`/`scope_id`. Pembaca lain
-  mengabaikannya, dan itu justru alasan kolomnya ada di sana dan bukan di
-  fragmen kedua yang nyaris identik yang bisa berbeda pendapat soal arti "sedang
-  berlaku".
+- One extra query in `resolveBusinessScopeFacts`, and only on routes that declare
+  a required scope (the new guard calls the resolver when a route opts in). Zero
+  queries when the kill switch is off — the flag is read before the query.
+- The query count stays bounded: one, however many scopes or permissions the
+  subject holds.
+- `activeRoleGrants` now projects `scope_type`/`scope_id`. Other readers ignore
+  them, and that is precisely why the columns are there and not in a second
+  near-identical fragment that could disagree about what "currently in force"
+  means.

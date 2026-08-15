@@ -1,85 +1,87 @@
-# ADR-0053 — Permission ber-scope platform, dipegang owner tenant default
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0053-platform-scoped-permissions.id.md)
+
+# ADR-0053 — Platform-scoped permissions, held by the default tenant's owner
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-02
-- **Pengambil keputusan:** @ahliweb
-- **Menyempurnakan:** [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) — mengembalikan permukaan HTTP aktivasi/rollback dataset wilayah, kini di balik gerbang yang ADR itu tetapkan sebagai syaratnya. Job operatornya **tetap ada**.
-- **Memenuhi:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) §Keputusan butir 1–3 (gerbang platform-scoped untuk aksi lintas-tenant) — yang sampai sekarang normatif tanpa primitif
-- **Terkait:** [ADR-0046](0046-idn-admin-regions-module-admission.md) (admisi `idn_admin_regions`), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (kredensial mesin baca-saja), [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) §3/§4 (fitur fondasi dirintis di sini + wajib dicatat sebagai divergence)
+- **Date:** 2026-08-02
+- **Decision maker:** @ahliweb
+- **Refines:** [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) — restores the HTTP surface for region dataset activation/rollback, now behind the gate that ADR set as its precondition. Its operator job **remains**.
+- **Fulfils:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) §Decision items 1–3 (a platform-scoped gate for cross-tenant actions) — normative until now without a primitive
+- **Related:** [ADR-0046](0046-idn-admin-regions-module-admission.md) (`idn_admin_regions` admission), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (read-only machine credentials), [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) §3/§4 (foundation features pioneered here + must be recorded as a divergence)
 
-## Konteks
+## Context
 
-ADR-0051 menuliskan aturan ini sebagai norma:
+ADR-0051 wrote this rule down as a norm:
 
-> Aksi yang efeknya melintasi batas tenant **wajib punya gerbang platform-scoped**, bukan sekadar RBAC tenant. Aksi lintas-tenant **tidak boleh** masuk katalog yang di-seed ke role tenant.
+> An action whose effect crosses tenant boundaries **must have a platform-scoped gate**, not merely tenant RBAC. A cross-tenant action **must not** enter the catalogue seeded to tenant roles.
 
-Aturannya benar dan sudah berlaku — tetapi **primitifnya tidak pernah ada**. Karena itu ADR-0052 tidak bisa menggerbangi aktivasi/rollback dataset wilayah; ia hanya bisa **menghapusnya**, dan mencatat bahwa layar operator boleh kembali "bila kelak sungguh dibutuhkan… ADR ini hanya menolak mengapalkan permukaannya sebelum gerbangnya ada".
+The rule is correct and already in force — but **its primitive never existed**. That is why ADR-0052 could not gate region dataset activation/rollback; it could only **delete them**, noting that the operator screen may come back "if it is genuinely needed one day… this ADR only refuses to ship the surface before its gate exists".
 
-Layar itu sekarang dibutuhkan, dan ini gerbangnya.
+That screen is now needed, and this is its gate.
 
-### Cacat yang sesungguhnya tidak pernah diperbaiki
+### The defect that was never actually fixed
 
-`sql/084` menghapus dua baris permission. Yang **melahirkan** cacatnya masih utuh, di `bootstrapPlatformTenant`:
+`sql/084` deleted two permission rows. What **produces** the defect is still intact, in `bootstrapPlatformTenant`:
 
 ```ts
 INSERT INTO awcms_role_permissions (tenant_id, role_id, permission_id)
 SELECT ${tenantId}, ${roleId}, id FROM awcms_permissions
 ```
 
-Setiap tenant yang dibuat menerima **seluruh** katalog. Menghapus dua baris menutup satu instansnya; **kelasnya kembali pada aksi lintas-tenant berikutnya yang ditambahkan siapa pun**. Selama statement itu tidak bisa mengecualikan satu populasi, satu-satunya perlindungan yang tersisa adalah tidak seorang pun pernah mendeklarasikan permission semacam itu lagi — dan itu bukan perlindungan.
+Every tenant created receives the **entire** catalogue. Deleting two rows closes one instance of it; **the class comes back with the next cross-tenant action anyone adds**. As long as that statement cannot exclude a population, the only protection left is that nobody ever declares such a permission again — and that is not a protection.
 
-## Keputusan
+## Decision
 
 ### 1. `awcms_permissions.scope` — `tenant` | `platform`
 
-`sql/085` menambah kolom, `DEFAULT 'tenant'` (yang persis arti setiap permission yang sudah ada, sehingga backfill-nya nol baris ditulis tangan). `ModulePermissionDescriptor.scope` mendeklarasikannya di kode; `MODULE_CONTRACT_VERSION` naik ke **2.5.0** (MINOR — aditif, menghilangkannya berarti `tenant`).
+`sql/085` adds the column, `DEFAULT 'tenant'` (which is exactly what every existing permission means, so its backfill is zero hand-written rows). `ModulePermissionDescriptor.scope` declares it in code; `MODULE_CONTRACT_VERSION` rises to **2.5.0** (MINOR — additive, omitting it means `tenant`).
 
-Grant borongan kini `WHERE scope = 'tenant'`. Konsekuensinya yang jadi tujuan: **permission platform berikutnya aman sejak ia dideklarasikan** — tanpa seorang pun perlu ingat.
+The bulk grant is now `WHERE scope = 'tenant'`. The intended consequence: **the next platform permission is safe from the moment it is declared** — with nobody needing to remember.
 
-### 2. Tenant platform = tenant default, di-resolve env-first
+### 2. The platform tenant = the default tenant, resolved env-first
 
 `PLATFORM_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_CODE` → `awcms_setup_state.tenant_id`.
 
-Default-nya **sengaja rantai yang sama** dengan resolver publik: di deployment satu-tenant keduanya tenant yang sama, dan jawaban kedua hanya akan jadi hal kedua yang harus dijaga tetap sinkron. Wewenangnya jatuh pada **role `owner` tenant itu** — tidak ada peran baru, tidak ada flag baru.
+Its default is **deliberately the same chain** as the public resolver: in a single-tenant deployment both are the same tenant, and a second answer would only be a second thing to keep in sync. The authority falls to that **tenant's `owner` role** — no new role, no new flag.
 
-Satu asimetri terhadap resolver publik, disengaja: `PLATFORM_TENANT_ID` yang **diisi tapi tak bisa di-resolve** (bukan UUID, tenant tidak ada, tenant nonaktif) menghasilkan `null` dan **menolak semua aksi platform** — ia tidak pernah jatuh ke langkah berikutnya. Untuk RENDERING, turun ke kandidat berikutnya itu anggun; untuk WEWENANG, itu menyerahkan hak ke tenant yang tidak disebut siapa pun.
+One asymmetry against the public resolver, deliberate: a `PLATFORM_TENANT_ID` that is **set but cannot be resolved** (not a UUID, tenant does not exist, tenant inactive) yields `null` and **refuses every platform action** — it never falls through to the next step. For RENDERING, falling to the next candidate is graceful; for AUTHORITY, it hands the right to a tenant nobody named.
 
-### 3. Gerbang di chokepoint, bukan di layar
+### 3. The gate is at the chokepoint, not at the screen
 
-`authorizeInTransaction` menolak permission ber-scope platform kecuali tenant yang bertindak **adalah** tenant platform — diputus **sebelum** izin dilihat, sekelas dengan penolakan baca-saja kredensial mesin (ADR-0049 §3). Jadi baris grant yang nyasar (backup ter-restore, `INSERT` tangan, jalur provisioning masa depan yang lupa filternya) menjadi **inert**, bukan cukup.
+`authorizeInTransaction` refuses a platform-scoped permission unless the acting tenant **is** the platform tenant — decided **before** permissions are looked at, in the same class as the read-only refusal for machine credentials (ADR-0049 §3). So a stray grant row (a restored backup, a hand-written `INSERT`, a future provisioning path that forgets the filter) becomes **inert**, not sufficient.
 
-Pemicunya dibaca dari **deklarasi kode**, bukan dari kolom DB. Kalau keduanya dari DB, satu `UPDATE` yang membalik `scope` ke `'tenant'` akan mencabut gerbangnya sekaligus filternya — aksi lintas-tenant tanpa penjagaan apa pun, dengan semua cek tetap hijau. Kolom DB menentukan **siapa di-grant**; kode menentukan **apakah gerbangnya ditanya**. `tests/platform-scoped-permissions.test.ts` mengikat keduanya dua arah.
+Its trigger is read from the **code declaration**, not from the DB column. If both came from the DB, a single `UPDATE` flipping `scope` back to `'tenant'` would revoke the gate and the filter at once — a cross-tenant action with no guarding whatsoever, with every check still green. The DB column decides **who is granted**; the code decides **whether the gate is asked**. `tests/platform-scoped-permissions.test.ts` binds the two in both directions.
 
-### 4. Mode ketenanan diturunkan, tidak pernah dikonfigurasi
+### 4. Tenancy mode is derived, never configured
 
-`single` selama tenant platform satu-satunya tenant aktif; `multi` sejak ada yang kedua. Tidak ada toggle: flag tersimpan harus dibalik oleh siapa pun yang mem-provision tenant kedua, dan gagalnya lupa berarti deployment terus berperilaku seolah satu tenant memiliki segalanya — persis asumsi yang harus berhenti berlaku.
+`single` while the platform tenant is the only active tenant; `multi` from the second one onwards. There is no toggle: a stored flag would have to be flipped by whoever provisions the second tenant, and forgetting means the deployment keeps behaving as if one tenant owns everything — exactly the assumption that has to stop holding.
 
-**Mode tidak pernah melonggarkan gerbang.** Penegakan identik di kedua mode; `single` hanya mengubah apa yang layar jelaskan. Selain itu, postur keamanan akan bergantung pada hasil `COUNT(*)`.
+**Mode never loosens the gate.** Enforcement is identical in both modes; `single` only changes what the screen explains. Otherwise the security posture would depend on the result of a `COUNT(*)`.
 
-### 5. Permukaan yang kembali
+### 5. The surface that comes back
 
-`POST /api/v1/idn-regions/datasets/{id}/activate` dan `/rollback` dipulihkan di balik permission platform, plus layar `/admin/idn-regions`.
+`POST /api/v1/idn-regions/datasets/{id}/activate` and `/rollback` are restored behind a platform permission, plus the `/admin/idn-regions` screen.
 
-Keberatan audit ADR-0052 **terjawab, bukan diabaikan**: `recordAuditEvent` tenant-scoped, yang dulu berarti barisnya mendarat di log tenant mana pun yang kebetulan menekan tombol. Kini ia hanya bisa mendarat di log **tenant platform** — tempat aksi platform memang seharusnya tercatat.
+ADR-0052's audit objection is **answered, not ignored**: `recordAuditEvent` is tenant-scoped, which used to mean the row landed in the log of whichever tenant happened to press the button. Now it can only land in the **platform tenant's** log — where a platform action should be recorded.
 
-Job operatornya (`bun run idn-regions:activate` / `:rollback`) **dipertahankan**: CI, shell pemulihan, dan deployment yang tenant platform-nya tak bisa login semuanya butuh jalur non-HTTP.
+Its operator job (`bun run idn-regions:activate` / `:rollback`) is **kept**: CI, recovery shells, and deployments whose platform tenant cannot log in all need a non-HTTP path.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:**
-  - Kelas cacatnya tertutup, bukan instansnya. Grant borongan tidak bisa lagi membocorkan wewenang lintas-tenant, hari ini maupun untuk permission platform berikutnya.
-  - Dua mekanisme independen (filter grant + gerbang chokepoint), sehingga kegagalan salah satunya tidak cukup.
-  - Prasyarat SaaS yang sesungguhnya. Jalur provisioning tenant — yang belum ada — kini punya tempat yang benar untuk berdiri: ia mewarisi filter `scope`, bukan mengulang cacatnya.
-- **Negatif / trade-off yang diterima:**
-  - **Selama `PLATFORM_TENANT_ID` kosong, `PUBLIC_DEFAULT_TENANT_ID` adalah kontrol keamanan.** Mengarahkan ulang situs mana yang tampil di host tak-tercocokkan ikut mengarahkan wewenang platform. Ini keputusan sadar (satu knob selama keduanya memang tenant yang sama), dibuat aman untuk ditinggalkan lewat variabel terpisah yang tinggal diisi — dan **dibuat terlihat**: `security:readiness` melaporkan tenant mana yang memegang wewenang itu.
-  - Satu query tambahan per request — **hanya** untuk permission ber-scope platform. Request biasa tidak menyentuhnya sama sekali.
-  - `awcms_permissions` bertambah kolom: setiap seed permission baru sekarang punya pertanyaan yang harus dijawab. Itu memang maksudnya.
-- **Netral:**
-  - Nol perubahan perilaku untuk deployment satu-tenant: tenant bootstrap adalah tenant platform, dan owner-nya menerima kedua permission itu lewat `sql/085`.
+- **Positive:**
+  - The class of defect is closed, not the instance. The bulk grant can no longer leak cross-tenant authority, today or for the next platform permission.
+  - Two independent mechanisms (the grant filter + the chokepoint gate), so failure of either one is not enough.
+  - A genuine SaaS precondition. The tenant provisioning path — which does not exist yet — now has the right place to stand: it inherits the `scope` filter instead of repeating the defect.
+- **Negative / accepted trade-offs:**
+  - **While `PLATFORM_TENANT_ID` is empty, `PUBLIC_DEFAULT_TENANT_ID` is a security control.** Repointing which site is served on an unmatched host also repoints platform authority. This is a conscious decision (one knob while the two really are the same tenant), made safe to leave behind through a separate variable that only needs filling in — and **made visible**: `security:readiness` reports which tenant holds that authority.
+  - One extra query per request — **only** for platform-scoped permissions. Ordinary requests do not touch it at all.
+  - `awcms_permissions` gains a column: every new permission seed now has a question that has to be answered. That is the point.
+- **Neutral:**
+  - Zero behaviour change for single-tenant deployments: the bootstrap tenant is the platform tenant, and its owner receives both permissions through `sql/085`.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Biarkan job-only (status quo ADR-0052)** — ditolak karena alasan yang ADR-0052 sendiri sebut sementara: operasi platform yang sah tidak boleh menuntut akses shell selamanya, dan tidak adanya gerbang adalah kekurangan yang bisa diperbaiki, bukan hukum alam.
-- **Gerbangi dengan kredensial mesin** — ditolak lagi, dengan alasan ADR-0052: kredensial mesin **baca-saja** (ADR-0049 §3), jadi melebarkannya membuat token build yang bocor bisa mengganti dataset global. Lebih buruk dari cacat yang diperbaiki.
-- **Role/flag "superadmin" global** — ditolak: memperkenalkan subjek di luar model tenant, sehingga RLS, decision log, dan audit semuanya butuh kasus khusus. Tenant platform sebagai tenant biasa membuat seluruh rantai yang ada tetap berlaku apa adanya.
-- **Anchor DB murni (`awcms_setup_state` saja, tanpa env)** — diusulkan dan **ditolak oleh pengambil keputusan** demi satu definisi "tenant default" yang dipakai bersama `awcms-astro`. Risikonya dinyatakan di §Konsekuensi dan dibuat bisa dipisah tanpa migrasi lewat `PLATFORM_TENANT_ID`.
+- **Leave it job-only (ADR-0052's status quo)** — rejected for the reason ADR-0052 itself called temporary: a legitimate platform operation must not demand shell access forever, and the absence of a gate is a shortcoming that can be fixed, not a law of nature.
+- **Gate it with machine credentials** — rejected again, on ADR-0052's reasoning: machine credentials are **read-only** (ADR-0049 §3), so widening them would let a leaked build token replace a global dataset. Worse than the defect being fixed.
+- **A global "superadmin" role/flag** — rejected: it introduces a subject outside the tenant model, so RLS, the decision log, and audit all need special cases. The platform tenant as an ordinary tenant keeps the entire existing chain applicable as-is.
+- **A pure DB anchor (`awcms_setup_state` only, no env)** — proposed and **rejected by the decision maker** in favour of one definition of "default tenant" shared with `awcms-astro`. The risk is stated in §Consequences and made separable without a migration through `PLATFORM_TENANT_ID`.

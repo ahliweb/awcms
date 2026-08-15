@@ -1,182 +1,186 @@
-# ADR-0088 — Memilih tenant, dan berpindah antar tenant, tanpa pernah bisa mengotorisasi
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0088-tenant-selection-and-switching.id.md)
 
-- **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 7 PR 7.4 — PR terakhir gelombang ini. Migrasi
+# ADR-0088 — Selecting a tenant, and switching between tenants, without ever being able to authorize
+
+- **Status:** Accepted (2026-08-12).
+- **Context:** Issue #423 Wave 7 PR 7.4 — the last PR of this wave. Migration
   `sql/115`.
-- **Membangun di atas:**
-  [ADR-0085](0085-one-human-one-credential-many-tenants.md) (principal adalah
-  fakta AUTENTIKASI, tidak pernah fakta OTORISASI — ADR ini adalah ujian
-  pertama kalimat itu),
-  [ADR-0086](0086-the-lockout-counter-is-global.md) (kredensial dan lockout
-  sudah global, yang membuat login tanpa tenant mungkin sama sekali),
-  [ADR-0087](0087-mfa-moves-to-the-principal.md) (faktor MFA sudah milik
-  manusia, jadi satu enrolment memenuhi kewajiban tenant mana pun yang dipilih),
-  dan [ADR-0049](0049-machine-credentials-and-session-introspection.md)
-  (jenis bearer dibawa oleh namespace hash-nya — ditiru **persis** di sini).
+- **Builds on:**
+  [ADR-0085](0085-one-human-one-credential-many-tenants.md) (a principal is an
+  AUTHENTICATION fact, never an AUTHORIZATION fact — this ADR is the first test
+  of that sentence),
+  [ADR-0086](0086-the-lockout-counter-is-global.md) (credentials and lockout are
+  already global, which is what makes a tenant-less login possible at all),
+  [ADR-0087](0087-mfa-moves-to-the-principal.md) (MFA factors already belong to
+  the human, so one enrolment satisfies the obligation of whichever tenant is
+  picked),
+  and [ADR-0049](0049-machine-credentials-and-session-introspection.md)
+  (the bearer kind is carried by its hash namespace — copied **exactly** here).
 
-## Keputusan
+## Decision
 
-Login tanpa `x-awcms-tenant-id` berhenti menjadi `400 TENANT_REQUIRED` dan
-menjadi **`409 MEMBERSHIP_SELECTION_REQUIRED`** yang membawa **token seleksi**
-berumur ≤120 detik dan sekali pakai. Token itu ditukar di
-`POST /api/v1/auth/session/tenant` menjadi sesi pada tenant yang **disebut
-pemanggil**. Sesi yang sudah ada dapat berpindah lewat
+A login without `x-awcms-tenant-id` stops being `400 TENANT_REQUIRED` and
+becomes **`409 MEMBERSHIP_SELECTION_REQUIRED`** carrying a **selection token**
+that lives ≤120 seconds and is single-use. That token is exchanged at
+`POST /api/v1/auth/session/tenant` for a session on the tenant **named by the
+caller**. An existing session can switch through
 `POST /api/v1/auth/session/switch`.
 
-> **Token seleksi tidak boleh PERNAH mengautentikasi `authorizeInTransaction`.**
+> **A selection token must NEVER authenticate `authorizeInTransaction`.**
 
-Kalimat itu adalah invarian paling berbahaya di seluruh program #423, dan ia
-ditegakkan dengan cara yang sama seperti ADR-0049 memisahkan kredensial mesin
-dari sesi: **jenisnya dibawa oleh namespace hash**, `isPrincipalSelectionHash()`
-diperiksa **sebelum** apa pun di dalam gerbang, dan hash principal menghasilkan
-401 keras **tanpa satu baris decision log pun**.
+That sentence is the most dangerous invariant in the whole #423 programme, and
+it is enforced the same way ADR-0049 separates machine credentials from
+sessions: **the kind is carried by the hash namespace**,
+`isPrincipalSelectionHash()` is checked **before** anything inside the gate, and
+a principal hash produces a hard 401 **without a single decision log row**.
 
-## `409` TIDAK membawa daftar keanggotaan, dan itu bukan penghematan
+## The `409` does NOT carry the membership list, and that is not a saving
 
-Rencana Gelombang 7 membayangkan sebuah picker. PR 7.1 bahkan menulis bahwa
-index `awcms_identities (principal_id)` "melayani query setiap keanggotaan
-manusia ini, yang menjadi dasar tenant switch Gelombang 7".
+The Wave 7 plan imagined a picker. PR 7.1 even wrote that the
+`awcms_identities (principal_id)` index "serves the query for every membership
+of this human, which is the basis of the Wave 7 tenant switch".
 
-**Query itu tidak bisa melihat lebih dari satu tenant.** Diukur, bukan
-disimpulkan — sebagai `awcms_app` terhadap basis data nyata berisi satu manusia
-dengan identitas di dua tenant:
+**That query cannot see more than one tenant.** Measured, not inferred — as
+`awcms_app` against a real database containing one human with identities in two
+tenants:
 
-| Yang ditanyakan                                            | Hasil   |
-| ---------------------------------------------------------- | ------- |
-| semua keanggotaan principal itu, di dalam konteks tenant A | 1 baris |
-| sama, tanpa konteks tenant (jalur login tanpa header)      | 0 baris |
+| What was asked                                                | Result |
+| ------------------------------------------------------------- | ------ |
+| all memberships of that principal, inside tenant A's context  | 1 row  |
+| the same, with no tenant context (the header-less login path) | 0 rows |
 
-`awcms_identities` FORCE RLS. Ini **kelas temuan yang sama** dengan yang
-menjatuhkan rencana "audit di kedua tenant" pada ADR-0087, dua PR berturut-turut:
-sebuah rencana yang mengasumsikan pembacaan lintas-tenant yang policy-nya
-larang.
+`awcms_identities` is FORCE RLS. This is the **same class of finding** that took
+down the "audit in both tenants" plan in ADR-0087, two PRs in a row: a plan that
+assumes a cross-tenant read the policy forbids.
 
-Yang membedakan: di sini ada jalan keluar yang buildable — **tabel proyeksi
-keanggotaan global** yang di-maintain setiap penulis identitas. Itu
-**DITOLAK**, dan penolakannya keputusan produk, bukan keterbatasan teknis:
+What is different: here there is a buildable way out — **a global membership
+projection table** maintained by every writer of identities. That is
+**REJECTED**, and the rejection is a product decision, not a technical
+limitation:
 
-- Ia adalah, secara harfiah, **direktori keanggotaan lintas-tenant** — bentuk
-  yang ADR-0087 tolak untuk dibangun dalam wujud lain (daftar tenant terjangkau
-  reset MFA). Menolaknya di satu tempat lalu membangunnya di tempat lain
-  sebulan kemudian bukan konsistensi.
-- Ia menciptakan **kewajiban penulis baru**: satu penulis identitas yang
-  terlewat berarti tenant yang hilang dari picker **selamanya dan senyap** —
-  persis mode kegagalan yang ADR-0086 bayar mahal untuk `principal_id` yang
-  nullable, dan yang baru saja terulang sebagai `unlinked_factor` di ADR-0087.
-- Ia menambah **tabel global keempat** yang tumbuh mengikuti keanggotaan, dengan
-  baris basi setiap kali sebuah identitas dinonaktifkan.
+- It is, literally, a **cross-tenant membership directory** — the shape ADR-0087
+  refused to build in another guise (the list of tenants reached by an MFA
+  reset). Refusing it in one place and then building it somewhere else a month
+  later is not consistency.
+- It creates a **new writer obligation**: one missed identity writer means a
+  tenant missing from the picker **forever and silently** — exactly the failure
+  mode ADR-0086 paid dearly for with a nullable `principal_id`, and which just
+  recurred as `unlinked_factor` in ADR-0087.
+- It adds a **fourth global table** that grows with membership, with a stale row
+  every time an identity is deactivated.
 
-**Gantinya: pemanggil menyebut tenantnya.** Itu bukan penurunan kemampuan yang
-nyata — permukaan admin sudah host-resolved
-([ADR-0059](0059-host-resolved-public-content-routes.md)), sehingga tenant diketahui
-dari URL sebelum formulir login dirender; dan setiap klien API hari ini memang
-sudah wajib mengirim `x-awcms-tenant-id`. Yang benar-benar hilang hanyalah
-layar "Anda anggota tenant mana saja", dan harga sebenarnya dari layar itu
-adalah sebuah direktori keanggotaan yang tidak boleh dimiliki siapa pun.
+**Instead: the caller names its tenant.** That is not a real loss of capability
+— the admin surface is already host-resolved
+([ADR-0059](0059-host-resolved-public-content-routes.md)), so the tenant is
+known from the URL before the login form is rendered; and every API client today
+is already required to send `x-awcms-tenant-id`. The only thing genuinely lost
+is the "which tenants are you a member of" screen, and the real price of that
+screen is a membership directory nobody should hold.
 
-## Token seleksi hidup di `awcms_principals`, bukan di tabel kelima
+## The selection token lives in `awcms_principals`, not in a fifth table
 
-Dua kolom: `selection_token_hash` (unik saat tidak NULL) dan
-`selection_token_expires_at`. **Satu token hidup per manusia** — meminta yang
-baru menghapus yang lama, preseden `deletePendingFactors` pada enrolment MFA
-(hanya QR terakhir yang boleh dikonfirmasi).
+Two columns: `selection_token_hash` (unique when not NULL) and
+`selection_token_expires_at`. **One live token per human** — asking for a new
+one deletes the old one, the precedent being `deletePendingFactors` in MFA
+enrolment (only the last QR may be confirmed).
 
-Alternatifnya tabel `awcms_principal_selection_tokens` sendiri, dan ia lebih
-buruk pada setiap sumbu yang penting: satu baris **per percobaan login
-tanpa-tenant** berarti tabel yang tumbuh mengikuti **trafik**, sehingga ia butuh
-deskriptor retensi, job purge, hak `DELETE` untuk `awcms_worker`, entri registry
-lifecycle, dan entri allow-list gerbang — seluruh perkakas itu untuk baris yang
-hidup 120 detik. Dua kolom pada baris yang **sudah** ada tidak tumbuh sama
-sekali.
+The alternative is a dedicated `awcms_principal_selection_tokens` table, and it
+is worse on every axis that matters: one row **per tenant-less login attempt**
+means a table that grows with **traffic**, so it needs a retention descriptor, a
+purge job, `DELETE` rights for `awcms_worker`, a lifecycle registry entry, and a
+gate allow-list entry — all that machinery for a row that lives 120 seconds. Two
+columns on a row that **already** exists do not grow at all.
 
-Konsekuensi yang diterima: dua login tanpa-tenant paralel oleh orang yang sama
-membuat yang kedua membatalkan yang pertama. Jendelanya 120 detik, dan lebih
-sedikit kredensial hidup adalah properti yang benar, bukan yang disesali.
+An accepted consequence: two parallel tenant-less logins by the same person mean
+the second invalidates the first. The window is 120 seconds, and fewer live
+credentials is the correct property, not a regretted one.
 
-**Gerbang `identity:principal-access:check` diperluas satu predikat**:
-`selection_token_hash = ${…}` menjadi bentuk berkunci yang sah untuk
-`awcms_principals`, di samping `id =` dan `email_normalized =`. Ia tetap
-mengikat satu baris — index uniknya yang menjamin — dan pelebaran ini ditulis
-di sini supaya ia keputusan review, bukan tambahan yang lolos karena praktis.
+**The `identity:principal-access:check` gate is widened by one predicate**:
+`selection_token_hash = ${…}` becomes a legitimate keyed shape for
+`awcms_principals`, alongside `id =` and `email_normalized =`. It still binds a
+single row — the unique index guarantees that — and this widening is written
+down here so that it is a review decision, not an addition that slipped through
+because it was convenient.
 
-## Tiga gerbang yang tidak boleh dilewati jalur pemilihan
+## Three gates the selection path may not skip
 
-Menukar token menjadi sesi adalah **login yang setengah selesai**, bukan
-pengiriman kunci. Setiap kontrol yang berlaku di `/auth/login` berlaku lagi saat
-tenantnya akhirnya diketahui:
+Exchanging a token for a session is a **half-finished login**, not key delivery.
+Every control that applies at `/auth/login` applies again once the tenant is
+finally known:
 
-1. **Tenant `suspended`/tidak aktif ditolak** ([ADR-0073](0073-suspension-is-a-service-state-not-a-login-state.md)).
-2. **Kebijakan auth tenant tujuan berlaku.** Tenant yang mematikan login
-   password untuk sebuah identitas menolak penukaran itu — kalau tidak, memilih
-   tenant menjadi jalan memutar mengelilingi kebijakan SSO-only.
-3. **Kebijakan MFA tenant tujuan berlaku, dan ini yang paling mudah dilupakan.**
-   Tenant B boleh mewajibkan MFA meski tenant A tidak. Menerbitkan sesi `aal1`
-   ke dalam tenant B karena orangnya sudah membuktikan password di tempat lain
-   akan membuat perpindahan tenant sebagai **bypass MFA** — dan yang paling
-   dirugikan justru tenant yang postur keamanannya paling ketat. Jalur
-   pemilihan dan perpindahan karena itu memakai gerbang yang **sama persis**
-   dengan login: `MFA_REQUIRED` + challenge, atau `MFA_ENROLLMENT_REQUIRED` +
-   grant enrolment. Sejak ADR-0087 faktornya sudah milik manusia, jadi
-   authenticator yang sama memenuhi kewajiban tenant B tanpa enroll ulang.
+1. **A `suspended`/inactive tenant is rejected** ([ADR-0073](0073-suspension-is-a-service-state-not-a-login-state.md)).
+2. **The destination tenant's auth policy applies.** A tenant that disables
+   password login for an identity rejects that exchange — otherwise, picking a
+   tenant becomes a detour around an SSO-only policy.
+3. **The destination tenant's MFA policy applies, and this is the easiest one to
+   forget.** Tenant B may require MFA even if tenant A does not. Issuing an
+   `aal1` session into tenant B because the person already proved a password
+   somewhere else would turn tenant switching into an **MFA bypass** — and the
+   worst hurt would be the tenant with the strictest security posture. The
+   selection and switch paths therefore use the **exact same** gates as login:
+   `MFA_REQUIRED` + challenge, or `MFA_ENROLLMENT_REQUIRED` + an enrolment
+   grant. Since ADR-0087 the factor already belongs to the human, so the same
+   authenticator satisfies tenant B's obligation without re-enrolling.
 
-**Assurance tidak ikut berpindah.** Sesi baru lahir `aal1` meski sesi asalnya
-`aal2`: step-up adalah bukti segar untuk **satu** tenant, dan membawanya
-menyeberang berarti step-up di tenant A memuaskan tuntutan tenant B.
+**Assurance does not travel.** A new session is born `aal1` even if its source
+session was `aal2`: step-up is fresh proof for **one** tenant, and carrying it
+across would mean a step-up in tenant A satisfying tenant B's demand.
 
-## Aturan non-switchable, dan pengambilalihan yang ia tutup
+## The non-switchable rule, and the takeover it closes
 
-Sesi ber-`origin_auth` **`sso`** atau **`handoff`** TIDAK BOLEH berpindah.
+A session whose `origin_auth` is **`sso`** or **`handoff`** MUST NOT switch.
 
-Tanpa aturan itu: administrator IdP tenant B meng-assert `alice@corp.com` —
-alamat yang boleh diklaim IdP-nya sendiri — menerima sesi tenant B yang sah,
-lalu **berpindah ke tenant A** tempat Alice yang sebenarnya bekerja.
-Pengambilalihan lintas-tenant lengkap, lewat fitur yang tampak seperti
-kenyamanan, tanpa satu pun kontrol yang dilanggar: setiap langkahnya sah.
+Without that rule: the IdP administrator of tenant B asserts `alice@corp.com` —
+an address their own IdP is allowed to claim — receives a legitimate tenant B
+session, and then **switches to tenant A** where the real Alice works. A complete
+cross-tenant takeover, through a feature that looks like a convenience, without
+a single control being violated: every step of it is legitimate.
 
-Yang membuat perpindahan aman hanyalah **kredensial global**: password yang
-diverifikasi terhadap `awcms_principals` membuktikan manusianya, dan tidak ada
-tenant yang bisa menerbitkannya. Sebuah assertion IdP membuktikan sesuatu yang
-jauh lebih sempit — bahwa tenant itu bersedia menyebut Anda dengan nama itu.
-`handoff` ikut ditolak dengan alasan yang sama: ia bukan bukti kredensial.
+The only thing that makes switching safe is a **global credential**: a password
+verified against `awcms_principals` proves the human, and no tenant can issue
+it. An IdP assertion proves something far narrower — that the tenant is willing
+to call you by that name. `handoff` is rejected for the same reason: it is not
+proof of a credential.
 
-Sesi hasil perpindahan ber-`origin_auth = 'switch'` — nilai keempat yang
-`sql/100` sudah antisipasi dan sengaja tidak masukkan ke CHECK waktu itu, dengan
-kalimat "CHECK yang memuat nilai yang tak bisa diproduksi apa pun terbaca
-sebagai kapabilitas yang sudah dikirim". `sql/115` kini memproduksinya, jadi
-`sql/115` yang menambahkannya. Rantai `switch` → `switch` tetap boleh: akarnya
-tetap password, dan rotasi step-up sudah membawa `origin_auth` maju
-(`stepUpSession`), sehingga `sso` tidak bisa menyamar menjadi `switch`.
+A session produced by switching has `origin_auth = 'switch'` — the fourth value
+`sql/100` already anticipated and deliberately did not put in the CHECK at the
+time, with the sentence "a CHECK containing a value nothing can produce reads as
+a capability that has already shipped". `sql/115` now produces it, so `sql/115`
+is what adds it. A `switch` → `switch` chain is still allowed: its root is still
+a password, and step-up rotation already carries `origin_auth` forward
+(`stepUpSession`), so `sso` cannot disguise itself as `switch`.
 
-## Kredensial yang belum dipromosikan menolak login tanpa-tenant
+## A credential that has not been promoted rejects a tenant-less login
 
-`sql/112` sengaja membiarkan `password_hash` principal NULL; ia dipromosikan
-saat login sukses pertama (ADR-0086). Login **tanpa** tenant tidak punya
-identitas untuk diverifikasi sebagai cadangan — itulah inti bentuknya — jadi
-manusia yang belum pernah login sejak migrasi mendapat kegagalan generik yang
-sama dengan password salah.
+`sql/112` deliberately leaves the principal `password_hash` NULL; it is promoted
+on the first successful login (ADR-0086). A login **without** a tenant has no
+identity to verify as a fallback — that is the essence of its shape — so a human
+who has not logged in since the migration gets the same generic failure as a
+wrong password.
 
-Ini **sengaja tidak** diperhalus dengan pesan khusus: "akun ini belum pernah
-login" adalah oracle enumerasi. Jalur pemulihannya sudah ada dan tidak butuh
-apa pun yang baru — login satu kali dengan header tenant (bentuk yang dipakai
-setiap klien hari ini) mempromosikan kredensialnya, dan login tanpa-tenant
-bekerja sejak saat itu.
+This is **deliberately not** softened with a special message: "this account has
+never logged in" is an enumeration oracle. The recovery path already exists and
+needs nothing new — log in once with the tenant header (the shape every client
+uses today) and the credential is promoted, and tenant-less login works from
+that moment on.
 
-## DITOLAK
+## REJECTED
 
-- **Daftar keanggotaan di respons 409** (yang rencananya minta). Mustahil di
-  bawah FORCE RLS tanpa `SECURITY DEFINER`/`NO FORCE`, dan proyeksi global yang
-  membuatnya mungkin adalah direktori keanggotaan lintas-tenant yang ADR-0087
-  tolak. Lihat di atas.
-- **Tabel `awcms_principal_selection_tokens` tersendiri.** Tumbuh mengikuti
-  trafik untuk baris berumur 120 detik; dua kolom pada baris yang sudah ada
-  tidak tumbuh sama sekali.
-- **Membawa `aal2` menyeberang tenant.** Step-up tenant A akan memuaskan
-  tuntutan tenant B.
-- **Mengizinkan sesi SSO berpindah.** Pengambilalihan lintas-tenant lengkap;
-  lihat di atas.
-- **Token seleksi berumur panjang atau bisa dipakai ulang.** Ia satu-satunya
-  bearer di sistem ini yang tidak terikat tenant; setiap detik dan setiap
-  pemakaian tambahan adalah pelebaran murni.
-- **Menjadikan token seleksi bearer yang diterima `resolveAuthInputs`.** Ia
-  hanya boleh diterima oleh satu endpoint yang menukarnya, dan penolakan di
-  gerbang diuji terhadap lima endpoint terjaga plus asersi nol decision log.
+- **The membership list in the 409 response** (what the plan asked for).
+  Impossible under FORCE RLS without `SECURITY DEFINER`/`NO FORCE`, and the
+  global projection that would make it possible is the cross-tenant membership
+  directory ADR-0087 rejected. See above.
+- **A dedicated `awcms_principal_selection_tokens` table.** It grows with
+  traffic for a row that lives 120 seconds; two columns on an existing row do
+  not grow at all.
+- **Carrying `aal2` across tenants.** Tenant A's step-up would satisfy tenant
+  B's demand.
+- **Allowing an SSO session to switch.** A complete cross-tenant takeover; see
+  above.
+- **A long-lived or reusable selection token.** It is the only bearer in this
+  system that is not bound to a tenant; every extra second and every extra use
+  is pure widening.
+- **Making the selection token a bearer accepted by `resolveAuthInputs`.** It
+  may only be accepted by the single endpoint that exchanges it, and the
+  rejection at the gate is tested against five guarded endpoints plus a
+  zero-decision-log assertion.

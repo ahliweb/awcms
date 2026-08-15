@@ -85,7 +85,20 @@ const FROZEN = /\*\*File ini di-generate\.\*\*|⚠️ DEPRECATED/;
  * false positive across the whole corpus, which was fixed by rewording rather
  * than by widening the exemption.
  */
-const EXONERATING = /SUDAH|kini |komponen|pustaka|Versi sebelumnya|no longer/i;
+/**
+ * ENGLISH equivalents were added with ADR-0097. Every marker except `no longer`
+ * was Indonesian-only, so TRANSLATING a document removed its exoneration while
+ * leaving the absence phrasing intact — and the gate then fired on a paragraph
+ * whose entire purpose is to say the claim is obsolete. That is precisely what
+ * happened to `awcms-theming`, whose correction note opens "An earlier version
+ * explained the absence of a purge with …" and then refutes it.
+ *
+ * One English marker per Indonesian one, not a wider net: `ALREADY` for `SUDAH`,
+ * `now ` for `kini `, `an earlier version` for `Versi sebelumnya`, `component`
+ * for `komponen`, `library` for `pustaka`.
+ */
+const EXONERATING =
+  /SUDAH|kini |komponen|pustaka|Versi sebelumnya|no longer|ALREADY|now |an earlier version|previously (?:said|stated|explained)|component|library/i;
 
 /**
  * `dot: true` is REQUIRED, not stylistic. `Bun.Glob.scan()` skips

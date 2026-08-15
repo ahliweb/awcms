@@ -13,7 +13,7 @@
  *
  * A stated window is a promise, and this repo's whole convention is that a
  * promise without a checker is a promise that gets forgotten. The natural
- * mechanism — `Accepted (belum diimplementasikan)` and
+ * mechanism — `Accepted (not yet implemented)` and
  * `tests/adr-implementation-status.test.ts` — CANNOT be used here, and the
  * reason is worth writing down because it will come up again: that gate binds
  * the qualifier to the PRESENCE of promised artifacts (absent → qualified,
@@ -83,9 +83,9 @@ const NEWS_ROUTE_DIR = "src/pages/news";
  * marker, so it spells the target state in prose. A status marker that its own
  * instructions can trip is a marker that reports on its wording, not its state.
  */
-const MARKER_PREFIX = "**Status pelaksanaan §4:**";
-const MARKER_OUTSTANDING = `${MARKER_PREFIX} BELUM DILAKSANAKAN`;
-const MARKER_DONE = `${MARKER_PREFIX} SUDAH DILAKSANAKAN`;
+const MARKER_PREFIX = "**§4 implementation status:**";
+const MARKER_OUTSTANDING = `${MARKER_PREFIX} NOT YET CARRIED OUT`;
+const MARKER_DONE = `${MARKER_PREFIX} ALREADY CARRIED OUT`;
 
 /**
  * Rule (e)'s corpus: the files a reader treats as CURRENT STATE. ADRs are
@@ -407,7 +407,7 @@ describe("ADR-0071 — kosakata URL publik dibelah", () => {
       resurrectionClaims: []
     });
     expect(verdict.ok).toBe(false);
-    expect(verdict.problems.join(" ")).toContain("SUDAH DILAKSANAKAN");
+    expect(verdict.problems.join(" ")).toContain("ALREADY CARRIED OUT");
   });
 
   test("MERAH bila satu rute saja bertahan — penghapusan separuh bukan penghapusan", () => {

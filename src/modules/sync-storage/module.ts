@@ -68,6 +68,13 @@ export const syncStorageModule = defineModule({
   jobs: [
     {
       command: "bun run sync:objects:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "*/2 * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Uploads the whole queued object backlog to R2 in bounded batches, but starting from a backlog nobody has sized. Check the queue depth and the R2 bill implications before enabling."
+      },
       purpose:
         "Drain the due object sync upload queue (claim-lease, retry/backoff, circuit breaker) for every active tenant.",
       recommendedSchedule: "Every 1-2 minutes via cron/systemd timer.",
@@ -77,6 +84,13 @@ export const syncStorageModule = defineModule({
     },
     {
       command: "bun run sync:objects:purge",
+      schedule: {
+        mode: "cron",
+        expression: "35 3 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes completed/failed object-queue rows past retention. Run it only AFTER `sync:objects:dispatch` has drained the backlog."
+      },
       purpose:
         "Delete terminal object sync queue rows past their retention window (legal-hold gated, bounded batches).",
       recommendedSchedule: "Daily, off-peak.",

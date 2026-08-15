@@ -1,196 +1,198 @@
-# ADR-0089 — Partner adalah tenant biasa: jangkauan adalah DATA, bukan permission
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0089-a-partner-is-an-ordinary-tenant.id.md)
 
-- **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 8 PR 8.1 — PR pertama gelombang terakhir.
-  Migrasi `sql/116`.
-- **Membangun di atas:**
-  [ADR-0053](0053-platform-scoped-permissions.md) (tidak ada superadmin global;
-  kuasa lintas-tenant adalah `platform` scope, dan itu pun dijaga dua mekanisme
-  independen),
-  [ADR-0082](0082-an-invitation-carries-its-own-policy.md) (bentuk yang benar untuk
-  "seseorang dari luar memulai sesuatu di dalam sebuah tenant": tenant pemilik
-  yang menulis, token yang menyeberang — bukan pembacaan yang menyeberang),
-  [ADR-0087](0087-mfa-moves-to-the-principal.md) dan
-  [ADR-0088](0088-tenant-selection-and-switching.md) (dua PR berturut-turut yang
-  rencananya mengasumsikan pembacaan lintas-tenant yang FORCE RLS larang — ADR
-  ini menolak menjadi yang ketiga).
+# ADR-0089 — A partner is an ordinary tenant: reach is DATA, not permission
 
-## Keputusan
+- **Status:** Accepted (2026-08-12).
+- **Context:** Issue #423 Wave 8 PR 8.1 — the first PR of the last wave.
+  Migration `sql/116`.
+- **Builds on:**
+  [ADR-0053](0053-platform-scoped-permissions.md) (there is no global superadmin;
+  cross-tenant power is the `platform` scope, and even that is guarded by two
+  independent mechanisms),
+  [ADR-0082](0082-an-invitation-carries-its-own-policy.md) (the right shape for
+  "someone from outside starts something inside a tenant": the owning tenant
+  writes, the token crosses — not the read crossing),
+  [ADR-0087](0087-mfa-moves-to-the-principal.md) and
+  [ADR-0088](0088-tenant-selection-and-switching.md) (two consecutive PRs whose
+  plans assumed a cross-tenant read that FORCE RLS forbids — this ADR
+  refuses to be the third).
 
-**`ModulePermissionScope` tetap `"tenant" | "platform"`. Tidak ada nilai
-`partner`, sekarang maupun nanti.** Kemitraan dimodelkan sebagai **data**: dua
-tabel, `awcms_partners` dan `awcms_partner_managed_tenants`, keduanya
-tenant-scoped dan FORCE RLS seperti tabel lain di repo ini.
+## Decision
 
-Kalimat yang wajib bertahan verbatim karena orang berikutnya akan mengusulkan
-nilai `partner` lagi:
+**`ModulePermissionScope` stays `"tenant" | "platform"`. There is no
+`partner` value, now or later.** Partnership is modelled as **data**: two
+tables, `awcms_partners` and `awcms_partner_managed_tenants`, both
+tenant-scoped and FORCE RLS'd like every other table in this repo.
 
-> **`scope` mengatur siapa yang boleh MEMEGANG sebuah permission; kemitraan
-> mengatur OBJEK MANA yang disentuhnya.**
+The sentence that must survive verbatim, because the next person will propose a
+`partner` value again:
 
-Menyatukan keduanya menghasilkan permission yang **dipegang dengan benar dan
-dijalankan terhadap tenant yang salah** — dan tidak satu pun policy RLS akan
-keberatan, karena aktornya memang terautentikasi secara sah di suatu tempat.
-Itu bukan kegagalan yang berbunyi; itu kegagalan yang lolos setiap gerbang.
+> **`scope` governs who may HOLD a permission; partnership governs WHICH
+> OBJECTS it touches.**
 
-## Menjadi partner dan menjangkau tenant adalah dua pertanyaan berbeda
+Merging the two produces a permission that is **held correctly and executed
+against the wrong tenant** — and not one RLS policy will object, because the
+actor really is legitimately authenticated somewhere.
+That is not a failure that makes a noise; it is a failure that passes every gate.
 
-Pemisahan itu bukan penghalusan; ia yang membuat ADR ini bisa memakai `scope`
-yang sudah ada tanpa menambah nilai ketiga:
+## Becoming a partner and reaching a tenant are two different questions
 
-| Pertanyaan                           | Dijawab oleh                                                            | Ditulis oleh                            |
-| ------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------- |
-| Siapa yang **boleh menjadi** partner | permission ber-`scope: "platform"` (ADR-0053, mekanisme yang sudah ada) | tenant platform                         |
-| Tenant mana yang **dijangkau**       | baris di `awcms_partner_managed_tenants`                                | **tenant target, di tenantnya sendiri** |
+That separation is not a refinement; it is what lets this ADR use the existing
+`scope` without adding a third value:
 
-Baris pertama adalah keputusan komersial operator, persis seperti katalog paket
-`awcms_plans` yang hanya bisa ditulis migrasi (ADR-0084). Baris kedua adalah
-keputusan pelanggan tentang tenantnya sendiri. Tidak ada satu pun aktor yang
-bisa melakukan keduanya, dan itulah seluruh keamanan model ini.
+| Question                      | Answered by                                                             | Written by                               |
+| ----------------------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
+| Who **may become** a partner  | a permission with `scope: "platform"` (ADR-0053, an existing mechanism) | the platform tenant                      |
+| Which tenants are **reached** | a row in `awcms_partner_managed_tenants`                                | **the target tenant, in its own tenant** |
 
-### Registri partner adalah data tenant PLATFORM — dipaksa, bukan dipilih
+The first row is the operator's commercial decision, exactly like the
+`awcms_plans` plan catalogue that only a migration can write (ADR-0084). The
+second row is the customer's decision about its own tenant. Not one actor can
+do both, and that is the whole security of this model.
 
-Bentuk yang wajar dibayangkan lebih dulu adalah `awcms_partners` ber-`tenant_id`
-= tenant partner itu sendiri: satu tenant, satu baris, "aku adalah partner".
-**Bentuk itu tidak bisa ditulis oleh siapa pun.** Di bawah FORCE RLS, tenant
-platform yang bertindak dengan `app.current_tenant_id` = dirinya sendiri tidak
-dapat menyisipkan baris ber-`tenant_id` tenant lain — policy isolasinya menolak,
-dan itu memang tugasnya. Satu-satunya cara menulisnya adalah tenant partner
-mendaftarkan dirinya sendiri, yaitu pendaftaran-mandiri kemitraan komersial.
+### The partner registry is PLATFORM tenant data — forced, not chosen
 
-Jadi barisnya milik tenant **platform**, dan subjeknya (`partner_tenant_id`)
-adalah tenant lain — bentuk yang sudah dipakai `awcms_tenant_status_transitions`
-(`sql/092`) sejak ADR-0054. Satu baris berada di satu tenant dan **menyebut**
-tenant lain; ia tidak pernah berada di dua tempat.
+The shape one naturally imagines first is `awcms_partners` with `tenant_id`
+= the partner tenant itself: one tenant, one row, "I am a partner".
+**Nobody can write that shape.** Under FORCE RLS, the platform tenant acting
+with `app.current_tenant_id` = itself cannot insert a row carrying another
+tenant's `tenant_id` — its isolation policy refuses, and that is exactly its
+job. The only way to write it is for the partner tenant to register itself,
+which is self-registration of a commercial partnership.
 
-Basis data tidak tahu tenant mana yang memegang otoritas platform — jawabannya
-resolusi env (`lib/tenant/platform-tenant.ts`), bukan kolom — jadi tidak ada
-CHECK yang bisa memasangnya. Yang menegakkannya adalah dua mekanisme independen
-ADR-0053 di jalur tulis, dan PR ini mengirim **nol penulis**.
+So the row belongs to the **platform** tenant, and its subject
+(`partner_tenant_id`) is another tenant — the shape
+`awcms_tenant_status_transitions` (`sql/092`) has used since ADR-0054. One row
+lives in one tenant and **names** another; it is never in two places.
 
-## Sisi mana yang memiliki baris pemetaan — dan mengapa rencananya tidak menjawabnya
+The database does not know which tenant holds platform authority — the answer
+is env resolution (`lib/tenant/platform-tenant.ts`), not a column — so there is
+no CHECK that can pin it. What enforces it is ADR-0053's two independent
+mechanisms on the write path, and this PR ships **zero writers**.
 
-Rencana Gelombang 8 menetapkan bahwa **baris grant** akses terdelegasi ber-RLS
-pada tenant **TARGET**, dengan alasan "pandangan pelanggan yang otoritatif". Ia
-tidak menetapkan hal yang sama untuk pemetaan partner→tenant, dan pemetaan itu
-punya masalah yang **persis sama**: ia adalah relasi antara dua tenant,
-sementara di bawah FORCE RLS sebuah baris hanya punya **satu** `tenant_id` yang
-policy-nya kenali.
+## Which side owns the mapping row — and why the plan did not answer it
 
-Tiga bentuk yang mungkin, dan hanya satu yang selamat:
+The Wave 8 plan states that the delegated-access **grant row** is RLS'd on the
+**TARGET** tenant, with the reason "the customer's authoritative view". It
+does not state the same for the partner→tenant mapping, and that mapping has
+**exactly the same** problem: it is a relation between two tenants,
+while under FORCE RLS a row has only **one** `tenant_id` that its
+policy recognises.
 
-1. **RLS pada tenant partner.** Partner bisa mendaftar seluruh bukunya; pelanggan
-   **buta terhadap siapa yang menjangkau tenantnya sendiri** dan karena itu tidak
-   bisa memutuskannya. Ditolak: itu membalik satu-satunya asimetri yang boleh ada.
-2. **Dua baris, satu di tiap sisi.** Setiap pencabutan harus menemukan keduanya,
-   dan kegagalannya senyap serta permanen — kelas yang sama dengan proyeksi
-   keanggotaan global yang ditolak ADR-0088 dan direktori lintas-tenant yang
-   ditolak ADR-0087. Ditolak.
-3. **RLS pada tenant TARGET.** Dipilih.
+Three possible shapes, and only one survives:
 
-Pelanggan **wajib** bisa melihat dan mencabut setiap jangkauan ke dalam tenantnya
-tanpa meminta izin siapa pun, dan itu hanya benar bila barisnya berada di
-tenantnya. Pandangan partner atas bukunya sendiri adalah kenyamanan, bukan
-kontrol keamanan, dan dilayani lewat fungsi `SECURITY DEFINER` sempit
-(preseden `sql/048`) **saat PR 8.4 memberinya pemanggil** — bukan di PR ini.
-Fungsi `SECURITY DEFINER` tanpa pemanggil adalah permukaan serang tanpa
-manfaat.
+1. **RLS on the partner tenant.** The partner can list its whole book; the
+   customer is **blind to who reaches into its own tenant** and therefore cannot
+   cut it off. Rejected: that inverts the one asymmetry that is allowed to exist.
+2. **Two rows, one on each side.** Every revocation has to find both,
+   and its failure is silent and permanent — the same class as the global
+   membership projection ADR-0088 rejected and the cross-tenant directory
+   ADR-0087 rejected. Rejected.
+3. **RLS on the TARGET tenant.** Chosen.
 
-Satu catatan yang harus dibaca siapa pun yang menulis fungsi itu nanti:
-`sql/048` mendokumentasikan bahwa di bawah postur repo ini (pemilik fungsi
-NON-superuser, `NOBYPASSRLS`, sql/019–022) **`SECURITY DEFINER` TIDAK mem-bypass
-RLS.** Ia bekerja hanya karena empat bagian sekaligus — role pemilik NOLOGIN
-tersendiri, policy baca eksplisit ber-scope untuk role itu, daftar kolom tetap,
-dan `EXECUTE` yang dikunci. "Cukup satu fungsi definer" adalah salah baca yang
-akan menghasilkan fungsi yang mengembalikan nol baris selamanya.
+The customer **must** be able to see and revoke every reach into its tenant
+without asking anyone's permission, and that is only true when the row lives in
+its tenant. The partner's view of its own book is a convenience, not a security
+control, and is served through a narrow `SECURITY DEFINER` function
+(precedent `sql/048`) **when PR 8.4 gives it a caller** — not in this PR.
+A `SECURITY DEFINER` function without a caller is attack surface without
+benefit.
 
-## Pelanggan yang memulai. Selalu
+One note anyone who writes that function later must read:
+`sql/048` documents that under this repo's posture (function owner
+NON-superuser, `NOBYPASSRLS`, sql/019–022) **`SECURITY DEFINER` does NOT bypass
+RLS.** It works only because of four parts at once — a dedicated NOLOGIN owner
+role, an explicit scoped read policy for that role, a fixed column list,
+and a locked-down `EXECUTE`. "One definer function is enough" is a misreading
+that will produce a function returning zero rows forever.
 
-Karena barisnya hidup di tenant target dan ditulis di konteks tenant target,
-**tidak ada satu pun penulisan lintas-tenant di model ini.** Partner tidak bisa
-memasukkan baris ke tenant yang belum dikelolanya — yang, kalau bisa, adalah
-partner memberi dirinya sendiri jangkauan.
+## The customer initiates. Always
 
-Arah sebaliknya (partner menawarkan diri) sengaja **tidak** dibangun sebagai
-penulisan. Bila kelak dibutuhkan, bentuknya sudah ada dan bukan bentuk baru:
-ADR-0082 — pihak yang memiliki keanggotaan menulis tawarannya di tenantnya
-sendiri, dan yang menyeberangi batas adalah **token**, bukan pembacaan maupun
-penulisan. Menyebutkan ini sekarang supaya ketiadaannya terbaca sebagai
-keputusan, bukan kelalaian.
+Because the row lives in the target tenant and is written in the target tenant's
+context, **there is not a single cross-tenant write in this model.** A partner
+cannot insert a row into a tenant it does not already manage — which, if it
+could, would be a partner granting itself reach.
 
-## FK menegakkan apa yang `SELECT` tidak boleh melihat
+The opposite direction (a partner offering itself) is deliberately **not** built
+as a write. If it is ever needed, the shape already exists and is not a new one:
+ADR-0082 — the side that owns the membership writes its offer in its own
+tenant, and what crosses the boundary is a **token**, not a read and not a
+write. Stating this now so that its absence reads as a decision, not an
+oversight.
 
-`awcms_partner_managed_tenants.partner_tenant_id` mereferensi
-`awcms_partners (partner_tenant_id)` — kolom SUBJEK registri, bukan kolom
-pemiliknya. Pemeriksaan foreign key **melewati RLS**, sehingga
-pelanggan dapat menamai partner yang barisnya tidak akan pernah bisa ia baca:
-basis data menolak baris yang menamai tenant yang bukan partner terdaftar, tanpa
-pernah memberi siapa pun kemampuan mengenumerasi daftar partner.
+## The FK enforces what `SELECT` must not see
 
-Bahwa FK melewati RLS biasanya adalah **bahaya** di repo ini — ia yang menuntut
-FK komposit ber-`tenant_id` pada tabel office (#149). Di sini justru itu
-persisnya yang diinginkan, dan perbedaannya dinyatakan supaya tidak "diperbaiki"
-oleh orang yang mengenali polanya tetapi bukan alasannya: referensi lintas-tenant
-di sini **disengaja dan satu-satunya arah yang masuk akal**.
+`awcms_partner_managed_tenants.partner_tenant_id` references
+`awcms_partners (partner_tenant_id)` — the registry's SUBJECT column, not its
+owner column. Foreign key checks **bypass RLS**, so a
+customer can name a partner whose row it will never be able to read:
+the database rejects a row naming a tenant that is not a registered partner,
+without ever giving anyone the ability to enumerate the partner list.
 
-Nama partner tidak perlu didenormalisasi ke dalam baris pemetaan.
-`awcms_tenants` adalah tabel GLOBAL tanpa RLS (terdaftar di
-`GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`), jadi pelanggan sudah bisa membaca nama
-tenant partner yang menjangkaunya. Denormalisasi akan menciptakan salinan yang
-bisa basi tanpa ada yang tahu.
+That an FK bypasses RLS is usually a **hazard** in this repo — it is what forced
+the composite `tenant_id` FK on the office table (#149). Here it is exactly
+what is wanted, and the difference is stated so it is not "fixed"
+by someone who recognises the pattern but not the reason: the cross-tenant
+reference here is **deliberate and the only direction that makes sense**.
 
-## Yang mendarat inert, dan kalimat yang dipinjam dari ADR-0082
+The partner name does not need to be denormalised into the mapping row.
+`awcms_tenants` is a GLOBAL table without RLS (listed in
+`GLOBAL_TABLE_FORBIDDEN_PRIVILEGES`), so the customer can already read the name
+of the partner tenant reaching it. Denormalising would create a copy that can go
+stale without anyone knowing.
 
-Kedua tabel mendarat **tanpa satu pun pembaca di gerbang otorisasi**.
+## What lands inert, and the sentence borrowed from ADR-0082
 
-`activeRoleGrants` (ADR-0079) tidak membacanya dan **tidak boleh pernah
-diajari**: subjek yang memegang peran karena sebuah baris di suatu tempat
-menyebutnya partner adalah persis jalur grant kedua yang ADR-0079 hapuskan.
-Karena itu keduanya juga **tidak** ditambahkan ke `GRANT_TABLES` di
-`scripts/access-grant-readers-check.ts` — berkas yang menamainya bukan sedang
-membaca otorisasi.
+Both tables land **without a single reader in the authorization gate**.
 
-Ketika PR 8.4 membacanya, ia hanya boleh **MENYEMPITKAN**: permukaan
-`/api/v1/partner/**` diotorisasi oleh pemetaan **DAN** grant aktif, tidak pernah
-oleh salah satunya, dan pemetaan itu sendiri tidak pernah menghasilkan
-`allowed: true` (aturan lintas-gelombang 3). Sebuah baris pemetaan adalah
-prasyarat, bukan pemberian.
+`activeRoleGrants` (ADR-0079) does not read them and **must never be
+taught to**: a subject holding a role because some row somewhere calls it a
+partner is exactly the second grant path ADR-0079 removed.
+That is also why neither is added to `GRANT_TABLES` in
+`scripts/access-grant-readers-check.ts` — a file that names them is not reading
+authorization.
 
-## Konsekuensi
+When PR 8.4 reads them, it may only **NARROW**: the
+`/api/v1/partner/**` surface is authorized by the mapping **AND** an active
+grant, never by either alone, and the mapping itself never produces
+`allowed: true` (cross-wave rule 3). A mapping row is a
+precondition, not a grant.
 
-- Sebuah permission tetap berarti hal yang sama di mana pun ia dipegang. Tidak
-  ada pembaca `scope` di mana pun yang perlu berubah, sekarang atau nanti.
-- Mencabut kemitraan adalah `DELETE` satu baris di tenant pelanggan, dan
-  sesudahnya tidak ada jangkauan yang tersisa untuk dilupakan. Sengaja **hard
-  delete**: pemetaan yang di-soft-delete adalah baris yang bisa dihidupkan
-  kembali oleh satu bug, dan riwayatnya sudah dijawab `awcms_audit_events` yang
-  punya retensinya sendiri.
-- Kedua tabel masuk `BOUNDED_BY_DESIGN`, bukan karena menulis deskriptor
-  merepotkan, melainkan karena tidak ada satu pun jalur trafik yang bisa
-  menambah baris: satu ditulis tenant platform, satu ditulis administrator
-  pelanggan, dan keduanya ber-unique index yang membatasi satu baris per pasangan.
-- Penambahan nilai ketiga pada `ModulePermissionScope` memerahkan
-  `tests/platform-scoped-permissions.test.ts`, yang berjalan di rantai `check`.
-  Klaimnya diuji di level **source** karena union itu adalah TIPE — ia tidak ada
-  saat runtime, jadi tidak ada nilai yang bisa diperiksa test perilaku mana pun —
-  dan dipasangkan dengan asersi keberadaan supaya rename tidak membuatnya lolos
-  secara hampa (aturan lintas-gelombang 4). Ia sengaja **tidak** menjadi gerbang
-  ke-42 di rantai: berkas test itu sudah tempat orang yang menyentuh `scope`
-  membaca, dan gerbang baru untuk satu union adalah upacara, bukan kontrol.
+## Consequences
 
-## Ditolak
+- A permission keeps meaning the same thing wherever it is held. No
+  reader of `scope` anywhere needs to change, now or later.
+- Revoking a partnership is a one-row `DELETE` in the customer's tenant, and
+  afterwards there is no reach left to forget about. Deliberately a **hard
+  delete**: a soft-deleted mapping is a row one bug can bring back to
+  life, and its history is already answered by `awcms_audit_events`, which has
+  its own retention.
+- Both tables go into `BOUNDED_BY_DESIGN`, not because writing a descriptor is
+  a nuisance, but because there is no traffic path at all that can add
+  rows: one is written by the platform tenant, one is written by a customer
+  administrator, and both carry a unique index limiting them to one row per pair.
+- Adding a third value to `ModulePermissionScope` turns
+  `tests/platform-scoped-permissions.test.ts` red, and that test runs in the `check` chain.
+  Its claim is tested at the **source** level because that union is a TYPE — it does not
+  exist at runtime, so there is no value any behavioural test could inspect —
+  and it is paired with an existence assertion so that a rename cannot make it
+  pass vacuously (cross-wave rule 4). It is deliberately **not** the 42nd gate
+  in the chain: that test file is already where someone touching `scope`
+  reads, and a new gate for one union is ceremony, not a control.
 
-- **Nilai `partner` pada `ModulePermissionScope`** — alasannya di atas, dan
-  penolakannya kini digerbangi, bukan sekadar dicatat.
-- **Tabel partner GLOBAL tanpa RLS.** Ia akan menjadi direktori setiap
-  kemitraan komersial di instalasi ini, terbaca oleh setiap tenant — kelas
-  artefak yang sama dengan direktori keanggotaan lintas-tenant yang ditolak
-  ADR-0087, dan tabel global kelima.
-- **Pemetaan yang ditulis dua kali, satu baris di tiap sisi.**
-- **Penulisan yang dimulai partner** ke dalam tenant yang belum dikelolanya.
-- **Denormalisasi nama partner** ke baris pemetaan.
-- **Fungsi `SECURITY DEFINER` untuk pandangan partner di PR ini**, sebelum ada
-  yang memanggilnya.
-- **Atribut ABAC `subject.partnerId`.** Program #423 mengunci tepat dua atribut
-  baru (`subject.principalKind`, `resource.scopeType`) dan yang ketiga tidak
-  dibuka di sini.
+## Rejected
+
+- **A `partner` value on `ModulePermissionScope`** — the reasons are above, and
+  the refusal is now gated, not merely recorded.
+- **A GLOBAL partner table without RLS.** It would become a directory of every
+  commercial partnership in this installation, readable by every tenant — the
+  same class of artifact as the cross-tenant membership directory rejected by
+  ADR-0087, and a fifth global table.
+- **A mapping written twice, one row on each side.**
+- **A partner-initiated write** into a tenant it does not already manage.
+- **Denormalising the partner name** into the mapping row.
+- **A `SECURITY DEFINER` function for the partner view in this PR**, before
+  anything calls it.
+- **A `subject.partnerId` ABAC attribute.** Programme #423 locks in exactly two
+  new attributes (`subject.principalKind`, `resource.scopeType`) and a third is
+  not opened here.

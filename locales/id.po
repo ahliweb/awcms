@@ -3825,3 +3825,9 @@ msgstr "Pengguna yang disediakan untuk tenant ini akan muncul di sini."
 
 msgid "You do not have permission to view users."
 msgstr "Anda tidak punya izin untuk melihat pengguna."
+
+msgid "Not available on this deployment"
+msgstr "Tidak tersedia pada deployment ini"
+
+msgid "Two-factor authentication is not available on this deployment. Ask an administrator to enable it."
+msgstr "Autentikasi dua faktor tidak tersedia pada deployment ini. Minta administrator mengaktifkannya."

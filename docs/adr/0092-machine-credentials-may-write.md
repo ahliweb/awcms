@@ -1,109 +1,110 @@
-# ADR-0092 — Kredensial mesin boleh MENULIS, dan plafonnya tetap di kode
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0092-machine-credentials-may-write.id.md)
 
-- **Status:** Diterima (2026-08-13).
-- **Konteks:** Issue #423 Gelombang 8 PR 8.5 — PR terakhir program ini. Migrasi
-  `sql/121`.
-- **Membangun di atas:**
-  [ADR-0049](0049-machine-credentials-and-session-introspection.md) (kredensial
-  mesin, dan kalimat yang menahan segalanya: satu nilai di
-  `MACHINE_CREDENTIAL_ALLOWED_ACTIONS`), dan
-  [ADR-0090](0090-delegated-access-prints-a-real-tenant-user.md) (bentuk yang
-  sama sekali lagi: plafon di kode, penyempit di baris).
+# ADR-0092 — Machine credentials may WRITE, and their ceiling stays in code
 
-## Keputusan
+- **Status:** Accepted (2026-08-13).
+- **Context:** Issue #423 Wave 8 PR 8.5 — the last PR of this programme.
+  Migration `sql/121`.
+- **Builds on:**
+  [ADR-0049](0049-machine-credentials-and-session-introspection.md) (machine
+  credentials, and the sentence holding everything up: one value in
+  `MACHINE_CREDENTIAL_ALLOWED_ACTIONS`), and
+  [ADR-0090](0090-delegated-access-prints-a-real-tenant-user.md) (the same shape
+  once more: the ceiling in code, the narrowing in the row).
 
-Sebuah kredensial mesin boleh menulis, dan aksi yang boleh ditulisnya adalah
+## Decision
+
+A machine credential may write, and the actions it may write are
 
 ```
 MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS  ∩  allowed_write_actions
 ```
 
-**Urutan itu bukan gaya penulisan.** Kalau daftar aksinya menjadi kolom MURNI,
-satu restore backup, satu INSERT tangan, atau satu jalur provisioning yang
-kehilangan `WHERE` bisa mencetak kredensial tulis se-katalog — **dengan setiap
-gerbang di repo ini hijau**, karena tidak satu pun gerbang membaca isi baris.
+**That order is not a matter of style.** If the action list becomes a PURE
+column, one backup restore, one hand-written INSERT, or one provisioning path
+that loses its `WHERE` could mint a write credential spanning the whole catalogue
+— **with every gate in this repo green**, because not a single gate reads row
+contents.
 
-Plafonnya karena itu tinggal di tempat yang hanya berubah lewat commit yang
-di-review. Kolomnya bukan sumber kebenaran; ia daftar penyempit.
+The ceiling therefore lives where it changes only through a reviewed commit. The
+column is not the source of truth; it is a narrowing list.
 
-## Yang ada di plafon, dan aturan yang menjaganya jujur
+## What is in the ceiling, and the rule that keeps it honest
 
-`create` dan `update`. Tidak ada yang menghancurkan, tidak ada yang memberikan
-otoritas, tidak ada yang tak bisa dibalik.
+`create` and `update`. Nothing destructive, nothing that confers authority,
+nothing irreversible.
 
-Dan sifat itu **dihitung, bukan dinyatakan**:
+And that property is **computed, not asserted**:
 
 ```
 MACHINE_CREDENTIAL_WRITE_ALLOWED_ACTIONS ∩ HIGH_RISK_ACTIONS = ∅
 ```
 
-diuji dari **konstanta hidup**. Daftar literal "yang high-risk" akan menyimpang
-pada hari seseorang menambah aksi high-risk baru, dan menyimpang **diam-diam**.
-Menurunkannya tidak bisa.
+tested against the **live constants**. A literal list of "the high-risk ones"
+would drift the day someone adds a new high-risk action, and drift **silently**.
+Deriving it cannot.
 
-Menambah anggota ke plafon adalah ADR, dengan alasan yang sama ADR-0049
-nyatakan untuk himpunan baca: setiap penambahan adalah kelas baru hal yang bisa
-dilakukan token curian, dan ia **tak terlihat di diff endpoint** yang tiba-tiba
-menerimanya.
+Adding a member to the ceiling is an ADR, for the same reason ADR-0049 gave for
+the read set: every addition is a new class of thing a stolen token can do, and
+it is **invisible in the diff of the endpoint** that suddenly accepts it.
 
-## Ketiadaan IP adalah DENY, dan itu bagian yang paling mudah dilupakan
+## The absence of an IP is a DENY, and that is the easiest part to forget
 
-Kredensial tulis wajib terikat CIDR — CHECK basis data, bukan konvensi. Aturan
-yang lebih halus hidup di gerbang: **bila `clientIp` tidak tersedia, kredensial
-tulis ditolak.**
+A write credential must be CIDR-bound — a database CHECK, not a convention. The
+subtler rule lives in the gate: **if `clientIp` is unavailable, the write
+credential is denied.**
 
-Tanpa itu, setiap rute yang belum meneruskan alamat pemanggil **diam-diam
-mematikan kondisinya** — kontrol yang terbaca sebagai ditegakkan dan sebenarnya
-tidak, kelas yang sudah dua kali muncul di gelombang ini. Gagal tertutup
-membuat rute seperti itu menjawab 403, yang adalah laporan bug alih-alih
-pelanggaran.
+Without it, every route that has not yet forwarded the caller's address
+**silently disables its condition** — a control that reads as enforced and is
+not, a class that has already surfaced twice in this wave. Failing closed makes
+such a route answer 403, which is a bug report rather than a breach.
 
-`defineTenantRoute` mengisinya untuk setiap rute yang dimilikinya, di **kedua**
-jalurnya — termasuk SSE, tempat ia diresolusi sekali saat stream dibuka karena
-satu koneksi panjang punya satu peer.
+`defineTenantRoute` fills it in for every route it owns, on **both** of its paths
+— including SSE, where it is resolved once when the stream opens because one long
+connection has one peer.
 
-Parser CIDR-nya ditulis tanpa dependensi dan **menyempit saat ragu**: CIDR yang
-tidak bisa di-parse tidak cocok dengan apa pun, alih-alih cocok dengan
-segalanya. Arah itu adalah keputusan, dan diuji.
+Its CIDR parser is written without dependencies and **narrows when in doubt**: a
+CIDR that cannot be parsed matches nothing, rather than matching everything. That
+direction is a decision, and it is tested.
 
-## Tiga puluh hari, bukan tiga ratus enam puluh lima
+## Thirty days, not three hundred and sixty-five
 
-Kredensial baca boleh hidup setahun (ADR-0049 §5). Kredensial tulis tidak: ia
-bisa mengubah data, dan waktu sampai seseorang menyadari ia bocor diukur dalam
-minggu.
+A read credential may live for a year (ADR-0049 §5). A write credential may not:
+it can change data, and the time until someone notices it leaked is measured in
+weeks.
 
-CHECK basis datanya 31 hari, satu hari lebih longgar, karena `created_at`
-DEFAULT `now()` adalah instant **mulai transaksi** sementara `expires_at`
-dihitung jam aplikasi — jebakan yang sama yang `sql/117` dokumentasikan.
+Its database CHECK is 31 days, one day looser, because `created_at` DEFAULT
+`now()` is the **transaction start** instant while `expires_at` is computed from
+the application clock — the same trap `sql/117` documents.
 
-## Dua sentinel, dan yang lama VERBATIM
+## Two sentinels, and the old one VERBATIM
 
-`machine_credential_readonly` ada di sejarah decision log dan di ADR-0049.
-Mendaur ulangnya untuk penolakan tulis akan **menulis ulang masa lalu** bagi
-setiap konsumen log — sebuah baris lama akan mulai berarti sesuatu yang bukan
-maksudnya saat ditulis.
+`machine_credential_readonly` exists in decision log history and in ADR-0049.
+Recycling it for a write denial would **rewrite the past** for every log consumer
+— an old row would start meaning something other than what it meant when it was
+written.
 
-Kelas tulis mendapat sentinel baru, `machine_credential_write_forbidden`.
+The write class gets a new sentinel, `machine_credential_write_forbidden`.
 
-## Konsekuensi
+## Consequences
 
-- Setiap kredensial yang ada sebelum migrasi ini **tetap baca-saja**:
-  `allowed_write_actions` kosong, dan cabang pertama setiap CHECK dan setiap
-  predikat benar untuk baris kosong. Tidak ada backfill, tidak ada validasi yang
-  bisa gagal saat migrasi.
-- Gerbangnya **deny-only** dan duduk di tempat yang sama seperti gerbang
-  read-only sebelumnya: di atas `fetchGrantedPermissionKeys`, tempat tidak ada
-  baris grant yang bisa memengaruhinya (aturan lintas-gelombang 1).
-- Tidak ada permukaan penerbitan untuk kelas tulis di PR ini. Kolomnya ada,
-  gerbangnya menegakkannya, dan yang bisa menuliskannya belum ada — sama seperti
-  setiap PR di gelombang ini yang mendarat inert sebelum permukaannya.
+- Every credential existing before this migration **stays read-only**:
+  `allowed_write_actions` is empty, and the first branch of every CHECK and every
+  predicate is true for an empty row. No backfill, no validation that can fail at
+  migration time.
+- The gate is **deny-only** and sits in the same place as the earlier read-only
+  gate: above `fetchGrantedPermissionKeys`, where no grant row can influence it
+  (cross-wave rule 1).
+- There is no issuance surface for the write class in this PR. The column exists,
+  the gate enforces it, and what could write it does not exist yet — just like
+  every PR in this wave that landed inert ahead of its surface.
 
-## Ditolak
+## Rejected
 
-- **Daftar aksi sebagai kolom murni**, tanpa plafon di kode.
-- **Daftar literal "aksi high-risk"** di test, alih-alih menurunkannya dari
-  konstanta hidup.
-- **Kondisi IP yang fail-open** ketika alamat pemanggil tidak diketahui.
-- **Parser CIDR yang melebar saat ragu.**
-- **Mendaur ulang sentinel `machine_credential_readonly`.**
-- **Umur setahun untuk kredensial tulis.**
+- **The action list as a pure column**, with no ceiling in code.
+- **A literal list of "high-risk actions"** in the test, instead of deriving it
+  from the live constants.
+- **A fail-open IP condition** when the caller's address is unknown.
+- **A CIDR parser that widens when in doubt.**
+- **Recycling the `machine_credential_readonly` sentinel.**
+- **A one-year lifetime for write credentials.**

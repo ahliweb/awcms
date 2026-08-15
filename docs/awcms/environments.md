@@ -1,304 +1,307 @@
-# Environment awcms — satu deployment, dan kontrak isolasi bila ada environment kedua
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](environments.id.md)
 
-> Dokumen **current-state**. Repo ini punya **satu** environment ter-deploy —
-> keputusannya
+# awcms environments — one deployment, and the isolation contract if a second environment exists
+
+> A **current-state** document. This repo has **one** deployed environment —
+> the decision is
 > [ADR-0083](../adr/0083-this-template-deploys-to-one-environment.md). `staging`
-> **bukan lagi** profil deployment: ia dihapus dari kosakatanya, bukan sekadar
-> tidak dijalankan di sini. Profil yang tersisa: `development`, `production`,
-> `offline-lan`. Yang **tidak** ikut terhapus adalah kontrak isolasinya — ia
-> berpindah rumah, dari sebuah tingkatan bernama menjadi aturan bagi
-> **environment kedua apa pun** yang seseorang dirikan
-> (§[Kontrak isolasi environment kedua](#kontrak-isolasi-environment-kedua)).
-> Untuk mekanisme deploy-nya lihat [`deploy-coolify.md`](deploy-coolify.md) dan
+> is **no longer** a deployment profile: it was removed from the vocabulary, not
+> merely left unused here. The remaining profiles: `development`, `production`,
+> `offline-lan`. What did **not** get deleted with it is its isolation contract —
+> it moved house, from a named tier to a rule for **any second environment**
+> somebody stands up
+> (§[Second-environment isolation contract](#kontrak-isolasi-environment-kedua)).
+> For the deployment mechanics see [`deploy-coolify.md`](deploy-coolify.md) and
 > [`deployment-profiles.md`](deployment-profiles.md).
 
-## Satu environment
+## One environment
 
-| Environment    | Domain                 | `APP_ENV`    | Catatan                                                                         |
+| Environment    | Domain                 | `APP_ENV`    | Notes                                                                           |
 | -------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------- |
-| **Production** | `awcms.ahlikoding.com` | `production` | Satu-satunya deployment hidup repo ini. Data nyata, integrasi keluar **AKTIF**. |
+| **Production** | `awcms.ahlikoding.com` | `production` | The only live deployment of this repo. Real data, outbound integrations **ON**. |
 
-Development bukan baris kedua yang hilang dari tabel itu. Ia
-`http://localhost:4321` dengan `APP_ENV=development`, hidup di workstation, dan
-tidak pernah di-deploy ke host mana pun (§Development lokal). Yang berkurang
-dari dokumen ini adalah **environment ter-deploy kedua**, bukan fase kerjanya.
+Development is not a second row missing from that table. It is
+`http://localhost:4321` with `APP_ENV=development`, lives on a workstation, and
+is never deployed to any host (§Local development). What this document lost is a
+**second deployed environment**, not the working phase.
 
-Alasannya pendek dan seluruhnya ada di ADR-0083: sebuah environment
-pra-produksi ada untuk **melatih perubahan terhadap data dan trafik sungguhan
-sebelum menyentuhnya**, dan deployment repo ini tidak punya keduanya — ia ada
-untuk menunjukkan dan memvalidasi template, bukan melayani bisnis. Yang akan
-"di-stage" adalah templatenya sendiri, dan template divalidasi oleh rantai
-gerbang plus suite integrasi ber-Postgres di CI, bukan oleh salinan kedua yang
-berjalan. Maka environment kedua di sini bukan jaring pengaman melainkan satu
-set secret lagi, satu database lagi yang butuh backup, satu antrean migrasi
-lagi, satu domain lagi, dan satu tempat lagi yang bisa diam-diam basi.
+The reason is short and lives entirely in ADR-0083: a pre-production environment
+exists to **rehearse changes against real data and real traffic before touching
+them**, and this repo's deployment has neither — it exists to demonstrate and
+validate the template, not to serve a business. What would be "staged" is the
+template itself, and the template is validated by the gate chain plus the
+Postgres-backed integration suite in CI, not by a second running copy. So a
+second environment here is not a safety net but one more set of secrets, one
+more database needing backups, one more migration queue, one more domain, and
+one more place that can go silently stale.
 
-Yang ikut hilang bersamanya dicatat sebagai **biaya**, bukan disembunyikan:
-tidak ada lagi latihan pra-produksi untuk `sql/NNN`. Penggantinya adalah backup
-yang sudah **diverifikasi bisa di-restore** sebelum tiap migrasi diterapkan
-(`deploy/backup/restore-postgres.sh`, mode verify-only) — mitigasi, bukan
-pengganti setara.
+What disappeared with it is recorded as a **cost**, not hidden: there is no
+longer a pre-production rehearsal for `sql/NNN`. The replacement is a backup that
+has been **verified restorable** before each migration is applied
+(`deploy/backup/restore-postgres.sh`, verify-only mode) — a mitigation, not an
+equivalent replacement.
 
-Deployment-nya berjalan di host Docker yang sama dengan aplikasi lain
-(`192.42.84.46`), dikelola Coolify, di belakang Traefik yang memegang
-`:80`/`:443` dan menerbitkan TLS lewat resolver `letsencrypt`.
+The deployment runs on the same Docker host as other applications
+(`192.42.84.46`), managed by Coolify, behind Traefik which holds `:80`/`:443` and
+issues TLS via the `letsencrypt` resolver.
 
-> **Aturan yang tetap berlaku bagi siapa pun yang menjalankan lebih dari satu
-> environment: satu app Coolify per environment** — bukan satu app dengan dua
-> domain. Environment yang berbagi app berbagi env var, dan itulah cara sebuah
-> environment kedua tanpa sengaja menulis ke data produksi. §Keadaan yang
-> dikoreksi di bawah adalah versi lebih ringan dari kegagalan yang sama (satu
-> app, dua host di satu rule Traefik), dan sudah cukup mahal.
+> **A rule that still holds for anyone running more than one environment: one
+> Coolify app per environment** — not one app with two domains. Environments
+> sharing an app share env vars, and that is exactly how a second environment
+> accidentally writes to production data. §The state corrected below is a lighter
+> version of the same failure (one app, two hosts in a single Traefik rule), and
+> it was already expensive enough.
 
-## Keadaan yang dikoreksi ADR-0083 (11 Agustus 2026)
+## The state ADR-0083 corrected (11 August 2026)
 
-Bagian ini ditulis karena ia menyesatkan selama berjam-jam, dan akan
-menyesatkan orang berikutnya persis sama bila tidak tertulis. Diverifikasi pada
-host, 11 Agustus 2026:
+This section is written because it misled for hours, and will mislead the next
+person in exactly the same way if it is not written down. Verified on the host,
+11 August 2026:
 
-- Baris aplikasi produksi (`got4etcblum9kowdv4mrixqo`) **tidak ada** di tabel
-  `applications` Coolify. Bukan soft-delete — barisnya memang tidak ada.
-- **Tidak ada database produksi** di `standalone_postgresqls`. Satu-satunya yang
-  ada adalah `awcms_staging`.
-- Container `awcms-staging-varnish` memasang rule Traefik yang mencocokkan
-  **kedua** host: ``Host(`awcms-staging.ahlikoding.com`) ||
-Host(`awcms.ahlikoding.com`)``. Domain produksi karena itu dilayani
-  **deployment staging, di atas database staging**, dengan `APP_ENV=staging`.
+- The production application row (`got4etcblum9kowdv4mrixqo`) **does not exist**
+  in Coolify's `applications` table. Not a soft-delete — the row simply is not
+  there.
+- **There is no production database** in `standalone_postgresqls`. The only one
+  that exists is `awcms_staging`.
+- The `awcms-staging-varnish` container installs a Traefik rule matching **both**
+  hosts: ``Host(`awcms-staging.ahlikoding.com`) ||
+Host(`awcms.ahlikoding.com`)``. The production domain is therefore served by the
+  **staging deployment, on top of the staging database**, with `APP_ENV=staging`.
 
-Dari situ satu kalimat yang layak dihafal: **respons 200 di
-`awcms.ahlikoding.com` bukan bukti produksi hidup.** Sepanjang keadaan di atas
-domain itu menjawab 200, sehat, tanpa keluhan. Verifikasi kepada
-`applications`/`standalone_postgresqls` — bukan kepada `curl`.
+From that, one sentence worth memorising: **a 200 response at
+`awcms.ahlikoding.com` is not proof that production is alive.** Throughout the
+state above that domain answered 200, healthy, without complaint. Verify against
+`applications`/`standalone_postgresqls` — not against `curl`.
 
-Akibatnya untuk membaca dokumen ini hari ini: **setiap pengukuran langsung
-terhadap `awcms.ahlikoding.com` mengukur deployment `awcms-staging-*` itu.**
-Bagian bertanda "produksi" di bawah menggambarkan bentuk yang ditegakkan
-kembali, beserta bukti dari saat ia terakhir benar-benar berjalan — bukan
-pengamatan hari ini. Rule Traefik dua-host itu wajib dicabut ketika produksi
-ditegakkan kembali; sampai itu terjadi, `APP_ENV` di host ini berhenti
-menandakan apa pun, dan orang berikutnya yang membacanya untuk memutuskan
-sesuatu yang berbahaya akan mendapat jawaban salah dengan percaya diri.
+The consequence for reading this document today: **every direct measurement
+against `awcms.ahlikoding.com` measures that `awcms-staging-*` deployment.**
+Sections marked "production" below describe the shape being re-established, along
+with evidence from when it last genuinely ran — not observations from today. That
+two-host Traefik rule must be revoked when production is re-established; until
+that happens, `APP_ENV` on this host stops signalling anything, and the next
+person who reads it to decide something dangerous will get a confidently wrong
+answer.
 
-> **Tiga baris di atas adalah pengamatan bertanggal 11 Agustus 2026, dan
-> dipertahankan apa adanya.** Nama `awcms_staging`/`awcms-staging-varnish` di
-> sana adalah nama sumber daya yang benar-benar ada di host saat itu — bukan
-> bukti bahwa ada "profil staging". Sesudah pengamatan itu pemilik repo
-> memutuskan `staging` **dihapus seluruhnya**, termasuk dari kosakata profil
-> deployment; app, database, dan Varnish bernama itu sedang dibongkar sebagai
-> pekerjaan infrastruktur terpisah. Yang tersisa dari mereka di dokumen ini
-> hanyalah namanya di dalam catatan bertanggal.
+> **The three bullets above are observations dated 11 August 2026, and are kept
+> as-is.** The names `awcms_staging`/`awcms-staging-varnish` there are the names
+> of resources that genuinely existed on the host at that moment — not evidence
+> that a "staging profile" exists. After that observation the repo owner decided
+> `staging` is **removed entirely**, including from the deployment profile
+> vocabulary; the app, database, and Varnish carrying that name are being
+> dismantled as separate infrastructure work. All that remains of them in this
+> document is their names inside a dated note.
 
-## Kontrak isolasi environment kedua
+## Second-environment isolation contract
 
-Bagian ini **tidak** menggambarkan sebuah profil deployment. `staging` sudah
-tidak ada — bukan "ada tapi tidak dipakai di sini", melainkan dihapus dari
-kosakata profil; yang tersisa `development`, `production`, dan `offline-lan`.
-Yang dulu ditulis sebagai "kontrak staging" tetap berlaku, hanya sasarannya yang
-berubah: ia sekarang aturan untuk **environment kedua apa pun** yang seseorang
-dirikan di samping produksinya — sebutlah pra-produksi, mirror, sandbox, atau
-apa pun namanya. Bentuk kegagalannya sama persis, dan tidak peduli nama
-tingkatannya.
+This section does **not** describe a deployment profile. `staging` no longer
+exists — not "exists but is unused here", but removed from the profile
+vocabulary; what remains is `development`, `production`, and `offline-lan`. What
+used to be written as "the staging contract" still holds, only its target
+changed: it is now the rule for **any second environment** somebody stands up
+next to their production — call it pre-production, mirror, sandbox, or whatever
+name. The failure shape is identical, and it does not care what the tier is
+called.
 
-Kontrak ini mahal untuk diturunkan ulang — sebagiannya dibayar dengan kesalahan
-nyata di environment kedua `awcms-micro` — jadi ia tidak ikut terhapus bersama
-tingkatan yang dulu memakainya.
+This contract is expensive to re-derive — part of it was paid for with real
+mistakes in the `awcms-micro` second environment — so it was not deleted along
+with the tier that used to carry it.
 
-Environment kedua umumnya berjalan di host yang sama dengan produksi. Yang
-memisahkannya **hanya konfigurasi**, jadi konfigurasi itu harus tegas:
+A second environment usually runs on the same host as production. What separates
+them is **configuration only**, so that configuration must be emphatic:
 
-- **Database sendiri**, role `awcms_app` sendiri, password sendiri. Bukan skema
-  lain di cluster produksi.
-- **Secret sendiri** — `AUTH_IP_HASH_SECRET`, `COMMENTS_TIMING_SECRET`, token
-  purge cache tepi, kunci enkripsi. Menyalin secret produksi ke environment
-  kedua berarti nilai yang dipakai environment kedua berlaku juga di produksi.
-- **Integrasi keluar MATI**: `R2_ENABLED=false`, `EMAIL_ENABLED=false`, sync
-  nonaktif. Environment kedua tidak boleh bisa menulis ke bucket media produksi
-  atau mengirim email ke alamat orang sungguhan.
-- `NEWS_PORTAL_PROFILE` **dihapus** (bukan diisi nilai lain) ketika environment
-  itu tanpa R2 — satu-satunya nilai yang diterima `full_online_r2`, jadi
-  `config:validate` akan menolak sebelum deploy. Ini kesalahan nyata yang
-  tertangkap di micro.
-- **Provider DNS `manual`**, bukan `cloudflare` — lihat §Subdomain tenant.
-- **Token purge cache tepi berbeda per environment** — lihat §Cache tepi.
-- Akun owner boleh memakai identifier yang sama; **password-nya tidak pernah
-  sama** — lihat §Tenant default.
+- **Its own database**, its own `awcms_app` role, its own password. Not another
+  schema in the production cluster.
+- **Its own secrets** — `AUTH_IP_HASH_SECRET`, `COMMENTS_TIMING_SECRET`, the edge
+  cache purge token, encryption keys. Copying production secrets to a second
+  environment means the value used by the second environment is also valid in
+  production.
+- **Outbound integrations OFF**: `R2_ENABLED=false`, `EMAIL_ENABLED=false`, sync
+  disabled. A second environment must not be able to write to the production
+  media bucket or send email to real people's addresses.
+- `NEWS_PORTAL_PROFILE` **removed** (not set to some other value) when that
+  environment has no R2 — the only accepted value is `full_online_r2`, so
+  `config:validate` will refuse before deploy. This is a real mistake that was
+  caught in micro.
+- **DNS provider `manual`**, not `cloudflare` — see §Tenant subdomains.
+- **A different edge cache purge token per environment** — see §Edge cache.
+- The owner account may use the same identifier; **its password is never the
+  same** — see §Default tenant.
 
-`APP_ENV` environment kedua itu tetap salah satu nilai yang ada — pada
-praktiknya `production`, karena aturan produksi (cookie `Secure`, proxy
-tepercaya, penolakan escape hatch SSRF) justru yang ingin dilatih. Tidak ada
-nilai `APP_ENV` yang menandai "ini bukan yang sungguhan": yang memisahkan adalah
-database, secret, dan integrasi keluar di daftar atas, bukan sebuah label.
+That second environment's `APP_ENV` is still one of the existing values — in
+practice `production`, because the production rules (`Secure` cookies, trusted
+proxies, refusing the SSRF escape hatch) are precisely the ones you want to
+rehearse. There is no `APP_ENV` value that marks "this is not the real one": what
+separates them is the database, the secrets, and the outbound integrations in the
+list above, not a label.
 
-Jalankan `bun run config:validate` dan `bun run security:readiness` **sebelum**
-deploy pertama tiap environment.
+Run `bun run config:validate` and `bun run security:readiness` **before** each
+environment's first deploy.
 
-## Tenant default & akun owner
+## Default tenant & owner account
 
-| Hal                       | Development               | Production                |
-| ------------------------- | ------------------------- | ------------------------- |
-| `tenant_code`             | `development`             | `ahliweb`                 |
-| `PUBLIC_DEFAULT_TENANT_*` | pin ke tenant lokal       | pin ke tenant `ahliweb`   |
-| Login owner               | `admin@ahlikoding.com`    | `admin@ahlikoding.com`    |
-| Password owner            | **sendiri**               | **sendiri**               |
-| Role                      | `owner` (system, 197/197) | `owner` (system, 197/197) |
+| Item                      | Development                | Production                 |
+| ------------------------- | -------------------------- | -------------------------- |
+| `tenant_code`             | `development`              | `ahliweb`                  |
+| `PUBLIC_DEFAULT_TENANT_*` | pinned to the local tenant | pinned to tenant `ahliweb` |
+| Owner login               | `admin@ahlikoding.com`     | `admin@ahlikoding.com`     |
+| Owner password            | **its own**                | **its own**                |
+| Role                      | `owner` (system, 197/197)  | `owner` (system, 197/197)  |
 
-Instalasi yang menjalankan environment kedua memakai konvensi yang sama dengan
-`tenant_code`-nya sendiri; yang berikut ini berlaku untuk setiap pasang
-environment, bukan hanya dua kolom di atas.
+An installation running a second environment uses the same convention with its
+own `tenant_code`; what follows applies to every pair of environments, not just
+the two columns above.
 
-**Identifier-nya sama, password-nya TIDAK PERNAH sama.** `awcms_identities` unik
-pada `(tenant_id, login_identifier)`, jadi satu alamat di dua environment adalah
-**dua akun terpisah** dengan dua hash password berbeda. Sesi juga tidak
-menyeberang: token sesi adalah nilai acak buram yang disimpan sebagai hash
-sha256 di `awcms_sessions` — tabel yang tenant-scoped — sehingga token hanya
-berlaku pada database yang menerbitkannya. Menyalin password antar environment
-membatalkan isolasi yang justru jadi alasan memisahkannya, dan itu satu-satunya
-hal yang bisa membatalkannya, karena tidak ada lagi yang dibagi.
+**The identifier is the same, the password is NEVER the same.**
+`awcms_identities` is unique on `(tenant_id, login_identifier)`, so one address in
+two environments is **two separate accounts** with two different password hashes.
+Sessions do not cross either: a session token is an opaque random value stored as
+a sha256 hash in `awcms_sessions` — a tenant-scoped table — so a token is only
+valid on the database that issued it. Copying passwords between environments
+cancels the very isolation that was the reason to separate them, and it is the
+only thing that can cancel it, because nothing else is shared.
 
-> **Catatan koreksi.** Versi sebelumnya paragraf ini menyebut "tiga
-> `AUTH_JWT_SECRET` berbeda". **Variabel itu tidak ada di awcms** — tidak dibaca
-> di mana pun dalam `src/`, dan tidak ada JWT di jalur sesi. Klaim itu keliru dan
-> menyesatkan: operator bisa mengira memutar variabel tersebut memisahkan sesi
-> antar-environment, padahal yang memisahkan adalah tenant-scoping di atas.
+> **Correction note.** A previous version of this paragraph mentioned "three
+> different `AUTH_JWT_SECRET`s". **That variable does not exist in awcms** — it is
+> read nowhere in `src/`, and there is no JWT in the session path. The claim was
+> wrong and misleading: an operator could believe that rotating that variable
+> separates sessions across environments, when what separates them is the
+> tenant-scoping above.
 
-### Kenapa `PUBLIC_DEFAULT_TENANT_*` di-pin, padahal tanpa itu pun jalan
+### Why `PUBLIC_DEFAULT_TENANT_*` is pinned, even though it works without it
 
-Rantai resolusinya `host` → `PUBLIC_DEFAULT_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_CODE`
-→ `awcms_setup_state.tenant_id`. Tanpa dua var itu, jawaban atas "host yang tidak
-cocok jatuh ke tenant mana?" tetap ada — tapi tersembunyi di sebuah baris tabel,
-bukan dinyatakan. Dan begitu tenant kedua ditambahkan, jawaban implisit itu bisa
-berubah tanpa satu pun perubahan konfigurasi. Konsumennya nyata:
-`seo_distribution` (`/robots.txt`, sitemap, feed) dan `site_search`.
+The resolution chain is `host` → `PUBLIC_DEFAULT_TENANT_ID` → `PUBLIC_DEFAULT_TENANT_CODE`
+→ `awcms_setup_state.tenant_id`. Without those two vars, the answer to "which
+tenant does a non-matching host fall back to?" still exists — but hidden in a
+table row, not stated. And once a second tenant is added, that implicit answer can
+change without a single configuration change. The consumers are real:
+`seo_distribution` (`/robots.txt`, sitemap, feed) and `site_search`.
 
-`PUBLIC_TENANT_RESOLUTION_MODE` **tidak** di-set di mana pun. Menyalakan
-`host_default` menuntut baris `awcms_tenant_domains` untuk host itu ada **di
-database yang benar-benar melayaninya** — dan itu diverifikasi pada database
-produksi setelah ia ditegakkan kembali, bukan diwarisi dari catatan lama
-(§Keadaan yang dikoreksi: database produksi yang dulu memuat baris itu sudah
-tidak ada). Terlepas dari itu, menyalakannya adalah keputusan perilaku
-tersendiri — ia mengaktifkan lookup host dan memperluas permukaan yang tersentuh
-— bukan bagian dari "tetapkan tenant default". Nyalakan terpisah bila memang
-diinginkan.
+`PUBLIC_TENANT_RESOLUTION_MODE` is **not** set anywhere. Turning on `host_default`
+demands that an `awcms_tenant_domains` row for that host exists **in the database
+that actually serves it** — and that is verified against the production database
+after it is re-established, not inherited from an old note (§The state corrected:
+the production database that used to hold that row no longer exists). Regardless,
+turning it on is a behavioural decision in its own right — it activates host
+lookup and widens the surface touched — not part of "set the default tenant". Turn
+it on separately if that is what you actually want.
 
-### Jebakan: seed permission tidak menjangkau tenant lama
+### Trap: the permission seed does not reach existing tenants
 
-Migrasi seed permission hanya berlaku untuk tenant yang dibuat **setelahnya**.
-Mendaratkan modul baru **tidak** memberi permission-nya ke owner yang sudah ada —
-gejalanya 403 `ACCESS_DENIED` pada modul yang "sudah terpasang". Terjadi nyata di
-produksi 2026-07-26: owner kehilangan 18 permission (`comments`, `site_search`,
-`form_drafts`) setelah migrasi 062–070. Backfill adalah langkah deployment:
+Permission seed migrations only apply to tenants created **after** them. Landing a
+new module does **not** grant its permissions to an existing owner — the symptom
+is a 403 `ACCESS_DENIED` on a module that is "already installed". Happened for
+real in production on 2026-07-26: the owner was missing 18 permissions
+(`comments`, `site_search`, `form_drafts`) after migrations 062–070. The backfill
+is a deployment step:
 
 ```bash
-bun run identity-access:permissions:backfill              # DRY-RUN, aman di produksi
-bun run identity-access:permissions:backfill --commit     # menulis
-bun run identity-access:permissions:backfill --tenant <kode> --commit   # bertahap
+bun run identity-access:permissions:backfill              # DRY-RUN, safe in production
+bun run identity-access:permissions:backfill --commit     # writes
+bun run identity-access:permissions:backfill --tenant <code> --commit   # incremental
 ```
 
-**Jangan pakai SQL "grant semua yang hilang".** Versi sebelumnya dari dokumen ini
-menganjurkan `LEFT JOIN … WHERE rp.permission_id IS NULL`, dan bentuk itu tidak
-bisa membedakan "belum pernah ada saat tenant dibuat" dari "dicabut admin dengan
-sengaja" — ia menghidupkan kembali persis grant yang seseorang putuskan untuk
-dihapus, tanpa jejak. Perintah di atas hanya memberikan permission yang baris
-katalognya **lebih baru** dari role owner-nya, melaporkan sisanya sebagai
-"presumed removed on purpose", dan menulis satu entri audit per tenant.
+**Do not use a "grant everything that is missing" SQL statement.** A previous
+version of this document recommended `LEFT JOIN … WHERE rp.permission_id IS NULL`,
+and that shape cannot tell "never existed when the tenant was created" apart from
+"deliberately revoked by an admin" — it resurrects exactly the grant somebody
+decided to remove, without a trace. The command above only grants permissions
+whose catalogue row is **newer** than its owner role, reports the rest as
+"presumed removed on purpose", and writes one audit entry per tenant.
 
-Verifikasi bahwa "akses penuh" memang penuh — RBAC penuh belum cukup bila ada
-ABAC deny, aturan SoD, atau batasan business-scope:
+Verify that "full access" really is full — full RBAC is not enough if there is an
+ABAC deny, an SoD rule, or a business-scope restriction:
 
 ```sql
 SELECT count(*) FROM awcms_abac_policies WHERE is_active AND is_dsl_managed;
 SELECT count(*) FROM awcms_business_scope_assignments;
 ```
 
-Keduanya `0` pada setiap database yang diukur 2026-07-26, dan tidak ada rute base
-yang menyetel `requiredScopeType`, jadi RBAC benar-benar penentu tunggalnya.
-Kuerinya diulang pada database produksi yang baru — angka lama adalah pengukuran,
-bukan jaminan.
+Both were `0` on every database measured on 2026-07-26, and no base route sets
+`requiredScopeType`, so RBAC really is the sole decider. Repeat the queries on the
+new production database — the old numbers are a measurement, not a guarantee.
 
-## Development lokal disamakan dengan produksi (2026-07-26)
+## Local development brought in line with production (2026-07-26)
 
-Sebelum ini dev bukan versi kecil produksi, melainkan **environment yang
-berbeda secara diam-diam**: skema berhenti di migrasi 30 (produksi 70), nol
-tenant, tidak ada `.env`, dan satu-satunya role dengan LOGIN adalah `awcms`
-milik container — seorang **superuser**. Bug kelas paling mahal — kebocoran
-RLS dan 403 karena permission — justru yang paling mustahil direproduksi di
-sana, karena superuser menembus RLS dan tenant kosong tak punya permission
-untuk salah.
+Before this, dev was not a small version of production but a **silently different
+environment**: the schema stopped at migration 30 (production 70), zero tenants,
+no `.env`, and the only role with LOGIN was the container's `awcms` — a
+**superuser**. The most expensive class of bugs — RLS leaks and permission-caused
+403s — was precisely the one that was impossible to reproduce there, because a
+superuser walks through RLS and an empty tenant has no permissions to get wrong.
 
-Sejak disamakan, keduanya cocok baris per baris. Angka di bawah adalah
-**snapshot 2026-07-26**, bukan konstanta: pohon repo kini memuat 108 migration,
-jadi paritasnya diukur ulang setiap kali, tidak dikutip dari sini.
+Since being brought in line, the two match row for row. The numbers below are a
+**2026-07-26 snapshot**, not constants: the repo tree now holds 108 migrations, so
+parity is re-measured every time, not quoted from here.
 
 |                      | Development     | Production      |
 | -------------------- | --------------- | --------------- |
-| migrasi              | 70              | 70              |
-| tabel                | 118             | 118             |
+| migrations           | 70              | 70              |
+| tables               | 118             | 118             |
 | `awcms_permissions`  | 197             | 197             |
 | RLS `ENABLE`+`FORCE` | 109/118         | 109/118         |
 | runtime role         | `awcms_app`     | `awcms_app`     |
 | owner                | `owner` 197/197 | `owner` 197/197 |
 
-Yang tetap **sengaja** berbeda, dan alasannya:
+What stays **deliberately** different, and why:
 
-| Var                     | Dev     | Prod   | Kenapa                                                                                                                                  |
-| ----------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `AUTH_COOKIE_SECURE`    | `false` | `true` | dev jalan di `http://`; cookie `Secure` tidak akan pernah terkirim                                                                      |
-| `TRUSTED_PROXY_ENABLED` | `false` | `true` | tidak ada proxy di depan `bun dev`; kalau `true`, siapa pun bisa memalsukan `X-Forwarded-For` dan memilih bucket rate-limit-nya sendiri |
-| `EDGE_CACHE_MODE`       | `off`   | `auto` | tidak ada Varnish lokal; `auto` hanya akan mengantre purge yang tak pernah dikonsumsi                                                   |
+| Var                     | Dev     | Prod   | Why                                                                                                                           |
+| ----------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_COOKIE_SECURE`    | `false` | `true` | dev runs on `http://`; a `Secure` cookie would never be sent                                                                  |
+| `TRUSTED_PROXY_ENABLED` | `false` | `true` | there is no proxy in front of `bun dev`; if `true`, anyone could forge `X-Forwarded-For` and pick their own rate-limit bucket |
+| `EDGE_CACHE_MODE`       | `off`   | `auto` | there is no local Varnish; `auto` would only queue purges that are never consumed                                             |
 
-`TRUSTED_PROXY_HOP_COUNT` (default `1`) berlaku hanya saat
-`TRUSTED_PROXY_ENABLED=true`, dan `config:validate` menolak kombinasi
-sebaliknya — menyetelnya sendirian adalah operator yang mengira sudah menyetel
-sesuatu. Angkanya menghitung entri `X-Forwarded-For` **dari kanan**: entri di
-kiri hop tepercaya Anda ditulis oleh sesuatu yang tidak Anda kendalikan, jadi
-tidak pernah dibaca (#438). Naikkan hanya sebanyak proxy yang benar-benar Anda
-miliki — angka yang terlalu besar justru melebarkan bagian header yang bisa
-dipalsukan.
+`TRUSTED_PROXY_HOP_COUNT` (default `1`) only applies when
+`TRUSTED_PROXY_ENABLED=true`, and `config:validate` rejects the opposite
+combination — setting it on its own is an operator who believes they configured
+something. The number counts `X-Forwarded-For` entries **from the right**: entries
+to the left of your trusted hop were written by something you do not control, so
+they are never read (#438). Raise it only by as many proxies as you genuinely own
+— a number that is too large actually widens the forgeable part of the header.
 
-### Role separation di lokal — bukan formalitas
+### Role separation locally — not a formality
 
-`sql/019`/`022` membuat `awcms_app`/`awcms_worker`/`awcms_setup` sebagai
-`NOLOGIN` tanpa password. Migrasi hijau **tidak** berarti role separation
-aktif; sampai ketiganya diberi `LOGIN PASSWORD` dan `DATABASE_URL` diarahkan ke
-`awcms_app`, runtime tetap superuser dan `FORCE RLS` inert. Sekali jalan:
+`sql/019`/`022` create `awcms_app`/`awcms_worker`/`awcms_setup` as `NOLOGIN`
+without passwords. Green migrations do **not** mean role separation is active;
+until all three are given `LOGIN PASSWORD` and `DATABASE_URL` points at
+`awcms_app`, the runtime is still a superuser and `FORCE RLS` is inert. One-off:
 
 ```sql
-ALTER ROLE awcms_app    LOGIN PASSWORD '<acak>';
-ALTER ROLE awcms_worker LOGIN PASSWORD '<acak>';
-ALTER ROLE awcms_setup  LOGIN PASSWORD '<acak>';
+ALTER ROLE awcms_app    LOGIN PASSWORD '<random>';
+ALTER ROLE awcms_worker LOGIN PASSWORD '<random>';
+ALTER ROLE awcms_setup  LOGIN PASSWORD '<random>';
 ```
 
-Migrasi tetap dijalankan sebagai role pemilik DDL (`awcms`), **bukan**
-`awcms_setup` — role itu hanya punya `USAGE` pada schema `public`, bukan
-`CREATE`. Ini sama seperti produksi.
+Migrations are still run as the DDL-owning role (`awcms`), **not** `awcms_setup` —
+that role only holds `USAGE` on schema `public`, not `CREATE`. This is the same as
+production.
 
-Buktikan hasilnya, jangan diasumsikan — sebagai `awcms_app`:
+Prove the result, do not assume it — as `awcms_app`:
 
 ```
 super=false bypassrls=false
-tanpa tenant context   -> awcms_identities terlihat: 0
-tenant sendiri         -> awcms_identities terlihat: 1
-tenant asing (uuid)    -> awcms_identities terlihat: 0
+no tenant context      -> awcms_identities visible: 0
+own tenant             -> awcms_identities visible: 1
+foreign tenant (uuid)  -> awcms_identities visible: 0
 ```
 
-Pola `0 / 1 / 0` yang sama adalah bentuk bukti yang diterima di **deployment mana
-pun**, bukan hanya di lokal. Kalau baris pertama bukan `0`, RLS tidak menyala dan
-semua sisanya tidak ada artinya.
+The same `0 / 1 / 0` pattern is the accepted shape of proof in **any**
+deployment, not just locally. If the first line is not `0`, RLS is not on and
+everything after it means nothing.
 
-### `DATABASE_URL` dipakai dua peran yang saling bertentangan
+### `DATABASE_URL` is used by two roles that contradict each other
 
-Begitu `.env` ada, **suite DB-gated ikut menyala** — Bun memuat `.env` sendiri,
-jadi tidak ada `DATABASE_URL` kosong seperti job `quality` di CI. Dan di situ
-dua kebutuhan bertabrakan pada satu variabel yang sama:
+As soon as `.env` exists, **the DB-gated suites turn on too** — Bun loads `.env`
+itself, so there is no empty `DATABASE_URL` like the `quality` job in CI. And
+that is where two needs collide on one and the same variable:
 
-- **runtime** menginginkan `awcms_app` — least-privilege, RLS berlaku;
-- **harness integrasi** menginginkan role **privileged** — ia membuat database
-  ephemeral dan menjalankan `ALTER ROLE`. Dengan `awcms_app` hasilnya
-  `permission denied to alter role` (42501), bukan skip.
+- the **runtime** wants `awcms_app` — least privilege, RLS applies;
+- the **integration harness** wants a **privileged** role — it creates ephemeral
+  databases and runs `ALTER ROLE`. With `awcms_app` the result is
+  `permission denied to alter role` (42501), not a skip.
 
-CI menyelesaikannya dengan menjalankan keduanya di job berbeda. Di lokal,
-biarkan `.env` memegang konfigurasi runtime (`awcms_app`) dan **override saat
-menjalankan test**; env var eksplisit menang atas `.env`:
+CI solves it by running the two in different jobs. Locally, let `.env` hold the
+runtime configuration (`awcms_app`) and **override when running tests**; an
+explicit env var beats `.env`:
 
 ```bash
 OWNER='postgres://awcms:<pw>@localhost:5433/awcms'
@@ -306,22 +309,21 @@ DATABASE_URL="$OWNER" SETUP_DATABASE_URL="$OWNER" WORKER_DATABASE_URL="$OWNER" \
   bun test tests/integration/
 ```
 
-**Override ketiganya, bukan hanya `DATABASE_URL`.** Kalau `SETUP_DATABASE_URL`
-dibiarkan diambil dari `.env`, harness memeriksa bahwa klien app dan klien setup
-menunjuk database yang sama, gagal, dan melapor `Connection closed` — pesan yang
-sama sekali tidak menunjuk ke penyebabnya.
+**Override all three, not just `DATABASE_URL`.** If `SETUP_DATABASE_URL` is left
+to be taken from `.env`, the harness checks that the app client and the setup
+client point at the same database, fails, and reports `Connection closed` — a
+message that does not point at its cause at all.
 
-Kedua suite itu **tidak boleh** satu proses `bun test` (tabrakan data — lihat
-komentar di `ci.yml`). Jalankan terpisah, persis seperti CI. Hasil di dev
-2026-07-26: harness 142 pass, legacy 64 pass, nol gagal.
+Those two suites must **not** share a single `bun test` process (data collision —
+see the comment in `ci.yml`). Run them separately, exactly like CI. Result in dev
+on 2026-07-26: harness 142 pass, legacy 64 pass, zero failures.
 
-### Jebakan: `bun run db:migrate` dari host bisa timeout
+### Trap: `bun run db:migrate` from the host can time out
 
-Di sebagian sandbox, TCP ke port Postgres yang di-publish **connect** tapi
-startup message-nya tidak pernah dibalas — gejalanya `Connection timeout after
-30s (sent startup message...)`, bukan connection refused, jadi mudah salah baca
-sebagai kredensial keliru. Jalan pintasnya: jalankan di dalam network namespace
-container DB-nya.
+In some sandboxes, TCP to the published Postgres port **connects** but the startup
+message is never answered — the symptom is `Connection timeout after 30s (sent
+startup message...)`, not connection refused, so it is easy to misread as wrong
+credentials. The shortcut: run inside the DB container's network namespace.
 
 ```bash
 docker run --rm --network container:<pg-container> \
@@ -331,46 +333,49 @@ docker run --rm --network container:<pg-container> \
   oven/bun:1 bun scripts/db-migrate.ts
 ```
 
-Catat `127.0.0.1:5432` — di dalam namespace itu, port yang di-publish ke host
-tidak relevan. Image `oven/bun` **tidak punya `curl` maupun `git`**: pakai
-`fetch` untuk HTTP, dan jangan jalankan test yang memanggil `git` di sana.
+Note `127.0.0.1:5432` — inside that namespace, the port published to the host is
+irrelevant. The `oven/bun` image **has neither `curl` nor `git`**: use `fetch` for
+HTTP, and do not run tests that call `git` in there.
 
-## `APP_URL` bukan kosmetik
+## `APP_URL` is not cosmetic
 
-`APP_URL` **wajib** (`scripts/validate-env.ts`) dan bukan sekadar label: ia
-menyusun URL callback OIDC/SSO (`src/lib/auth/sso-config.ts`). Salah host = alur
-login rusak dengan `redirect_uri_mismatch`, bukan sekadar tautan yang jelek.
+`APP_URL` is **mandatory** (`scripts/validate-env.ts`) and not just a label: it
+composes the OIDC/SSO callback URL (`src/lib/auth/sso-config.ts`). The wrong host
+means the login flow is broken with `redirect_uri_mismatch`, not merely an ugly
+link.
 
 ```bash
 APP_ENV=production
 APP_URL=https://awcms.ahlikoding.com
 ```
 
-Instalasi turunan yang menjalankan environment kedua mendaftarkan **satu
-redirect URI per environment** di IdP, dan mendaftarkannya **sebelum** login di
-environment itu dipakai — bukan sesudah alurnya gagal.
+A derived installation running a second environment registers **one redirect URI
+per environment** at the IdP, and registers it **before** login in that
+environment is used — not after the flow has already failed.
 
 ## DNS
 
-Zona `ahlikoding.com` ada di Cloudflare (NS `dilbert`/`katja`).
-`awcms.ahlikoding.com` menunjuk ke `192.42.84.46`. Record
-`awcms-staging.ahlikoding.com` masih ada dan menunjuk host yang sama — sisa
-topologi lama, dan pada 11 Agustus 2026 justru hostname itulah yang
-deployment-nya melayani kedua domain (§Keadaan yang dikoreksi). Record itu ikut
-dibongkar bersama sumber daya bernama sama; ia tidak menandakan sebuah profil.
+The `ahlikoding.com` zone lives at Cloudflare (NS `dilbert`/`katja`).
+`awcms.ahlikoding.com` points at `192.42.84.46`. The
+`awcms-staging.ahlikoding.com` record still exists and points at the same host — a
+leftover of the old topology, and on 11 August 2026 it was that very hostname
+whose deployment served both domains (§The state corrected). That record is being
+dismantled together with the identically named resources; it does not signal a
+profile.
 
-Setelah record ada, TLS terbit otomatis lewat Traefik — tidak ada konfigurasi
-lain. Sejak 2026-07-25 resolver `letsencrypt` di Traefik pakai **tantangan
-DNS-01 via Cloudflare** (bukan HTTP-01 lagi), jadi status proxy record
-(DNS-only vs proxied/orange cloud) **tidak memengaruhi** penerbitan/renewal
-sertifikat — keduanya jalan sama saja. Detail perubahan dan alasannya ada di
-`docs/12-cloudflare-proxy-dns01.md` pada repo `serv-dinkesdocker`.
+Once the record exists, TLS is issued automatically via Traefik — no other
+configuration. Since 2026-07-25 the `letsencrypt` resolver in Traefik uses the
+**DNS-01 challenge via Cloudflare** (no longer HTTP-01), so the record's proxy
+status (DNS-only vs proxied/orange cloud) **does not affect** certificate
+issuance/renewal — both work exactly the same. The details of the change and its
+reasoning are in `docs/12-cloudflare-proxy-dns01.md` in the `serv-dinkesdocker`
+repo.
 
-### Subdomain tenant (asumsi — konfirmasi sebelum dipakai)
+### Tenant subdomains (assumption — confirm before use)
 
-`bun run tenant-domain:dns:sync` (ADR-0042 / PR #236) mengubah baris
-`awcms_tenant_domains` menjadi record DNS nyata, tetapi butuh **root domain**
-yang belum ditetapkan pemilik repo. Yang paling koheren dengan domain di atas:
+`bun run tenant-domain:dns:sync` (ADR-0042 / PR #236) turns `awcms_tenant_domains`
+rows into real DNS records, but it needs a **root domain** the repo owner has not
+yet decided on. The most coherent one with the domains above:
 
 ```bash
 TENANT_DOMAIN_DNS_PROVIDER=cloudflare
@@ -379,302 +384,301 @@ TENANT_DOMAIN_SERVING_TARGET=awcms.ahlikoding.com
 TENANT_DOMAIN_SERVING_RECORD_TYPE=CNAME
 ```
 
-→ subdomain tenant berbentuk `<tenant>.awcms.ahlikoding.com`.
+→ tenant subdomains of the form `<tenant>.awcms.ahlikoding.com`.
 
-Ini **asumsi yang ditulis eksplisit**, bukan keputusan yang sudah diambil.
-Alternatifnya adalah root `ahlikoding.com` (memberi `<tenant>.ahlikoding.com`),
-yang lebih pendek tetapi menaruh namespace tenant di zona yang dipakai bersama
-aplikasi lain di host itu. Adapter **menolak** hostname di luar root yang
-dikonfigurasi, jadi memilih root yang salah bukan lubang keamanan — hanya
-migrasi hostname yang menyakitkan nanti. Putuskan sebelum tenant pertama.
+This is an **explicitly written assumption**, not a decision that has been taken.
+The alternative is the root `ahlikoding.com` (giving `<tenant>.ahlikoding.com`),
+which is shorter but puts the tenant namespace in a zone shared with other
+applications on that host. The adapter **refuses** hostnames outside the
+configured root, so choosing the wrong root is not a security hole — only a
+painful hostname migration later. Decide before the first tenant.
 
-Aturan untuk siapa pun yang menjalankan environment kedua: environment itu
-sebaiknya **tidak** memakai provider `cloudflare` (biarkan `manual`). Dua
-environment yang menulis ke zona yang sama akan saling menimpa record serving
-milik hostname yang sama — kegagalan yang tidak berbunyi sampai record produksi
-menunjuk ke tempat yang salah.
+A rule for anyone running a second environment: that environment should **not**
+use the `cloudflare` provider (leave it `manual`). Two environments writing into
+the same zone will overwrite each other's serving records for the same hostname —
+a failure that makes no noise until the production record points somewhere wrong.
 
-## Cache tepi (ADR-0042) — mode `auto` di produksi
+## Edge cache (ADR-0042) — `auto` mode in production
 
-Produksi memakai **`EDGE_CACHE_MODE=auto`**, bukan `on`: inilah perilaku
-"diaktifkan otomatis apabila diperlukan" yang diminta sejak awal. Saat origin
-santai, tidak ada yang di-cache dan pengunjung selalu dapat data segar; saat
-beban naik, TTL merambat naik dan database berhenti ditanyai pertanyaan publik
-yang sama berulang-ulang.
+Production uses **`EDGE_CACHE_MODE=auto`**, not `on`: this is the "activated
+automatically when needed" behaviour that was asked for from the start. When the
+origin is relaxed, nothing is cached and visitors always get fresh data; when load
+rises, TTL creeps up and the database stops being asked the same public question
+over and over.
 
-Ambang: **≥5 permintaan/detik** dihitung atas jendela 60 detik (jadi ≥300
-observasi di jendela) **ATAU** rata-rata latensi origin ≥250 ms. Salah satu
-cukup. Sekali menyala, latch bertahan 3× jendela.
+Thresholds: **≥5 requests/second** counted over a 60-second window (so ≥300
+observations in the window) **OR** an average origin latency ≥250 ms. Either one
+is enough. Once engaged, the latch holds for 3× the window.
 
-Topologi:
+Topology:
 
 ```
 Cloudflare (proxied) -> Traefik :443 -> varnish:80 -> app :4321
 ```
 
-Lapisan Varnish itu terbukti mahal untuk dilewati: menyalakannya lebih dulu di
-sebuah environment pra-produksi (Juli 2026) membongkar tiga bug yang lolos
-review dan `bun run check`, satu di antaranya mematikan jalur tulis blog. Lihat
-[`edge-cache-architecture.md`](edge-cache-architecture.md) §Pelajaran. Repo ini
-tidak lagi punya environment seperti itu — yang menggantikannya adalah gerbang
-CI dan backup terverifikasi (§Satu environment); siapa pun yang menjalankan
-environment kedua sebaiknya tetap membuktikan lapisan ini di sana lebih dulu.
+That Varnish layer proved expensive to skip: turning it on first in a
+pre-production environment (July 2026) uncovered three bugs that had passed review
+and `bun run check`, one of which killed the blog write path. See
+[`edge-cache-architecture.md`](edge-cache-architecture.md) §Lessons. This repo no
+longer has such an environment — what replaces it is the CI gates and verified
+backups (§One environment); anyone running a second environment should still prove
+this layer there first.
 
-### Kompresi respons DIWARISI dari topologi ini, bukan dimiliki repo
+### Response compression is INHERITED from this topology, not owned by the repo
 
 <!-- kompresi-tepi:mulai -->
 
-**Tier pengompresi adalah Cloudflare** — lapisan paling kiri pada topologi di
-atas, dan satu-satunya yang mengompresi apa pun. Repo ini tidak mengompresi di
-lapisan mana pun yang ia kirim: nol middleware kompresi di aplikasi
-(`src/middleware.ts`, `astro.config.mjs`), nol `beresp.do_gzip` di
-`infra/varnish/default.vcl` (Varnish tidak mengompresi atas inisiatif
-sendiri), nol middleware `compress` Traefik yang dideklarasikan repo. Yang
-memancar dari sini hanyalah `Vary: Accept-Encoding` pada respons yang bisa
-di-cache — sebuah janji tentang caching, bukan tindakan mengompresi.
+**The compressing tier is Cloudflare** — the leftmost layer in the topology above,
+and the only one that compresses anything. This repo does not compress at any
+layer it ships: zero compression middleware in the application
+(`src/middleware.ts`, `astro.config.mjs`), zero `beresp.do_gzip` in
+`infra/varnish/default.vcl` (Varnish does not compress on its own initiative),
+zero Traefik `compress` middleware declared by the repo. All that emanates from
+here is `Vary: Accept-Encoding` on cacheable responses — a promise about caching,
+not an act of compressing.
 
-Dibuktikan probe 4 Agustus 2026: **kedua** hostname `ahlikoding.com` yang
-menjawab saat itu mengirim `content-encoding: gzip`, karena keduanya proxied
-Cloudflare. Jadi klaim "tidak ada kompresi di mana pun" salah untuk apa yang
-pembaca terima, dan benar untuk apa yang repo ini miliki.
+Proven by a probe on 4 August 2026: **both** `ahlikoding.com` hostnames answering
+at that time sent `content-encoding: gzip`, because both are Cloudflare-proxied.
+So the claim "there is no compression anywhere" is wrong for what a reader
+receives, and right for what this repo owns.
 
-**Konsekuensi yang harus dibaca sebelum go-live:** sebuah deployment basis ini
-yang TIDAK di belakang CDN pengompresi menyajikan seluruh HTML, JSON,
-`sitemap.xml`, dan `feed.xml` tanpa kompresi — aset teks `dist/client` saja
-menyusut 2,79× oleh gzip, dan HTML/JSON menyusut lebih baik lagi. Verifikasi
-`content-encoding` di tepi environment yang sebenarnya, bukan di Varnish.
+**A consequence that must be read before go-live:** a deployment of this base that
+is NOT behind a compressing CDN serves all HTML, JSON, `sitemap.xml`, and
+`feed.xml` uncompressed — the `dist/client` text assets alone shrink 2.79× under
+gzip, and HTML/JSON shrink better still. Verify `content-encoding` at the actual
+environment's edge, not at Varnish.
 
-Blok ini dibaca `bun run security:readiness` (pemeriksa
-`checkResponseCompressionOwnership` di `scripts/security-readiness.ts`, celah
-C3 [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9):
-menghapusnya memerahkan pemeriksa itu, dan menyalakan kompresi di lapisan yang
-repo ini kirim membuat pemeriksa itu menuntut blok ini ditulis ulang.
+This block is read by `bun run security:readiness` (the
+`checkResponseCompressionOwnership` checker in `scripts/security-readiness.ts`,
+gap C3 in [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md)
+§9): deleting it turns that checker red, and turning on compression in a layer
+this repo ships makes that checker demand this block be rewritten.
 
 <!-- kompresi-tepi:selesai -->
 
-### Varnish bukan resource Coolify
+### Varnish is not a Coolify resource
 
-Ia container compose biasa di network `coolify`, memegang label Traefik sendiri;
-FQDN app dikosongkan atau dikalahkan prioritas (lihat di bawah) supaya Traefik
-tidak merutekan dua router ke host yang sama. `default.vcl` disalin apa adanya
-dari `infra/varnish/default.vcl` (checksum dicocokkan) supaya berkas yang
-di-review adalah berkas yang berjalan. Backend `app` disuplai `extra_hosts` —
-bukan DNS compose — karena app adalah application Coolify, bukan service
-compose.
+It is an ordinary compose container on the `coolify` network, holding its own
+Traefik labels; the app's FQDN is either emptied or beaten on priority (see below)
+so that Traefik does not route two routers to the same host. `default.vcl` is
+copied verbatim from `infra/varnish/default.vcl` (checksums matched) so that the
+file under review is the file that runs. The `app` backend is supplied via
+`extra_hosts` — not compose DNS — because the app is a Coolify application, not a
+compose service.
 
-Env aplikasi:
+Application env:
 
 ```bash
-EDGE_CACHE_MODE=auto        # `on` hanya untuk membuktikan lapisannya;
-                            # `auto` meng-cache saat origin tertekan
-EDGE_CACHE_PURGE_ENDPOINT=http://<container-varnish>:80
+EDGE_CACHE_MODE=auto        # `on` only to prove the layer works;
+                            # `auto` caches when the origin is under pressure
+EDGE_CACHE_PURGE_ENDPOINT=http://<varnish-container>:80
 EDGE_CACHE_PURGE_TOKEN=<secret per environment>
 EDGE_CACHE_MAX_TTL_SECONDS=300
 ```
 
-Token purge **berbeda per environment**. Worker purge berjalan tiap menit dari
-cron host sebagai container one-shot — `Dockerfile.production` tidak mengirim
-`scripts/`, jadi ia tidak bisa dijalankan lewat `docker exec` pada container app
-(masalah dan pola yang sama dengan migrasi di bawah):
+The purge token is **different per environment**. The purge worker runs every
+minute from the host's cron as a one-shot container — `Dockerfile.production` does
+not ship `scripts/`, so it cannot be run via `docker exec` on the app container
+(the same problem and the same pattern as the migrations below):
 
 ```
 * * * * * /home/admin1/awcms-prod-varnish/purge-runner.sh
 ```
 
-> **Per 11 Agustus 2026 container Varnish yang berada di depan
-> `awcms.ahlikoding.com` adalah `awcms-staging-varnish`**, bukan milik produksi —
-> lihat §Keadaan yang dikoreksi. Container itu termasuk yang dibongkar; cron dan
-> endpoint purge di atas adalah bentuk yang ditegakkan kembali bersama
-> produksinya.
+> **As of 11 August 2026 the Varnish container sitting in front of
+> `awcms.ahlikoding.com` is `awcms-staging-varnish`**, not production's — see
+> §The state corrected. That container is among those being dismantled; the cron
+> and purge endpoint above are the shape being re-established along with
+> production.
 
-### Routing: prioritas Traefik, BUKAN mengosongkan FQDN
+### Routing: Traefik priority, NOT emptying the FQDN
 
-Mengosongkan FQDN app memindahkan domain, tetapi itu berarti **redeploy**, dan
-selama redeploy backend Varnish hilang. Produksi karena itu memberi router
-Varnish `priority=100` (default Traefik = panjang rule):
+Emptying the app's FQDN moves the domain, but that means a **redeploy**, and
+during the redeploy the Varnish backend disappears. Production therefore gives the
+Varnish router `priority=100` (Traefik's default = rule length):
 
 ```
 traefik.http.routers.awcms-prod-varnish-https.priority=100
 ```
 
-Router app tetap ada dengan rule `Host(...)` yang identik. Prioritas membuat
-cache **deterministik** — tanpanya kedua router seri dan pilihan Traefik
-sembarang, sehingga sebagian trafik diam-diam melewati cache — sekaligus
-menyisakan router app sebagai **fallback**. Itu terbukti berguna: selama
-container Varnish dibuat ulang, permintaan publik tetap dilayani app langsung,
-nol downtime.
+The app router still exists with an identical `Host(...)` rule. The priority makes
+the cache **deterministic** — without it the two routers tie and Traefik's choice
+is arbitrary, so some traffic silently bypasses the cache — while also leaving the
+app router as a **fallback**. That proved useful: while the Varnish container was
+being recreated, public requests were still served by the app directly, zero
+downtime.
 
-### Uji penerimaan — `X-Cache`, bukan exit code
+### Acceptance test — `X-Cache`, not the exit code
 
-Setiap bug di lapisan ini melapor sukses sambil tidak bekerja. Yang sah hanya:
+Every bug in this layer reports success while not working. Only this is valid:
 
-| langkah                           | harus             |
+| step                              | must be           |
 | --------------------------------- | ----------------- |
-| dua kali GET `/blog/<tenant>`     | `X-Cache: HIT`    |
-| GET `/api/v1/health` dua kali     | tetap `MISS`      |
-| purge key **near-miss** `t:<id>x` | tetap `HIT`       |
-| purge key **tepat** `t:<id>`      | `MISS`            |
-| permintaan berikutnya             | `HIT` lagi        |
-| baris antrean                     | `done attempts=1` |
+| two GETs of `/blog/<tenant>`      | `X-Cache: HIT`    |
+| GET `/api/v1/health` twice        | still `MISS`      |
+| **near-miss** purge key `t:<id>x` | still `HIT`       |
+| **exact** purge key `t:<id>`      | `MISS`            |
+| the next request                  | `HIT` again       |
+| queue row                         | `done attempts=1` |
 
-> **Peringatan — tabel di atas mengukur Varnish, dan Varnish BUKAN tier yang
-> menjawab pembaca.** Host `ahlikoding.com` proxied Cloudflare, jadi tier
-> penjawab pembaca adalah **Cloudflare** — dibuktikan probe 4 Agustus 2026
-> (`cf-cache-status: HIT` plus header `age:`). Baca `cf-cache-status`/`age`
-> juga, bukan hanya `X-Cache`; dan `MISS` pasca-purge di Varnish **tidak
-> membuktikan pembaca melihat konten segar**, karena antrean purge ADR-0042
-> mem-BAN Varnish dan **tidak menjangkau Cloudflare** — celah C14 di
-> [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9.
-> Kebasian yang pembaca lihat berbatas `s-maxage` ≤
-> `EDGE_CACHE_MAX_TTL_SECONDS` (300 detik pada konfigurasi ini).
+> **Warning — the table above measures Varnish, and Varnish is NOT the tier that
+> answers readers.** The `ahlikoding.com` hosts are Cloudflare-proxied, so the tier
+> answering readers is **Cloudflare** — proven by a probe on 4 August 2026
+> (`cf-cache-status: HIT` plus an `age:` header). Read `cf-cache-status`/`age`
+> too, not only `X-Cache`; and a post-purge `MISS` at Varnish **does not prove
+> readers see fresh content**, because the ADR-0042 purge queue BANs Varnish and
+> **does not reach Cloudflare** — gap C14 in
+> [`standar-performa-dan-keamanan.md`](standar-performa-dan-keamanan.md) §9. The
+> staleness readers see is bounded by `s-maxage` ≤
+> `EDGE_CACHE_MAX_TTL_SECONDS` (300 seconds in this configuration).
 
-Bukti mode `auto` dari produksi 2026-07-26 — diukur, bukan diasumsikan:
+Evidence of `auto` mode from production on 2026-07-26 — measured, not assumed:
 
-| langkah                    | hasil                                            |
-| -------------------------- | ------------------------------------------------ |
-| saat santai                | `x-edge-cache-skip: auto_not_engaged`, tanpa TTL |
-| 120 permintaan (2 req/s)   | masih `auto_not_engaged` — di bawah ambang       |
-| 400 permintaan (>5 req/s)  | `surrogate-control: max-age=5` — ramp menyala    |
-| lewat Varnish              | `X-Cache: HIT`                                   |
-| purge lewat antrean+worker | `sent=1 failed=0` → `MISS` → baris `done`        |
+| step                       | result                                         |
+| -------------------------- | ---------------------------------------------- |
+| while idle                 | `x-edge-cache-skip: auto_not_engaged`, no TTL  |
+| 120 requests (2 req/s)     | still `auto_not_engaged` — below the threshold |
+| 400 requests (>5 req/s)    | `surrogate-control: max-age=5` — ramp engaged  |
+| through Varnish            | `X-Cache: HIT`                                 |
+| purge via the queue+worker | `sent=1 failed=0` → `MISS` → a `done` row      |
 
-`max-age=5` itu `MIN_ACTIVATED_TTL_SECONDS`: rasio tekanan baru menyentuh 1,
-jadi TTL-nya paling pendek dan akan naik bila beban berlanjut.
+That `max-age=5` is `MIN_ACTIVATED_TTL_SECONDS`: the pressure ratio had only just
+touched 1, so the TTL is the shortest one and will rise if load continues.
 
-## Operasi database di host
+## Database operations on the host
 
-### Menjalankan migrasi: container one-shot, bukan `docker exec`
+### Running migrations: a one-shot container, not `docker exec`
 
-`Dockerfile.production` menghasilkan image **runtime saja**: `scripts/` tidak
-ikut, jadi `docker exec <app> bun run db:migrate` gagal dengan
-`Module not found "scripts/db-migrate.ts"`. Ini bukan kesalahan konfigurasi;
-itu memang bentuk image-nya, dan tidak perlu diubah.
+`Dockerfile.production` produces a **runtime-only** image: `scripts/` is not
+included, so `docker exec <app> bun run db:migrate` fails with
+`Module not found "scripts/db-migrate.ts"`. This is not a misconfiguration; that
+is the shape of the image, and it does not need changing.
 
-Jalankan migrasi sebagai **container one-shot** dari checkout repo, berbagi
-network container DB supaya DSN-nya `127.0.0.1`.
+Run migrations as a **one-shot container** from a repo checkout, sharing the DB
+container's network so the DSN is `127.0.0.1`.
 
-Checkout-nya **wajib tag rilis yang sedang di-deploy**, **bukan `main`**. `main`
-bisa sudah memuat `sql/NNN` yang belum ada di image yang akan berjalan;
-menerapkannya berarti skema mendahului aplikasi — dan migrasi terapan itu
-immutable, jadi tidak ada jalan mundur selain restore backup. Tag yang sama
-dengan image = skema yang persis dibutuhkan image itu.
+The checkout **must be the release tag being deployed**, **not `main`**. `main`
+may already contain `sql/NNN` that is not in the image about to run; applying it
+means the schema runs ahead of the application — and an applied migration is
+immutable, so there is no way back other than restoring a backup. The same tag as
+the image = exactly the schema that image needs.
 
-**Tag git dan tag image tidak identik.** `release.yml` menghitung tag image
-dengan membuang `v` di depan (`VERSION="${GITHUB_REF_NAME#v}"`), jadi image
-`ghcr.io/ahliweb/awcms:7.0.1` berasal dari tag git `v7.0.1`. Mencocokkannya
-terbalik memberi `manifest unknown` (kalau beruntung) atau checkout versi yang
-salah (kalau tidak).
+**The git tag and the image tag are not identical.** `release.yml` computes the
+image tag by stripping the leading `v` (`VERSION="${GITHUB_REF_NAME#v}"`), so the
+image `ghcr.io/ahliweb/awcms:7.0.1` comes from the git tag `v7.0.1`. Matching them
+the wrong way round gives `manifest unknown` (if you are lucky) or a checkout of
+the wrong version (if you are not).
 
 ```bash
 git clone --depth 1 --branch v7.0.1 https://github.com/ahliweb/awcms.git /tmp/awcms-migrate
-docker run --rm --network container:<container-db> \
+docker run --rm --network container:<db-container> \
   -v /tmp/awcms-migrate:/app -w /app \
   -e DATABASE_URL="postgres://<owner>:<pw>@127.0.0.1:5432/<db>" \
   oven/bun:1.3.14-alpine \
   sh -c "bun install --frozen-lockfile --production && bun run db:migrate"
 ```
 
-Nama/ID container DB berubah setiap kali Coolify men-deploy ulang — ambil dari
-`docker ps`, jangan dari catatan lama. Migrasi memakai user **owner** (superuser
-yang dibuat Coolify) karena ia `CREATE ROLE`/`GRANT`. Runtime app **tidak boleh**
-memakai user itu — lihat di bawah.
+The DB container's name/ID changes every time Coolify redeploys — take it from
+`docker ps`, not from an old note. Migrations use the **owner** user (the
+superuser Coolify created) because it does `CREATE ROLE`/`GRANT`. The app runtime
+**must not** use that user — see below.
 
-### Jebakan: user yang dibuat Coolify adalah superuser
+### Trap: the user Coolify creates is a superuser
 
-Ini menggigit pada 2026-07-25 dan layak diingat karena kegagalannya tidak
-terlihat sama sekali.
+This bit on 2026-07-25 and is worth remembering because the failure is completely
+invisible.
 
-Coolify (dan image `postgres:*` pada umumnya) membuat `POSTGRES_USER` sebagai
-**superuser**. Bentuk paling wajar setelah provisioning otomatis adalah
-`DATABASE_URL` runtime menunjuk user itu — dan **superuser melewati RLS tanpa
-syarat, bahkan dengan `FORCE`**. Deployment tampak sehat: migrasi hijau, health
-200, semua endpoint jalan. Isolasi tenant tidak ada sama sekali.
+Coolify (and `postgres:*` images generally) creates `POSTGRES_USER` as a
+**superuser**. The most natural shape after automatic provisioning is a runtime
+`DATABASE_URL` pointing at that user — and **a superuser bypasses RLS
+unconditionally, even with `FORCE`**. The deployment looks healthy: green
+migrations, health 200, every endpoint working. Tenant isolation is entirely
+absent.
 
-`sql/019` dan `sql/022` membuat `awcms_app`/`awcms_worker`/`awcms_setup`
-**`NOLOGIN` dan tanpa password** — sengaja, karena password adalah secret dan
-secret tidak boleh masuk berkas migrasi. Jadi migrasi selesai bersih tetapi
-belum satu pun role bisa dipakai. Langkah pengaktifannya eksplisit, per
-deployment:
+`sql/019` and `sql/022` create `awcms_app`/`awcms_worker`/`awcms_setup` as
+**`NOLOGIN` and without a password** — deliberately, because a password is a
+secret and secrets must not go into a migration file. So the migrations finish
+cleanly but not one of those roles is usable yet. The activation step is explicit,
+per deployment:
 
 ```sql
-ALTER ROLE awcms_app    LOGIN PASSWORD '<secret app>';
-ALTER ROLE awcms_worker LOGIN PASSWORD '<secret worker>';
-ALTER ROLE awcms_setup  LOGIN PASSWORD '<secret setup>';
+ALTER ROLE awcms_app    LOGIN PASSWORD '<app secret>';
+ALTER ROLE awcms_worker LOGIN PASSWORD '<worker secret>';
+ALTER ROLE awcms_setup  LOGIN PASSWORD '<setup secret>';
 GRANT CONNECT ON DATABASE <db> TO awcms_app, awcms_worker, awcms_setup;
 ```
 
-Lalu arahkan env var runtime:
+Then point the runtime env vars:
 
 ```bash
-DATABASE_URL=postgres://awcms_app:<secret app>@<host>:5432/<db>
-WORKER_DATABASE_URL=postgres://awcms_worker:<secret worker>@<host>:5432/<db>
-SETUP_DATABASE_URL=postgres://awcms_setup:<secret setup>@<host>:5432/<db>
+DATABASE_URL=postgres://awcms_app:<app secret>@<host>:5432/<db>
+WORKER_DATABASE_URL=postgres://awcms_worker:<worker secret>@<host>:5432/<db>
+SETUP_DATABASE_URL=postgres://awcms_setup:<setup secret>@<host>:5432/<db>
 ```
 
-Ketiganya wajib, bukan dua: tanpa `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL`
-setiap job jatuh kembali ke `DATABASE_URL` = `awcms_app`, dan pemisahan
-least-privilege yang baru saja dibuat menjadi dekorasi. Worker purge cache tepi,
-misalnya, berjalan sebagai `awcms_worker` — `SELECT`/`UPDATE`/`DELETE` saja atas
-antrean.
+All three are mandatory, not two: without `WORKER_DATABASE_URL`/`SETUP_DATABASE_URL`
+every job falls back to `DATABASE_URL` = `awcms_app`, and the least-privilege
+separation just created becomes decoration. The edge cache purge worker, for
+example, runs as `awcms_worker` — only `SELECT`/`UPDATE`/`DELETE` on the queue.
 
-Verifikasi dengan kueri, bukan asumsi — ketiganya harus `f`/`f`:
+Verify with a query, not an assumption — all three must be `f`/`f`:
 
 ```sql
 SELECT rolname, rolcanlogin, rolsuper, rolbypassrls
 FROM pg_roles WHERE rolname LIKE 'awcms%';
 ```
 
-`ADMIN_DATABASE_URL` **tidak dibaca kode mana pun** — jangan menyetelnya; ia
-hanya menyesatkan pembaca env berikutnya.
+`ADMIN_DATABASE_URL` is **read by no code at all** — do not set it; it only
+misleads the next reader of the env.
 
-### Buktikan isolasinya, jangan diasumsikan
+### Prove the isolation, do not assume it
 
-Konfigurasi yang benar belum tentu isolasi yang bekerja. Kueri di bawah
-dijalankan **sebagai `awcms_app`** setelah tenant pertama ada, dan itulah bentuk
-bukti yang diterima — sebelum repointing, kueri yang sama berjalan sebagai
-superuser dan **lulus tanpa membuktikan apa pun**:
+Correct configuration is not necessarily working isolation. The queries below are
+run **as `awcms_app`** once the first tenant exists, and that is the accepted shape
+of proof — before repointing, the same queries ran as a superuser and **passed
+without proving anything**:
 
 ```sql
-                                                    -- hasil yang diterima
+                                                    -- accepted result
 SELECT count(*) FROM awcms_offices;                 -- 0  (fail-closed)
-SELECT set_config('app.current_tenant_id','<tenant nyata>',false);
+SELECT set_config('app.current_tenant_id','<real tenant>',false);
 SELECT count(*) FROM awcms_offices;                 -- 1
-SELECT set_config('app.current_tenant_id','<uuid asing>',false);
+SELECT set_config('app.current_tenant_id','<foreign uuid>',false);
 SELECT count(*) FROM awcms_offices;                 -- 0
 ```
 
-Tanpa tenant context hasilnya **0**, bukan "semua baris" — itu perbedaan antara
-policy yang menyaring dan policy yang inert.
+Without a tenant context the result is **0**, not "all rows" — that is the
+difference between a policy that filters and a policy that is inert.
 
-## Status nyata (11 Agustus 2026)
+## Actual status (11 August 2026)
 
-| Hal                            | Status                                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| App Coolify produksi           | ❌ baris `got4etcblum9kowdv4mrixqo` **tidak ada** di `applications` — bukan soft-delete                                |
-| Database produksi              | ❌ tidak ada di `standalone_postgresqls`; satu-satunya yang ada `awcms_staging` (sedang dibongkar)                     |
-| `https://awcms.ahlikoding.com` | ⚠️ menjawab **200** — tetapi dilayani `awcms-staging-varnish` (rule Traefik dua host) di atas database `awcms_staging` |
-| Development lokal              | ✅ paritas dev↔prod ditegakkan sejak 2026-07-26 (§Development lokal); angkanya diukur ulang, bukan dikutip             |
-| Halaman akar `/`               | ✅ halaman landing informasional (ADR-0083); catch-all `[...path].ts` tetap 404 bersih untuk path tak dikenal          |
+| Item                           | Status                                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Production Coolify app         | ❌ the row `got4etcblum9kowdv4mrixqo` **does not exist** in `applications` — not a soft-delete                               |
+| Production database            | ❌ not in `standalone_postgresqls`; the only one that exists is `awcms_staging` (being dismantled)                           |
+| `https://awcms.ahlikoding.com` | ⚠️ answers **200** — but is served by `awcms-staging-varnish` (two-host Traefik rule) on top of the `awcms_staging` database |
+| Local development              | ✅ dev↔prod parity enforced since 2026-07-26 (§Local development); the numbers are re-measured, not quoted                   |
+| Root page `/`                  | ✅ an informational landing page (ADR-0083); the catch-all `[...path].ts` still returns a clean 404 for unknown paths        |
 
-Pengukuran berikut berasal dari topologi dua-environment yang **sudah tidak
-ada** dan dipertahankan sebagai bukti historis, bukan status: mode `auto`
-terbukti di produksi 2026-07-26 (§Uji penerimaan), role least-privilege
-`rolsuper=f`/`rolbypassrls=f` terbukti 2026-07-25 (§Jebakan superuser), dan
-isolasi RLS `0/1/0` terbukti di bawah `awcms_app` pada tanggal yang sama.
+The measurements that follow come from a two-environment topology that **no longer
+exists** and are kept as historical evidence, not as status: `auto` mode was
+proven in production on 2026-07-26 (§Acceptance test), the least-privilege roles
+`rolsuper=f`/`rolbypassrls=f` were proven on 2026-07-25 (§Superuser trap), and RLS
+isolation `0/1/0` was proven under `awcms_app` on the same date.
 
-## Yang masih terbuka
+## What is still open
 
-- **Tegakkan kembali app + database produksi**, lalu **bongkar app, database,
-  dan Varnish bernama `awcms-staging-*`** beserta rule Traefik dua-host yang
-  dipasangnya (pekerjaan infrastruktur, di luar repo ini). Sampai keduanya
-  selesai, `awcms.ahlikoding.com` melayani database `awcms_staging` — bukan
-  data produksi.
-- Setelah database produksi baru berdiri: jalankan `bun run config:validate` +
-  `bun run security:readiness`, buktikan `0/1/0` sebagai `awcms_app`, dan jalankan
-  `bun run identity-access:permissions:backfill` (dry-run dulu) — tenant baru
-  tidak mewarisi apa pun dari database yang hilang.
-- Karena tidak ada lagi latihan pra-produksi, **backup yang sudah diverifikasi
-  bisa di-restore** (`deploy/backup/restore-postgres.sh`, mode verify-only)
-  adalah prasyarat tiap migrasi, bukan kebiasaan baik.
-- `awcms-micro-staging` sudah **dihapus** (app + DB) pada 2026-07-25; DNS-nya
-  memang tidak pernah ada.
+- **Re-establish the production app + database**, then **dismantle the app,
+  database, and Varnish named `awcms-staging-*`** along with the two-host Traefik
+  rule they install (infrastructure work, outside this repo). Until both are done,
+  `awcms.ahlikoding.com` serves the `awcms_staging` database — not production
+  data.
+- Once the new production database is standing: run `bun run config:validate` +
+  `bun run security:readiness`, prove `0/1/0` as `awcms_app`, and run
+  `bun run identity-access:permissions:backfill` (dry-run first) — a new tenant
+  inherits nothing from the database that is gone.
+- Because there is no pre-production rehearsal any more, **a backup that has been
+  verified restorable** (`deploy/backup/restore-postgres.sh`, verify-only mode) is
+  a precondition of every migration, not a good habit.
+- `awcms-micro-staging` has already been **deleted** (app + DB) on 2026-07-25; its
+  DNS never existed in the first place.

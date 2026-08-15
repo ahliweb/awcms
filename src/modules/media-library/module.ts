@@ -204,6 +204,11 @@ export const mediaLibraryModule = defineModule({
   jobs: [
     {
       command: "bun run news-media:reconcile",
+      schedule: {
+        mode: "cron",
+        expression: "0 2 * * *",
+        backlog: "bounded"
+      },
       purpose:
         "Reconcile awcms_news_media_objects metadata against the real R2 bucket contents; clean up expired pending uploads and grace-period-expired orphans in bounded, race-safe batches (dry-run supported).",
       recommendedSchedule: "Daily via cron/systemd timer.",

@@ -1,147 +1,149 @@
-# ADR-0063 — Grant berbasis kepemilikan lewat chokepoint, bukan menggantikannya
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0063-ownership-grants-run-through-the-authorization-chokepoint.id.md)
+
+# ADR-0063 — Ownership-based grants run THROUGH the chokepoint, they do not replace it
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0053](0053-platform-scoped-permissions.md) (gerbang platform-scope di chokepoint), [ADR-0060](0060-business-scope-hierarchy-provided-by-tenant-admin.md) (business-scope facts di chokepoint), [ADR-0057](0057-blog-page-lifecycle.md) §F + [ADR-0058](0058-unenforced-permissions-disposition.md) (gerbang cakupan permission — dan batasnya), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (kredensial mesin tak pernah mengotorisasi), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) (preseden: aturan yang tak tertulis di skill tidak diikuti)
+- **Date:** 2026-08-04
+- **Decision makers:** @ahliweb
+- **Related:** [ADR-0053](0053-platform-scoped-permissions.md) (platform-scope gate at the chokepoint), [ADR-0060](0060-business-scope-hierarchy-provided-by-tenant-admin.md) (business-scope facts at the chokepoint), [ADR-0057](0057-blog-page-lifecycle.md) §F + [ADR-0058](0058-unenforced-permissions-disposition.md) (permission coverage gate — and its limits), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (machine credentials never authorize), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) (precedent: a rule not written in a skill is not followed)
 
-## Konteks
+## Context
 
-### 1. Tiga handler memutuskan permission di luar chokepoint
+### 1. Three handlers decide permissions outside the chokepoint
 
-`authorizeInTransaction` adalah satu-satunya tempat empat lapisan ini dievaluasi:
-evaluator ABAC (`evaluateAccess`), gerbang platform-scope (ADR-0053),
-business-scope facts (ADR-0060), dan SoD aksi-waktu (#181).
+`authorizeInTransaction` is the single place where these four layers are
+evaluated: the ABAC evaluator (`evaluateAccess`), the platform-scope gate
+(ADR-0053), business-scope facts (ADR-0060), and action-time SoD (#181).
 
-Tiga handler tidak memanggilnya dan menyusun keputusannya sendiri dari
-`fetchGrantedPermissionKeys` + aturan domain:
+Three handlers do not call it and assemble their own decision out of
+`fetchGrantedPermissionKeys` + domain rules:
 
 - `PATCH /api/v1/blog/posts/{id}`
 - `POST /api/v1/blog/posts/{id}/submit-review`
 - `PATCH /api/v1/blog/pages/{id}`
 
-Akibatnya konkret: **sebuah tenant yang menulis policy ABAC `deny` atas
-`blog_content.posts.update` mendapati policy-nya dihormati di sebagian rute dan
-diabaikan di tiga rute ini** — tanpa error, tanpa test merah, tanpa gerbang
-merah.
+The concrete consequence: **a tenant that writes an ABAC `deny` policy over
+`blog_content.posts.update` finds its policy honoured on some routes and ignored
+on these three** — no error, no red test, no red gate.
 
-### 2. Ketiganya BUKAN kelalaian — chokepoint memang tidak bisa menampungnya
+### 2. None of the three is an OVERSIGHT — the chokepoint genuinely cannot hold them
 
-Ini bagian yang mengubah bentuk keputusan.
+This is the part that changes the shape of the decision.
 
-Ketiga handler menegakkan aturan yang sengaja ada di dokumen produk (#538): **penulis
-boleh menyunting kontennya sendiri yang belum terbit MESKIPUN tidak memegang
-`blog_content.posts.update`.** Itu sumbu otorisasi yang **tidak bisa diekspresikan
-katalog permission** — ia properti relasi subjek↔resource, bukan properti role.
+All three handlers enforce a rule that deliberately exists in the product
+document (#538): **an author may edit their own unpublished content EVEN IF they
+do not hold `blog_content.posts.update`.** That is an authorization axis the
+**permission catalogue cannot express** — it is a property of the subject↔resource
+relation, not a property of a role.
 
-`authorizeInTransaction` mengembalikan `denied` **sebelum** aturan domain mana pun
-sempat dikonsultasi. Jadi menaruhnya di depan `evaluatePostUpdateAccess` akan
-**menghapus jalur penulis**: seorang penulis tanpa permission ditolak di
-chokepoint, dan fitur yang dispesifikasikan hilang.
+`authorizeInTransaction` returns `denied` **before** any domain rule gets a
+chance to be consulted. So putting it in front of `evaluatePostUpdateAccess`
+would **delete the author pathway**: an author without the permission is denied
+at the chokepoint, and the specified feature disappears.
 
-Dengan kata lain: ketiga rute itu bukan memilih jalan pintas. **Mereka satu-satunya
-jalan yang tersedia.** Cacatnya ada di seam chokepoint, bukan di disiplin
-penulisnya — dan memperbaikinya dengan "panggil saja chokepoint" adalah regresi
-fungsional yang akan lolos review karena terlihat seperti pengetatan keamanan.
+In other words: those three routes are not taking a shortcut. **They are the only
+road available.** The defect is in the chokepoint's seam, not in their authors'
+discipline — and fixing it with "just call the chokepoint" is a functional
+regression that would pass review because it looks like a security tightening.
 
-### 3. Koreksi terhadap asesmen yang memicu ADR ini
+### 3. A correction to the assessment that triggered this ADR
 
 [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §2
-menulis temuan ini sebagai **satu** rute menyimpang, dengan
-`PATCH /api/v1/blog/posts/{id}` sebagai **contoh pola yang BENAR** ("memanggil
-`authorizeInTransaction` lebih dulu, lalu `evaluatePostUpdateAccess`").
+writes this finding up as **one** deviating route, with
+`PATCH /api/v1/blog/posts/{id}` as **an example of the CORRECT pattern** ("calls
+`authorizeInTransaction` first, then `evaluatePostUpdateAccess`").
 
-**Itu salah.** Berkas `blog/posts/[id].ts` memanggil `authorizeInTransaction` dua
-kali — di `GET` (baris 83) dan di `DELETE` (baris 431) — sementara `PATCH` di
-berkas yang sama tidak sama sekali. Pembacaan tingkat-BERKAS menggabungkan
-ketiganya jadi satu alur dan menyimpulkan kepatuhan yang tidak ada.
+**That is wrong.** The file `blog/posts/[id].ts` calls `authorizeInTransaction`
+twice — in `GET` (line 83) and in `DELETE` (line 431) — while `PATCH` in the same
+file does not at all. A FILE-level reading merged all three into one flow and
+concluded a compliance that does not exist.
 
-Kelasnya sama persis dengan yang ADR-0058 §1 catat dan ADR-0059 ulangi: sebuah
-dugaan ditulis sebagai temuan, lalu tersalin ke dokumen sebagai keputusan. Kali
-ini korbannya asesmen itu sendiri. Asesmen sudah dikoreksi di PR yang sama dengan
-ADR ini, dan gerbang di §Keputusan **mengiris per-HANDLER justru karena itulah
-kesalahan yang benar-benar terjadi**.
+The class is exactly the one ADR-0058 §1 recorded and ADR-0059 repeated: a guess
+written down as a finding, then copied into a document as a decision. This time
+the victim was the assessment itself. The assessment has been corrected in the
+same PR as this ADR, and the gate in §Decision **slices per HANDLER precisely
+because that is the error that actually happened**.
 
-### 4. Kenapa gerbang cakupan permission tidak melihatnya
+### 4. Why the permission coverage gate did not see it
 
-`access:permissions:enforcement:check` bertanya **"apakah permission ini punya
-penegak?"**. `blog_content.posts.update` punya — `GET`/`DELETE` di berkas yang
-sama, dan rute lain. Ia tidak pernah bertanya **"apakah SETIAP situs penegakan
-memakai chokepoint?"**. Pengulangan pelajaran PR #351: gerbang cakupan dan
-kebenaran situs penegakan adalah dua pertanyaan berbeda, dan sebuah kontrol bisa
-lulus yang pertama sambil salah di yang kedua.
+`access:permissions:enforcement:check` asks **"does this permission have an
+enforcer?"**. `blog_content.posts.update` does — `GET`/`DELETE` in the same file,
+and other routes. It never asks **"does EVERY enforcement site use the
+chokepoint?"**. A repeat of the PR #351 lesson: coverage gates and correctness of
+the enforcement site are two different questions, and a control can pass the
+first while being wrong on the second.
 
-## Keputusan
+## Decision
 
-### §A — `ownershipGrant`: MELEBARKAN, bukan MEMOTONG
+### §A — `ownershipGrant`: it WIDENS, it does not SHORT-CIRCUIT
 
-`authorizeInTransaction` menerima opsi baru:
+`authorizeInTransaction` accepts a new option:
 
 ```ts
 options?: { ownershipGrant?: { granted: boolean; reason: string } }
 ```
 
-Saat `granted`, guard **menambahkan permission key yang diminta ke himpunan yang
-dievaluasi** — lalu menjalankan `evaluateAccess` seperti biasa. Ia tidak
-mengembalikan allow lebih awal, tidak melewati satu pun lapisan.
+When `granted`, the guard **adds the requested permission key to the set being
+evaluated** — and then runs `evaluateAccess` as usual. It does not return allow
+early, and it skips not a single layer.
 
-Konsekuensinya persis yang diinginkan: tenant isolation, ABAC (termasuk `deny`
-eksplisit), business-scope, dan SoD **tetap bisa menolak**. Kepemilikan hanya
-menjawab "apakah subjek ini boleh dianggap memegang permission-nya", bukan
-"apakah aksi ini boleh".
+The consequence is exactly the one wanted: tenant isolation, ABAC (including an
+explicit `deny`), business-scope, and SoD **can still deny**. Ownership only
+answers "may this subject be treated as holding the permission", not "is this
+action allowed".
 
-**Kredensial mesin dikecualikan.** Ia MENGAUTENTIKASI dan tak pernah
-MENGOTORISASI (ADR-0049 §3), jadi token build yang diarahkan ke akun seorang
-penulis tidak boleh mewarisi kepemilikan penulis itu.
+**Machine credentials are excluded.** They AUTHENTICATE and never AUTHORIZE
+(ADR-0049 §3), so a build token pointed at an author's account must not inherit
+that author's ownership.
 
-**Decision log menandai allow berbasis kepemilikan** (`ownership_grant:<reason>`).
-Tanpa itu barisnya terbaca identik dengan allow RBAC, dan auditor yang bertanya
-"siapa yang bisa melakukan ini, dan kenapa" mendapat jawaban salah untuk
-satu-satunya kasus yang jawabannya bukan "sebuah role memberikannya". DENY tidak
-pernah dilabeli ulang.
+**The decision log marks an ownership-based allow** (`ownership_grant:<reason>`).
+Without it the row reads identically to an RBAC allow, and an auditor asking "who
+can do this, and why" gets the wrong answer for the one case whose answer is not
+"a role conferred it". DENY is never relabelled.
 
-### §B — Gerbang `access:chokepoint:check`, di-iris per HANDLER
+### §B — The `access:chokepoint:check` gate, sliced per HANDLER
 
-Setiap handler yang memanggil `fetchGrantedPermissionKeys` wajib juga melewati
-`authorizeInTransaction`/`defineTenantRoute`, atau terdaftar sebagai pengecualian
-ber-alasan berkunci `<berkas>#<METHOD>`.
+Every handler that calls `fetchGrantedPermissionKeys` must also pass through
+`authorizeInTransaction`/`defineTenantRoute`, or be registered as a reasoned
+exception keyed `<file>#<METHOD>`.
 
-**Per-handler, bukan per-berkas, adalah keputusan yang menanggung beban** — §3 di
-atas adalah buktinya bahwa pembacaan per-berkas gagal justru pada kasus nyata.
-Kunci ber-METHOD juga memastikan sebuah pengecualian tak pernah melebar ke
-handler tetangga di berkas yang sama, yang persis cara cacat aslinya bersembunyi.
+**Per-handler, not per-file, is the decision that carries the weight** — §3 above
+is the proof that a per-file reading fails precisely on the real case. The
+METHOD-keyed key also ensures an exception never widens to a neighbouring handler
+in the same file, which is exactly how the original defect hid.
 
-Dua pengecualian, keduanya diverifikasi:
+Two exceptions, both verified:
 
-- `auth/login.ts#POST` — **pra-autentikasi**: belum ada subjek untuk diotorisasi.
-- `access/evaluate.ts#POST` — **introspeksi diri**: memantulkan keputusan
-  `evaluateAccess` untuk permintaan CALLER SENDIRI dan memanggil evaluator yang
-  sama secara langsung, jadi ABAC **diterapkan**, bukan dilewati.
+- `auth/login.ts#POST` — **pre-authentication**: there is no subject yet to authorize.
+- `access/evaluate.ts#POST` — **self-introspection**: it reflects the
+  `evaluateAccess` decision for the CALLER'S OWN request and calls the same
+  evaluator directly, so ABAC is **applied**, not bypassed.
 
-Pengecualian yang **mati** (handler-nya tak lagi bypass, atau tak ada lagi) ikut
-dilaporkan — aturan yang sama yang ADR-0058 dan ADR-0062 pakai.
+**Dead** exceptions (whose handler no longer bypasses, or no longer exists) are
+reported too — the same rule ADR-0058 and ADR-0062 use.
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Nol handler memutuskan permission di luar chokepoint. Policy
-ABAC sebuah tenant kini berlaku seragam. Aturan kepemilikan tetap hidup, dan kini
-**terbaca di decision log sebagai apa adanya**.
+**What we get.** Zero handlers decide permissions outside the chokepoint. A
+tenant's ABAC policy now applies uniformly. The ownership rule stays alive, and is
+now **readable in the decision log for what it is**.
 
-**Yang dibayar.** Satu opsi baru di spine keamanan — permukaan yang harus
-dilindungi. Perlindungannya: guard tidak boleh MEMOTONG, dan itu ditegakkan
-sebagai kontrak atas teks sumber guard itu sendiri, karena implementasi salahnya
-(`if (ownership.granted) return { allowed: true }`) satu baris, lolos setiap test
-perilaku `evaluateAccess`, dan tak akan pernah terlihat oleh test evaluator mana
-pun.
+**What we pay.** One new option on the security spine — a surface that has to be
+protected. Its protection: the guard must not SHORT-CIRCUIT, and that is enforced
+as a contract over the guard's own source text, because the wrong implementation
+(`if (ownership.granted) return { allowed: true }`) is one line, passes every
+behavioural test of `evaluateAccess`, and would never be seen by any evaluator
+test.
 
-> **Satu klaim yang sempat ditulis di test ADR ini juga SALAH, dan mutasi yang
-> membantahnya.** Draf pertama menyatakan keamanannya berasal dari urutan — "ABAC
-> dicocokkan SEBELUM cek key RBAC, jadi kepemilikan tak bisa mengalahkan deny".
-> Dimutasi dengan menaikkan cek RBAC ke atas blok ABAC: **test tetap hijau**,
-> karena `deny` mengembalikan hasil di kedua urutan. Urutannya tidak relevan.
-> Yang menjadi properti sesungguhnya adalah **tidak memotong**, dan itulah yang
-> sekarang diuji — termasuk di tingkat sumber guard.
+> **One claim that was briefly written into this ADR's test was ALSO WRONG, and a
+> mutation disproved it.** The first draft stated the safety came from ordering —
+> "ABAC is matched BEFORE the RBAC key check, so ownership cannot beat a deny".
+> Mutated by hoisting the RBAC check above the ABAC block: **the test stayed
+> green**, because `deny` returns a result in either order. The ordering is
+> irrelevant. The real property is **not short-circuiting**, and that is what is
+> now tested — including at the level of the guard's source.
 
-**Nol migrasi, nol permission baru, nol perubahan OpenAPI.** Perilaku yang
-berubah hanya satu arah: aksi yang sebelumnya lolos karena melewati ABAC kini
-bisa ditolak policy tenant — yang memang tujuannya.
+**Zero migrations, zero new permissions, zero OpenAPI changes.** The only
+behaviour that changes moves in one direction: an action that previously passed
+because it bypassed ABAC can now be denied by tenant policy — which is exactly the
+point.

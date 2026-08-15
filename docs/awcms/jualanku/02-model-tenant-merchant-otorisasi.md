@@ -1,180 +1,182 @@
-# 02 — Tenant, merchant, role, dan otorisasi
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](02-model-tenant-merchant-otorisasi.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status.
+# 02 — Tenant, merchant, role, and authorization
 
-Dokumen ini adalah tulang punggung keamanan porting Jualanku. Satu kalimat yang
-harus dipegang: **RLS memisahkan tenant, bukan merchant.** Semua yang lain di
-bawah ada karena kalimat itu.
+> Plan. See the [README](README.md) for status.
 
-## 1. Model tenant pilot
+This document is the security backbone of the Jualanku porting. One sentence must
+be held onto: **RLS separates tenants, not merchants.** Everything else below
+exists because of that sentence.
 
-Satu tenant penyelenggara (`JUALANKU_MAIN`). Merchant, membership, affiliate,
-katalog, dan aktivitas adalah **entitas domain di dalam tenant itu** — bukan
-tenant sendiri. Konsekuensinya:
+## 1. Pilot tenant model
 
-- Direktori lintas merchant, taksonomi bersama, antrean moderasi, dan reporting
-  platform tetap query biasa dalam satu tenant.
-- Isolasi antar merchant **tidak gratis** dan harus dibangun (bagian 2–4).
-- Model multi-penyelenggara/white-label tetap terbuka di kemudian hari justru
-  karena isolasi merchant tidak menumpang batas tenant.
+One operator tenant (`JUALANKU_MAIN`). Merchants, memberships, affiliates,
+catalogue, and activity are **domain entities inside that tenant** — not tenants
+of their own. The consequences:
 
-## 2. Enam lapis isolasi
+- The cross-merchant directory, the shared taxonomy, the moderation queue, and
+  platform reporting stay ordinary queries within a single tenant.
+- Isolation between merchants is **not free** and has to be built (sections 2–4).
+- A multi-operator/white-label model stays open for later precisely because
+  merchant isolation does not ride on the tenant boundary.
 
-| Lapis      | Memisahkan                | Kontrol                                                                                       | Gagal-nya seperti apa                               |
-| ---------- | ------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Tenant     | Penyelenggara/white-label | PostgreSQL `FORCE` RLS + tenant context dari server                                           | Kebocoran lintas penyelenggara                      |
-| Merchant   | Usaha dalam satu tenant   | Merchant sebagai **business scope** + grant membership + predikat kepemilikan di setiap query | Merchant A membaca/menulis data merchant B          |
-| Role       | Jenis tindakan            | RBAC permission ter-seed migrasi + `configure`/`approve` terpisah dari `read`                 | Editor mengubah rekening bank                       |
-| Workflow   | Maker/checker/approver    | `workflow_approval` + `sodRules` (ADR-0031)                                                   | Pembuat payout menyetujui payout-nya sendiri        |
-| Field data | PII & keuangan            | Projection per-purpose + masking (`_shared` masking identifier)                               | NIK/rekening bocor lewat endpoint yang "hanya" list |
-| Permukaan  | Publik/portal/internal    | Namespace rute, audience sesi, `noindex`, cache policy, security header                       | Halaman privat masuk sitemap atau cache publik      |
+## 2. Six layers of isolation
 
-## 3. Merchant sebagai business scope
+| Layer      | Separates              | Control                                                                                  | What its failure looks like                                    |
+| ---------- | ---------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Tenant     | Operator/white-label   | PostgreSQL `FORCE` RLS + tenant context from the server                                  | Cross-operator leak                                            |
+| Merchant   | Businesses in a tenant | Merchant as a **business scope** + membership grant + ownership predicate in every query | Merchant A reads/writes merchant B's data                      |
+| Role       | Kind of action         | RBAC permissions seeded by migration + `configure`/`approve` separate from `read`        | An editor changes the bank account                             |
+| Workflow   | Maker/checker/approver | `workflow_approval` + `sodRules` (ADR-0031)                                              | The payout's creator approves their own payout                 |
+| Data field | PII & financial        | Per-purpose projection + masking (`_shared` identifier masking)                          | NIK/bank account leaks through an endpoint that "merely" lists |
+| Surface    | Public/portal/internal | Route namespace, session audience, `noindex`, cache policy, security headers             | A private page ends up in the sitemap or in a public cache     |
 
-Repo ini sudah punya lapisan otorisasi berbasis scope (ADR-0030) dengan port
-`src/modules/_shared/ports/business-scope-hierarchy-port.ts`. Implementasi base-nya
-mengembalikan `resolved: false` untuk **setiap** tipe scope, dan pemanggil wajib
-**default-deny untuk aksi high-risk** saat `resolved: false`. Artinya: selama
-tidak ada modul yang menyediakan hierarki, aksi merchant high-risk gagal tertutup
-— aman, tapi juga tidak berfungsi.
+## 3. Merchant as a business scope
 
-Rancangannya:
+This repo already has a scope-based authorization layer (ADR-0030) with the port
+`src/modules/_shared/ports/business-scope-hierarchy-port.ts`. Its base
+implementation returns `resolved: false` for **every** scope type, and the caller
+must **default-deny high-risk actions** when `resolved: false`. Which means: as
+long as no module provides the hierarchy, high-risk merchant actions fail closed —
+safe, but also non-functional.
 
-- `jualanku_directory` **menyediakan** capability hierarki scope untuk tipe
-  `merchant`. Satu merchant = satu scope; grup/jaringan usaha di masa depan
-  menjadi scope induk tanpa mengubah pemanggil mana pun.
-- **Membership merchant = grant scope**, dengan effective dating (`valid_from`,
-  `valid_until`). Pencabutan berlaku seketika karena evaluasi memakai `now`
-  server, bukan kolom boolean yang harus diingat seseorang untuk di-set.
-- **Assisted onboarding ("Pasukan Semut") = grant scope bertenggat** ke satu
-  merchant. Pendamping tidak pernah mendapat role global.
-- Policy ABAC merujuk `resource.businessScopeId` — atribut yang **sudah ada** di
-  allow-list. Tidak ada atribut baru yang ditambahkan untuk Jualanku
-  (lihat [08](08-koreksi-dokumen-validasi.md) §3).
+The design:
 
-**Dua sabuk pengaman, bukan satu.** ABAC adalah lapis kebijakan; lapis kedua
-adalah **predikat kepemilikan di query**. Setiap SELECT/UPDATE/DELETE
-merchant-scoped membawa `merchant_id IN (<scope grant terselesaikan>)`. Kalau
-suatu hari policy salah tulis, query tetap tidak mengembalikan baris milik orang
-lain.
+- `jualanku_directory` **provides** the scope hierarchy capability for the
+  `merchant` type. One merchant = one scope; future business groups/networks
+  become parent scopes without changing any caller.
+- **Merchant membership = a scope grant**, with effective dating (`valid_from`,
+  `valid_until`). Revocation takes effect immediately because the evaluation uses
+  server `now`, not a boolean column somebody has to remember to set.
+- **Assisted onboarding ("Pasukan Semut") = a time-bounded scope grant** to a
+  single merchant. The assistant never gets a global role.
+- ABAC policies refer to `resource.businessScopeId` — an attribute that
+  **already exists** in the allow-list. No new attribute is added for Jualanku
+  (see [08](08-koreksi-dokumen-validasi.md) §3).
 
-## 4. Katalog role
+**Two safety belts, not one.** ABAC is the policy layer; the second layer is the
+**ownership predicate in the query**. Every merchant-scoped SELECT/UPDATE/DELETE
+carries `merchant_id IN (<resolved scope grants>)`. If one day a policy is
+written wrong, the query still returns no rows belonging to somebody else.
 
-Role code di bawah adalah role tenant `awcms` biasa; permission-nya diseed lewat
-migrasi (descriptor modul saja **tidak** memberi permission ke tenant yang sudah
-ada).
+## 4. Role catalogue
 
-| Persona               | Role code           | Batas utama                                                              |
-| --------------------- | ------------------- | ------------------------------------------------------------------------ |
-| Owner SaaS            | `platform_owner`    | Governance & break-glass; bukan role harian, setiap pemakaian ter-audit. |
-| Admin platform        | `platform_admin`    | Konfigurasi operasional; **tidak** menyetujui payout.                    |
-| Verifier merchant     | `merchant_verifier` | Menilai bukti; tidak menyentuh payout maupun katalog.                    |
-| Moderator konten      | `content_moderator` | Moderasi listing, ulasan, komplain.                                      |
-| Customer success      | `customer_success`  | Onboarding & support; akses data sensitif dibatasi purpose.              |
-| Finance maker         | `finance_operator`  | Menyiapkan payout/invoice.                                               |
-| Finance checker       | `finance_approver`  | Menyetujui payout; **tidak boleh** pembuatnya (SoD).                     |
-| Risk/compliance       | `risk_compliance`   | Legal hold, audit, kebijakan, review fraud.                              |
-| Merchant owner        | `merchant_owner`    | Mengelola merchant miliknya + membership.                                |
-| Merchant editor       | `merchant_editor`   | Konten/katalog; **tanpa** rekening, identitas legal, paket, atau role.   |
-| Merchant analyst      | `merchant_analyst`  | Analytics read-only merchant miliknya.                                   |
-| Affiliate             | `affiliate_member`  | Tautan, konversi, dan payout miliknya sendiri.                           |
-| Pendamping onboarding | `onboarding_agent`  | Hanya merchant yang di-assign, selama masa berlaku assignment.           |
+The role codes below are ordinary `awcms` tenant roles; their permissions are
+seeded via migration (a module descriptor alone does **not** give permissions to
+an already existing tenant).
 
-Tiga role terakhir plus `merchant_*` **tidak pernah** mendapat permission modul
-internal apa pun, dan tidak punya entri navigasi ke `/admin/**`.
+| Persona              | Role code           | Main boundary                                                                  |
+| -------------------- | ------------------- | ------------------------------------------------------------------------------ |
+| SaaS owner           | `platform_owner`    | Governance & break-glass; not a day-to-day role, every use is audited.         |
+| Platform admin       | `platform_admin`    | Operational configuration; does **not** approve payouts.                       |
+| Merchant verifier    | `merchant_verifier` | Assesses evidence; touches neither payouts nor the catalogue.                  |
+| Content moderator    | `content_moderator` | Moderates listings, reviews, complaints.                                       |
+| Customer success     | `customer_success`  | Onboarding & support; access to sensitive data is purpose-limited.             |
+| Finance maker        | `finance_operator`  | Prepares payouts/invoices.                                                     |
+| Finance checker      | `finance_approver`  | Approves payouts; **must not** be their creator (SoD).                         |
+| Risk/compliance      | `risk_compliance`   | Legal hold, audit, policy, fraud review.                                       |
+| Merchant owner       | `merchant_owner`    | Manages their own merchant + memberships.                                      |
+| Merchant editor      | `merchant_editor`   | Content/catalogue; **without** bank accounts, legal identity, plans, or roles. |
+| Merchant analyst     | `merchant_analyst`  | Read-only analytics for their own merchant.                                    |
+| Affiliate            | `affiliate_member`  | Their own links, conversions, and payouts.                                     |
+| Onboarding assistant | `onboarding_agent`  | Only the merchants assigned to them, for the assignment's validity period.     |
 
-## 5. Bentuk permission
+The last three roles plus `merchant_*` **never** get any internal module
+permission, and have no navigation entry into `/admin/**`.
 
-Kunci permission di repo ini adalah `${moduleKey}.${activityCode}.${action}`, dan
-`action` harus salah satu nilai `AccessAction` yang **sudah ada**
-(`src/modules/identity-access/domain/access-control.ts`). Tidak ada `submit`,
-tidak ada `payout`, tidak ada `verify` — memakai action yang tidak ada di union
-menghasilkan permission yang tidak pernah ter-seed dan deny senyap terhadap
-pemilik sekalipun.
+## 5. Permission shape
 
-Pemetaan yang dipakai:
+The permission key in this repo is `${moduleKey}.${activityCode}.${action}`, and
+`action` must be one of the **already existing** `AccessAction` values
+(`src/modules/identity-access/domain/access-control.ts`). There is no `submit`,
+no `payout`, no `verify` — using an action that is not in the union produces a
+permission that is never seeded and a silent deny against even the owner.
 
-| Maksud bisnis                         | Action yang dipakai | Alasan                                                                  |
-| ------------------------------------- | ------------------- | ----------------------------------------------------------------------- |
-| Melihat data                          | `read`              | —                                                                       |
-| Membuat/menyunting entitas            | `create` / `update` | —                                                                       |
-| Mengajukan (submit) verifikasi/payout | `create`            | Pengajuan = membuat case/request, bukan action baru.                    |
-| Menyetujui verifikasi/payout/moderasi | `approve`           | High-risk; pasangan SoD-nya `create`.                                   |
-| Menolak                               | `reject`            | Ada di union; non-high-risk — keputusan negatif tidak memindahkan uang. |
-| Menerbitkan halaman usaha             | `publish`           | Sudah dipakai lifecycle konten repo ini.                                |
-| Menonaktifkan merchant/affiliate      | `disable`           | —                                                                       |
-| Memulihkan yang di-soft-delete        | `restore`           | —                                                                       |
-| Mengubah kebijakan/komisi/paket       | `configure`         | Bukan `update` — authoring kebijakan adalah kelas sendiri.              |
-| Menugaskan pendamping/role            | `assign`            | —                                                                       |
-| Ekspor laporan                        | `export`            | Menghasilkan artefak; high-risk untuk data PII/keuangan.                |
+The mapping used:
 
-Seluruh action di tabel itu sudah ada di union saat dokumen ini ditulis
-(`read`, `create`, `update`, `approve`, `reject`, `publish`, `disable`,
-`restore`, `configure`, `assign`, `export`). Menambah nilai union baru butuh ADR
-tersendiri — dan permission yang memakai action tak-ter-seed akan men-_deny_
-bahkan pemilik tenant, hijau di CI karena tidak ada yang mengujinya.
+| Business intent                            | Action used         | Reason                                                                    |
+| ------------------------------------------ | ------------------- | ------------------------------------------------------------------------- |
+| Viewing data                               | `read`              | —                                                                         |
+| Creating/editing an entity                 | `create` / `update` | —                                                                         |
+| Submitting a verification/payout           | `create`            | A submission = creating a case/request, not a new action.                 |
+| Approving a verification/payout/moderation | `approve`           | High-risk; its SoD counterpart is `create`.                               |
+| Rejecting                                  | `reject`            | Present in the union; non-high-risk — a negative decision moves no money. |
+| Publishing a business page                 | `publish`           | Already used by this repo's content lifecycle.                            |
+| Disabling a merchant/affiliate             | `disable`           | —                                                                         |
+| Restoring something soft-deleted           | `restore`           | —                                                                         |
+| Changing policy/commission/plan            | `configure`         | Not `update` — policy authoring is a class of its own.                    |
+| Assigning an assistant/role                | `assign`            | —                                                                         |
+| Exporting a report                         | `export`            | Produces an artifact; high-risk for PII/financial data.                   |
 
-## 6. Aturan ABAC wajib
+Every action in that table already existed in the union when this document was
+written (`read`, `create`, `update`, `approve`, `reject`, `publish`, `disable`,
+`restore`, `configure`, `assign`, `export`). Adding a new union value needs its
+own ADR — and a permission using an unseeded action will _deny_ even the tenant
+owner, green in CI because nothing tests it.
 
-Ditulis dengan atribut yang ada di allow-list (`subject.roles`,
+## 6. Mandatory ABAC rules
+
+Written with the attributes present in the allow-list (`subject.roles`,
 `subject.tenantUserId`, `resource.businessScopeId`, `resource.ownerTenantUserId`,
 `resource.status`, `resource.resourceType`, `resource.amount`, `action`,
 `env.now`, `env.ipTrusted`).
 
-1. **Kepemilikan merchant.** Akses resource bertipe merchant hanya diizinkan bila
-   `resource.businessScopeId` termasuk grant scope subjek yang aktif pada
-   `env.now`. `resolved: false` dari resolver hierarki = **deny** untuk aksi
-   high-risk.
-2. **Editor bukan pemilik.** `merchant_editor` ditolak pada resource bertipe
-   rekening bank, identitas legal, kepemilikan, langganan, dan penugasan role —
-   deny eksplisit, karena deny menang atas allow.
-3. **Approver bukan pembuat.** `finance_approver` ditolak menyetujui payout yang
-   `resource.ownerTenantUserId == subject.tenantUserId`. Ini deny ABAC **dan**
-   `sodRules`; dua-duanya, karena satu-satunya adalah satu titik kegagalan.
-4. **Pendamping hanya assignment aktif.** Sama seperti (1), dengan grant
-   bertenggat; kedaluwarsa berlaku pada `env.now`, tanpa job pembersih.
-5. **Affiliate tidak boleh self-referral.** Konversi yang identitas/instrumen
-   pembayaran/merchant-nya terklasifikasi self-referral ditolak untuk atribusi
-   dan payout.
-6. **Break-glass ber-jejak.** `platform_owner` boleh melewati batas tertentu
-   hanya lewat jalur break-glass yang sudah ada, selalu ter-audit, dan
-   `env.ipTrusted` diperhitungkan.
-7. **Atribut resource selalu dari baris nyata.** Endpoint membaca resource lebih
-   dulu, lalu menyusun `resourceAttributes`. `merchantId` di body adalah input
-   yang divalidasi, bukan klaim yang dipercaya.
+1. **Merchant ownership.** Access to a merchant-typed resource is only allowed if
+   `resource.businessScopeId` is among the subject's scope grants active at
+   `env.now`. A `resolved: false` from the hierarchy resolver = **deny** for
+   high-risk actions.
+2. **An editor is not an owner.** `merchant_editor` is denied on resources typed
+   bank account, legal identity, ownership, subscription, and role assignment —
+   an explicit deny, because deny beats allow.
+3. **An approver is not the creator.** `finance_approver` is denied approving a
+   payout whose `resource.ownerTenantUserId == subject.tenantUserId`. This is an
+   ABAC deny **and** `sodRules`; both, because just one is a single point of
+   failure.
+4. **An assistant only has an active assignment.** Same as (1), with a
+   time-bounded grant; expiry takes effect at `env.now`, with no cleanup job.
+5. **An affiliate must not self-refer.** A conversion whose
+   identity/payment-instrument/merchant is classified as a self-referral is
+   rejected for attribution and payout.
+6. **Break-glass leaves a trail.** `platform_owner` may cross certain boundaries
+   only through the existing break-glass path, always audited, and with
+   `env.ipTrusted` taken into account.
+7. **Resource attributes always come from the real row.** The endpoint reads the
+   resource first, then assembles `resourceAttributes`. The `merchantId` in the
+   body is validated input, not a trusted claim.
 
-## 7. Matriks negative-authorization test
+## 7. Negative-authorization test matrix
 
-Test ini ditulis **sebelum** implementasi dan harus merah dulu. Hijau sejak awal
-= test tidak menguji apa pun.
+These tests are written **before** the implementation and must be red first.
+Green from the start = the test tests nothing.
 
-| #   | Skenario                                                                 | Ekspektasi                                                                 |
-| --- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| 1   | Merchant A membaca katalog/lead/analytics merchant B                     | 404 anti-oracle (bukan 403 yang mengonfirmasi keberadaan)                  |
-| 2   | Merchant A mengubah `merchantId` di body ke merchant B                   | Diabaikan; resource owner diambil server. Tidak ada tulisan ke merchant B. |
-| 3   | `merchant_editor` mengubah rekening bank/identitas legal                 | 403 + decision log; tidak ada baris berubah                                |
-| 4   | `finance_approver` menyetujui payout buatannya sendiri                   | 409/403 `SOD_CONFLICT` + audit                                             |
-| 5   | Affiliate membuka payout/konversi affiliate lain                         | 404 anti-oracle                                                            |
-| 6   | Pendamping membuka merchant di luar assignment, atau setelah kedaluwarsa | 403; kedaluwarsa berlaku tanpa job                                         |
-| 7   | Sesi merchant memanggil `/api/v1/jualanku/admin/*`                       | 403 sebelum service bisnis dijalankan                                      |
-| 8   | Modul Jualanku dinonaktifkan untuk tenant, endpoint tetap dipanggil      | 403 `MODULE_DISABLED`                                                      |
-| 9   | Sesi tenant lain dipakai pada host Jualanku                              | Ditolak sebelum service bisnis                                             |
-| 10  | API publik meminta merchant/produk draft atau ditolak moderasi           | Tidak ditemukan; draft tidak pernah masuk projection publik                |
-| 11  | Resolver hierarki scope mengembalikan `resolved: false`                  | Aksi high-risk **deny**, bukan lolos                                       |
-| 12  | Payout disetujui dua kali (retry/double submit)                          | Idempotent: satu efek, satu entri ledger                                   |
-| 13  | Cross-tenant: baris merchant tenant lain diakses sebagai `awcms_app`     | 0 baris (RLS terbukti, diuji sebagai role aplikasi, bukan superuser)       |
+| #   | Scenario                                                                     | Expectation                                                                   |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 1   | Merchant A reads merchant B's catalogue/leads/analytics                      | 404 anti-oracle (not a 403 that confirms existence)                           |
+| 2   | Merchant A changes `merchantId` in the body to merchant B                    | Ignored; the resource owner is taken from the server. No write to merchant B. |
+| 3   | `merchant_editor` changes the bank account/legal identity                    | 403 + decision log; no row changes                                            |
+| 4   | `finance_approver` approves a payout they created themselves                 | 409/403 `SOD_CONFLICT` + audit                                                |
+| 5   | An affiliate opens another affiliate's payout/conversion                     | 404 anti-oracle                                                               |
+| 6   | An assistant opens a merchant outside their assignment, or after expiry      | 403; expiry takes effect with no job                                          |
+| 7   | A merchant session calls `/api/v1/jualanku/admin/*`                          | 403 before the business service can run                                       |
+| 8   | The Jualanku module is disabled for the tenant, the endpoint is still called | 403 `MODULE_DISABLED`                                                         |
+| 9   | Another tenant's session is used on the Jualanku host                        | Rejected before the business service                                          |
+| 10  | The public API asks for a draft or moderation-rejected merchant/product      | Not found; drafts never enter the public projection                           |
+| 11  | The scope hierarchy resolver returns `resolved: false`                       | High-risk actions **deny**, not slip through                                  |
+| 12  | A payout is approved twice (retry/double submit)                             | Idempotent: one effect, one ledger entry                                      |
+| 13  | Cross-tenant: another tenant's merchant row accessed as `awcms_app`          | 0 rows (RLS proven, tested as the application role, not a superuser)          |
 
-Uji RLS **wajib** dijalankan sebagai role aplikasi (`awcms_app`), bukan sebagai
-superuser. Pada PaaS yang menjadikan user Postgres default superuser, `FORCE` RLS
-diam-diam inert sementara migrasi tetap hijau.
+RLS tests **must** be run as the application role (`awcms_app`), not as a
+superuser. On a PaaS that makes the default Postgres user a superuser, `FORCE`
+RLS is silently inert while migrations stay green.
 
 ## 8. Audit & decision log
 
-- Setiap keputusan akses (allow maupun deny) atas resource merchant-scoped masuk
-  decision log; deny karena `resolved: false` dicatat dengan sebabnya, agar
-  "kenapa merchant ini tidak bisa apa-apa" bisa dijawab tanpa menebak.
-- Aksi high-risk (verifikasi, moderasi, payout, perubahan paket, perubahan
-  rekening, penugasan pendamping, ekspor data) wajib audit event ber-actor,
-  resource, outcome, dan correlation ID; PII direduksi/masked pada payload log.
-- Ekspor data pribadi dan pemulihan (restore/purge) ikut alur `data_lifecycle`
-  dan menghormati legal hold.
+- Every access decision (allow as well as deny) over a merchant-scoped resource
+  goes into the decision log; a deny caused by `resolved: false` is recorded with
+  its reason, so that "why can this merchant do nothing" can be answered without
+  guessing.
+- High-risk actions (verification, moderation, payout, plan change, bank account
+  change, assistant assignment, data export) must have an audit event with actor,
+  resource, outcome, and correlation ID; PII is reduced/masked in the log payload.
+- Personal data export and recovery (restore/purge) follow the `data_lifecycle`
+  flow and honour legal holds.

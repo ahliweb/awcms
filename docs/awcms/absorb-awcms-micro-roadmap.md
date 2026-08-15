@@ -1,144 +1,146 @@
-# Roadmap Penyerapan awcms-micro → awcms
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](absorb-awcms-micro-roadmap.id.md)
 
-> **Dibaca lewat kacamata [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) (2 Agustus 2026):**
-> `awcms-mini`/`awcms-micro` kini **arsip**, jadi dokumen ini adalah daftar
-> **kebutuhan kapabilitas**, bukan antrean port. Tiap butir masuk lewat **ADR
-> admission-nya sendiri dan dibangun di repo ini**; kode arsip boleh dibaca
-> sebagai spesifikasi/referensi, bukan sumber yang di-port. Tabel status di §5
-> karena itu **tidak lagi dirawat sebagai antrean pekerjaan** — ia potret
-> sejarah program penyerapan sampai jalurnya ditutup.
+# Roadmap for Absorbing awcms-micro → awcms
 
-> **Sumber keputusan asli:** [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
-> (menyempurnakan positioning [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).
-> `awcms` diposisikan **online-first hybrid, siap ERP + SaaS terintegrasi, dan superset
-> keluarga** yang menyerap klaster website/e-commerce, UI/UX, dan pengerasan auth
-> `awcms-micro` **langsung ke `src/modules/`** (bukan repo turunan; ADR-0034 §2/§3 tetap
-> berlaku). Sumber kebenaran state tetap kode + `sql/` + `bun run check`.
+> **Read through the lens of [ADR-0055](../adr/0055-development-confined-to-awcms-and-awcms-astro.md) (2 August 2026):**
+> `awcms-mini`/`awcms-micro` are now **archives**, so this document is a list of
+> **capability needs**, not a port queue. Each item enters through **its own
+> admission ADR and is built in this repo**; archive code may be read as a
+> specification/reference, not as a source that gets ported. The status table in §5
+> is therefore **no longer maintained as a work queue** — it is a historical
+> snapshot of the absorption programme up to the point its pathway was closed.
 
-> **Pendamping** [`absorb-awcms-mini-backbone-roadmap.md`](absorb-awcms-mini-backbone-roadmap.md),
-> yang membawa banner yang sama untuk klaster fondasi bisnis + SaaS control plane.
+> **Original decision sources:** [ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)
+> (refining the positioning of [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)).
+> `awcms` is positioned as an **online-first hybrid, ERP + integrated SaaS ready, and the
+> family superset** that absorbs the website/e-commerce cluster, the UI/UX, and the auth
+> hardening of `awcms-micro` **directly into `src/modules/`** (not a derived repo; ADR-0034 §2/§3
+> still applies). The source of truth for state remains the code + `sql/` + `bun run check`.
 
-Kode `awcms-micro` boleh dibaca sebagai spesifikasi. Ia bukan "repo sumber port":
-alur mini-first ([`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md))
-sudah **DICABUT PERMANEN** oleh ADR-0055, dan tidak ada jalur port kedua yang
-menggantikannya.
+> **Companion to** [`absorb-awcms-mini-backbone-roadmap.md`](absorb-awcms-mini-backbone-roadmap.md),
+> which carries the same banner for the business foundation + SaaS control plane cluster.
 
-## 1. Prinsip penyerapan (wajib per modul)
+`awcms-micro` code may be read as a specification. It is not a "port source repo":
+the mini-first flow ([`alur-pengembangan-mini-first.md`](alur-pengembangan-mini-first.md))
+has been **PERMANENTLY REVOKED** by ADR-0055, and there is no second port pathway
+replacing it.
 
-Setiap penyerapan = **satu PR atomic**, **adaptasi bukan salin**:
+## 1. Absorption principles (mandatory per module)
 
-1. **Delta analysis dulu.** Bandingkan dengan yang SUDAH ada di `awcms` (§2). Port **hanya**
-   yang belum ada; jangan menimpa/mundurkan kapabilitas awcms yang sudah lebih maju
-   (mis. auth: awcms sudah punya MFA/OIDC/SSO/business-scope/SoD/Turnstile/break-glass).
-2. **Rename prefix** `awcms_micro_` → `awcms_` (tabel, GUC, konstanta, env, katalog permission).
-3. **Penomoran migrasi lanjut & rapat** dari migrasi tertinggi saat ini (`ls sql/ | tail -1`
-   — per 2026-07-25 `sql/067`, jadi nomor berikutnya `068`), **sekuensial tanpa gap** — gap
-   sengaja milik micro (ranges ERP tak-diport) TIDAK dibawa ke sini. Migrasi terapan itu
-   immutable; koreksi via migrasi baru.
-4. **Drop dependensi/toolchain yang belum ada di awcms**; bila sebuah modul butuh seam yang
-   belum ada, port seam-nya di Gelombang 0 dulu.
-5. **RLS FORCE + tenant_id-first** untuk setiap tabel tenant-scoped; uji RLS di bawah role
-   `awcms_app` LOGIN (bukan superuser).
-6. **Sinkronkan kontrak**: fragment OpenAPI per-modul + bundle (ADR-0026), AsyncAPI untuk
-   event baru. Snapshot beku → evolusi via `INTENTIONALLY_EVOLVED_PATHS`.
-7. **Test** unit + integration (dua-world) + contract + security; **docs + skill** modul;
-   **changeset**; daftarkan di `src/modules/index.ts`.
-8. **Lulus `bun run check` PENUH** sebelum PR.
+Every absorption = **one atomic PR**, **adapt do not copy**:
 
-`MODULE_CONTRACT_VERSION` **naik satu MINOR aditif per seam kontribusi baru** yang
-penyerapan ini butuhkan — perkiraan awal "tidak ada kenaikan kontrak" ternyata keliru.
-Dari `2.0.0` (ADR-0034): `2.1.0` `dataLifecycle` (#222), `2.2.0` `searchSources` (#231),
-`2.3.0` `commentableResources`. `2.4.0` `api.routes` (#267) dan `2.5.0` `ModulePermissionDescriptor.scope` (ADR-0053) SUDAH memakai slot berikutnya, jadi `newsletterContentSources` akan jadi `2.6.0` — bukan `2.4.0` seperti tertulis sebelumnya.
-Tiap kenaikan **wajib** disertai pembaruan pin `contracts.moduleDescriptorContractVersion`
-di `awcms-family-compatibility.yaml`, atau `bun run family:conformance:check` merah.
+1. **Delta analysis first.** Compare against what ALREADY exists in `awcms` (§2). Port **only**
+   what does not exist yet; do not overwrite/regress awcms capabilities that are already further
+   ahead (e.g. auth: awcms already has MFA/OIDC/SSO/business-scope/SoD/Turnstile/break-glass).
+2. **Rename the prefix** `awcms_micro_` → `awcms_` (tables, GUCs, constants, env, permission catalogue).
+3. **Migration numbering continues, tightly packed** from the current highest migration (`ls sql/ | tail -1`
+   — as of 2026-07-25 `sql/067`, so the next number is `068`), **sequential with no gaps** — the gaps
+   micro has deliberately (the un-ported ERP ranges) are NOT carried over here. An applied migration is
+   immutable; correct it with a new migration.
+4. **Drop dependencies/toolchain that do not exist in awcms yet**; if a module needs a seam that
+   does not exist yet, port the seam in Wave 0 first.
+5. **RLS FORCE + tenant_id-first** for every tenant-scoped table; test RLS under the
+   `awcms_app` LOGIN role (not a superuser).
+6. **Keep the contracts in sync**: per-module OpenAPI fragment + bundle (ADR-0026), AsyncAPI for
+   new events. Frozen snapshot → evolution via `INTENTIONALLY_EVOLVED_PATHS`.
+7. **Tests** unit + integration (two-world) + contract + security; module **docs + skill**;
+   **changeset**; register it in `src/modules/index.ts`.
+8. **Pass the FULL `bun run check`** before the PR.
 
-## 2. Delta: sudah ada di awcms vs yang diserap
+`MODULE_CONTRACT_VERSION` **rises one additive MINOR per new contribution seam** that this
+absorption needs — the initial estimate of "no contract bump" turned out to be wrong.
+From `2.0.0` (ADR-0034): `2.1.0` `dataLifecycle` (#222), `2.2.0` `searchSources` (#231),
+`2.3.0` `commentableResources`. `2.4.0` `api.routes` (#267) and `2.5.0` `ModulePermissionDescriptor.scope` (ADR-0053) have ALREADY taken the following slots, so `newsletterContentSources` will be `2.6.0` — not `2.4.0` as previously written.
+Every bump **must** be accompanied by updating the `contracts.moduleDescriptorContractVersion` pin
+in `awcms-family-compatibility.yaml`, or `bun run family:conformance:check` goes red.
 
-**Sudah ada (JANGAN port ulang):** `tenant-admin`, `identity-access` (login, sesi, RBAC,
-ABAC DSL, MFA TOTP + step-up, OIDC/SSO generik + break-glass, business-scope, SoD, Turnstile),
+## 2. Delta: already in awcms vs what is absorbed
+
+**Already present (DO NOT re-port):** `tenant-admin`, `identity-access` (login, sessions, RBAC,
+ABAC DSL, MFA TOTP + step-up, generic OIDC/SSO + break-glass, business-scope, SoD, Turnstile),
 `profile-identity`, `logging`, `module-management`, `sync-storage`, `workflow-approval`,
 `reporting`, `email`, `domain-event-runtime`, **`theming`, `blog-content`**
-(yang sejak [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) juga
-memiliki seluruh bekas `news-portal`).
+(which since [ADR-0044](../adr/0044-merge-news-portal-into-blog-content.md) also
+owns all of the former `news-portal`).
 
-**Diserap dari awcms-micro (lingkup penuh; status per-modul di §5):** pustaka UI
-`src/components/ui/`, seam kontribusi konten, `media-library` ✅, `tenant-domain` ✅,
+**Absorbed from awcms-micro (full scope; per-module status in §5):** the UI library
+`src/components/ui/`, the content contribution seams, `media-library` ✅, `tenant-domain` ✅,
 `visitor-analytics` ✅, `data-lifecycle` ✅, `seo-distribution` ✅, `form-drafts` ✅,
-`site-search` ✅, `comments` ✅, `newsletter`, `social-publishing`; delta auth/admin
+`site-search` ✅, `comments` ✅, `newsletter`, `social-publishing`; the auth/admin delta
 (self-registration, password reset, admin security policy UI, per-tenant sidebar menu,
-login OIDC Google spesifik — **verifikasi mana yang belum ada**); trajektori
-e-commerce/toko online (epik lanjutan). ✅ = sudah mendarat (2026-07-24/25).
+Google-specific OIDC login — **verify which of these does not exist yet**); the
+e-commerce/online shop trajectory (a follow-on epic). ✅ = already landed (2026-07-24/25).
 
-## 3. Gelombang & urutan dependensi
+## 3. Waves & dependency order
 
-Modul dalam satu gelombang sebagian besar paralel secara logis, tetapi penomoran migrasi
-menyerialkan urutan commit. Kerjakan berurut per baris.
+Modules within one wave are mostly logically parallel, but migration numbering serialises the
+commit order. Work through them row by row.
 
-### Gelombang 0 — infra fondasi (membuka jalan sisanya)
+### Wave 0 — foundation infra (opens the way for the rest)
 
-| Item                                                    | Sumber micro                                                     | Catatan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pustaka `src/components/ui/` + paritas design-token     | `src/components/ui/`, `src/styles/tokens.css`                    | **Rekonsiliasi** dengan overhaul admin awcms yang sudah ada (PR #215: `admin.css`/`admin-screens.css`) — jangan timpa. Komponen: DataTable, FilterBar, FormField, Pagination, StatusBadge, StateNotice, ConfirmDialog, ActionBanner + primitives wizard.                                                                                                                                                                                                                                                                              |
-| Seam kontribusi pada `ModuleDescriptor`                 | `_shared/module-contract.ts`                                     | Tambah field descriptor `seo_facts`, `searchSources`, `commentableResources`, `newsletterContentSources` **bila belum ada** di `src/modules/_shared/module-contract.ts`. Dikonsumsi Gelombang 1.                                                                                                                                                                                                                                                                                                                                      |
-| `media-library` (**wave INVERSI**, bukan Wave-0 aditif) | `src/modules/media-library/`, sql media-library micro            | ✅ **selesai** ([ADR-0036](../adr/0036-media-library-module-admission-ownership-inversion.md)). Bukan port aditif: **inversi kepemilikan ADR-0026** — registry R2 + presign/finalize/cancel + MIME sniffing + job `news-media:reconcile` **DIEKSTRAK keluar dari `news_portal`** ke `media_library`; port `news_media` dipensiunkan → `media_library`; migrasi permission destruktif `052`, tenant-state `053`, enforcement `054` (+ endpoint `POST /api/v1/media/enforcement`). Step 5b/5c/5d (`/admin/media`, srcset, PDF) ditunda. |
-| `tenant-domain`                                         | `src/modules/tenant-domain/`, sql tenant-domain micro (ADR-0010) | Routing host→tenant; **buka rute publik `/news/**` host-resolved + custom domain** (prioritas tinggi, sudah ditandai di PROJECT_STATE). Adopsi [ADR-0010](../adr/0010-public-host-tenant-routing.md) yang sudah ada di awcms.                                                                                                                                                                                                                                                                                                         |
+| Item                                                         | Micro source                                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The `src/components/ui/` library + design-token parity       | `src/components/ui/`, `src/styles/tokens.css`                      | **Reconcile** with the existing awcms admin overhaul (PR #215: `admin.css`/`admin-screens.css`) — do not overwrite it. Components: DataTable, FilterBar, FormField, Pagination, StatusBadge, StateNotice, ConfirmDialog, ActionBanner + wizard primitives.                                                                                                                                                                                                                                                                                                 |
+| Contribution seams on `ModuleDescriptor`                     | `_shared/module-contract.ts`                                       | Add the descriptor fields `seo_facts`, `searchSources`, `commentableResources`, `newsletterContentSources` **if they do not already exist** in `src/modules/_shared/module-contract.ts`. Consumed by Wave 1.                                                                                                                                                                                                                                                                                                                                               |
+| `media-library` (**an INVERSION wave**, not additive Wave-0) | `src/modules/media-library/`, micro's media-library sql            | ✅ **done** ([ADR-0036](../adr/0036-media-library-module-admission-ownership-inversion.md)). Not an additive port: an **ADR-0026 ownership inversion** — the R2 registry + presign/finalize/cancel + MIME sniffing + the `news-media:reconcile` job were **EXTRACTED out of `news_portal`** into `media_library`; the `news_media` port was retired → `media_library`; destructive permission migration `052`, tenant-state `053`, enforcement `054` (+ endpoint `POST /api/v1/media/enforcement`). Steps 5b/5c/5d (`/admin/media`, srcset, PDF) deferred. |
+| `tenant-domain`                                              | `src/modules/tenant-domain/`, micro's tenant-domain sql (ADR-0010) | host→tenant routing; **open the host-resolved public `/news/**` routes + custom domains** (high priority, already flagged in PROJECT_STATE). Adopt the [ADR-0010](../adr/0010-public-host-tenant-routing.md) that already exists in awcms.                                                                                                                                                                                                                                                                                                                 |
 
-### Gelombang 1 — klaster website/konten (mengandalkan seam Gelombang 0; blog/news sudah ada)
+### Wave 1 — website/content cluster (relies on the Wave 0 seams; blog/news already exists)
 
-| Item                                                                     | Sumber micro                                | Bergantung pada                                                                     |
-| ------------------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `form-drafts` + primitives wizard                                        | `src/modules/form-drafts/`                  | UI lib (G0)                                                                         |
-| `seo-distribution` (+ endpoint publik sitemap/robots/RSS/Atom/JSON feed) | `src/modules/seo-distribution/` (ADR-0028)  | seam `seo_facts`; blog/news sudah ada (penyedia fakta)                              |
-| `site-search`                                                            | `src/modules/site-search/` (ADR-0031 micro) | seam `searchSources`; konten published                                              |
-| `comments`                                                               | `src/modules/comments/` (ADR-0032 micro)    | seam `commentableResources`; anti-abuse (honeypot/timing/rate-limit), PII hash+mask |
-| `newsletter`                                                             | `src/modules/newsletter/` (ADR-0033 micro)  | seam `newsletterContentSources`; double-opt-in, suppression                         |
-| `social-publishing`                                                      | `src/modules/social-publishing/`            | `blog-content` (mengaktifkan hook publish yang kini no-op)                          |
-| `visitor-analytics`                                                      | `src/modules/visitor-analytics/`            | privacy-first; rollup/purge                                                         |
-| `data-lifecycle`                                                         | `src/modules/data-lifecycle/`               | descriptor retensi per-modul + legal-hold                                           |
+| Item                                                                      | Micro source                                | Depends on                                                                              |
+| ------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `form-drafts` + wizard primitives                                         | `src/modules/form-drafts/`                  | the UI lib (W0)                                                                         |
+| `seo-distribution` (+ public sitemap/robots/RSS/Atom/JSON feed endpoints) | `src/modules/seo-distribution/` (ADR-0028)  | the `seo_facts` seam; blog/news already exists (the fact provider)                      |
+| `site-search`                                                             | `src/modules/site-search/` (micro ADR-0031) | the `searchSources` seam; published content                                             |
+| `comments`                                                                | `src/modules/comments/` (micro ADR-0032)    | the `commentableResources` seam; anti-abuse (honeypot/timing/rate-limit), PII hash+mask |
+| `newsletter`                                                              | `src/modules/newsletter/` (micro ADR-0033)  | the `newsletterContentSources` seam; double-opt-in, suppression                         |
+| `social-publishing`                                                       | `src/modules/social-publishing/`            | `blog-content` (activates the publish hook that is currently a no-op)                   |
+| `visitor-analytics`                                                       | `src/modules/visitor-analytics/`            | privacy-first; rollup/purge                                                             |
+| `data-lifecycle`                                                          | `src/modules/data-lifecycle/`               | per-module retention descriptor + legal hold                                            |
 
-### Gelombang 2 — delta auth/admin + pengerasan online-first
+### Wave 2 — auth/admin delta + online-first hardening
 
-- ~~**self-registration** (public registration request + approval admin)~~ — **SELESAI**
-  (`sql/074`–`075`, default MATI): submit publik tak pernah membuat akun & tak menerima
-  password; approval membuat akun dengan kredensial tak terpakai lalu mengirim link reset.
-- ~~**password reset** enumeration-safe~~ — **SELESAI** (`sql/073`): awcms terbukti belum
-  punya sama sekali, jadi di-port + diadaptasi (SSO-only ditolak, pengiriman lewat capability
-  port `auth_notification`, single-use dengan row lock). Lihat `identity-access/README.md`.
-- ~~**admin security policy UI** (`/admin/security`) untuk auth policy tenant~~ — **SELESAI**:
-  postur deployment (read-only) + policy autentikasi tenant + enforcement MFA + daftar
-  provider OIDC read-only. CRUD provider tetap API-only.
-- ~~**per-tenant sidebar menu management** (`/admin/sidebar-menu`)~~ — **SELESAI** (#272).
-- **login OIDC Google spesifik** — awcms punya OIDC generik; port hanya bila diinginkan.
-- **reframe default `online-security-config`** untuk online-first (gate full-online aktif
-  sebagai default, LAN/offline tetap exempt sesuai divergence Turnstile).
-- **paritas halaman admin** untuk semua modul baru Gelombang 0–1.
+- ~~**self-registration** (public registration request + admin approval)~~ — **DONE**
+  (`sql/074`–`075`, OFF by default): a public submit never creates an account & never receives
+  a password; approval creates the account with unusable credentials and then sends a reset link.
+- ~~**password reset**, enumeration-safe~~ — **DONE** (`sql/073`): awcms was proven to have none
+  at all, so it was ported + adapted (SSO-only is rejected, delivery through the `auth_notification`
+  capability port, single-use with a row lock). See `identity-access/README.md`.
+- ~~**admin security policy UI** (`/admin/security`) for tenant auth policy~~ — **DONE**:
+  deployment posture (read-only) + tenant authentication policy + MFA enforcement + a read-only
+  list of OIDC providers. Provider CRUD remains API-only.
+- ~~**per-tenant sidebar menu management** (`/admin/sidebar-menu`)~~ — **DONE** (#272).
+- **Google-specific OIDC login** — awcms has generic OIDC; port only if wanted.
+- **Reframe the `online-security-config` defaults** for online-first (the full-online gate active
+  by default, LAN/offline still exempt per the Turnstile divergence).
+- **Admin page parity** for all the new Wave 0–1 modules.
 
-### Gelombang 3 — trajektori e-commerce/toko online (epik lanjutan, ADR sendiri)
+### Wave 3 — e-commerce/online shop trajectory (a follow-on epic, with its own ADR)
 
-Katalog/storefront/keranjang/checkout online. Belum dibangun di micro juga — rancang lewat
-ADR baru + perencanaan tersendiri sebelum implementasi.
+Online catalogue/storefront/cart/checkout. Not built in micro either — design it through a new
+ADR + its own planning before implementation.
 
-## 4. Verifikasi per PR
+## 4. Verification per PR
 
-`bun run check` penuh (lint + docs + kontrak + typecheck + test + build); untuk perubahan UI
-non-trivial tambahkan E2E `bun run test:e2e`. Uji RLS di bawah `awcms_app` LOGIN. Snapshot
-OpenAPI beku (add-only). Changeset wajib.
+The full `bun run check` (lint + docs + contract + typecheck + test + build); for non-trivial UI
+changes add the E2E `bun run test:e2e`. Test RLS under `awcms_app` LOGIN. The OpenAPI snapshot is
+frozen (add-only). A changeset is mandatory.
 
-## 5. Status penyerapan (potret sejarah, tidak dirawat)
+## 5. Absorption status (historical snapshot, not maintained)
 
-| Gelombang | Item                                                                                                                                                                                                  | Status                                                                                                                                                                                                                          | PR                  |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| 0         | `src/components/ui/` + token                                                                                                                                                                          | 🟡 sebagian — shell/chrome admin sudah paritas (#229: topbar, sidebar dua-level, breadcrumb, toggle tema via CSP hash, dashboard KPI); pustaka komponen reusable + paritas token belum                                          | #229                |
-| 0         | Seam kontribusi `ModuleDescriptor`                                                                                                                                                                    | 🟡 sebagian (`dataLifecycle` #222, capability `seo_facts` #223, `searchSources` #231, `commentableResources` ADR-0041 sudah; `newsletterContentSources` belum)                                                                  | #222/#223/#231      |
-| 0         | `media-library` (wave INVERSI, ADR-0036)                                                                                                                                                              | ✅ selesai                                                                                                                                                                                                                      | #221                |
-| 0         | `tenant-domain`                                                                                                                                                                                       | ✅ selesai                                                                                                                                                                                                                      | #219                |
-| 1         | `form-drafts`                                                                                                                                                                                         | ✅ selesai (store saja; komponen wizard `src/components/ui/` masih Gelombang-0 terbuka)                                                                                                                                         | #230                |
-| 1         | `seo-distribution` — discovery ([ADR-0038](../adr/0038-seo-distribution-module-admission-discovery-scope.md)) + redirect governance ([ADR-0039](../adr/0039-seo-distribution-redirect-governance.md)) | ✅ selesai (discovery + redirect/404)                                                                                                                                                                                           | #223/#224           |
-| 1         | `site-search` ([ADR-0040](../adr/0040-site-search-module-admission.md))                                                                                                                               | ✅ selesai (indeks FTS lintas-konten + query/suggest publik + admin index/settings/diagnostics; typeahead inline & sumber non-`blog_post` follow-up)                                                                            | #231                |
-| 1         | `comments`                                                                                                                                                                                            | ✅ selesai ([ADR-0041](../adr/0041-comments-module-admission.md); seam `commentableResources` + `MODULE_CONTRACT_VERSION` 2.3.0, `sql/066`–`067`, admin queue + 10 rute; notifikasi balasan menunggu consumer dispatcher email) | —                   |
-| 1         | `newsletter`                                                                                                                                                                                          | ⏳ belum                                                                                                                                                                                                                        | —                   |
-| 1         | `social-publishing`                                                                                                                                                                                   | ⏳ belum                                                                                                                                                                                                                        | —                   |
-| 1         | `visitor-analytics`                                                                                                                                                                                   | ✅ selesai                                                                                                                                                                                                                      | #220                |
-| 1         | `data-lifecycle` ([ADR-0037](../adr/0037-data-lifecycle-module-admission.md))                                                                                                                         | ✅ selesai                                                                                                                                                                                                                      | #222                |
-| 2         | Delta auth/admin                                                                                                                                                                                      | 🟡 inti selesai — sidebar per-tenant (#272), password reset (`sql/073`), self-registration (`sql/074`–`075`), `/admin/security`; sisa opsional: OIDC Google, reframe `online-security-config`, paritas halaman admin Gel. 0–1   | #272/#273/#276/#274 |
-| 3         | E-commerce/toko online                                                                                                                                                                                | ⏳ belum (butuh ADR)                                                                                                                                                                                                            | —                   |
+| Wave | Item                                                                                                                                                                                                  | Status                                                                                                                                                                                                                               | PR                  |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| 0    | `src/components/ui/` + tokens                                                                                                                                                                         | 🟡 partial — the admin shell/chrome is at parity (#229: topbar, two-level sidebar, breadcrumb, theme toggle via CSP hash, KPI dashboard); the reusable component library + token parity are not                                      | #229                |
+| 0    | `ModuleDescriptor` contribution seams                                                                                                                                                                 | 🟡 partial (`dataLifecycle` #222, the `seo_facts` capability #223, `searchSources` #231, `commentableResources` ADR-0041 are done; `newsletterContentSources` is not)                                                                | #222/#223/#231      |
+| 0    | `media-library` (INVERSION wave, ADR-0036)                                                                                                                                                            | ✅ done                                                                                                                                                                                                                              | #221                |
+| 0    | `tenant-domain`                                                                                                                                                                                       | ✅ done                                                                                                                                                                                                                              | #219                |
+| 1    | `form-drafts`                                                                                                                                                                                         | ✅ done (the store only; the wizard components in `src/components/ui/` are still open Wave-0 work)                                                                                                                                   | #230                |
+| 1    | `seo-distribution` — discovery ([ADR-0038](../adr/0038-seo-distribution-module-admission-discovery-scope.md)) + redirect governance ([ADR-0039](../adr/0039-seo-distribution-redirect-governance.md)) | ✅ done (discovery + redirect/404)                                                                                                                                                                                                   | #223/#224           |
+| 1    | `site-search` ([ADR-0040](../adr/0040-site-search-module-admission.md))                                                                                                                               | ✅ done (cross-content FTS index + public query/suggest + admin index/settings/diagnostics; inline typeahead & non-`blog_post` sources are follow-ups)                                                                               | #231                |
+| 1    | `comments`                                                                                                                                                                                            | ✅ done ([ADR-0041](../adr/0041-comments-module-admission.md); the `commentableResources` seam + `MODULE_CONTRACT_VERSION` 2.3.0, `sql/066`–`067`, admin queue + 10 routes; reply notifications await the email dispatcher consumer) | —                   |
+| 1    | `newsletter`                                                                                                                                                                                          | ⏳ not yet                                                                                                                                                                                                                           | —                   |
+| 1    | `social-publishing`                                                                                                                                                                                   | ⏳ not yet                                                                                                                                                                                                                           | —                   |
+| 1    | `visitor-analytics`                                                                                                                                                                                   | ✅ done                                                                                                                                                                                                                              | #220                |
+| 1    | `data-lifecycle` ([ADR-0037](../adr/0037-data-lifecycle-module-admission.md))                                                                                                                         | ✅ done                                                                                                                                                                                                                              | #222                |
+| 2    | Auth/admin delta                                                                                                                                                                                      | 🟡 core done — per-tenant sidebar (#272), password reset (`sql/073`), self-registration (`sql/074`–`075`), `/admin/security`; optional remainder: Google OIDC, reframing `online-security-config`, admin page parity for Waves 0–1   | #272/#273/#276/#274 |
+| 3    | E-commerce/online shop                                                                                                                                                                                | ⏳ not yet (needs an ADR)                                                                                                                                                                                                            | —                   |

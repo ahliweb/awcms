@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0044-merge-news-portal-into-blog-content.id.md)
+
 # ADR-0044 — Merge `news_portal` into `blog_content`: one content module, no feature loss
 
 - Status: Accepted

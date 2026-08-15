@@ -1,159 +1,157 @@
-# ADR-0056 — Permukaan admin `media_library`: cabut yang mati, beri permukaan yang perlu
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0056-media-library-admin-surface.id.md)
+
+# ADR-0056 — The `media_library` admin surface: revoke what is dead, give a surface to what is needed
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-02
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0036](0036-media-library-module-admission-ownership-inversion.md) (inversi kepemilikan media), [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) (seluruh layar admin dibangun di sini), [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) (preseden mencabut permission yang tak semestinya dipegang tenant)
+- **Date:** 2026-08-02
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0036](0036-media-library-module-admission-ownership-inversion.md) (media ownership inversion), [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) (all admin screens are built here), [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) (precedent for revoking a permission a tenant should not hold)
 
-## Konteks
+## Context
 
-[ADR-0051](0051-admin-screens-consolidated-in-awcms.md) menyisakan `media_library`
-sebagai satu dari dua modul tanpa layar. Ia terdaftar berdampingan dengan modul
-lain yang benar-benar hanya kehilangan halaman — dan audit gelombang layar kedua
-(PR #335–#338, #340) menemukan bahwa untuk modul ini kalimat itu **salah**.
+[ADR-0051](0051-admin-screens-consolidated-in-awcms.md) left `media_library` as
+one of two modules without a screen. It was listed alongside other modules that
+really were only missing a page — and the second screen-wave audit (PR
+#335–#338, #340) found that for this module that sentence is **wrong**.
 
-Tiga temuan, semuanya diverifikasi ke kode, bukan disimpulkan dari dokumen.
+Three findings, all verified against the code, not inferred from documents.
 
-### 1. Lima dari sebelas permission tidak digerbangi apa pun
+### 1. Five of eleven permissions are gated by nothing
 
-`media_library` mendeklarasikan 11 permission, dan `sql/052` men-seed seluruhnya
-ke katalog global. Enam punya call site `authorizeInTransaction` yang nyata:
+`media_library` declares 11 permissions, and `sql/052` seeds all of them into
+the global catalogue. Six have a real `authorizeInTransaction` call site:
 `media.create`, `media.read`, `media.verify`, `media.cancel`,
 `enforcement.read`, `enforcement.enable`.
 
-**Lima tidak punya sama sekali:** `media.attach`, `media.detach`,
-`media.delete`, `media.restore`, `media.purge`. Tidak ada route, tidak ada
-fungsi aplikasi, tidak ada job yang menegakkannya. Mereka ada di katalog dan
-di-grant ke role `owner` tiap tenant baru, dan tidak ada satu pun jalur kode
-yang memeriksanya.
+**Five have none at all:** `media.attach`, `media.detach`, `media.delete`,
+`media.restore`, `media.purge`. No route, no application function, no job
+enforces them. They exist in the catalogue and are granted to every new
+tenant's `owner` role, and not a single code path checks them.
 
-> Catatan cara memeriksanya, karena mudah salah: `media-object-directory.ts`
-> memuat banyak string `action: "news_media.object.attached"` dan sejenisnya.
-> Itu **nama aksi audit**, bukan gerbang permission. Sebaliknya `media.verify`
-> TIDAK muncul di berkas route mana pun — gerbangnya ada di dalam fungsi
-> aplikasi `media-finalize-upload-session.ts`. Memindai route saja memberi
-> jawaban yang salah di kedua arah.
+> A note on how to check this, because it is easy to get wrong:
+> `media-object-directory.ts` contains many `action: "news_media.object.attached"`
+> strings and the like. Those are **audit action names**, not permission gates.
+> Conversely `media.verify` does NOT appear in any route file — its gate lives
+> inside the application function `media-finalize-upload-session.ts`. Scanning
+> routes alone gives the wrong answer in both directions.
 
-### 2. Lima fungsi aplikasi yang pemanggilnya nol
+### 2. Five application functions with zero callers
 
 `attachNewsMediaObject`, `detachNewsMediaObject`, `softDeleteNewsMediaObject`,
-`restoreNewsMediaObject`, dan `purgeNewsMediaObject` diekspor dari
-`application/media-object-directory.ts` dan **tidak dipanggil dari mana pun** —
-tidak di `src/`, tidak di `scripts/`, tidak di `tests/`. Satu-satunya rujukan
-tersisa untuk `purgeNewsMediaObject` adalah sebuah komentar.
+`restoreNewsMediaObject`, and `purgeNewsMediaObject` are exported from
+`application/media-object-directory.ts` and are **called from nowhere** — not in
+`src/`, not in `scripts/`, not in `tests/`. The only remaining reference to
+`purgeNewsMediaObject` is a comment.
 
-Lifecycle yang benar-benar berjalan hari ini dilakukan job rekonsiliasi lewat
-fungsi yang BERBEDA — `purgeExpiredPendingNewsMediaObject` dan
-`markStaleOrphanedNewsMediaObjectDeleted` — pada jadwalnya sendiri.
+The lifecycle that actually runs today is performed by the reconciliation job
+through DIFFERENT functions — `purgeExpiredPendingNewsMediaObject` and
+`markStaleOrphanedNewsMediaObjectDeleted` — on its own schedule.
 
-### 3. Tidak ada fungsi daftar
+### 3. There is no list function
 
-`GET /api/v1/media/objects` menuntut `?ids=` (maksimum 100) — ia **resolver
-batch**, dibangun untuk `awcms-astro` menukar id jadi URL saat build, bukan
-daftar. Lapisan aplikasi hanya punya `fetchNewsMediaObjectById`,
-`fetchNewsMediaObjectsByIds`, dan `fetchNewsMediaObjectByObjectKey`. Tidak ada
-`list*` sama sekali.
+`GET /api/v1/media/objects` demands `?ids=` (maximum 100) — it is a **batch
+resolver**, built for `awcms-astro` to swap ids for URLs at build time, not a
+list. The application layer only has `fetchNewsMediaObjectById`,
+`fetchNewsMediaObjectsByIds`, and `fetchNewsMediaObjectByObjectKey`. There is no
+`list*` at all.
 
-Artinya layar browse **tidak bisa** dibangun dari permukaan yang ada: ia butuh
-fungsi baca baru. "Layarnya hilang" karena itu bukan deskripsi yang jujur untuk
-modul ini, dan mendaftarkannya bersama enam modul yang memang hanya kehilangan
-halaman membuatnya tampak seperti pekerjaan satu PR selama dua gelombang.
+That means a browse screen **cannot** be built on the existing surface: it needs
+a new read function. "The screen is missing" is therefore not an honest
+description for this module, and listing it alongside the six modules that
+really were only missing a page made it look like one PR's work for two waves.
 
-## Keputusan
+## Decision
 
-Permukaan admin `media_library` **tidak** dibangun sebagai satu layar di atas
-permission yang ada. Ia dipecah tiga, karena kelima permission tak-tergerbangi
-itu tidak sekelas.
+The `media_library` admin surface is **not** built as a single screen on top of
+the existing permissions. It is split three ways, because those five ungated
+permissions are not in the same class.
 
-### A. `media.attach` / `media.detach` — DICABUT
+### A. `media.attach` / `media.detach` — REVOKED
 
-Keduanya usang sejak [ADR-0036](0036-media-library-module-admission-ownership-inversion.md).
-Sebelum inversi, `news_media` memiliki relasi objek→konten, sehingga
-"attach"/"detach" adalah aksi nyata pada modul ini. Setelah inversi,
-keterikatan media dinyatakan oleh **FK milik konsumen** — `featuredMediaId`
-pada post `blog_content`, `media_object_id` pada ad placement. Mengubahnya
-berarti meng-update baris konsumen, digerbangi permission konsumen.
+Both have been obsolete since
+[ADR-0036](0036-media-library-module-admission-ownership-inversion.md). Before
+the inversion, `news_media` owned the object→content relation, so
+"attach"/"detach" were real actions on this module. After the inversion, media
+attachment is expressed by a **FK owned by the consumer** — `featuredMediaId` on
+a `blog_content` post, `media_object_id` on an ad placement. Changing it means
+updating the consumer's row, gated by the consumer's permission.
 
-Membiarkan keduanya di katalog berarti setiap owner tenant memegang wewenang
-atas aksi yang tak bisa dilakukan siapa pun, dan review permission berikutnya
-harus menebak lagi apakah itu celah atau peninggalan. Dicabut lewat migrasi
-baru, mengikuti preseden [ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md)
+Leaving both in the catalogue means every tenant owner holds authority over an
+action nobody can perform, and the next permission review has to guess again
+whether that is a gap or a leftover. Revoked via a new migration, following the
+[ADR-0052](0052-idn-region-dataset-lifecycle-is-an-operator-job.md) precedent
 (`sql/084`).
 
-**Koreksi terhadap edisi pertama ADR ini.** Kalimat aslinya berbunyi "kelima
-fungsi mati dihapus bersamanya" — itu bertentangan dengan §B, yang justru
-MEMAKAI tiga dari lima fungsi tersebut. Yang dihapus adalah **dua**:
-`attachNewsMediaObject` dan `detachNewsMediaObject`. `softDeleteNewsMediaObject`,
-`restoreNewsMediaObject`, dan `purgeNewsMediaObject` tetap — §B memberi mereka
-endpoint.
+**Correction to the first edition of this ADR.** The original sentence read "the
+five dead functions are deleted along with them" — that contradicts §B, which
+actually USES three of those five functions. What is deleted is **two**:
+`attachNewsMediaObject` and `detachNewsMediaObject`. `softDeleteNewsMediaObject`,
+`restoreNewsMediaObject`, and `purgeNewsMediaObject` stay — §B gives them
+endpoints.
 
-Status `attached` sendiri **tidak** ikut dicabut: CHECK di `sql/041` masih
-menerimanya dan `isNewsMediaObjectSafeForPublicReference` masih menganggapnya
-aman, jadi baris yang sudah berada di status itu tetap resolve. Yang hilang
-adalah kemampuan menulisnya dari modul ini — yang memang tak dipakai siapa pun.
+The `attached` status itself is **not** revoked along with them: the CHECK in
+`sql/041` still accepts it and `isNewsMediaObjectSafeForPublicReference` still
+considers it safe, so rows already in that status still resolve. What is lost is
+the ability to write it from this module — which nobody used anyway.
 
-### B. `media.delete` / `media.restore` / `media.purge` — DIBERI PERMUKAAN
+### B. `media.delete` / `media.restore` / `media.purge` — GIVEN A SURFACE
 
-Ketiganya bukan peninggalan; mereka lubang. Objek yang salah unggah, yatim,
-atau melanggar kebijakan hari ini **hanya** bisa hilang bila job rekonsiliasi
-kebetulan mengategorikannya begitu, pada jadwalnya sendiri. Tidak ada jalan bagi
-administrator untuk menghapus satu objek, dan tidak ada jalan untuk
-membatalkannya bila salah.
+These three are not leftovers; they are holes. An object uploaded by mistake,
+orphaned, or in breach of policy can today **only** disappear if the
+reconciliation job happens to categorize it that way, on its own schedule. There
+is no way for an administrator to delete a single object, and no way to undo it
+if that was a mistake.
 
-Ketiganya mendapat endpoint ter-guard, ter-audit, ber-`Idempotency-Key`, dan
-fungsi aplikasi yang sudah ditulis untuk mereka dipakai — bukan dihapus.
+All three get a guarded, audited endpoint carrying an `Idempotency-Key`, and the
+application functions already written for them are used — not deleted.
 
-**`purge` menghapus baris registry, bukan objek R2.** Job rekonsiliasi yang
-memiliki jalur penghapusan R2, dan menduplikasinya di endpoint berarti dua
-penulis pada satu bucket dengan dua gagasan berbeda tentang apa yang aman
-dihapus. Endpoint memurnikan registry; job tetap pemilik byte-nya. Biaya yang
-diterima dan dinyatakan: jendela di mana objek R2 hidup lebih lama dari baris
-registry-nya, ditutup oleh tick rekonsiliasi berikutnya.
+**`purge` deletes the registry row, not the R2 object.** The reconciliation job
+owns the R2 deletion path, and duplicating it in an endpoint means two writers on
+one bucket with two different ideas about what is safe to delete. The endpoint
+purifies the registry; the job stays the owner of the bytes. An accepted and
+stated cost: a window in which the R2 object outlives its registry row, closed by
+the next reconciliation tick.
 
-### C. Daftar objek — fungsi baca BARU, bukan pelebaran resolver
+### C. Object listing — a NEW read function, not a widened resolver
 
-`listMediaObjects(tx, tenantId, filter, cursor)` ditambahkan ke
-`application/media-object-directory.ts`, dengan filter status/MIME dan **keyset
-cursor** (`(created_at, id)`, teks presisi mikrodetik — jebakan yang sudah
-tercatat di repo ini).
+`listMediaObjects(tx, tenantId, filter, cursor)` is added to
+`application/media-object-directory.ts`, with status/MIME filters and a **keyset
+cursor** (`(created_at, id)`, microsecond-precision text — a trap already
+recorded in this repo).
 
-`GET /api/v1/media/objects` **tidak** diperluas menjadi mode-ganda. `?ids=`
-adalah kontrak yang sudah dipakai `awcms-astro` di jalur build-nya; menambahkan
-cabang "tanpa `ids` berarti daftar semuanya" ke endpoint yang sama mengubah
-arti request yang hari ini adalah 400 menjadi dump seluruh registry. Daftar
-mendapat rute sendiri.
+`GET /api/v1/media/objects` is **not** extended into a dual-mode endpoint. `?ids=`
+is a contract `awcms-astro` already uses on its build path; adding a "no `ids`
+means list everything" branch to the same endpoint turns a request that is a 400
+today into a dump of the entire registry. The list gets its own route.
 
-Layar `/admin/media` menyusul setelah A–C mendarat, dan hanya menggerakkan
-permission yang tergerbangi.
+The `/admin/media` screen follows once A–C have landed, and it only drives gated
+permissions.
 
-## Konsekuensi
+## Consequences
 
-- **Perubahan otorisasi nyata.** Dua permission dicabut dari katalog. Tenant
-  yang men-grant-nya ke role kustom kehilangan grant itu; tak ada perilaku yang
-  berubah, karena tak ada yang pernah memeriksanya.
-- **Tiga endpoint baru** menambah permukaan tulis pada modul yang selama ini
-  hampir seluruhnya baca + job. Ketiganya `isHighRiskAction`-worthy: `purge`
-  tak bisa dibatalkan.
-- **Urutan mengikat.** A dan B mengubah katalog permission; keduanya harus
-  mendarat sebelum layar apa pun menggerbangi sesuatu di atasnya — persis kelas
-  cacat yang `tests/admin-*-page-contract.test.ts` sudah dua kali tangkap.
-- **`media_library` tetap tanpa layar sampai C selesai**, dan
-  `docs/PROJECT_STATE.md` §4 harus menyebutnya sebagai pekerjaan ber-ADR, bukan
-  sebagai satu layar yang tertinggal.
+- **A real authorization change.** Two permissions are revoked from the
+  catalogue. A tenant that granted them to a custom role loses that grant; no
+  behaviour changes, because nothing ever checked them.
+- **Three new endpoints** add write surface to a module that has so far been
+  almost entirely reads + jobs. All three are `isHighRiskAction`-worthy: `purge`
+  cannot be undone.
+- **The order is binding.** A and B change the permission catalogue; both must
+  land before any screen gates anything on top of them — exactly the class of
+  defect `tests/admin-*-page-contract.test.ts` has already caught twice.
+- **`media_library` stays without a screen until C is done**, and
+  `docs/PROJECT_STATE.md` §4 must name it as ADR-carrying work, not as one
+  screen left behind.
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-- **Bangun layar di atas enam permission yang tergerbangi saja, biarkan lima
-  sisanya.** Ini yang paling cepat, dan ia meninggalkan lima permission
-  ter-seed yang tak diperiksa siapa pun di katalog yang di-grant ke tiap owner.
-  Repo ini sudah dua kali mengirim cacat latent-authz; membiarkan lima
-  permission menganggur adalah bahan bakunya.
-- **Cabut kelimanya.** Rapi, dan salah: `delete`/`restore`/`purge` menggambarkan
-  aksi yang operator memang butuhkan dan hari ini tak punya. Mencabutnya
-  mengubah lubang jadi keputusan tanpa ada yang memutuskan.
-- **Beri kelimanya permukaan.** Berarti membangun attach/detach yang menulis
-  keterikatan yang bukan milik modul ini — persis kepemilikan yang ADR-0036
-  balik.
-- **Perluas `GET /api/v1/media/objects` jadi mode-ganda.** Ditolak di §C:
-  mengubah 400 hari ini menjadi dump registry adalah perubahan kontrak yang
-  menyamar sebagai penambahan.
+- **Build a screen on top of the six gated permissions only, and leave the other
+  five.** This is the fastest, and it leaves five seeded permissions that nobody
+  checks in a catalogue granted to every owner. This repo has already shipped
+  latent-authz defects twice; five idle permissions are the raw material.
+- **Revoke all five.** Tidy, and wrong: `delete`/`restore`/`purge` describe
+  actions operators genuinely need and today do not have. Revoking them turns a
+  hole into a decision without anybody deciding.
+- **Give all five a surface.** That means building attach/detach that write an
+  attachment this module does not own — exactly the ownership ADR-0036 inverted.
+- **Extend `GET /api/v1/media/objects` into dual mode.** Rejected in §C: turning
+  today's 400 into a registry dump is a contract change disguised as an addition.

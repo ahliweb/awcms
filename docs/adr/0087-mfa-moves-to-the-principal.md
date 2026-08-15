@@ -1,186 +1,188 @@
-# ADR-0087 — MFA pindah ke principal, dan satu admin tenant kini menjangkau keluar
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0087-mfa-moves-to-the-principal.id.md)
 
-- **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 7 PR 7.3. Migrasi `sql/114`. Perintah
-  preflight baru `bun run identity:mfa-collisions:preflight`.
-- **Membangun di atas:**
+# ADR-0087 — MFA moves to the principal, and one tenant admin now reaches outside
+
+- **Status:** Accepted (2026-08-12).
+- **Context:** Issue #423 Wave 7 PR 7.3. Migration `sql/114`. New preflight
+  command `bun run identity:mfa-collisions:preflight`.
+- **Builds on:**
   [ADR-0085](0085-one-human-one-credential-many-tenants.md) (`awcms_principals`,
-  dan empat kontrol yang menggantikan RLS — ADR ini memakai keempatnya lagi,
-  bukan menurunkan versi yang lebih longgar),
-  [ADR-0086](0086-the-lockout-counter-is-global.md) (penghitung yang dipindahkan
-  wajib membawa serta setiap tuas pemulihannya), dan
+  and the four controls that replace RLS — this ADR uses all four again, not a
+  looser version of them),
+  [ADR-0086](0086-the-lockout-counter-is-global.md) (a counter that is moved
+  must bring every one of its recovery levers with it), and
   [ADR-0027](0027-mfa-totp-session-assurance-step-up.md) (MFA TOTP + step-up,
-  yang skema dan enkripsinya TIDAK berubah di sini).
+  whose schema and encryption do NOT change here).
 
-## Keputusan
+## Decision
 
-Faktor MFA dan recovery code berhenti menjadi milik sebuah identitas per-tenant
-dan menjadi milik **manusia**: `awcms_principal_mfa_factors` dan
-`awcms_principal_mfa_recovery_codes`, keduanya GLOBAL dan tanpa RLS, ber-kunci
+MFA factors and recovery codes stop belonging to a per-tenant identity and
+start belonging to the **human**: `awcms_principal_mfa_factors` and
+`awcms_principal_mfa_recovery_codes`, both GLOBAL and without RLS, keyed by
 `principal_id`.
 
-Enkripsi secret **tidak berubah** — konstruksi, kunci, dan format ciphertext
-`sql/024` dipakai apa adanya. ADR ini memindahkan KEPEMILIKAN, bukan kriptografi.
+Secret encryption **does not change** — the construction, the keys, and the
+`sql/024` ciphertext format are used as-is. This ADR moves OWNERSHIP, not
+cryptography.
 
-### Yang TIDAK ikut pindah, dan kenapa
+### What does NOT move, and why
 
-`awcms_mfa_challenges` dan `awcms_tenant_mfa_policies` tetap tenant-scoped di
-bawah FORCE RLS.
+`awcms_mfa_challenges` and `awcms_tenant_mfa_policies` stay tenant-scoped under
+FORCE RLS.
 
-Sebuah challenge adalah **satu percobaan login di satu tenant** — ia lahir dari
-sebuah `POST /auth/login` yang membawa `x-awcms-tenant-id` dan mati saat sesi di
-tenant itu terbit. Menjadikannya global akan membuat challenge yang diterbitkan
-tenant A bisa ditukar menjadi sesi di tenant B, yaitu persis bentuk serangan yang
-PR 7.4 nanti larang untuk principal token.
+A challenge is **one login attempt in one tenant** — it is born from a
+`POST /auth/login` carrying `x-awcms-tenant-id` and dies when the session in
+that tenant is issued. Making it global would let a challenge issued by tenant
+A be exchanged for a session in tenant B, which is exactly the attack shape PR
+7.4 will forbid for principal tokens.
 
-Sebuah policy adalah **keputusan produk sebuah tenant**. Faktornya global, tetapi
-KEWAJIBANNYA lokal: tenant B boleh menuntut MFA meski tenant A tidak, dan orang
-yang sama memakai satu authenticator untuk memenuhi keduanya. Menjadikan policy
-global akan memberi satu tenant kuasa memaksa kebijakan keamanan tenant lain.
+A policy is **a tenant's product decision**. The factor is global, but the
+OBLIGATION is local: tenant B may demand MFA even if tenant A does not, and the
+same person uses one authenticator to satisfy both. Making the policy global
+would give one tenant the power to force another tenant's security policy.
 
-> Faktornya milik manusia; kewajibannya milik tenant.
+> The factor belongs to the human; the obligation belongs to the tenant.
 
-## Konsekuensi yang wajib dinyatakan: reset admin kini menjangkau keluar tenant
+## A consequence that must be stated: an admin reset now reaches outside the tenant
 
-Reset MFA administratif oleh admin tenant A kini **global** — ia menonaktifkan
-authenticator yang sama yang dipakai orang itu di tenant B.
+An administrative MFA reset by an admin of tenant A is now **global** — it
+disables the very same authenticator that person uses in tenant B.
 
-Ini **satu-satunya tempat di seluruh repo tempat tindakan admin tenant
-menjangkau keluar tenantnya**, dan karena itu ia diperlakukan sebagai
-pengecualian yang disengaja, bukan efek samping:
+This is **the only place in the entire repo where a tenant admin action reaches
+outside its tenant**, and it is therefore treated as a deliberate exception,
+not as a side effect:
 
-1. **Ber-permission** — tetap `identity_access.mfa_admin.reset`, default-deny,
-   plus step-up (ADR-0027 F3). Tidak ada permission baru.
-2. **Tercatat sebagai jangkauan, bukan sebagai daftar.** Baris audit
-   `mfa_admin_reset` di tenant yang bertindak (severity `critical`, `reason`
-   wajib) membawa `crossTenantReach: true` ketika sebuah faktor benar-benar
-   dicabut. Ia menyatakan bahwa tindakan itu keluar dari tenant, tanpa menyebut
-   keluar ke mana.
-3. **Jejaknya menempel pada barisnya, bukan pada log tenant lain.**
-   `awcms_principal_mfa_factors.disabled_by_tenant_id` mencatat tenant yang
-   memerintahkan reset (NULL bila tak ada yang memerintahkan: `disable`
-   self-service, atau faktor yang distandown backfill `sql/114`). Baris itu GLOBAL,
-   jadi ia bertahan di sisi manusia yang kehilangan faktornya — tempat satu-satunya
-   yang bisa menjawab "kenapa MFA saya hilang" tanpa satu tenant menulis ke log
-   tenant lain.
+1. **Permissioned** — still `identity_access.mfa_admin.reset`, default-deny,
+   plus step-up (ADR-0027 F3). No new permission.
+2. **Recorded as reach, not as a list.** The `mfa_admin_reset` audit row in the
+   acting tenant (severity `critical`, `reason` mandatory) carries
+   `crossTenantReach: true` when a factor is genuinely revoked. It states that
+   the action left the tenant, without saying where it went.
+3. **The trace sticks to its own row, not to another tenant's log.**
+   `awcms_principal_mfa_factors.disabled_by_tenant_id` records the tenant that
+   ordered the reset (NULL when nobody ordered it: a self-service `disable`, or
+   a factor stood down by the `sql/114` backfill). That row is GLOBAL, so it
+   survives on the side of the human who lost their factor — the one place that
+   can answer "why did my MFA disappear" without one tenant writing into
+   another tenant's log.
 
-### Rencana meminta baris audit di SETIAP tenant. Itu tidak bisa dibangun, dan penolakannya adalah temuan
+### The plan asked for an audit row in EVERY tenant. That cannot be built, and the refusal is a finding
 
-Rencana Gelombang 7 menuliskan "diaudit di log kedua tenant". Edisi pertama ADR
-ini menyalinnya, dengan kalimat percaya diri bahwa penulisan lintas-tenant "tidak
-melanggar RLS karena melewati port audit, satu panggilan per tenant". **Basis
-data membantahnya**, dan itu ketahuan dengan memeriksa policy alih-alih
-mempercayai rencana:
+The Wave 7 plan wrote "audited in both tenants' logs". The first edition of this
+ADR copied that, with the confident sentence that a cross-tenant write "does not
+violate RLS because it goes through the audit port, one call per tenant". **The
+database contradicts it**, and that was caught by inspecting the policy instead
+of trusting the plan:
 
-- `awcms_identities` FORCE RLS dengan
-  `USING (tenant_id = current_setting('app.current_tenant_id')::uuid)`, jadi
-  `WHERE principal_id = … AND tenant_id <> …` mengembalikan **nol baris
-  selamanya**. Kode yang mengenumerasi tenant terjangkau akan hijau di setiap
-  gerbang dan diam-diam tidak pernah menemukan apa pun.
-- `awcms_audit_events` FORCE RLS dengan policy yang sama dan tanpa `WITH CHECK`
-  terpisah — sehingga `INSERT` ber-`tenant_id` lain ditolak policy, bukan
-  diterima.
+- `awcms_identities` is FORCE RLS with
+  `USING (tenant_id = current_setting('app.current_tenant_id')::uuid)`, so
+  `WHERE principal_id = … AND tenant_id <> …` returns **zero rows forever**.
+  Code that enumerates reachable tenants would be green in every gate and
+  silently never find anything.
+- `awcms_audit_events` is FORCE RLS with the same policy and without a separate
+  `WITH CHECK` — so an `INSERT` carrying a different `tenant_id` is rejected by
+  the policy, not accepted.
 
-Jadi kewajiban itu hanya bisa dipenuhi dengan mencabut properti yang membuat
-repo ini layak dipercaya: `SECURITY DEFINER` lintas-tenant (yang ADR-0086 sudah
-tolak untuk kerabat masalah ini) atau toggle `NO FORCE` saat request.
+So that obligation could only be met by revoking the property that makes this
+repo trustworthy: cross-tenant `SECURITY DEFINER` (which ADR-0086 already
+rejected for a relative of this problem) or a per-request `NO FORCE` toggle.
 
-**Dan seandainya bisa pun, ia tidak seharusnya.** Mengenumerasi tenant lain
-tempat sebuah alamat punya identitas adalah **oracle keanggotaan lintas-tenant**:
-admin tenant A yang memegang `mfa_admin.reset` akan belajar di mana lagi seorang
-manusia bekerja, dari sebuah endpoint yang tugasnya memulihkan orang. Kewajiban
-"catat jangkauannya" karena itu dipenuhi dengan menyatakan BAHWA ia menjangkau
-keluar, plus jejak pada baris global — bukan dengan daftar yang tidak boleh
-dimiliki siapa pun.
+**And even if it could be done, it should not be.** Enumerating the other
+tenants where an address has an identity is a **cross-tenant membership
+oracle**: an admin of tenant A holding `mfa_admin.reset` would learn where else
+a human works, from an endpoint whose job is to restore that person. The
+obligation to "record the reach" is therefore met by stating THAT it reached
+outside, plus the trace on the global row — not by a list nobody should hold.
 
-## Lockout per-faktor ikut menjadi global, dengan tuas pemulihannya
+## Per-factor lockout becomes global too, together with its recovery levers
 
-`failed_verify_count`/`locked_until` menempel pada faktor, jadi memindahkan
-faktor memindahkan lockout — konsekuensi yang sama yang ADR-0086 ambil untuk
-password, diambil sadar di sini juga: penyerang yang tahu password seseorang bisa
-mengunci authenticator orang itu di **semua** tenant sekaligus.
+`failed_verify_count`/`locked_until` stick to the factor, so moving the factor
+moves the lockout — the same consequence ADR-0086 took for passwords, taken
+knowingly here as well: an attacker who knows someone's password can lock that
+person's authenticator in **all** tenants at once.
 
-Aturan ADR-0086 berlaku penuh: **trade-off itu hanya boleh diambil bersama tuas
-pemulihannya, di PR yang sama.** Tuasnya ada tiga dan ketiganya kini juga global:
-recovery code, self-service `disable` + enroll ulang, dan reset administratif.
-Sebelum ADR ini, lockout faktor di tenant A tidak bisa dibatalkan oleh admin
-tenant B; sesudahnya, siapa pun dari ketiga jalur itu memulihkan orangnya
-sepenuhnya. Pemulihannya lebih baik dari sebelumnya, bukan lebih buruk.
+The ADR-0086 rule applies in full: **that trade-off may only be taken together
+with its recovery levers, in the same PR.** There are three levers and all three
+are now global as well: recovery codes, self-service `disable` + re-enroll, and
+the administrative reset. Before this ADR, a factor lockout in tenant A could
+not be cleared by an admin of tenant B; afterwards, any of those three paths
+restores the person fully. Recovery is better than before, not worse.
 
-## Backfill: pertahankan authenticator yang benar-benar ada di tangan orangnya
+## Backfill: keep the authenticator that is actually in the person's hands
 
-`awcms_identity_mfa_factors` unik pada `(tenant_id, identity_id, factor_type)`
-selama status ≠ `disabled`, jadi satu manusia yang ter-enroll di N tenant memiliki
-N secret BERBEDA. Setelah faktor ber-kunci principal, hanya satu yang boleh aktif.
+`awcms_identity_mfa_factors` is unique on `(tenant_id, identity_id, factor_type)`
+while status ≠ `disabled`, so one human enrolled in N tenants owns N DIFFERENT
+secrets. Once factors are keyed by principal, only one may stay active.
 
-Baris yang dipertahankan dipilih `ORDER BY last_used_step DESC, activated_at DESC`
-— **bukan** yang terbaru dibuat. `last_used_step` adalah nomor langkah TOTP dan
-karena itu sebanding lintas faktor: yang tertinggi adalah authenticator yang
-paling belakangan benar-benar dipakai, yaitu yang ada di ponsel yang orang itu
-masih pegang. Memilih `activated_at` tertinggi akan memilih enrolment
-terbaru — yang bisa saja dilakukan di ponsel yang sejak itu hilang, dan itu
-mengunci orangnya. Sisanya menjadi `disabled` ber-`disabled_at`, tidak dihapus.
+The row that is kept is picked by
+`ORDER BY last_used_step DESC, activated_at DESC` — **not** the most recently
+created one. `last_used_step` is a TOTP step number and is therefore comparable
+across factors: the highest one is the authenticator most recently actually
+used, i.e. the one on the phone that person still holds. Picking the highest
+`activated_at` would pick the newest enrolment — which may well have been done
+on a phone that has since been lost, and that locks the person out. The rest
+become `disabled` with a `disabled_at`, not deleted.
 
-Ini penerapan aturan ADR-0086 yang sama: **migrasi tidak boleh melemahkan kontrol
-yang dipindahkannya**, dan di sana jawabannya `MAX()` karena `0` akan melepaskan
-lockout yang sedang berlaku. Di sini jawabannya "terakhir dipakai" karena
-"terbaru dibuat" akan melepaskan orang dari authenticator-nya.
+This is an application of the same ADR-0086 rule: **a migration must not weaken
+the control it is moving**, and there the answer was `MAX()` because `0` would
+release a lockout that was in force. Here the answer is "last used" because
+"most recently created" would separate a person from their authenticator.
 
-**Migrasi TIDAK menolak jalan pada tabrakan.** Ia berbeda dari `sql/112`, yang
-`RAISE EXCEPTION` pada email bertabrakan, dan perbedaannya prinsipil: dua alamat
-yang berbeda hanya pada huruf besar-kecil adalah **kemungkinan dua orang**, dan
-menggabungkannya tak bisa dibatalkan. Dua faktor TOTP di dua tenant adalah **satu
-orang dalam keadaan yang sah**, yang dibuat produk ini sendiri — memblokir deploy
-untuk keadaan normal adalah gerbang yang salah. Yang dipakai sebagai gantinya:
-`bun run identity:mfa-collisions:preflight` melaporkan setiap principal
-ber-faktor lebih dari satu **sebelum** jendela deploy, sehingga keputusan
-"siapa kehilangan apa" bisa dilihat, bukan ditemukan.
+**The migration does NOT refuse to proceed on a collision.** It differs from
+`sql/112`, which does `RAISE EXCEPTION` on colliding emails, and the difference
+is principled: two addresses that differ only in letter case are **possibly two
+people**, and merging them cannot be undone. Two TOTP factors in two tenants
+are **one person in a legitimate state**, created by this product itself —
+blocking a deploy for a normal state is the wrong gate. What is used instead:
+`bun run identity:mfa-collisions:preflight` reports every principal with more
+than one factor **before** the deploy window, so the "who loses what" decision
+can be seen rather than discovered.
 
-Tabel lama dipertahankan terisi sebagai sejarah (preseden
-[ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)), dan
-`RETIRED_TENANT_TABLE_PRIVILEGES` menurunkan haknya ke `SELECT` saja.
+The old table is kept populated as history (precedent
+[ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md)), and
+`RETIRED_TENANT_TABLE_PRIVILEGES` reduces its rights to `SELECT` only.
 
-## Empat kontrol yang menggantikan RLS, dipakai ulang utuh
+## The four controls that replace RLS, reused whole
 
-Kedua tabel baru mewarisi kontrak ADR-0085 tanpa pelonggaran:
+Both new tables inherit the ADR-0085 contract without loosening:
 
-| #   | Kontrol                                                              | Ditegakkan oleh                                                  |
-| --- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | Hak dipersempit — `SELECT, INSERT, UPDATE, DELETE`, tanpa `TRUNCATE` | `sql/114` + `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` + suite DB-gated |
-| 2   | Invarian bentuk-baca, per-call-site                                  | `bun run identity:principal-access:check` (kini multi-tabel)     |
-| 3   | `secret_ciphertext` tidak pernah meninggalkan modul store            | tipe `PrincipalFactor` + test                                    |
-| 4   | Batas otorisasi tidak bergerak                                       | test yang menolak setiap nama tabel otorisasi di dalam store     |
+| #   | Control                                                                | Enforced by                                                      |
+| --- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1   | Narrowed rights — `SELECT, INSERT, UPDATE, DELETE`, without `TRUNCATE` | `sql/114` + `GLOBAL_TABLE_FORBIDDEN_PRIVILEGES` + DB-gated suite |
+| 2   | Read-shape invariant, per call site                                    | `bun run identity:principal-access:check` (now multi-table)      |
+| 3   | `secret_ciphertext` never leaves the store module                      | the `PrincipalFactor` type + tests                               |
+| 4   | The authorization boundary does not move                               | a test rejecting every authorization table name inside the store |
 
-Satu perbedaan disengaja terhadap `awcms_principals`: **`DELETE` diizinkan di
-sini.** Alasan ADR-0085 menahannya adalah bahwa principal adalah sandaran login
-seorang manusia dan pemulihan dari baris yang salah terhapus adalah restore.
-Recovery code justru sebaliknya — menghapusnya adalah operasi normal yang sudah
-dilakukan `disable`, `regenerate`, dan reset admin sejak ADR-0027, dan baris yang
-hilang berarti "kode itu tidak berlaku", bukan "orang ini tidak bisa login".
+One deliberate difference from `awcms_principals`: **`DELETE` is allowed
+here.** ADR-0085's reason for withholding it is that a principal is a human's
+login anchor and recovering from a wrongly deleted row means a restore. Recovery
+codes are the opposite — deleting them is a normal operation already performed
+by `disable`, `regenerate`, and the admin reset since ADR-0027, and a missing
+row means "that code is not valid", not "this person cannot log in".
 
-Kontrol 2 diperluas dari satu tabel menjadi tiga. Gerbangnya dulu memakai satu
-konstanta `TABLE`; ia kini beriterasi atas daftar tabel principal, masing-masing
-dengan allow-list berkasnya sendiri — supaya `principal-mfa-store.ts` tidak
-diberi izin menyentuh kredensial, dan `principal-store.ts` tidak diberi izin
-menyentuh faktor.
+Control 2 is widened from one table to three. The gate used to use a single
+`TABLE` constant; it now iterates over the list of principal tables, each with
+its own file allow-list — so that `principal-mfa-store.ts` is not granted
+permission to touch credentials, and `principal-store.ts` is not granted
+permission to touch factors.
 
-## DITOLAK
+## REJECTED
 
-- **Mengizinkan BANYAK faktor aktif per principal** (mencabut batasan
-  faktor-tunggal supaya nol orang kehilangan apa pun saat backfill). Ia melemahkan
-  kontrol yang sedang dipindahkan: satu tebakan kode akan diuji terhadap N secret
-  sekaligus, sehingga peluang cocok naik ~N kali, dan `failed_verify_count`
-  tersebar di N baris sehingga lockout per-faktor berhenti mengikat.
-- **Migrasi yang `RAISE EXCEPTION` pada tabrakan.** Lihat di atas: memblokir
-  deploy untuk keadaan yang sah.
-- **Memindahkan `awcms_mfa_challenges` ke principal.** Challenge global bisa
-  ditukar menjadi sesi di tenant yang bukan penerbitnya.
-- **Memindahkan `awcms_tenant_mfa_policies` ke principal.** Memberi satu tenant
-  kuasa atas postur keamanan tenant lain.
-- **Baris audit di setiap tenant terjangkau** (yang rencananya minta). Mustahil
-  di bawah FORCE RLS tanpa `SECURITY DEFINER` atau toggle `NO FORCE` saat
-  request, dan daftar tenantnya sendiri adalah oracle keanggotaan lintas-tenant.
-  Lihat bagian di atas.
-- **Menonaktifkan diam-diam faktor yang kalah saat backfill tanpa preflight.**
-  Kehilangan authenticator yang tidak bisa dilihat sebelum terjadi adalah insiden
-  dukungan, bukan migrasi.
+- **Allowing MANY active factors per principal** (dropping the single-factor
+  constraint so that nobody loses anything during the backfill). It weakens the
+  very control being moved: one code guess would be tested against N secrets at
+  once, so the chance of a match rises ~N-fold, and `failed_verify_count` would
+  be spread across N rows so per-factor lockout stops binding.
+- **A migration that does `RAISE EXCEPTION` on a collision.** See above:
+  blocking a deploy for a legitimate state.
+- **Moving `awcms_mfa_challenges` to the principal.** A global challenge could
+  be exchanged for a session in a tenant that did not issue it.
+- **Moving `awcms_tenant_mfa_policies` to the principal.** Giving one tenant
+  power over another tenant's security posture.
+- **An audit row in every reachable tenant** (what the plan asked for).
+  Impossible under FORCE RLS without `SECURITY DEFINER` or a per-request
+  `NO FORCE` toggle, and the tenant list itself is a cross-tenant membership
+  oracle. See the section above.
+- **Silently disabling the losing factor during the backfill without a
+  preflight.** Losing an authenticator in a way nobody can see before it happens
+  is a support incident, not a migration.

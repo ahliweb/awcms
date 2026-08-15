@@ -83,7 +83,7 @@ describe("the generated block", () => {
     // comparison would fail right after every `bun run lint`, so the check
     // asserts CONTENT — padding is not drift.
     const padded = [
-      "| Target             | Skrip                      | Gate |",
+      "| Target             | Script                     | Gate |",
       "| ------------------ | -------------------------- | ---- |",
       "| `modules:dag:check`| `validate-module-graph.ts` | ✅   |"
     ].join("\n");
@@ -103,7 +103,7 @@ describe("the generated block", () => {
       "# Scripts",
       "<!-- BEGIN GENERATED: script-inventory -->",
       "<!-- END GENERATED: script-inventory -->",
-      "## Ditunda"
+      "## Deferred"
     ].join("\n");
 
     expect(extractInventoryBlock(replaceInventoryBlock(readme, rendered))).toBe(
@@ -125,10 +125,7 @@ describe("the counts sentence is compared too (#442)", () => {
   const rendered = renderInventory(buildInventory(SCRIPTS));
 
   test("a mutation of ONLY the counts sentence is drift", () => {
-    const mutated = rendered.replace(
-      "2 target menjalankan",
-      "1 target menjalankan"
-    );
+    const mutated = rendered.replace("2 targets run", "1 targets run");
 
     expect(mutated).not.toBe(rendered);
     // The rows are untouched, so the old comparison had nothing to say.
@@ -139,7 +136,7 @@ describe("the counts sentence is compared too (#442)", () => {
   });
 
   test("a mutation of ONLY the gated count is drift", () => {
-    const mutated = rendered.replace("; 1 di antaranya", "; 0 di antaranya");
+    const mutated = rendered.replace("; 1 of them are", "; 0 of them are");
 
     expect(mutated).not.toBe(rendered);
     expect(parseInventoryBlock(mutated)).toEqual(parseInventoryBlock(rendered));
@@ -153,7 +150,7 @@ describe("the counts sentence is compared too (#442)", () => {
     // or the gate fights `bun run lint` forever — the reason it parsed in the
     // first place.
     const padded = rendered
-      .replace("| Target | Skrip | Gate |", "| Target      | Skrip | Gate |")
+      .replace("| Target | Script | Gate |", "| Target      | Script | Gate |")
       .replace("| ------ | ----- | ---- |", "| ----------- | ----- | ---- |")
       .replace("| `db:migrate` |", "| `db:migrate`  |");
 
@@ -173,7 +170,7 @@ describe("the counts sentence is compared too (#442)", () => {
 describe("findFalseAbsenceClaims", () => {
   test("flags the defect this gate exists for: a shipped tool listed as not-yet-ported", () => {
     const readme = [
-      "## Ditunda",
+      "## Deferred",
       "",
       "| Target acuan | Prasyarat |",
       "| --- | --- |",
@@ -194,7 +191,7 @@ describe("findFalseAbsenceClaims", () => {
     // while doing so, and scanning it wholesale made the gate report itself on
     // its very first run.
     const readme = [
-      "## Ditunda",
+      "## Deferred",
       "",
       "`scripts:inventory:check` menolak kalau nama di bawah sudah terdaftar.",
       "",
@@ -263,7 +260,7 @@ describe("the real repository", () => {
     const gated = targets.filter(([target]) => chain.includes(target));
 
     expect(extractInventoryBlock(readme)).toContain(
-      `${targets.length} target menjalankan berkas di \`scripts/\`; ${gated.length} di antaranya`
+      `${targets.length} targets run a file in \`scripts/\`; ${gated.length} of them are`
     );
   });
 

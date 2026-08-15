@@ -1,12 +1,14 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](release-process.id.md)
+
 # Release Process — Changesets, SBOM, Signing, Provenance
 
-> **Status dokumen:** pipeline **sudah dieksekusi sebagai rilis nyata**. Rilis nyata pertama **`v6.0.0` (2026-07-21)** menjalankan `.github/workflows/release.yml` end-to-end lewat push tag `v6.0.0`: `validate` → `build` (image + dua SBOM) → `sign-attest-publish` semuanya sukses, image `ghcr.io/ahliweb/awcms:6.0.0` (+`:latest`,`:sha-*`) ter-publish dengan attestation terverifikasi (`gh attestation verify oci://ghcr.io/ahliweb/awcms:6.0.0 --owner ahliweb` → OK), dan GitHub Release `v6.0.0` terbit dengan asset SBOM×2 + `CHECKSUMS.txt` + `source.tar.gz`. Versi sebelumnya `5.0.0` adalah lompatan manual melanjutkan lini major legacy `v4.6.0` (lihat [ADR-0024](../adr/0024-semver-numbering-continues-legacy-major-line.md)); `6.0.0` adalah bump changeset normal (MAJOR: breaking ADR-0034). Kedua workflow (`.github/workflows/changesets.yml`, `.github/workflows/release.yml`, `Dockerfile.production`, `scripts/release-verify.ts`) diadaptasi dari basis `awcms-mini`.
+> **Document status:** the pipeline **has already been executed as a real release**. The first real release **`v6.0.0` (2026-07-21)** ran `.github/workflows/release.yml` end-to-end via a `v6.0.0` tag push: `validate` → `build` (image + two SBOMs) → `sign-attest-publish` all succeeded, image `ghcr.io/ahliweb/awcms:6.0.0` (+`:latest`,`:sha-*`) was published with a verified attestation (`gh attestation verify oci://ghcr.io/ahliweb/awcms:6.0.0 --owner ahliweb` → OK), and GitHub Release `v6.0.0` shipped with SBOM×2 + `CHECKSUMS.txt` + `source.tar.gz` assets. The previous version `5.0.0` was a manual jump continuing the legacy major line `v4.6.0` (see [ADR-0024](../adr/0024-semver-numbering-continues-legacy-major-line.md)); `6.0.0` is a normal changeset bump (MAJOR: breaking ADR-0034). Both workflows (`.github/workflows/changesets.yml`, `.github/workflows/release.yml`, `Dockerfile.production`, `scripts/release-verify.ts`) were adapted from the `awcms-mini` base.
 >
-> **✅ Approval gate kini AKTIF (dikonfigurasi 2026-07-21).** Pada rilis `v6.0.0` job `sign-attest-publish` sempat berjalan **tanpa jeda "Waiting for review"** karena Environment `release` belum punya required reviewers. Gap itu **sudah ditutup**: required reviewer `ahliweb` (id `44542506`) dipasang via `gh api -X PUT .../environments/release` (`prevent_self_review: false`, `can_admins_bypass: true`). **Diverifikasi lewat rehearsal** (`workflow_dispatch`, run 29831369872): `validate`+`build` sukses lalu `sign-attest-publish` berhenti di `status: waiting` dengan pending deployment environment `release` — membuktikan gerbang benar-benar menahan (run rehearsal lalu dibatalkan tanpa publish). Sejak sekarang setiap rilis nyata **dan** rehearsal pause menunggu **Approve and deploy** dari maintainer sebelum sign/attest/publish.
+> **✅ The approval gate is now ACTIVE (configured 2026-07-21).** On release `v6.0.0` the `sign-attest-publish` job ran **without any "Waiting for review" pause** because the `release` Environment had no required reviewers yet. That gap is **now closed**: required reviewer `ahliweb` (id `44542506`) was installed via `gh api -X PUT .../environments/release` (`prevent_self_review: false`, `can_admins_bypass: true`). **Verified through a rehearsal** (`workflow_dispatch`, run 29831369872): `validate`+`build` succeeded and then `sign-attest-publish` stopped at `status: waiting` with a pending deployment for environment `release` — proving the gate really does hold (the rehearsal run was then cancelled without publishing). From now on every real release **and** rehearsal pauses waiting for a maintainer's **Approve and deploy** before sign/attest/publish.
 >
-> **Prosedur tag (koreksi):** tidak ada script `bun run changeset:tag` — tag rilis `vX.Y.Z` dibuat **manual** (`git tag -a vX.Y.Z -m "vX.Y.Z"` → `RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify` → `git push origin vX.Y.Z`). Image di-tag **tanpa** prefix `v` (`6.0.0`), sedangkan git tag & GitHub Release memakai `v6.0.0`.
+> **Tag procedure (correction):** there is no `bun run changeset:tag` script — the release tag `vX.Y.Z` is created **manually** (`git tag -a vX.Y.Z -m "vX.Y.Z"` → `RELEASE_VERIFY_TAG=vX.Y.Z bun run release:verify` → `git push origin vX.Y.Z`). The image is tagged **without** the `v` prefix (`6.0.0`), while the git tag and GitHub Release use `v6.0.0`.
 
-Changesets sudah mengelola version bump dan `CHANGELOG.md` (lihat `.changeset/` dan `CHANGELOG.md` di repo ini serta `docs/awcms/09_roadmap_repository_commit.md` §Versioning dengan Changesets, menyusul) dan `bun run changesets:policy:check` sudah menegakkan kebijakan changeset di setiap PR (`.github/workflows/changesets.yml`). `release.yml` mem-produksi image, dua SBOM, signature, dan provenance yang bisa diverifikasi — desainnya didokumentasikan lengkap di bawah, implementasinya ada di `.github/workflows/release.yml`.
+Changesets already manages the version bump and `CHANGELOG.md` (see `.changeset/` and `CHANGELOG.md` in this repo plus `docs/awcms/09_roadmap_repository_commit.md` §Versioning with Changesets, to follow) and `bun run changesets:policy:check` already enforces the changeset policy on every PR (`.github/workflows/changesets.yml`). `release.yml` produces an image, two SBOMs, a signature, and provenance that can be verified — its design is documented in full below, its implementation lives in `.github/workflows/release.yml`.
 
 ## Pipeline overview
 
@@ -26,66 +28,66 @@ flowchart TD
   SignJob --> Publish[Push ghcr.io attestations<br/>+ GitHub Release with assets<br/>real release only]
 ```
 
-Kedua trigger wajib menjalankan `validate` job yang persis sama — jalur rehearsal bukan jalan pintas melewati quality gate, hanya melewati tag-ancestor guard dan `release:verify` (keduanya `if: github.event_name == 'push'`; `bun run check` sendiri selalu berjalan).
+Both triggers must run exactly the same `validate` job — the rehearsal path is not a shortcut around the quality gate, it only skips the tag-ancestor guard and `release:verify` (both `if: github.event_name == 'push'`; `bun run check` itself always runs).
 
 ## 1. PR-time gate: `changesets.yml`
 
-`scripts/changeset-policy-check.ts` (`bun run changesets:policy:check`) memutuskan apakah sebuah PR butuh changeset baru, memakai riwayat PR yang sudah merge di repo ini sendiri sebagai ground truth untuk apa yang tergolong "docs-only/chore":
+`scripts/changeset-policy-check.ts` (`bun run changesets:policy:check`) decides whether a PR needs a new changeset, using this repo's own merged-PR history as ground truth for what counts as "docs-only/chore":
 
-- **Exempt** (tidak butuh changeset): `docs/**`, `.claude/**`, `.changeset/**`, berkas `*.md` mana pun.
-- **Tidak exempt** (wajib changeset): semua yang lain, termasuk `.github/**` workflow, `scripts/**`, `src/**`, `sql/**`, `openapi/**`, `asyncapi/**`, `package.json`, `Dockerfile*`, `docker-compose*.yml`, dan berkas test.
+- **Exempt** (no changeset needed): `docs/**`, `.claude/**`, `.changeset/**`, any `*.md` file.
+- **Not exempt** (changeset required): everything else, including `.github/**` workflows, `scripts/**`, `src/**`, `sql/**`, `openapi/**`, `asyncapi/**`, `package.json`, `Dockerfile*`, `docker-compose*.yml`, and test files.
 
-Bila berkas `.changeset/*.md` baru ditambahkan, frontmatter-nya divalidasi (`"awcms": major|minor|patch` — repo single-package, jadi tidak ada nama package lain yang valid). Sebuah daftar pengecualian path satu-off (`CHANGESET_POLICY_PATH_EXEMPTIONS` di script) tersedia untuk false positive genuine, meniru pola `CONFIG_EXEMPTIONS`/`LOGGING_LINT_EXEMPTIONS` yang sudah dipakai di tempat lain di repo ini bila diadopsi.
+When a new `.changeset/*.md` file is added, its frontmatter is validated (`"awcms": major|minor|patch` — this repo is single-package, so no other package name is valid). A one-off path exception list (`CHANGESET_POLICY_PATH_EXEMPTIONS` in the script) is available for genuine false positives, mirroring the `CONFIG_EXEMPTIONS`/`LOGGING_LINT_EXEMPTIONS` pattern already used elsewhere in this repo where adopted.
 
-Check ini berjalan sebagai workflow sendiri (`changesets.yml`), bukan step tambahan di dalam `ci.yml`'s `quality` job atau `bun run check`, karena secara inheren berbentuk PR-diff (butuh tip `origin/main` untuk dibandingkan) — setiap step lain di `check` bersifat self-contained dan aman dijalankan terhadap satu checkout tanpa dependency network/git-history.
+This check runs as its own workflow (`changesets.yml`), not as an extra step inside `ci.yml`'s `quality` job or `bun run check`, because it is inherently PR-diff shaped (it needs the `origin/main` tip to compare against) — every other step in `check` is self-contained and safe to run against a single checkout with no network/git-history dependency.
 
 ## 2. Tag-time release: `release.yml`
 
-Dua entry point, keduanya konvergen ke job graph yang sama:
+Two entry points, both converging on the same job graph:
 
-| Trigger                           | Efek                                                                                                                                                  |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `push` tag yang cocok `v*.*.*`    | **Rilis nyata.** Mempublikasikan image, GitHub Release, dan memindahkan `:latest`.                                                                    |
-| `workflow_dispatch` (ref apa pun) | **Rehearsal.** Menjalankan pipeline yang identik terhadap image tag `dryrun-<sha>`. Tidak ada GitHub Release dibuat, `:latest` tidak pernah disentuh. |
+| Trigger                           | Effect                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `push` of a tag matching `v*.*.*` | **Real release.** Publishes the image, the GitHub Release, and moves `:latest`.                                                        |
+| `workflow_dispatch` (any ref)     | **Rehearsal.** Runs the identical pipeline against image tag `dryrun-<sha>`. No GitHub Release is created, `:latest` is never touched. |
 
 ### `validate` job (read-only)
 
-1. **Ancestor-of-main guard** (rilis nyata saja) — `git merge-base --is-ancestor HEAD origin/main`. Selama repo ini belum punya branch protection rule di `main`, guard ini adalah pengganti level-workflow untuk "publish hanya dari branch terproteksi": tag yang commit-nya bukan bagian dari riwayat `origin/main` ditolak sebelum apa pun dibangun.
-2. **`bun run release:verify`** (rilis nyata saja, `scripts/release-verify.ts`) — memastikan versi tag yang di-push cocok dengan `package.json`, bahwa `CHANGELOG.md` punya section `## [X.Y.Z]` untuknya, dan tidak ada berkas changeset yang belum terkonsumsi di `.changeset/`.
-3. **`bun run check`** (terhadap Postgres service nyata yang sudah dimigrasi) — quality gate penuh, diverifikasi ulang saat release time, bukan dipercaya dari hasil CI yang mungkin sudah basi. Ini harus **lebih ketat** daripada `quality` job milik `ci.yml`, bukan identik dengannya — pastikan setiap step yang dijalankan `bun run check` juga dijalankan `ci.yml`'s `quality` job (mis. `i18n:pot:check`, `config:docs:check`, `logging:lint:check`, `api:docs:check`, `repo:inventory:check`) agar drift semacam ini tidak bisa merge ke `main` lewat PR hijau dan baru muncul saat tag-push.
+1. **Ancestor-of-main guard** (real releases only) — `git merge-base --is-ancestor HEAD origin/main`. As long as this repo has no branch protection rule on `main`, this guard is the workflow-level substitute for "publish only from a protected branch": a tag whose commit is not part of `origin/main`'s history is rejected before anything is built.
+2. **`bun run release:verify`** (real releases only, `scripts/release-verify.ts`) — makes sure the pushed tag's version matches `package.json`, that `CHANGELOG.md` has a `## [X.Y.Z]` section for it, and that there are no unconsumed changeset files left in `.changeset/`.
+3. **`bun run check`** (against a real, already-migrated Postgres service) — the full quality gate, re-verified at release time rather than trusted from a possibly stale CI result. This must be **stricter** than `ci.yml`'s `quality` job, not identical to it — make sure every step `bun run check` runs is also run by `ci.yml`'s `quality` job (e.g. `i18n:pot:check`, `config:docs:check`, `logging:lint:check`, `api:docs:check`, `repo:inventory:check`) so that this kind of drift cannot merge to `main` through a green PR and only surface on a tag push.
 
-   (Catatan historis: versi lama paragraf ini menyarankan menambahkan `extension:check` — kompatibilitas manifest aplikasi turunan — ke composite `check` dan `ci.yml`. Saran itu **tidak lagi berlaku**: jalur aplikasi-turunan beserta `extension:check` sudah **dicabut oleh [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)**. Prinsipnya tetap: setiap check baru yang ditambahkan ke `package.json`'s `check` composite harus juga menjadi step eksplisit bernama di `ci.yml`'s `quality` job dalam PR yang sama, agar tidak muncul kelas drift yang sama.)
+   (Historical note: an older version of this paragraph suggested adding `extension:check` — derived-application manifest compatibility — to the `check` composite and to `ci.yml`. That advice **no longer applies**: the derived-application pathway together with `extension:check` has been **revoked by [ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)**. The principle stands: every new check added to `package.json`'s `check` composite must also become an explicit named step in `ci.yml`'s `quality` job in the same PR, so the same class of drift cannot appear.)
 
-### `build` job (unprivileged: `contents: read`, `packages: write` saja)
+### `build` job (unprivileged: `contents: read`, `packages: write` only)
 
-Berjalan identik untuk rilis nyata dan rehearsal. Sengaja tidak memegang credential signing/attestation (`id-token`/`attestations`) — lihat di bawah.
+Runs identically for a real release and a rehearsal. Deliberately holds no signing/attestation credentials (`id-token`/`attestations`) — see below.
 
-1. Build `Dockerfile.production` dengan Docker Buildx, push ke `ghcr.io/ahliweb/awcms` bertag `<version>` (atau `dryrun-<sha>` untuk rehearsal) dan `sha-<commit>`; `:latest` ditambahkan hanya untuk rilis nyata.
-2. **SBOM** — dua SBOM CycloneDX JSON terpisah via [`anchore/sbom-action`](https://github.com/anchore/sbom-action) (Syft di baliknya): satu untuk **source tree** (`bun.lock` + workspace, `sbom-source.cdx.json`) dan satu untuk **image container terbangun** (`sbom-image.cdx.json`) — keduanya bisa berbeda (SBOM image juga mencerminkan paket OS base image, bukan hanya `bun.lock`).
-3. **Checksums** — `CHECKSUMS.txt` (SHA-256) mencakup kedua SBOM dan sebuah `git archive` source tarball.
-4. Mengunggah semua di atas sebagai workflow artifact berumur pendek (1 hari) untuk diunduh job berikutnya.
+1. Build `Dockerfile.production` with Docker Buildx, push to `ghcr.io/ahliweb/awcms` tagged `<version>` (or `dryrun-<sha>` for a rehearsal) and `sha-<commit>`; `:latest` is added only for a real release.
+2. **SBOM** — two separate CycloneDX JSON SBOMs via [`anchore/sbom-action`](https://github.com/anchore/sbom-action) (Syft behind it): one for the **source tree** (`bun.lock` + workspace, `sbom-source.cdx.json`) and one for the **built container image** (`sbom-image.cdx.json`) — the two can differ (the image SBOM also reflects the base image's OS packages, not just `bun.lock`).
+3. **Checksums** — `CHECKSUMS.txt` (SHA-256) covers both SBOMs and a `git archive` source tarball.
+4. Uploads all of the above as a short-lived (1 day) workflow artifact for the next job to download.
 
 ### `sign-attest-publish` job (`environment: release`)
 
-Digerbangi di belakang GitHub Environment bernama `release` (lihat §Environment approval di bawah). Dipisah dari `build` menjadi job sendiri karena alasan keamanan: `id-token`/`attestations` permission bersifat JOB-scoped di GitHub Actions, jadi setiap step di job yang memegangnya bisa mencetak OIDC token sendiri — menjaga third-party action `anchore/sbom-action` sepenuhnya di luar job ini berarti hipotesis kompromi supply-chain pada action itu tidak pernah punya credential OIDC/attestation untuk disalahgunakan. Berjalan identik untuk rilis nyata dan rehearsal:
+Gated behind a GitHub Environment named `release` (see §Environment approval below). It is split out of `build` into its own job for a security reason: the `id-token`/`attestations` permissions are JOB-scoped in GitHub Actions, so every step in a job holding them can mint its own OIDC token — keeping the third-party `anchore/sbom-action` entirely out of this job means a hypothetical supply-chain compromise of that action never has OIDC/attestation credentials to abuse. Runs identically for a real release and a rehearsal:
 
-1. **Signing** — `cosign sign --yes` terhadap digest image yang dihasilkan `build` job, **keyless OIDC** (tidak ada signing key yang pernah ada; identitasnya adalah workflow run ini sendiri, didukung OIDC token GitHub Actions dan Sigstore's Fulcio/Rekor).
-2. **Attestation/provenance** — `actions/attest-build-provenance` untuk digest image (dipush ke registry juga) dan untuk tiga artefak source (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest-sbom` mengasosiasikan `sbom-image.cdx.json` dengan digest image secara spesifik. Semua adalah attestation store SLSA-compatible milik GitHub sendiri — tidak ada infrastruktur terpisah yang perlu dijalankan/dipelihara.
-3. **Publish** (rilis nyata saja) — mengekstrak section versi ini dari `CHANGELOG.md` sebagai body release dan menjalankan `gh release create`, melampirkan `CHECKSUMS.txt` dan kedua SBOM plus source tarball sebagai release asset.
+1. **Signing** — `cosign sign --yes` against the image digest produced by the `build` job, **keyless OIDC** (no signing key ever exists; the identity is this workflow run itself, backed by the GitHub Actions OIDC token and Sigstore's Fulcio/Rekor).
+2. **Attestation/provenance** — `actions/attest-build-provenance` for the image digest (pushed to the registry too) and for the three source artifacts (`CHECKSUMS.txt`, `sbom-source.cdx.json`, source tarball); `actions/attest-sbom` associates `sbom-image.cdx.json` with the image digest specifically. All of these are GitHub's own SLSA-compatible attestation store — no separate infrastructure to run/maintain.
+3. **Publish** (real releases only) — extracts this version's section from `CHANGELOG.md` as the release body and runs `gh release create`, attaching `CHECKSUMS.txt` and both SBOMs plus the source tarball as release assets.
 
-## Mengapa `anchore/sbom-action` (Syft) untuk SBOM generation
+## Why `anchore/sbom-action` (Syft) for SBOM generation
 
-- Menghasilkan CycloneDX **dan** SPDX (pipeline ini memakai CycloneDX untuk kedua scan — satu format lebih sederhana untuk konsumen di-diff/tooling; keduanya memenuhi kriteria "CycloneDX atau SPDX").
-- Composite action self-contained yang membungkus satu binary Go statically-linked (Syft) — tidak memanggil `npm`/`node` terhadap repo ini atau membutuhkan SBOM generator berbasis Node.js (`@cyclonedx/cyclonedx-npm` dan sejenisnya adalah npm-ecosystem-only dan akan bertentangan dengan aturan Bun-only di `AGENTS.md`). Hanya membaca `bun.lock`/filesystem/image terbangun — tidak pernah mengeksekusi kode proyek ini sendiri.
-- Satu action mencakup kedua scan target (`path:` untuk source tree, `image:` untuk container terbangun), jadi hanya ada satu third-party action baru untuk di-pin dan diaudit, bukan dua tool berbeda.
+- Produces CycloneDX **and** SPDX (this pipeline uses CycloneDX for both scans — one format is simpler for consumers to diff/tool against; both satisfy the "CycloneDX or SPDX" criterion).
+- A self-contained composite action wrapping a single statically-linked Go binary (Syft) — it does not invoke `npm`/`node` against this repo or require a Node.js-based SBOM generator (`@cyclonedx/cyclonedx-npm` and friends are npm-ecosystem-only and would conflict with the Bun-only rule in `AGENTS.md`). It only reads `bun.lock`/the filesystem/the built image — it never executes this project's own code.
+- One action covers both scan targets (`path:` for the source tree, `image:` for the built container), so there is only one new third-party action to pin and audit, not two different tools.
 
-## Environment approval (langkah manual maintainer)
+## Environment approval (manual maintainer step)
 
-`sign-attest-publish` mendeklarasikan `environment: release` (`build` tidak — karena tidak memegang credential signing/attestation, menggerbanginya di belakang approval hanya menambah friksi tanpa manfaat keamanan). Mereferensikan nama environment di sebuah workflow **auto-create record environment yang tidak terproteksi** pada run pertama bila belum ada — ini **tidak**, dengan sendirinya, mem-pause job untuk approval. Mengonfigurasi **required reviewers** pada environment tersebut adalah perubahan repo-admin/shared-state yang sengaja dibiarkan untuk diterapkan eksplisit oleh maintainer:
+`sign-attest-publish` declares `environment: release` (`build` does not — since it holds no signing/attestation credentials, gating it behind approval would only add friction with no security benefit). Referencing an environment name in a workflow **auto-creates an unprotected environment record** on the first run if it does not exist — this does **not**, by itself, pause the job for approval. Configuring **required reviewers** on that environment is a repo-admin/shared-state change deliberately left for a maintainer to apply explicitly:
 
-**Via GitHub UI:** Settings → Environments → New environment → beri nama tepat `release` → **Required reviewers** → tambahkan minimal satu maintainer → Save protection rules. Setiap run `release.yml`'s publish job (rilis nyata **dan** rehearsal) akan pause di "Waiting for review" sampai reviewer yang disetujui klik **Approve and deploy**.
+**Via the GitHub UI:** Settings → Environments → New environment → name it exactly `release` → **Required reviewers** → add at least one maintainer → Save protection rules. Every run of `release.yml`'s publish job (real release **and** rehearsal) will then pause at "Waiting for review" until an approved reviewer clicks **Approve and deploy**.
 
-**Setara `gh api`** (dijalankan oleh repo admin; ganti `<reviewer-user-id>` dengan numeric GitHub user id tiap required reviewer, dari `gh api users/<login> --jq .id`):
+**`gh api` equivalent** (run by a repo admin; replace `<reviewer-user-id>` with the numeric GitHub user id of each required reviewer, from `gh api users/<login> --jq .id`):
 
 ```bash
 gh api -X PUT repos/ahliweb/awcms/environments/release \
@@ -93,74 +95,74 @@ gh api -X PUT repos/ahliweb/awcms/environments/release \
   -F 'reviewers[][id]=<reviewer-user-id>'
 ```
 
-Sampai ini diterapkan, `release.yml` tetap berjalan end-to-end (kedua entry point) tanpa pause — setiap kontrol lain di dokumen ini (ancestor-of-main guard, `release:verify`, quality gate penuh, least-privilege per-job permissions, pinned-by-SHA actions) independen dari langkah ini.
+Until this is applied, `release.yml` still runs end-to-end (both entry points) with no pause — every other control in this document (ancestor-of-main guard, `release:verify`, the full quality gate, least-privilege per-job permissions, actions pinned by SHA) is independent of this step.
 
 ## Dry-run / rehearsal path
 
-Trigger `release.yml` secara manual — GitHub UI: **Actions → Release → Run workflow** (pilih branch mana pun; `main` adalah default yang masuk akal), atau:
+Trigger `release.yml` manually — GitHub UI: **Actions → Release → Run workflow** (pick any branch; `main` is the sensible default), or:
 
 ```bash
 gh workflow run release.yml --repo ahliweb/awcms --ref main
 ```
 
-Ini menjalankan pipeline **sepenuhnya** — image build, kedua SBOM, checksums, keyless signing, provenance/SBOM attestation, dan gate approval `release` environment (setelah dikonfigurasi) — terhadap tag `ghcr.io/ahliweb/awcms:dryrun-<short-sha>` yang sekali pakai. Tidak pernah membuat GitHub Release dan tidak pernah memindahkan `:latest`, jadi tidak bisa keliru dianggap (atau tanpa sengaja jadi) rilis produksi. Rehearse ini minimal sekali, dengan reviewer benar-benar menyetujui gate environment, sebelum tag `vX.Y.Z` nyata pertama di-push.
+This runs the pipeline **in full** — image build, both SBOMs, checksums, keyless signing, provenance/SBOM attestation, and the `release` environment approval gate (once configured) — against a throwaway `ghcr.io/ahliweb/awcms:dryrun-<short-sha>` tag. It never creates a GitHub Release and never moves `:latest`, so it cannot be mistaken for (or accidentally become) a production release. Rehearse this at least once, with a reviewer actually approving the environment gate, before the first real `vX.Y.Z` tag is pushed.
 
-Image rehearsal menumpuk di package `ghcr.io/ahliweb/awcms` di bawah tag `dryrun-*`; maintainer bisa menghapus yang lama secara berkala lewat halaman **Manage versions** package atau `gh api -X DELETE /orgs/ahliweb/packages/container/awcms/versions/<id>` — tidak diotomasi pipeline ini, karena penghapusan otomatis butuh `packages: delete`, permission yang tidak dibutuhkan job mana pun di sini.
+Rehearsal images pile up in the `ghcr.io/ahliweb/awcms` package under `dryrun-*` tags; a maintainer can delete old ones periodically via the package's **Manage versions** page or `gh api -X DELETE /orgs/ahliweb/packages/container/awcms/versions/<id>` — not automated by this pipeline, because automatic deletion needs `packages: delete`, a permission no job here needs.
 
-## Verifikasi (sisi konsumen — tidak butuh secret repository)
+## Verification (consumer side — no repository secrets needed)
 
-Setiap check di bawah hanya memakai data publik (registry, GitHub public attestation API, Sigstore public transparency log) — tidak ada yang butuh akses ke secret/CI environment repo ini.
+Every check below uses only public data (the registry, the GitHub public attestation API, the Sigstore public transparency log) — none of them needs access to this repo's secrets/CI environment.
 
-> **Tag image TIDAK berawalan `v`.** `release.yml` menghitung `VERSION="${GITHUB_REF_NAME#v}"`, jadi tag Git `v7.0.1` mem-publish `ghcr.io/ahliweb/awcms:7.0.1` (+ `:latest`, `:sha-<12>`). `…:v7.0.1` tidak ada di registry dan setiap perintah di bawah akan gagal dengan "manifest unknown" bila `v`-nya ikut ditulis. Ganti `X.Y.Z` di bawah dengan versi tanpa `v`.
+> **The image tag is NOT prefixed with `v`.** `release.yml` computes `VERSION="${GITHUB_REF_NAME#v}"`, so Git tag `v7.0.1` publishes `ghcr.io/ahliweb/awcms:7.0.1` (+ `:latest`, `:sha-<12>`). `…:v7.0.1` does not exist in the registry and every command below will fail with "manifest unknown" if the `v` is written along with it. Replace `X.Y.Z` below with the version without the `v`.
 
 ```bash
-# 1. Verifikasi attestation SLSA build provenance milik image
+# 1. Verify the image's SLSA build provenance attestation
 gh attestation verify oci://ghcr.io/ahliweb/awcms:X.Y.Z \
   --owner ahliweb
 
-# 2. Verifikasi attestation SBOM milik image
+# 2. Verify the image's SBOM attestation
 gh attestation verify oci://ghcr.io/ahliweb/awcms:X.Y.Z \
   --owner ahliweb --predicate-type https://cyclonedx.org/bom
 
-# 3. Verifikasi signature keyless cosign langsung (tanpa gh CLI)
+# 3. Verify the keyless cosign signature directly (without the gh CLI)
 cosign verify ghcr.io/ahliweb/awcms:X.Y.Z \
   --certificate-identity-regexp "^https://github.com/ahliweb/awcms/.github/workflows/release.yml@refs/tags/v.*" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-# 4. Verifikasi provenance untuk artefak source yang bisa diunduh
+# 4. Verify provenance for the downloadable source artifacts
 gh attestation verify CHECKSUMS.txt --owner ahliweb
 gh attestation verify sbom-source.cdx.json --owner ahliweb
 
-# 5. Verifikasi checksum untuk apa pun yang diunduh dari GitHub Release
+# 5. Verify checksums for anything downloaded from the GitHub Release
 sha256sum -c CHECKSUMS.txt
 ```
 
-`gh attestation verify` dan `cosign verify` keduanya bekerja terhadap identitas GitHub/Sigstore publik dan anonim — tidak butuh `GITHUB_TOKEN`, secret repository, atau credential maintainer apa pun untuk kelima command di atas.
+`gh attestation verify` and `cosign verify` both work against public, anonymous GitHub/Sigstore identities — none of the five commands above needs a `GITHUB_TOKEN`, a repository secret, or any maintainer credential.
 
-## Panduan rollback / yank
+## Rollback / yank guidance
 
-Baik Changesets maupun pipeline ini tidak pernah menghapus atau menulis ulang versi yang sudah dipublikasikan — konsisten dengan semangat append-only aturan audit trail di `AGENTS.md` (diterapkan di sini untuk artefak rilis, bukan data domain). Untuk memulihkan dari rilis yang buruk:
+Neither Changesets nor this pipeline ever deletes or rewrites an already-published version — consistent with the append-only spirit of the audit trail rule in `AGENTS.md` (applied here to release artifacts, not domain data). To recover from a bad release:
 
-1. **Jangan hapus git tag, GitHub Release, atau image/tag `ghcr.io`.** Konsumen mungkin sudah menarik (pull) rilis itu; menghapusnya menghilangkan kemampuan mereka bahkan untuk mendiagnosis apa yang mereka punya.
-2. **Tandai GitHub Release sebagai pre-release** (`gh release edit vX.Y.Z --prerelease`) dan tambahkan catatan di atas body-nya yang menunjuk ke versi yang sudah diperbaiki.
-3. **Buat rilis patch baru** (`vX.Y.Z+1`) lewat jalur normal (changeset → `changeset:version` → tag → `release.yml`) dengan perbaikannya. Jangan force-push tag yang dikoreksi di atas nomor versi yang sama — digest image dan attestation yang sudah diterbitkan untuk tag lama akan secara diam-diam menunjuk ke byte yang berbeda dari yang diimplikasikan nama tag, yang membatalkan seluruh tujuan rantai checksum/signature/provenance yang dideskripsikan dokumen ini.
-4. Bila image sudah dideploy, redeploy dengan pin ke **digest** versi baru (`ghcr.io/ahliweb/awcms@sha256:...`, dari `CHECKSUMS.txt` atau `docker buildx imagetools inspect`), bukan tag mengambang, untuk menjamin byte yang benar-benar tetap yang berjalan.
+1. **Do not delete the git tag, the GitHub Release, or the `ghcr.io` image/tag.** Consumers may already have pulled that release; deleting it takes away even their ability to diagnose what they have.
+2. **Mark the GitHub Release as a pre-release** (`gh release edit vX.Y.Z --prerelease`) and add a note at the top of its body pointing at the fixed version.
+3. **Cut a new patch release** (`vX.Y.Z+1`) through the normal path (changeset → `changeset:version` → tag → `release.yml`) with the fix. Do not force-push a corrected tag over the same version number — the image digest and attestations already published for the old tag would silently point at different bytes than the tag name implies, which defeats the entire purpose of the checksum/signature/provenance chain this document describes.
+4. If the image is already deployed, redeploy pinned to the new version's **digest** (`ghcr.io/ahliweb/awcms@sha256:...`, from `CHECKSUMS.txt` or `docker buildx imagetools inspect`), not a floating tag, to guarantee exactly which bytes are running.
 
-## Lihat juga
+## See also
 
-- `docs/awcms/09_roadmap_repository_commit.md` (menyusul) — kebijakan SemVer dan alur Changesets yang diotomasi pipeline ini.
-- `branch-protection.md` (menyusul) — required status checks dan status branch protection `main`; ancestor-of-main guard dan environment-approval step dokumen ini mengikuti pola "dokumentasikan langkah admin manual, jangan diterapkan sendiri" yang sama.
-- [`performance-suite.md`](performance-suite.md) — sebelum rilis yang menyentuh jalur query kritikal atau sizing koneksi/work-class, jalankan performance lane penuh (`bun run performance:suite -- --full`) terhadap database terisolasi (`APP_ENV=test`, bukan environment hidup mana pun) dan bandingkan laporan JSON-nya dengan rilis sebelumnya, sesuai §Comparing two releases/commits dokumen itu.
-- `.github/workflows/changesets.yml` / `.github/workflows/release.yml` — definisi workflow aktual yang dideskripsikan dokumen ini.
-- `scripts/changeset-policy-check.ts` / `scripts/release-verify.ts` — pure-function policy check yang melandasi kedua workflow, diuji unit di `tests/`.
+- `docs/awcms/09_roadmap_repository_commit.md` (to follow) — the SemVer policy and the Changesets flow this pipeline automates.
+- `branch-protection.md` (to follow) — required status checks and the branch protection status of `main`; this document's ancestor-of-main guard and environment-approval step follow the same "document the manual admin step, do not apply it yourself" pattern.
+- [`performance-suite.md`](performance-suite.md) — before a release that touches a critical query path or connection/work-class sizing, run the full performance lane (`bun run performance:suite -- --full`) against an isolated database (`APP_ENV=test`, never any live environment) and compare its JSON report against the previous release, per that document's §Comparing two releases/commits.
+- `.github/workflows/changesets.yml` / `.github/workflows/release.yml` — the actual workflow definitions this document describes.
+- `scripts/changeset-policy-check.ts` / `scripts/release-verify.ts` — the pure-function policy checks underpinning both workflows, unit-tested in `tests/`.
 
-## Sesudah rilis: post-release review (langkah 18)
+## After a release: post-release review (step 18)
 
-Dalam satu minggu kerja setelah tag di-deploy, tulis satu entri di
-[`post-release-reviews.md`](post-release-reviews.md) memakai
+Within one working week after a tag is deployed, write one entry in
+[`post-release-reviews.md`](post-release-reviews.md) using
 [`templates/post-release-review-template.md`](templates/post-release-review-template.md).
 
-Rilis yang berjalan mulus **tetap** mendapat entri, dan boleh empat baris.
-Register yang hanya memuat insiden mengajarkan pembacanya bahwa rilis biasanya
-bermasalah, dan menghapus satu-satunya garis dasar yang membuat rilis buruk
-terlihat buruk.
+A release that went smoothly **still** gets an entry, and four lines are fine.
+A register that only contains incidents teaches its readers that releases are
+usually troubled, and removes the only baseline that makes a bad release
+look bad.

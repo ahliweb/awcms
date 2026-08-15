@@ -1,435 +1,435 @@
 ---
 name: awcms-module-management
-description: Kelola/konsumsi sistem Module Management AWCMS (registry base, validasi komposisi registry-base, tenant lifecycle enable/disable, settings, permission sync/status, navigation, job registry, health/readiness). Gunakan saat menambah field descriptor baru (permissions/navigation/settings/jobs/health) di modul lain, saat menyelidiki kenapa suatu modul terlihat degraded/orphaned, saat menambah modul domain/website LANGSUNG ke `src/modules/` (ADR-0034: template dipakai-langsung, TIDAK ada jalur aplikasi-turunan — `application-registry.ts`/`extension:check` DIHAPUS), atau saat mengubah perilaku enable/disable/settings/health module_management sendiri. Sesuai src/modules/module-management/README.md, ADR-0034 (jalur turunan dihapus, men-supersede ADR-0014/0015).
+description: Manage/consume the AWCMS Module Management system (base registry, registry-base composition validation, tenant lifecycle enable/disable, settings, permission sync/status, navigation, job registry, health/readiness). Use when adding a new descriptor field (permissions/navigation/settings/jobs/health) in another module, when investigating why a module looks degraded/orphaned, when adding a domain/website module DIRECTLY to `src/modules/` (ADR-0034: templates are used-directly, there is NO derived-application pathway — `application-registry.ts`/`extension:check` were REMOVED), or when changing module_management's own enable/disable/settings/health behaviour. Per src/modules/module-management/README.md, ADR-0034 (derived pathway removed, supersedes ADR-0014/0015).
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Module Management System
 
-Ikuti `src/modules/module-management/README.md` (sumber kebenaran penuh
-per issue #511-#521) dan `docs/awcms/10_template_kode_coding_standard.md`
-§Module contract. Skill ini merangkum pola yang **tidak jelas dari
-sekadar membaca satu file** — dependency graph, urutan sync, semantik
-merge settings, dan makna tiap sinyal health.
+Follow `src/modules/module-management/README.md` (the full source of truth
+per issues #511-#521) and `docs/awcms/10_template_kode_coding_standard.md`
+§Module contract. This skill summarises the patterns that are **not obvious
+from just reading a single file** — the dependency graph, sync ordering, the
+settings merge semantics, and the meaning of each health signal.
 
-## Kapan pakai skill ini vs `awcms-new-module`
+## When to use this skill vs `awcms-new-module`
 
-`awcms-new-module` = cara **scaffold** modul baru (struktur folder,
-descriptor minimal). Skill ini = cara kerja **sistem** yang mengelola
-modul yang sudah terdaftar — enable/disable per tenant, settings,
-permission sync, navigation, jobs, health. Pakai skill ini saat modulmu
-sudah ada dan kamu perlu mendeklarasikan `permissions`/`navigation`/
-`settings`/`jobs` di descriptornya, atau saat menyelidiki masalah di
-sistem module management itu sendiri.
+`awcms-new-module` = how to **scaffold** a new module (folder structure,
+minimal descriptor). This skill = how the **system** that manages already
+registered modules works — per-tenant enable/disable, settings, permission
+sync, navigation, jobs, health. Use this skill when your module already
+exists and you need to declare `permissions`/`navigation`/
+`settings`/`jobs` in its descriptor, or when investigating a problem in the
+module management system itself.
 
-## "Sync first" — aturan FK yang wajib dipahami
+## "Sync first" — the FK rule you must understand
 
 `awcms_tenant_modules`, `_module_settings`, `_module_health_checks`
-semua punya FK ke `awcms_modules.module_key`. Mendaftarkan modul di
-`src/modules/index.ts` **tidak otomatis** membuat baris registrynya.
-Setiap mutasi tenant-scoped yang butuh baris registry ada
+all have an FK to `awcms_modules.module_key`. Registering a module in
+`src/modules/index.ts` does **not automatically** create its registry row.
+Every tenant-scoped mutation that needs the registry row to exist
 (`enableTenantModule`/`disableTenantModule`/`updateModuleSettings`/
-`runModuleHealthCheck`) memanggil `syncModuleDescriptors(tx)` sendiri di
-awal — **jangan** asumsikan operator sudah menjalankan
-`POST /api/v1/modules/sync` manual lebih dulu. Bila menambah mutasi baru
-dengan FK serupa, ikuti pola yang sama.
+`runModuleHealthCheck`) calls `syncModuleDescriptors(tx)` itself at the
+start — do **not** assume the operator already ran
+`POST /api/v1/modules/sync` manually first. When adding a new mutation
+with a similar FK, follow the same pattern.
 
-Konsekuensi: `GET /api/v1/modules/{moduleKey}/health`'s sinyal
-`db_registry_synced` bisa `fail` di instance yang baru dimigrasikan
-(belum pernah ada mutasi tenant-scoped apa pun) — ini **bukan bug**,
-laporan yang jujur. `POST .../health/check` men-sync duluan sebagai efek
-samping menulis riwayat, jadi bisa menunjukkan hasil `pass` untuk sinyal
-yang sama di momen yang sama — asimetri yang disengaja, didokumentasikan
-di README modul.
+Consequence: `GET /api/v1/modules/{moduleKey}/health`'s `db_registry_synced`
+signal can be `fail` on a freshly migrated instance
+(no tenant-scoped mutation has ever happened) — this is **not a bug**, it is
+an honest report. `POST .../health/check` syncs first as a side effect of
+writing history, so it can show a `pass` result for the same signal at the
+same moment — a deliberate asymmetry, documented in the module README.
 
 ## Dependency graph (enable/disable)
 
-Graph **selalu** dibaca dari `listModules()` (code), **tidak pernah**
-dari `awcms_module_dependencies` (cache hasil sync terakhir — bisa
-basi). Kode error dari `domain/tenant-module-lifecycle.ts`:
+The graph is **always** read from `listModules()` (code), **never**
+from `awcms_module_dependencies` (a cache of the last sync — it can be
+stale). Error codes from `domain/tenant-module-lifecycle.ts`:
 
-| Kode                                 | Kapan                                                |
-| ------------------------------------ | ---------------------------------------------------- |
-| `MODULE_NOT_FOUND`                   | Key tidak terdaftar / dinonaktifkan global (code)    |
-| `MODULE_ALREADY_ENABLED`/`_DISABLED` | Tidak ada perubahan state                            |
-| `MODULE_DEPENDENCY_MISSING`          | Dependency tidak terdaftar sama sekali               |
-| `MODULE_DEPENDENCY_DISABLED`         | Dependency nonaktif (global atau tenant ini)         |
-| `MODULE_REVERSE_DEPENDENCY_ACTIVE`   | Modul lain yang aktif masih bergantung padanya       |
-| `MODULE_DEPENDENCY_CYCLE`            | Circular dependency di graph                         |
-| `MODULE_VERSION_INCOMPATIBLE`        | `minAppVersion` modul > versi app saat ini           |
-| `CORE_MODULE_CANNOT_BE_DISABLED`     | `isCore: true` — tidak bisa dinonaktifkan, bukan bug |
+| Code                                 | When                                                   |
+| ------------------------------------ | ------------------------------------------------------ |
+| `MODULE_NOT_FOUND`                   | Key not registered / globally disabled (code)          |
+| `MODULE_ALREADY_ENABLED`/`_DISABLED` | No state change                                        |
+| `MODULE_DEPENDENCY_MISSING`          | Dependency not registered at all                       |
+| `MODULE_DEPENDENCY_DISABLED`         | Dependency disabled (globally or for this tenant)      |
+| `MODULE_REVERSE_DEPENDENCY_ACTIVE`   | Another active module still depends on it              |
+| `MODULE_DEPENDENCY_CYCLE`            | Circular dependency in the graph                       |
+| `MODULE_VERSION_INCOMPATIBLE`        | Module `minAppVersion` > current app version           |
+| `CORE_MODULE_CANNOT_BE_DISABLED`     | `isCore: true` — cannot be disabled, this is not a bug |
 
-Modul `isCore: true` (saat ini hanya `module_management` sendiri) tidak
-bisa dinonaktifkan — ini pencegah _admin lockout_ utama: kemampuan
-mengelola modul lain tidak pernah hilang.
+A module with `isCore: true` (currently only `module_management` itself)
+cannot be disabled — this is the main _admin lockout_ preventer: the ability
+to manage other modules is never lost.
 
-### Registry-wide DAG validator (Issue #680, epic #679) — beda dari `hasDependencyCycle`
+### Registry-wide DAG validator (Issue #680, epic #679) — different from `hasDependencyCycle`
 
-`hasDependencyCycle` di atas hanya pernah dipanggil untuk SATU modul (yang
-sedang dicoba di-enable, `evaluateModuleEnable` — lihat `tenant-module-lifecycle.ts:138`)
-— tidak pernah dipakai untuk memeriksa "apakah SELURUH registry sudah
-DAG yang valid". Celah inilah yang membuat `tenant_admin`/
-`profile_identity`/`identity_access` sempat punya cycle 3-node nyata di
-`dependencies` masing-masing (`tenant_admin -> profile_identity ->
-tenant_admin`, dst) selama registry-nya tidak pernah diiterasi
-menyeluruh — padahal `hasDependencyCycle` SUDAH akan menolaknya kalau
-ada yang mencoba meng-enable salah satu dari ketiganya lewat jalur
-normal.
+`hasDependencyCycle` above was only ever called for ONE module (the one
+being enabled, `evaluateModuleEnable` — see `tenant-module-lifecycle.ts:138`)
+— it was never used to check "is the WHOLE registry a valid DAG". That gap
+is exactly what let `tenant_admin`/
+`profile_identity`/`identity_access` carry a real 3-node cycle in their
+respective `dependencies` (`tenant_admin -> profile_identity ->
+tenant_admin`, and so on) for as long as the registry was never iterated
+exhaustively — even though `hasDependencyCycle` WOULD have rejected it had
+anyone tried to enable one of those three through the normal path.
 
 `domain/module-dependency-graph.ts`'s `validateModuleDependencyGraph(listModules())`
-adalah pemeriksaan menyeluruh itu — mendeteksi EMPAT masalah berbeda
-sekaligus (tidak berhenti di yang pertama): `self_dependency`,
-`duplicate_dependency`, `missing_dependency`, dan `cycle`
-(langsung/tidak langsung, algoritma Kahn menyeluruh, bukan DFS
-satu-titik). Dipanggil dari:
+is that exhaustive check — it detects FOUR different problems
+at once (it does not stop at the first): `self_dependency`,
+`duplicate_dependency`, `missing_dependency`, and `cycle`
+(direct/indirect, exhaustive Kahn algorithm, not a single-point
+DFS). Called from:
 
 - `bun run modules:dag:check` (`scripts/validate-module-graph.ts`) —
-  disisipkan ke `bun run check` tepat setelah `api:spec:check`.
-- `bun run modules:sync` (`scripts/modules-sync.ts`) — menolak sync ke DB
-  bila graph rusak, SEBELUM baris apa pun tersentuh. Sejak Issue #697 (epic
-  #679), script ini dibangun di atas shared worker runner
+  inserted into `bun run check` right after `api:spec:check`.
+- `bun run modules:sync` (`scripts/modules-sync.ts`) — refuses to sync to the DB
+  when the graph is broken, BEFORE any row is touched. Since Issue #697 (epic
+  #679), this script is built on top of the shared worker runner
   `src/lib/jobs/job-runner.ts` (advisory lock, `--dry-run` via
-  `planModuleSync`, JSON telemetry) — lihat
-  `docs/awcms/deployment-profiles.md` §Shared worker runner; perilaku
-  `syncModuleDescriptors` sendiri TIDAK berubah.
+  `planModuleSync`, JSON telemetry) — see
+  `docs/awcms/deployment-profiles.md` §Shared worker runner; the behaviour of
+  `syncModuleDescriptors` itself did NOT change.
 
-**Fix nyata untuk cycle historis** (Issue #680): `tenant_admin.dependencies`
-diubah dari `["profile_identity", "identity_access"]` menjadi `[]` —
-`profile_identity`/`identity_access`'s array masing-masing SUDAH benar
-sejak awal (`profile_identity: ["tenant_admin"]`,
-`identity_access: ["tenant_admin", "profile_identity"]`); satu-satunya
-edge yang salah arah adalah `tenant_admin` balik menunjuk keduanya.
-Alasan historis edge itu ada: `tenant_admin`'s one-time setup wizard
-(`POST /api/v1/setup/initialize`) menulis baris ke tabel
-`profile_identity`/`identity_access` DALAM transaksi yang sama — itu
-kebutuhan **saat-dipanggil** (call-time), bukan "tenant_admin tidak bisa
-berfungsi sama sekali tanpa keduanya" (static dependency yang salah).
-Orkestrasi itu sekarang jadi fungsi composition-root eksplisit,
-`application/platform-bootstrap.ts`'s `bootstrapPlatformTenant`, dipanggil
-langsung oleh route handler — bukan lewat `dependencies` array. Jangan
-kembalikan pola lama ini kalau butuh orkestrasi lintas-modul serupa di
-masa depan — buat composition-root function baru, jangan tambah edge
-`dependencies` untuk menjustifikasi urutan panggilan satu-kali.
+**The actual fix for the historical cycle** (Issue #680): `tenant_admin.dependencies`
+was changed from `["profile_identity", "identity_access"]` to `[]` —
+`profile_identity`/`identity_access`'s arrays were each ALREADY correct
+from the start (`profile_identity: ["tenant_admin"]`,
+`identity_access: ["tenant_admin", "profile_identity"]`); the only
+edge pointing the wrong way was `tenant_admin` pointing back at both.
+The historical reason that edge existed: `tenant_admin`'s one-time setup wizard
+(`POST /api/v1/setup/initialize`) writes rows into the
+`profile_identity`/`identity_access` tables WITHIN the same transaction — that is
+a **call-time** need, not "tenant_admin cannot
+function at all without both" (a wrong static dependency).
+That orchestration is now an explicit composition-root function,
+`application/platform-bootstrap.ts`'s `bootstrapPlatformTenant`, called
+directly by the route handler — not via the `dependencies` array. Do not
+bring this old pattern back if you need similar cross-module orchestration in
+the future — create a new composition-root function, do not add a
+`dependencies` edge to justify a one-time call ordering.
 
-`resolveProtectedModuleKeys`'s (module-presets.ts) hasil closure untuk
+`resolveProtectedModuleKeys`'s (module-presets.ts) closure result for
 `module_management` — `{module_management, tenant_admin, identity_access,
-profile_identity}` — TIDAK berubah meski edge tenant_admin dihapus,
-karena closure dihitung lewat `identity_access -> profile_identity ->
-tenant_admin` (masih transitif sama), bukan lewat edge tenant_admin yang
-dihapus. Verifikasi ini lewat test yang sudah ada
+profile_identity}` — did NOT change even after the tenant_admin edge was removed,
+because the closure is computed via `identity_access -> profile_identity ->
+tenant_admin` (still transitively the same), not via the removed tenant_admin
+edge. Verify this through the existing test
 (`tests/unit/module-presets.test.ts`'s "real registry's protected set is
 exactly module_management's own dependency closure").
 
-### `capabilities` — hubungan source-level, BEDA dari `dependencies` (Issue #681, epic #679)
+### `capabilities` — a source-level relationship, DIFFERENT from `dependencies` (Issue #681, epic #679)
 
-`ModuleDescriptor` punya field opsional baru, `capabilities?:
+`ModuleDescriptor` has a new optional field, `capabilities?:
 {provides?: string[]; consumes?: {capability, providedBy, optional?}[]}`
-(`_shared/module-contract.ts`). Ini BUKAN bagian dari dependency-graph
-lifecycle di atas — `dependencies` tetap satu-satunya field yang dibaca
+(`_shared/module-contract.ts`). This is NOT part of the dependency-graph
+lifecycle above — `dependencies` remains the only field read by
 `hasDependencyCycle`/`validateModuleDependencyGraph`/`evaluateModuleEnable`/
-`evaluateModuleDisable`. `capabilities` murni mendokumentasikan hubungan
-IMPORT SOURCE-LEVEL lewat pola ports-and-adapters (`_shared/ports/*.ts`)
-— lihat ADR-0011 dan skill `awcms-news-portal` §681 untuk contoh
-nyata (`blog_content`/`news_portal`), yang kini **historis** (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan). Modul yang butuh kapabilitas dari
-modul lain TIDAK PERNAH meng-import `application`/`domain` modul itu
-langsung — hanya port interface (`_shared/ports/`) di layer
-`application`/`domain`, dengan adapter konkret disuntikkan pemanggil
-(route handler = composition root). `optional: true` di `consumes`
-berarti fitur pemanggil degradasi aman (bukan error) kalau kapabilitas
-itu resolve ke "tidak berlaku" untuk suatu tenant — bukan berarti kode
-bisa jalan tanpa modul lain ter-compile (ini monolith, semua source
-selalu ikut ter-bundle).
+`evaluateModuleDisable`. `capabilities` purely documents SOURCE-LEVEL
+IMPORT relationships via the ports-and-adapters pattern (`_shared/ports/*.ts`)
+— see ADR-0011 and the `awcms-news-portal` skill §681 for a real
+example (`blog_content`/`news_portal`), which is now **historical** (the `news_portal` module was MERGED into `blog_content` — ADR-0044/#300; its table names were kept). A module that needs a capability from
+another module NEVER imports that module's `application`/`domain`
+directly — only the port interface (`_shared/ports/`) in the
+`application`/`domain` layer, with the concrete adapter injected by the caller
+(route handler = composition root). `optional: true` in `consumes`
+means the caller's feature degrades safely (not an error) if that capability
+resolves to "not applicable" for a tenant — it does not mean the code
+can run without the other module being compiled (this is a monolith, all source
+is always bundled).
 
-**Dua varian composition-root sudah ada di repo ini — pilih sesuai
-taruhan keamanan fitur, bukan template tunggal.** Varian #1
-(`blog_content` konsumsi `NewsMediaPort` dari `news_portal`, Issue #681 —
-**contoh historis**: keduanya kini satu modul, dan port yang setara hari ini
-adalah `MediaLibraryPort` dari `media_library`):
-route handler SELALU inject adapter konkret, TANPA cek enable/disable
-tenant di call site — port itu sendiri yang didesain fail-closed/no-op
-aman untuk setiap kasus "tidak berlaku". Varian #2 (`identity_access`
-konsumsi `BusinessScopeHierarchyPort` dari `organization_structure`,
-Issue #746/#749/#786): composition root (`POST /api/v1/identity/
-business-scope/assignments`'s `buildHierarchyPort`) SECARA EKSPLISIT
-memanggil `resolveModuleEnabled(tx, tenantId, "organization_structure")`
-lebih dulu — hanya mencoba adapter nyata modul itu saat aktif untuk
-tenant tsb, jatuh ke adapter default modul pengonsumsi kalau tidak. Pilih
-varian #2 (gate eksplisit) ketika kapabilitas yang dikonsumsi menentukan
-keputusan otorisasi/keamanan (di sini: apakah sebuah scope reference
-valid sebelum SoD dievaluasi) — men-degradasi "aman" secara implisit
-lewat port semata (varian #1) berisiko diam-diam mengonsultasikan data
-milik modul yang justru sudah dinonaktifkan tenant. Kedua varian tetap
-sama-sama TIDAK PERNAH meng-import `application`/`domain` modul lain
-langsung dari modul pengonsumsi — hanya lewat port + composition root,
-lihat `identity-access/README.md` dan `organization-structure/README.md`
-§`BusinessScopeHierarchyPort` untuk detail varian #2, dan
+**Two composition-root variants already exist in this repo — pick according to
+the feature's security stakes, not a single template.** Variant #1
+(`blog_content` consuming `NewsMediaPort` from `news_portal`, Issue #681 —
+**a historical example**: both are now one module, and the equivalent port today
+is `MediaLibraryPort` from `media_library`):
+the route handler ALWAYS injects the concrete adapter, WITHOUT checking the
+tenant's enable/disable at the call site — the port itself is designed to be
+fail-closed/no-op safe for every "not applicable" case. Variant #2 (`identity_access`
+consuming `BusinessScopeHierarchyPort` from `organization_structure`,
+Issue #746/#749/#786): the composition root (`POST /api/v1/identity/
+business-scope/assignments`'s `buildHierarchyPort`) EXPLICITLY
+calls `resolveModuleEnabled(tx, tenantId, "organization_structure")`
+first — it only tries that module's real adapter when it is active for that
+tenant, falling back to the consuming module's default adapter otherwise. Pick
+variant #2 (explicit gate) when the consumed capability determines an
+authorization/security decision (here: whether a scope reference is
+valid before SoD is evaluated) — degrading "safely" implicitly
+through the port alone (variant #1) risks silently consulting data
+belonging to a module the tenant has in fact disabled. Both variants still
+equally NEVER import another module's `application`/`domain`
+directly from the consuming module — only via port + composition root,
+see `identity-access/README.md` and `organization-structure/README.md`
+§`BusinessScopeHierarchyPort` for variant #2 details, and
 `tests/integration/business-scope-organization-structure-wiring.
-integration.test.ts` untuk buktinya end-to-end.
+integration.test.ts` for the end-to-end proof.
 
-## Baca status tenant-enabled: plural vs singular
+## Reading tenant-enabled status: plural vs singular
 
-`fetchTenantModuleEntries(tx, tenantId)` (semua modul terdaftar) vs
-`fetchTenantModuleEntry(tx, tenantId, moduleKey)` (satu modul,
-`SELECT`-nya di-filter `module_key` langsung, bukan filter di memori).
-Pakai yang **singular** kalau consumer-mu cuma butuh status satu modul
-spesifik (terutama di gate publik/anonim — narrower read surface untuk
-kode yang tidak authenticated), seperti `blog-content`'s
-`public-news-tenant-resolution.ts`. Pakai yang **plural** kalau memang
-butuh daftar lengkap (endpoint `GET /api/v1/tenant/modules`, tenant module
-presets, tenant-module matrix UI). Keduanya punya semantik
-opt-out-by-default yang sama (tidak ada row `awcms_tenant_modules`
-→ `tenantEnabled: true`). Detail lengkap:
+`fetchTenantModuleEntries(tx, tenantId)` (all registered modules) vs
+`fetchTenantModuleEntry(tx, tenantId, moduleKey)` (one module, its
+`SELECT` filtered on `module_key` directly, not filtered in memory).
+Use the **singular** one when your consumer only needs the status of one
+specific module (especially in a public/anonymous gate — a narrower read
+surface for code that is not authenticated), like `blog-content`'s
+`public-news-tenant-resolution.ts`. Use the **plural** one when you really
+need the complete list (endpoint `GET /api/v1/tenant/modules`, tenant module
+presets, the tenant-module matrix UI). Both have the same
+opt-out-by-default semantics (no `awcms_tenant_modules` row
+→ `tenantEnabled: true`). Full details:
 `module-management/README.md` §Tenant module lifecycle, skill
-`awcms-tenant-domain-routing` §Belum ada (Sudah diperbaiki).
+`awcms-tenant-domain-routing` §Not yet present (Now fixed).
 
 ## Tenant module presets (Issue #565, epic #555)
 
 `domain/module-presets.ts` + `application/module-presets.ts`
-(`applyModulePreset`) — set state modul tenant sekaligus ke sebuah
-"profil" (`online_website`, `news_portal`, `saas_online`, `pos_lan`,
-`minimal`), 100% reuse `evaluateModuleEnable`/`evaluateModuleDisable`/
-`enableTenantModule`/`disableTenantModule` di atas — **tidak pernah**
-menulis `awcms_tenant_modules` langsung. Preset menerapkan enable
-DAN disable (bukan cuma enable) — modul yang tidak ada di daftar preset
-dan bukan "protected" (`isCore` + closure transitif dependency-nya,
-dihitung dinamis lewat `resolveProtectedModuleKeys`) akan di-disable,
-leaves-first, skip (bukan force) untuk modul yang masih dibutuhkan modul
-lain yang tetap enabled. Idempotent (re-apply = plan kosong). **Baru
-service layer** — belum ada endpoint API/UI (scope Issue #566). Detail
-lengkap: `module-management/README.md` §Tenant module presets, skill
+(`applyModulePreset`) — set a tenant's module state all at once to a
+"profile" (`online_website`, `news_portal`, `saas_online`, `pos_lan`,
+`minimal`), 100% reusing `evaluateModuleEnable`/`evaluateModuleDisable`/
+`enableTenantModule`/`disableTenantModule` above — it **never**
+writes `awcms_tenant_modules` directly. A preset applies enables
+AND disables (not just enables) — a module that is not in the preset list
+and is not "protected" (`isCore` + its transitive dependency closure,
+computed dynamically via `resolveProtectedModuleKeys`) will be disabled,
+leaves-first, skipping (not forcing) modules still needed by other
+modules that stay enabled. Idempotent (re-apply = empty plan). **Service
+layer only** — there is no API endpoint/UI yet (scope of Issue #566). Full
+details: `module-management/README.md` §Tenant module presets, skill
 `awcms-tenant-domain-routing` §Tenant module presets (Issue #565).
 
-## Settings — merge dangkal, bukan replace
+## Settings — shallow merge, not replace
 
-`PATCH .../settings` men-**merge dangkal** body ke `tenantOverride` yang
-ada (`{ ...before, ...patch }`) — key yang tidak disebut tetap tidak
-berubah. Berbeda dari `PATCH /api/v1/settings`'s `featureFlags` (replace
-utuh field itu) karena di sini seluruh body request **adalah** resource
-settings-nya, bukan satu field bernama di resource lain. Key yang
-menyerupai secret (daftar sama `_shared/redaction.ts`'s `REDACTION_KEYS`,
-termasuk `credential`) **ditolak saat request** (`400
-SETTINGS_SENSITIVE_KEY_REJECTED`), tidak pernah disimpan lalu di-redact
-saat dibaca. **Value** berbentuk credential juga ditolak walau key-nya
-tidak mencurigakan (`_shared/redaction.ts`'s `findSecretShapedValues` —
-JWT, blok PEM private key, AWS access key id, header `Bearer`/`Basic`
-mentah, connection string ber-`user:pass@`; sengaja konservatif supaya
-label/URL/flag biasa tidak pernah salah tertolak) — `400
-SETTINGS_SECRET_SHAPED_VALUE_REJECTED`, pesan error hanya menyebut path
-key, tidak pernah value-nya. Berlaku otomatis untuk semua modul yang
-pakai `validateModuleSettingsPatch`, tanpa perlu ubah route/modul
-masing-masing.
+`PATCH .../settings` **shallow-merges** the body into the existing
+`tenantOverride` (`{ ...before, ...patch }`) — keys not mentioned stay
+unchanged. Different from `PATCH /api/v1/settings`'s `featureFlags` (which
+replaces that field wholesale) because here the entire request body **is** the
+settings resource, not one named field of another resource. Keys that
+look like secrets (the same list as `_shared/redaction.ts`'s `REDACTION_KEYS`,
+including `credential`) are **rejected at request time** (`400
+SETTINGS_SENSITIVE_KEY_REJECTED`), never stored and then redacted
+on read. A **value** shaped like a credential is also rejected even if its key
+is unsuspicious (`_shared/redaction.ts`'s `findSecretShapedValues` —
+JWT, PEM private key block, AWS access key id, raw `Bearer`/`Basic`
+headers, connection strings with `user:pass@`; deliberately conservative so that
+ordinary labels/URLs/flags are never wrongly rejected) — `400
+SETTINGS_SECRET_SHAPED_VALUE_REJECTED`, and the error message only names the key
+path, never its value. Applies automatically to every module that
+uses `validateModuleSettingsPatch`, with no need to change each
+route/module.
 
-## Permission sync status — jangan auto-fix `orphaned`
+## Permission sync status — do not auto-fix `orphaned`
 
-`GET /api/v1/modules/{moduleKey}/permissions` (Issue #517) melaporkan
+`GET /api/v1/modules/{moduleKey}/permissions` (Issue #517) reports
 `synced`/`missing`/`orphaned`/`mismatched_description` — **read-only**,
-tidak pernah menulis ke `awcms_permissions`.
+it never writes to `awcms_permissions`.
 
-Per 2026-08-05 di repo INI: **SEMUA 21 modul** (termasuk `idn-admin-regions`,
-ADR-0046) mendeklarasikan `permissions` di descriptornya (#251 menutup `email`,
-yang terakhir dari gelombang itu). Artinya `orphaned` sekarang
-BUKAN lagi kondisi normal untuk modul mana pun — kalau laporan menampilkannya,
-itu sinyal nyata, bukan latar belakang yang bisa diabaikan.
+As of 2026-08-05 in THIS repo: **ALL 21 modules** (including `idn-admin-regions`,
+ADR-0046) declare `permissions` in their descriptor (#251 closed out `email`,
+the last of that wave). That means `orphaned` is now
+NO LONGER a normal condition for any module — if the report shows it,
+that is a real signal, not background noise you can ignore.
 
-Sebelum #251, dua belas baris `email` permanen tampil `orphaned` karena
-permission-nya di-seed `sql/014` tapi tak pernah masuk descriptor. False
-positive menetap seperti itu melatih pembaca mengabaikan laporan drift — satu
-hal yang justru tidak boleh dilakukan laporan drift. Tetap jangan hapus baris
-`awcms_permissions` berdasarkan laporan ini tanpa keputusan admin eksplisit;
-`missing`/`orphaned` diperbaiki dengan menyelaraskan descriptor ATAU menambah
-migrasi seed, bukan dengan DELETE.
+Before #251, twelve `email` rows permanently showed as `orphaned` because
+its permissions were seeded in `sql/014` but never entered the descriptor. A false
+positive that persists like that trains readers to ignore the drift report — the one
+thing a drift report must never cause. Still, do not delete
+`awcms_permissions` rows based on this report without an explicit admin decision;
+`missing`/`orphaned` is fixed by aligning the descriptor OR adding a
+seed migration, not by DELETE.
 
-## Kepemilikan rute: `api.routes`, bukan `basePath`
+## Route ownership: `api.routes`, not `basePath`
 
-`basePath` adalah prefix **tampilan**. Yang mengklaim kepemilikan adalah
-`api.routes` — daftar prefix, longest-prefix menang.
+`basePath` is a **display** prefix. What claims ownership is
+`api.routes` — a list of prefixes, longest-prefix wins.
 
-Kenapa daftar: kepemilikan memang bukan satu prefix. `tenant_admin` memiliki
-`/api/v1/{offices,settings,setup}`, dan `/api/v1/tenant` **terbelah** antara
-`tenant_domain` (`/domains`) dan `module_management` (`/modules`). Permukaan
-publik non-API juga masuk (`/blog`, `/robots.txt`, `/search`, `/theming`) —
-sebelum Issue #256 ada 30 rute nyata yang tak diklaim siapa pun.
+Why a list: ownership genuinely is not one prefix. `tenant_admin` owns
+`/api/v1/{offices,settings,setup}`, and `/api/v1/tenant` is **split** between
+`tenant_domain` (`/domains`) and `module_management` (`/modules`). Non-API
+public surfaces count too (`/blog`, `/robots.txt`, `/search`, `/theming`) —
+before Issue #256 there were 30 real routes nobody claimed.
 
-> **JANGAN pernah menulis `basePath: "/api/v1"`.** Itu prefix setiap rute di
-> aplikasi; `tenant_admin` dulu menulisnya dan mencaplok 36 rute milik modul
-> lain (seluruh `/api/v1/{access,roles,users,abac,identity}` = `identity_access`,
-> `/api/v1/tenant/modules` = `module_management`). Gate menolak `/`, `/api`,
-> dan `/api/v1` secara eksplisit — **cek cakupan saja tidak cukup**: prefix yang
-> cocok dengan segalanya membuat nol rute tak-terklaim, jadi gerbang cakupan
-> hijau sementara jawabannya salah.
+> **NEVER write `basePath: "/api/v1"`.** That is the prefix of every route in
+> the application; `tenant_admin` once wrote it and swallowed 36 routes belonging to
+> other modules (all of `/api/v1/{access,roles,users,abac,identity}` = `identity_access`,
+> `/api/v1/tenant/modules` = `module_management`). The gate rejects `/`, `/api`,
+> and `/api/v1` explicitly — **a coverage check alone is not enough**: a prefix that
+> matches everything leaves zero unclaimed routes, so the coverage gate is
+> green while the answer is wrong.
 
-`bun run modules:routes:check` menuntut tiap berkas di `src/pages` (kecuali
-`/admin/**`) dipetakan ke tepat SATU modul, atau ada di `PLATFORM_ROUTES`
-berikut alasan. `/admin/**` sengaja tidak di sini — sudah diikat
-`tests/admin-navigation-registry.test.ts`; mengklaimnya dua kali berarti dua
-sumber kebenaran untuk fakta yang sama.
+`bun run modules:routes:check` demands that every file under `src/pages` (except
+`/admin/**`) maps to exactly ONE module, or is in `PLATFORM_ROUTES`
+with a reason. `/admin/**` is deliberately not here — it is already bound by
+`tests/admin-navigation-registry.test.ts`; claiming it twice would mean two
+sources of truth for the same fact.
 
-## `navigation` = SATU sumber; sidebar dirender dari registry
+## `navigation` = ONE source; the sidebar is rendered from the registry
 
-`ModuleDescriptor.navigation` dikonsumsi **empat** cara sekarang:
-`descriptor-sync.ts` menuliskannya ke `awcms_module_navigation`,
-`navigation-registry.ts` menyajikannya lewat `GET /api/v1/modules`,
-`module-composition.ts` memvalidasi konflik path, dan
-`src/layouts/AdminLayout.astro` **merender sidebar dari situ** lewat
+`ModuleDescriptor.navigation` is now consumed **four** ways:
+`descriptor-sync.ts` writes it into `awcms_module_navigation`,
+`navigation-registry.ts` serves it via `GET /api/v1/modules`,
+`module-composition.ts` validates path conflicts, and
+`src/layouts/AdminLayout.astro` **renders the sidebar from it** via
 `module-management/domain/sidebar-menu.ts`.
 
-> **Versi sebelumnya dari bagian ini SALAH sejak sidebar direwire.** Ia
-> menyuruh menambahkan link ke array statis `navSections` "JUGA". Array itu
-> sudah tidak ada. Yang memakai instruksi lama akan menambahkan link ke berkas
-> yang tak ada lagi, lalu mengira menu-nya rusak.
+> **The previous version of this section was WRONG from the moment the sidebar was
+> rewired.** It told you to ALSO add the link to a static `navSections` array. That
+> array no longer exists. Anyone following the old instructions will add a link to a
+> file that no longer exists, then think the menu is broken.
 
-Cara kerjanya:
+How it works:
 
-- `buildDefaultSidebarModel(listModules())` menyusun model default = entri core
-  sintetis (`CORE_NAV_ENTRIES`, hanya `/admin` di base ini) + `navigation` tiap
-  modul non-`disabled`.
-- Penempatan section diambil dari `DEFAULT_MODULE_TYPE` (peta modul→type), yang
-  **menang atas** `group` di entri nav. Modul baru WAJIB masuk peta ini — gate
-  menolak kalau tidak.
-- `composeSidebarSections` menyaring per pemanggil: modul yang di-disable tenant
-  dibuang, `requiredPermission` menentukan link terlihat atau tidak. Section
-  kosong tidak dirender.
-- Label: base ini tak punya katalog gettext, jadi `labelKey` di-resolve lewat
-  tabel `SIDEBAR_LABELS` di berkas yang sama. Tambah entri nav = tambah label.
+- `buildDefaultSidebarModel(listModules())` builds the default model = synthetic
+  core entries (`CORE_NAV_ENTRIES`, only `/admin` in this base) + each
+  non-`disabled` module's `navigation`.
+- Section placement comes from `DEFAULT_MODULE_TYPE` (a module→type map), which
+  **wins over** `group` in the nav entry. A new module MUST be in this map — the gate
+  rejects it otherwise.
+- `composeSidebarSections` filters per caller: modules disabled for the tenant
+  are dropped, `requiredPermission` decides whether a link is visible. Empty
+  sections are not rendered.
+- Labels: this base has no gettext catalog, so `labelKey` is resolved via the
+  `SIDEBAR_LABELS` table in the same file. Adding a nav entry = adding a label.
 
-**Gate `tests/admin-navigation-registry.test.ts`** menegakkan dua arah: tiap
-`navigation[].path` harus punya halaman nyata di `src/pages/admin/**`, dan tiap
-halaman `/admin/**` harus diklaim tepat satu descriptor atau ada di
-`CORE_NAV_ENTRIES`. Sudah dibuktikan merah untuk ketiga kelas pelanggaran
-(path mati, halaman tak terdaftar, label hilang).
+**The gate `tests/admin-navigation-registry.test.ts`** enforces both directions: every
+`navigation[].path` must have a real page under `src/pages/admin/**`, and every
+`/admin/**` page must be claimed by exactly one descriptor or be in
+`CORE_NAV_ENTRIES`. It has been proven red for all three violation classes
+(dead path, unregistered page, missing label).
 
-Konsekuensi praktis saat menambah modul: deklarasikan `navigation` **dan**
-buat halamannya di PR yang sama. Mendeklarasikan lebih dulu kini gagal di CI —
-sebelumnya itu diam-diam mengirim 404 ke DB dan ke API.
+Practical consequence when adding a module: declare `navigation` **and**
+create its page in the same PR. Declaring it first now fails in CI —
+previously it silently shipped a 404 into the DB and into the API.
 
-Yang **belum** ada: lapisan override per-tenant milik awcms-micro
-(`sidebar_menu_types`/`sidebar_menu_items` + editor admin) — reorder, hide,
-relabel, pindah type per tenant. Itu butuh migrasi dan increment tersendiri.
+What does **not** exist yet: awcms-micro's per-tenant override layer
+(`sidebar_menu_types`/`sidebar_menu_items` + admin editor) — reorder, hide,
+relabel, move type per tenant. That needs its own migration and increment.
 
-## Health check — GET pasif, POST eksplisit
+## Health check — GET passive, POST explicit
 
-`GET .../health` = sinyal generik murah saja (registry synced, migrasi
-diterapkan, permission/jobs/OpenAPI/AsyncAPI terdokumentasi, settings
-valid) — **tidak pernah** memanggil provider eksternal, aman dipanggil
-berulang. `POST .../health/check` = sinyal sama **plus** live check ke
-provider bila modul punya satu (`email` saat ini, lewat
-`resolveEmailProvider().healthCheck()` yang sudah timeout-bounded sejak
-Issue #495) — dan menulis riwayat ke `awcms_module_health_checks`.
-Menambah provider check baru untuk modul lain: ikuti pola yang sama
-(hanya di `POST`, bounded/non-throwing, `detail` selalu string generik
-tetap — tidak pernah pesan error mentah).
+`GET .../health` = cheap generic signals only (registry synced, migrations
+applied, permission/jobs/OpenAPI/AsyncAPI documented, settings
+valid) — it **never** calls an external provider, safe to call
+repeatedly. `POST .../health/check` = the same signals **plus** a live check to
+the provider if the module has one (`email` currently, via
+`resolveEmailProvider().healthCheck()`, which has been timeout-bounded since
+Issue #495) — and it writes history to `awcms_module_health_checks`.
+Adding a new provider check for another module: follow the same pattern
+(only in `POST`, bounded/non-throwing, `detail` always a fixed generic
+string — never a raw error message).
 
-## Job registry — dokumentasi murni
+## Job registry — pure documentation
 
-`ModuleDescriptor.jobs` **tidak pernah** jadi permukaan eksekusi command
-dari web — hanya metadata (`command`, `purpose`, `recommendedSchedule`,
-`environmentNotes`, `safeInOfflineLan`). Jangan tambah endpoint yang
-menjalankan command dari sini; bila eksekusi job dari UI benar-benar
-dibutuhkan suatu saat, itu harus fitur terpisah yang dibatasi ketat
-(security note eksplisit epic #510).
+`ModuleDescriptor.jobs` is **never** a surface for executing commands
+from the web — it is metadata only (`command`, `purpose`, `recommendedSchedule`,
+`environmentNotes`, `safeInOfflineLan`). Do not add an endpoint that
+runs commands from here; if executing jobs from the UI is genuinely
+needed some day, it must be a separate, tightly constrained feature
+(explicit security note in epic #510).
 
-## Verifikasi
+## Verification
 
-`tests/module-management-*.test.ts` (domain, unit, per Issue) dan
+`tests/module-management-*.test.ts` (domain, unit, per Issue) and
 `tests/integration/module-*.integration.test.ts` (API+RLS+audit
-end-to-end, real Postgres) — jalankan `bun test` dengan `DATABASE_URL`
-sebelum PR yang menyentuh sistem ini dianggap selesai (`bun run check`
-tanpa `DATABASE_URL` **melewatkan** semua test integration secara diam-diam).
+end-to-end, real Postgres) — run `bun test` with `DATABASE_URL`
+before a PR touching this system is considered done (`bun run check`
+without `DATABASE_URL` **silently skips** every integration test).
 
-## Skill terkait
+## Related skills
 
-`awcms-new-module` (scaffold modul baru, termasuk field descriptor
-ini), `awcms-abac-guard` (guard bersama yang juga menegakkan
+`awcms-new-module` (scaffold a new module, including these descriptor
+fields), `awcms-abac-guard` (the shared guard that also enforces
 `403 MODULE_DISABLED`), `awcms-sensitive-data`/redaction
-(`REDACTION_KEYS` yang dipakai validasi settings), `awcms-audit-log`
-(pola audit `tenant_module_enabled`/`_disabled`/`settings_updated`/`health_checked`).
+(the `REDACTION_KEYS` used by settings validation), `awcms-audit-log`
+(the audit pattern `tenant_module_enabled`/`_disabled`/`settings_updated`/`health_checked`).
 
-## Kebijakan admission modul (Issue #696)
+## Module admission policy (Issue #696)
 
-`docs/awcms/21_module_admission_governance.md` mendefinisikan
-kategori modul (Core/System/Official Optional Module/Derived Application/
-External Integration), kriteria admission, aturan dependency required vs
-optional (§5, melengkapi `capabilities` di atas), ekspektasi kompatibilitas
-offline/LAN vs full-online-only, dan pemetaan 23 modul ke kategori tersebut
-(termasuk catatan remediasi field `type`/`isCore`/`maintainers` yang belum
-konsisten diisi — lihat doc 21 §8).
+`docs/awcms/21_module_admission_governance.md` defines the
+module categories (Core/System/Official Optional Module/Derived Application/
+External Integration), admission criteria, the rules for required vs
+optional dependencies (§5, complementing `capabilities` above), the
+offline/LAN vs full-online-only compatibility expectations, and the mapping of 23 modules
+to those categories (including remediation notes for the `type`/`isCore`/`maintainers`
+fields that are not yet consistently filled in — see doc 21 §8).
 
-> **Jangan baca "23 modul" sebagai isi registry.** `listModules()` mengembalikan
-> **20** modul (`news_portal` dilebur ke `blog_content` oleh ADR-0044/#300); jalankan itu bila butuh angka pasti, jangan kutip doc 21. Dari
-> 7 modul platform-evolution epic #738 yang dipetakan doc 21, hanya
-> **`data_lifecycle` dan `domain_event_runtime`** yang benar-benar terdaftar.
+> **Do not read "23 modules" as the registry contents.** `listModules()` returns
+> **20** modules (`news_portal` was merged into `blog_content` by ADR-0044/#300); run it if you need the exact number, do not quote doc 21. Of
+> the 7 platform-evolution epic #738 modules that doc 21 maps, only
+> **`data_lifecycle` and `domain_event_runtime`** are actually registered.
 > `organization_structure`, `document_infrastructure`, `data_exchange`,
-> `integration_hub`, dan `reference_data` **belum ada kodenya** — ADR-nya
-> Accepted (0016/0017/0018/0019/0021) tetapi tidak ada `src/modules/<x>/`.
-> `organization_structure` hanya muncul sebagai string `providedBy` pada
-> capability opsional di `identity-access/module.ts` — itu metadata seam, bukan
-> bukti modulnya ada. Kebutuhannya tercatat di
-> `docs/awcms/absorb-awcms-mini-backbone-roadmap.md` — dokumen itu **daftar
-> kebutuhan**, bukan antrean port; pengadaannya lewat ADR admission sendiri
+> `integration_hub`, and `reference_data` **have no code yet** — their ADRs are
+> Accepted (0016/0017/0018/0019/0021) but there is no `src/modules/<x>/`.
+> `organization_structure` appears only as a `providedBy` string on an
+> optional capability in `identity-access/module.ts` — that is a metadata seam, not
+> evidence the module exists. The need is recorded in
+> `docs/awcms/absorb-awcms-mini-backbone-roadmap.md` — that document is a **list of
+> needs**, not a port queue; acquiring them goes through their own ADR admission
 > (ADR-0055 §1).
 
-Baca dokumen
-itu sebelum mengusulkan modul baru atau mengubah kategori/status lifecycle
-modul yang sudah ada.
+Read that document
+before proposing a new module or changing the category/lifecycle status of an
+existing module.
 
-## Komposisi modul: validasi registry BASE (ADR-0034 — jalur turunan DIHAPUS)
+## Module composition: validating the BASE registry (ADR-0034 — derived pathway REMOVED)
 
-> **Perubahan aturan (ADR-0034, Fase 2).** Jalur aplikasi-turunan DIHAPUS. awcms =
-> template dipakai-langsung; TIDAK ada repo turunan, `application-registry.ts`,
-> `extension:check`, `extension.manifest.json`, atau migration-namespace 900–999.
-> Modul domain/website hidup LANGSUNG di `src/modules/`. ADR-0014/0015 lama =
-> historis (di-supersede ADR-0034).
+> **Rule change (ADR-0034, Phase 2).** The derived-application pathway was REMOVED. awcms =
+> a template used directly; there is NO derived repo, `application-registry.ts`,
+> `extension:check`, `extension.manifest.json`, or migration namespace 900–999.
+> Domain/website modules live DIRECTLY in `src/modules/`. The old ADR-0014/0015 =
+> historical (superseded by ADR-0034).
 
-Yang TERSISA (load-bearing base): `src/modules/module-management/domain/module-composition.ts`
-memvalidasi **registry base sendiri** — `composeModuleRegistry()`/
-`validateComposedModuleRegistry()` dipanggil `bun run modules:compose:check` (tak
-pernah oleh `index.ts`). `listModules()` = `listBaseModules()` (base saja; identitas
-referensi dipertahankan untuk `descriptor-sync`).
+What REMAINS (load-bearing base): `src/modules/module-management/domain/module-composition.ts`
+validates **the base registry itself** — `composeModuleRegistry()`/
+`validateComposedModuleRegistry()` are called by `bun run modules:compose:check` (never
+by `index.ts`). `listModules()` = `listBaseModules()` (base only; reference identity
+is preserved for `descriptor-sync`).
 
-- **Issue komposisi yang ditegakkan** (registry base): `duplicate_module_key`,
+- **Composition issues that are enforced** (base registry): `duplicate_module_key`,
   `capability_provider_conflict`/`_missing`, `deployment_profile_incompatible`,
-  `navigation_path_conflict`, `invalid_job_descriptor`, + DAG (missing_dependency/
-  cycle). **DIHAPUS** (khusus turunan): `prohibited_base_override`,
+  `navigation_path_conflict`, `invalid_job_descriptor`, + the DAG (missing_dependency/
+  cycle). **REMOVED** (derived-specific): `prohibited_base_override`,
   `invalid_module_type`, `migration_namespace_overlap`, `mergeModuleRegistries`.
-- **`bun run modules:composition:inventory:generate`/`:check`** — snapshot JSON
-  deterministik registry base (`docs/awcms/module-composition-inventory.json`),
-  wired ke `bun run check`.
-- **Fixture test**: `tests/fixtures/example-domain-modules/` (contoh modul domain
-  untuk menguji enforcement base #180 business-scope + #181 SoD + komposisi #178),
-  BUKAN "derived application".
-- **`MODULE_CONTRACT_VERSION` = 4.0.0** per 2026-08-13 (jangan kutip angka dari
-  dokumen mana pun — sumbernya konstanta di
-  `src/modules/_shared/module-contract.ts`, yang juga memuat riwayat lengkap
-  beserta alasan tiap kenaikan). ADR-0034 menaikkannya ke
-  **2.0.0** (breaking: tipe `ApplicationModuleRegistry`/`ModuleMigrationNamespace`
-  dihapus). Tiga MINOR pertama sesudahnya adalah seam **descriptor-list** yang
-  ditemukan agregator lewat `listModules()` — bukan capability `provides`, karena
-  penyedia jamak memang diharapkan dan provider kedua akan men-trip
+- **`bun run modules:composition:inventory:generate`/`:check`** — a deterministic
+  JSON snapshot of the base registry (`docs/awcms/module-composition-inventory.json`),
+  wired into `bun run check`.
+- **Test fixture**: `tests/fixtures/example-domain-modules/` (example domain modules
+  for testing base enforcement #180 business-scope + #181 SoD + composition #178),
+  NOT a "derived application".
+- **`MODULE_CONTRACT_VERSION` = 4.0.0** as of 2026-08-13 (do not quote the number from
+  any document — the source is the constant in
+  `src/modules/_shared/module-contract.ts`, which also carries the full history
+  along with the reason for each bump). ADR-0034 raised it to
+  **2.0.0** (breaking: the `ApplicationModuleRegistry`/`ModuleMigrationNamespace` types
+  were removed). The first three MINORs after that are **descriptor-list** seams
+  that aggregators discover via `listModules()` — not capability `provides`, because
+  multiple providers are expected there and a second provider would trip
   `capability_provider_conflict`:
-  - **2.1.0** `dataLifecycle` (#222) — retensi/arsip/purge generik.
-  - **2.2.0** `searchSources` (#231, ADR-0040) — sumber indeks `site_search`.
+  - **2.1.0** `dataLifecycle` (#222) — generic retention/archive/purge.
+  - **2.2.0** `searchSources` (#231, ADR-0040) — `site_search` index sources.
   - **2.3.0** `commentableResources` (in-flight `feat/port-comments`, ADR-0041) —
-    resource yang boleh dikomentari.
-  - **2.5.0** `ModulePermissionDescriptor.scope` (ADR-0053) — bukan seam
-    descriptor-list, melainkan field aditif pada descriptor permission; absen
-    berarti `"tenant"`. (Riwayat di `src/modules/_shared/module-contract.ts`
-    melompat dari 2.3.0 ke 2.5.0 — tidak ada entri 2.4.0.)
-  - **3.0.0** (ADR-0083) — MAJOR: member `"staging"` DIHAPUS dari union
-    `ModuleDeploymentProfile`. Union terbit yang menyempit = penarikan
-    kapabilitas, bukan "sinkronisasi dokumentasi".
-  - **3.1.0** `requiresEntitlement` (ADR-0084) — aditif; absen berarti tidak
-    ada prasyarat komersial.
-  - **3.2.0** `subjectData` (ADR-0094, #542) — seam descriptor-list keempat:
-    apa yang tiap tabel simpan tentang seseorang.
-  - **4.0.0** (ADR-0094 gelombang 2, #557) — MAJOR karena dua alasan yang
-    keduanya soal MAKNA, bukan ukuran: `SubjectDataErasure` MELEBAR dengan
-    `"severed_with_subject_row"` (union yang melebar itu breaking di sini
-    justru karena konsumennya adalah `switch` ekshaustif — intinya supaya
-    mereka MEMUTUSKAN, bukan jatuh ke `default`), dan `tenantColumn` diketik
-    ulang `string | null` sehingga `null` menyatakan "global" alih-alih
-    absennya berarti dua hal sekaligus.
+    resources that may be commented on.
+  - **2.5.0** `ModulePermissionDescriptor.scope` (ADR-0053) — not a
+    descriptor-list seam, but an additive field on the permission descriptor; absence
+    means `"tenant"`. (The history in `src/modules/_shared/module-contract.ts`
+    jumps from 2.3.0 to 2.5.0 — there is no 2.4.0 entry.)
+  - **3.0.0** (ADR-0083) — MAJOR: the `"staging"` member was REMOVED from the
+    `ModuleDeploymentProfile` union. A published union that narrows = a withdrawal
+    of capability, not "documentation synchronisation".
+  - **3.1.0** `requiresEntitlement` (ADR-0084) — additive; absence means there is
+    no commercial prerequisite.
+  - **3.2.0** `subjectData` (ADR-0094, #542) — the fourth descriptor-list seam:
+    what each table stores about a person.
+  - **4.0.0** (ADR-0094 wave 2, #557) — MAJOR for two reasons that are
+    both about MEANING, not size: `SubjectDataErasure` WIDENED with
+    `"severed_with_subject_row"` (a widening union is breaking here
+    precisely because its consumers are exhaustive `switch`es — the point is to make
+    them DECIDE, not fall through to `default`), and `tenantColumn` was retyped
+    `string | null` so that `null` states "global" instead of
+    absence meaning two things at once.
 
-  Setiap kenaikan **wajib** ikut memperbarui pin
-  `contracts.moduleDescriptorContractVersion` di `awcms-family-compatibility.yaml`
-  atau `bun run family:conformance:check` merah.
+  Every bump **must** also update the pin
+  `contracts.moduleDescriptorContractVersion` in `awcms-family-compatibility.yaml`
+  or `bun run family:conformance:check` goes red.
 
-Detail: `docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md`.
+Details: `docs/adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md`.

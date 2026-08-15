@@ -208,6 +208,13 @@ export const identityAccessModule = defineModule({
   jobs: [
     {
       command: "bun run identity-access:business-scope:expiry",
+      schedule: {
+        mode: "cron",
+        expression: "5 * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Revokes business-scope access past its expiry. Because this never ran, access has been outliving its validity — so the first pass is a MASS REVOCATION of everything already expired. That is the correct end state and it will lock people out mid-session; run it dry, tell the affected tenants, then enable."
+      },
       purpose:
         "Transitions business-scope assignments and SoD conflict exceptions past their effective_to to expired, recording append-only lifecycle events and an aggregate audit entry per tenant (per-exception audit for exceptions).",
       recommendedSchedule: "Hourly via cron/systemd timer.",
@@ -217,6 +224,11 @@ export const identityAccessModule = defineModule({
     },
     {
       command: "bun run entitlements:backfill",
+      schedule: {
+        mode: "manual",
+        because:
+          "A one-shot data migration, run once before merging the change that depends on it. Running it on a schedule would re-derive state that is already correct."
+      },
       purpose:
         "Grandfathers every tenant that PREDATES an entitlement onto it (ADR-0084), and prints the blast radius — how many tenants would start receiving 403 ENTITLEMENT_REQUIRED — for each entitlement the registry requires. Dry-run by default; --commit writes; --tenant <code> stages the rollout.",
       recommendedSchedule:
@@ -227,6 +239,13 @@ export const identityAccessModule = defineModule({
     },
     {
       command: "bun run identity-access:subscription-lifecycle",
+      schedule: {
+        mode: "cron",
+        expression: "30 2 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Same shape as business-scope expiry: the first pass transitions every subscription already past its boundary. Dry-run, read the counts, then enable."
+      },
       purpose:
         "Walks each tenant's subscription one rung down the trialing -> active -> past_due -> grace -> suspended ladder when its own dates say so (ADR-0084), auditing every transition in that tenant's own trail. Never moves a subscription up — restoring service is a payment event, not a clock event — and never writes awcms_tenants: a run that would cost more than MAX_ENTITLEMENT_LOSSES_PER_RUN tenants their plan entitlements applies none of them and reports instead.",
       recommendedSchedule: "Daily via cron/systemd timer.",

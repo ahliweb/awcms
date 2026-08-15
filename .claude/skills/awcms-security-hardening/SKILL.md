@@ -1,149 +1,150 @@
 ---
 name: awcms-security-hardening
-description: Audit keamanan berbasis standar (OWASP Top 10, OWASP ASVS, ISO/IEC 27001 Annex A) untuk AWCMS. Gunakan saat diminta "security hardening", audit OWASP/ASVS/ISO, penilaian kepatuhan, atau pengerasan menjelang go-live/audit eksternal. Berbeda dari awcms-security-review (checklist DoD per modul) — skill ini memetakan kontrol ke kerangka standar industri.
+description: Standards-based security audit (OWASP Top 10, OWASP ASVS, ISO/IEC 27001 Annex A) for AWCMS. Use when asked for "security hardening", an OWASP/ASVS/ISO audit, a compliance assessment, or hardening ahead of go-live/an external audit. Different from awcms-security-review (the per-module DoD checklist) — this skill maps controls onto industry standard frameworks.
 ---
 
-> **BACA DULU — peta kontrol ↔ standar ada di
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
+
+> **READ THIS FIRST — the control ↔ standard map lives in
 > [`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md).**
-> Dokumen itu **hidup** (dimutakhirkan saat kontrol berubah) dan memuat: edisi
-> tiap standar yang di-pin, matriks OWASP Top 10 2021 / API Security Top 10 2023 /
-> ASVS 4.0.3 / ISO 27001:2022 Annex A / NIST SSDF **dengan bukti berkas per
-> baris**, tabel header respons berdampingan dengan `awcms-astro`, daftar celah
-> ber-pemeriksa (C1–C15, sebagian sudah DITUTUP — dokumen itulah peta status
-> yang berlaku), dan daftar kontrol yang **sengaja ditolak**. Halaman ini
-> adalah cara kerjanya; dokumen itu adalah keadaannya.
+> That document is **living** (updated when a control changes) and contains: the pinned
+> edition of each standard, the OWASP Top 10 2021 / API Security Top 10 2023 /
+> ASVS 4.0.3 / ISO 27001:2022 Annex A / NIST SSDF matrices **with per-row file
+> evidence**, the response header table side by side with `awcms-astro`, the list of gaps
+> with their checkers (C1–C15, some already CLOSED — that document is the status map
+> that applies), and the list of controls that were **deliberately rejected**. This page
+> is how the work is done; that document is the state.
 >
-> **Postur dasar KUAT, diverifikasi ke kode** (dijalankan, bukan dikutip):
-> `access:chokepoint:check` **331 handler / 6 memutuskan permission / 0 bypass**;
-> `access:permissions:enforcement:check` **203/203 / 0 pengecualian**;
-> 143 pernyataan RLS `FORCE` diuji sebagai `awcms_app` LOGIN; `bun audit` bersih;
-> argon2id; lockout ber-increment di-DB (satu statement); MFA/OIDC/Turnstile/SoD; kredensial mesin
-> baca-saja.
+> **The baseline posture is STRONG, verified against the code** (run, not quoted):
+> `access:chokepoint:check` **331 handlers / 6 deciding a permission / 0 bypasses**;
+> `access:permissions:enforcement:check` **203/203 / 0 exceptions**;
+> 143 RLS `FORCE` statements tested as `awcms_app` LOGIN; `bun audit` clean;
+> argon2id; the lockout increment happens in the DB (a single statement); MFA/OIDC/Turnstile/SoD; machine credentials
+> read-only.
 >
-> **Yang SUDAH DITUTUP** (jangan dilaporkan ulang sebagai temuan):
+> **What is ALREADY CLOSED** (do not report it again as a finding):
 >
-> - ~~A01/API5 — rute melewati chokepoint otorisasi.~~ **DITUTUP
+> - ~~A01/API5 — routes bypassing the authorization chokepoint.~~ **CLOSED
 >   ([ADR-0063](../../../docs/adr/0063-ownership-grants-run-through-the-authorization-chokepoint.md)):**
->   TIGA handler (bukan satu — pembacaan tingkat-BERKAS pada putaran pertama
->   menggabungkan `GET`/`PATCH` di satu berkas dan menyimpulkan kepatuhan yang
->   tidak ada). `authorizeInTransaction` kini menerima `ownershipGrant` yang
->   **MELEBARKAN** himpunan permission alih-alih memotong keputusan, jadi ABAC/
->   platform-scope/business-scope/SoD tetap bisa menolak. Gerbangnya di-iris
+>   THREE handlers (not one — the FILE-level reading in the first round
+>   merged `GET`/`PATCH` in one file and concluded a compliance that did
+>   not exist). `authorizeInTransaction` now accepts an `ownershipGrant` that
+>   **WIDENS** the permission set instead of short-circuiting the decision, so ABAC/
+>   platform-scope/business-scope/SoD can still deny. Its gate is sliced
 >   **per HANDLER**.
-> - ~~API4/ASVS V11.2 — rate limiter `Map` dalam-proses.~~ **DITUTUP
+> - ~~API4/ASVS V11.2 — an in-process `Map` rate limiter.~~ **CLOSED
 >   ([ADR-0066](../../../docs/adr/0066-shared-rate-limiting-and-full-auth-surface-coverage.md)):**
->   `checkSharedRateLimit` berbagi lewat Redis (nomor window ada di KUNCI, jadi
->   tak ada read-modify-write). Ia **GAGAL-TERBUKA** saat Redis mati — sengaja,
->   karena gagal-tertutup mengubah gangguan Redis jadi penolakan login total yang
->   bisa dipicu penyerang; lockout **per-principal** di PostgreSQL
->   ([ADR-0086](../../../docs/adr/0086-the-lockout-counter-is-global.md)) adalah
->   kontrol yang mengikat dan tidak terpengaruh.
-> - ~~Rantai pasok — 1 moderate `postcss`.~~ **DITUTUP** (`overrides` `^8.5.23`).
-> - ~~Kontrak `awcms-astro` tak dijaga test.~~ **DITUTUP**
+>   `checkSharedRateLimit` shares through Redis (the window number is in the KEY, so
+>   there is no read-modify-write). It **FAILS OPEN** when Redis is down — deliberately,
+>   because failing closed turns a Redis outage into a total login denial that
+>   an attacker can trigger; the **per-principal** lockout in PostgreSQL
+>   ([ADR-0086](../../../docs/adr/0086-the-lockout-counter-is-global.md)) is the
+>   binding control and is unaffected.
+> - ~~Supply chain — 1 moderate `postcss`.~~ **CLOSED** (`overrides` `^8.5.23`).
+> - ~~The `awcms-astro` contract was not guarded by tests.~~ **CLOSED**
 >   ([ADR-0065](../../../docs/adr/0065-awcms-astro-consumer-contract-is-frozen.md)) —
->   dengan catatan cakupan di temuan 3 di bawah.
+>   with the coverage caveat in finding 3 below.
 >
-> **TEMUAN putaran kedua asesmen (§9) — status per 5 Agustus 2026 (keempatnya
-> DITUTUP; pelajarannya dipertahankan):**
+> **SECOND-ROUND assessment FINDINGS (§9) — status as of 5 August 2026 (all four
+> CLOSED; the lessons are kept):**
 >
-> 1. ~~ASVS V3.4.1 / A05 — `AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset.~~
->    **DITUTUP 4 Agustus 2026.** Aturan produksi `scripts/validate-env.ts` kini
->    `!== "true"`, sejajar dengan perbandingan runtime (`auth/login.ts`,
->    `mfa-session-assurance.ts`, `analytics/collect.ts`). Non-produksi sengaja
->    tidak dituntut — dev berjalan di `http://`. **Pelajaran yang tetap
->    berlaku saat mengaudit apa pun yang berbentuk seperti ini:** cacatnya hanya
->    terlihat pada keadaan **ABSEN**; ejaan salah (`1`/`TRUE`/`yes`) sudah
->    ditolak aturan tipe `bool`, jadi menguji nilai `"false"` — atau nilai salah
->    apa pun — tetap hijau di atas cacat aslinya. Draf pertama temuan ini
->    mengklaim keempat keadaan lolos; **menjalankan validator** membantahnya dan
->    menyempitkannya jadi satu. Jalankan, jangan baca.
-> 2. ~~OWASP Secure Headers — `Cross-Origin-Opener-Policy` dan
->    `Cross-Origin-Resource-Policy` tidak dikirim.~~ **DITUTUP 4 Agustus 2026**
->    (commit 769292d7): keduanya kini dikirim `same-origin` **tanpa syarat** —
->    tanpa gerbang produksi — dari `src/lib/security/security-headers.ts`.
->    Asersi test-nya menyasar **NILAI** header, bukan sekadar keberadaannya,
->    supaya pelonggaran diam-diam (mis. `same-origin-allow-popups`) tetap merah.
-> 3. ~~Interop — kontrak konsumen membekukan enam permukaan; `awcms-astro`
->    memanggil tiga.~~ **DITUTUP
+> 1. ~~ASVS V3.4.1 / A05 — `AUTH_COOKIE_SECURE` failed open when unset.~~
+>    **CLOSED 4 August 2026.** The production rule in `scripts/validate-env.ts` is now
+>    `!== "true"`, aligned with the runtime comparisons (`auth/login.ts`,
+>    `mfa-session-assurance.ts`, `analytics/collect.ts`). Non-production is deliberately
+>    not required to set it — dev runs on `http://`. **The lesson that still
+>    applies when auditing anything shaped like this:** the defect was only
+>    visible in the **ABSENT** state; wrong spellings (`1`/`TRUE`/`yes`) were already
+>    rejected by the `bool` type rule, so testing the value `"false"` — or any wrong
+>    value at all — stays green on top of the real defect. The first draft of this finding
+>    claimed all four states passed; **running the validator** refuted that and
+>    narrowed it to one. Run it, do not read it.
+> 2. ~~OWASP Secure Headers — `Cross-Origin-Opener-Policy` and
+>    `Cross-Origin-Resource-Policy` were not sent.~~ **CLOSED 4 August 2026**
+>    (commit 769292d7): both are now sent as `same-origin` **unconditionally** —
+>    with no production gate — from `src/lib/security/security-headers.ts`.
+>    Its test assertions target the header **VALUE**, not merely its presence,
+>    so a silent loosening (e.g. `same-origin-allow-popups`) still goes red.
+> 3. ~~Interop — the consumer contract freezes six surfaces; `awcms-astro`
+>    calls three.~~ **CLOSED
 >    ([ADR-0068](../../../docs/adr/0068-family-standards-posture-editions-and-recorded-divergences.md)):**
->    pemisahan `CONSUMED` vs `COMMITTED` sudah mendarat di
->    `scripts/api-consumer-contract.ts` — `CONSUMED_PATHS` (3 path) dipin ke blok
->    bertanda di repo `awcms-astro`, `COMMITTED_PATHS` (2 path) wajib ber-ADR;
->    gerbangnya `bun run api:consumer-contract:check`.
-> 4. ~~Pin edisi OWASP (Top 10 2021, ASVS 4.0.3) tidak pernah menjadi keputusan
->    tertulis.~~ **DITUTUP:** kini keputusan tertulis ber-`reviewDate` di
+>    the `CONSUMED` vs `COMMITTED` split has landed in
+>    `scripts/api-consumer-contract.ts` — `CONSUMED_PATHS` (3 paths) is pinned to a
+>    marked block in the `awcms-astro` repo, `COMMITTED_PATHS` (2 paths) requires an ADR;
+>    its gate is `bun run api:consumer-contract:check`.
+> 4. ~~The OWASP edition pins (Top 10 2021, ASVS 4.0.3) were never a written
+>    decision.~~ **CLOSED:** it is now a written decision with a `reviewDate` in
 >    [ADR-0068](../../../docs/adr/0068-family-standards-posture-editions-and-recorded-divergences.md) §A.
->    Menaikkan edisi = **revisi ADR tingkat keluarga**, bukan penyuntingan tabel;
->    `awcms-astro` mengikuti repo ini dan tidak mendahuluinya.
+>    Raising an edition = a **family-level ADR revision**, not a table edit;
+>    `awcms-astro` follows this repo and does not run ahead of it.
 
 # AWCMS — Security Hardening (OWASP / ASVS / ISO)
 
-Sumber kebenaran: **`docs/awcms/20_threat_model_security_architecture.md`** (STRIDE, kontrol berlapis, trust boundary, **§Matrix kepatuhan OWASP/ASVS/ISO 27001** — matrix nyata dengan bukti per baris sudah ditulis di Issue #437, pakai sebagai template/precedent saat audit ulang atau menambah kontrol baru), **`docs/awcms/10_template_kode_coding_standard.md`** (guardrail), dan **`docs/awcms/13_final_master_index_traceability.md`** (matrix kontrol). Skill ini **memetakan** kontrol proyek ke kerangka standar; pakai bersama `awcms-security-review` (checklist per modul) dan subagent `awcms-security-auditor`.
+Source of truth: **`docs/awcms/20_threat_model_security_architecture.md`** (STRIDE, layered controls, trust boundaries, **§OWASP/ASVS/ISO 27001 compliance matrix** — the real matrix with per-row evidence was written in Issue #437, use it as the template/precedent when re-auditing or adding a new control), **`docs/awcms/10_template_kode_coding_standard.md`** (guardrails), and **`docs/awcms/13_final_master_index_traceability.md`** (control matrix). This skill **maps** the project's controls onto standard frameworks; use it together with `awcms-security-review` (the per-module checklist) and the `awcms-security-auditor` subagent.
 
-## OWASP Top 10 (2021) → kontrol di base
+## OWASP Top 10 (2021) → controls in the base
 
-| #   | Kategori                       | Cek utama di AWCMS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A01 | Broken Access Control          | ABAC default-deny + deny-overrides (ADR-0004); RLS `ENABLE`+`FORCE` (ADR-0003); DB role non-superuser; `WHERE id=<tenant>` eksplisit pada tabel RLS-free (`awcms_tenants`); IDOR — cek tiap resource difilter tenant/kepemilikan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| A02 | Cryptographic Failures         | Password argon2id (`Bun.password`); token sesi opaque (hanya hash disimpan); identifier sensitif `value_hash`+`masked_value`; HTTPS di produksi; cookie `HttpOnly` + `SameSite=Lax` **tanpa syarat**; `Secure` ditegakkan validator di produksi (**gagal-tertutup** — `scripts/validate-env.ts` menolak `AUTH_COOKIE_SECURE !== "true"`, termasuk saat tidak diset); tetap verifikasi respons (`Set-Cookie … Secure`), bukan hanya konfigurasi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| A03 | Injection                      | Query hanya via tagged template parametrik `Bun.SQL` (tak ada string-concat SQL); `tx.unsafe`/`SET LOCAL` hanya untuk nilai tervalidasi (`assertUuid`); validasi input tiap endpoint; output encoding (Astro auto-escape)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| A04 | Insecure Design                | Threat model doc 20; immutability posted; idempotency; self-approval ditolak; fail-closed default (GUC tenant zero-UUID)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| A05 | Security Misconfiguration      | Secret hanya env; `.env` gitignored; CI menolak `.env`; `security:readiness` memblokir go-live (RLS FORCE, role bukan superuser); error tanpa stack trace; **satu-satunya** pemilik header keamanan adalah `src/lib/security/security-headers.ts` dipasang `src/middleware.ts` ke SETIAP response — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, HSTS prod-gated. **`astro.config.mjs` SENGAJA TIDAK memuat blok `security.csp`** (Issue #148, dipertahankan #166): mengaktifkannya membuat DUA sumber CSP yang saling menimpa saat page render, dan halaman rusak tanpa sebab yang terlihat. Versi lama halaman ini menuliskan kebalikannya — jangan ikuti                                                                                                                                                                                                                                                                                          |
-| A06 | Vulnerable Components          | Bun-only (ADR-0002); Dependabot; lockfile terkunci; minim dependency                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| A07 | Identification & Auth Failures | Login lockout **per-principal — satu penghitung per manusia, lintas seluruh tenant** ([ADR-0086](../../../docs/adr/0086-the-lockout-counter-is-global.md), `sql/113`, menutup #430; penghitungnya ada di `awcms_principals`, dan `awcms_identities.failed_login_count`/`locked_until` tinggal SEJARAH — membacanya untuk memutuskan login mengembalikan cacat #430), **di-increment di DB dalam satu statement** — `failed_login_count = failed_login_count + 1` dengan `CASE WHEN … >= max` (`src/modules/identity-access/application/principal-store.ts`), bukan read-modify-write JS; sampai #483 baris ini menjanjikan properti yang justru tidak dipenuhi jalur password, jadi periksa mekanismenya bukan kalimatnya; pesan generik anti-enumeration; TTL sesi; revoke saat logout; deaktivasi mencabut sesi seketika; MFA TOTP + rotasi aal1→aal2 anti-fixation; rate limit **berbagi lewat Redis** `checkSharedRateLimit` (`src/lib/security/rate-limit.ts`, ADR-0066) di 18 berkas rute — reuse untuk endpoint publik/mahal lain via `awcms-integration` |
-| A08 | Software & Data Integrity      | Checksum file sync/objek/backup; audit append-only; CodeQL; migration checksum                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| A09 | Logging & Monitoring Failures  | Audit high-risk + decision log + correlation ID (otomatis di `meta.correlationId` untuk semua endpoint `/api/*` sejak Issue #447, lihat `awcms-observability`); log terstruktur; **redaksi** secret/PII wajib sebelum log; retensi/purge audit event (730 hari default) + extension point untuk export ke SIEM eksternal (Issue #447)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| A10 | SSRF                           | URL provider dari env tepercaya, bukan input user; provider di luar transaksi (ADR-0006)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| #   | Category                       | Main checks in AWCMS                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A01 | Broken Access Control          | ABAC default-deny + deny-overrides (ADR-0004); RLS `ENABLE`+`FORCE` (ADR-0003); non-superuser DB role; explicit `WHERE id=<tenant>` on RLS-free tables (`awcms_tenants`); IDOR — check that every resource is filtered by tenant/ownership                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| A02 | Cryptographic Failures         | argon2id passwords (`Bun.password`); opaque session tokens (only the hash is stored); sensitive identifiers `value_hash`+`masked_value`; HTTPS in production; `HttpOnly` + `SameSite=Lax` cookies **unconditionally**; `Secure` enforced by the validator in production (**fail-closed** — `scripts/validate-env.ts` rejects `AUTH_COOKIE_SECURE !== "true"`, including when it is unset); still verify the response (`Set-Cookie … Secure`), not just the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| A03 | Injection                      | Queries only through parametric `Bun.SQL` tagged templates (no SQL string concatenation); `tx.unsafe`/`SET LOCAL` only for validated values (`assertUuid`); input validation on every endpoint; output encoding (Astro auto-escape)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| A04 | Insecure Design                | Threat model doc 20; posted immutability; idempotency; self-approval rejected; fail-closed defaults (zero-UUID tenant GUC)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| A05 | Security Misconfiguration      | Secrets only from env; `.env` gitignored; CI rejects `.env`; `security:readiness` blocks go-live (RLS FORCE, role not superuser); errors without stack traces; the **only** owner of the security headers is `src/lib/security/security-headers.ts` installed by `src/middleware.ts` onto EVERY response — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, prod-gated HSTS. **`astro.config.mjs` DELIBERATELY DOES NOT carry a `security.csp` block** (Issue #148, upheld in #166): enabling it creates TWO CSP sources that overwrite each other at page render, and pages break with no visible cause. An older version of this page wrote the opposite — do not follow it                                                                                                                                                                                                                                                                                                 |
+| A06 | Vulnerable Components          | Bun-only (ADR-0002); Dependabot; locked lockfile; minimal dependencies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| A07 | Identification & Auth Failures | Login lockout **per-principal — one counter per human, across every tenant** ([ADR-0086](../../../docs/adr/0086-the-lockout-counter-is-global.md), `sql/113`, closing #430; the counter lives in `awcms_principals`, and `awcms_identities.failed_login_count`/`locked_until` are now HISTORY — reading them to decide a login brings defect #430 back), **incremented in the DB in a single statement** — `failed_login_count = failed_login_count + 1` with `CASE WHEN … >= max` (`src/modules/identity-access/application/principal-store.ts`), not a JS read-modify-write; until #483 this line promised a property the password path did not actually satisfy, so inspect the mechanism, not the sentence; generic anti-enumeration messages; session TTL; revoke on logout; deactivation revokes sessions immediately; MFA TOTP + aal1→aal2 rotation against fixation; rate limiting **shared through Redis** `checkSharedRateLimit` (`src/lib/security/rate-limit.ts`, ADR-0066) across 18 route files — reuse it for other public/expensive endpoints via `awcms-integration` |
+| A08 | Software & Data Integrity      | Checksums for sync files/objects/backups; append-only audit; CodeQL; migration checksums                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| A09 | Logging & Monitoring Failures  | High-risk audit + decision log + correlation ID (automatic in `meta.correlationId` for all `/api/*` endpoints since Issue #447, see `awcms-observability`); structured logs; **redaction** of secrets/PII mandatory before logging; audit event retention/purge (730 days by default) + an extension point for export to an external SIEM (Issue #447)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| A10 | SSRF                           | Provider URLs come from trusted env, not from user input; providers are called outside the transaction (ADR-0006)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-## OWASP ASVS (L1/L2 relevan)
+## OWASP ASVS (relevant L1/L2)
 
-- [ ] **V2 Auth** — hashing modern, lockout, session fixation dicegah (token baru saat login), logout mencabut sesi.
-- [ ] **V3 Session** — token opaque server-side; expiry; rotasi saat naik assurance; logout & deaktivasi mencabut. Cookie `HttpOnly`+`SameSite=Lax` tanpa syarat; `Secure` **gagal-tertutup di produksi** sejak 4 Agustus 2026 (validator menolak `AUTH_COOKIE_SECURE !== "true"`; test keadaan-absen ada di `tests/validate-env.test.ts`). Pelajaran yang tetap berlaku: uji dengan variabelnya **DIHAPUS**, bukan disetel `"false"`.
-- [ ] **V4 Access Control** — default deny, cek per-request (bukan sekali), RLS defense-in-depth, tak ada IDOR.
-- [ ] **V5 Validation/Encoding** — validasi tiap input, output encoding, CSRF via Astro `checkOrigin` (wajib `Content-Type` pada mutation).
-- [ ] **V7 Error/Logging** — error aman tanpa detail internal; log tanpa data sensitif.
-- [ ] **V9 Communications** — TLS di produksi (HSTS `Strict-Transport-Security` prod-gated, Issue #437); HMAC untuk kanal mesin-ke-mesin (sync).
-- [ ] **V12 Files** — checksum diverifikasi; path/objek tak dari input tak tepercaya.
-- [ ] **V14 HTTP Security Configuration** — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` `same-origin`, `Cross-Origin-Resource-Policy` `same-origin` (keduanya sejak commit 769292d7), plus HSTS prod-gated — **delapan header (tujuh tanpa syarat + HSTS produksi), satu pemilik**: `src/lib/security/security-headers.ts` dipasang `src/middleware.ts`. `astro.config.mjs` **tidak** memuat `security.csp`, dan tidak boleh (dua sumber CSP yang saling menimpa). **Gotcha CSP nyata**: nonce per-request dihapus diam-diam oleh compiler Astro dari atribut `is:inline`; hash SHA-256 manual untuk satu skrip yang diketahui bisa melewatkan skrip/style lain yang Astro inline per-komponen tanpa diminta — **verifikasi CSP wajib pakai browser sungguhan** (headless-Chrome/CDP), curl tidak bisa mendeteksi pelanggaran CSP karena tak mengeksekusi JS/CSS.
+- [ ] **V2 Auth** — modern hashing, lockout, session fixation prevented (a new token at login), logout revokes the session.
+- [ ] **V3 Session** — opaque server-side tokens; expiry; rotation when assurance is raised; logout & deactivation revoke. `HttpOnly`+`SameSite=Lax` cookies unconditionally; `Secure` **fails closed in production** since 4 August 2026 (the validator rejects `AUTH_COOKIE_SECURE !== "true"`; the absent-state test is in `tests/validate-env.test.ts`). The lesson that still applies: test with the variable **REMOVED**, not set to `"false"`.
+- [ ] **V4 Access Control** — default deny, checked per request (not once), RLS defense-in-depth, no IDOR.
+- [ ] **V5 Validation/Encoding** — validate every input, output encoding, CSRF via Astro `checkOrigin` (`Content-Type` mandatory on mutations).
+- [ ] **V7 Error/Logging** — safe errors with no internal detail; logs without sensitive data.
+- [ ] **V9 Communications** — TLS in production (HSTS `Strict-Transport-Security` prod-gated, Issue #437); HMAC for machine-to-machine channels (sync).
+- [ ] **V12 Files** — checksums verified; paths/objects never taken from untrusted input.
+- [ ] **V14 HTTP Security Configuration** — CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` `same-origin`, `Cross-Origin-Resource-Policy` `same-origin` (both since commit 769292d7), plus prod-gated HSTS — **eight headers (seven unconditional + production HSTS), one owner**: `src/lib/security/security-headers.ts` installed by `src/middleware.ts`. `astro.config.mjs` does **not** carry `security.csp`, and must not (two CSP sources overwriting each other). **A real CSP gotcha**: the per-request nonce is silently stripped by the Astro compiler from `is:inline` attributes; a manual SHA-256 hash for one known script can miss other scripts/styles that Astro inlines per component without being asked — **CSP verification must use a real browser** (headless-Chrome/CDP), curl cannot detect a CSP violation because it does not execute JS/CSS.
 
 ## OWASP API Security Top 10 (2023)
 
-Repo ini **menyajikan** 255 berkas rute `/api/v1`, jadi kategori ini berlaku
-penuh — dan ia tidak punya padanan di `awcms-astro`, yang tidak menyajikan API.
-Matriks API1–API10 lengkap dengan bukti per baris ada di
+This repo **serves** 255 `/api/v1` route files, so this category applies in
+full — and it has no counterpart in `awcms-astro`, which serves no API.
+The complete API1–API10 matrix with per-row evidence is in
 [`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md) §4.
-Yang paling sering salah dinilai saat audit ulang:
+What is most often misjudged during a re-audit:
 
-- **API5** — jangan menilai per BERKAS. Satu berkas rute bisa memanggil
-  chokepoint di `GET` dan tidak di `PATCH`; itu persis cara temuan ADR-0063
-  terlewat sekali. Jalankan `bun run access:chokepoint:check`.
-- **API9** — inventori bukan "OpenAPI-nya ada", melainkan "tiap operasi ber-tag
-  terdeklarasi DAN tiap tag terdeklarasi dipakai". Jalankan
+- **API5** — do not judge per FILE. One route file can call the
+  chokepoint in `GET` and not in `PATCH`; that is exactly how the ADR-0063 finding
+  was missed once. Run `bun run access:chokepoint:check`.
+- **API9** — inventory does not mean "the OpenAPI exists", it means "every operation has a
+  declared tag AND every declared tag is used". Run
   `bun run api:spec:check`.
 
-## ISO/IEC 27001:2022 Annex A (kontrol yang relevan ke kode)
+## ISO/IEC 27001:2022 Annex A (the controls relevant to code)
 
-A.5.15 access control · A.5.17 authentication info · A.8.2 privileged access (DB role least-privilege) · A.8.5 secure authentication · A.8.12 data leakage prevention (masking/redaction) · A.8.15 logging · A.8.16 monitoring (log terstruktur + extension point `setLogSink`/`setAuditExportHook` sejak Issue #447 — titik pemasangan SIEM eksternal, BUKAN implementasi SIEM nyata, itu tetap di luar cakupan base generik ini, lihat `awcms-observability`) · A.8.24 cryptography · A.8.28 secure coding (guardrail doc 10) · A.8.31 separation of environments. Sisanya (kebijakan, personel, fisik) di luar cakupan kode base.
+A.5.15 access control · A.5.17 authentication info · A.8.2 privileged access (least-privilege DB role) · A.8.5 secure authentication · A.8.12 data leakage prevention (masking/redaction) · A.8.15 logging · A.8.16 monitoring (structured logs + the `setLogSink`/`setAuditExportHook` extension points since Issue #447 — an attachment point for an external SIEM, NOT a real SIEM implementation, which remains outside the scope of this generic base, see `awcms-observability`) · A.8.24 cryptography · A.8.28 secure coding (doc 10 guardrails) · A.8.31 separation of environments. The rest (policy, personnel, physical) is outside the scope of the base code.
 
-## Cara kerja
+## How to work
 
-1. Petakan tiap item ke bukti nyata di repo (query DB, panggilan fungsi domain, grep file) — **bukan** asumsi; pola sama seperti `scripts/security-readiness.ts`.
-2. Tandai: terpenuhi / gap / di luar scope base. Temuan **critical** memblokir go-live.
-3. Prioritaskan gap berdasarkan dampak (STRIDE/EoP & Info-disclosure paling tinggi).
+1. Map every item to real evidence in the repo (DB queries, domain function calls, file greps) — **not** assumptions; the same pattern as `scripts/security-readiness.ts`.
+2. Mark it: satisfied / gap / out of base scope. A **critical** finding blocks go-live.
+3. Prioritise gaps by impact (STRIDE/EoP & Info-disclosure highest).
 
 ## Output
 
-Matrix kepatuhan (kategori → status → bukti/lokasi → remediasi) + daftar temuan berperingkat critical→low + saran patch. Jalankan `bun run security:readiness` sebagai gate objektif.
+A compliance matrix (category → status → evidence/location → remediation) + a list of findings ranked critical→low + suggested patches. Run `bun run security:readiness` as the objective gate.
 
-**Lalu mutakhirkan
+**Then update
 [`docs/awcms/standar-performa-dan-keamanan.md`](../../../docs/awcms/standar-performa-dan-keamanan.md).**
-Itu bukan pekerjaan tambahan, itu keluarannya: sebuah audit yang hasilnya hanya
-hidup di jawaban chat akan diulang dari nol enam bulan kemudian, dan celah yang
-sudah ditolak dengan alasan akan diusulkan lagi sebagai temuan baru. Aturan
-dokumen itu: baris tanpa **pemeriksa** adalah klaim, bukan kontrol — jadi setiap
-celah yang dipindahkan ke `DITUTUP` harus menyebut gerbang/test yang ikut
-mendarat.
+That is not extra work, it is the deliverable: an audit whose result only
+lives in a chat answer will be redone from scratch six months later, and a gap that
+was already rejected with a reason will be proposed again as a new finding. That
+document's rule: a row without a **checker** is a claim, not a control — so every
+gap moved to `CLOSED` must name the gate/test that landed with it.
 
-## Skill terkait
+## Related skills
 
-`awcms-security-review` (checklist DoD per modul), `awcms-abac-guard`, `awcms-audit-log`, `awcms-observability` (correlation ID, retensi, extension point A.8.16), `awcms-integration` (rate limiting reuse), `awcms-sensitive-data`, `awcms-sync-hmac`, `awcms-production-preflight`; subagent `awcms-security-auditor`.
+`awcms-security-review` (the per-module DoD checklist), `awcms-abac-guard`, `awcms-audit-log`, `awcms-observability` (correlation ID, retention, the A.8.16 extension point), `awcms-integration` (rate limiting reuse), `awcms-sensitive-data`, `awcms-sync-hmac`, `awcms-production-preflight`; the `awcms-security-auditor` subagent.

@@ -12,6 +12,7 @@
  * this file owns only the deployment-level knobs: the master enable flag, the
  * at-rest credential encryption key, and the discovery/JWKS fetch bounds.
  */
+import { resolveDeclaredBaseUrl } from "../http/site-origin";
 
 /**
  * The single feature switch every SSO login/callback/link/unlink endpoint
@@ -110,7 +111,7 @@ export function resolveSsoRedirectUri(
   providerKey: string,
   env: NodeJS.ProcessEnv = process.env
 ): string {
-  const appUrl = env.APP_URL ?? "http://localhost:4321";
+  const appUrl = resolveDeclaredBaseUrl(env);
 
   return new URL(
     `${DEFAULT_REDIRECT_PATH_PREFIX}/${providerKey}/callback`,

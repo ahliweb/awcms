@@ -1,176 +1,178 @@
 ---
 name: awcms-deploy
-description: Pilih dan jalankan profil deployment AWCMS (development/production/offline-LAN — TIGA profil; `staging` dihapus dari kosakata profil oleh ADR-0083, dan kontrak isolasinya kini berlaku untuk environment kedua apa pun). Gunakan saat menyiapkan deployment baru, memutuskan LAN-first vs registry-based, atau deploy ke Coolify. Sesuai doc 18 dan deployment-profiles.md/deploy-coolify.md.
+description: Choose and run an AWCMS deployment profile (development/production/offline-LAN — THREE profiles; `staging` was removed from the profile vocabulary by ADR-0083, and its isolation contract now applies to any second environment). Use when preparing a new deployment, deciding LAN-first vs registry-based, or deploying to Coolify. Per doc 18 and deployment-profiles.md/deploy-coolify.md.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Deployment Profile & Execution
 
-Ikuti `docs/awcms/deployment-profiles.md` (peta profil ke berkas
-`deploy/*`) dan `docs/awcms/deploy-coolify.md` (khusus Coolify).
+Follow `docs/awcms/deployment-profiles.md` (map of profiles to `deploy/*`
+files) and `docs/awcms/deploy-coolify.md` (Coolify-specific).
 
-> **Tiga profil, bukan empat.** `development`, `production`, `offline-lan`.
-> `staging` DIHAPUS dari kosakata profil deployment (ADR-0083 sebagaimana
-> diamandemen) — bukan "ada tapi tak dipakai di sini". Jangan menuliskannya di
-> `deploymentProfiles` modul, di `APP_ENV`, atau di dokumen baru. Kontrak
-> isolasi yang dulu melekat padanya TIDAK hilang: ia kini aturan untuk
-> **environment kedua apa pun** yang seseorang dirikan di samping produksinya
-> (database sendiri, role/password sendiri, secret sendiri, integrasi keluar
-> mati, tanpa tulis ke bucket media produksi, provider DNS `manual`, token purge
-> per-environment) — tertulis di `docs/awcms/environments.md` §Kontrak isolasi
-> environment kedua.
+> **Three profiles, not four.** `development`, `production`, `offline-lan`.
+> `staging` was REMOVED from the deployment profile vocabulary (ADR-0083 as
+> amended) — not "exists but unused here". Do not write it in a module's
+> `deploymentProfiles`, in `APP_ENV`, or in new documents. The isolation
+> contract that used to attach to it is NOT gone: it is now the rule for
+> **any second environment** someone stands up alongside their production
+> (its own database, its own role/password, its own secrets, outbound
+> integrations off, no writes to the production media bucket, DNS provider
+> `manual`, per-environment purge token) — written in
+> `docs/awcms/environments.md` §Second-environment isolation contract.
 
-## Pilih jalur
+## Choose the path
 
 ```mermaid
 flowchart TD
-  A{Topologi target?} -->|LAN-first satu server,\noperator git pull in-place| B[docker-compose.yml]
-  A -->|Registry/CI-push,\norkestrator container| C[Dockerfile.production]
-  C --> D{Orkestrator?}
-  D -->|Docker Compose langsung| G[docker-compose.prod.yml]
+  A{Target topology?} -->|LAN-first single server,\noperator git pull in-place| B[docker-compose.yml]
+  A -->|Registry/CI-push,\ncontainer orchestrator| C[Dockerfile.production]
+  C --> D{Orchestrator?}
+  D -->|Docker Compose directly| G[docker-compose.prod.yml]
   D -->|Coolify| E[deploy-coolify.md]
-  D -->|k8s/ECS/lain| F[Adaptasi pola Dockerfile.production yang sama]
+  D -->|k8s/ECS/other| F[Adapt the same Dockerfile.production pattern]
 ```
 
-`docker-compose.yml` tetap jalur yang **direkomendasikan** untuk
-LAN-first/offline satu server — jangan beralih ke `Dockerfile.production`
-kecuali orkestrator memang mengharapkan image siap-pakai (build-saat-startup
-tidak diinginkan). Untuk registry-based via Compose (bukan Coolify/k8s),
-pakai `docker-compose.prod.yml` (Issue #682) — standalone, bukan override
+`docker-compose.yml` remains the **recommended** path for LAN-first/offline
+single server — do not switch to `Dockerfile.production` unless the
+orchestrator genuinely expects a ready-made image (build-at-startup is
+undesirable). For registry-based via Compose (not Coolify/k8s), use
+`docker-compose.prod.yml` (Issue #682) — standalone, not an override of
 `docker-compose.yml`.
 
-**Container hardening (Issue #682, berlaku di kedua compose file)**:
-`db`/`pgbouncer` tidak publish port host secara default (salin
-`docker-compose.override.yml.example` untuk akses lokal opsional);
-`cap_drop: [ALL]` di semua service (`db` dapat `cap_add` minimal untuk
-entrypoint-nya sendiri); image Bun/Postgres/PgBouncer dipin ke versi
-eksplisit, bukan tag mengambang; healthcheck di `db`/`app` (`migrate`
-one-shot dan `pgbouncer` opsional sengaja tanpa healthcheck — lihat
-komentar masing-masing service);
-`docker-compose.prod.yml`'s `app` jalan `read_only: true` (image
-registry-based tidak pernah menulis ke filesystem-nya sendiri saat
-runtime). PgBouncer's `deploy/pgbouncer/pgbouncer.ini.example` memakai
-`auth_type = scram-sha-256` (bukan `md5`) — lihat berkas itu untuk
-perintah generate `userlist.txt` dari `pg_authid`. CI
-(`.github/workflows/ci.yml`) menjalankan `docker compose config -q` untuk
-kedua compose file di setiap PR — jangan biarkan salah satu file punya
-syntax error/env var yang tidak resolve sampai lolos ke deploy.
+**Container hardening (Issue #682, applies to both compose files)**:
+`db`/`pgbouncer` do not publish host ports by default (copy
+`docker-compose.override.yml.example` for optional local access);
+`cap_drop: [ALL]` on every service (`db` gets a minimal `cap_add` for its
+own entrypoint); Bun/Postgres/PgBouncer images are pinned to explicit
+versions, not floating tags; healthchecks on `db`/`app` (the `migrate`
+one-shot and the optional `pgbouncer` deliberately have no healthcheck —
+see the comments on each service);
+`docker-compose.prod.yml`'s `app` runs `read_only: true` (a registry-based
+image never writes to its own filesystem at runtime). PgBouncer's
+`deploy/pgbouncer/pgbouncer.ini.example` uses `auth_type = scram-sha-256`
+(not `md5`) — see that file for the command to generate `userlist.txt` from
+`pg_authid`. CI (`.github/workflows/ci.yml`) runs `docker compose config -q`
+for both compose files on every PR — do not let either file carry a syntax
+error/unresolved env var all the way to a deploy.
 
-## Dua hal yang TIDAK dijaga gerbang mana pun — periksa dengan mata
+## Two things NO gate guards — check them with your eyes
 
-Keduanya ditemukan asesmen 4 Agustus 2026 (§9.1 dan §9.3) dan keduanya adalah
-kesalahan konfigurasi yang melapor sukses:
+Both were found by the 4 August 2026 assessment (§9.1 and §9.3) and both are
+misconfigurations that report success:
 
-1. ~~`AUTH_COOKIE_SECURE` gagal-terbuka saat tidak diset.~~ **DITUTUP 4 Agustus
-   2026** — `config:validate` kini menuntutnya bernilai persis `"true"` di
-   produksi (sebelumnya hanya menolak `"false"`, sehingga variabel yang **hilang**
-   lolos dan cookie sesi terkirim tanpa `Secure`). Tetap setel eksplisit
-   `AUTH_COOKIE_SECURE=true` untuk tiap profil online, dan **verifikasi dengan
-   `curl -I`** bahwa `Set-Cookie` login membawa `Secure` — validator memeriksa
-   konfigurasi, bukan respons.
-2. **Kompresi datang dari lapisan LUAR, dan repo ini tak memeriksanya.** Repo
-   tidak mengompresi apa pun (nol di aplikasi, nol `do_gzip` di
-   `infra/varnish/default.vcl`, nol middleware `compress` Traefik). Deployment
-   `ahlikoding.com` tetap mengompresi karena **Cloudflare** ada di depan —
-   topologi ter-deploy adalah `Cloudflare (proxied) -> Traefik :443 -> varnish
--> app`, tertulis di [`environments.md`](../../../docs/awcms/environments.md)
-   §Cache tepi. **Deployment template ini di luar CDN pengompresi tidak mendapat
-   kompresi sama sekali, dan tak ada gerbang yang mengatakannya** — verifikasi
-   sendiri dengan `curl -sSI -H 'Accept-Encoding: gzip' <host>/api/v1/health`
-   dan cari `content-encoding`. Bila harus menambahkannya, **pilih satu tempat**;
-   dua lapisan yang sama-sama mengompresi menghasilkan `Content-Encoding` ganda.
-3. **Antrean purge tidak menjangkau Cloudflare.** `EDGE_CACHE_PURGE_ENDPOINT`
-   menunjuk Varnish; tak ada pemanggilan API zona CF di mana pun. Menerbitkan
-   konten karena itu meng-invalidasi Varnish sementara CF tetap menyajikan salinan
-   lamanya sampai `s-maxage` habis (`EDGE_CACHE_MAX_TTL_SECONDS`, bawaan 300 detik).
-   Berbatas dan bukan kebocoran — tetapi uji penerimaan `X-Cache` di
-   `environments.md` mengukur Varnish, jadi jeda ini tak akan terlihat di sana.
-   Untuk menguji tier yang benar, baca `cf-cache-status` dan `age`.
+1. ~~`AUTH_COOKIE_SECURE` fails open when unset.~~ **CLOSED 4 August
+   2026** — `config:validate` now demands it be exactly `"true"` in
+   production (previously it only rejected `"false"`, so a **missing**
+   variable slipped through and session cookies were sent without `Secure`).
+   Still set `AUTH_COOKIE_SECURE=true` explicitly for every online profile, and
+   **verify with `curl -I`** that the login `Set-Cookie` carries `Secure` — the
+   validator checks configuration, not responses.
+2. **Compression comes from an OUTER layer, and this repo does not check it.**
+   The repo compresses nothing (zero in the application, zero `do_gzip` in
+   `infra/varnish/default.vcl`, zero Traefik `compress` middleware). The
+   `ahlikoding.com` deployment still compresses because **Cloudflare** sits in
+   front — the deployed topology is `Cloudflare (proxied) -> Traefik :443 -> varnish
+-> app`, written in [`environments.md`](../../../docs/awcms/environments.md)
+   §Edge cache. **A deployment of this template outside a compressing CDN gets no
+   compression at all, and no gate says so** — verify it yourself with
+   `curl -sSI -H 'Accept-Encoding: gzip' <host>/api/v1/health` and look for
+   `content-encoding`. If you must add it, **pick one place**; two layers both
+   compressing produce a doubled `Content-Encoding`.
+3. **The purge queue does not reach Cloudflare.** `EDGE_CACHE_PURGE_ENDPOINT`
+   points at Varnish; there is no CF zone API call anywhere. Publishing content
+   therefore invalidates Varnish while CF keeps serving its old copy until
+   `s-maxage` expires (`EDGE_CACHE_MAX_TTL_SECONDS`, default 300 seconds).
+   Bounded, and not a leak — but the `X-Cache` acceptance test in
+   `environments.md` measures Varnish, so this lag will not show up there.
+   To test the right tier, read `cf-cache-status` and `age`.
 
-## Command inti (semua profil)
+## Core commands (all profiles)
 
 ```bash
-bun run config:validate   # wajib pertama — konfigurasi valid sebelum apa pun
-bun run db:migrate        # migrasi sebagai role privileged, sebelum container app pertama
-bun run security:readiness # gate go-live NYATA — exit non-zero bila ada `critical`
-bun run db:pool:health    # pool sehat terhadap DB target
+bun run config:validate   # mandatory first — valid configuration before anything else
+bun run db:migrate        # migrate as the privileged role, before the first app container
+bun run security:readiness # the REAL go-live gate — exits non-zero if anything is `critical`
+bun run db:pool:health    # pool healthy against the target DB
 ```
 
-> **`bun run production:preflight` TIDAK ADA di repo ini.** Versi skill ini
-> sebelumnya mencantumkannya sebagai perintah inti; ia gagal dengan
-> `error: Script not found`. Orkestrator itu terdaftar sebagai target DITUNDA
-> di `scripts/README.md` §Ditunda — jalankan langkah-langkahnya sendiri
-> (perintah di atas, plus `bun run check` yang sudah memuat test + build).
+> **`bun run production:preflight` DOES NOT EXIST in this repo.** An earlier
+> version of this skill listed it as a core command; it fails with
+> `error: Script not found`. That orchestrator is listed as a DEFERRED target
+> in `scripts/README.md` §Deferred — run its steps yourself (the commands
+> above, plus `bun run check` which already covers test + build).
 
-> **Image runtime TIDAK BISA menjalankan job apa pun — rebuild image job tiap
-> deploy.** `Dockerfile.production`'s stage `runtime` hanya menyalin `dist/`,
-> `node_modules/`, `package.json`. Ke-29 job yang didaftarkan modul berbentuk
-> `bun run <target>` dan **semuanya** keluar `error: Script not found` di sana;
-> tidak ada penjadwal in-process sebagai jalur kedua. Deployment yang berjalan
-> memakai image kedua `awcms-jobs:<versi>` (dibangun dari `scripts/` + `src/` +
-> `sql/`) yang dipanggil `/home/admin1/awcms-jobs/run-job.sh <target>` dari
-> cron. **Coolify MENGHAPUS image itu tiap kali app di-deploy** (prune image
-> yang tak dipakai container mana pun) — karena itu `run-job.sh` membangunnya
-> ulang sendiri saat hilang (~55 detik). Yang TIDAK otomatis: konteks build
-> `/home/admin1/awcms-jobs/` adalah SNAPSHOT sumber, jadi **segarkan tiap
-> rilis** — auto-rebuild memperbaiki penghapusan, bukan keusangan, dan versi
-> job yang tertinggal akan menjalankan kode LAMA terhadap skema BARU tanpa
-> suara. Detail + utang yang tersisa: `docs/PROJECT_STATE.md` §4.
+> **The runtime image CANNOT run any job — rebuild the job image on every
+> deploy.** `Dockerfile.production`'s `runtime` stage only copies `dist/`,
+> `node_modules/`, `package.json`. All 29 jobs registered by modules take the
+> form `bun run <target>` and **every one of them** exits with
+> `error: Script not found` there; there is no in-process scheduler as a second
+> path. The running deployment uses a second image `awcms-jobs:<version>`
+> (built from `scripts/` + `src/` + `sql/`) invoked by
+> `/home/admin1/awcms-jobs/run-job.sh <target>` from cron. **Coolify DELETES
+> that image every time the app is deployed** (it prunes images not used by any
+> container) — which is why `run-job.sh` rebuilds it itself when missing
+> (~55 seconds). What is NOT automatic: the build context
+> `/home/admin1/awcms-jobs/` is a SNAPSHOT of the source, so **refresh it every
+> release** — the auto-rebuild fixes deletion, not staleness, and a job version
+> left behind will run OLD code against a NEW schema silently. Details +
+> remaining debt: `docs/PROJECT_STATE.md` §4.
 
-**Setelah deploy rilis yang menambah modul/permission BARU, jalankan
-backfill permission:**
+**After deploying a release that adds NEW modules/permissions, run the
+permission backfill:**
 
 ```bash
 bun run identity-access:permissions:backfill
 ```
 
-Seed permission di migration hanya menjangkau tenant yang dibuat
-**SESUDAHNYA**. Tenant yang sudah ada tidak pernah menerima grant untuk
-permission baru, jadi owner-nya mendapat **403 senyap** di modul yang
-tampak "sudah terpasang" — bukan error yang mengarahkan ke sebabnya.
-Ini terbukti nyata di v7.0.0 (9 grant per tenant). Rilis yang menambah
-permission WAJIB menjalankan langkah ini, dan memverifikasinya dengan
-membuka layar yang bersangkutan sebagai owner, bukan dengan membaca log.
+The permission seed in a migration only reaches tenants created
+**AFTERWARDS**. Existing tenants never receive grants for the new
+permissions, so their owners get a **silent 403** in a module that looks
+"already installed" — not an error that points at the cause.
+This proved real in v7.0.0 (9 grants per tenant). A release that adds
+permissions MUST run this step, and verify it by opening the relevant screen
+as an owner, not by reading logs.
 
-## Checklist per topologi
+## Checklist per topology
 
 **LAN-first (`docker-compose.yml`)**: `export APP_UID=$(id -u) APP_GID=$(id -g)`
-sebelum `docker compose up --build` (wajib — tanpanya container jadi root
-dan menulis `node_modules/`/`dist/` sebagai root di bind mount host);
+before `docker compose up --build` (mandatory — without it the container runs as
+root and writes `node_modules/`/`dist/` as root into the host bind mount);
 health check `curl http://localhost:4321/api/v1/health`.
 
-**Registry-based/Coolify (`Dockerfile.production`)**: migration one-shot
-**terpisah** (image tidak menjalankannya — role runtime least-privilege
-tidak punya hak DDL); role app selalu `awcms_app` atau setara, tidak
-pernah superuser; database tidak perlu public port bila app+DB satu
-internal network; secret selalu via env var/orkestrator, tidak pernah
-dibakar ke image (`.dockerignore` mengecualikan `.env`).
+**Registry-based/Coolify (`Dockerfile.production`)**: migration is a **separate**
+one-shot (the image does not run it — the least-privilege runtime role
+has no DDL rights); the app role is always `awcms_app` or equivalent, never
+a superuser; the database needs no public port when app+DB share one
+internal network; secrets always via env var/orchestrator, never
+baked into the image (`.dockerignore` excludes `.env`).
 
-**Multi-aplikasi dalam satu VPS/Coolify**: setiap aplikasi wajib
-domain/secret/database (atau minimal schema+role) terpisah — jangan reuse
-`AUTH_IP_HASH_SECRET`/HMAC/kredensial R2 antar aplikasi; lihat
-`deploy-coolify.md` §Opsi PostgreSQL untuk perbandingan satu cluster vs
-satu container per aplikasi vs managed database eksternal.
+**Multiple applications on one VPS/Coolify**: every application must have a
+separate domain/secret/database (or at minimum schema+role) — do not reuse
+`AUTH_IP_HASH_SECRET`/HMAC/R2 credentials across applications; see
+`deploy-coolify.md` §PostgreSQL options for a comparison of one cluster vs
+one container per application vs an external managed database.
 
-## Model tiga-peran basis data (wajib di semua profil)
+## Three-role database model (mandatory in all profiles)
 
-Migrasi = role privileged (DDL/GRANT). Runtime app = `awcms_app`
-least-privilege, `FORCE ROW LEVEL SECURITY` ditegakkan untuknya. Jangan
-pernah menjalankan aplikasi sebagai superuser/owner — `bun run
-security:readiness` memblokir go-live bila terdeteksi.
+Migration = privileged role (DDL/GRANT). App runtime = least-privilege
+`awcms_app`, with `FORCE ROW LEVEL SECURITY` enforced for it. Never
+run the application as superuser/owner — `bun run
+security:readiness` blocks go-live if it detects that.
 
-**Status konkret di repo ini** (jangan asumsikan lebih dari ini):
+**Concrete status in this repo** (do not assume more than this):
 
-- Role `awcms_app` dibuat `sql/019_awcms_db_role_separation.sql` (Issue
-  #141); `awcms_worker` dan `awcms_setup` dibuat
-  `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163). **KOREKSI:** versi
-  skill ini sebelumnya menyatakan `awcms_worker`/`awcms_setup` "tidak ada" dan
-  bahwa mengarahkan `WORKER_DATABASE_URL` ke sana menghasilkan
-  `permission denied`. Itu sudah lama tidak benar — jangan menolak memisahkan
-  role atas dasar itu.
-- Ketiganya dibuat **`NOLOGIN` dan tanpa password** — sengaja, karena password
-  itu secret dan secret tidak boleh masuk berkas migrasi. Migrasi selesai
-  bersih tetapi **belum satu pun role bisa dipakai**. Deployment yang
-  mengaktifkannya:
+- Role `awcms_app` is created by `sql/019_awcms_db_role_separation.sql` (Issue
+  #141); `awcms_worker` and `awcms_setup` are created by
+  `sql/022_awcms_db_worker_setup_roles.sql` (Issue #163). **CORRECTION:** an
+  earlier version of this skill stated that `awcms_worker`/`awcms_setup` "do not
+  exist" and that pointing `WORKER_DATABASE_URL` at them produced
+  `permission denied`. That has long been untrue — do not refuse to separate
+  roles on those grounds.
+- All three are created **`NOLOGIN` and without a password** — deliberately,
+  because a password is a secret and secrets must not go into a migration file.
+  The migration completes cleanly but **not one of the roles is usable yet**.
+  The deployment activates them:
 
   ```sql
   ALTER ROLE awcms_app    LOGIN PASSWORD '<secret>';
@@ -179,52 +181,53 @@ security:readiness` memblokir go-live bila terdeteksi.
   GRANT CONNECT ON DATABASE <db> TO awcms_app, awcms_worker, awcms_setup;
   ```
 
-- Lalu arahkan `DATABASE_URL`→`awcms_app`, `WORKER_DATABASE_URL`→`awcms_worker`,
-  `SETUP_DATABASE_URL`→`awcms_setup`. Dua yang terakhir **fallback ke
-  `DATABASE_URL`** bila kosong (opt-in, tidak breaking).
+- Then point `DATABASE_URL`→`awcms_app`, `WORKER_DATABASE_URL`→`awcms_worker`,
+  `SETUP_DATABASE_URL`→`awcms_setup`. The last two **fall back to
+  `DATABASE_URL`** when empty (opt-in, not breaking).
 
-> **Jebakan yang benar-benar terjadi (staging 2026-07-25).** Platform PaaS
-> (Coolify, dan sebagian besar image `postgres:*`) membuat `POSTGRES_USER`
-> sebagai **superuser**. Bila `DATABASE_URL` runtime dibiarkan menunjuk user
-> itu — bentuk paling wajar setelah provisioning otomatis — aplikasi berjalan
-> sebagai superuser dan **setiap policy `*_tenant_isolation` inert meski
-> `FORCE`**: superuser melewati RLS tanpa syarat. Deployment tampak sehat,
-> migrasi hijau, health 200, dan isolasi tenant tidak ada sama sekali.
-> Verifikasi dengan koneksi nyata, bukan asumsi:
+> **A trap that actually happened (staging 2026-07-25).** PaaS platforms
+> (Coolify, and most `postgres:*` images) create `POSTGRES_USER` as a
+> **superuser**. If the runtime `DATABASE_URL` is left pointing at that user —
+> the most natural shape after automatic provisioning — the application runs
+> as a superuser and **every `*_tenant_isolation` policy is inert even with
+> `FORCE`**: a superuser bypasses RLS unconditionally. The deployment looks
+> healthy, migrations are green, health returns 200, and tenant isolation is
+> entirely absent.
+> Verify with a real connection, not an assumption:
 >
 > ```sql
 > SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname LIKE 'awcms%';
 > ```
 >
-> Role runtime harus `rolsuper=f` **dan** `rolbypassrls=f`.
+> The runtime role must be `rolsuper=f` **and** `rolbypassrls=f`.
 
-## Credential otomasi (agent-cred)
+## Automation credentials (agent-cred)
 
-Kalau langkah deploy ini butuh token API Coolify/Cloudflare atau kredensial
-server secara interaktif (dijalankan agent/operator dalam satu sesi kerja,
-bukan job cron), ambil lewat `agent-cred get <service> <field>` (isi dulu
-dengan `agent-cred set <service>` bila belum ada) — jangan `read -s` ad-hoc
-atau credential inline baru, termasuk untuk `ALTER ROLE ... PASSWORD` di
-atas: generate & simpan dulu via `agent-cred set postgres`. TTL cache 3 jam.
-Detail: repo `personal-coding` `docs/sop-agent-cred-credential-cache.md`.
-Job cron/systemd tetap pakai env var/secret file seperti biasa.
+If this deploy step needs a Coolify/Cloudflare API token or server credentials
+interactively (run by an agent/operator within one working session, not a cron
+job), fetch it via `agent-cred get <service> <field>` (populate it first with
+`agent-cred set <service>` if absent) — not an ad-hoc `read -s` or a new inline
+credential, including for the `ALTER ROLE ... PASSWORD` above: generate and store
+it first via `agent-cred set postgres`. Cache TTL is 3 hours.
+Details: repo `personal-coding` `docs/sop-agent-cred-credential-cache.md`.
+Cron/systemd jobs keep using env vars/secret files as usual.
 
 ## Rollback
 
-Image immutable (Pola registry) → redeploy tag sebelumnya. **Migration
-caution**: rollback image tidak membatalkan migrasi skema yang sudah
-diterapkan — uji migrasi backward-compatible (expand-first) sebelum
-deploy, atau siapkan restore dari backup (`deploy/backup/restore-postgres.sh`)
-sebagai jalur rollback skema.
+Immutable image (registry pattern) → redeploy the previous tag. **Migration
+caution**: rolling back the image does not undo schema migrations that were
+already applied — test that migrations are backward-compatible (expand-first)
+before deploying, or prepare a restore from backup
+(`deploy/backup/restore-postgres.sh`) as the schema rollback path.
 
-> **Jangan berasumsi ada backup untuk di-restore.** Pada deployment Coolify
-> yang berjalan hari ini, tabel `scheduled_database_backups` **KOSONG** —
-> nol backup terjadwal. "Siapkan restore dari backup" di atas hanya nyata
-> bila kamu **mengambil `pg_dump` sendiri SEBELUM menjalankan migrasi
-> produksi**. Verifikasi keberadaan backup, jangan menyimpulkannya dari
-> adanya skrip restore.
+> **Do not assume there is a backup to restore.** On the Coolify deployment
+> running today, the `scheduled_database_backups` table is **EMPTY** —
+> zero scheduled backups. "Prepare a restore from backup" above is only real
+> if you **take a `pg_dump` yourself BEFORE running the production
+> migration**. Verify that a backup exists; do not infer it from the
+> existence of a restore script.
 
 ## Output
 
-Laporan: profil dipilih + alasan, checklist yang terpenuhi, health check
-hasil, dan (bila registry-based) rencana rollback singkat.
+Report: chosen profile + reason, checklist items satisfied, health check
+results, and (if registry-based) a short rollback plan.

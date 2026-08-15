@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # visitor_analytics
 
 Privacy-first human visitor statistics for admin and public routes, in both

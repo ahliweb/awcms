@@ -1,177 +1,179 @@
-# ADR-0060 — Hierarki business scope disediakan `tenant_admin` (office), bukan aplikasi turunan
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0060-business-scope-hierarchy-provided-by-tenant-admin.id.md)
+
+# ADR-0060 — The business scope hierarchy is provided by `tenant_admin` (office), not by a derived application
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-03
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md) (capability port), [ADR-0016](0016-organization-structure-module-admission.md) (`organization_structure` — di-`Accepted` tanpa pernah ada kodenya), [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (jalur aplikasi turunan DIHAPUS), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (merchant Jualanku = business scope), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (kemampuan dibangun di sini)
+- **Date:** 2026-08-03
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0011](0011-capability-ports-for-cross-module-collaboration.md) (capability port), [ADR-0016](0016-organization-structure-module-admission.md) (`organization_structure` — `Accepted` without a single line of its code ever existing), [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (the derived-application pathway is REMOVED), [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (a Jualanku merchant = a business scope), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (capabilities are built here)
 
-## Konteks
+## Context
 
-### 1. Sebuah endpoint ter-guard, ter-audit, ber-RLS yang jalur SUKSESNYA tak bisa dicapai
+### 1. A guarded, audited, RLS-backed endpoint whose SUCCESS path is unreachable
 
-`POST /api/v1/identity/business-scope/assignments` (#180) menulis ke
-`awcms_business_scope_assignments` (`sql/027`, FORCE RLS), digerbangi permission,
-dievaluasi SoD (#181), ter-audit, ber-`Idempotency-Key`. Sebelum ADR ini,
-**tidak ada satu pun input yang bisa membuatnya berhasil**, di deployment mana
-pun.
+`POST /api/v1/identity/business-scope/assignments` (#180) writes to
+`awcms_business_scope_assignments` (`sql/027`, FORCE RLS), is permission-gated,
+SoD-evaluated (#181), audited, and carries an `Idempotency-Key`. Before this ADR,
+**there was no input at all that could make it succeed**, in any deployment
+whatsoever.
 
-Rantainya, diverifikasi ke kode:
+The chain, verified against the code:
 
-1. `createBusinessScopeAssignment` memverifikasi `(scopeType, scopeId)` lewat
-   `BusinessScopeHierarchyPort` sebelum menulis; `resolved: false` → `scope_unresolved`.
-2. Satu-satunya composition root yang ada, `src/pages/api/v1/identity/business-scope/assignments/index.ts`,
-   menyuntikkan `defaultBusinessScopeHierarchyPortAdapter` — adapter NO-OP yang
-   mengembalikan `resolved: false` untuk **setiap** scope type.
-3. Scope type cadangan `tenant` bukan jalan keluar: `validateCreateBusinessScopeAssignmentInput`
-   menolaknya sebagai **tak-bisa-di-assign** (#180 review F2) — ia sentinel
-   cakupan, bukan resource.
+1. `createBusinessScopeAssignment` verifies `(scopeType, scopeId)` through
+   `BusinessScopeHierarchyPort` before writing; `resolved: false` → `scope_unresolved`.
+2. The only composition root that exists, `src/pages/api/v1/identity/business-scope/assignments/index.ts`,
+   injects `defaultBusinessScopeHierarchyPortAdapter` — a NO-OP adapter that
+   returns `resolved: false` for **every** scope type.
+3. The reserved `tenant` scope type is no way out:
+   `validateCreateBusinessScopeAssignmentInput` rejects it as
+   **not-assignable** (#180 review F2) — it is a coverage sentinel, not a
+   resource.
 
-Jadi setiap request berakhir di salah satu dari dua penolakan. Sisa
-subsistemnya ikut mati bersamanya: `resolveBusinessScopeFacts` tak pernah punya
-baris untuk dibaca, `businessScopeFacts` pada `evaluateAccess` tak pernah terisi,
-job `business-scope:expiry` tak pernah punya yang kedaluwarsa, dan SoD
-`same_scope_only` tak pernah punya scope untuk dicocokkan.
+So every request ends in one of two rejections. The rest of the subsystem dies
+with it: `resolveBusinessScopeFacts` never has a row to read,
+`businessScopeFacts` on `evaluateAccess` is never populated, the
+`business-scope:expiry` job never has anything to expire, and the SoD
+`same_scope_only` never has a scope to match against.
 
-### 2. Yang menunggu itu TIDAK akan datang — ADR-0034 sudah menghapusnya
+### 2. What it was waiting for is NOT coming — ADR-0034 already removed it
 
-NO-OP itu **benar saat ditulis**. ADR-0011/0014 mendesain base sebagai fondasi
-yang di-vendor aplikasi turunan; turunan itulah yang akan membawa tabel
-legal-entity/organization-unit-nya sendiri dan menyuntikkan resolver di
-composition root-nya. `identity_access` bahkan menuliskan penyedia kanoniknya:
-`providedBy: "organization_structure"`.
+That NO-OP was **correct when it was written**. ADR-0011/0014 designed the base
+as a foundation vendored by derived applications; it was the derived application
+that would bring its own legal-entity/organization-unit tables and inject a
+resolver in its own composition root. `identity_access` even wrote down its
+canonical provider: `providedBy: "organization_structure"`.
 
-Dua hal kemudian terjadi dan tak seorang pun menutup lingkarannya:
+Two things then happened and nobody closed the loop:
 
-- **`organization_structure` tak pernah ada di sini.** ADR-0016 men-`Accepted`
-  modulnya; nol baris kode pernah ditulis (temuan audit yang sama sudah tercatat
-  di `PROJECT_STATE.md` §4 untuk lima ADR sekaligus).
+- **`organization_structure` never existed here.** ADR-0016 marked the module
+  `Accepted`; zero lines of code were ever written (the same audit finding is
+  already recorded in `PROJECT_STATE.md` §4 for five ADRs at once).
 - **[ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)
-  menghapus jalur turunannya**, dan [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
-  mengunci pengembangan ke repo ini. Tidak akan ada aplikasi turunan yang
-  menyuntikkan resolver, karena jalur itu sudah tidak ada.
+  removed the derived pathway**, and [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md)
+  locked development to this repo. There will be no derived application
+  injecting a resolver, because that pathway no longer exists.
 
-Sejak saat itu NO-OP berhenti menjadi "default aman sementara menunggu penyedia"
-dan menjadi **penolakan permanen** — kelas cacat yang sama dengan page yang tak
-pernah bisa terbit ([ADR-0057](0057-blog-page-lifecycle.md)) dan tombol Restore
-yang dirender persis pada baris yang pasti 404 (#351): permukaan yang melapor
-sukses sambil tidak bekerja.
+From that moment the NO-OP stopped being a "safe default while waiting for a
+provider" and became a **permanent rejection** — the same class of defect as the
+page that could never be published ([ADR-0057](0057-blog-page-lifecycle.md)) and
+the Restore button rendered on exactly the rows that are guaranteed to 404
+(#351): a surface that reports success while not working.
 
-### 3. Base SUDAH punya hierarki nyata, dan sudah dikeraskan
+### 3. The base ALREADY has a real hierarchy, and it is already hardened
 
-`awcms_offices` (`sql/002`) milik `tenant_admin`: `parent_office_id`, `status`
-(`active`/`inactive`), soft delete, `FORCE ROW LEVEL SECURITY` sejak `sql/017`,
-dan — yang paling relevan — **FK komposit tenant-scoped** sejak `sql/020`,
-sehingga sebuah office tidak bisa menunjuk parent milik tenant lain. CRUD,
-soft-delete/restore, dan layar `/admin/offices` semuanya sudah ada.
+`awcms_offices` (`sql/002`) belongs to `tenant_admin`: `parent_office_id`,
+`status` (`active`/`inactive`), soft delete, `FORCE ROW LEVEL SECURITY` since
+`sql/017`, and — most relevant of all — a **tenant-scoped composite FK** since
+`sql/020`, so an office cannot point at a parent owned by another tenant. CRUD,
+soft-delete/restore, and the `/admin/offices` screen all already exist.
 
-Yang hilang bukan hierarkinya. Yang hilang adalah seorang penyedia.
+What is missing is not the hierarchy. What is missing is a provider.
 
-## Keputusan
+## Decision
 
-### A. `tenant_admin` menyediakan `business_scope_hierarchy`; scope type-nya `office`
+### A. `tenant_admin` provides `business_scope_hierarchy`; its scope type is `office`
 
-`tenant-admin/application/office-scope-hierarchy-port-adapter.ts` me-resolve
-`("office", <uuid>)` terhadap `awcms_offices`. Descriptor `tenant_admin`
-mendeklarasikan `capabilities.provides: ["business_scope_hierarchy"]`,
-`identity_access` mengubah `providedBy` dari `organization_structure` (hantu) ke
-`tenant_admin`, dan `CAPABILITY_CONTRACT_VERSIONS` memuat capability itu untuk
-pertama kalinya (`1.0.0`).
+`tenant-admin/application/office-scope-hierarchy-port-adapter.ts` resolves
+`("office", <uuid>)` against `awcms_offices`. The `tenant_admin` descriptor
+declares `capabilities.provides: ["business_scope_hierarchy"]`,
+`identity_access` changes `providedBy` from `organization_structure` (a ghost) to
+`tenant_admin`, and `CAPABILITY_CONTRACT_VERSIONS` carries that capability for
+the first time (`1.0.0`).
 
-`optional: true` **tetap**. Tenant tanpa office sama sekali harus tetap jalan,
-dan degradasinya sama fail-closed-nya seperti sebelumnya. Relasinya tetap
-tingkat-SUMBER: adapter tiba sebagai parameter suntikan di composition root,
-tidak pernah sebagai import dari `identity_access` — jadi tak ada edge
-Core-bergantung-pada-Optional yang lahir.
+`optional: true` **stays**. A tenant with no offices at all must still work, and
+its degradation is exactly as fail-closed as before. The relationship stays
+SOURCE-level: the adapter arrives as an injected parameter at the composition
+root, never as an import from `identity_access` — so no
+Core-depends-on-Optional edge is born.
 
-Scope type lain tetap `resolved: false`. Itu kontrak port, bukan kelalaian:
-scope type yang tak dimiliki siapa pun tak boleh menjadi cakupan otorisasi.
+Other scope types stay `resolved: false`. That is the port contract, not an
+oversight: a scope type nobody owns must not become an authorization scope.
 
-### B. Hanya baris HIDUP yang me-resolve, dan itu keputusan otorisasi
+### B. Only LIVE rows resolve, and that is an authorization decision
 
-Soft-deleted → tidak resolve. `status = 'inactive'` → tidak resolve.
-Milik tenant lain → tidak resolve. Cakupan yang hidup lebih lama daripada
-resource yang dinamainya persis kasus "stale hierarchy" yang kontrak port
-suruh tolak; dan tenant yang menonaktifkan sebuah cabang telah menyatakan
-"ini tidak beroperasi" — membiarkan assignment-nya tetap berlaku membuat
-deaktivasi jadi tindakan kosmetik.
+Soft-deleted → does not resolve. `status = 'inactive'` → does not resolve.
+Owned by another tenant → does not resolve. Coverage that outlives the resource
+it names is exactly the "stale hierarchy" case the port contract tells you to
+reject; and a tenant that deactivates a branch has declared "this is not
+operating" — leaving its assignments in force makes deactivation a cosmetic act.
 
-Baris mati dilewati **di mana pun dalam rantai**: office hidup di bawah parent
-yang dinonaktifkan mendapat rantai ancestor yang lebih pendek, bukan pinjaman
-cakupan lewat resource yang sudah dimatikan tenant-nya.
+Dead rows are skipped **anywhere in the chain**: a live office under a
+deactivated parent gets a shorter ancestor chain, not borrowed coverage through
+a resource its tenant has already switched off.
 
-### C. Setiap batas MENOLAK, tidak pernah memotong
+### C. Every limit REJECTS, never truncates
 
-Siklus, rantai melewati batas kedalaman, dan hasil melewati batas jumlah:
-ketiganya `resolved: false`. Memotong lebih buruk daripada menolak di sini,
-karena daftar yang terpotong **tetap** mengklaim `resolved: true` — pemanggil
-menerima jawaban cakupan yang dihitung dari sebagian graf tanpa satu pun sinyal
-bahwa sisanya ada. Kedua penelusuran adalah satu recursive CTE yang membawa
-array `path`-nya sendiri; `updateOffice` tidak bisa me-reparent office, jadi
-siklus hanya bisa tiba lewat tulisan langsung ke database — justru kasus di
-mana menebak paling berbahaya.
+Cycles, a chain past the depth limit, and results past the count limit: all
+three are `resolved: false`. Truncating is worse than rejecting here, because a
+truncated list **still** claims `resolved: true` — the caller receives a coverage
+answer computed from part of the graph with no signal at all that the rest
+exists. Both traversals are a single recursive CTE carrying its own `path`
+array; `updateOffice` cannot reparent an office, so a cycle can only arrive
+through a direct write to the database — precisely the case where guessing is
+most dangerous.
 
-### D. Sentinel tenant-wide hanya dipercaya bila menamai TENANT INI
+### D. The tenant-wide sentinel is trusted only when it names THIS TENANT
 
-`resolveBusinessScopeFacts` mencetak fakta "mencakup segalanya" untuk
-`scope_type = 'tenant'` tanpa melihat `scope_id`. Tak ada jalur yang didukung
-bisa menulis baris seperti itu (validator menolak scope type cadangan) — dan
-justru itulah alasan pemeriksaannya ditambahkan di sini: baris yang membawanya
-tidak datang lewat service, jadi ia belum melewati validasi apa pun. Kini fakta
-itu hanya lahir bila `scope_id` = id tenant itu sendiri; selain itu
-`resolved: false` (fail-closed).
+`resolveBusinessScopeFacts` emits a "covers everything" fact for
+`scope_type = 'tenant'` without looking at `scope_id`. No supported path can
+write such a row (the validator rejects the reserved scope type) — and that is
+exactly why the check is added here: a row carrying it did not arrive through
+the service, so it has not passed any validation at all. That fact is now only
+born when `scope_id` = the tenant's own id; otherwise `resolved: false`
+(fail-closed).
 
-### E. Adapter NO-OP dihapus, bukan disimpan "untuk berjaga-jaga"
+### E. The NO-OP adapter is deleted, not kept "just in case"
 
-Setelah composition root menyuntikkan adapter office, NO-OP tak punya pemanggil
-di `src/`. Repo ini sudah dua kali mencatat pelajaran fungsi nol-pemanggil
-(ADR-0056 §A). Perilakunya tidak hilang: adapter office mengembalikan
-`resolved: false` untuk setiap scope type yang bukan `office`, jadi
-"default fail-closed" tetap ada — sekarang sebagai cabang di satu-satunya
-adapter, bukan sebagai berkas yang harus dipilih seseorang.
+Once the composition root injects the office adapter, the NO-OP has no caller in
+`src/`. This repo has already recorded the zero-caller function lesson twice
+(ADR-0056 §A). Its behaviour is not lost: the office adapter returns
+`resolved: false` for every scope type that is not `office`, so the
+"fail-closed default" is still there — now as a branch inside the only adapter,
+not as a file somebody has to choose.
 
-### F. Nol migrasi, nol permission baru
+### F. Zero migrations, zero new permissions
 
-Tabel, kolom, index, FK, RLS, katalog permission, dan rutenya sudah ada
-sejak `sql/002`/`sql/017`/`sql/020`/`sql/027`. Yang berubah hanya siapa yang
-menjawab pertanyaan resolusi.
+The table, columns, indexes, FKs, RLS, permission catalogue, and the route have
+all existed since `sql/002`/`sql/017`/`sql/020`/`sql/027`. The only thing that
+changes is who answers the resolution question.
 
-## Konsekuensi
+## Consequences
 
-- `POST /api/v1/identity/business-scope/assignments` punya jalur sukses untuk
-  pertama kalinya. Assignment ber-scope office kini bisa dibuat, kedaluwarsa,
-  dicabut, dan **memengaruhi otorisasi** lewat `businessScopeFacts`.
-- Ini melebarkan permukaan yang sebelumnya inert: sebuah assignment kini bisa
-  memberi cakupan. Penjagaannya tak berubah dan tetap berlapis — permission
-  gate, penolakan self-grant, evaluasi SoD assignment-time, audit, effective
-  dating + expiry, dan `resolved: false` yang tetap men-deny aksi high-risk.
-- Rute yang ingin otorisasi ber-scope masih harus **memilihnya secara sadar**
-  (`resourceAttributes.requiredScopeType`/`.requiredScopeId` + meneruskan
-  `hierarchyPort`). Tidak ada rute yang melakukannya hari ini, jadi perilaku
-  setiap endpoint yang ada tidak berubah oleh ADR ini.
-- `merchant` Jualanku ([ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md))
-  akhirnya punya fondasi yang bisa dipijak: ia dimodelkan sebagai business
-  scope, dan resolver base tak lagi menolak segalanya. Bentuk scope merchant
-  sendiri tetap butuh ADR admission-nya sendiri.
-- Hierarki yang lebih kaya (legal entity, cost center) nanti memperluas adapter
-  ini atau mengganti binding-nya di composition root — bukan menghidupkan lagi
-  jalur turunan yang ADR-0034 hapus.
+- `POST /api/v1/identity/business-scope/assignments` has a success path for the
+  first time. Office-scoped assignments can now be created, expire, be revoked,
+  and **affect authorization** through `businessScopeFacts`.
+- This widens a surface that was previously inert: an assignment can now grant
+  coverage. Its guards are unchanged and still layered — the permission gate,
+  self-grant rejection, assignment-time SoD evaluation, audit, effective dating
+  - expiry, and `resolved: false` still denying high-risk actions.
+- A route that wants scoped authorization must still **opt into it deliberately**
+  (`resourceAttributes.requiredScopeType`/`.requiredScopeId` + passing
+  `hierarchyPort`). No route does that today, so the behaviour of every existing
+  endpoint is unchanged by this ADR.
+- Jualanku's `merchant` ([ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md))
+  finally has a foundation to stand on: it is modelled as a business scope, and
+  the base resolver no longer rejects everything. The shape of the merchant
+  scope itself still needs its own admission ADR.
+- A richer hierarchy (legal entity, cost center) will later extend this adapter
+  or replace its binding at the composition root — not revive the derived
+  pathway ADR-0034 removed.
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-1. **Biarkan NO-OP, tulis `organization_structure` dulu.** Modul baru dengan
-   tabel hierarki barunya sendiri, sementara `awcms_offices` sudah ada, sudah
-   ber-RLS FORCE, sudah punya FK komposit anti-lintas-tenant, dan sudah punya
-   layar admin. Itu membangun hierarki KEDUA untuk membenarkan sebuah baris
-   `providedBy`.
-2. **Cabut seluruh subsistem business scope.** Simetris dengan pencabutan
-   ADR-0058 §C/§D — dan salah di sini: mesinnya lengkap (assignment, effective
-   dating, expiry job, SoD scope-aware, decision log), yang hilang cuma
-   penyedia; dan ADR-0045 sudah bergantung padanya.
-3. **Resolve office TANPA memeriksa `status`/`deleted_at`.** Lebih sederhana,
-   dan membuat soft-delete serta deaktivasi office tak berpengaruh pada
-   otorisasi — cakupan yang hidup lebih lama dari resource-nya.
-4. **Memotong hasil di batas alih-alih menolak.** Jawaban yang diam-diam salah
-   sebagian, dengan `resolved: true` yang menutupinya (§C).
-5. **Menjadikan `business_scope_hierarchy` konsumsi WAJIB.** Akan memaksa
-   setiap deployment punya penyedia dan mengubah kegagalan resolusi dari
-   deny-yang-terdefinisi menjadi kegagalan komposisi.
+1. **Leave the NO-OP, write `organization_structure` first.** A new module with
+   its own new hierarchy table, while `awcms_offices` already exists, already
+   has FORCE RLS, already has an anti-cross-tenant composite FK, and already has
+   an admin screen. That builds a SECOND hierarchy to justify one `providedBy`
+   line.
+2. **Revoke the entire business scope subsystem.** Symmetric with the revocation
+   in ADR-0058 §C/§D — and wrong here: the machinery is complete (assignment,
+   effective dating, expiry job, scope-aware SoD, decision log), the only thing
+   missing is a provider; and ADR-0045 already depends on it.
+3. **Resolve offices WITHOUT checking `status`/`deleted_at`.** Simpler, and it
+   makes office soft-delete and deactivation have no effect on authorization —
+   coverage that outlives its resource.
+4. **Truncate results at the limit instead of rejecting.** An answer that is
+   silently partly wrong, with a `resolved: true` covering it up (§C).
+5. **Making `business_scope_hierarchy` a REQUIRED consumption.** It would force
+   every deployment to have a provider and turn a resolution failure from a
+   defined deny into a composition failure.

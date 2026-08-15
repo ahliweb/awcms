@@ -202,6 +202,13 @@ export const workflowApprovalModule = defineModule({
   jobs: [
     {
       command: "bun run workflow:escalations:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "*/5 * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Escalates every approval task already past its timeout. On a system where this never ran, that is every overdue task at once, each one notifying a human."
+      },
       purpose:
         "Escalate awcms_workflow_tasks rows past their due_at for every active tenant (bounded batch, advisory lock, idempotent per escalation step).",
       recommendedSchedule: "Every 1-5 minutes via cron/systemd timer.",

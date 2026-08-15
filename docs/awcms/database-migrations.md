@@ -1,104 +1,106 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](database-migrations.id.md)
+
 # Database Migration Runner
 
-> **Status dokumen (AWCMS).** Mekanisme runner migrasi ini diwarisi
-> langsung dari base teknis `awcms-mini` (Issue 0.2 di repo asal) dan
-> belum diadaptasi/diverifikasi ulang di repo AWCMS — belum ada migrasi
-> domain ERP yang ditulis. Konvensi di bawah adalah standar yang berlaku
-> begitu migration pertama modul ERP ditambahkan.
+> **Document status (AWCMS).** This migration runner mechanism is inherited
+> directly from the `awcms-mini` technical base (Issue 0.2 in the origin repo) and
+> has not been re-adapted/re-verified in the AWCMS repo — no ERP domain
+> migration has been written yet. The conventions below are the standard that applies
+> the moment the first ERP module migration is added.
 
-Dokumen ini mencatat runner migrasi PostgreSQL AWCMS.
+This document records the AWCMS PostgreSQL migration runner.
 
-## Langkah 0 — ambil DAN verifikasi backup
+## Step 0 — take AND verify a backup
 
-Berlaku untuk setiap environment bersama — produksi, dan environment
-kedua apa pun yang seseorang dirikan di sampingnya. Bukan
-saran, melainkan langkah pertama: migrasi di repo ini **forward-only**
-(tidak ada `down`), jadi satu-satunya jalur pembatalan yang nyata adalah
-restore. Backup yang belum pernah diuji-restore bukan jalur pembatalan —
-ia hanya berkas.
+Applies to every shared environment — production, and any second
+environment someone stands up beside it. This is not
+advice, it is the first step: migrations in this repo are **forward-only**
+(there is no `down`), so the only real rollback path is a
+restore. A backup that has never been restore-tested is not a rollback path —
+it is just a file.
 
 ```bash
-# 1. ambil backup (custom format + sidecar sha256, diverifikasi saat itu juga)
-DATABASE_URL=<url owner/privileged> \
+# 1. take the backup (custom format + sha256 sidecar, verified right there and then)
+DATABASE_URL=<owner/privileged url> \
 BACKUP_DIR=/var/backups/awcms \
 ./deploy/backup/backup-postgres.sh
 
-# 2. buktikan dump itu benar-benar bisa di-restore — drill verify-only:
-#    restore ke database sekali-pakai, diperiksa, lalu di-DROP.
-#    Tanpa --target skrip ini TIDAK PERNAH menyentuh database live.
-DATABASE_URL=<url owner/privileged> \
+# 2. prove the dump can genuinely be restored — a verify-only drill:
+#    restore into a single-use database, inspect it, then DROP it.
+#    Without --target this script NEVER touches the live database.
+DATABASE_URL=<owner/privileged url> \
 ./deploy/backup/restore-postgres.sh /var/backups/awcms/awcms_<db>_<timestamp>.dump
 ```
 
-Langkah 2 tidak opsional. `backup-postgres.sh` hanya membuktikan berkasnya
-terbaca; `restore-postgres.sh` yang membuktikan isinya kembali menjadi
-database — termasuk bahwa tabel ber-`FORCE ROW LEVEL SECURITY` selamat
-melewati round-trip. Isolasi tenant yang hilang saat restore adalah
-kegagalan senyap: semuanya tampak sehat, tak ada satu pun tenant yang
-terpisah.
+Step 2 is not optional. `backup-postgres.sh` only proves the file is
+readable; `restore-postgres.sh` is what proves its contents become a
+database again — including that tables with `FORCE ROW LEVEL SECURITY` survive
+the round-trip. Tenant isolation lost during a restore is a
+silent failure: everything looks healthy, and not a single tenant is
+separated.
 
-Database PostgreSQL di sini adalah container yang dikelola Coolify tanpa
-port ter-publish, jadi kedua skrip dijalankan sebagai container one-shot
-yang berbagi network namespace container DB — pola yang sama persis
-dengan menjalankan migrasi itu sendiri (lihat
-[`environments.md`](environments.md) §Menjalankan migrasi, dan header
-komentar di masing-masing skrip untuk perintah `docker run` lengkapnya).
+The PostgreSQL database here is a Coolify-managed container with no
+published port, so both scripts are run as one-shot containers
+sharing the DB container's network namespace — exactly the same pattern
+as running the migrations themselves (see
+[`environments.md`](environments.md) §Running migrations, and the
+comment header in each script for the full `docker run` command).
 
-Catat nama berkas dump, `sha256`-nya, dan waktu drill di catatan deploy —
-itulah bukti yang diminta
+Record the dump filename, its `sha256`, and the time of the drill in the deploy notes —
+that is the evidence
 [`production-preflight-runbook.md`](production-preflight-runbook.md)
-Stage 2 sebelum `--backup-verified` boleh dipakai.
+Stage 2 asks for before `--backup-verified` may be used.
 
-> Enkripsi at-rest dan manifest bertanda tangan HMAC yang disebut runbook
-> itu **belum ada**; kedua skrip menolak jalan (bukan diam-diam
-> mengabaikan) bila variabel kuncinya diset, supaya tak ada yang mengira
-> dump polos itu terenkripsi.
+> The at-rest encryption and the HMAC-signed manifest the runbook mentions
+> do **not exist yet**; both scripts refuse to run (rather than silently
+> ignoring it) when the key variable is set, so nobody assumes a
+> plain dump is encrypted.
 
-## Perintah
+## Command
 
 ```bash
 DATABASE_URL=postgres://awcms:awcms_password@localhost:5432/awcms bun run db:migrate
 ```
 
-`DATABASE_URL` wajib berasal dari environment. Jangan commit `.env`, dump database, atau kredensial production.
+`DATABASE_URL` must come from the environment. Do not commit `.env`, database dumps, or production credentials.
 
-## Kontrak runner
+## Runner contract
 
-- Runtime memakai Bun melalui `bun scripts/db-migrate.ts`.
-- Driver memakai `Bun.SQL`, bukan `pg` atau adapter Node.js.
-- File migrasi dibaca dari `sql/` dan diurutkan berdasarkan nama file.
-- Nama file wajib mengikuti `NNN_awcms_<area>_<description>.sql`.
-- Runner memastikan tabel `awcms_schema_migrations` tersedia.
-- Migration yang sudah tercatat akan di-skip.
-- Checksum SHA-256 disimpan untuk setiap migration yang applied.
-- Jika migration yang sudah applied berubah, runner berhenti dan meminta migration baru.
-- Setiap migration baru dijalankan dalam transaction runner; wrapper `BEGIN; ... COMMIT;` luar boleh ada pada file lama dan akan dilepas sebelum eksekusi.
-- Runner menyetel `lock_timeout = 5s` dan `statement_timeout = 15min` pada sesinya sendiri, tepat setelah advisory lock diambil — bukan tanggung jawab operator di command line. `lock_timeout` mencegah satu DDL yang menunggu `ACCESS EXCLUSIVE` mengantrikan seluruh request di belakangnya (cara paling umum sebuah `ALTER TABLE` "cepat" menjatuhkan situs); `statement_timeout` memberi batas atas pada backfill yang meleset. Migration yang memang butuh lebih lama menyatakannya sendiri dengan `SET LOCAL statement_timeout` di dalam berkasnya, sehingga niat itu terbaca di tempat reviewer melihatnya.
-- Error menghentikan proses dengan exit code non-zero.
-- Pesan error tidak mencetak nilai `DATABASE_URL`.
+- The runtime is Bun, via `bun scripts/db-migrate.ts`.
+- The driver is `Bun.SQL`, not `pg` or a Node.js adapter.
+- Migration files are read from `sql/` and ordered by file name.
+- File names must follow `NNN_awcms_<area>_<description>.sql`.
+- The runner ensures the `awcms_schema_migrations` table exists.
+- Migrations already recorded are skipped.
+- A SHA-256 checksum is stored for every applied migration.
+- If an already-applied migration changes, the runner stops and demands a new migration.
+- Every new migration runs inside the runner's transaction; an outer `BEGIN; ... COMMIT;` wrapper may exist in older files and is stripped before execution.
+- The runner sets `lock_timeout = 5s` and `statement_timeout = 15min` on its own session, right after the advisory lock is taken — this is not the operator's responsibility on the command line. `lock_timeout` prevents a single DDL statement waiting on `ACCESS EXCLUSIVE` from queueing every request behind it (the most common way a "quick" `ALTER TABLE` takes the site down); `statement_timeout` puts an upper bound on a backfill that overruns. A migration that genuinely needs longer states so itself with `SET LOCAL statement_timeout` inside its own file, so the intent is readable where the reviewer looks.
+- Errors stop the process with a non-zero exit code.
+- Error messages never print the `DATABASE_URL` value.
 
-## Alur
+## Flow
 
 ```mermaid
 flowchart TD
-  A[Baca sql/*.sql] --> B[Validasi nama file]
-  B --> C[Hitung checksum]
-  C --> D[Ambil advisory lock]
-  D --> E{Sudah tercatat?}
-  E -- Ya --> F{Checksum sama?}
-  F -- Ya --> G[Skip]
-  F -- Tidak --> H[Stop non-zero]
-  E -- Tidak --> I[Jalankan dalam transaction]
-  I --> J[Catat name + checksum]
-  J --> K[Lanjut]
+  A[Read sql/*.sql] --> B[Validate file names]
+  B --> C[Compute checksum]
+  C --> D[Take advisory lock]
+  D --> E{Already recorded?}
+  E -- Yes --> F{Checksum matches?}
+  F -- Yes --> G[Skip]
+  F -- No --> H[Stop non-zero]
+  E -- No --> I[Run inside a transaction]
+  I --> J[Record name + checksum]
+  J --> K[Continue]
   G --> K
 ```
 
-## Aturan membuat migration baru
+## Rules for writing a new migration
 
-1. Tambahkan file baru di `sql/` dengan nomor berikutnya.
-2. Jangan edit migration yang sudah pernah applied di environment bersama atau production.
-3. Jangan menaruh secret, dump data customer/finansial/payroll, atau nilai environment nyata di SQL.
-4. Schema tenant-scoped (termasuk entitas ERP: ledger, inventory, procurement, manufacturing, HR/payroll) wajib mengikuti standar PostgreSQL + RLS pada dokumen governance/ADR terkait (lihat ADR-0001 dan ADR foundation lain yang akan menyusul untuk RLS/RBAC-ABAC).
-5. Resource yang bisa dihapus wajib memakai kolom soft delete sesuai standar ADR soft-delete/immutability yang diwarisi dari base.
+1. Add a new file in `sql/` with the next number.
+2. Do not edit a migration that has ever been applied in a shared environment or production.
+3. Do not put secrets, customer/financial/payroll data dumps, or real environment values in SQL.
+4. Tenant-scoped schema (including ERP entities: ledger, inventory, procurement, manufacturing, HR/payroll) must follow the PostgreSQL + RLS standard in the relevant governance/ADR documents (see ADR-0001 and the other foundation ADRs still to come for RLS/RBAC-ABAC).
+5. Deletable resources must use soft delete columns per the soft-delete/immutability ADR standard inherited from the base.
 </content>

@@ -210,6 +210,11 @@ export const reportingModule = defineModule({
   jobs: [
     {
       command: "bun run reporting:projections:refresh",
+      schedule: {
+        mode: "cron",
+        expression: "*/2 * * * *",
+        backlog: "bounded"
+      },
       purpose:
         "Incrementally update every `cursor_table`-strategy projection for every active tenant (bounded cursor re-scan of each projection's declared source streams), and continue any in-progress rebuild's bounded passes.",
       recommendedSchedule: "Every 2 minutes via cron/systemd timer.",
@@ -219,6 +224,13 @@ export const reportingModule = defineModule({
     },
     {
       command: "bun run reporting:exports:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "*/15 * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Dispatches every export queued since the module landed. Harmless per item, unbounded in aggregate — size the queue first."
+      },
       purpose:
         "Generate a fresh export artifact for every enabled scheduled export config whose interval has elapsed, for every active tenant.",
       recommendedSchedule: "Every 15 minutes via cron/systemd timer.",

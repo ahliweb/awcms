@@ -1,26 +1,28 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](production-preflight-runbook.id.md)
+
 # Production Preflight — Rehearsal, Apply, and Rollback Runbook
 
-> **Status dokumen (AWCMS, tahap foundation-rebuild).** `bun run
-production:preflight` dan seluruh prosedur di bawah (`scripts/
+> **Document status (AWCMS, foundation-rebuild phase).** `bun run
+production:preflight` and every procedure below (`scripts/
 production-preflight.ts`, `authorizeApply`, `deploy/backup/{backup,
-restore,offsite-copy}-postgres.sh` dengan enkripsi/HMAC/manifest) adalah
-> mekanisme yang pada base `awcms-mini` sudah diimplementasikan penuh dan
-> diverifikasi (Issue #684 di repo asal, epic `platform-hardening`). Di
-> AWCMS, **belum ada implementasi kode untuk tool ini**: `scripts/
-production-preflight.ts` tidak ada, tidak ada key `production:preflight`
-> di `package.json`, dan `deploy/` hanya berisi
-> `deploy/pgbouncer/pgbouncer.ini.example` (belum ada `deploy/backup/`
-> sama sekali). Tiga dari sembilan tahap yang dijelaskan di bawah SUDAH
-> nyata sebagai script berdiri sendiri — `config:validate`,
-> `security:readiness`, `db:pool:health` (lihat
-> [`production-readiness.md`](production-readiness.md)) — tetapi
-> orkestrator yang menjalankannya sebagai satu urutan gated go/no-go,
-> plus tahap `database:capacity`, `db:connectivity`, `migration:plan`,
-> belum ada. Dokumen ini menjelaskan **target arsitektur dan kontrak**
-> yang akan diporting dari base sebagai bagian pembangunan fondasi teknis
-> AWCMS; baca klaim "tersedia"/"sudah berjalan" di bawah sebagai
-> spesifikasi yang harus dipenuhi ulang saat porting, bukan status
-> berjalan saat ini.
+restore,offsite-copy}-postgres.sh` with encryption/HMAC/manifest) are
+> mechanisms that on the `awcms-mini` base are already fully implemented
+> and verified (Issue #684 in the origin repo, epic `platform-hardening`).
+> In AWCMS, **there is no code implementation for this tool yet**:
+> `scripts/production-preflight.ts` does not exist, there is no
+> `production:preflight` key in `package.json`, and `deploy/` only
+> contains `deploy/pgbouncer/pgbouncer.ini.example` (there is no
+> `deploy/backup/` at all yet). Three of the nine stages described below
+> ARE real as standalone scripts — `config:validate`,
+> `security:readiness`, `db:pool:health` (see
+> [`production-readiness.md`](production-readiness.md)) — but the
+> orchestrator that runs them as one gated go/no-go sequence, plus the
+> `database:capacity`, `db:connectivity`, `migration:plan` stages, does
+> not exist yet. This document describes the **target architecture and
+> contract** that will be ported from the base as part of building
+> AWCMS's technical foundation; read the "available"/"already running"
+> claims below as a specification that has to be met again during the
+> port, not as the current running status.
 
 Companion to `docs/awcms/07_sprint_testing_production_readiness.md` — this
 doc covers the operational procedure around `bun run production:preflight`,
@@ -61,12 +63,12 @@ action.
 > `production`, and `offline-lan`. This stage therefore describes a
 > rehearsal environment somebody chooses to stand up, not a named tier the
 > template ships. Its isolation contract lives in
-> [`environments.md`](environments.md) §Kontrak isolasi environment kedua.
+> [`environments.md`](environments.md) §Second-environment isolation contract.
 > Here the stage has no target, and what stands in its place is deliberately
 > narrower: the CI integration suite against a real PostgreSQL service, plus
 > Stage 2's restore-tested backup — which stops being a formality the moment
 > nothing rehearses the migration first. That is a mitigation, not an equal
-> substitute; ADR-0083 §Konsekuensi records what was given up rather than
+> substitute; ADR-0083 §Consequences records what was given up rather than
 > pretending it was free.
 
 Where a rehearsal environment exists, never run `--apply-migrations` against

@@ -1,22 +1,24 @@
-# 01 — Arsitektur porting Jualanku.info
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](01-arsitektur-porting.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status dan
+# 01 — Jualanku.info porting architecture
+
+> A plan. See the [README](README.md) for status and
 > [ADR-0045](../../adr/0045-jualanku-porting-awcms-system-of-record-astro-bff.md)
-> untuk keputusannya.
+> for the decision.
 
-## 1. Pembagian lapisan
+## 1. Layer split
 
-| Lapisan                  | Pemilik                                                      | Tanggung jawab                                                                                   | Yang **bukan** tanggung jawabnya                            |
-| ------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| Experience publik        | `awcms-astro`                                                | Homepage, direktori, profil usaha, katalog publik, artikel, SEO, structured data, aksesibilitas. | Aturan bisnis, keputusan otorisasi, akses basis data.       |
-| Portal penjual/affiliate | `awcms-astro` (on-demand)                                    | Render halaman privat, BFF `/_portal-api/*`, view model, header privat, CSRF.                    | Entitlement, kepemilikan, transisi state, ledger.           |
-| Business platform        | `awcms`                                                      | Domain service, policy, validasi, workflow, reporting, audit, outbox, API.                       | Markup halaman publik, cache tepi, SEO halaman portal.      |
-| Admin internal           | `awcms` (SSR `/admin/*`)                                     | Operasi, moderasi, verifikasi, finance, risk, support, settings.                                 | Akses merchant/affiliate — mereka tidak punya rute ke sini. |
-| Data                     | PostgreSQL via `awcms`                                       | System of record, RLS, retensi, legal hold.                                                      | Diakses langsung oleh `awcms-astro` (tidak pernah).         |
-| Media                    | `media_library` (R2) via `awcms`                             | Upload presigned, verifikasi MIME magic-byte, SHA-256, lifecycle, enforcement managed-media.     | Menerima URL gambar bebas dari portal.                      |
-| Edge/routing             | Cloudflare/Traefik/Coolify + Varnish (`src/lib/edge-cache/`) | TLS, WAF, rate limit, routing host, pemisahan cache.                                             | Otorisasi. Cache bukan kontrol akses.                       |
+| Layer                   | Owner                                                        | Responsibility                                                                                          | What is **not** its responsibility                        |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Public experience       | `awcms-astro`                                                | Homepage, directory, business profile, public catalogue, articles, SEO, structured data, accessibility. | Business rules, authorization decisions, database access. |
+| Seller/affiliate portal | `awcms-astro` (on-demand)                                    | Rendering private pages, the `/_portal-api/*` BFF, view models, private headers, CSRF.                  | Entitlement, ownership, state transitions, the ledger.    |
+| Business platform       | `awcms`                                                      | Domain services, policy, validation, workflow, reporting, audit, outbox, API.                           | Public page markup, edge cache, portal page SEO.          |
+| Internal admin          | `awcms` (SSR `/admin/*`)                                     | Operations, moderation, verification, finance, risk, support, settings.                                 | Merchant/affiliate access — they have no route in here.   |
+| Data                    | PostgreSQL via `awcms`                                       | System of record, RLS, retention, legal hold.                                                           | Being accessed directly by `awcms-astro` (never).         |
+| Media                   | `media_library` (R2) via `awcms`                             | Presigned upload, magic-byte MIME verification, SHA-256, lifecycle, managed-media enforcement.          | Accepting arbitrary image URLs from the portal.           |
+| Edge/routing            | Cloudflare/Traefik/Coolify + Varnish (`src/lib/edge-cache/`) | TLS, WAF, rate limit, host routing, cache separation.                                                   | Authorization. A cache is not access control.             |
 
-## 2. Topologi
+## 2. Topology
 
 ```
 Internet
@@ -28,91 +30,91 @@ Traefik / Coolify
   │                              │
 jualanku.info                   ops.jualanku.info
 awcms-astro                     awcms (Astro SSR, @astrojs/node)
-- publik: prerender             - /admin/** internal
-- /penjual/**  on-demand        - allowlist jaringan / Zero Trust
+- public: prerender             - /admin/** internal
+- /penjual/**  on-demand        - network allowlist / Zero Trust
 - /affiliate/** on-demand
 - BFF /_portal-api/**
   │
-  │ jaringan privat / service identity (mTLS atau token layanan)
+  │ private network / service identity (mTLS or a service token)
   ▼
 awcms REST API  ──►  PostgreSQL (RLS FORCE) + audit + outbox + R2
 ```
 
-Catatan yang mengikat:
+Binding notes:
 
-- `awcms` **tidak** dipublikasikan sebagai API umum. Rute publik yang memang
-  sudah ada di repo ini (`/blog/{tenantCode}/*`, `/robots.txt`, `/sitemap*.xml`,
-  feed, `/search`) tetap boleh terbuka; sisanya hanya menerima trafik dari
+- `awcms` is **not** published as a general-purpose API. The public routes that
+  already exist in this repo (`/blog/{tenantCode}/*`, `/robots.txt`, `/sitemap*.xml`,
+  feeds, `/search`) may stay open; everything else only accepts traffic from the
   experience layer.
-- Host admin terpisah dari host publik. Satu origin yang melayani halaman
-  merchant dan halaman admin membuat setiap kesalahan CSP, cookie, atau cache
-  berubah menjadi kesalahan lintas-audience.
-- Cache tepi hanya menyentuh permukaan publik. `private, no-store` untuk semua
-  respons portal dan admin — lihat `bun run edge-cache:surfaces:check` sebelum
-  menambah surface baru.
+- The admin host is separate from the public host. A single origin serving
+  merchant pages and admin pages turns every CSP, cookie, or cache mistake
+  into a cross-audience mistake.
+- The edge cache only touches public surfaces. `private, no-store` for every
+  portal and admin response — run `bun run edge-cache:surfaces:check` before
+  adding a new surface.
 
-## 3. Matriks rendering per permukaan
+## 3. Rendering matrix per surface
 
-| Permukaan                           | Repo          | Rendering                                | Cache                          | Autentikasi             |
-| ----------------------------------- | ------------- | ---------------------------------------- | ------------------------------ | ----------------------- |
-| `/`, halaman marketing, `/harga`    | `awcms-astro` | Prerender                                | Public, revalidate saat deploy | Tidak                   |
-| `/artikel/**`, `/bantuan/**`        | `awcms-astro` | Prerender (fetch saat build)             | Public                         | Tidak                   |
-| `/kategori/[slug]`, `/usaha/[slug]` | `awcms-astro` | Prerender + rebuild/purge                | Public, invalidasi ber-tag     | Tidak                   |
-| `/cari`                             | `awcms-astro` | On-demand atau API publik ber-TTL pendek | Public, TTL terbatas           | Tidak                   |
-| `/penjual/**`                       | `awcms-astro` | On-demand (`prerender = false`)          | `private, no-store`            | Sesi merchant           |
-| `/affiliate/**` (dashboard)         | `awcms-astro` | On-demand (`prerender = false`)          | `private, no-store`            | Sesi affiliate          |
-| `/affiliate` (landing)              | `awcms-astro` | Prerender                                | Public                         | Tidak                   |
-| `/_portal-api/**`                   | `awcms-astro` | Server endpoint (BFF)                    | `no-store`                     | Sesi + CSRF             |
-| `/admin/jualanku/**`                | `awcms`       | SSR                                      | `no-store`                     | Role internal + step-up |
-| `/api/v1/jualanku/**`               | `awcms`       | API                                      | `no-store`                     | Sesuai namespace        |
+| Surface                             | Repo          | Rendering                           | Cache                          | Authentication          |
+| ----------------------------------- | ------------- | ----------------------------------- | ------------------------------ | ----------------------- |
+| `/`, marketing pages, `/harga`      | `awcms-astro` | Prerender                           | Public, revalidate on deploy   | No                      |
+| `/artikel/**`, `/bantuan/**`        | `awcms-astro` | Prerender (fetch at build time)     | Public                         | No                      |
+| `/kategori/[slug]`, `/usaha/[slug]` | `awcms-astro` | Prerender + rebuild/purge           | Public, tag-based invalidation | No                      |
+| `/cari`                             | `awcms-astro` | On-demand or a short-TTL public API | Public, limited TTL            | No                      |
+| `/penjual/**`                       | `awcms-astro` | On-demand (`prerender = false`)     | `private, no-store`            | Merchant session        |
+| `/affiliate/**` (dashboard)         | `awcms-astro` | On-demand (`prerender = false`)     | `private, no-store`            | Affiliate session       |
+| `/affiliate` (landing)              | `awcms-astro` | Prerender                           | Public                         | No                      |
+| `/_portal-api/**`                   | `awcms-astro` | Server endpoint (BFF)               | `no-store`                     | Session + CSRF          |
+| `/admin/jualanku/**`                | `awcms`       | SSR                                 | `no-store`                     | Internal role + step-up |
+| `/api/v1/jualanku/**`               | `awcms`       | API                                 | `no-store`                     | Per namespace           |
 
-Istilah yang dipakai: **static-by-default dengan rute on-demand**. Astro modern
-hanya punya `output: 'static'` atau `'server'`; kemampuan campuran didapat dari
-`export const prerender = false` per rute setelah adapter terpasang — bukan dari
-nilai `output: 'hybrid'` yang sudah tidak ada.
+The term used: **static-by-default with on-demand routes**. Modern Astro only
+has `output: 'static'` or `'server'`; the mixed capability comes from
+`export const prerender = false` per route once an adapter is installed — not from
+the `output: 'hybrid'` value, which no longer exists.
 
-## 4. Kenapa BFF wajib
+## 4. Why the BFF is mandatory
 
-Enam alasan, masing-masing menutup satu kegagalan konkret:
+Six reasons, each closing one concrete failure:
 
-1. **Tenant tidak boleh ditentukan browser.** `awcms` menerima tenant dari header
-   `x-awcms-tenant-id` atau cookie. Bila browser publik yang mengirimnya, pemilihan
-   tenant menjadi input pengguna. BFF menurunkannya server-side dari konfigurasi
-   deployment/host.
-2. **Tidak ada token di penyimpanan browser.** Cookie httpOnly dipegang origin
-   publik; token sesi `awcms` tidak pernah sampai ke JavaScript.
-3. **CSRF, Origin/Referer, dan cache policy diterapkan di satu tempat**, bukan
-   diulang di setiap halaman.
-4. **Envelope `awcms` diproyeksikan menjadi view model**, sehingga perubahan
-   bentuk respons internal tidak langsung menjadi perubahan HTML publik.
-5. **Rate limit berbeda per audience** (pencarian publik, mutasi merchant, payout
-   affiliate, admin) tanpa membebani satu konfigurasi.
-6. **Permukaan serang `awcms` tetap kecil**: satu klien tepercaya, bukan seluruh
+1. **The tenant must not be decided by the browser.** `awcms` takes the tenant from the
+   `x-awcms-tenant-id` header or a cookie. If the public browser sends it, tenant
+   selection becomes user input. The BFF derives it server-side from the
+   deployment/host configuration.
+2. **No tokens in browser storage.** httpOnly cookies are held by the public
+   origin; the `awcms` session token never reaches JavaScript.
+3. **CSRF, Origin/Referer, and cache policy are applied in one place**, not
+   repeated on every page.
+4. **The `awcms` envelope is projected into a view model**, so a change to the shape of
+   an internal response does not immediately become a change to the public HTML.
+5. **Different rate limits per audience** (public search, merchant mutations, affiliate
+   payout, admin) without overloading a single configuration.
+6. **The `awcms` attack surface stays small**: one trusted client, not the whole
    internet.
 
-**Batas keras:** BFF tidak boleh memutuskan apa pun yang punya konsekuensi bisnis.
-Kalau sebuah cek hanya ada di BFF, cek itu tidak ada — panggilan langsung ke
-`awcms` dari jaringan internal akan melewatinya. Setiap aturan yang penting
-di-_re-check_ di `awcms` untuk setiap panggilan.
+**Hard boundary:** the BFF must not decide anything with business consequences.
+If a check only exists in the BFF, that check does not exist — a direct call to
+`awcms` from the internal network will bypass it. Every rule that matters is
+_re-checked_ in `awcms` on every call.
 
-## 5. Bagaimana modul website yang sudah ada dipakai
+## 5. How the existing website modules are used
 
-Jualanku **tidak** membangun ulang kemampuan yang sudah ada di repo ini:
+Jualanku does **not** rebuild capabilities that already exist in this repo:
 
-| Kebutuhan Jualanku                    | Modul yang dipakai                            | Catatan integrasi                                                                                  |
-| ------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Artikel, halaman bantuan, legal       | `blog_content`                                | Halaman legal ber-versi + tanggal berlaku memakai lifecycle post/page yang sudah ada.              |
-| Metadata SEO, sitemap, feed, redirect | `seo_distribution`                            | Modul konten Jualanku mendeklarasikan `seo_facts` lewat seam yang ada; host diturunkan server.     |
-| Pencarian direktori                   | `site_search`                                 | `jualanku_directory`/`jualanku_catalog_growth` mendeklarasikan `searchSources` untuk baris terbit. |
-| Gambar usaha/produk/bukti verifikasi  | `media_library`                               | Upload presigned + verifikasi MIME. Portal tidak pernah mengirim URL gambar bebas.                 |
-| Tema & design token per tenant        | `theming`                                     | Token Jualanku menjadi konfigurasi tema, bukan CSS lepas di komponen.                              |
-| Domain/host → tenant                  | `tenant_domain`                               | Sumber host kanonik untuk BFF dan SEO.                                                             |
-| Analitik kunjungan privacy-minimal    | `visitor_analytics`                           | Metrik halaman publik. Metrik bisnis merchant tetap milik modul Jualanku.                          |
-| Komentar/ulasan (bila dibuka)         | `comments`                                    | Hanya untuk resource yang sudah terbit; deklarasi lewat `commentableResources`.                    |
-| Retensi/arsip/purge + legal hold      | `data_lifecycle`                              | Setiap tabel bervolume tinggi Jualanku mendeklarasikan `dataLifecycle`.                            |
-| Notifikasi email                      | `email`                                       | Template + outbox dispatcher yang sudah ada.                                                       |
-| Approval payout/verifikasi            | `workflow_approval` + `identity_access` (SoD) | Maker/checker sebagai definisi workflow + `sodRules`, bukan `if` di service.                       |
-| Draft form multi-langkah onboarding   | `form_drafts`                                 | Payload JSONB generik; arti payload milik modul Jualanku.                                          |
+| Jualanku need                                 | Module used                                   | Integration notes                                                                                        |
+| --------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Articles, help pages, legal                   | `blog_content`                                | Versioned legal pages with effective dates use the existing post/page lifecycle.                         |
+| SEO metadata, sitemap, feed, redirects        | `seo_distribution`                            | Jualanku content modules declare `seo_facts` through the existing seam; the host is derived server-side. |
+| Directory search                              | `site_search`                                 | `jualanku_directory`/`jualanku_catalog_growth` declare `searchSources` for published rows.               |
+| Business/product/verification-evidence images | `media_library`                               | Presigned upload + MIME verification. The portal never sends arbitrary image URLs.                       |
+| Per-tenant theme & design tokens              | `theming`                                     | Jualanku tokens become theme configuration, not loose CSS in components.                                 |
+| Domain/host → tenant                          | `tenant_domain`                               | The canonical host source for the BFF and SEO.                                                           |
+| Privacy-minimal visit analytics               | `visitor_analytics`                           | Public page metrics. Merchant business metrics stay owned by the Jualanku modules.                       |
+| Comments/reviews (if opened up)               | `comments`                                    | Only for already-published resources; declared through `commentableResources`.                           |
+| Retention/archive/purge + legal hold          | `data_lifecycle`                              | Every high-volume Jualanku table declares `dataLifecycle`.                                               |
+| Email notifications                           | `email`                                       | The existing templates + outbox dispatcher.                                                              |
+| Payout/verification approval                  | `workflow_approval` + `identity_access` (SoD) | Maker/checker as a workflow definition + `sodRules`, not an `if` in a service.                           |
+| Multi-step onboarding form drafts             | `form_drafts`                                 | A generic JSONB payload; the meaning of the payload belongs to the Jualanku modules.                     |
 
-Yang benar-benar baru hanya lima modul domain di
+The only genuinely new things are the five domain modules in
 [03-bounded-context-dan-model-data.md](03-bounded-context-dan-model-data.md).

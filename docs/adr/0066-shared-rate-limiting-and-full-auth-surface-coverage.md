@@ -1,101 +1,105 @@
-# ADR-0066 — Rate limit berbagi lintas-instans, dan seluruh permukaan auth ter-cakup
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0066-shared-rate-limiting-and-full-auth-surface-coverage.id.md)
+
+# ADR-0066 — Rate limits shared across instances, and the whole auth surface covered
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §3 (temuannya), [ADR-0050](0050-bff-session-handoff-code.md) (handoff sesi), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (introspeksi sesi)
+- **Date:** 2026-08-04
+- **Decision makers:** @ahliweb
+- **Related:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §3 (the finding), [ADR-0050](0050-bff-session-handoff-code.md) (session handoff), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (session introspection)
 
-## Konteks
+## Context
 
-### 1. Batas melemah linier terhadap jumlah replika
+### 1. The limit weakens linearly with the number of replicas
 
-`src/lib/security/rate-limit.ts` menghitung di **`Map` dalam-proses**. Berkasnya
-sendiri sudah mencatat itu sebagai keterbatasan yang diketahui — jadi ini bukan
-cacat tersembunyi, melainkan **utang yang jatuh tempo begitu deployment
-diskalakan horizontal**.
+`src/lib/security/rate-limit.ts` counts in an **in-process `Map`**. The file
+itself already records that as a known limitation — so this is not a hidden
+defect, it is **debt that comes due the moment the deployment is scaled
+horizontally**.
 
-Aritmetikanya: dengan **N** replika di belakang load balancer, batas efektif
-menjadi **N × batas terkonfigurasi**. Untuk `POST /api/v1/auth/login` artinya
-anti-brute-force melemah persis sebanding dengan jumlah replika — sehingga
-deployment yang paling butuh perlindungan (trafik tinggi → banyak replika)
-justru yang paling lemah.
+The arithmetic: with **N** replicas behind a load balancer, the effective limit
+becomes **N × the configured limit**. For `POST /api/v1/auth/login` that means
+anti-brute-force weakens exactly in proportion to the replica count — so the
+deployments that most need the protection (high traffic → many replicas) are
+precisely the weakest ones.
 
-Redis **sudah ada di repo** (`src/lib/redis/`), jadi ini penyambungan, bukan
-kemampuan baru.
+Redis **already exists in the repo** (`src/lib/redis/`), so this is wiring, not a
+new capability.
 
-### 2. Tiga permukaan autentikasi tanpa limiter sama sekali
+### 2. Three authentication surfaces with no limiter at all
 
-`auth/session-handoff/issue`, `auth/session-handoff/redeem`, dan
-`auth/sso/{providerKey}/callback`. Ketiganya punya mitigasi lain (kode handoff
-≤60 detik + sekali pakai + `redeem` menuntut client secret; callback SSO terikat
-state), jadi ini **kelengkapan, bukan lubang** — tetapi ASVS V11.2 menuntut
-anti-automation di **seluruh** permukaan autentikasi, bukan sebagian.
+`auth/session-handoff/issue`, `auth/session-handoff/redeem`, and
+`auth/sso/{providerKey}/callback`. All three have other mitigations (the handoff
+code is ≤60 seconds + single-use + `redeem` demands a client secret; the SSO
+callback is bound to state), so this is **completeness, not a hole** — but
+ASVS V11.2 demands anti-automation across the **entire** authentication surface,
+not part of it.
 
-## Keputusan
+## Decision
 
-### §A — `checkSharedRateLimit`, dengan window di dalam KUNCI
+### §A — `checkSharedRateLimit`, with the window inside the KEY
 
-Fixed window di Redis: `INCR` pada kunci window, `PEXPIRE` sekali pada hit
-pertama.
+A fixed window in Redis: `INCR` on the window key, `PEXPIRE` once on the first
+hit.
 
-**Nomor window adalah bagian dari KUNCI, bukan timestamp tersimpan.** Itu yang
-membuatnya benar di tempat `Map` tidak: dua instans yang menambah window yang
-sama sepakat **tanpa read-modify-write**, jadi tidak ada balapan untuk
-dimenangkan siapa pun.
+**The window number is part of the KEY, not a stored timestamp.** That is what
+makes it correct where the `Map` is not: two instances incrementing the same
+window agree **without read-modify-write**, so there is no race for anyone to
+win.
 
-`PEXPIRE` hanya pada hit pertama. Menyetel ulang tiap hit akan menggeser window
-dan membiarkan penyerang yang stabil menahan kunci hidup tanpa batas.
+`PEXPIRE` only on the first hit. Resetting it on every hit would slide the window
+and let a steady attacker keep the key alive indefinitely.
 
-**Tanpa Redis terkonfigurasi ia jatuh ke `Map` dalam-proses.** Itu bukan
-kompromi: deployment satu-instans tak punya apa pun untuk dibagi, dan menuntut
-Redis untuknya akan menjadikan limiter dependensi keras baru bagi topologi
-terkecil.
+**Without Redis configured it falls back to the in-process `Map`.** That is not a
+compromise: a single-instance deployment has nothing to share, and demanding
+Redis for it would make the limiter a new hard dependency for the smallest
+topology.
 
-### §B — GAGAL-TERBUKA, dan hanya di sini
+### §B — FAIL-OPEN, and only here
 
-Bila Redis terkonfigurasi tapi tak terjangkau, limiter **MENGIZINKAN**. Ini
-kebalikan dari postur default repo ini, jadi dinyatakan keras-keras:
+If Redis is configured but unreachable, the limiter **ALLOWS**. This is the
+opposite of this repo's default posture, so it is stated out loud:
 
-Rate limiter adalah perkakas **ketersediaan** di jalur autentikasi. Gagal-tertutup
-akan mengubah gangguan Redis menjadi _"tidak ada yang bisa login"_ — penolakan
-layanan total atas control plane, yang **bisa dipicu penyerang**.
+A rate limiter is an **availability** tool on the authentication path.
+Failing closed would turn a Redis outage into _"nobody can log in"_ — a total
+denial of service over the control plane, which **an attacker can trigger**.
 
-Yang menjaga itu tetap jujur: **ia bukan satu-satunya kontrol.** Lockout
-per-identitas milik `identity-access` (`login-policy.ts`) ditegakkan **di
-PostgreSQL, atomik**, dan tidak terpengaruh gangguan Redis. Limiter ini backstop
-ber-scope SUMBER di atasnya — penangkap penyerang yang merotasi
-`loginIdentifier` — bukan garis terakhir. Timeout perintahnya 250 ms supaya Redis
-lambat merosot ke "diizinkan" dengan cepat alih-alih menambah latensi tiap
-percobaan, dan `security:readiness` melaporkan Redis terkonfigurasi-tapi-mati
-sehingga keadaan terdegradasi terlihat, bukan senyap.
+What keeps that honest: **it is not the only control.** The per-identity lockout
+owned by `identity-access` (`login-policy.ts`) is enforced **in PostgreSQL,
+atomically**, and is unaffected by a Redis outage. This limiter is a
+SOURCE-scoped backstop on top of it — the catcher of an attacker rotating
+`loginIdentifier` — not the last line. Its command timeout is 250 ms so that a
+slow Redis degrades to "allowed" quickly instead of adding latency to every
+attempt, and `security:readiness` reports Redis configured-but-dead so the
+degraded state is visible, not silent.
 
-### §C — Sebelas permukaan, bukan delapan
+### §C — Eleven surfaces, not eight
 
-Ketiga endpoint tanpa limiter mendapatkannya. Cakupannya kini: `login`,
+The three endpoints without a limiter get one. The coverage is now: `login`,
 `register`, `mfa/totp/verify`, `mfa/step-up`, `password/reset`,
 `password/forgot`, `session`, `session-handoff/issue`, `session-handoff/redeem`,
-`sso/{providerKey}/start`, `sso/{providerKey}/callback` — **sebelas**, dijaga
-test yang juga menegakkan bahwa tak ada rute yang masih memakai limiter
-per-instans secara langsung.
+`sso/{providerKey}/start`, `sso/{providerKey}/callback` — **eleven**, guarded by
+a test that also enforces that no route still uses the per-instance limiter
+directly.
 
-> **Diperbarui (ADR-0082, Gelombang 4 PR 4.2):** sebelas menjadi **tiga belas**.
-> `auth/invitations/{token}` dan `auth/invitations/{token}/accept` keduanya
-> tak-terautentikasi dan ber-token, dan yang kedua MENCETAK AKUN — permukaan
-> tulis tak-terautentikasi paling berkonsekuensi di modul ini. Angka itu hidup
-> di `tests/shared-rate-limit.test.ts`, bukan di `scripts/`, jadi ia yang paling
-> mudah terlupa; kalimat ini ada supaya prosanya tidak menua sendirian.
+> **Updated (ADR-0082, Wave 4 PR 4.2):** eleven becomes **thirteen**.
+> `auth/invitations/{token}` and `auth/invitations/{token}/accept` are both
+> unauthenticated and token-bearing, and the second one MINTS AN ACCOUNT — the
+> most consequential unauthenticated write surface in this module. That number
+> lives in `tests/shared-rate-limit.test.ts`, not in `scripts/`, so it is the
+> easiest one to forget; this sentence exists so the prose does not age alone.
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Batas rate menjadi properti deployment, bukan properti satu
-proses. Permukaan autentikasi ter-cakup penuh.
+**What we get.** The rate limit becomes a property of the deployment, not a
+property of a single process. The authentication surface is fully covered.
 
-**Yang dibayar.** Jalur login mendapat satu round-trip Redis (dibatasi 250 ms,
-gagal-terbuka). Call site berubah jadi `await` — lima belas berkas, mekanis.
+**What we pay.** The login path gets one Redis round-trip (capped at 250 ms,
+fail-open). The call sites become `await` — fifteen files, mechanical.
 
-**Yang TIDAK berubah.** Limiter tetap fixed-window, bukan sliding/token-bucket.
-Fixed window mengizinkan lonjakan 2× di perbatasan window; diterima karena
-kontrol yang benar-benar mengikat brute-force adalah lockout per-identitas di DB,
-dan mengganti algoritma tanpa mengubah itu hanya memindahkan angka.
+**What does NOT change.** The limiter stays fixed-window, not
+sliding/token-bucket. A fixed window allows a 2× burst at the window boundary;
+accepted because the control that actually binds brute-force is the per-identity
+lockout in the DB, and swapping the algorithm without changing that only moves
+the number around.
 
-**Nol migrasi, nol permission, nol perubahan OpenAPI.**
+**Zero migrations, zero permissions, zero OpenAPI changes.**

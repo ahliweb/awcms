@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # site_search
 
 Tenant-scoped, cross-content **PostgreSQL full-text search** over PUBLISHED website content ([ADR-0040](../../../docs/adr/0040-site-search-module-admission.md), ported from awcms-micro Issue #270 / ADR-0031). Official Optional Module, `type: "domain"`, depends only on Core (`tenant_admin`, `identity_access`).

@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0043-lib-boundary-and-module-presentation-layer.id.md)
+
 # ADR-0043 — `src/lib` boundary and the module presentation layer
 
 - Status: Accepted

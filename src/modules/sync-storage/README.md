@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Sync Storage
 
 Offline-first synchronization foundation ported from awcms-mini's proven
@@ -195,7 +197,7 @@ is an overwrite). A per-provider circuit breaker
 (`OBJECT_SYNC_UPLOAD_TIMEOUT_MS`, default 10000). No new OpenAPI/AsyncAPI
 contract — the dispatcher is purely internal.
 
-## Belum tersedia
+## Not yet available
 
 - **Server → node replication** — issue #477 / ADR-0077. The second outbox is
   retired and `/sync/pull` now reads `awcms_domain_events`, but

@@ -214,6 +214,28 @@ export const NAMING_EXEMPTIONS = new Set([
 ]);
 
 /**
+ * A MIRROR inherits its source's naming exemptions, for the same reason
+ * `isSqlRefUnchecked` exists: the key is a PATH plus an identifier, and under
+ * ADR-0097 every exempt document now has an `.id.md` twin quoting the same
+ * identifier. Listing the mirrors separately would double this set and leave
+ * two lists to keep in step by hand, where forgetting is silent.
+ *
+ * Note the exemption is keyed by identifier, NOT by line number — which is what
+ * makes inheritance safe here. Translation rewraps prose and moves line numbers
+ * freely, but `awcms_mini_sync_enabled` is the same token in both languages.
+ *
+ * @param {string} file - repo-relative path.
+ * @param {string} identifier - lowercased `awcms_mini_*` token.
+ * @returns {boolean}
+ */
+export function isNamingExempt(file, identifier) {
+  if (NAMING_EXEMPTIONS.has(`${file}::${identifier}`)) return true;
+  if (!file.endsWith(".id.md")) return false;
+  const source = `${file.slice(0, -".id.md".length)}.md`;
+  return NAMING_EXEMPTIONS.has(`${source}::${identifier}`);
+}
+
+/**
  * Deteksi sisa penamaan repo acuan yang belum diadaptasi: `awcms_mini_x` /
  * `awcms-mini_x` / `AWCMS_MINI_X` — identifier tabel/env-var bergaya
  * `awcms(-|_)mini_<suffix>` yang seharusnya menjadi `awcms_<suffix>` /
@@ -239,7 +261,7 @@ export function checkNaming(file, lines) {
     let hasUnexempted = false;
     for (const match of line.matchAll(pattern)) {
       const identifier = (match[0] ?? "").toLowerCase();
-      if (NAMING_EXEMPTIONS.has(`${file}::${identifier}`)) continue;
+      if (isNamingExempt(file, identifier)) continue;
       hasUnexempted = true;
     }
     if (!hasUnexempted) return;
@@ -385,6 +407,31 @@ export const SQL_REF_UNCHECKED_FILES = new Set([
 ]);
 
 /**
+ * A MIRROR inherits its source's exemption.
+ *
+ * `SQL_REF_UNCHECKED_FILES` is keyed by path, and it was written when every
+ * document existed once. Under ADR-0097 each of these has an `.id.md` twin
+ * carrying the SAME sentences — so the mirror of an exempt file failed a gate
+ * its source is exempt from, on prose that is a faithful translation of exempt
+ * prose.
+ *
+ * Deriving the source is the fix rather than listing four more paths. A second
+ * list would have to be kept in step with the first by hand, and the failure
+ * mode of forgetting is silent: the mirror simply stops being exempt. This is
+ * the same shape as the exoneration markers and the count pattern that the
+ * translation exposed — a rule written for a world with one copy of each
+ * document.
+ *
+ * @param {string} file - repo-relative path.
+ * @returns {boolean}
+ */
+export function isSqlRefUnchecked(file) {
+  if (SQL_REF_UNCHECKED_FILES.has(file)) return true;
+  if (!file.endsWith(".id.md")) return false;
+  return SQL_REF_UNCHECKED_FILES.has(`${file.slice(0, -".id.md".length)}.md`);
+}
+
+/**
  * Deteksi rujukan migration hantu: `sql/NNN...` di prosa/dokumentasi yang
  * berkasnya TIDAK ada di `sql/`. Kelas bug nyata (Issue #156): skill dan docs
  * diadaptasi dari awcms-mini membawa serta penomoran migration mini, sehingga
@@ -410,7 +457,7 @@ export const SQL_REF_UNCHECKED_FILES = new Set([
  * @returns {Problem[]}
  */
 export function checkSqlMigrationReferences(file, lines, sqlFileNames) {
-  if (SQL_REF_UNCHECKED_FILES.has(file)) return [];
+  if (isSqlRefUnchecked(file)) return [];
   if (lines.some((line) => SQL_REF_MINI_MARKER.test(line))) return [];
 
   /** @type {Set<string>} */
@@ -712,8 +759,14 @@ export const ADR_FILE_PATTERN = /^(\d{4})-.+\.md$/;
 /**
  * ADR index drift gate (Issue #183 F3) — every numbered ADR file
  * `docs/adr/NNNN-*.md` (except the `0000` template) MUST be linked from the
- * authoritative ADR index (`docs/adr/README.id.md`). Ported ADRs (0027-0031)
+ * authoritative ADR index (`docs/adr/README.md`). Ported ADRs (0027-0031)
  * had drifted out of the index; this makes that impossible to recur silently.
+ *
+ * The index this reads is the ENGLISH one. Under ADR-0023 the authoritative
+ * index was `README.id.md` and this gate read that; ADR-0097 inverted the
+ * direction, and a gate that keeps holding the MIRROR to the ADR set is asking
+ * the copy to lead. The mirror stays covered — by its `i18n-source-hash`, which
+ * goes stale the moment the English index gains a row.
  *
  * @param {string[]} adrFileNames - basenames present in `docs/adr/`.
  * @param {string} indexFile - repo-relative path of the index (for the message).
@@ -739,7 +792,7 @@ export function checkAdrIndexCoverage(adrFileNames, indexFile, indexContent) {
       problems.push({
         file: indexFile,
         line: 1,
-        message: `ADR ${name} tidak terdaftar di indeks ADR — tambahkan barisnya (dan regenerasi padanan Inggris + i18n-source-hash).`
+        message: `ADR ${name} is not listed in the ADR index — add its row (then re-translate the Indonesian mirror and update its i18n-source-hash).`
       });
     }
   }

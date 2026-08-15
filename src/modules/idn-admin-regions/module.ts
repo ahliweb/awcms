@@ -96,6 +96,11 @@ export const idnAdminRegionsModule = defineModule({
   jobs: [
     {
       command: "bun run idn-regions:import",
+      schedule: {
+        mode: "manual",
+        because:
+          "Runs on deploy, and only when the vendored dataset actually changed. A timer would re-parse an unchanged dump forever."
+      },
       purpose:
         "Parse, validate, and import the vendored Indonesia administrative region dump as a new dataset version (status `validated`, never auto-activated). Dry-run by default: `--commit` is what writes. Re-running the same bytes collides on the deterministic dataset code instead of creating a duplicate version, so it is safe to run on every deploy.",
       recommendedSchedule:
@@ -104,6 +109,11 @@ export const idnAdminRegionsModule = defineModule({
     },
     {
       command: "bun run idn-regions:activate",
+      schedule: {
+        mode: "manual",
+        because:
+          "A platform operator activates a reviewed dataset version deliberately. Automatic activation would publish a dataset nobody read."
+      },
       purpose:
         "Choose which imported dataset version the platform SERVES (`--dataset <code|uuid>`). Dry-run by default; `--commit` writes. ADR-0052 moved this off HTTP: it swaps data served to every tenant, so no tenant permission can express it.",
       recommendedSchedule:
@@ -114,6 +124,11 @@ export const idnAdminRegionsModule = defineModule({
     },
     {
       command: "bun run idn-regions:rollback",
+      schedule: {
+        mode: "manual",
+        because:
+          "A recovery action. A recovery action on a timer is not a recovery action."
+      },
       purpose:
         "Return the platform to the PREVIOUSLY active dataset version. Dry-run by default; `--commit` writes. The destination is resolved from activation history and is never supplied by the caller — naming it would make this an activation wearing a safer-sounding name.",
       recommendedSchedule:

@@ -1,109 +1,110 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](module-proposal-template.id.md)
+
 # Module proposal template
 
-> **Status (2026-07-14):** Repo `awcms` baru pada tahap fondasi ulang (lihat
-> [ADR-0001](../../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — belum
-> ada modul ERP yang diimplementasikan. Template ini adalah proses admission
-> modul yang berlaku begitu modul mulai diusulkan/di-scaffold, diadaptasi
-> dari base [awcms-mini](https://github.com/ahliweb/awcms-mini).
+> **Status (2026-07-14):** The `awcms` repo is only at the re-foundation stage (see
+> [ADR-0001](../../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — no ERP
+> module has been implemented yet. This template is the module admission
+> process that applies the moment a module starts being proposed/scaffolded,
+> adapted from the [awcms-mini](https://github.com/ahliweb/awcms-mini) base.
 
-Lightweight — bukan RFC panjang. Isi di body issue GitHub sebelum sebuah
-modul **System** atau **Official Optional Module** baru mulai di-scaffold di
-repo ini. Baca dulu dokumen governance admission modul (rencana:
-`docs/awcms/21_module_admission_governance.md` — kategori, pohon keputusan
-§3, kriteria admission §4) sebelum mengisi.
+Lightweight — not a long RFC. Fill it in the body of a GitHub issue before a new
+**System** or **Official Optional Module** starts being scaffolded in this
+repo. First read the module admission governance document (planned:
+`docs/awcms/21_module_admission_governance.md` — categories, decision tree
+§3, admission criteria §4) before filling it in.
 
-Untuk kebutuhan spesifik satu vertikal bisnis (mis. aturan pajak satu
-industri, integrasi marketplace tertentu) — pertimbangkan dulu apakah itu
-benar-benar generik lintas modul ERP (finance/inventory/procurement/
-manufacturing/HR) atau spesifik satu domain; bila spesifik, tetap masuk
-sebagai modul domain ERP di `src/modules/` (bukan "aplikasi turunan" seperti
-di model awcms-mini — repo ini adalah platform ERP tunggal, bukan base untuk
-banyak aplikasi turunan), tapi jelaskan cakupannya di §3 di bawah.
+For a need specific to a single business vertical (e.g. tax rules for one
+industry, a particular marketplace integration) — first consider whether it is
+genuinely generic across the ERP modules (finance/inventory/procurement/
+manufacturing/HR) or specific to one domain; if specific, it still lands
+as an ERP domain module in `src/modules/` (not a "derived application" as in
+the awcms-mini model — this repo is a single ERP platform, not a base for
+many derived applications), but describe its scope in §3 below.
 
 ---
 
-## 1. Nama & key modul yang diusulkan
+## 1. Proposed module name & key
 
-- Nama:
+- Name:
 - `key` (`snake_case`):
-- Kategori yang diusulkan (**System** / **Official Optional Module** /
-  **modul domain ERP** / **External Integration** — bila ragu, isi
-  "Tidak yakin" dan jelaskan di §2 di bawah):
+- Proposed category (**System** / **Official Optional Module** /
+  **ERP domain module** / **External Integration** — if unsure, write
+  "Not sure" and explain in §2 below):
 
-## 2. Masalah / kebutuhan
+## 2. Problem / need
 
-Apa yang tidak bisa dilakukan hari ini tanpa modul ini? Untuk siapa (semua
-modul ERP, atau modul/proses bisnis tertentu — mis. hanya alur procurement,
-hanya rekonsiliasi finance)?
+What cannot be done today without this module? For whom (all
+ERP modules, or a particular module/business process — e.g. only the procurement flow,
+only finance reconciliation)?
 
-## 3. Cakupan & generalitas
+## 3. Scope & generality
 
-Bila modul ini diusulkan sebagai **System**/**Official Optional Module**
-(dipakai lintas banyak modul domain ERP): buktikan modul ini generik lintas
-domain bisnis, bukan spesifik satu vertikal. Bila modul ini adalah **modul
-domain ERP** (mis. finance, inventory): jelaskan batas tanggung jawabnya
-terhadap modul domain ERP lain yang sudah/akan ada, supaya tidak tumpang
-tindih.
+If this module is proposed as a **System**/**Official Optional Module**
+(used across many ERP domain modules): prove that this module is generic across
+business domains, not specific to one vertical. If this module is an **ERP
+domain module** (e.g. finance, inventory): describe its responsibility boundary
+against the other ERP domain modules that exist or will exist, so they do not overlap.
 
-## 4. Dependency
+## 4. Dependencies
 
-- Lifecycle dependency (`ModuleDescriptor.dependencies`, wajib berupa modul
-  yang HARUS aktif duluan):
-- Capability dependency (`ModuleDescriptor.capabilities.consumes`, tandai
-  `required` atau `optional` per entri):
+- Lifecycle dependencies (`ModuleDescriptor.dependencies`, must be modules
+  that MUST be active first):
+- Capability dependencies (`ModuleDescriptor.capabilities.consumes`, mark
+  `required` or `optional` per entry):
 
-## 5. Kompatibilitas offline/LAN vs full-online-only
+## 5. offline/LAN vs full-online-only compatibility
 
-- Kelas kompatibilitas yang diusulkan (`offline-lan-safe` /
+- Proposed compatibility class (`offline-lan-safe` /
   `full-online-only`):
-- Bila `full-online-only`: bagaimana profil `offline-lan` tetap 100%
-  fungsional saat fitur ini off? (mis. transaksi finance/inventory tetap bisa
-  dicatat lokal, sinkronisasi ke provider/pusat tertunda sampai online)
+- If `full-online-only`: how does the `offline-lan` profile stay 100%
+  functional while this feature is off? (e.g. finance/inventory transactions can still be
+  recorded locally, syncing to the provider/central deferred until online)
 
-## 6. Provider eksternal (bila ada)
+## 6. External providers (if any)
 
-Bila modul ini membungkus provider eksternal (payment gateway, marketplace,
-sistem pajak/Coretax, logistik, atau kategori External Integration lain),
-lihat dan lampirkan hasil
+If this module wraps an external provider (payment gateway, marketplace,
+tax/Coretax system, logistics, or another External Integration category),
+see and attach the result of
 [`module-admission-decision-checklist.md`](module-admission-decision-checklist.md)
-§Provider eksternal / data governance.
+§External providers / data governance.
 
 ## 7. Security & data governance
 
-Ringkas: data apa yang disentuh (termasuk PII, data finansial/keuangan
-sensitif, dokumen HR/payroll), siapa yang boleh akses (ABAC awal), dan aksi
-high-risk apa yang perlu audit log (mis. approval transaksi, perubahan harga
-pokok, disbursement pembayaran).
+In short: which data is touched (including PII, sensitive financial data,
+HR/payroll documents), who may access it (the initial ABAC), and which
+high-risk actions need an audit log (e.g. transaction approval, cost price
+changes, payment disbursement).
 
-### Dampak finansial & sensitivitas data (khusus modul ERP)
+### Financial impact & data sensitivity (ERP modules only)
 
-- Apakah modul ini menyentuh data finansial (jurnal, saldo, harga pokok,
-  payroll)? Bila ya, mekanisme apa yang mencegah perubahan tanpa jejak audit
-  (append-only ledger, approval berjenjang)?
-- Apakah modul ini bisa memicu kewajiban pajak/pelaporan (mis. faktur pajak,
-  Coretax)? Siapa yang bertanggung jawab memvalidasi kepatuhan sebelum
+- Does this module touch financial data (journals, balances, cost prices,
+  payroll)? If yes, what mechanism prevents changes without an audit trail
+  (append-only ledger, tiered approval)?
+- Can this module trigger a tax/reporting obligation (e.g. tax invoices,
+  Coretax)? Who is responsible for validating compliance before
   go-live?
-- Klasifikasi sensitivitas data (publik/internal/rahasia/sangat rahasia) dan
-  siapa yang berwenang mengubah klasifikasi ini pasca-merge.
+- Data sensitivity classification (public/internal/confidential/highly confidential) and
+  who is authorised to change this classification post-merge.
 
 ## 8. Ownership
 
-Siapa yang akan memelihara modul ini pasca-merge (mengisi
-`ModuleDescriptor.maintainers` bila tim sudah lebih dari satu maintainer;
-default `.github/CODEOWNERS` bila belum)?
+Who will maintain this module post-merge (filling in
+`ModuleDescriptor.maintainers` when the team has more than one maintainer;
+defaulting to `.github/CODEOWNERS` when it does not)?
 
-## 9. Rencana deprecation (bila relevan)
+## 9. Deprecation plan (if relevant)
 
-Apakah modul ini menggantikan modul/fitur lain yang ada? Bila ya, lihat
-dokumen governance admission modul §4.4/§8 untuk pola deprecation notice.
+Does this module replace another existing module/feature? If yes, see
+the module admission governance document §4.4/§8 for the deprecation notice pattern.
 
-## 10. Alternatif yang dipertimbangkan
+## 10. Alternatives considered
 
-Kenapa tidak dilakukan sebagai bagian dari modul yang sudah ada?
+Why not do it as part of an existing module?
 
 ---
 
-Setelah issue ini didiskusikan dan disetujui maintainer, lanjutkan ke
+Once this issue has been discussed and approved by the maintainers, continue to
 [`module-admission-decision-checklist.md`](module-admission-decision-checklist.md)
-sebagai checklist review PR, dan tulis ADR terpisah bila keputusannya
-mengikat lintas dokumen (lihat `AGENTS.md` §Perubahan standar).
+as the PR review checklist, and write a separate ADR when the decision is
+binding across documents (see `AGENTS.md` §Standards changes).

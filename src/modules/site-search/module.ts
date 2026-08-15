@@ -207,6 +207,11 @@ export const siteSearchModule = defineModule({
   jobs: [
     {
       command: "bun run site-search:reconcile",
+      schedule: {
+        mode: "cron",
+        expression: "*/15 * * * *",
+        backlog: "bounded"
+      },
       purpose:
         "Deterministic, idempotent per-tenant search index reconciliation — upsert current public documents (checksum-gated skip) and remove stale ones so archive/delete/unpublish never leaks. The event-driven incremental path (reindexSearchResource) covers live changes where content modules publish real lifecycle events; this scheduled sweep is the authoritative backbone.",
       recommendedSchedule: "every 15 minutes (or after a bulk content change)",

@@ -1,55 +1,57 @@
-# ADR-0048 — Pembagian peran frontend: `awcms-astro` = admin OWNER/INTERNAL, `awcms` = frontend PUBLIK + admin PUBLIK
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0048-frontend-role-split-awcms-astro-internal-admin.id.md)
+
+# ADR-0048 — Frontend role split: `awcms-astro` = OWNER/INTERNAL admin, `awcms` = PUBLIC frontend + PUBLIC admin
 
 - **Status:** Superseded by [ADR-0051](0051-admin-screens-consolidated-in-awcms.md)
-- **Tanggal:** 2026-07-31
-- **Pengambil keputusan:** @ahliweb
-- **Melengkapi:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) (pembekuan `awcms-mini`/`awcms-micro`; dua repo yang dikembangkan adalah repo ini dan `awcms-astro`)
-- **Mengoreksi premis:** ADR-0047 §Alternatif menolak "bangun kredensial mesin di `awcms-astro`" dengan alasan repo itu "situs publik statis tanpa basis data dan tanpa identity store". Alasannya tetap benar untuk **kredensial**, tetapi deskripsi perannya tidak lagi lengkap: ADR ini memberi `awcms-astro` peran kedua yang eksplisit.
-- **Terkait:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + satu-satunya BFF), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (cache tepi), ADR-0034/0035 (tata kelola & positioning keluarga).
+- **Date:** 2026-07-31
+- **Decision maker:** @ahliweb
+- **Complements:** [ADR-0047](0047-mini-micro-frozen-foundation-built-here.md) (freezing `awcms-mini`/`awcms-micro`; the two repos under development are this one and `awcms-astro`)
+- **Corrects a premise:** ADR-0047 §Alternatives rejected "build machine credentials in `awcms-astro`" on the grounds that that repo is a "static public site with no database and no identity store". The reasoning still holds for **credentials**, but the description of its role is no longer complete: this ADR gives `awcms-astro` an explicit second role.
+- **Related:** [ADR-0045](0045-jualanku-porting-awcms-system-of-record-astro-bff.md) (`awcms` system of record, `awcms-astro` experience layer + the only BFF), [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (edge cache), ADR-0034/0035 (family governance & positioning).
 
-## Konteks
+## Context
 
-ADR-0047 memusatkan pengembangan pada dua repo, tetapi tidak menyatakan **layar mana milik siapa**. Kekosongan itu langsung terasa: repo ini sudah memuat rute publik (`/blog/{tenantCode}/*`, `robots`/`sitemap`/`feed`, `/search`) **dan** `/admin/*`, sementara `awcms-astro` berdiri sebagai experience layer + BFF (ADR-0045) tanpa batas tertulis soal admin.
+ADR-0047 concentrated development on two repos, but did not state **which screens belong to whom**. That vacuum was felt immediately: this repo already carries public routes (`/blog/{tenantCode}/*`, `robots`/`sitemap`/`feed`, `/search`) **and** `/admin/*`, while `awcms-astro` stands as the experience layer + BFF (ADR-0045) with no written boundary about admin.
 
-Tanpa garis itu, layar admin berikutnya mendarat di repo yang kebetulan paling dekat dengan tangan penulisnya — dan pilihan itu sulit dibalik setelah ada penggunanya.
+Without that line, the next admin screen lands in whichever repo happens to be closest to the author's hand — and that choice is hard to reverse once it has users.
 
-Contoh konkret yang memaksa keputusan ini diambil sekarang, bukan nanti: modul `idn_admin_regions` ([ADR-0046](0046-idn-admin-regions-module-admission.md)) mengapalkan aksi **aktivasi/rollback versi dataset wilayah** — mengganti data yang dilayani untuk **semua tenant sekaligus**. Itu bukan layar tenant; itu layar operator platform. Modulnya sengaja mendarat **tanpa** `navigation` karena pertanyaan ini belum punya jawaban tertulis.
+The concrete example that forces this decision to be made now, not later: the `idn_admin_regions` module ([ADR-0046](0046-idn-admin-regions-module-admission.md)) ships an action for **activating/rolling back a version of the region dataset** — replacing the data served to **all tenants at once**. That is not a tenant screen; that is a platform-operator screen. The module deliberately landed **without** `navigation` because this question had no written answer yet.
 
-## Keputusan
+## Decision
 
-| Repo          | Peran frontend                              | Audiens                                  |
+| Repo          | Frontend role                               | Audience                                 |
 | ------------- | ------------------------------------------- | ---------------------------------------- |
-| `awcms-astro` | **Halaman admin OWNER / INTERNAL**          | operator platform, staf internal         |
-| `awcms`       | **Frontend PUBLIK + frontend ADMIN PUBLIK** | pengunjung situs, dan admin milik tenant |
+| `awcms-astro` | **OWNER / INTERNAL admin pages**            | platform operators, internal staff       |
+| `awcms`       | **PUBLIC frontend + PUBLIC ADMIN frontend** | site visitors, and a tenant's own admins |
 
-Operasionalnya:
+Operationally:
 
-- Layar yang mengurus **platform** — master data global, operasi rilis/rollback data, kesehatan lintas tenant, alat internal — dibangun di **`awcms-astro`**.
-- Layar yang dipakai **tenant atas datanya sendiri** (konten, komentar, media, domain, pengguna tenant) tetap di **`awcms`**, berdampingan dengan rute publiknya.
-- `awcms` tetap **system of record**. `awcms-astro` tidak punya basis data sendiri dan tidak pernah menyentuh PostgreSQL `awcms` langsung — ia memanggil `/api/v1/*` lewat BFF-nya (ADR-0045).
+- Screens that administer the **platform** — global master data, data release/rollback operations, cross-tenant health, internal tooling — are built in **`awcms-astro`**.
+- Screens used by a **tenant over its own data** (content, comments, media, domains, tenant users) stay in **`awcms`**, alongside its public routes.
+- `awcms` remains the **system of record**. `awcms-astro` has no database of its own and never touches the `awcms` PostgreSQL directly — it calls `/api/v1/*` through its BFF (ADR-0045).
 
-### Yang membuat pembagian ini aman, bukan sekadar rapi
+### What makes this split safe, not merely tidy
 
-1. **Permukaan otorisasi tetap SATU.** Memindahkan layar ke repo lain **tidak** memindahkan izinnya: setiap panggilan tetap melewati sesi + konteks tenant + RBAC/ABAC default-deny milik `awcms`. Frontend internal tidak boleh menjadi jalur kedua yang lebih longgar — kalau sebuah aksi butuh permission, ia butuh permission dari mana pun ia dipanggil.
-2. **Kredensial tidak berpindah ke browser.** Konsekuensi langsung ADR-0045: browser internal berbicara ke BFF `awcms-astro`, BFF yang memegang sesi/token ke `awcms`. Ini juga alasan penolakan ADR-0047 tetap berlaku — `awcms-astro` bukan penerbit identitas, ia pemakai.
-3. **Cache tidak dibagi lintas audiens.** Situs publik `awcms` boleh berada di belakang cache tepi (ADR-0042, default mati). Permukaan admin — tenant maupun internal — **tidak pernah** ikut di dalamnya: cache bersama di depan permukaan multi-tenant adalah mesin kebocoran lintas-tenant.
-4. **Performa dibayar di tempat yang benar.** Layar internal boleh berat dan interaktif karena penggunanya sedikit dan terautentikasi; permukaan publik dioptimalkan untuk pengunjung anonim. Menyatukan keduanya memaksa satu profil performa melayani dua kebutuhan yang berlawanan.
+1. **The authorization surface stays ONE.** Moving a screen to another repo does **not** move its permission: every call still passes through `awcms`'s session + tenant context + RBAC/ABAC default-deny. The internal frontend must not become a second, looser path — if an action needs a permission, it needs that permission from wherever it is called.
+2. **Credentials do not move into the browser.** A direct consequence of ADR-0045: the internal browser talks to the `awcms-astro` BFF, and the BFF is what holds the session/token to `awcms`. This is also why ADR-0047's rejection still holds — `awcms-astro` is not an identity issuer, it is a consumer.
+3. **Cache is not shared across audiences.** The public `awcms` site may sit behind an edge cache (ADR-0042, off by default). Admin surfaces — tenant or internal — are **never** inside it: a shared cache in front of a multi-tenant surface is a cross-tenant leak machine.
+4. **Performance is paid for in the right place.** Internal screens may be heavy and interactive because their users are few and authenticated; the public surface is optimised for anonymous visitors. Merging the two forces one performance profile to serve two opposing needs.
 
-### Yang TIDAK diputuskan di sini
+### What is NOT decided here
 
-- **Pemilahan `/admin/*` yang sudah ada.** Layar admin hari ini bercampur tenant dan platform (mis. `/admin/modules`, `/admin/security`). Memindahkannya adalah pekerjaan tersendiri dengan ADR-nya sendiri. Aturan ini mengikat layar **baru**, dan menjadi acuan saat layar lama disentuh.
-- **Bentuk autentikasi internal di `awcms-astro`.** ADR-0047 mencatat dua kontrak yang masih buntu (header tenant dan kredensial yang bisa dipegang build); keduanya harus selesai sebelum layar internal pertama bisa memanggil `awcms`. ADR ini menetapkan **di mana** layar itu tinggal, bukan bagaimana ia login.
+- **Splitting up the existing `/admin/*`.** Today's admin screens mix tenant and platform (e.g. `/admin/modules`, `/admin/security`). Moving them is a separate piece of work with its own ADR. This rule binds **new** screens, and is the reference when old screens are touched.
+- **The shape of internal authentication in `awcms-astro`.** ADR-0047 recorded two contracts still unresolved (the tenant header, and credentials a build can hold); both must be settled before the first internal screen can call `awcms`. This ADR fixes **where** that screen lives, not how it logs in.
 
-## Konsekuensi
+## Consequences
 
-**Positif**
+**Positive**
 
-- "Layar ini seharusnya di mana?" punya jawaban tertulis sebelum kode ditulis, termasuk untuk layar dataset wilayah yang sedang menunggu.
-- `awcms` tetap satu-satunya sumber kebenaran data dan izin, apa pun frontend-nya.
-- Permukaan publik dan permukaan internal bisa dioptimalkan (dan di-cache) menurut kebutuhannya masing-masing tanpa berkompromi.
+- "Where should this screen go?" has a written answer before the code is written, including for the region-dataset screen currently waiting.
+- `awcms` remains the single source of truth for data and permissions, whatever the frontend.
+- The public surface and the internal surface can each be optimised (and cached) according to their own needs without compromise.
 
-**Negatif / biaya yang diterima**
+**Negative / accepted costs**
 
-- Dua repo aktif berarti satu kontrak API lintas-repo yang harus dijaga tetap sinkron. Itu beban nyata — dan alasan `awcms-astro` wajib memanggil `/api/v1` alih-alih menumbuhkan jalur datanya sendiri.
-- Sebagian layar internal akan terasa "jauh" dari kodenya (aksinya di `awcms`, tampilannya di `awcms-astro`). Biaya itu diterima karena alternatifnya — admin platform yang hidup di dalam aplikasi tenant — jauh lebih mahal untuk dipisahkan belakangan.
-- `awcms-astro` yang tadinya murni statis kini memikul permukaan terautentikasi. Setiap penambahan di sana harus dinilai sebagai permukaan keamanan, bukan sekadar halaman.
+- Two active repos mean one cross-repo API contract that has to be kept in sync. That is a real burden — and the reason `awcms-astro` must call `/api/v1` instead of growing its own data path.
+- Some internal screens will feel "far" from their code (the action in `awcms`, the view in `awcms-astro`). That cost is accepted because the alternative — platform admin living inside the tenant application — is far more expensive to separate later.
+- `awcms-astro`, previously purely static, now carries an authenticated surface. Every addition there must be assessed as a security surface, not merely as a page.

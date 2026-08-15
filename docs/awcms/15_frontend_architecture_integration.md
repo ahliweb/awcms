@@ -1,51 +1,53 @@
-# Bagian 15 — Arsitektur Frontend dan Integrasi Frontend–Backend
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](15_frontend_architecture_integration.id.md)
 
-> **Status dokumen (2026-07-14):** Repo `awcms` adalah **template ERP/back-office keluarga AWCMS yang dipakai langsung** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)/[ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — base sudah menyertakan **admin SSR + modul website/konten** dan sedang **menyerap** klaster website/e-commerce awcms-micro ke `src/modules/` (status kode aktual: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). Dokumen ini mengadaptasi arsitektur frontend base [awcms-mini](https://github.com/ahliweb/awcms-mini) (Astro SSR di atas Bun, islands, offline-first) menjadi arsitektur untuk platform AWCMS yang **hybrid online-first**: jalur utama online, dengan ketahanan offline/LAN sebagai pelengkap. Klaim "sudah live"/"diverifikasi" di sumber tetap perlu diverifikasi ke `docs/ARCHITECTURE.md`. Contoh route/endpoint domain mencakup ERP (finance, inventory, procurement, manufacturing, HR/payroll) dan website/e-commerce.
+# Part 15 — Frontend Architecture and Frontend–Backend Integration
 
-## Tujuan
+> **Document status (2026-07-14):** The `awcms` repo is the **directly-used ERP/back-office template of the AWCMS family** ([ADR-0035](../adr/0035-awcms-online-first-erp-saas-superset-repositioning.md)/[ADR-0034](../adr/0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md)) — the base already includes **admin SSR + website/content modules** and is currently **absorbing** the awcms-micro website/e-commerce cluster into `src/modules/` (actual code status: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)). This document adapts the frontend architecture of the base [awcms-mini](https://github.com/ahliweb/awcms-mini) (Astro SSR on Bun, islands, offline-first) into an architecture for the **hybrid online-first** AWCMS platform: the main path is online, with offline/LAN resilience as a complement. Claims of "already live"/"verified" in the source still need to be verified against `docs/ARCHITECTURE.md`. The domain route/endpoint examples cover ERP (finance, inventory, procurement, manufacturing, HR/payroll) and website/e-commerce.
 
-Dokumen ini menetapkan **arsitektur frontend** dan **integrasi frontend ↔ backend** AWCMS: strategi rendering Astro, API client, autentikasi/sesi, **mekanisme ketahanan offline (service worker + IndexedDB + outbox)** sebagai pelengkap jalur online-first, state, form/validasi, dan kontrak layar→endpoint→event — sebagai baseline yang mengikat untuk modul base maupun modul domain (ERP, website/e-commerce, konten).
+## Purpose
 
-Terkait: `14_ui_ux_design_system.md` (desain), `16_backend_data_access_integration.md` (sisi backend/DB), dokumen kontrak API/event (menyusul, mengikuti pola `05_openapi_asyncapi_detail.md` di awcms-mini). Skill penegak yang direncanakan: **`awcms-ui-screen`** (`.claude/skills/`).
+This document defines the **frontend architecture** and the **frontend ↔ backend integration** of AWCMS: the Astro rendering strategy, the API client, authentication/session, the **offline resilience mechanism (service worker + IndexedDB + outbox)** as a complement to the online-first path, state, forms/validation, and the screen→endpoint→event contract — as a binding baseline for base modules as well as domain modules (ERP, website/e-commerce, content).
 
-## Keputusan arsitektur frontend
+Related: `14_ui_ux_design_system.md` (design), `16_backend_data_access_integration.md` (backend/DB side), the API/event contract documents (to follow, following the `05_openapi_asyncapi_detail.md` pattern in awcms-mini). Planned enforcing skill: **`awcms-ui-screen`** (`.claude/skills/`).
 
-| Aspek          | Keputusan                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework      | Astro 7, output **server (SSR)** dijalankan di runtime Bun                                                                               |
-| Interaktivitas | **Astro islands** + TypeScript; framework island opsional (mis. Preact) hanya untuk pulau kompleks (entri jurnal cepat, chat AI analyst) |
-| Styling        | CSS variables (design token doc 14), scoped styles                                                                                       |
-| Rendering      | Halaman authed = SSR; portal vendor/karyawan = SSR; aset statis di-cache SW                                                              |
-| Data fetching  | SSR initial load + client mutation via API client                                                                                        |
-| Offline        | PWA: service worker + IndexedDB outbox untuk entri operasional lapangan (gudang, stock opname)                                           |
-| State          | Lokal per-island + store ringan untuk sesi entri berjalan; hindari SPA global besar                                                      |
+## Frontend architecture decisions
 
-Alasan: SSR menjaga waktu muat cepat di LAN, aman untuk cookie httpOnly, dan tetap ringan; islands membatasi JS hanya di area interaktif. Backend/SSR dijalankan dengan **Bun** sebagai platform runtime; Node.js bukan target platform server utama.
+| Aspect        | Decision                                                                                                                                  |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework     | Astro 7, output **server (SSR)** run on the Bun runtime                                                                                   |
+| Interactivity | **Astro islands** + TypeScript; an optional framework island (e.g. Preact) only for complex islands (fast journal entry, AI analyst chat) |
+| Styling       | CSS variables (design tokens, doc 14), scoped styles                                                                                      |
+| Rendering     | Authed pages = SSR; vendor/employee portal = SSR; static assets cached by the SW                                                          |
+| Data fetching | SSR initial load + client mutation via the API client                                                                                     |
+| Offline       | PWA: service worker + IndexedDB outbox for field operational entry (warehouse, stock count)                                               |
+| State         | Local per-island + a lightweight store for the running entry session; avoid a large global SPA                                            |
 
-## Astro SSR di atas runtime Bun
+Rationale: SSR keeps load times fast on a LAN, is safe for httpOnly cookies, and stays lightweight; islands limit JS to interactive areas only. Backend/SSR runs on **Bun** as the runtime platform; Node.js is not the primary server platform target.
 
-Astro **berjalan penuh di Bun** untuk semua fase: `bun install`, dev, build, dan runtime. Panggil bin Astro/Vite via `bun --bun astro …` (dev/build/preview) agar Bun yang mengeksekusi, bukan binary `node` (shebang bin default `#!/usr/bin/env node`).
+## Astro SSR on the Bun runtime
 
-Nuansa satu-satunya: Astro **belum punya adapter SSR Bun first-party** (yang resmi: `@astrojs/node`, Cloudflare, Vercel, Netlify — verifikasi versi saat implementasi). Dua opsi tersanksi, keduanya tetap runtime Bun:
+Astro **runs fully on Bun** for every phase: `bun install`, dev, build, and runtime. Call the Astro/Vite bins via `bun --bun astro …` (dev/build/preview) so that Bun executes them, not the `node` binary (the default bin shebang is `#!/usr/bin/env node`).
 
-| Opsi                               | Cara                                                                                                                    | Kapan                                                                           |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **A. Pisahkan seam (rekomendasi)** | API/backend native `Bun.serve` (+Hono); Astro hanya frontend/SSR                                                        | Default base — paling "Bun-murni", cocok jalur online-first + ketahanan offline |
-| **B. `@astrojs/node` di atas Bun** | `output: "server"` + adapter node standalone; jalankan `bun ./dist/standalone-entry.mjs`; build `bun --bun astro build` | Bila ingin SSR Astro terpadu tanpa server terpisah                              |
+The one nuance: Astro **does not yet have a first-party Bun SSR adapter** (the official ones: `@astrojs/node`, Cloudflare, Vercel, Netlify — verify the versions at implementation time). Two sanctioned options, both still on the Bun runtime:
 
-Opsi B memakai paket ber-nama "node" tetapi **binary `node` tidak dipakai** — output-nya jalan di atas Node-compat Bun. Ini satu-satunya pemakaian paket "node" yang diizinkan; catat sebagai pengecualian di dokumen audit standar pengembangan bila dipilih (lihat doc 10 §Standar platform backend, saat ditulis; doc 18 §Runtime & tooling, saat ditulis). Output `static` (tanpa SSR) tidak butuh adapter dan bisa dilayani `Bun.serve` langsung.
+| Option                               | How                                                                                                                         | When                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **A. Split the seam (recommended)**  | API/backend on native `Bun.serve` (+Hono); Astro is frontend/SSR only                                                       | Base default — the most "pure Bun", fits the online-first path + offline resilience |
+| **B. `@astrojs/node` on top of Bun** | `output: "server"` + the standalone node adapter; run `bun ./dist/standalone-entry.mjs`; build with `bun --bun astro build` | When you want unified Astro SSR without a separate server                           |
 
-## Lapisan frontend
+Option B uses a package named "node" but **the `node` binary is not used** — its output runs on Bun's Node-compat layer. This is the only permitted use of a "node" package; record it as an exception in the development standards audit document if it is chosen (see doc 10 §Backend platform standard, once written; doc 18 §Runtime & tooling, once written). `static` output (without SSR) needs no adapter and can be served directly by `Bun.serve`.
+
+## Frontend layers
 
 ```mermaid
 flowchart TB
   subgraph Astro["Astro (SSR + islands)"]
     Pages[Pages/layout]
-    Islands[Islands interaktif: entri jurnal, forms, chat]
+    Islands[Interactive islands: journal entry, forms, chat]
   end
   subgraph FE["Client runtime"]
-    Client[API client typed]
-    Store[Store sesi entri berjalan]
+    Client[Typed API client]
+    Store[Running entry session store]
     SW[Service worker]
     IDB[(IndexedDB outbox/cache)]
   end
@@ -53,58 +55,58 @@ flowchart TB
   Pages -->|SSR fetch| API
   Islands --> Client --> API
   Islands --> Store
-  Client -->|saat offline| IDB
+  Client -->|when offline| IDB
   SW --> IDB
   SW -->|background sync| API
 ```
 
 ## API client
 
-**Rencana, bukan kontrak yang sudah dibangun.** Bagian ini menetapkan kontrak
-target untuk typed fetch wrapper `src/lib/ui/admin-form-client.ts` (mengikuti
-pola `submitJson`/`fetchJson` yang terbukti di awcms-mini), untuk dipakai oleh
-script inline halaman admin (`login.astro`, `admin/access-users.astro`,
-`admin/finance/*.astro`, dan halaman admin lain). Perilaku yang ditetapkan:
+**A plan, not a contract that has already been built.** This section sets the
+target contract for the typed fetch wrapper `src/lib/ui/admin-form-client.ts`
+(following the `submitJson`/`fetchJson` pattern proven in awcms-mini), to be used by
+the inline scripts of admin pages (`login.astro`, `admin/access-users.astro`,
+`admin/finance/*.astro`, and other admin pages). The behaviour that is fixed:
 
-1. **Auth**: `credentials: "same-origin"` — mengandalkan cookie httpOnly
-   sesi yang browser kirim otomatis. TIDAK ADA header `Authorization`
-   yang di-inject manual oleh client ini.
-2. **Tenant/correlation header**: TIDAK ADA injeksi otomatis
-   `X-AWCMS-Tenant-ID`/`X-Correlation-ID` dari client. Tenant selalu
-   diresolusi server-side dari sesi (`src/middleware.ts`) — never a
-   client-supplied value, menutup risiko cross-tenant; correlation ID
-   dibaca-atau-dibuat server-side juga (`src/middleware.ts`,
+1. **Auth**: `credentials: "same-origin"` — relying on the httpOnly session
+   cookie that the browser sends automatically. There is NO `Authorization`
+   header injected manually by this client.
+2. **Tenant/correlation header**: there is NO automatic injection of
+   `X-AWCMS-Tenant-ID`/`X-Correlation-ID` from the client. The tenant is always
+   resolved server-side from the session (`src/middleware.ts`) — never a
+   client-supplied value, which closes the cross-tenant risk; the correlation ID
+   is read-or-created server-side too (`src/middleware.ts`,
    `CORRELATION_ID_HEADER`).
-3. **Idempotency**: **tidak otomatis** — pemanggil membuat sendiri lewat
-   `newIdempotencyKey()` (`crypto.randomUUID()`) dan mengirimnya manual
-   per-panggilan lewat parameter `extraHeaders` ke `submitJson(url,
-method, body, strings, extraHeaders)` (pola dipakai untuk lifecycle action
-   mutasi high-risk, mis. posting jurnal, approve PO).
-4. **Retry**: **tidak ada** retry otomatis sama sekali (GET maupun
-   mutation) — satu percobaan; kegagalan network dipetakan ke `{ ok:
+3. **Idempotency**: **not automatic** — the caller creates it itself via
+   `newIdempotencyKey()` (`crypto.randomUUID()`) and sends it manually
+   per-call through the `extraHeaders` parameter to `submitJson(url,
+method, body, strings, extraHeaders)` (the pattern used for high-risk
+   mutation lifecycle actions, e.g. posting a journal, approving a PO).
+4. **Retry**: there is **no** automatic retry at all (neither GET nor
+   mutation) — a single attempt; a network failure is mapped to `{ ok:
 false, message: strings.networkError }`.
-5. **Offline-outbox**: **tidak ada** integrasi IndexedDB/service-worker
-   outbox di client dasar ini — outbox offline adalah lapisan terpisah
-   (lihat §Offline-first).
-6. **Response envelope**: `submitJson`/`fetchJson` mem-parse envelope
-   standar `{ success, data }` / `{ success: false, error }`
-   (`modules/_shared/api-response.ts`) dan memetakan `error.code` lewat
-   `strings.errorMessages` (i18n) — tidak pernah membocorkan stack/detail
-   internal ke UI (doc 10, saat ditulis).
-7. **UX pendukung**: `lockElement` men-disable tombol + `aria-busy` selama
-   request in-flight (cegah double-submit dari klik/Enter ganda);
-   `showBanner`/`reloadAfterDelay` untuk feedback sukses/gagal.
+5. **Offline outbox**: there is **no** IndexedDB/service-worker outbox
+   integration in this base client — the offline outbox is a separate layer
+   (see §Offline-first).
+6. **Response envelope**: `submitJson`/`fetchJson` parse the standard
+   envelope `{ success, data }` / `{ success: false, error }`
+   (`modules/_shared/api-response.ts`) and map `error.code` through
+   `strings.errorMessages` (i18n) — never leaking an internal stack/detail
+   to the UI (doc 10, once written).
+7. **Supporting UX**: `lockElement` disables the button + sets `aria-busy` while
+   the request is in flight (preventing double-submit from a double click/Enter);
+   `showBanner`/`reloadAfterDelay` for success/failure feedback.
 
 ```ts
-// src/lib/ui/admin-form-client.ts — kontrak target (belum diimplementasikan)
+// src/lib/ui/admin-form-client.ts — target contract (not implemented yet)
 async function submitJson(
   url: string,
   method: string,
   body: unknown,
   strings: ClientErrorStrings,
-  extraHeaders?: Record<string, string> // mis. { "Idempotency-Key": newIdempotencyKey() }
+  extraHeaders?: Record<string, string> // e.g. { "Idempotency-Key": newIdempotencyKey() }
 ): Promise<{ ok: boolean; code?: string; message: string }> {
-  /* fetch same-origin, parse envelope, tidak pernah throw */
+  /* same-origin fetch, parse the envelope, never throws */
 }
 
 async function fetchJson<TData = unknown>(
@@ -117,30 +119,30 @@ async function fetchJson<TData = unknown>(
   message: string;
   data: TData | null;
 }> {
-  /* GET same-origin, parse envelope, tidak pernah throw */
+  /* same-origin GET, parse the envelope, never throws */
 }
 ```
 
-**Belum dibangun, aspirasi masa depan.** Sebuah typed API client generik
-lintas-modul dengan tanggung jawab lebih luas — base URL `/api/v1`
-terpusat, injeksi header Authorization/tenant/correlation otomatis, retry
-aman untuk GET, timeout + deteksi offline dengan fallback outbox — adalah
-**target masa depan yang legitimate** bila kompleksitas client-side
-bertambah (mis. island entri lapangan yang butuh retry/offline sungguhan),
-tapi bukan prioritas fase awal. Jangan berasumsi client generik semacam
-itu sudah ada saat menulis kode atau panduan baru — rujuk kontrak
-`admin-form-client.ts` di atas sebagai pola dasar yang harus dibangun
-lebih dulu.
+**Not built yet, a future aspiration.** A generic cross-module typed API client
+with broader responsibilities — a centralised `/api/v1` base URL,
+automatic Authorization/tenant/correlation header injection, safe retry
+for GET, timeout + offline detection with an outbox fallback — is a
+**legitimate future target** once client-side complexity
+grows (e.g. a field-entry island that needs real retry/offline),
+but it is not an early-phase priority. Do not assume such a generic
+client already exists when writing new code or guidance — refer to the
+`admin-form-client.ts` contract above as the base pattern that must be built
+first.
 
-## Autentikasi dan sesi
+## Authentication and session
 
-- Login `POST /auth/login` → server set **cookie httpOnly + SameSite=Lax** (akses token) dan menyediakan konteks user.
-- Tenant aktif dipilih setelah login (bila user multi-tenant) → dikirim sebagai `X-AWCMS-Tenant-ID` dan disimpan di sesi.
-- SSR membaca cookie untuk render terproteksi; 401 → redirect `/login`.
-- `GET /auth/me` untuk hidrasi konteks (roles, default entitas/gudang, permission untuk filter navigasi).
-- Logout `POST /auth/logout` → invalidasi sesi + hapus cookie.
-- Token/secret **tidak pernah** disimpan di localStorage yang dapat diakses skrip pihak ketiga.
-- Halaman `/login` (`src/pages/login.astro`) = kartu auth mobile-first (doc 14 §Auth screen): brand + judul/subjudul, field tenant adaptif (readout single-tenant / `<select>` / manual, dibaca SSR dari tabel root `awcms_tenants`), toggle show/hide password CSP-safe, dan submit anti-double-submit (`lockElement` + `sendJson`/`postJson`). Script-nya modul yang di-bundle (bukan inline — patuh CSP `default-src 'self'`); `tokens.css`/`motion.css`/`<style>` scoped semua di-emit `<link>` eksternal (`build.inlineStylesheets: "never"`).
+- Login `POST /auth/login` → the server sets an **httpOnly + SameSite=Lax cookie** (access token) and provides the user context.
+- The active tenant is chosen after login (if the user is multi-tenant) → sent as `X-AWCMS-Tenant-ID` and stored in the session.
+- SSR reads the cookie to render protected pages; 401 → redirect to `/login`.
+- `GET /auth/me` to hydrate the context (roles, default entity/warehouse, permissions for filtering navigation).
+- Logout `POST /auth/logout` → invalidate the session + delete the cookie.
+- Tokens/secrets are **never** stored in localStorage, which third-party scripts can access.
+- The `/login` page (`src/pages/login.astro`) = a mobile-first auth card (doc 14 §Auth screen): brand + title/subtitle, an adaptive tenant field (single-tenant readout / `<select>` / manual, read server-side from the root table `awcms_tenants`), a CSP-safe show/hide password toggle, and an anti-double-submit submit (`lockElement` + `sendJson`/`postJson`). Its script is a bundled module (not inline — it complies with the CSP `default-src 'self'`); `tokens.css`/`motion.css`/scoped `<style>` are all emitted as external `<link>`s (`build.inlineStylesheets: "never"`).
 
 ```mermaid
 sequenceDiagram
@@ -148,112 +150,112 @@ sequenceDiagram
   participant FE as Astro SSR
   participant API as Backend
   U->>FE: GET /admin
-  FE->>FE: Baca cookie sesi
-  alt tidak valid
+  FE->>FE: Read the session cookie
+  alt not valid
     FE-->>U: Redirect /login
   else valid
-    FE->>API: GET /auth/me + data awal (tenant header)
+    FE->>API: GET /auth/me + initial data (tenant header)
     API-->>FE: user, roles, permissions, data
-    FE-->>U: Render shell + navigasi terfilter
+    FE-->>U: Render the shell + filtered navigation
   end
 ```
 
-## Rute publik tenant-scoped (tanpa sesi)
+## Public tenant-scoped routes (without a session)
 
-Berbeda dari `/admin/*` (sesi cookie) dan API client terautentikasi
-(header `X-AWCMS-Tenant-ID`) di atas — keduanya mengasumsikan
-pemanggil sudah tahu tenant-nya. Rute publik untuk pengunjung anonim
-(mis. halaman status tracking pengiriman publik, portal vendor tanpa
-login penuh) **belum punya contoh implementasi di repo ini**; ADR
-terkait (mengikuti pola `ADR-0009-public-tenant-scoped-routes.md` di
-awcms-mini, akan ditulis sebagai ADR terpisah di `docs/adr/` repo ini
-bila dibutuhkan) menetapkan polanya: tenant di-resolve dari segmen path
-eksplisit yang membawa `tenantCode` (`/<prefix>/{tenantCode}/...`, look
-up ke `awcms_tenants` yang RLS-free), **bukan** subdomain — subdomain
-butuh wildcard DNS/TLS yang bertentangan dengan topologi LAN (mode ketahanan)
-default. `tenantCode` tidak ditemukan/tenant tidak aktif → `404`, bukan
-bocor keberadaan tenant.
+Different from `/admin/*` (cookie session) and the authenticated API client
+(the `X-AWCMS-Tenant-ID` header) above — both assume the
+caller already knows its tenant. Public routes for anonymous visitors
+(e.g. a public delivery tracking status page, a vendor portal without a
+full login) **have no implementation example in this repo yet**; the related
+ADR (following the `ADR-0009-public-tenant-scoped-routes.md` pattern in
+awcms-mini, to be written as a separate ADR in this repo's `docs/adr/`
+if needed) sets the pattern: the tenant is resolved from an explicit path
+segment carrying `tenantCode` (`/<prefix>/{tenantCode}/...`, looked
+up against the RLS-free `awcms_tenants`), **not** a subdomain — a subdomain
+needs wildcard DNS/TLS, which conflicts with the default LAN topology (resilience
+mode). A `tenantCode` that is not found / a tenant that is not active → `404`, not
+leaking the existence of the tenant.
 
-## Offline-first (mode ketahanan)
+## Offline-first (resilience mode)
 
-Entri operasional lapangan (mis. penerimaan barang gudang, stock opname, entri jurnal kasir di lokasi tanpa koneksi stabil) **wajib** berjalan tanpa internet. Mekanisme yang direncanakan:
+Field operational entry (e.g. warehouse goods receipt, stock count, cashier journal entry at a location without a stable connection) **must** work without internet. The planned mechanism:
 
-1. **App shell + aset** di-cache service worker (cache-first) agar UI entri operasional terbuka offline.
-2. **Data master** (produk, akun, harga, stok terakhir, vendor/karyawan yang relevan) di-cache ke IndexedDB saat online (stale-while-revalidate) untuk pencarian/scan offline.
-3. **Transaksi** yang di-post saat offline ditulis ke **IndexedDB outbox** dengan `Idempotency-Key` yang digenerate klien + status `pending`.
-4. **Background sync** (atau retry saat online) mengirim outbox ke backend; server idempotent (doc 10, saat ditulis) mencegah duplikasi.
-5. **SyncIndicator** menampilkan jumlah antrean & status; konflik high-risk ditandai untuk resolusi manual.
+1. **App shell + assets** cached by the service worker (cache-first) so the operational entry UI opens offline.
+2. **Master data** (products, accounts, prices, last known stock, relevant vendors/employees) cached into IndexedDB while online (stale-while-revalidate) for offline search/scan.
+3. **Transactions** posted while offline are written to an **IndexedDB outbox** with a client-generated `Idempotency-Key` + status `pending`.
+4. **Background sync** (or a retry once online) sends the outbox to the backend; the idempotent server (doc 10, once written) prevents duplication.
+5. **SyncIndicator** shows the queue count & status; high-risk conflicts are flagged for manual resolution.
 
 ```mermaid
 sequenceDiagram
-  participant K as Petugas lapangan
+  participant K as Field officer
   participant IDB as IndexedDB outbox
   participant SW as Service worker
   participant API as Backend
   Note over K,API: OFFLINE
-  K->>IDB: Simpan transaksi + Idempotency-Key (pending)
-  K-->>K: Konfirmasi lokal + ringkasan (optimistic)
-  Note over K,API: ONLINE kembali
-  SW->>IDB: Ambil item pending
-  SW->>API: POST /inventory/stock-adjustment-requests/.../post (Idempotency-Key sama)
-  API-->>SW: 200 (atau replay idempotent)
-  SW->>IDB: Tandai synced
-  API-->>SW: 409 SYNC_CONFLICT (jika ada) → tandai untuk review
+  K->>IDB: Store the transaction + Idempotency-Key (pending)
+  K-->>K: Local confirmation + summary (optimistic)
+  Note over K,API: ONLINE again
+  SW->>IDB: Take the pending items
+  SW->>API: POST /inventory/stock-adjustment-requests/.../post (same Idempotency-Key)
+  API-->>SW: 200 (or an idempotent replay)
+  SW->>IDB: Mark synced
+  API-->>SW: 409 SYNC_CONFLICT (if any) → flag for review
 ```
 
-Aturan offline:
+Offline rules:
 
-- Hanya operasi yang aman offline yang didukung (entri stok/jurnal draft, catatan lapangan). Operasi yang butuh server otoritatif (approval multi-level, export pajak/Coretax, posting final ke buku besar) **tidak** dijalankan offline.
-- Stok/saldo yang ditampilkan offline adalah snapshot; server tetap otoritatif dan dapat menolak (mis. `STOCK_NOT_AVAILABLE`) saat sync.
-- Provider eksternal (WA/email/R2/payment gateway) selalu lewat outbox server, bukan dari klien.
-- Soft delete yang terjadi offline disimpan sebagai mutation/tombstone dengan `Idempotency-Key`; UI lokal menyembunyikan resource sampai server menerima atau menolak saat sync.
+- Only operations that are safe offline are supported (stock/draft journal entry, field notes). Operations that need an authoritative server (multi-level approval, tax/Coretax export, final posting to the general ledger) are **not** run offline.
+- The stock/balance shown offline is a snapshot; the server remains authoritative and may reject (e.g. `STOCK_NOT_AVAILABLE`) at sync time.
+- External providers (WA/email/R2/payment gateway) always go through the server outbox, never from the client.
+- A soft delete that happens offline is stored as a mutation/tombstone with an `Idempotency-Key`; the local UI hides the resource until the server accepts or rejects it at sync time.
 
 ## State management
 
-- **Store sesi entri berjalan**: store ringan (signals/nanostores) per sesi entri operasional (mis. draft penerimaan barang); sumber kebenaran total tetap server saat posting.
-- **Server state**: di-fetch per halaman (SSR) + refetch pada mutation; hindari cache global yang basi.
-- **Form state**: lokal di island; submit → API client.
+- **Running entry session store**: a lightweight store (signals/nanostores) per operational entry session (e.g. a goods receipt draft); the total source of truth remains the server at posting time.
+- **Server state**: fetched per page (SSR) + refetched on mutation; avoid a stale global cache.
+- **Form state**: local to the island; submit → API client.
 
-## Form dan validasi
+## Forms and validation
 
-- Skema validasi bersama (mis. Zod) didefinisikan di `_shared` dan dipakai **klien & server** agar konsisten.
-- Klien memvalidasi untuk UX cepat; **server tetap otoritatif** (semua input divalidasi backend).
-- Error field dari `VALIDATION_ERROR.details` dipetakan ke FormField.
+- A shared validation schema (e.g. Zod) is defined in `_shared` and used by **client & server** so they stay consistent.
+- The client validates for fast UX; **the server remains authoritative** (all input is validated by the backend).
+- Field errors from `VALIDATION_ERROR.details` are mapped to FormField.
 
-## Kontrak integrasi layar → endpoint → event
+## Screen → endpoint → event integration contract
 
-> Kontrak berikut adalah **rencana target** per modul ERP; akan diperinci lebih lanjut per modul di dokumen OpenAPI/AsyncAPI saat ditulis.
+> The contract below is a **target plan** per ERP module; it will be detailed further per module in the OpenAPI/AsyncAPI documents once written.
 
-| Layar               | Aksi                 | Endpoint                                                                   | Event dihasilkan                          |
-| ------------------- | -------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
-| Setup wizard        | Inisialisasi         | `POST /setup/initialize`                                                   | `tenant.created`                          |
-| Login               | Masuk                | `POST /auth/login`                                                         | `identity.login.succeeded`                |
-| Produk & bahan baku | CRUD                 | `/inventory/products`                                                      | `inventory.product.created`               |
-| Produk & bahan baku | Soft delete/restore  | `DELETE /inventory/products/{id}`, `POST /inventory/products/{id}/restore` | `inventory.product.soft_deleted/restored` |
-| Stock adjustment    | Opening balance      | `/inventory/stock-adjustment-requests`                                     | `inventory.stock.adjustment.posted`       |
-| Purchase order      | Approval & posting   | `POST /procurement/purchase-orders/{id}/approve`                           | `procurement.purchase_order.approved`     |
-| Jurnal keuangan     | Posting              | `POST /finance/journal-entries/{id}/post`                                  | `finance.journal_entry.posted`            |
-| Payroll             | Jalankan payroll run | `POST /hr/payroll-runs/{id}/execute`                                       | `hr.payroll_run.executed`                 |
-| Warehouse           | Transfer             | `/warehouse-transfers/*`                                                   | `warehouse.transfer.shipped/received`     |
-| Pajak               | VAT/Coretax          | `/tax/*`                                                                   | `tax.vat_invoice.generated`               |
-| Sync                | Push/pull            | `/sync/push`, `/sync/pull`                                                 | `sync.conflict.detected`                  |
+| Screen                   | Action              | Endpoint                                                                   | Event produced                            |
+| ------------------------ | ------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
+| Setup wizard             | Initialisation      | `POST /setup/initialize`                                                   | `tenant.created`                          |
+| Login                    | Sign in             | `POST /auth/login`                                                         | `identity.login.succeeded`                |
+| Products & raw materials | CRUD                | `/inventory/products`                                                      | `inventory.product.created`               |
+| Products & raw materials | Soft delete/restore | `DELETE /inventory/products/{id}`, `POST /inventory/products/{id}/restore` | `inventory.product.soft_deleted/restored` |
+| Stock adjustment         | Opening balance     | `/inventory/stock-adjustment-requests`                                     | `inventory.stock.adjustment.posted`       |
+| Purchase order           | Approval & posting  | `POST /procurement/purchase-orders/{id}/approve`                           | `procurement.purchase_order.approved`     |
+| Finance journal          | Posting             | `POST /finance/journal-entries/{id}/post`                                  | `finance.journal_entry.posted`            |
+| Payroll                  | Run a payroll run   | `POST /hr/payroll-runs/{id}/execute`                                       | `hr.payroll_run.executed`                 |
+| Warehouse                | Transfer            | `/warehouse-transfers/*`                                                   | `warehouse.transfer.shipped/received`     |
+| Tax                      | VAT/Coretax         | `/tax/*`                                                                   | `tax.vat_invoice.generated`               |
+| Sync                     | Push/pull           | `/sync/push`, `/sync/pull`                                                 | `sync.conflict.detected`                  |
 
-## Keamanan frontend
+## Frontend security
 
-- Tidak ada secret/API key provider di klien (doc 10/18, saat ditulis).
-- CSP ketat; sanitasi input; hindari `innerHTML` tak aman (XSS).
-- Cookie httpOnly + SameSite untuk token; CSRF token untuk mutation berbasis cookie.
-- Navigasi/aksi disembunyikan sesuai permission, **bukan** kontrol utama — backend ABAC tetap wajib.
-- Data sensitif ditampilkan ter-mask (mis. gaji, rekening bank, NPWP); jangan cache PII mentah di IndexedDB.
-- Archive view tidak boleh menjadi bypass tenant/ABAC; soft-deleted PII tetap masked dan tidak disimpan mentah di IndexedDB.
+- No provider secret/API key in the client (doc 10/18, once written).
+- Strict CSP; sanitise input; avoid unsafe `innerHTML` (XSS).
+- httpOnly + SameSite cookie for the token; a CSRF token for cookie-based mutations.
+- Navigation/actions are hidden according to permissions, which is **not** the primary control — backend ABAC is still mandatory.
+- Sensitive data is shown masked (e.g. salary, bank account, NPWP); do not cache raw PII in IndexedDB.
+- The archive view must not become a tenant/ABAC bypass; soft-deleted PII stays masked and is not stored raw in IndexedDB.
 
 ## Acceptance criteria
 
-- Astro SSR render halaman authed; islands hanya di area interaktif.
-- API client menyuntik header wajib & idempotency; error termetakan ke UI.
-- Login berbasis cookie httpOnly; 401 redirect; navigasi terfilter permission.
-- Entri operasional lapangan terbuka & memposting transaksi **offline**, lalu tersinkron tanpa duplikasi.
-- SyncIndicator menampilkan antrean & status; konflik ditandai.
-- Validasi klien mengikuti skema bersama; server tetap otoritatif.
-- Tidak ada secret di klien; PII mentah tidak di-cache.
-- Archive/list restore flow memakai permission efektif, `includeDeleted`, dan state UI yang jelas.
+- Astro SSR renders authed pages; islands only in interactive areas.
+- The API client injects the mandatory headers & idempotency; errors are mapped to the UI.
+- httpOnly cookie-based login; 401 redirects; navigation filtered by permission.
+- Field operational entry opens & posts transactions **offline**, then syncs without duplication.
+- SyncIndicator shows the queue & status; conflicts are flagged.
+- Client validation follows the shared schema; the server remains authoritative.
+- No secrets in the client; raw PII is not cached.
+- The archive/list restore flow uses effective permissions, `includeDeleted`, and clear UI state.

@@ -1,88 +1,90 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0016-organization-structure-module-admission.id.md)
+
 # ADR-0016 — Admission of `organization_structure` as an Official Optional Business Foundation module
 
-- **Status:** Accepted (belum diimplementasikan)
-- **Catatan status (2026-08-05):** Keputusan admission ini tetap berlaku, tetapi artefaknya (`src/modules/organization-structure/`) belum ada di repo ini, dan sejak ADR-0055 implementasinya menunggu ADR admission di repo ini.
-- **Tanggal:** 2026-07-14
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** Issue #749 (epic #738 `platform-evolution`, Wave 2), Issue #739 / ADR-0013 (extension layers, tenant vs legal entity vs organization unit vocabulary), Issue #746 (business-scope assignments + `BusinessScopeHierarchyPort`, PR #776), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
+- **Status:** Accepted (not yet implemented)
+- **Status note (2026-08-05):** This admission decision still stands, but its artefacts (`src/modules/organization-structure/`) do not exist in this repo, and since ADR-0055 its implementation awaits an admission ADR in this repo.
+- **Date:** 2026-07-14
+- **Decision maker:** @ahliweb
+- **Related:** Issue #749 (epic #738 `platform-evolution`, Wave 2), Issue #739 / ADR-0013 (extension layers, tenant vs legal entity vs organization unit vocabulary), Issue #746 (business-scope assignments + `BusinessScopeHierarchyPort`, PR #776), `docs/awcms/21_module_admission_governance.md`, `docs/awcms/templates/module-proposal-template.md`
 
-> **BELUM DIIMPLEMENTASIKAN DI REPO INI.** Status `Accepted` di atas adalah
-> keputusan **admission**, bukan pernyataan bahwa modulnya ada. Per hari ini
-> tidak ada `src/modules/organization_structure/`, tidak ada migrasi, tidak ada permission, dan
-> `listModules()` tidak mengembalikannya — memanggilnya akan gagal. Rencana
-> pengadaannya: Gelombang A
+> **NOT YET IMPLEMENTED IN THIS REPO.** The `Accepted` status above is an
+> **admission** decision, not a statement that the module exists. As of today
+> there is no `src/modules/organization_structure/`, no migration, no permission, and
+> `listModules()` does not return it — calling it will fail. The plan for
+> providing it: Wave A of
 > [`docs/awcms/absorb-awcms-mini-backbone-roadmap.md`](../awcms/absorb-awcms-mini-backbone-roadmap.md).
-> Hapus blok ini pada PR yang benar-benar mendaratkan modulnya —
-> `tests/adr-admission-implementation-status.test.ts` menuntutnya dihapus begitu
-> modul masuk registry.
+> Delete this block in the PR that actually lands the module —
+> `tests/adr-admission-implementation-status.test.ts` demands its removal as soon
+> as the module enters the registry.
 
-## Konteks
+## Context
 
-ADR-0013 §1 sudah mem-pre-klasifikasikan `organization_structure` sebagai kandidat **Official Optional Business Foundation** (lapisan 3) untuk Wave 2 epic #738, dan §2 sudah mendefinisikan batas konsep tenant vs legal entity vs organization unit secara mengikat. Issue #749 sendiri secara eksplisit mensyaratkan sebagai acceptance criterion pertama: "Admission decision and ADR classify the module and dependencies before implementation" — ADR ini memenuhi syarat itu dengan mengisi `docs/awcms/templates/module-proposal-template.md` inline dan mengonfirmasi kategori/dependency/lifecycle/offline-compatibility/owner sebelum baris kode pertama modul ditulis, mengikuti pohon keputusan admission `docs/awcms/21_module_admission_governance.md` §3.
+ADR-0013 §1 already pre-classified `organization_structure` as an **Official Optional Business Foundation** candidate (layer 3) for Wave 2 of epic #738, and §2 already defined the tenant vs legal entity vs organization unit conceptual boundary bindingly. Issue #749 itself explicitly requires as its first acceptance criterion: "Admission decision and ADR classify the module and dependencies before implementation" — this ADR satisfies that requirement by filling in `docs/awcms/templates/module-proposal-template.md` inline and confirming category/dependency/lifecycle/offline-compatibility/owner before the module's first line of code is written, following the admission decision tree in `docs/awcms/21_module_admission_governance.md` §3.
 
-Berbeda dari #742 (`domain_event_runtime`) dan #743 (`data_lifecycle`) yang keduanya **tidak** menulis ADR/update doc 21 §8 terpisah (mengandalkan pre-klasifikasi ADR-0013 sebagai cukup) — issue #749 secara eksplisit meminta admission decision/ADR sendiri sebagai acceptance criterion, jadi preseden itu **tidak** diikuti di sini secara sengaja.
+Unlike #742 (`domain_event_runtime`) and #743 (`data_lifecycle`), which both did **not** write a separate ADR/doc 21 §8 update (relying on the ADR-0013 pre-classification as sufficient) — issue #749 explicitly asks for its own admission decision/ADR as an acceptance criterion, so that precedent is deliberately **not** followed here.
 
-## Keputusan
+## Decision
 
-Kami memutuskan untuk mengadmisi `organization_structure` sebagai modul baru di registry base ini dengan parameter berikut (mengisi format `module-proposal-template.md` inline):
+We decide to admit `organization_structure` as a new module in this base registry with the following parameters (filling in the `module-proposal-template.md` format inline):
 
-### 1. Nama & key modul
+### 1. Module name & key
 
-- Nama: **Organization Structure**
+- Name: **Organization Structure**
 - `key`: `organization_structure`
-- Kategori: **Official Optional Module** (= lapisan ADR-0013 "Official Optional Business Foundation")
+- Category: **Official Optional Module** (= the ADR-0013 "Official Optional Business Foundation" layer)
 
-### 2. Masalah/kebutuhan
+### 2. Problem/need
 
-Banyak aplikasi turunan (retail multi-cabang, layanan publik multi-unit, portal pendidikan dengan struktur fakultas/departemen) butuh primitif organisasi generik — legal entity, departemen/cabang/cost-center/gudang/program unit, hierarki efektif-tanggal, lokasi operasional, dan penugasan pihak/user ke unit — tanpa membangun ulang ini di setiap repo turunan, dan tanpa melemahkan batas isolasi tenant (ADR-0013 §2). Ini untuk **sebagian besar** aplikasi turunan yang punya struktur organisasi internal (bukan hanya satu vertikal), tapi tetap **opt-in per tenant** (tidak setiap tenant butuh legal entity/hierarki — banyak tenant kecil beroperasi datar).
+Many derived applications (multi-branch retail, multi-unit public services, education portals with faculty/department structures) need generic organizational primitives — legal entity, department/branch/cost-center/warehouse/program unit, effective-dated hierarchy, operational locations, and party/user assignment to units — without rebuilding these in every derived repo, and without weakening the tenant isolation boundary (ADR-0013 §2). This is for **most** derived applications that have an internal organizational structure (not just one vertical), but still **opt-in per tenant** (not every tenant needs a legal entity/hierarchy — many small tenants operate flat).
 
-### 3. Mengapa ini bukan modul Derived Application
+### 3. Why this is not a Derived Application module
 
-Lolos pohon keputusan §3 doc 21, node Q3 ("generik untuk SEMUA aplikasi turunan"): legal entity/organization unit/hierarki/lokasi operasional/penugasan adalah primitif struktural yang berlaku sama untuk retail, layanan publik, pendidikan, kesehatan, dst. — bukan logika spesifik satu vertikal (tidak ada chart of accounts, valuasi inventory, payroll, atau aturan pemerintah spesifik di sini, lihat §Out of scope). Preseden sama seperti `blog_content`/`news_portal`/`social_publishing` (konten editorial generik lintas vertikal) — modul ini adalah "struktur organisasi generik lintas vertikal", bukan ERP.
+It passes the doc 21 §3 decision tree, node Q3 ("generic for ALL derived applications"): legal entity/organization unit/hierarchy/operational location/assignment are structural primitives that apply the same way to retail, public services, education, healthcare, etc. — not logic specific to one vertical (there is no chart of accounts, inventory valuation, payroll, or specific government rule here, see §Out of scope). The same precedent as `blog_content`/`news_portal`/`social_publishing` (generic editorial content across verticals) — this module is "generic organizational structure across verticals", not ERP.
 
-### 4. Dependency
+### 4. Dependencies
 
-- **Lifecycle dependency** (`ModuleDescriptor.dependencies`, wajib aktif duluan): `["tenant_admin", "identity_access", "domain_event_runtime"]`. `tenant_admin` untuk `awcms_tenants` (batas tenant), `identity_access` untuk `awcms_tenant_users` (subjek assignment direferensikan lewat FK biasa ke tabel ini, mirip pola `business-scope-assignment-service.ts`'s `tenantUserId` check), `domain_event_runtime` karena modul ini adalah REAL producer (`appendDomainEvent`, mengimpor konstanta event type dari `domain-event-runtime/domain/event-type-registry.ts`) — persis pola `workflow_approval` (Issue #747), bukan pola `profile_identity` (Issue #748, Core, sengaja TIDAK mengimpor konstanta lintas-modul karena Core tidak boleh depend ke System). Optional (`organization_structure`) depend ke System (`domain_event_runtime`) adalah arah DAG yang diizinkan (ADR-0013 §1: Opt → Sys).
-- **Capability dependency** (`ModuleDescriptor.capabilities`, ADR-0011): `organization_structure` **PROVIDES** `organization_hierarchy_resolution` — sebuah implementasi nyata `BusinessScopeHierarchyPort` (`_shared/ports/business-scope-hierarchy-port.ts`) untuk `scopeType` "legal_entity"/"organization_unit". Modul ini **TIDAK** mendaftarkan `capabilities.consumes` apa pun dari `identity_access`, dan yang lebih penting — `identity_access` **TIDAK** mendaftarkan `organization_structure` sebagai lifecycle atau capability dependency apa pun ke arah sebaliknya (Core tidak pernah depend ke Optional, ADR-0013 §1). Pemilihan adapter (`defaultBusinessScopeHierarchyPortAdapter` identity-access yang flat vs `organizationStructureHierarchyPortAdapter` yang nyata) dilakukan oleh **composition root** (route handler / job script yang butuh resolusi scope) saat runtime — persis pola yang didokumentasikan header `business-scope-hierarchy-port.ts` dan `business-scope-hierarchy-port-adapter.ts` sendiri untuk kasus "office" hari ini.
+- **Lifecycle dependency** (`ModuleDescriptor.dependencies`, must be active first): `["tenant_admin", "identity_access", "domain_event_runtime"]`. `tenant_admin` for `awcms_tenants` (the tenant boundary), `identity_access` for `awcms_tenant_users` (the assignment subject is referenced through an ordinary FK to this table, similar to the pattern of `business-scope-assignment-service.ts`'s `tenantUserId` check), `domain_event_runtime` because this module is a REAL producer (`appendDomainEvent`, importing event type constants from `domain-event-runtime/domain/event-type-registry.ts`) — exactly the `workflow_approval` pattern (Issue #747), not the `profile_identity` pattern (Issue #748, Core, deliberately NOT importing cross-module constants because Core must not depend on System). An Optional (`organization_structure`) depending on a System (`domain_event_runtime`) is a permitted DAG direction (ADR-0013 §1: Opt → Sys).
+- **Capability dependency** (`ModuleDescriptor.capabilities`, ADR-0011): `organization_structure` **PROVIDES** `organization_hierarchy_resolution` — a real implementation of `BusinessScopeHierarchyPort` (`_shared/ports/business-scope-hierarchy-port.ts`) for `scopeType` "legal_entity"/"organization_unit". This module registers **NO** `capabilities.consumes` from `identity_access`, and more importantly — `identity_access` does **NOT** register `organization_structure` as any lifecycle or capability dependency in the opposite direction (Core never depends on Optional, ADR-0013 §1). Adapter selection (identity-access's flat `defaultBusinessScopeHierarchyPortAdapter` vs the real `organizationStructureHierarchyPortAdapter`) is done by the **composition root** (the route handler / job script that needs scope resolution) at runtime — exactly the pattern documented in the headers of `business-scope-hierarchy-port.ts` and `business-scope-hierarchy-port-adapter.ts` themselves for the "office" case today.
 
-### 5. Kompatibilitas offline/LAN vs full-online-only
+### 5. Offline/LAN vs full-online-only compatibility
 
-- Kelas kompatibilitas: **offline-lan-safe**. Tidak ada provider eksternal apa pun yang dilibatkan — seluruh CRUD/hierarki/lokasi/assignment adalah operasi database murni, koordinat lat/lng divalidasi secara lokal (bukan dipanggil ke geocoding provider), dan import seed hook (lewat kontrak data-exchange masa depan, #750/#752) bersifat opsional, bukan hard dependency runtime.
-- Modul ini berfungsi 100% di profil `offline-lan` tanpa konektivitas internet sama sekali.
+- Compatibility class: **offline-lan-safe**. No external provider is involved at all — all CRUD/hierarchy/location/assignment operations are pure database operations, lat/lng coordinates are validated locally (not sent to a geocoding provider), and the seed import hook (through the future data-exchange contract, #750/#752) is optional, not a hard runtime dependency.
+- This module works 100% in the `offline-lan` profile with no internet connectivity at all.
 
-### 6. Provider eksternal
+### 6. External providers
 
-Tidak ada. Tidak ada kategori External Integration di dalam modul ini.
+None. There is no External Integration category inside this module.
 
 ### 7. Security & data governance
 
-- Data yang disentuh: nama/identifier legal entity (identifier generik, BUKAN field spesifik pemerintah seperti NPWP/SIUP — lihat §Out of scope), nama unit organisasi, alamat/koordinat lokasi operasional (PII rendah — alamat kantor/cabang, bukan data pribadi individu), referensi `tenant_user_id` untuk assignment (bukan data profil baru — mereferensikan `identity_access`'s tabel yang sudah ada).
-- ABAC: default-deny, permission key baru per resource (`organization_structure.legal_entities.*`, `.unit_types.*`, `.units.*`, `.hierarchy.*`, `.locations.*`, `.location_unit_relationships.*`, `.assignments.*`) — lihat migration permission seed.
-- High-risk action yang wajib audit log: reparent hierarki (+ `Idempotency-Key`), deaktivasi legal entity, akhiri assignment, hapus (soft-delete) unit/lokasi.
-- Tenant dan legal entity/organization unit tetap konsep berbeda (ADR-0013 §2) — RLS predicate SETIAP tabel baru modul ini selalu dan hanya `tenant_id`, tidak pernah `legal_entity_id`/`organization_unit_id` sebagai predicate kedua.
+- Data touched: legal entity name/identifier (a generic identifier, NOT a government-specific field such as NPWP/SIUP — see §Out of scope), organization unit names, operational location address/coordinates (low PII — office/branch addresses, not individual personal data), `tenant_user_id` references for assignments (not new profile data — referencing `identity_access`'s existing table).
+- ABAC: default-deny, new permission keys per resource (`organization_structure.legal_entities.*`, `.unit_types.*`, `.units.*`, `.hierarchy.*`, `.locations.*`, `.location_unit_relationships.*`, `.assignments.*`) — see the permission seed migration.
+- High-risk actions that must be audit-logged: hierarchy reparent (+ `Idempotency-Key`), legal entity deactivation, ending an assignment, deleting (soft-deleting) a unit/location.
+- Tenant and legal entity/organization unit remain distinct concepts (ADR-0013 §2) — the RLS predicate of EVERY new table in this module is always and only `tenant_id`, never `legal_entity_id`/`organization_unit_id` as a second predicate.
 
 ### 8. Ownership
 
-`@ahliweb` (mengikuti `.github/CODEOWNERS`, sama seperti seluruh modul lain — `ModuleDescriptor.maintainers` belum diisi modul manapun per doc 21 §8 R3, tidak diubah di sini).
+`@ahliweb` (following `.github/CODEOWNERS`, the same as every other module — `ModuleDescriptor.maintainers` is not filled in by any module per doc 21 §8 R3, and is not changed here).
 
-### 9. Rencana deprecation
+### 9. Deprecation plan
 
-Tidak relevan — modul baru, tidak menggantikan modul/fitur lain yang ada.
+Not applicable — a new module, it does not replace any existing module/feature.
 
-### 10. Alternatif yang dipertimbangkan
+### 10. Alternatives considered
 
-- **Menambahkan `legal_entity_id`/`organization_unit_id` langsung ke `awcms_offices`/`tenant_admin`** — ditolak: melanggar ADR-0013 §2 secara langsung (legal entity/organization unit BUKAN konsep Core, dan `tenant_admin` tidak boleh punya dependency ke modul Optional manapun, ADR-0012 §4.1). Sebagai gantinya, `organization_structure` boleh (opsional) mereferensikan `awcms_offices` lewat `office_id` sebagai FK biasa di masa depan (tidak diimplementasikan di issue ini — di luar scope), bukan sebaliknya.
-- **Menjadikan `organization_structure` modul System, bukan Official Optional Module** — ditolak: ini adalah fitur produk bernilai bisnis langsung (opt-in per tenant, dinonaktifkan tanpa merusak Core/System manapun), bukan infrastruktur reusable murni seperti `logging`/`sync_storage` (doc 21 §2 definisi System vs Official Optional Module) — persis kriteria yang sama yang menempatkan `blog_content`/`news_portal`/`social_publishing` di kategori ini.
-- **`organization_structure` men-declare `identity_access` sebagai capability consumer dari port yang modul ini sendiri sediakan** — tidak relevan/tidak masuk akal: port `BusinessScopeHierarchyPort` didefinisikan di `_shared` dan modul ini hanya PROVIDES sebuah implementasi tambahan untuknya; tidak ada arah dependency capability dari `organization_structure` ke `identity_access` untuk hal ini.
-- **Menjadikan "location" sebuah `scopeType` yang diekspos lewat `BusinessScopeHierarchyPort`** — ditolak untuk versi ini: port ini tentang otorisasi/hierarki bisnis (legal entity/organization unit), bukan lookup lokasi fisik; `location` tetap murni internal `organization_structure` (diakses lewat endpoint modul ini sendiri, bukan lewat port ini) sampai ada kebutuhan konkret authorization berbasis lokasi.
+- **Adding `legal_entity_id`/`organization_unit_id` directly to `awcms_offices`/`tenant_admin`** — rejected: it violates ADR-0013 §2 directly (legal entity/organization unit are NOT Core concepts, and `tenant_admin` must not have a dependency on any Optional module, ADR-0012 §4.1). Instead, `organization_structure` may (optionally) reference `awcms_offices` through an `office_id` ordinary FK in the future (not implemented in this issue — out of scope), not the other way round.
+- **Making `organization_structure` a System module rather than an Official Optional Module** — rejected: this is a product feature with direct business value (opt-in per tenant, disable-able without breaking any Core/System), not pure reusable infrastructure like `logging`/`sync_storage` (doc 21 §2's System vs Official Optional Module definition) — exactly the same criteria that place `blog_content`/`news_portal`/`social_publishing` in this category.
+- **`organization_structure` declaring `identity_access` as a capability consumer of the port this module itself provides** — irrelevant/nonsensical: the `BusinessScopeHierarchyPort` port is defined in `_shared` and this module merely PROVIDES an additional implementation of it; there is no capability dependency direction from `organization_structure` to `identity_access` for this.
+- **Making "location" a `scopeType` exposed through `BusinessScopeHierarchyPort`** — rejected for this version: this port is about business authorization/hierarchy (legal entity/organization unit), not physical location lookup; `location` stays purely internal to `organization_structure` (accessed through this module's own endpoints, not through this port) until there is a concrete need for location-based authorization.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** Aplikasi turunan (AWPOS multi-cabang, Smart School Portal dengan struktur fakultas, dst.) mendapat primitif organisasi reusable tanpa membangun ulang legal entity/hierarki/lokasi/assignment masing-masing, dan `identity_access` mendapat implementasi hierarki nyata (bukan hanya flat "office") untuk `BusinessScopeHierarchyPort` tanpa Core pernah bergantung pada modul Optional ini.
-- **Positif:** Batas tenant vs legal entity/organization unit ADR-0013 §2 sekarang punya implementasi konkret pertama yang membuktikan aturan itu bisa ditegakkan (RLS tetap hanya `tenant_id`, `legal_entity_id`/`organization_unit_id` selalu FK biasa yang divalidasi ulang di application layer).
-- **Negatif/trade-off:** Modul ke-17 di registry menambah permukaan yang harus lolos `modules:dag:check`/`modules:compose:check` setiap kali registry berubah — mitigasi: dependency dideklarasikan minimal (`tenant_admin`, `identity_access` saja), tidak ada capability `consumes` yang bisa menciptakan cycle.
-- **Netral:** `docs/awcms/21_module_admission_governance.md` §8 diperbarui menambah baris ke-17 (lihat PR ini) — dari "3 Core + 9 System + 3 Official Optional Module = 15 dari 16 modul" menjadi "3 Core + 9 System + 4 Official Optional Module = 16 dari 17 modul terdaftar".
+- **Positive:** Derived applications (multi-branch AWPOS, a Smart School Portal with faculty structures, etc.) get reusable organizational primitives without rebuilding legal entity/hierarchy/location/assignment each on their own, and `identity_access` gets a real hierarchy implementation (not just the flat "office") for `BusinessScopeHierarchyPort` without Core ever depending on this Optional module.
+- **Positive:** The ADR-0013 §2 tenant vs legal entity/organization unit boundary now has its first concrete implementation proving that rule can be enforced (RLS stays `tenant_id` only, `legal_entity_id`/`organization_unit_id` are always ordinary FKs revalidated in the application layer).
+- **Negative/trade-off:** The 17th module in the registry adds surface that must pass `modules:dag:check`/`modules:compose:check` every time the registry changes — mitigation: dependencies are declared minimally (`tenant_admin`, `identity_access` only), with no capability `consumes` that could create a cycle.
+- **Neutral:** `docs/awcms/21_module_admission_governance.md` §8 is updated to add a 17th row (see this PR) — from "3 Core + 9 System + 3 Official Optional Module = 15 of 16 modules" to "3 Core + 9 System + 4 Official Optional Module = 16 of 17 registered modules".
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-Lihat §10 di atas (digabung ke dalam format proposal template inline, bukan diulang di sini).
+See §10 above (merged into the inline proposal template format, not repeated here).

@@ -1,22 +1,24 @@
-# Bagian 11 — Implementation Blueprint per Sprint
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](11_implementation_blueprint.id.md)
 
-> **Status implementasi (2026-07-14).** Diadaptasi dari `docs/awcms-mini/11_implementation_blueprint.md`. Repo `awcms` ini **belum memulai sprint manapun** — belum ada folder `src/`, `sql/`, module, atau skeleton yang diimplementasikan (lihat [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)). Seluruh sprint plan di bawah adalah **rencana target**, disusun ulang untuk skop **ERP + integrasi bisnis** (bukan retail/POS seperti dokumen asal). Nomor sprint dan urutan boleh disesuaikan lewat ADR terpisah begitu prioritas bisnis nyata ditetapkan.
+# Part 11 — Implementation Blueprint per Sprint
+
+> **Implementation status (2026-07-14).** Adapted from `docs/awcms-mini/11_implementation_blueprint.md`. This `awcms` repo **has not started any sprint yet** — there is no `src/`, `sql/`, module, or implemented skeleton yet (see [ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)). The whole sprint plan below is a **target plan**, restructured for the **ERP + business integration** scope (not retail/POS like the source document). Sprint numbers and ordering may be adjusted through a separate ADR once the real business priorities are set.
 >
-> **Contoh domain (ilustratif).** Pola & standar-nya reusable; entitas, endpoint, dan istilah domain (finance, inventory, procurement, manufacturing, HR/payroll, tax/Coretax, payment gateway, marketplace, logistik) adalah target modul repo ini sendiri — bukan aplikasi turunan seperti di awcms-mini.
+> **Domain examples (illustrative).** The patterns & standards are reusable; the entities, endpoints, and domain terms (finance, inventory, procurement, manufacturing, HR/payroll, tax/Coretax, payment gateway, marketplace, logistics) are the target modules of this repo itself — not of a derived application as in awcms-mini.
 
-## Tujuan
+## Goal
 
-Dokumen ini menjadi blueprint praktis untuk membuat skeleton repository AWCMS secara bertahap berdasarkan sprint, dari fondasi modular monolith hingga modul-modul ERP inti dan integrasi bisnis eksternal.
+This document is the practical blueprint for building the AWCMS repository skeleton incrementally by sprint, from the modular monolith foundation up to the core ERP modules and external business integrations.
 
-## Prinsip blueprint
+## Blueprint principles
 
-1. Build-first: setiap sprint menjaga repository tetap buildable.
-2. Skeleton-first: buat module descriptor, README, domain, service, repository, route, OpenAPI, migration, test, docs.
-3. No fake completion: skeleton diberi TODO jelas dan tidak diklaim production-ready.
-4. Security-first: tenant context, ABAC, RLS, audit, masking sejak awal.
-5. Soft-delete-first untuk master/config/draft: helper query, kolom standar, dan audit sejak schema awal.
+1. Build-first: every sprint keeps the repository buildable.
+2. Skeleton-first: create the module descriptor, README, domain, service, repository, route, OpenAPI, migration, test, docs.
+3. No fake completion: skeletons carry clear TODOs and are not claimed production-ready.
+4. Security-first: tenant context, ABAC, RLS, audit, masking from the start.
+5. Soft-delete-first for master/config/draft: query helper, standard columns, and audit from the initial schema.
 
-## Alur build skeleton bertahap
+## Incremental skeleton build flow
 
 ```mermaid
 flowchart LR
@@ -30,12 +32,12 @@ flowchart LR
   S8 --> S9[S9 Manufacturing]
   S9 --> S10[S10 HR & Payroll]
   S10 --> S11[S11 Tax/Coretax]
-  S11 --> S12[S12 Integrasi Bisnis Eksternal]
+  S11 --> S12[S12 External Business Integrations]
   S12 --> S13[S13 UI/Reporting/AI]
   S13 --> S14[S14 Workflow/Security/Deploy]
 ```
 
-Setiap sprint menjaga repository tetap **buildable**; skeleton diberi TODO jelas dan tidak diklaim production-ready.
+Every sprint keeps the repository **buildable**; skeletons carry clear TODOs and are not claimed production-ready.
 
 ## Target root structure
 
@@ -45,7 +47,7 @@ awcms/
 ├── README.md
 ├── CHANGELOG.md        # versioning (Changesets)
 ├── .changeset/         # config + changeset entries
-├── .claude/skills/     # skill proyek Claude Code (belum ada — lihat doc 10)
+├── .claude/skills/     # Claude Code project skills (not present yet — see doc 10)
 ├── package.json
 ├── astro.config.mjs
 ├── tsconfig.json
@@ -63,7 +65,7 @@ awcms/
 └── fixtures/
 ```
 
-> Saat mengeksekusi sprint, gunakan skill proyek terkait begitu tersedia (lihat doc 10 §Skill pendukung). Sampai skill dibuat, ikuti prompt manual di doc 12.
+> When executing a sprint, use the related project skill as soon as it exists (see doc 10 §Supporting skills). Until the skill is created, follow the manual prompt in doc 12.
 
 ## Minimal package scripts
 
@@ -86,9 +88,9 @@ awcms/
 }
 ```
 
-Semua script di atas wajib dijalankan dengan Bun. Bin Astro/Vite dipanggil lewat **`bun --bun`** agar Bun yang mengeksekusi, bukan binary `node` yang kebetulan terpasang (shebang bin-nya `#!/usr/bin/env node`). Server SSR hasil build dijalankan `bun ./dist/standalone-entry.mjs` (lihat doc 10 §Standar platform backend). Jangan menambahkan `node`, `npm`, `npx`, `pnpm`, atau `yarn` sebagai jalur eksekusi.
+Every script above must be run with Bun. The Astro/Vite bins are invoked through **`bun --bun`** so that Bun is the executor, not whatever `node` binary happens to be installed (their bin shebang is `#!/usr/bin/env node`). The built SSR server is run with `bun ./dist/standalone-entry.mjs` (see doc 10 §Backend platform standards). Do not add `node`, `npm`, `npx`, `pnpm`, or `yarn` as an execution path.
 
-**Catatan:** blok JSON di atas adalah **contoh minimal ilustratif** untuk Sprint 1 — belum ada `package.json` nyata di repo ini hari ini. Skrip di atas (`db:migrate`, `api:spec:check`, dst.) **belum diimplementasikan**; ini target Sprint 1, bukan kondisi saat ini.
+**Note:** the JSON block above is an **illustrative minimal example** for Sprint 1 — there is no real `package.json` in this repo today. The scripts above (`db:migrate`, `api:spec:check`, etc.) are **not implemented yet**; this is the Sprint 1 target, not the current state.
 
 ## Minimal `.env.example`
 
@@ -106,19 +108,19 @@ LOCAL_STORAGE_PATH=./storage
 R2_ENABLED=false
 ```
 
-> **Blok di atas adalah rencana 2026-07-14, bukan kontrak env yang berlaku.**
-> Dua barisnya tidak pernah terwujud: `APP_TIMEZONE` dan `AUTH_JWT_SECRET`
-> **tidak dibaca kode mana pun** — sesi awcms memakai token acak buram
-> ber-hash sha256 di `awcms_sessions`, bukan JWT. Kontrak yang berlaku ada di
-> [`.env.example`](../../.env.example) dan ditegakkan
-> `scripts/validate-env.ts`; yang wajib hanya `APP_ENV`, `APP_URL`, dan
-> `DATABASE_URL`. Blok ini sengaja tidak diedit agar rekaman rencana awal utuh.
+> **The block above is the 2026-07-14 plan, not the env contract in force.**
+> Two of its lines never materialised: `APP_TIMEZONE` and `AUTH_JWT_SECRET`
+> **are read by no code at all** — awcms sessions use an opaque random token
+> hashed with sha256 in `awcms_sessions`, not a JWT. The contract in force is in
+> [`.env.example`](../../.env.example) and is enforced by
+> `scripts/validate-env.ts`; the only required ones are `APP_ENV`, `APP_URL`, and
+> `DATABASE_URL`. This block is deliberately left unedited so the record of the original plan stays intact.
 
-Base tidak menetapkan provider eksternal tertentu (payment gateway, marketplace, Coretax, logistik). Setiap integrasi bisnis menambah flag provider-nya sendiri (default off) — lihat doc 19 §Integrasi bisnis eksternal.
+The base does not mandate any particular external provider (payment gateway, marketplace, Coretax, logistics). Each business integration adds its own provider flag (default off) — see doc 19 §External business integrations.
 
 ## Sprint 1 — Foundation
 
-### Folder/file
+### Folders/files
 
 ```text
 src/lib/{errors,logging,database,auth,files,i18n}
@@ -132,13 +134,13 @@ asyncapi/awcms-domain-events.asyncapi.yaml
 docs/ARCHITECTURE.md
 ```
 
-Shared foundation minimal juga menyiapkan konvensi soft delete:
+The minimal shared foundation also sets up the soft delete convention:
 
 ```text
 src/modules/_shared/soft-delete.ts
 ```
 
-Isi awal: tipe `SoftDeleteColumns`, `ListOptions`, helper validasi `includeDeleted`, dan TODO repository filter `deleted_at IS NULL`.
+Initial contents: the `SoftDeleteColumns` and `ListOptions` types, an `includeDeleted` validation helper, and a TODO for the repository filter `deleted_at IS NULL`.
 
 ### Minimal `src/modules/index.ts`
 
@@ -192,7 +194,7 @@ CREATE TABLE IF NOT EXISTS awcms_modules (
 COMMIT;
 ```
 
-Migration tenant/domain yang soft-deletable harus menambahkan `deleted_at`, `deleted_by`, `delete_reason`, optional `restored_at`/`restored_by`, index aktif `WHERE deleted_at IS NULL`, dan partial unique index untuk kode bisnis yang boleh dipakai ulang.
+A tenant/domain migration for something soft-deletable must add `deleted_at`, `deleted_by`, `delete_reason`, optionally `restored_at`/`restored_by`, an active index `WHERE deleted_at IS NULL`, and a partial unique index for business codes that may be reused.
 
 ### Validation
 
@@ -235,12 +237,12 @@ src/modules/identity-access
 
 ### Validation
 
-- Tenant dibuat.
-- Owner login.
+- Tenant created.
+- Owner logs in.
 - Profile resolver.
 - Identifier masked.
 - Setup locked.
-- Office/profile soft delete tidak muncul di list default dan restore diaudit.
+- Soft-deleted offices/profiles do not appear in the default list and restore is audited.
 
 ## Sprint 3 — RBAC, ABAC, RLS
 
@@ -285,16 +287,16 @@ src/modules/finance-accounting
 
 - Chart of accounts.
 - Journal (header).
-- Ledger entry (line, append-only setelah posted).
+- Ledger entry (line, append-only once posted).
 - Fiscal period (open/closed).
 
 ### Validation
 
-- Akun unique per tenant.
-- Debit = kredit per journal.
-- Ledger entry append-only, tidak bisa diedit setelah posted.
-- Fiscal period closed menolak posting baru.
-- Reversal/adjustment untuk koreksi entry yang sudah posted.
+- Account unique per tenant.
+- Debit = credit per journal.
+- Ledger entry append-only, cannot be edited once posted.
+- A closed fiscal period rejects new postings.
+- Reversal/adjustment for correcting an already-posted entry.
 
 ## Sprint 5 — Inventory & Warehouse
 
@@ -335,7 +337,7 @@ src/modules/inventory-warehouse
 - Opening balance.
 - Stock movement append-only.
 - Transfer source ≠ destination; ship ≤ approved; receive ≤ shipped.
-- Cycle count variance tercatat dan diaudit.
+- Cycle count variance recorded and audited.
 
 ## Sprint 6 — Logging & Pooling
 
@@ -383,10 +385,10 @@ src/modules/procurement
 
 ### Validation
 
-- Purchase order butuh approval sebelum dikirim ke supplier.
-- Goods receipt tidak melebihi PO outstanding.
-- Goods receipt memicu stock movement inventory.
-- Three-way match (PO – goods receipt – invoice) sebelum pembayaran disetujui.
+- A purchase order needs approval before being sent to the supplier.
+- A goods receipt does not exceed the outstanding PO.
+- A goods receipt triggers an inventory stock movement.
+- Three-way match (PO – goods receipt – invoice) before payment is approved.
 
 ## Sprint 8 — Sync & Object Storage
 
@@ -412,7 +414,7 @@ src/modules/sync-storage
 - HMAC valid.
 - Timestamp anti replay.
 - Duplicate event idempotent.
-- Conflict manual.
+- Manual conflict.
 - Checksum verified.
 
 ## Sprint 9 — Manufacturing
@@ -441,9 +443,9 @@ src/modules/manufacturing
 
 ### Validation
 
-- BOM component tersedia stoknya sebelum work order start.
-- Material consumption memicu stock movement (keluar bahan baku, masuk barang jadi).
-- Work order tidak bisa complete dua kali (idempotent).
+- BOM components have stock available before the work order starts.
+- Material consumption triggers a stock movement (raw material out, finished goods in).
+- A work order cannot be completed twice (idempotent).
 
 ## Sprint 10 — HR & Payroll
 
@@ -465,10 +467,10 @@ src/modules/hr-payroll
 
 ### Validation
 
-- Data pribadi karyawan (NIK, nomor rekening, gaji) masked di log dan response non-authorized.
-- Payroll run post bersifat idempotent dan append-only setelah posted.
-- Payslip hanya bisa diakses karyawan bersangkutan atau role HR/finance yang berwenang.
-- Payroll run posted memicu ledger entry finance (beban gaji).
+- Employee personal data (NIK, bank account number, salary) masked in logs and in non-authorized responses.
+- Payroll run post is idempotent and append-only once posted.
+- A payslip can only be accessed by the employee it belongs to or by an authorized HR/finance role.
+- A posted payroll run triggers a finance ledger entry (salary expense).
 
 ## Sprint 11 — Tax & Coretax
 
@@ -498,7 +500,7 @@ src/modules/tax-coretax
 - Coretax batch checksum.
 - Export approval.
 
-## Sprint 12 — Integrasi Bisnis Eksternal
+## Sprint 12 — External Business Integrations
 
 ### Module
 
@@ -506,21 +508,21 @@ src/modules/tax-coretax
 src/modules/business-integrations
 ```
 
-### Sub-kapabilitas (adapter provider, bukan modul top-level terpisah — lihat doc 21 §External Integration)
+### Sub-capabilities (provider adapters, not separate top-level modules — see doc 21 §External Integration)
 
 ```text
-payment-gateway/   # mis. Midtrans/Xendit-style adapter
-marketplace/       # mis. Tokopedia/Shopee-style channel adapter
-logistics/         # mis. kurir/ekspedisi tracking adapter
+payment-gateway/   # e.g. Midtrans/Xendit-style adapter
+marketplace/       # e.g. Tokopedia/Shopee-style channel adapter
+logistics/         # e.g. courier/freight tracking adapter
 ```
 
 ### Validation
 
-- Kredensial provider dari env, tidak hardcode.
-- Webhook signature diverifikasi sebelum diproses.
+- Provider credentials come from env, never hardcoded.
+- Webhook signature verified before processing.
 - Payment callback idempotent.
-- Marketplace order sync tidak menduplikasi sales/finance record.
-- Provider eksternal tidak dipanggil di dalam DB transaction.
+- Marketplace order sync does not duplicate sales/finance records.
+- External providers are not called inside a DB transaction.
 
 ## Sprint 13 — UI/UX, Reporting, AI
 
@@ -553,7 +555,7 @@ src/components/reporting
 
 ### Validation
 
-- Admin shell render.
+- Admin shell renders.
 - Report API.
 - AI read-only/no SQL/no PII.
 
@@ -601,26 +603,26 @@ tests/security
 
 ## Definition of Skeleton Done
 
-- Folder utama tersedia.
-- Module contract tersedia.
-- Response/error helper tersedia.
-- Tenant context helper tersedia.
-- Audit helper tersedia.
-- Domain event helper tersedia.
-- Migration runner tersedia.
-- OpenAPI/AsyncAPI baseline tersedia.
-- Health endpoint tersedia.
-- Build pass.
-- Docs awal tersedia.
+- Main folders present.
+- Module contract present.
+- Response/error helper present.
+- Tenant context helper present.
+- Audit helper present.
+- Domain event helper present.
+- Migration runner present.
+- OpenAPI/AsyncAPI baseline present.
+- Health endpoint present.
+- Build passes.
+- Initial docs present.
 
 ## Definition of Implementation Ready
 
 - Skeleton done.
-- Tenant/profile/auth siap.
-- ABAC guard siap.
-- RLS context siap.
-- Redaction siap.
-- Transaction wrapper siap.
-- Idempotency wrapper siap.
-- OpenAPI contract siap.
-- Test skeleton siap.
+- Tenant/profile/auth ready.
+- ABAC guard ready.
+- RLS context ready.
+- Redaction ready.
+- Transaction wrapper ready.
+- Idempotency wrapper ready.
+- OpenAPI contract ready.
+- Test skeleton ready.

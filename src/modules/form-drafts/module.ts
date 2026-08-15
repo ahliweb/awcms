@@ -71,6 +71,13 @@ export const formDraftsModule = defineModule({
   jobs: [
     {
       command: "bun run form-drafts:purge",
+      schedule: {
+        mode: "cron",
+        expression: "15 3 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes abandoned form drafts past retention — the whole accumulated excess on the first pass. Dry-run and read the count."
+      },
       purpose:
         "Expire overdue draft rows, then physically delete expired/abandoned drafts past the retention cutoff, for every active tenant.",
       recommendedSchedule: "Daily via cron/systemd timer.",

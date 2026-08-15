@@ -1,26 +1,28 @@
-# 03 — Bounded context, modul, dan model data
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](03-bounded-context-dan-model-data.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status. Tidak ada tabel di bawah ini
-> yang sudah ada di `sql/`.
+# 03 — Bounded contexts, modules, and the data model
 
-## 1. Lima konteks, bukan tujuh
+> A plan. See the [README](README.md) for status. None of the tables below exist
+> in `sql/` yet.
 
-| Module key                  | Memiliki                                                                                                                      | **Tidak** memiliki                                             |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `jualanku_directory`        | Merchant, membership, kategori usaha, lokasi, halaman usaha, publikasi, projection status verifikasi, hierarki scope merchant | Detail produk, pembayaran, ledger affiliate                    |
-| `jualanku_catalog_growth`   | Produk/layanan, promosi, CTA, interaksi bermakna, lead, event sumber analytics                                                | Persetujuan komisi dan payout                                  |
-| `jualanku_affiliate`        | Profil affiliate, referral link, atribusi, konversi, flag fraud                                                               | Invoice/langganan merchant                                     |
-| `jualanku_commercial`       | Paket, entitlement, langganan, invoice, ledger komisi, permintaan payout                                                      | Settlement gateway (sebelum provider dipilih)                  |
-| `jualanku_trust_operations` | Case verifikasi, moderasi, komplain, banding, assignment pendamping                                                           | Identitas/email/media/audit generik (sudah disediakan fondasi) |
+## 1. Five contexts, not seven
 
-Alasan tidak tujuh: batas modul mengikuti invariant, kepemilikan data, dan pola
-perubahan — bukan struktur menu. Memecah lebih jauh dilakukan setelah coupling
-terukur, bukan sebelum.
+| Module key                  | Owns                                                                                                                                                 | Does **not** own                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `jualanku_directory`        | Merchants, membership, business categories, locations, business pages, publication, the verification-status projection, the merchant scope hierarchy | Product detail, payments, the affiliate ledger                     |
+| `jualanku_catalog_growth`   | Products/services, promotions, CTAs, meaningful interactions, leads, analytics source events                                                         | Commission approval and payouts                                    |
+| `jualanku_affiliate`        | Affiliate profiles, referral links, attribution, conversions, fraud flags                                                                            | Merchant invoices/subscriptions                                    |
+| `jualanku_commercial`       | Plans, entitlements, subscriptions, invoices, the commission ledger, payout requests                                                                 | Gateway settlement (until a provider is chosen)                    |
+| `jualanku_trust_operations` | Verification cases, moderation, complaints, appeals, onboarding-agent assignments                                                                    | Generic identity/email/media/audit (the foundation provides those) |
+
+Why not seven: module boundaries follow invariants, data ownership, and change
+patterns — not menu structure. Splitting further happens once coupling has been
+measured, not before.
 
 ## 2. Draft `ModuleDescriptor`
 
-Bentuk minimum yang dipakai setiap modul (nilai final ditetapkan saat scaffold;
-`MODULE_CONTRACT_VERSION` repo saat dokumen ini ditulis adalah `2.4.0`):
+The minimum shape every module uses (final values are fixed at scaffold time; the
+repo's `MODULE_CONTRACT_VERSION` when this document was written is `2.4.0`):
 
 ```ts
 export const jualankuDirectoryModule: ModuleDescriptor = {
@@ -47,8 +49,8 @@ export const jualankuDirectoryModule: ModuleDescriptor = {
     ]
   },
   capabilities: {
-    // Mengisi resolver hierarki scope untuk tipe `merchant` (ADR-0030) —
-    // tanpa ini, aksi merchant high-risk deny karena `resolved: false`.
+    // Fills the scope hierarchy resolver for the `merchant` type (ADR-0030) —
+    // without it, high-risk merchant actions deny because `resolved: false`.
     provides: ["business_scope_hierarchy"]
   },
   permissions: [
@@ -62,138 +64,140 @@ export const jualankuDirectoryModule: ModuleDescriptor = {
       description: "..."
     }
   ],
-  searchSources: [/* baris terbit saja — lihat modul site_search */],
-  dataLifecycle: [/* tabel bervolume tinggi + kelas retensi */]
+  searchSources: [/* published rows only — see the site_search module */],
+  dataLifecycle: [/* high-volume tables + retention classes */]
 };
 ```
 
-Catatan yang menentukan lulus/tidaknya gate:
+Notes that decide whether the gates pass:
 
-- `permissions` di descriptor **tidak** memberi permission ke tenant yang sudah
-  ada. Setiap modul membawa **migrasi seed permission** sendiri, dan deploy ke
-  tenant lama butuh backfill `awcms_role_permissions`.
-- `routes` menyatakan kepemilikan rute (`bun run modules:routes:check`), dan
-  hanya modul pemilik yang boleh menulis tabelnya
+- `permissions` in the descriptor does **not** grant permissions to tenants that
+  already exist. Every module carries its own **permission seed migration**, and
+  deploying to an older tenant needs an `awcms_role_permissions` backfill.
+- `routes` declares route ownership (`bun run modules:routes:check`), and only
+  the owning module may write its tables
   (`bun run modules:table-writes:check`).
-- Modul dengan `capabilities.provides` mengubah graf capability, bukan graf
-  dependency — DAG tetap acyclic.
-- Setiap modul domain baru butuh **ADR admission** sesuai
+- A module with `capabilities.provides` changes the capability graph, not the
+  dependency graph — the DAG stays acyclic.
+- Every new domain module needs an **admission ADR** per
   [`../21_module_admission_governance.md`](../21_module_admission_governance.md).
 
-## 3. Konvensi tabel
+## 3. Table conventions
 
-- Prefix `awcms_jualanku_<konteks>_<entitas>` (mis.
-  `awcms_jualanku_directory_merchants`). Prefix panjang dipilih supaya
-  kepemilikan modul terbaca dari nama tabel, sesuai kebiasaan repo ini.
-- Kolom wajib: `id uuid`, `tenant_id uuid NOT NULL`, `created_at timestamptz`,
-  `updated_at timestamptz`, dan `deleted_at timestamptz` untuk entitas yang
-  di-soft-delete.
-- **`FORCE` RLS pada semua tabel tenant-scoped**, kebijakan berbasis GUC tenant.
-- FK lintas tabel tenant-scoped memakai **FK komposit** `(tenant_id, id)` —
-  FK biasa melewati RLS dan menjadi jalur kebocoran lintas tenant. Tabel yang
-  jadi target FK butuh `UNIQUE (tenant_id, id)`.
-- Uang memakai `numeric`, bukan float. Waktu memakai `timestamptz`.
-- Kolom kepemilikan merchant bernama `merchant_id` **di semua konteks**, agar
-  predikat kepemilikan bisa ditinjau dengan satu grep.
-- Kolom bervolume tinggi (klik, event interaksi, log) mendeklarasikan
-  `dataLifecycle` dan menghormati legal hold.
+- Prefix `awcms_jualanku_<context>_<entity>` (e.g.
+  `awcms_jualanku_directory_merchants`). The long prefix is chosen so that module
+  ownership is readable from the table name, in keeping with this repo's habits.
+- Mandatory columns: `id uuid`, `tenant_id uuid NOT NULL`, `created_at timestamptz`,
+  `updated_at timestamptz`, and `deleted_at timestamptz` for soft-deleted
+  entities.
+- **`FORCE` RLS on every tenant-scoped table**, with policies based on the tenant
+  GUC.
+- FKs between tenant-scoped tables use a **composite FK** `(tenant_id, id)` —
+  a plain FK bypasses RLS and becomes a cross-tenant leak path. A table that is
+  the target of an FK needs `UNIQUE (tenant_id, id)`.
+- Money uses `numeric`, not float. Time uses `timestamptz`.
+- The merchant ownership column is named `merchant_id` **in every context**, so
+  ownership predicates can be reviewed with a single grep.
+- High-volume columns (clicks, interaction events, logs) declare
+  `dataLifecycle` and honour legal hold.
 
-Penomoran migrasi mengikuti nomor berikutnya yang tersedia saat modul ditulis —
-**jangan** menuliskan nomor konkret di dokumen ini: rujukan ke berkas migrasi
-yang belum ada digagalkan oleh `bun run check:docs`, dan migrasi yang sudah
-terpasang bersifat immutable (koreksi lewat migrasi baru, bukan edit).
+Migration numbering follows the next available number at the time the module is
+written — do **not** write a concrete number into this document: references to
+migration files that do not exist yet are failed by `bun run check:docs`, and an
+applied migration is immutable (correct it with a new migration, not an edit).
 
-## 4. Entitas per konteks
+## 4. Entities per context
 
 ### 4.1 `jualanku_directory`
 
-| Tabel                       | Kolom kunci                                                                                                                                        | Catatan                                                           |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `..._merchants`             | `slug` (unik per tenant), `display_name`, `legal_name`, `category_id`, `status` (draft/published/suspended), `verification_status`, `published_at` | `legal_name` bukan data publik.                                   |
-| `..._merchant_members`      | `merchant_id`, `identity_id`, `member_role` (owner/editor/analyst), `valid_from`, `valid_until`, `status`                                          | Sumber grant scope; unik `(tenant_id, merchant_id, identity_id)`. |
-| `..._categories`            | `parent_id`, `slug`, `name`, `position`                                                                                                            | Taksonomi bersama lintas merchant.                                |
-| `..._merchant_locations`    | `merchant_id`, `province`, `city`, `district`, `geo_point`                                                                                         | Alamat presisi tinggi = data terbatas, bukan publik.              |
-| `..._merchant_pages`        | `merchant_id`, `sections jsonb`, `status`, `published_revision_id`                                                                                 | Blok konten memakai kosakata blok `blog_content`, bukan HTML.     |
-| `..._merchant_publications` | `merchant_id`, `action` (publish/unpublish), `actor`, `occurred_at`                                                                                | Append-only; jejak publikasi.                                     |
+| Table                       | Key columns                                                                                                                                          | Notes                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `..._merchants`             | `slug` (unique per tenant), `display_name`, `legal_name`, `category_id`, `status` (draft/published/suspended), `verification_status`, `published_at` | `legal_name` is not public data.                                            |
+| `..._merchant_members`      | `merchant_id`, `identity_id`, `member_role` (owner/editor/analyst), `valid_from`, `valid_until`, `status`                                            | The source of scope grants; unique `(tenant_id, merchant_id, identity_id)`. |
+| `..._categories`            | `parent_id`, `slug`, `name`, `position`                                                                                                              | A shared taxonomy across merchants.                                         |
+| `..._merchant_locations`    | `merchant_id`, `province`, `city`, `district`, `geo_point`                                                                                           | A high-precision address is restricted data, not public.                    |
+| `..._merchant_pages`        | `merchant_id`, `sections jsonb`, `status`, `published_revision_id`                                                                                   | Content blocks use the `blog_content` block vocabulary, not HTML.           |
+| `..._merchant_publications` | `merchant_id`, `action` (publish/unpublish), `actor`, `occurred_at`                                                                                  | Append-only; the publication trail.                                         |
 
-Projection publik = baris `status = 'published'` **dan** tidak sedang ditahan
-moderasi. Tidak ada query bebas ke tabel draft dari namespace publik.
+The public projection = rows with `status = 'published'` **and** not currently
+held by moderation. No free-form queries against draft tables from the public
+namespace.
 
 ### 4.2 `jualanku_catalog_growth`
 
-| Tabel                | Kolom kunci                                                                                                        | Catatan                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `..._offerings`      | `merchant_id`, `kind` (product/service), `slug`, `name`, `price_amount numeric`, `price_currency`, `status`        | Harga dari system of record, bukan teks halaman.          |
-| `..._offering_media` | `offering_id`, `media_object_id`                                                                                   | FK ke registry `media_library`; tidak ada URL bebas.      |
-| `..._promotions`     | `merchant_id`, `offering_id?`, `starts_at`, `ends_at`, `terms`                                                     | Klaim promosi masuk review konten.                        |
-| `..._leads`          | `merchant_id`, `channel`, `contact_hash`, `contact_masked`, `status`, `occurred_at`                                | PII kontak di-hash + masked, tidak pernah mentah di list. |
-| `..._interactions`   | `merchant_id`, `interaction_type` (whatsapp_click/call/direction/link), `idempotency_key`, `occurred_at`, `source` | Ingest publik; unik pada `idempotency_key`.               |
+| Table                | Key columns                                                                                                        | Notes                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `..._offerings`      | `merchant_id`, `kind` (product/service), `slug`, `name`, `price_amount numeric`, `price_currency`, `status`        | Price comes from the system of record, not page text.    |
+| `..._offering_media` | `offering_id`, `media_object_id`                                                                                   | FK into the `media_library` registry; no free-form URLs. |
+| `..._promotions`     | `merchant_id`, `offering_id?`, `starts_at`, `ends_at`, `terms`                                                     | Promotional claims go through content review.            |
+| `..._leads`          | `merchant_id`, `channel`, `contact_hash`, `contact_masked`, `status`, `occurred_at`                                | Contact PII is hashed + masked, never raw in a list.     |
+| `..._interactions`   | `merchant_id`, `interaction_type` (whatsapp_click/call/direction/link), `idempotency_key`, `occurred_at`, `source` | Public ingest; unique on `idempotency_key`.              |
 
-`..._interactions` adalah satu-satunya tabel yang menerima tulisan dari
-permukaan publik. Karena itu ia: privacy-minimized (tanpa fingerprint),
-idempotent, ber-rate-limit sendiri, dan tidak pernah menjadi sumber otorisasi.
+`..._interactions` is the only table that accepts writes from a public surface.
+Because of that it is: privacy-minimized (no fingerprint), idempotent, has its own
+rate limit, and is never a source of authorization.
 
 ### 4.3 `jualanku_affiliate`
 
-| Tabel             | Kolom kunci                                                                                                                   | Catatan                                                |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `..._affiliates`  | `identity_id`, `status` (pending/approved/suspended), `payout_profile_id`                                                     | Approval affiliate adalah aksi high-risk.              |
-| `..._links`       | `affiliate_id`, `code` (unik per tenant), `target_type`, `target_id`                                                          | Kode tidak boleh bisa ditebak berurutan.               |
-| `..._clicks`      | `link_id`, `occurred_at`, `source_hash`                                                                                       | Bervolume tinggi → `dataLifecycle` + rollup.           |
-| `..._conversions` | `link_id`, `merchant_id`, `subject_type`, `subject_id`, `status` (pending/held/approved/rejected/reversed), `idempotency_key` | Transisi status append-only di tabel event.            |
-| `..._fraud_flags` | `conversion_id`, `flag_type` (self_referral/velocity/duplicate_instrument), `raised_by`, `resolved_at`                        | Self-referral adalah aturan, bukan heuristik opsional. |
+| Table             | Key columns                                                                                                                   | Notes                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `..._affiliates`  | `identity_id`, `status` (pending/approved/suspended), `payout_profile_id`                                                     | Affiliate approval is a high-risk action.             |
+| `..._links`       | `affiliate_id`, `code` (unique per tenant), `target_type`, `target_id`                                                        | Codes must not be sequentially guessable.             |
+| `..._clicks`      | `link_id`, `occurred_at`, `source_hash`                                                                                       | High volume → `dataLifecycle` + rollup.               |
+| `..._conversions` | `link_id`, `merchant_id`, `subject_type`, `subject_id`, `status` (pending/held/approved/rejected/reversed), `idempotency_key` | Status transitions are append-only in an event table. |
+| `..._fraud_flags` | `conversion_id`, `flag_type` (self_referral/velocity/duplicate_instrument), `raised_by`, `resolved_at`                        | Self-referral is a rule, not an optional heuristic.   |
 
 ### 4.4 `jualanku_commercial`
 
-| Tabel                     | Kolom kunci                                                                                        | Catatan                                                            |
-| ------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `..._plans`               | `code`, `name`, `price_amount`, `billing_period`, `status`                                         | Perubahan paket = `configure`, ter-audit.                          |
-| `..._plan_entitlements`   | `plan_id`, `entitlement_key`, `limit_value`                                                        | Entitlement dievaluasi di service, bukan di UI.                    |
-| `..._subscriptions`       | `merchant_id`, `plan_id`, `status`, `current_period_start/end`, `cancel_at`                        | —                                                                  |
-| `..._invoices` / `_lines` | `merchant_id`, `number` (unik per tenant), `status`, `total_amount`                                | Nomor invoice tidak pernah dipakai ulang.                          |
-| `..._commission_entries`  | `affiliate_id`, `conversion_id`, `entry_type` (accrual/reversal/adjustment), `amount`, `posted_at` | **Append-only**; koreksi = entri baru, bukan UPDATE.               |
-| `..._payout_requests`     | `affiliate_id`, `amount`, `status`, `requested_by`, `idempotency_key`                              | Saldo _available_ dihitung dari ledger, bukan dari total konversi. |
-| `..._payout_decisions`    | `payout_request_id`, `decision` (approve/reject), `decided_by`, `decided_at`, `reason`             | Pembuat ≠ penyetuju (SoD + workflow).                              |
+| Table                     | Key columns                                                                                        | Notes                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `..._plans`               | `code`, `name`, `price_amount`, `billing_period`, `status`                                         | Changing a plan = `configure`, audited.                                           |
+| `..._plan_entitlements`   | `plan_id`, `entitlement_key`, `limit_value`                                                        | Entitlements are evaluated in the service, not in the UI.                         |
+| `..._subscriptions`       | `merchant_id`, `plan_id`, `status`, `current_period_start/end`, `cancel_at`                        | —                                                                                 |
+| `..._invoices` / `_lines` | `merchant_id`, `number` (unique per tenant), `status`, `total_amount`                              | An invoice number is never reused.                                                |
+| `..._commission_entries`  | `affiliate_id`, `conversion_id`, `entry_type` (accrual/reversal/adjustment), `amount`, `posted_at` | **Append-only**; a correction is a new entry, not an UPDATE.                      |
+| `..._payout_requests`     | `affiliate_id`, `amount`, `status`, `requested_by`, `idempotency_key`                              | The _available_ balance is computed from the ledger, not from a conversion total. |
+| `..._payout_decisions`    | `payout_request_id`, `decision` (approve/reject), `decided_by`, `decided_at`, `reason`             | Maker ≠ approver (SoD + workflow).                                                |
 
-Aturan yang tidak bisa dilonggarkan: **provider eksternal tidak pernah dipanggil
-di dalam transaksi basis data**. Pemanggilan gateway/pajak/notifikasi lewat
-outbox + idempotency key.
+The rule that cannot be relaxed: **an external provider is never called inside a
+database transaction**. Gateway/tax/notification calls go through the outbox +
+an idempotency key.
 
 ### 4.5 `jualanku_trust_operations`
 
-| Tabel                        | Kolom kunci                                                                            | Catatan                                                |
-| ---------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `..._verification_cases`     | `merchant_id`, `case_type`, `status`, `assigned_to`, `sla_due_at`                      | Merchant tidak bisa menyetujui dirinya sendiri.        |
-| `..._verification_evidence`  | `case_id`, `media_object_id`, `evidence_type`, `masked_summary`                        | Bukti sensitif dimasking di response; akses ter-audit. |
-| `..._moderation_cases`       | `subject_type`, `subject_id`, `reason`, `status`, `decided_by`                         | Menahan publikasi tanpa menghapus data.                |
-| `..._complaints`             | `reporter_hash`, `subject_type`, `subject_id`, `status`, `resolution`                  | Kanal pengaduan wajib ada sebelum go-live (UU 8/1999). |
-| `..._appeals`                | `case_id`, `submitted_by`, `status`, `decided_by`                                      | Banding diputus orang berbeda dari pemutus awal.       |
-| `..._onboarding_assignments` | `merchant_id`, `agent_identity_id`, `valid_from`, `valid_until`, `consent_recorded_at` | Sumber grant scope bertenggat untuk pendamping.        |
+| Table                        | Key columns                                                                            | Notes                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `..._verification_cases`     | `merchant_id`, `case_type`, `status`, `assigned_to`, `sla_due_at`                      | A merchant cannot approve itself.                                |
+| `..._verification_evidence`  | `case_id`, `media_object_id`, `evidence_type`, `masked_summary`                        | Sensitive evidence is masked in responses; access is audited.    |
+| `..._moderation_cases`       | `subject_type`, `subject_id`, `reason`, `status`, `decided_by`                         | Hold publication without deleting data.                          |
+| `..._complaints`             | `reporter_hash`, `subject_type`, `subject_id`, `status`, `resolution`                  | A complaint channel is mandatory before go-live (Law 8/1999).    |
+| `..._appeals`                | `case_id`, `submitted_by`, `status`, `decided_by`                                      | An appeal is decided by someone other than the original decider. |
+| `..._onboarding_assignments` | `merchant_id`, `agent_identity_id`, `valid_from`, `valid_until`, `consent_recorded_at` | The source of time-bounded scope grants for onboarding agents.   |
 
-## 5. Kepemilikan tabel & komunikasi lintas modul
+## 5. Table ownership & cross-module communication
 
-- Satu tabel = satu modul penulis. Modul lain membaca lewat **application
-  service**, **capability port**, **read model**, atau **domain event** — tidak
-  pernah lewat join langsung ke tabel milik orang lain.
-- Arah dependency: `commercial` dan `affiliate` **tidak** boleh bergantung pada
-  `catalog_growth`; keterkaitannya lewat event (`conversion.recorded`,
-  `subscription.activated`) dan read model.
-- `directory` menyediakan hierarki scope merchant yang dikonsumsi seluruh modul
-  Jualanku lain — itulah satu-satunya capability yang mereka bagi.
-- Event domain memakai runtime outbox yang sudah ada (`domain_event_runtime`)
-  dan dideklarasikan di AsyncAPI, lengkap dengan klasifikasi PII, retry, dan
-  dead-letter.
+- One table = one writing module. Other modules read through an **application
+  service**, a **capability port**, a **read model**, or a **domain event** —
+  never through a direct join into someone else's table.
+- Dependency direction: `commercial` and `affiliate` must **not** depend on
+  `catalog_growth`; their relationship goes through events (`conversion.recorded`,
+  `subscription.activated`) and read models.
+- `directory` provides the merchant scope hierarchy consumed by every other
+  Jualanku module — that is the only capability they share.
+- Domain events use the existing outbox runtime (`domain_event_runtime`) and are
+  declared in AsyncAPI, complete with PII classification, retry, and
+  dead-lettering.
 
-## 6. Data pribadi & retensi
+## 6. Personal data & retention
 
-| Kelas data                                | Perlakuan                                                                                                      |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Nomor rekening, NIK, NPWP, telepon, email | Simpan ter-normalisasi + hash untuk lookup; tampilkan **masked** sesuai purpose; tidak pernah di list default. |
-| Bukti verifikasi (dokumen/gambar)         | `media_library` + akses ter-audit + masking ringkasan; tidak pernah URL publik.                                |
-| Klik/interaksi/analytics                  | Privacy-minimized, tanpa fingerprint, agregasi cepat, retensi pendek lewat `dataLifecycle`.                    |
-| Ledger komisi, invoice, payout            | Retensi panjang (kewajiban pembukuan), append-only, tunduk legal hold.                                         |
-| Komplain & bukti pengaduan                | Retensi terbatas + legal hold saat sengketa.                                                                   |
+| Data class                                   | Treatment                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Bank account number, NIK, NPWP, phone, email | Store normalized + hashed for lookup; display **masked** according to purpose; never in a default list. |
+| Verification evidence (documents/images)     | `media_library` + audited access + summary masking; never a public URL.                                 |
+| Clicks/interactions/analytics                | Privacy-minimized, no fingerprint, fast aggregation, short retention via `dataLifecycle`.               |
+| Commission ledger, invoices, payouts         | Long retention (bookkeeping obligations), append-only, subject to legal hold.                           |
+| Complaints & complaint evidence              | Limited retention + legal hold during a dispute.                                                        |
 
-Alur permintaan hak subjek data (akses/koreksi/penghapusan/keberatan) memakai
-mekanisme `data_lifecycle` yang sudah ada; data yang wajib dipertahankan dibatasi
-dan alasannya dijelaskan ke pemohon.
+The data-subject request flow (access/rectification/erasure/objection) uses the
+existing `data_lifecycle` mechanism; data that must be retained is limited and the
+reason is explained to the requester.

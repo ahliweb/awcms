@@ -1,224 +1,225 @@
-# ADR-0071 — Kosakata URL publik dibelah: `/blog/**` di sini, `/news/**` di `awcms-astro`
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0071-kosakata-url-publik-dibelah-blog-di-sini-news-di-awcms-astro.id.md)
+
+# ADR-0071 — The public URL vocabulary is split: `/blog/**` here, `/news/**` in `awcms-astro`
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-08
-- **Pengambil keputusan:** @ahliweb
-- **Men-supersede:** [ADR-0059](0059-host-resolved-public-content-routes.md) — keluarga rute host-resolved `/news/**` tidak dibangun di repo ini. Yang dicabut adalah **alamatnya**, bukan kemampuannya; lihat §3 untuk apa yang tetap berlaku dari ADR itu.
-- **Menyempurnakan:** [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md) — ADR itu menyatakan `awcms-astro` memikul halaman publik sebagai fungsi utama, tetapi §Konsekuensi-nya masih menyebut keluarga `/news/**` sebagai permukaan publik repo ini. ADR ini menyelesaikan sisa itu.
-- **Terkait:** [ADR-0009](0009-public-tenant-scoped-routes.md) (keluarga `/blog/{tenantCode}`), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (`news_portal` dilebur ke `blog_content`), [ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md) (surface cache tepi), [ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) (kontrak konsumen beku), `awcms-astro` ADR-0033 (sebuah tab boleh menyatakan dirinya seksi berita) dan ADR-0036 ([`docs/adr/0036-...`](https://github.com/ahliweb/awcms-astro/blob/main/docs/adr/))
+- **Date:** 2026-08-08
+- **Decision makers:** @ahliweb
+- **Supersedes:** [ADR-0059](0059-host-resolved-public-content-routes.md) — the host-resolved `/news/**` route family is not built in this repo. What is revoked is its **address**, not its capability; see §3 for what still holds from that ADR.
+- **Refines:** [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md) — that ADR states `awcms-astro` carries public pages as its primary function, but its §Consequences still names the `/news/**` family as this repo's public surface. This ADR settles that remainder.
+- **Related:** [ADR-0009](0009-public-tenant-scoped-routes.md) (the `/blog/{tenantCode}` family), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (`news_portal` merged into `blog_content`), [ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md) (edge cache surfaces), [ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) (frozen consumer contract), `awcms-astro` ADR-0033 (a tab may declare itself a news section) and ADR-0036 ([`docs/adr/0036-...`](https://github.com/ahliweb/awcms-astro/blob/main/docs/adr/))
 
-## Konteks
+## Context
 
 [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
-memindahkan sumbu pembagian dari AUDIENS ke APA YANG DIKELOLA, dan menyatakan
-`awcms-astro` memikul **halaman publik sebagai fungsi utama**. Tetapi ia
-membiarkan satu hal tidak dijawab, dan §Konsekuensi-nya bahkan menuliskannya
-sebagai bagian yang tidak tersentuh:
+moved the split axis from AUDIENCE to WHAT IS MANAGED, and states that
+`awcms-astro` carries **public pages as its primary function**. But it left one
+thing unanswered, and its §Consequences even wrote it down as the part left
+untouched:
 
-> Permukaan publik `awcms` sendiri (`/blog/{tenantCode}/**`, keluarga
-> host-resolved `/news/**`, `robots`/`sitemap`/`feed`, `/search`) tidak
-> tersentuh — ADR-0059/ADR-0061 tetap berlaku apa adanya.
+> `awcms`'s own public surface (`/blog/{tenantCode}/**`, the host-resolved
+> `/news/**` family, `robots`/`sitemap`/`feed`, `/search`) is untouched —
+> ADR-0059/ADR-0061 stand as they are.
 
-Jadi kedua repo boleh melayani halaman berita publik, pada dua alamat berbeda,
-dari satu sumber konten yang sama. Itu bukan pembagian peran; itu dua jawaban
-untuk satu pertanyaan. Dan pertanyaannya akan ditanyakan setiap kali sebuah
-deployment dibangun: **berita situs ini disajikan dari mana?**
+So both repos may serve public news pages, at two different addresses, from one
+and the same content source. That is not a division of roles; that is two answers
+to one question. And the question will be asked every time a deployment is built:
+**where is this site's news served from?**
 
-### Apa yang membuat pertanyaan itu tidak punya jawaban hari ini
+### What leaves that question without an answer today
 
-ADR-0059 mendaratkan `/news/**` di sini dengan alasan yang benar pada waktunya:
-`blog_content` sudah memerikan keluarga itu sebagai desain yang sengaja belum
-ada, `tenant_domain` akhirnya menyediakan resolver host-nya, dan repo ini adalah
-satu-satunya tempat yang punya konten untuk dilayani. Pada 4 Agustus 2026 tidak
-ada repo lain yang bisa memikulnya.
+ADR-0059 landed `/news/**` here for reasons that were right at the time:
+`blog_content` already described that family as a design deliberately not yet
+built, `tenant_domain` finally provided its host resolver, and this repo was the
+only place that had content to serve. On 4 August 2026 there was no other repo
+that could carry it.
 
-Sejak itu tiga hal berubah, dan ketiganya berubah di sisi sebelah:
+Three things have changed since, and all three changed on the other side:
 
-1. `awcms-astro` ADR-0033 memberi sebuah tab kemampuan **menyatakan dirinya
-   seksi berita** — urutan dari tanggal, dua tanggal yang terpisah, dan
-   semantik terbit/diubah yang benar untuk berita.
-2. `awcms-astro` ADR-0035 memberi setiap seksi berita **feed Atom-nya sendiri**.
-3. `awcms-astro` ADR-0034 dan repo ini ADR-0070 menyatakan repo itu memikul
-   halaman publik sebagai **fungsi utama**, bukan sebagai pelengkap.
+1. `awcms-astro` ADR-0033 gives a tab the ability to **declare itself a news
+   section** — ordering by date, two separate dates, and publish/modified
+   semantics that are correct for news.
+2. `awcms-astro` ADR-0035 gives every news section **its own Atom feed**.
+3. `awcms-astro` ADR-0034 and this repo's ADR-0070 state that that repo carries
+   public pages as its **primary function**, not as an add-on.
 
-Repo sebelah kini punya mesin berita yang lebih lengkap daripada empat rute yang
-ADR-0059 daratkan di sini — dan ia mengambil isinya dari repo ini lewat
-`GET /api/v1/blog/posts`, kontrak yang sudah dibekukan ADR-0065.
+The neighbouring repo now has a more complete news engine than the four routes
+ADR-0059 landed here — and it takes its content from this repo through
+`GET /api/v1/blog/posts`, a contract already frozen by ADR-0065.
 
-### Selisih yang tidak terlihat sampai keduanya berdiri berdampingan
+### The discrepancy that is invisible until the two stand side by side
 
-[ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md) §A menyimpulkan
-posisi cache tepi hari ini "persis terbalik dari arah yang ADR-0059 tetapkan:
-cache tepi mempercepat **bentuk warisan** dan tidak menyentuh **bentuk maju**
-sama sekali". Kesimpulan itu benar — tetapi ia bersandar pada premis bahwa
-`/blog/{tenantCode}` adalah bentuk warisan yang sedang ditinggalkan.
+[ADR-0061](0061-host-resolved-public-surfaces-are-edge-cacheable.md) §A concludes
+that today's edge cache position is "exactly the inverse of the direction
+ADR-0059 set: edge cache speeds up the **legacy form** and does not touch the
+**forward form** at all". That conclusion is correct — but it rests on the
+premise that `/blog/{tenantCode}` is a legacy form being left behind.
 
-Keputusan di bawah mencabut premis itu. `/blog/{tenantCode}` bukan warisan; ia
-kosakata permanen repo ini.
+The decision below revokes that premise. `/blog/{tenantCode}` is not legacy; it
+is this repo's permanent vocabulary.
 
-## Keputusan
+## Decision
 
-**Kami memutuskan membelah kosakata URL publik antara dua repo keluarga, satu
-keluarga rute per repo, dan tidak pernah keduanya di satu repo.**
+**We decide to split the public URL vocabulary between the two family repos, one
+route family per repo, and never both in one repo.**
 
-| Kosakata   | Repo yang melayani                                              | Bentuknya                                                                      |
+| Vocabulary | Serving repo                                                    | Its form                                                                       |
 | ---------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `/blog/**` | [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | `/blog/{tenantCode}/**` — path-scoped, ADR-0009, dengan `tenantCode` eksplisit |
-| `/news/**` | [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | sebuah tab bernama `news` yang menyatakan `urutanSeksi: "terbaru"` (ADR-0033)  |
+| `/blog/**` | [`ahliweb/awcms`](https://github.com/ahliweb/awcms)             | `/blog/{tenantCode}/**` — path-scoped, ADR-0009, with an explicit `tenantCode` |
+| `/news/**` | [`ahliweb/awcms-astro`](https://github.com/ahliweb/awcms-astro) | a tab named `news` that declares `urutanSeksi: "terbaru"` (ADR-0033)           |
 
-### 1. Satu modul, dua kosakata — bukan dua model konten
+### 1. One module, two vocabularies — not two content models
 
-Keduanya dilayani **modul `blog_content` yang sama** di repo ini. `awcms-astro`
-tidak punya basis data dan tidak menyimpan satu pun post; ia membaca
-`GET /api/v1/blog/posts` lewat kontrak yang dibekukan
-[ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) dan membangun
-halamannya secara statis.
+Both are served by the **same `blog_content` module** in this repo. `awcms-astro`
+has no database and stores not one post; it reads `GET /api/v1/blog/posts`
+through the contract frozen by
+[ADR-0065](0065-awcms-astro-consumer-contract-is-frozen.md) and builds its pages
+statically.
 
-Ini yang membuat pembelahan ini murah, dan ini juga syaratnya: **kosakata yang
-dibelah adalah URL, bukan kepemilikan konten.** Sebuah post punya satu sumber
-kebenaran, satu rangkaian layar pengelola (`/admin/blog*` di sini), dan satu
-kontrak. Yang berbeda hanya alamat tempat pembaca anonim menemukannya.
+This is what makes the split cheap, and it is also its condition: **what is split
+is the URL, not content ownership.** A post has one source of truth, one set of
+management screens (`/admin/blog*` here), and one contract. All that differs is
+the address at which an anonymous reader finds it.
 
-Aturan cermin [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
-§4 karena itu terpenuhi tanpa pekerjaan tambahan: tidak ada kemampuan yang hanya
-ada di sana, karena tidak ada kemampuan yang **pindah** ke sana — yang pindah
-adalah rendering halamannya.
+The mirror rule of [ADR-0070](0070-peran-keluarga-awcms-astro-memikul-publik-dan-admin-user.md)
+§4 is therefore satisfied with no extra work: no capability exists only over
+there, because no capability **moved** over there — what moved is the rendering
+of the pages.
 
-### 2. `/news` berhenti menjadi kata yang dipesan di repo ini
+### 2. `/news` stops being a reserved word in this repo
 
-ADR-0059 §Konsekuensi mencatat "`/news` menjadi kata yang dipesan pada host mana
-pun". Itu dicabut. Setelah rute-rutenya dihapus (§4), `/news` di repo ini adalah
-path biasa seperti path lain yang tidak dilayani.
+ADR-0059 §Consequences records that "`/news` becomes a reserved word on any
+host". That is revoked. Once its routes are deleted (§4), `/news` in this repo is
+an ordinary path like any other path that is not served.
 
-Sebaliknya di `awcms-astro`, `news` **tetap bukan** kata yang dipesan: ia slug
-tab yang dipilih situs. Sebuah situs yang tidak punya berita tidak punya `/news`,
-dan tidak perlu menjelaskan kenapa. Itu perbedaan yang disengaja antara aturan
-ini dan bentuk yang ADR-0059 pakai.
+Conversely, in `awcms-astro`, `news` **is still not** a reserved word: it is a
+tab slug chosen by the site. A site with no news has no `/news`, and needs no
+explanation why. That is a deliberate difference between this rule and the form
+ADR-0059 used.
 
-### 3. Yang TETAP berlaku dari ADR-0059, dinyatakan supaya tidak ikut tercabut
+### 3. What STILL holds from ADR-0059, stated so it is not revoked along with it
 
-Men-supersede sebuah ADR mencabut seluruh keputusannya. Dua di antaranya justru
-harus bertahan, jadi keduanya dinyatakan ulang di sini alih-alih dibiarkan gugur
-diam-diam:
+Superseding an ADR revokes all of its decisions. Two of them must in fact
+survive, so both are restated here instead of being let fall silently:
 
-- **Invarian "jangan pernah mengiklankan URL yang tidak kita layani"** (§C).
-  Tabel base path SEO menyusut menjadi dua baris — `legacyTenantRouteEnabled`
-  `true` → `/blog/{tenantCode}`, `false` → **nol provider** — tetapi barisan
-  terakhirnya, yang menjadi inti aturannya, tidak berubah: tenant yang mematikan
-  permukaan publiknya mendapat sitemap kosong, bukan sitemap berisi tautan yang
-  pasti 404. Invarian itu ditegakkan test, dan test-nya tetap.
-- **Penolakan mendeklarasikan surface cache tepi tanpa kunci per-host** (§E).
-  Alasannya tidak pernah tentang `/news`: mendeklarasikan surface host-resolved
-  sebelum kunci per-host diverifikasi di VCL adalah cara paling langsung memasang
-  kebocoran lintas-tenant di cache bersama. Itu tetap benar untuk rute discovery
-  root, yang tidak tersentuh ADR ini.
+- **The invariant "never advertise a URL we do not serve"** (§C). The SEO base
+  path table shrinks to two rows — `legacyTenantRouteEnabled` `true` →
+  `/blog/{tenantCode}`, `false` → **zero providers** — but its last row, which is
+  the core of the rule, does not change: a tenant that disables its public
+  surface gets an empty sitemap, not a sitemap full of links that are certain to 404. That invariant is test-enforced, and its test stays.
+- **The refusal to declare an edge cache surface without a per-host key** (§E).
+  The reason was never about `/news`: declaring a host-resolved surface before
+  the per-host key is verified in the VCL is the most direct way to install a
+  cross-tenant leak in a shared cache. That remains true for the root discovery
+  routes, which this ADR does not touch.
 
-Yang **tidak** bertahan: keluarga rutenya sendiri (§A), gerbang
-`withHostResolvedBlogTenant` yang hanya melayaninya (§B), saklar
-`publicRouteMode`, dan deklarasi `"/news"` pada `blog_content.api.routes` (§D).
+What does **not** survive: the route family itself (§A), the
+`withHostResolvedBlogTenant` gate that only served it (§B), the `publicRouteMode`
+switch, and the `"/news"` declaration on `blog_content.api.routes` (§D).
 
-### 4. Rute `/news/**` di repo ini dihapus
+### 4. The `/news/**` routes in this repo are deleted
 
-- **Status pelaksanaan §4:** SUDAH DILAKSANAKAN
+- **§4 implementation status:** ALREADY CARRIED OUT
 
-Saat ADR ini mendarat, empat rute masih ada di `src/pages/news/` dan
-`publicRouteMode` masih `domain_default` sebagai nilai bawaan modul — artinya
-`/news/**` **menyala** untuk setiap tenant yang tidak mematikannya. Aturan di
-atas berlaku sejak hari itu; kodenya menyusul di PR tersendiri, dan urutan itu
-dipilih: menghapus keluarga rute yang menyala secara bawaan adalah migrasi URL,
-dan migrasi URL yang digabungkan dengan keputusan yang melahirkannya menghasilkan
-satu PR yang tidak bisa di-review sebagai keduanya.
+When this ADR landed, four routes still existed in `src/pages/news/` and
+`publicRouteMode` was still `domain_default` as the module default — meaning
+`/news/**` was **on** for every tenant that did not turn it off. The rule above
+applies from that day; the code followed in its own PR, and that ordering was
+chosen: deleting a route family that is on by default is a URL migration, and a
+URL migration merged with the decision that produced it yields one PR that cannot
+be reviewed as either.
 
-Jendela itu kini tertutup. Yang mendarat:
+That window is now closed. What landed:
 
-1. Empat berkas rute dihapus. `src/pages/news/` tidak ada lagi.
-2. **301 dari `/news/**` ke `/blog/{tenantCode}/**`**, bukan 404 — URL yang sudah
-   diiklankan sitemap dan feed repo ini tidak mati tanpa penerus. Ia hidup di
-   `seo_distribution` sebagai **strategi 1 yang dibalik**: berkas yang dulu
-   memetakan `/blog/{tenantCode}` → `/news` (`domain/legacy-blog-redirect.ts`)
-   diganti `domain/retired-news-redirect.ts` yang memetakan arah sebaliknya.
-   Redirect ini **tidak** ber-policy: keluarga rutenya hilang untuk semua orang,
-   jadi tidak ada yang bisa memilih untuk tetap dilayani. Ia juga sengaja tidak
-   digerbangi `seo_distribution` yang aktif — menggerbanginya berarti tenant yang
-   mematikan modul itu justru yang URL terbitnya mati.
-3. **Satu syarat tetap berlaku, dan ia menjaga invarian §3**: tenant dengan
-   `legacyTenantRouteEnabled: false` tidak mendapat redirect. Ia sudah mematikan
-   seluruh permukaan konten publiknya, jadi 301 ke `/blog/{tenantCode}` akan
-   menyerahkan 404 yang pasti. "Jangan pernah mengiklankan URL yang tidak kita
-   layani" berlaku untuk tujuan redirect, bukan hanya untuk entri sitemap.
-4. **Auto-redirect legacy `/blog/{tenantCode}` → `/news` dimatikan** bersama
-   berkasnya. Kolom `legacy_blog_redirect_enabled` (`sql/060`) **tidak** dihapus —
-   migrasi terapan immutable, dan permukaan API-nya sudah terbit — tetapi tidak
-   ada lagi yang membacanya. Ia kini benar-benar inert, dan untuk alasan yang
-   diputuskan alih-alih kebetulan.
-5. Tabel §C menciut menjadi dua baris; `publicRouteMode`,
-   `withHostResolvedBlogTenant`, dan `padUnresolvedHostRouteLatency` dicabut;
-   `"/news"` keluar dari `blog_content.api.routes`.
+1. Four route files deleted. `src/pages/news/` no longer exists.
+2. **301 from `/news/**` to `/blog/{tenantCode}/**`**, not 404 — URLs already
+   advertised by this repo's sitemap and feeds do not die without a successor. It
+   lives in `seo_distribution` as **strategy 1 inverted**: the file that used to
+   map `/blog/{tenantCode}` → `/news` (`domain/legacy-blog-redirect.ts`) is
+   replaced by `domain/retired-news-redirect.ts`, which maps the opposite
+   direction. This redirect has **no** policy: its route family is gone for
+   everyone, so nobody can opt to keep being served. It is also deliberately not
+   gated on `seo_distribution` being active — gating it would mean the tenants
+   that disable that module are exactly the ones whose published URLs die.
+3. **One condition still applies, and it upholds the §3 invariant**: a tenant
+   with `legacyTenantRouteEnabled: false` gets no redirect. It has already turned
+   off its entire public content surface, so a 301 to `/blog/{tenantCode}` would
+   hand over a certain 404. "Never advertise a URL we do not serve" applies to
+   redirect targets, not just to sitemap entries.
+4. **The legacy auto-redirect `/blog/{tenantCode}` → `/news` is turned off**
+   along with its file. The `legacy_blog_redirect_enabled` column (`sql/060`) is
+   **not** dropped — applied migrations are immutable, and its API surface is
+   already published — but nothing reads it any more. It is now genuinely inert,
+   and for a decided rather than an accidental reason.
+5. The §C table shrinks to two rows; `publicRouteMode`,
+   `withHostResolvedBlogTenant`, and `padUnresolvedHostRouteLatency` are revoked;
+   `"/news"` leaves `blog_content.api.routes`.
 
-Penanda di atas bukan formalitas: `tests/url-vocabulary-split.test.ts` mengikatnya
-pada keberadaan `src/pages/news/` **dua arah**, dan ia memang memerah di antara
-penghapusan rute dan pembalikan penanda ini. Aturan tanpa pemeriksa adalah aturan
-yang dilupakan, dan aturan yang menjadwalkan pekerjaan untuk "nanti" adalah yang
-paling sering dilupakan.
+The marker above is not a formality: `tests/url-vocabulary-split.test.ts` binds it
+to the existence of `src/pages/news/` **in both directions**, and it did go red
+between deleting the routes and flipping this marker. A rule without a checker is
+a forgotten rule, and a rule that schedules work for "later" is the one most often
+forgotten.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:**
-  - Pertanyaan "berita situs ini disajikan dari mana" punya satu jawaban yang
-    bisa dibaca dari alamatnya. `/blog/` berarti `awcms`; `/news/` berarti
-    `awcms-astro`. Tidak ada deployment yang perlu memutuskannya lagi.
-  - Premis ADR-0061 §A gugur ke arah yang menguntungkan: `/blog/{tenantCode}`
-    bukan lagi "bentuk warisan yang di-cache sementara bentuk maju tidak", ia
-    kosakata permanen repo ini — dan ia **path-scoped**, yang berarti ia sudah
-    bisa di-cache tepi hari ini. Penangguhan kunci per-host berhenti memblokir
-    permukaan konten repo ini; ia tinggal soal rute discovery.
-  - Satu kelas duplikasi hilang seluruhnya: dua URL untuk satu post, yang
-    ADR-0059 §Konsekuensi terima sebagai "duplikasi terkendali" dengan canonical
-    sebagai penengah. Tidak ada yang perlu ditengahi bila hanya ada satu.
-  - Repo sebelah mendapat kosakata yang cocok dengan mesinnya. `urutanSeksi`
-    (ADR-0033) dan feed per-seksi (ADR-0035) memang ditulis untuk berita; empat
-    rute di sini tidak punya keduanya.
-- **Negatif / trade-off yang diterima:**
-  - **Sebuah deployment yang hanya memakai `awcms` kehilangan URL berita tanpa
-    kode tenant.** `/blog/{tenantCode}/**` selalu membawa `tenantCode` di
-    path-nya, dan itu tidak berubah. Deployment yang menginginkan URL bersih
-    memasang `awcms-astro` di depannya — yang memang bentuk yang keluarga ini
-    tuju sejak ADR-0045.
-  - **Ada jendela antara aturan ini dan implementasinya** ketika repo ini masih
-    melayani `/news/**` yang aturannya sendiri larang. Jendela itu dinyatakan
-    (§4) dan digerbangi, bukan dibiarkan diketahui pembaca yang teliti saja.
-  - **Migrasi URL adalah biaya SEO nyata**, dan 301 pada butir §4.2 adalah cara
-    membayarnya, bukan cara menghindarinya.
-- **Netral:**
-  - **Nol perubahan kode pada PR ini.** Modul `blog_content`, kontrak ADR-0065,
-    seluruh layar admin, dan setiap izin tetap persis seperti sebelumnya.
-  - `awcms-astro` tidak wajib memasang tab `news`. Aturan ini menyatakan **di
-    mana** `/news/**` boleh ada, bukan bahwa setiap situs harus punya berita.
+- **Positive:**
+  - The question "where is this site's news served from" has one answer readable
+    from the address itself. `/blog/` means `awcms`; `/news/` means
+    `awcms-astro`. No deployment needs to decide it again.
+  - The ADR-0061 §A premise falls in a favourable direction:
+    `/blog/{tenantCode}` is no longer "the legacy form that is cached while the
+    forward form is not", it is this repo's permanent vocabulary — and it is
+    **path-scoped**, which means it is already edge-cacheable today. The per-host
+    key deferral stops blocking this repo's content surface; it is now only about
+    the discovery routes.
+  - One class of duplication disappears entirely: two URLs for one post, which
+    ADR-0059 §Consequences accepted as "controlled duplication" with canonical as
+    the arbiter. There is nothing to arbitrate when there is only one.
+  - The neighbouring repo gets the vocabulary that matches its engine.
+    `urutanSeksi` (ADR-0033) and per-section feeds (ADR-0035) were written for
+    news; the four routes here have neither.
+- **Negative / accepted trade-offs:**
+  - **A deployment that uses only `awcms` loses news URLs without a tenant
+    code.** `/blog/{tenantCode}/**` always carries `tenantCode` in its path, and
+    that does not change. A deployment that wants clean URLs puts `awcms-astro`
+    in front of it — which is precisely the shape this family has been aiming at
+    since ADR-0045.
+  - **There is a window between this rule and its implementation** during which
+    this repo still served the `/news/**` that its own rule forbids. That window
+    is stated (§4) and gated, not left to be discovered only by an attentive
+    reader.
+  - **A URL migration is a real SEO cost**, and the 301 in item §4.2 is how it is
+    paid, not how it is avoided.
+- **Neutral:**
+  - **Zero code changes in this PR.** The `blog_content` module, the ADR-0065
+    contract, every admin screen, and every permission stay exactly as before.
+  - `awcms-astro` is not obliged to install a `news` tab. This rule states
+    **where** `/news/**` may exist, not that every site must have news.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Membiarkan keduanya melayani `/news/**`, dibedakan per-deployment** —
-  ditolak. Itu memindahkan keputusan dari ADR ke berkas konfigurasi setiap
-  deployment, dan bentuk kegagalannya adalah dua tim yang sama-sama benar
-  menunjuk dokumen yang berbeda. Kosakata URL adalah antarmuka publik keluarga
-  ini; ia pantas diputuskan sekali.
-- **Memindahkan `/blog/{tenantCode}` ke `awcms-astro` juga**, meninggalkan repo
-  ini tanpa permukaan konten publik — ditolak. Repo ini butuh permukaan publik
-  yang bisa berdiri sendiri: sebuah deployment `awcms` tunggal harus tetap bisa
-  menerbitkan, dan `/blog/{tenantCode}` sudah melakukannya sejak ADR-0009 dengan
-  cache tepi yang sudah bekerja.
-- **Menghapus `/news/**` dalam PR yang sama dengan ADR ini** — ditolak, dan
-  alasannya ditulis di §4: keputusan dan migrasi URL yang dilahirkannya
-  di-review dengan pertanyaan yang berbeda. Menggabungkannya membuat salah
-  satunya lolos tanpa dibaca.
-- **Menandai ADR ini `Accepted (belum diimplementasikan)`** — tidak mungkin
-  secara mekanis, dan itu informatif. Gerbang `tests/adr-implementation-status.test.ts`
-  mengikat kualifikasi itu pada **keberadaan** artefak yang dijanjikan: artefak
-  ada → status wajib `Accepted` polos. ADR ini menjanjikan sebuah **penghapusan**,
-  jadi arahnya terbalik, dan aturan (d) gerbang itu melarang kualifikasi dipakai
-  di luar petanya. Karena itu §4 mendapat gerbangnya sendiri, yang menegakkan
-  hal yang sama untuk bentuk janji yang berlawanan.
-- **Men-supersede ADR-0061 juga**, karena premis §A-nya gugur — ditolak.
-  Analisisnya tetap benar untuk rute discovery root, yang adalah mayoritas
-  isinya; yang gugur hanya framing "warisan versus maju" untuk keluarga konten.
-  Itu dicatat sebagai banner di sana, bukan sebagai pencabutan.
+- **Let both serve `/news/**`, differentiated per deployment** — rejected. That
+  moves the decision out of an ADR and into every deployment's configuration
+  file, and its failure mode is two teams both being right while pointing at
+  different documents. The URL vocabulary is this family's public interface; it
+  deserves to be decided once.
+- **Move `/blog/{tenantCode}` to `awcms-astro` too**, leaving this repo with no
+  public content surface — rejected. This repo needs a public surface that can
+  stand on its own: a single `awcms` deployment must still be able to publish,
+  and `/blog/{tenantCode}` has done that since ADR-0009 with edge caching that
+  already works.
+- **Delete `/news/**` in the same PR as this ADR** — rejected, and the reason is
+  written in §4: a decision and the URL migration it produces are reviewed with
+  different questions. Merging them lets one of the two through unread.
+- **Marking this ADR `Accepted (not yet implemented)`** — mechanically
+  impossible, and that is informative. The `tests/adr-implementation-status.test.ts`
+  gate binds that qualifier to the **existence** of the promised artefact:
+  artefact exists → status must be plain `Accepted`. This ADR promises a
+  **deletion**, so its direction is inverted, and rule (d) of that gate forbids
+  using the qualifier outside its map. That is why §4 gets its own gate, which
+  enforces the same thing for the opposite shape of promise.
+- **Superseding ADR-0061 as well**, since its §A premise falls — rejected. Its
+  analysis remains correct for the root discovery routes, which are the majority
+  of its content; what falls is only the "legacy versus forward" framing for the
+  content family. That is recorded as a banner there, not as a revocation.

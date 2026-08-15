@@ -1,135 +1,136 @@
-# ADR-0073 — `suspended` adalah status LAYANAN, bukan status login
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0073-suspension-is-a-service-state-not-a-login-state.id.md)
+
+# ADR-0073 — `suspended` is a SERVICE state, not a login state
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-09
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** Issue #429 (Gelombang 0 dari #423), [`../awcms/program-model-keanggotaan-2026-08-09.md`](../awcms/program-model-keanggotaan-2026-08-09.md), [ADR-0053](0053-platform-scoped-permissions.md) (gerbang platform-scope + prinsip deklarasi sisi-kode), [ADR-0054](0054-tenant-provisioning.md) §2 (kenapa tindakan lintas-tenant platform-scoped), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (kredensial mesin berumur sampai setahun)
+- **Date:** 2026-08-09
+- **Decision makers:** @ahliweb
+- **Related:** Issue #429 (Wave 0 of #423), [`../awcms/program-model-keanggotaan-2026-08-09.md`](../awcms/program-model-keanggotaan-2026-08-09.md), [ADR-0053](0053-platform-scoped-permissions.md) (platform-scope gate + the code-side declaration principle), [ADR-0054](0054-tenant-provisioning.md) §2 (why cross-tenant actions are platform-scoped), [ADR-0049](0049-machine-credentials-and-session-introspection.md) (machine credentials live for up to a year)
 
-## Konteks
+## Context
 
-### 1. Enum yang tidak pernah ditegakkan
+### 1. An enum that was never enforced
 
-`awcms_tenants.status` menerima `'suspended'` sejak `sql/002`. Nilai itu dibaca
-di **empat** tempat — `identity-access/domain/login-policy.ts`,
-`application/password-reset.ts`, `application/self-registration.ts`, dan
-`pages/api/v1/auth/sso/[providerKey]/start.ts` — ditambah resolver host publik
-dan resolver tenant platform.
+`awcms_tenants.status` has accepted `'suspended'` since `sql/002`. That value is
+read in **four** places — `identity-access/domain/login-policy.ts`,
+`application/password-reset.ts`, `application/self-registration.ts`, and
+`pages/api/v1/auth/sso/[providerKey]/start.ts` — plus the public host resolver
+and the platform tenant resolver.
 
-`authorizeInTransaction` **tidak pernah membacanya**.
+`authorizeInTransaction` **never reads it**.
 
-### 2. Asimetrinya mengarah ke sisi yang salah
+### 2. The asymmetry points the wrong way
 
-| Permukaan                        | Setelah suspend, sebelum ADR ini                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Situs publik tenant              | **mati seketika** (resolver host menuntut `status = 'active'`)                                   |
-| Login baru                       | ditolak                                                                                          |
-| **Sesi admin yang sudah terbit** | **penuh akses sampai kedaluwarsa sendiri**                                                       |
-| **Machine credential**           | **tidak tersentuh** — jalurnya tak pernah menyentuh `awcms_tenants`, dan umurnya sampai 365 hari |
+| Surface                           | After suspension, before this ADR                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| The tenant's public site          | **dead instantly** (the host resolver demands `status = 'active'`)                             |
+| New logins                        | rejected                                                                                       |
+| **Already-issued admin sessions** | **full access until they expire on their own**                                                 |
+| **Machine credentials**           | **untouched** — their path never touches `awcms_tenants`, and their lifetime is up to 365 days |
 
-Pelanggan yang ditangguhkan kehilangan hal yang **dilihat pengunjungnya** dan
-mempertahankan hal yang **bisa mengubah datanya**. Untuk penangguhan karena
-penyalahgunaan atau perintah hukum, "situsnya kami matikan tetapi stafnya masih
-bisa menulis lewat API" bukan penangguhan.
+A suspended customer loses the thing **their visitors see** and keeps the thing
+that **can change their data**. For a suspension due to abuse or a legal order,
+"we took the site down but the staff can still write through the API" is not a
+suspension.
 
-### 3. Kenapa ini murah
+### 3. Why this is cheap
 
-`resolveTenantContext` **tidak** membaca `awcms_tenants` — asumsi awal issue-nya
-keliru di titik itu. Tetapi `awcms_tenants` adalah tabel akar yang sengaja
-RLS-free (ADR-0003), jadi ia bisa di-JOIN pada query tenant-user yang **sudah**
-berjalan. Statusnya karena itu ikut terbawa **tanpa round-trip tambahan**.
+`resolveTenantContext` does **not** read `awcms_tenants` — the issue's initial
+assumption was wrong on that point. But `awcms_tenants` is a root table that is
+deliberately RLS-free (ADR-0003), so it can be JOINed onto the tenant-user query
+that **already** runs. Its status therefore comes along **with no extra
+round-trip**.
 
-### 4. Gerbang yang bisa dibatalkan satu baris UPDATE bukan gerbang
+### 4. A gate that one UPDATE statement can cancel is not a gate
 
-Prinsip yang sama sudah ditulis ADR-0053 §3 untuk gerbang platform-scope: kolom
-basis data memutuskan **siapa yang diberi**, kode memutuskan **apakah gerbangnya
-ditanyakan**. Allow-list "apa yang masih boleh saat ditangguhkan" karena itu
-adalah deklarasi kode, bukan setting.
+The same principle is already written down in ADR-0053 §3 for the platform-scope
+gate: the database column decides **who is granted**, the code decides **whether
+the gate is asked at all**. The allow-list of "what is still permitted while
+suspended" is therefore a code declaration, not a setting.
 
-## Keputusan
+## Decision
 
-Kami memutuskan untuk:
+We decided to:
 
-**A. Menegakkan status layanan tenant di chokepoint**, untuk sesi **dan**
-machine credential, dengan `403 TENANT_SUSPENDED` dan
-`matchedPolicy: "tenant_suspended"`. Diputuskan **sebelum** permission dicari —
-alasan yang sama dipakai penolakan read-only machine credential tepat di
-bawahnya: jawabannya tidak boleh bisa bergantung pada apa yang dipegang aktor.
+**A. Enforce tenant service status at the chokepoint**, for sessions **and**
+machine credentials, with `403 TENANT_SUSPENDED` and
+`matchedPolicy: "tenant_suspended"`. Decided **before** permissions are looked up
+— the same reason the read-only machine credential refusal directly below it uses:
+the answer must not be able to depend on what the actor holds.
 
-Tidak ada sapuan pencabutan sesi, dan tidak diperlukan: pemeriksaannya pada
-**tenant**, bukan pada kredensial, jadi setiap sesi hidup dan setiap machine
-credential ditolak sejak permintaan berikutnya.
+There is no session revocation sweep, and none is needed: the check is on the
+**tenant**, not on the credential, so every live session and every machine
+credential is refused from the next request onward.
 
-**B. Memperlakukan `inactive` sama dengan `suspended`.** `sql/002` menerima
-`active | inactive | suspended`; jalur login sudah menolak apa pun yang bukan
-`active`. Menegakkan satu status dan membiarkan satu lagi dilayani akan
-memperkenalkan ulang asimetri §2 dalam bentuk yang lebih kecil.
+**B. Treat `inactive` the same as `suspended`.** `sql/002` accepts
+`active | inactive | suspended`; the login path already rejects anything that is
+not `active`. Enforcing one status while letting the other be served would
+reintroduce the §2 asymmetry in a smaller form.
 
-**C. Memblokir shell admin untuk tenant yang layanannya berhenti**, di
-`resolveSsrContext`. Satu baris di sana mencakup ke-32 layar, karena
-`src/middleware.ts` merutekan setiap `/admin/*` melaluinya. Tanpa ini, penegakan
-di §A menghentikan API dan meninggalkan seluruh UI admin hidup — yaitu sebagian
-besar dari yang dilihat operator.
+**C. Block the admin shell for tenants whose service has stopped**, in
+`resolveSsrContext`. One line there covers all 32 screens, because
+`src/middleware.ts` routes every `/admin/*` through it. Without this, the
+enforcement in §A stops the API and leaves the entire admin UI alive — which is
+most of what an operator sees.
 
-**D. Allow-list berbasis PERMISSION KEY, dideklarasikan di kode.** Unitnya kunci
-penuh, bukan `AccessAction`: mengizinkan `read` akan membuka setiap permukaan
-baca di setiap modul, yang adalah sebagian besar produk. Melebarkan daftar itu
-**butuh ADR**, disiplin yang sama dibawa `MACHINE_CREDENTIAL_ALLOWED_ACTIONS`.
+**D. A PERMISSION KEY based allow-list, declared in code.** The unit is the full
+key, not an `AccessAction`: allowing `read` would open every read surface in every
+module, which is most of the product. Widening that list **requires an ADR**, the
+same discipline `MACHINE_CREDENTIAL_ALLOWED_ACTIONS` carries.
 
-**E. Tenant PLATFORM dikecualikan, dua lapis.** Kontrol yang bisa merusak
-remedinya sendiri bukan kontrol.
+**E. The PLATFORM tenant is excluded, in two layers.** A control that can break
+its own remedy is not a control.
 
-Ini menuntut resolver baru. `resolvePlatformTenant` sengaja menuntut
-`status = 'active'` supaya "tak ada yang jadi platform" tidak pernah terbaca
-"semua orang jadi platform" — benar untuk **otoritas**, dan salah untuk
-pengecualian ini: platform tenant yang ter-suspend akan membuat resolvernya
-mengembalikan `null`, pengecualiannya bernilai false, dan operatornya ditolak
-untuk **setiap** aksi termasuk yang akan mengangkat penangguhan itu.
-`resolvePlatformTenantIdIgnoringStatus` menjawab pertanyaan yang berbeda —
-"tenant mana yang memegang otoritas platform" — dan tidak memberi apa pun:
-permission platform-scoped tetap lewat `resolvePlatformTenant` dan cek aktifnya,
-tak berubah.
+This demands a new resolver. `resolvePlatformTenant` deliberately demands
+`status = 'active'` so that "nobody is the platform" is never read as "everybody
+is the platform" — correct for **authority**, and wrong for this exclusion: a
+suspended platform tenant would make its resolver return `null`, the exclusion
+would evaluate false, and the operator would be denied **every** action including
+the one that would lift that suspension.
+`resolvePlatformTenantIdIgnoringStatus` answers a different question — "which
+tenant holds platform authority" — and grants nothing: platform-scoped permissions
+still go through `resolvePlatformTenant` and its active check, unchanged.
 
-Lapis kedua: endpoint `suspend` **menolak** menangguhkan tenant platform dengan
-`409 PLATFORM_TENANT_PROTECTED` — pesan yang bisa dipahami, alih-alih pintu
-terkunci.
+The second layer: the `suspend` endpoint **refuses** to suspend the platform
+tenant with `409 PLATFORM_TENANT_PROTECTED` — a comprehensible message instead of
+a locked door.
 
-**F. `disable` dan `restore` adalah DUA permission**, keduanya `scope: platform`.
-Saat insiden Anda menginginkan orang yang bisa mengembalikan pelanggan **tanpa**
-bisa memutus pelanggan — pemisahan yang sama sudah ditarik `machine_credentials`
-antara `create` dan `revoke`.
+**F. `disable` and `restore` are TWO permissions**, both `scope: platform`. During
+an incident you want someone who can bring a customer back **without** being able
+to cut a customer off — the same split `machine_credentials` already drew between
+`create` and `revoke`.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** penangguhan menjadi nyata di seluruh permukaan; machine
-  credential berumur setahun berhenti menjadi lubang; transisinya tercatat
-  append-only di jejak audit tenant **target**, sehingga pelanggan bisa melihat
-  layanannya dihentikan, oleh siapa, dan kenapa.
-- **Negatif / trade-off:** blok SSR bersifat semua-atau-tidak, tidak seperti
-  allow-list per-permission di chokepoint. Hari ini tidak ada layar yang
-  dibutuhkan tenant tertangguh (penagihan datang di Gelombang 5); ketika ada,
-  cabang itu harus menumbuhkan allow-list yang sama. Dicatat di kodenya supaya
-  ditemukan saat itu.
-- **Negatif:** tenant tertangguh yang membuka `/admin` dialihkan ke `/login`,
-  yang lalu juga menolaknya. Pesannya buruk. Ia tetap jauh lebih baik daripada
-  akses admin penuh, dan memperbaikinya adalah pekerjaan layar.
-- **Netral:** dua permission baru mencapai tenant SETUP lewat migrasi. Deployment
-  yang tenant platform-nya bukan tenant setup wajib menjalankan
-  `bun run identity-access:permissions:backfill` — jebakan yang sudah tercatat.
-- **Netral:** tombolnya belum ada. `/admin/tenants` sudah mendaftar setiap tenant
-  beserta statusnya, jadi itu suntingan layar, bukan permukaan baru; kedua kunci
-  masuk `NOT_YET_SCREENED` yang hanya boleh menyusut.
+- **Positive:** suspension becomes real across every surface; year-long machine
+  credentials stop being a hole; the transition is recorded append-only in the
+  **target** tenant's audit trail, so the customer can see their service being
+  stopped, by whom, and why.
+- **Negative / trade-off:** the SSR block is all-or-nothing, unlike the
+  per-permission allow-list at the chokepoint. Today no screen is needed by a
+  suspended tenant (billing arrives in Wave 5); when one is, that branch will have
+  to grow the same allow-list. Noted in the code so it is found at that moment.
+- **Negative:** a suspended tenant opening `/admin` is redirected to `/login`,
+  which then also rejects them. The messaging is bad. It is still far better than
+  full admin access, and fixing it is screen work.
+- **Neutral:** two new permissions reach the SETUP tenant through the migration. A
+  deployment whose platform tenant is not the setup tenant must run
+  `bun run identity-access:permissions:backfill` — an already-recorded pitfall.
+- **Neutral:** the button does not exist yet. `/admin/tenants` already lists every
+  tenant along with its status, so this is a screen edit, not a new surface; both
+  keys go into `NOT_YET_SCREENED`, which is only allowed to shrink.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Mencabut semua sesi saat suspend, alih-alih memeriksa di chokepoint** —
-  ditolak. Ia tidak menyentuh machine credential sama sekali, dan sebuah sapuan
-  adalah kejadian sekali yang bisa dilewati kredensial yang terbit setelahnya.
-  Memeriksa tenant menutup keduanya, selamanya, tanpa pekerjaan latar.
-- **Menegakkan hanya `suspended`, membiarkan `inactive`** — ditolak, §B.
-- **Allow-list berbasis `AccessAction`** — ditolak, §D: terlalu kasar sampai tak
-  bermakna.
-- **Allow-list sebagai kolom/pengaturan** — ditolak, §4. Penangguhan yang bisa
-  dibatalkan diam-diam oleh sebuah baris bukan penangguhan.
-- **Satu permission untuk suspend dan restore** — ditolak, §F.
-- **Mengizinkan penangguhan tenant platform, dengan peringatan** — ditolak, §E.
-  Tidak ada pemulihan in-band, dan sebuah peringatan bukan kontrol.
+- **Revoking all sessions on suspend instead of checking at the chokepoint** —
+  rejected. It does not touch machine credentials at all, and a sweep is a one-off
+  event that any credential issued afterwards slips past. Checking the tenant
+  closes both, forever, with no background work.
+- **Enforcing only `suspended`, leaving `inactive`** — rejected, §B.
+- **An `AccessAction` based allow-list** — rejected, §D: so coarse as to be
+  meaningless.
+- **The allow-list as a column/setting** — rejected, §4. A suspension that a row
+  can silently cancel is not a suspension.
+- **One permission for both suspend and restore** — rejected, §F.
+- **Allowing the platform tenant to be suspended, with a warning** — rejected, §E.
+  There is no in-band recovery, and a warning is not a control.

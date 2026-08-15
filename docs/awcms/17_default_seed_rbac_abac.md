@@ -1,14 +1,16 @@
-# Bagian 17 — Default Seed, RBAC, dan ABAC Policy
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](17_default_seed_rbac_abac.id.md)
 
-> **Status dokumen.** Repo `awcms` baru pada tahap fondasi ulang ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — belum ada modul ERP yang diimplementasikan. Dokumen ini adalah **desain target** untuk mekanisme RBAC/ABAC dan seed default yang akan dibangun dibangun di sini (ADR-0055 §1); kode `awcms-mini` boleh dibaca sebagai referensi sejarah, bukan sebagai standar, diadaptasi untuk skop **ERP + integrasi bisnis** (finance/accounting, inventory/warehouse, procurement, manufaktur, HR/payroll, serta integrasi payment gateway, marketplace, pajak/Coretax, logistik). Belum ada baris kode/migrasi yang mengimplementasikan role, permission, atau policy di bawah ini — semua **rencana untuk diverifikasi saat modul terkait benar-benar dibangun**, bukan klaim status berjalan.
+# Part 17 — Default Seed, RBAC, and ABAC Policy
 
-## Tujuan
+> **Document status.** The `awcms` repo is only at the foundation-rebuild stage ([ADR-0001](../adr/0001-rebuild-on-awcms-foundation-erp-scope.md)) — no ERP module has been implemented yet. This document is the **target design** for the RBAC/ABAC mechanism and the default seed that will be built here (ADR-0055 §1); the `awcms-mini` code may be read as historical reference, not as the standard, adapted for the **ERP + business integration** scope (finance/accounting, inventory/warehouse, procurement, manufacturing, HR/payroll, plus payment gateway, marketplace, tax/Coretax and logistics integrations). There is not yet a single line of code/migration implementing the roles, permissions, or policies below — everything here is a **plan to be verified when the relevant module is actually built**, not a claim about a running status.
 
-Dokumen ini melengkapi data awal yang diperlukan agar **Setup Wizard** dan **RBAC/ABAC** dapat diimplementasikan di awcms: registry module/activity, daftar permission, matriks role → permission, ABAC default policy, dan seed default. Tanpa ini, akses tidak dapat dievaluasi secara konkret begitu modul-modul ERP mulai dikerjakan.
+## Purpose
 
-Terkait: `03_srs_detail_per_modul.md` (aturan akses, belum ditulis — akan ditambahkan bertahap mengikuti modul yang dibangun), `10_template_kode_coding_standard.md` (ABAC guard, belum ditulis).
+This document supplies the initial data needed so that the **Setup Wizard** and **RBAC/ABAC** can be implemented in awcms: the module/activity registry, the permission list, the role → permission matrix, the ABAC default policy, and the default seed. Without it, access cannot be evaluated concretely once the ERP modules start being built.
 
-## Model akses
+Related: `03_srs_detail_per_modul.md` (access rules, not written yet — to be added incrementally as modules are built), `10_template_kode_coding_standard.md` (ABAC guard, not written yet).
+
+## Access model
 
 ```mermaid
 flowchart LR
@@ -20,19 +22,19 @@ flowchart LR
   A --> Eval
   Eval --> D{allow?}
   D -->|default deny / deny overrides| Deny[ACCESS_DENIED + decision log]
-  D -->|allow| Ok[Lanjut]
+  D -->|allow| Ok[Continue]
 ```
 
-- **RBAC** memberi baseline permission per role.
-- **ABAC** menyaring lebih lanjut berdasarkan atribut (office/plant scope, kepemilikan resource, environment) dengan **default deny** dan **deny overrides allow**.
+- **RBAC** gives the baseline permission set per role.
+- **ABAC** filters further on attributes (office/plant scope, resource ownership, environment) with **default deny** and **deny overrides allow**.
 
-Mekanisme evaluator ini (default deny, deny overrides allow, `module_key.activity_code.action`) adalah pola generik yang diwarisi langsung dari base awcms-mini — reusable apa adanya. Yang berubah untuk skop ERP adalah **daftar module/activity** dan **daftar role**, karena domain bisnisnya finance/inventory/procurement/manufaktur/HR alih-alih retail/POS.
+This evaluator mechanism (default deny, deny overrides allow, `module_key.activity_code.action`) is a generic pattern inherited directly from the awcms-mini base — reusable as is. What changes for the ERP scope is the **module/activity list** and the **role list**, because the business domain is finance/inventory/procurement/manufacturing/HR instead of retail/POS.
 
-## Registry module & activity (rencana, skop ERP)
+## Module & activity registry (planned, ERP scope)
 
-`module_key.activity_code` mengidentifikasi kemampuan. Contoh awal yang perlu diseed begitu modul terkait mulai dibangun (akan diperluas/direvisi seiring implementasi nyata — bukan daftar final):
+`module_key.activity_code` identifies a capability. An initial example set that needs seeding once the relevant module starts being built (it will be extended/revised alongside the real implementation — this is not a final list):
 
-| Module key                      | Activity code          | Action tersedia                       |
+| Module key                      | Activity code          | Available actions                     |
 | ------------------------------- | ---------------------- | ------------------------------------- |
 | `tenant_admin`                  | `office_management`    | read, create, update                  |
 | `identity_access`               | `user_management`      | read, create, update, assign          |
@@ -75,31 +77,31 @@ Mekanisme evaluator ini (default deny, deny overrides allow, `module_key.activit
 | `module_management`             | `jobs`                 | read                                  |
 | `module_management`             | `health`               | read, check                           |
 
-## Role default (rencana)
+## Default roles (planned)
 
-Base generik (`tenant_admin`, `identity_access`, dst.) dipertahankan apa adanya dari awcms-mini. Role bisnis diganti dari domain retail ke domain ERP:
+The generic base (`tenant_admin`, `identity_access`, etc.) is kept exactly as it is from awcms-mini. The business roles are swapped from the retail domain to the ERP domain:
 
-| Role                 | Ringkasan akses                                                                          |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| Owner                | Semua module, termasuk approval & go-live                                                |
-| Admin                | Setup, user, master data, laporan, konfigurasi (bukan approval keuangan tertentu)        |
-| Finance Approver     | Approval jurnal, rekonsiliasi bank, approval matrix keuangan; **tanpa** posting langsung |
-| Finance Staff        | Input jurnal, draft rekonsiliasi; **tanpa** approval/post final                          |
-| Procurement Officer  | PR/PO, vendor management; approval PO di atas ambang butuh Finance Approver              |
-| Warehouse Supervisor | Approval transfer stok & cycle count, receiving                                          |
-| Warehouse Staff      | Transfer, receiving, cycle count operasional                                             |
-| Production Planner   | Production order & BOM/routing                                                           |
-| Payroll Admin        | Payroll run, payslip, employee management (akses PII sensitif)                           |
-| Tax Officer          | Pajak & Coretax                                                                          |
-| Integration Operator | Konfigurasi payment gateway/marketplace/logistik/webhook (bukan approval keuangan)       |
-| Business Analyst     | Laporan (read-only)                                                                      |
-| Auditor              | Audit trail & logs read-only                                                             |
+| Role                 | Access summary                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------- |
+| Owner                | Every module, including approval & go-live                                                   |
+| Admin                | Setup, users, master data, reports, configuration (not certain financial approvals)          |
+| Finance Approver     | Journal approval, bank reconciliation, financial approval matrix; **without** direct posting |
+| Finance Staff        | Journal entry, reconciliation drafts; **without** final approval/post                        |
+| Procurement Officer  | PR/PO, vendor management; PO approval above the threshold needs a Finance Approver           |
+| Warehouse Supervisor | Stock transfer & cycle count approval, receiving                                             |
+| Warehouse Staff      | Transfer, receiving, operational cycle count                                                 |
+| Production Planner   | Production order & BOM/routing                                                               |
+| Payroll Admin        | Payroll run, payslip, employee management (sensitive PII access)                             |
+| Tax Officer          | Tax & Coretax                                                                                |
+| Integration Operator | Payment gateway/marketplace/logistics/webhook configuration (not financial approval)         |
+| Business Analyst     | Reports (read-only)                                                                          |
+| Auditor              | Audit trail & logs read-only                                                                 |
 
-## Matriks role → permission (ringkas, rencana)
+## Role → permission matrix (condensed, planned)
 
-Legenda action: R=read, C=create, U=update, P=post, X=cancel/reverse, A=approve, E=export, S=send/sync, G=assign, F=configure, Y=sync, I=enable, D=disable, K=health check.
+Action legend: R=read, C=create, U=update, P=post, X=cancel/reverse, A=approve, E=export, S=send/sync, G=assign, F=configure, Y=sync, I=enable, D=disable, K=health check.
 
-Permission `delete`, `restore`, dan `purge` untuk soft delete tidak tersirat dari `U`; seed harus memberikannya eksplisit per resource dan ABAC tetap default deny untuk archive/restore/purge — pola ini dipertahankan sama dari base awcms-mini.
+The `delete`, `restore`, and `purge` permissions for soft delete are not implied by `U`; the seed must grant them explicitly per resource and ABAC stays default deny for archive/restore/purge — this pattern is kept identical to the awcms-mini base.
 
 | Module.activity                | Owner | Admin | Fin. Approver | Fin. Staff | Procurement | Wh. Supervisor | Wh. Staff | Production | Payroll | Tax | Integration | Analyst | Auditor |
 | ------------------------------ | ----- | ----- | ------------- | ---------- | ----------- | -------------- | --------- | ---------- | ------- | --- | ----------- | ------- | ------- |
@@ -131,76 +133,76 @@ Permission `delete`, `restore`, dan `purge` untuk soft delete tidak tersirat dar
 | workflow.approval              | RA    | R     | RA            | –          | RA          | RA             | –         | RA         | RA      | –   | –           | –       | R       |
 | logs.logs                      | R     | R     | –             | –          | –           | –              | –         | –          | –       | –   | –           | –       | R       |
 
-`*` Approval PO oleh Finance Approver berlaku hanya di atas ambang nominal yang dikonfigurasi ABAC (lihat policy #6 di bawah).
+`*` PO approval by a Finance Approver applies only above the nominal threshold configured in ABAC (see policy #6 below).
 
-## ABAC default policy (rencana)
+## ABAC default policy (planned)
 
-Prinsip: **default deny**, **deny overrides allow**, RLS tetap wajib — dipertahankan sama dari base awcms-mini.
+Principle: **default deny**, **deny overrides allow**, RLS still mandatory — kept identical to the awcms-mini base.
 
-| #   | Policy                      | Efek                                                                                                                           |
-| --- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Default                     | **Deny** semua yang tidak diizinkan eksplisit                                                                                  |
-| 2   | Role allow                  | Allow sesuai matriks role → permission                                                                                         |
-| 3   | Tenant isolation            | Deny bila `resource.tenant_id != context.tenant_id`                                                                            |
-| 4   | Office/plant scope          | Deny bila resource office/plant di luar scope user (kecuali role lintas-office)                                                |
-| 5   | Segregation of duties (SoD) | Deny bila actor yang membuat jurnal/PO juga menjadi approver-nya (pemisahan create vs approve wajib untuk finance/procurement) |
-| 6   | Approval threshold          | Deny approval PO/jurnal di atas ambang nominal tanpa role approval yang sesuai                                                 |
-| 7   | Self-approval               | Deny bila `approver == requester` pada workflow apa pun                                                                        |
-| 8   | Tax/PII masking             | Deny tampilkan tax identity/data payroll (NPWP, NIK, gaji) penuh untuk non-tax/non-payroll role                                |
-| 9   | AI safety                   | Deny AI mengakses raw SQL/mutation/PII/data finansial mentah                                                                   |
-| 10  | Export approval             | Deny Coretax export atau payroll export tanpa approval bila policy aktif                                                       |
-| 11  | Soft delete archive         | Deny `includeDeleted`, `restore`, atau `purge` tanpa permission eksplisit; deny delete untuk posted/append-only entity         |
-| 12  | Webhook integrity           | Deny pemrosesan webhook inbound (payment/marketplace/tax/logistik) tanpa verifikasi signature/HMAC yang valid                  |
-| 13  | Double-posting guard        | Deny posting jurnal/pembayaran duplikat (idempotency key wajib untuk seluruh mutasi finansial high-risk)                       |
+| #   | Policy                      | Effect                                                                                                                                  |
+| --- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Default                     | **Deny** everything not explicitly allowed                                                                                              |
+| 2   | Role allow                  | Allow per the role → permission matrix                                                                                                  |
+| 3   | Tenant isolation            | Deny when `resource.tenant_id != context.tenant_id`                                                                                     |
+| 4   | Office/plant scope          | Deny when the resource's office/plant is outside the user's scope (except cross-office roles)                                           |
+| 5   | Segregation of duties (SoD) | Deny when the actor who created the journal/PO is also its approver (create vs approve separation is mandatory for finance/procurement) |
+| 6   | Approval threshold          | Deny PO/journal approval above the nominal threshold without the matching approval role                                                 |
+| 7   | Self-approval               | Deny when `approver == requester` in any workflow                                                                                       |
+| 8   | Tax/PII masking             | Deny showing the full tax identity/payroll data (NPWP, NIK, salary) to non-tax/non-payroll roles                                        |
+| 9   | AI safety                   | Deny the AI access to raw SQL/mutation/PII/raw financial data                                                                           |
+| 10  | Export approval             | Deny Coretax export or payroll export without approval when the policy is active                                                        |
+| 11  | Soft delete archive         | Deny `includeDeleted`, `restore`, or `purge` without an explicit permission; deny delete for posted/append-only entities                |
+| 12  | Webhook integrity           | Deny processing an inbound webhook (payment/marketplace/tax/logistics) without a valid signature/HMAC verification                      |
+| 13  | Double-posting guard        | Deny duplicate journal/payment posting (an idempotency key is mandatory for every high-risk financial mutation)                         |
 
-Policy #5, #6, #12, #13 baru untuk skop ERP (SoD, approval threshold, webhook integrity, double-posting guard) — memperluas prinsip generik "self-approval ditolak" dan "high-risk mutation butuh idempotency" dari base awcms-mini ke risiko finansial yang lebih tinggi konsekuensinya di ERP.
+Policies #5, #6, #12, #13 are new for the ERP scope (SoD, approval threshold, webhook integrity, double-posting guard) — they extend the generic "self-approval is denied" and "high-risk mutation needs idempotency" principles from the awcms-mini base to the financial risks whose consequences are higher in an ERP.
 
-Setiap **deny high-risk** dicatat di decision log tenant-scoped (mengikuti pola `*_abac_decision_logs` dari base, nama tabel disesuaikan saat skema awcms dibangun).
+Every **high-risk deny** is recorded in a tenant-scoped decision log (following the `*_abac_decision_logs` pattern from the base, with the table name adjusted when the awcms schema is built).
 
 ```mermaid
 flowchart TD
-  Req[Access request] --> D0{Ada allow eksplisit?}
-  D0 -- Tidak --> Deny[DENY - default]
-  D0 -- Ya --> D1{Ada deny yang cocok?}
-  D1 -- Ya --> DenyO[DENY - overrides]
-  D1 -- Tidak --> Allow[ALLOW]
-  Deny --> Log[Decision log jika high-risk]
+  Req[Access request] --> D0{Any explicit allow?}
+  D0 -- No --> Deny[DENY - default]
+  D0 -- Yes --> D1{Any matching deny?}
+  D1 -- Yes --> DenyO[DENY - overrides]
+  D1 -- No --> Allow[ALLOW]
+  Deny --> Log[Decision log if high-risk]
   DenyO --> Log
 ```
 
-## Seed default saat Setup Wizard (rencana)
+## Default seed during the Setup Wizard (planned)
 
-Setup wizard akan membuat data awal berikut (idempotent, sekali sebelum locked) — mengikuti pola base awcms-mini:
+The setup wizard will create the following initial data (idempotent, once before it is locked) — following the awcms-mini base pattern:
 
-1. **Tenant** + owner **identity** + **tenant_user** owner.
-2. **Office/plant** pertama (`head_office`).
-3. **Role default** (role di atas) + **permission** + **role_permission**.
-4. **ABAC default policy** (policy di atas).
-5. **Tenant settings**: `default_locale`, `default_theme=system`, timezone, chart of account default (spesifik ERP, detail di dokumen finance/accounting yang belum ditulis).
-6. **Master data dasar**: unit ukur, mata uang dasar, akun COA minimal.
-7. **Assignment**: owner → role Owner.
-8. **Audit**: `tenant.created`, `access.assignment` awal.
+1. **Tenant** + owner **identity** + owner **tenant_user**.
+2. First **office/plant** (`head_office`).
+3. **Default roles** (the roles above) + **permission** + **role_permission**.
+4. **ABAC default policy** (the policies above).
+5. **Tenant settings**: `default_locale`, `default_theme=system`, timezone, default chart of accounts (ERP-specific, detailed in the finance/accounting document that has not been written yet).
+6. **Basic master data**: units of measure, base currency, a minimal COA account set.
+7. **Assignment**: owner → Owner role.
+8. **Audit**: initial `tenant.created`, `access.assignment`.
 
 ```mermaid
 flowchart LR
   A[Setup initialize] --> B[Tenant + Owner + Office]
   B --> C[Roles + Permissions]
   C --> D[ABAC default policies]
-  D --> E[Tenant settings + master data dasar]
+  D --> E[Tenant settings + basic master data]
   E --> F[Assign Owner role]
   F --> G[Audit + Setup locked]
 ```
 
-## Acceptance criteria (target, belum diverifikasi terhadap kode)
+## Acceptance criteria (target, not yet verified against code)
 
-- Setup wizard menghasilkan tenant, owner, office, role default, permission, dan ABAC default; lalu terkunci.
-- Evaluator menegakkan default deny & deny overrides allow sesuai matriks & policy.
-- SoD ditegakkan: pembuat jurnal/PO tidak bisa merangkap approver; self-approval ditolak.
-- Approval di atas ambang nominal ditolak tanpa role approval yang sesuai; export Coretax/payroll butuh approval bila policy aktif.
-- Cross-tenant & cross-office/plant ditolak.
-- Webhook inbound (payment/marketplace/tax/logistik) ditolak tanpa verifikasi signature valid.
-- Soft delete/restore hanya untuk role berizin; archive view default deny untuk role operasional.
-- Deny high-risk tercatat di decision log.
-- Seed idempotent; tidak dapat dijalankan ulang setelah locked.
+- The setup wizard produces the tenant, owner, office, default roles, permissions, and ABAC defaults; then locks itself.
+- The evaluator enforces default deny & deny overrides allow per the matrix & policies.
+- SoD is enforced: the creator of a journal/PO cannot also be the approver; self-approval is denied.
+- Approval above the nominal threshold is denied without the matching approval role; Coretax/payroll export needs approval when the policy is active.
+- Cross-tenant & cross-office/plant is denied.
+- An inbound webhook (payment/marketplace/tax/logistics) is denied without valid signature verification.
+- Soft delete/restore only for authorized roles; the archive view is default deny for operational roles.
+- High-risk denies are recorded in the decision log.
+- The seed is idempotent; it cannot be re-run once locked.
 
-Semua kriteria di atas **akan diverifikasi ulang secara konkret** (test otomatis + live verification) saat modul RBAC/ABAC dan modul ERP terkait benar-benar diimplementasikan di awcms — dokumen ini adalah desain, bukan laporan hasil uji.
+All the criteria above **will be verified again concretely** (automated tests + live verification) when the RBAC/ABAC module and the related ERP modules are actually implemented in awcms — this document is a design, not a test report.

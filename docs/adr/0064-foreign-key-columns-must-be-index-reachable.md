@@ -1,106 +1,107 @@
-# ADR-0064 — Kolom foreign key wajib terjangkau index
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0064-foreign-key-columns-must-be-index-reachable.id.md)
+
+# ADR-0064 — Foreign key columns must be index-reachable
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §5 (temuan: nol dari 28 gerbang memeriksa performa), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) + [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (preseden: daftar pengecualian ber-alasan, entri mati ikut gagal)
+- **Date:** 2026-08-04
+- **Decision makers:** @ahliweb
+- **Related:** [`../awcms/repo-assessment-2026-08-04.md`](../awcms/repo-assessment-2026-08-04.md) §5 (finding: zero of 28 gates check performance), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) + [ADR-0063](0063-ownership-grants-run-through-the-authorization-chokepoint.md) (precedent: a list of reasoned exceptions, dead entries fail too)
 
-## Konteks
+## Context
 
-### 1. Gerbang repo ini tidak pernah memeriksa performa
+### 1. This repo's gates never check performance
 
-Asesmen 4 Agustus 2026 mengukurnya: **nol dari 28 gerbang** di `bun run check`
-menyentuh performa. Konsekuensi praktisnya — kolom FK tanpa index, atau query
-N+1, mendarat dengan CI hijau penuh dan muncul berbulan-bulan kemudian sebagai
-"layar admin jadi lambat".
+The 4 August 2026 assessment measured it: **zero of 28 gates** in `bun run check`
+touch performance. The practical consequence — an FK column without an index, or
+an N+1 query, lands with fully green CI and shows up months later as "the admin
+screen got slow".
 
-### 2. Kenapa FK khususnya
+### 2. Why FKs specifically
 
-Postgres meng-index sisi **REFERENCED** sebuah foreign key secara otomatis (ia
-constraint unik) dan sisi **REFERENCING** **tidak sama sekali**. Kolom FK tanpa
-index membayar dua kali, dan keduanya terlambat terlihat:
+Postgres indexes the **REFERENCED** side of a foreign key automatically (it is a
+unique constraint) and the **REFERENCING** side **not at all**. An FK column
+without an index pays twice, and both are visible too late:
 
-- setiap `DELETE`/`UPDATE` baris induk **sequential scan** tabel anak untuk
-  menegakkan constraint, pada tabel yang hanya bertambah besar;
-- join dari induk ke anak juga tak punya index untuk dipakai.
+- every parent row `DELETE`/`UPDATE` **sequential scans** the child table to
+  enforce the constraint, on a table that only grows;
+- a join from parent to child has no index to use either.
 
-Diukur di repo ini: **182 kolom FK**, dan **14** di antaranya tak terjangkau
-index apa pun. Satu tabel — `awcms_blog_ads` — tak punya index sama sekali di
-luar primary key-nya.
+Measured in this repo: **182 FK columns**, and **14** of them reachable by no
+index at all. One table — `awcms_blog_ads` — has no index whatsoever outside its
+primary key.
 
-### 3. Aturan ketat menghasilkan gerbang yang akan dimatikan
+### 3. A strict rule produces a gate that will be switched off
 
-Aturan yang "benar" secara literal adalah **kolom FK wajib MEMIMPIN sebuah
-index**, karena Postgres hanya bisa memakai PREFIX B-tree. Diukur: **40 dari
-182** melanggar.
+The literally "correct" rule is that an **FK column must LEAD an index**, because
+Postgres can only use a B-tree PREFIX. Measured: **40 of 182** violate it.
 
-Empat puluh migrasi pada hari sebuah gerbang mendarat bukan gerbang — itu daftar
-pengecualian yang menunggu ditulis. Repo ini sudah mencatat kelas kegagalan itu
-tiga kali (ADR-0057 §F draf 1–3, ADR-0058 §1): pemeriksa yang menuntut terlalu
-banyak melatih pembacanya menambah pengecualian sampai ia tak menanyakan apa
-pun.
+Forty migrations on the day a gate lands is not a gate — it is an exception list
+waiting to be written. This repo has already recorded that failure class three
+times (ADR-0057 §F drafts 1–3, ADR-0058 §1): a checker that demands too much
+trains its readers to add exceptions until it stops asking anything at all.
 
-## Keputusan
+## Decision
 
-### §A — Aturan: terjangkau index, sadar-tenant
+### §A — The rule: index-reachable, tenant-aware
 
-Kolom FK dianggap **terjangkau** bila ia:
+An FK column counts as **reachable** if it:
 
-1. **memimpin** sebuah index (`(fk, …)`), **atau**
-2. adalah kolom **kedua setelah `tenant_id`** (`(tenant_id, fk, …)`).
+1. **leads** an index (`(fk, …)`), **or**
+2. is the **second column after `tenant_id`** (`(tenant_id, fk, …)`).
 
-Butir 2 adalah relaksasi yang sengaja, dan alasannya spesifik untuk basis kode
-ini: **setiap query ber-scope tenant membawa `tenant_id`** — RLS `FORCE`
-menjamin itu — jadi composite `(tenant_id, fk)` MEMANG index yang dipakai join
-tersebut. Menuntut 26 index satu-kolom tambahan akan menambah biaya tulis nyata
-untuk lookup yang tak pernah dilakukan siapa pun.
+Point 2 is a deliberate relaxation, and the reason is specific to this codebase:
+**every tenant-scoped query carries `tenant_id`** — RLS `FORCE` guarantees that —
+so the composite `(tenant_id, fk)` IS the index that join uses. Demanding 26
+extra single-column indexes would add real write cost for lookups nobody ever
+performs.
 
-**Residualnya dinyatakan, bukan disembunyikan.** Composite `(tenant_id, X)`
-**TIDAK** membantu Postgres menegakkan constraint saat baris INDUK dihapus — itu
-butuh lookup `X` telanjang dan akan scan. Diterima karena penghapusan induk pada
-tabel-tabel ini administratif dan jarang, sementara biaya tulis 26 index dibayar
-di setiap insert selamanya. Bila suatu saat penghapusan induk jadi panas,
-jawabannya index untuk tabel itu — bukan aturan global yang lebih ketat.
+**The residual is stated, not hidden.** A composite `(tenant_id, X)` does **NOT**
+help Postgres enforce the constraint when a PARENT row is deleted — that needs a
+bare `X` lookup and will scan. Accepted because parent deletion on these tables
+is administrative and rare, while the write cost of 26 indexes is paid on every
+insert forever. If parent deletion ever becomes hot, the answer is an index for
+that table — not a stricter global rule.
 
-Relaksasinya **berbatas dan diuji di kedua arah**: kolom kedua setelah sesuatu
-selain `tenant_id` TIDAK terjangkau, dan kolom KETIGA setelah `tenant_id` juga
-tidak. Tanpa batas itu aturannya akan menerima composite apa pun dan menemukan
-nol — persis "gerbang yang terbaca sebagai cakupan sambil tak memberi apa-apa".
+The relaxation is **bounded and tested in both directions**: a column that is
+second after something other than `tenant_id` is NOT reachable, and a THIRD
+column after `tenant_id` is not either. Without that bound the rule would accept
+any composite and find zero — exactly "a gate that reads as coverage while giving
+nothing".
 
-### §B — `sql/090` mengindeks ketiga belas sisanya
+### §B — `sql/090` indexes the remaining thirteen
 
-Tiga belas index additif (`IF NOT EXISTS`, nol data dipindah, nol constraint
-berubah). Yang paling menonjol:
+Thirteen additive indexes (`IF NOT EXISTS`, zero data moved, zero constraints
+changed). The most notable:
 
-- `awcms_abac_decision_logs.tenant_user_id` — tabel dengan pertumbuhan tercepat
-  di schema, dan kolom yang justru difilter audit "apa yang dilakukan user ini".
-- `awcms_access_assignments.role_id` — menghapus sebuah role men-scan setiap
-  baris assignment di deployment.
-- `awcms_blog_ads.tenant_id` — satu-satunya tabel tanpa index apa pun.
+- `awcms_abac_decision_logs.tenant_user_id` — the fastest-growing table in the
+  schema, and precisely the column an audit of "what did this user do" filters on.
+- `awcms_access_assignments.role_id` — deleting a role scans every assignment row
+  in the deployment.
+- `awcms_blog_ads.tenant_id` — the only table without any index at all.
 
-### §C — Satu pengecualian, dan alasannya bukan "belum sempat"
+### §C — One exception, and the reason is not "we didn't get to it"
 
-`awcms_setup_state.tenant_id`. Tabel itu singleton keras
-(`id boolean PRIMARY KEY` + `CHECK (id)`), jadi berisi **tepat satu baris** dan
-index di atasnya murni overhead tulis melawan scan satu halaman.
+`awcms_setup_state.tenant_id`. That table is a hard singleton
+(`id boolean PRIMARY KEY` + `CHECK (id)`), so it holds **exactly one row** and an
+index on it is pure write overhead against a one-page scan.
 
-Pengecualian yang **mati** — kolomnya sudah ter-index, atau bukan FK lagi — ikut
-dilaporkan gagal, mengikuti ADR-0062/0063.
+Exceptions that are **dead** — the column is already indexed, or is no longer an
+FK — are reported as failures too, following ADR-0062/0063.
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Gerbang performa pertama repo ini. Kelas cacat "FK tanpa
-index" jadi merah di CI alih-alih ditemukan lewat keluhan latensi. Tiga belas
-scan yang nyata hilang.
+**What we get.** This repo's first performance gate. The "FK without an index"
+defect class goes red in CI instead of being discovered through latency
+complaints. Thirteen real scans gone.
 
-**Yang dibayar.** Tiga belas index berarti tiga belas struktur yang dipelihara
-di setiap insert. Diterima: semuanya pada kolom yang di-join atau di-filter, dan
-alternatifnya adalah sequential scan yang tumbuh tanpa batas.
+**What we pay.** Thirteen indexes means thirteen structures maintained on every
+insert. Accepted: all of them are on columns that are joined or filtered, and the
+alternative is a sequential scan that grows without bound.
 
-**Yang TIDAK dilakukan.** Gerbang ini tidak mengukur rencana query, tidak
-menghitung query per-endpoint, dan tidak menyentuh Core Web Vitals — ketiganya
-ada di asesmen §7 sebagai butir terpisah. Ia sengaja satu aturan yang bisa
-diputuskan dari teks migrasi saja, tanpa database, supaya bisa masuk rantai
-`check` yang murni.
+**What is NOT done.** This gate does not measure query plans, does not count
+queries per endpoint, and does not touch Core Web Vitals — all three are in
+assessment §7 as separate items. It is deliberately one rule that can be decided
+from migration text alone, without a database, so it can join the pure `check`
+chain.
 
-**Nol permission, nol perubahan OpenAPI, nol perubahan runtime.**
+**Zero permissions, zero OpenAPI changes, zero runtime changes.**

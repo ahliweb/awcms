@@ -1,114 +1,115 @@
-# ADR-0094 — Seorang subjek data dijawab PER TENANT, dan tiap tabel menjawab sendiri
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0094-a-data-subject-is-answered-per-tenant.id.md)
 
-- **Status:** Diterima (2026-08-13).
-- **Konteks:** Issue #542, dari
-  [`privacy-analysis.md`](../awcms/privacy-analysis.md) §4 yang menempatkan
-  ekspor per-subjek dan penghapusan per-subjek di kolom **celah**, bukan
-  pengurangan cakupan.
-- **Membangun di atas:**
-  [ADR-0037](0037-data-lifecycle-module-admission.md) (deskriptor retensi
-  per-tabel, dideklarasikan pemiliknya, dibaca satu mesin),
+# ADR-0094 — A data subject is answered PER TENANT, and every table answers for itself
+
+- **Status:** Accepted (2026-08-13).
+- **Context:** Issue #542, from
+  [`privacy-analysis.md`](../awcms/privacy-analysis.md) §4, which places
+  per-subject export and per-subject deletion in the **gap** column, not as a
+  reduction of coverage.
+- **Builds on:**
+  [ADR-0037](0037-data-lifecycle-module-admission.md) (per-table retention
+  descriptors, declared by their owner, read by a single engine),
   [ADR-0076](0076-infrastructure-tables-may-hold-lifecycle-descriptors.md)
-  (tabel milik `src/lib/` mendapat registry KEDUA),
-  [ADR-0087](0087-mfa-moves-to-the-principal.md) (principal itu GLOBAL, dan
-  menjangkau keluar tenant adalah tindakan platform), dan
+  (tables owned by `src/lib/` get a SECOND registry),
+  [ADR-0087](0087-mfa-moves-to-the-principal.md) (a principal is GLOBAL, and
+  reaching outside a tenant is a platform action), and
   [ADR-0003](0003-postgresql-rls-multi-tenant.md) (FORCE RLS).
 
-## Kenapa ADR, dan kenapa bukan satu endpoint
+## Why an ADR, and why not a single endpoint
 
-Seorang subjek data menyebar ke identitas, profil, sesi, audit, decision log,
-komentar, draft form, media, dan analytics — sembilan modul dengan pemilik tabel
-berbeda dan aturan retensi berbeda. Menuliskan daftar tabel dengan tangan di satu
-modul akan menyimpang **diam-diam** pada modul berikutnya yang mendarat: kelas
-cacat yang persis melahirkan gerbang `data-lifecycle:table-coverage:check`
-(#437).
+A data subject spreads across identity, profiles, sessions, audit, the decision
+log, comments, form drafts, media, and analytics — nine modules with different
+table owners and different retention rules. Writing the table list by hand in
+one module will drift **silently** with the next module that lands: exactly the
+class of defect that gave birth to the `data-lifecycle:table-coverage:check`
+gate (#437).
 
-Jadi bentuknya sama dengan yang sudah terbukti: **tiap tabel menjawab
-pertanyaannya sendiri, dan sebuah gerbang membuat "tidak menjawab" mustahil.**
-Pertanyaan barunya satu kalimat — _bagaimana tabel ini menjawab tentang seorang
-subjek_ — dan satu-satunya jawaban yang tidak diterima adalah diam.
+So the shape is the one already proven: **every table answers its own question,
+and a gate makes "not answering" impossible.** The new question is one sentence
+— _how does this table answer about a subject_ — and the only answer that is not
+accepted is silence.
 
-## Keputusan 1 — Subjeknya adalah TENANT USER, dan permintaannya dijawab PER TENANT
+## Decision 1 — The subject is the TENANT USER, and the request is answered PER TENANT
 
-Bukan `awcms_principals` yang global.
+Not the global `awcms_principals`.
 
-Ini pertanyaan pertama Definition of Ready, dan repo ini sudah membayarnya dua
-kali: **ADR-0087 dan ADR-0088 sama-sama merencanakan pembacaan lintas-tenant yang
-FORCE RLS larang**, dan keduanya baru ketahuan saat implementasi. Ekspor untuk
-satu principal di seluruh tenant adalah rencana yang sama untuk ketiga kalinya.
+This is the first Definition of Ready question, and this repo has already paid
+for it twice: **ADR-0087 and ADR-0088 both planned a cross-tenant read that
+FORCE RLS forbids**, and both were only caught at implementation time. An export
+for one principal across every tenant is the same plan for the third time.
 
-Dan RLS di sini bukan sekadar hambatan teknis yang harus disiasati — ia
-**memodelkan hal yang benar**. Tiap tenant adalah pengendali data yang terpisah.
-Satu pengendali tidak boleh menyerahkan data yang dipegang pengendali lain, dan
-seorang manusia yang menjadi anggota tiga tenant memang punya tiga hubungan yang
-berbeda. Menjawab per tenant bukan kompromi; ia jawaban yang benar, yang
-kebetulan juga satu-satunya yang bisa ditulis.
+And RLS here is not merely a technical obstacle to be worked around — it
+**models the right thing**. Each tenant is a separate data controller. One
+controller must not hand over data held by another controller, and a human being
+who is a member of three tenants genuinely has three different relationships.
+Answering per tenant is not a compromise; it is the correct answer, which also
+happens to be the only one that can be written.
 
-Konsekuensinya dinyatakan terus terang: **tidak ada satu tombol yang menjawab
-"lupakan saya di mana-mana"**, dan tidak boleh ada yang berpura-pura ada.
+The consequence is stated bluntly: **there is no single button that answers
+"forget me everywhere"**, and nothing may pretend there is.
 
-## Keputusan 2 — Penghapusan MENGANONIMKAN secara default, dan tabel yang menyatakan lain wajib beralasan
+## Decision 2 — Deletion ANONYMISES by default, and a table that declares otherwise must justify it
 
-Baris audit yang merujuk seorang aktor adalah foreign key, dan menghapusnya
-menghapus bukti bahwa sesuatu pernah terjadi — termasuk bukti bahwa
-penghapusannya sendiri terjadi.
+An audit row referencing an actor is a foreign key, and deleting it deletes the
+evidence that something happened — including the evidence that the deletion
+itself happened.
 
-Kosakatanya sudah ada di `LifecycleDeletionMode` dan dipakai ulang, bukan
-ditemukan lagi: `hard_delete`, `anonymize`, `status_transition_then_purge`,
-ditambah satu yang khas pertanyaan ini — `retain_under_obligation`, untuk baris
-yang memang tidak boleh dihapus (kewajiban statutori, legal hold aktif).
-"Hapus segalanya" bukan yang dikatakan hukum, dan deskriptor yang berpura-pura
-begitu akan berbohong pada operator yang memercayainya.
+The vocabulary already exists in `LifecycleDeletionMode` and is reused, not
+reinvented: `hard_delete`, `anonymize`, `status_transition_then_purge`, plus one
+specific to this question — `retain_under_obligation`, for rows that genuinely
+must not be deleted (a statutory obligation, an active legal hold).
+"Delete everything" is not what the law says, and a descriptor that pretends it
+is would lie to the operator who trusts it.
 
-Defaultnya `anonymize` karena arah kesalahannya asimetris: menganonimkan baris
-yang sebenarnya boleh dihapus meninggalkan baris tanpa orang di dalamnya,
-sementara menghapus baris yang seharusnya dianonimkan menghancurkan jejak audit
-yang tak bisa dipulihkan.
+The default is `anonymize` because the direction of error is asymmetric:
+anonymising a row that could actually have been deleted leaves a row with nobody
+in it, while deleting a row that should have been anonymised destroys an audit
+trail that cannot be recovered.
 
-## Keputusan 3 — Ekspor dan penghapusan adalah DUA otoritas, dan penghapusan maker/checker
+## Decision 3 — Export and deletion are TWO authorities, and deletion is maker/checker
 
-Ekspor adalah pengungkapan: siapa pun yang bisa mengekspor subjek mana pun bisa
-mengeksfiltrasi seluruh basis pengguna satu permintaan pada satu waktu. Ia
-digerbangi izinnya sendiri, dan setiap ekspor **diaudit sebagai pengungkapan**,
-bukan sebagai pembacaan.
+Export is disclosure: anyone who can export any subject can exfiltrate the whole
+user base one request at a time. It is gated by its own permission, and every
+export is **audited as a disclosure**, not as a read.
 
-Penghapusan tak bisa dibalik. Ia high-risk, menuntut alasan, diaudit `critical`,
-dan menjadi pasangan **maker/checker** lewat registry SoD yang sudah ada — mesin
-yang persis baru mendapat inbox-nya di #545, sehingga checker-nya punya tempat
-melihat apa yang menunggu alih-alih diberi tahu lewat jalur di luar sistem.
+Deletion cannot be undone. It is high-risk, demands a reason, is audited
+`critical`, and becomes a **maker/checker** pair through the existing SoD
+registry — the very engine that just got its inbox in #545, so its checker has
+somewhere to see what is waiting instead of being told through a channel outside
+the system.
 
-## Yang mendarat di PR ini, dan yang TIDAK
+## What lands in this PR, and what does NOT
 
-Issue #542 menulis sendiri bahwa ini bukan satu PR. Yang mendarat adalah
-FONDASINYA — bentuk yang membuat sisanya mekanis, dan gerbang yang membuat modul
-berikutnya tidak bisa lupa:
+Issue #542 says itself that this is not one PR. What lands is the FOUNDATION —
+the shape that makes the rest mechanical, and the gate that makes it impossible
+for the next module to forget:
 
-| Mendarat                                                            | Belum                |
-| ------------------------------------------------------------------- | -------------------- |
-| `SubjectDataDescriptor` di kontrak modul                            | endpoint ekspor      |
-| `subject-data:coverage:check` — tiap tabel `awcms_*` wajib MENJAWAB | endpoint penghapusan |
-| ledger hanya-menyusut untuk tabel yang mendahului aturannya         | layar admin          |
-| deskriptor gelombang pertama                                        | izin + migrasi seed  |
-| perencana murni yang merakit daftar tabel seorang subjek            | eksekutor            |
+| Lands                                                             | Not yet                      |
+| ----------------------------------------------------------------- | ---------------------------- |
+| `SubjectDataDescriptor` in the module contract                    | the export endpoint          |
+| `subject-data:coverage:check` — every `awcms_*` table must ANSWER | the deletion endpoint        |
+| a shrink-only ledger for tables that predate the rule             | the admin screen             |
+| the first wave of descriptors                                     | permissions + seed migration |
+| a pure planner that assembles a subject's table list              | the executor                 |
 
-Alasan urutannya bukan kenyamanan. Endpoint yang mendarat lebih dulu akan
-mengekspor **tabel yang kebetulan diingat penulisnya**, dan diam untuk sisanya —
-laporan lengkap yang tidak lengkap adalah kegagalan yang lebih buruk daripada
-tidak punya laporan, karena ia ditandatangani. Gerbangnya mendarat lebih dulu
-supaya kelengkapan menjadi sifat yang dipaksa, bukan sifat yang diklaim.
+The reason for the ordering is not convenience. An endpoint that landed first
+would export **the tables its author happened to remember**, and stay silent
+about the rest — a complete report that is not complete is a worse failure than
+having no report at all, because it is signed. The gate lands first so that
+completeness becomes a forced property, not a claimed one.
 
-## Ditolak
+## Rejected
 
-- **Satu endpoint yang tahu segalanya.** Daftar tabel tulis-tangan yang
-  menyimpang diam-diam pada modul berikutnya — cacat yang sama yang melahirkan
-  `#437`.
-- **Subjek = `awcms_principals`, dijawab lintas tenant.** FORCE RLS melarangnya,
-  DUA ADR sudah tergelincir di situ, dan ia juga salah secara substansi: satu
-  pengendali menyerahkan data pengendali lain.
-- **`hard_delete` sebagai default.** Menghapus baris audit menghapus bukti bahwa
-  penghapusan itu terjadi.
-- **Satu izin untuk ekspor dan penghapusan.** Pengungkapan dan penghancuran
-  adalah dua hal yang berbeda, dan yang satu tidak menyiratkan yang lain.
-- **Menunggu sampai semuanya siap.** Gerbang tanpa endpoint tetap menutup celah
-  yang paling mahal — modul berikutnya yang mendarat dengan tabel ber-data
-  pribadi dan tak seorang pun tahu.
+- **One endpoint that knows everything.** A hand-written table list that drifts
+  silently with the next module — the same defect that gave birth to `#437`.
+- **Subject = `awcms_principals`, answered across tenants.** FORCE RLS forbids
+  it, TWO ADRs have already slipped on exactly that, and it is also
+  substantively wrong: one controller handing over another controller's data.
+- **`hard_delete` as the default.** Deleting an audit row deletes the evidence
+  that the deletion happened.
+- **One permission for both export and deletion.** Disclosure and destruction
+  are two different things, and neither implies the other.
+- **Waiting until everything is ready.** A gate with no endpoint still closes
+  the most expensive gap — the next module landing with a personal-data table
+  and nobody knowing.

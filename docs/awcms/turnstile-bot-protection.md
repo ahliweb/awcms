@@ -1,14 +1,16 @@
-# Cloudflare Turnstile — bot protection sadar deployment-profile
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](turnstile-bot-protection.id.md)
 
-Referensi implementasi Issue #186 (epic #177). Modul: `identity-access` (jalur login) + `tenant-admin` (setup). ADR: [ADR-0029](../adr/0029-deployment-profile-aware-turnstile-bot-protection.md). **Tanpa migration** — Turnstile murni konfigurasi/env; tak ada tabel/kolom baru dan secret tak pernah menyentuh DB.
+# Cloudflare Turnstile — deployment-profile-aware bot protection
 
-Fitur aktif **hanya** saat profil deployment full-online DAN `TURNSTILE_ENABLED=true`. Setiap deployment LAN/offline (default) merender halaman login byte-identik seperti sebelum fitur ini: tak ada widget, tak ada iframe, tak ada origin CSP Cloudflare, tak ada panggilan verifikasi keluar.
+Implementation reference for Issue #186 (epic #177). Modules: `identity-access` (login path) + `tenant-admin` (setup). ADR: [ADR-0029](../adr/0029-deployment-profile-aware-turnstile-bot-protection.md). **No migration** — Turnstile is purely configuration/env; there are no new tables/columns and the secret never touches the DB.
 
-Turnstile adalah lapisan **di atas** rate limiting, lockout, audit, dan generic authentication error — bukan pengganti. Rate limit + lockout tetap bekerja independen dari Turnstile.
+The feature is active **only** when the deployment profile is full-online AND `TURNSTILE_ENABLED=true`. Every LAN/offline deployment (the default) renders the login page byte-identical to how it was before this feature: no widget, no iframe, no Cloudflare CSP origin, no outbound verification call.
 
-## 1. Gerbang aktivasi
+Turnstile is a layer **on top of** rate limiting, lockout, audit, and the generic authentication error — not a replacement. Rate limit + lockout keep working independently of Turnstile.
 
-Satu fungsi memutuskan segalanya: `isTurnstileRequired(env)` (`src/lib/security/turnstile.ts`):
+## 1. Activation gate
+
+One function decides everything: `isTurnstileRequired(env)` (`src/lib/security/turnstile.ts`):
 
 ```
 isTurnstileRequired = isFullOnlineSecurityActive(env) && TURNSTILE_ENABLED === "true"
@@ -17,114 +19,114 @@ isFullOnlineSecurityActive = AUTH_ONLINE_SECURITY_ENABLED === "true"
                           && AUTH_ONLINE_SECURITY_PROFILE === "full_online"
 ```
 
-| Profil                            | `AUTH_ONLINE_SECURITY_*`    | `TURNSTILE_ENABLED` | Hasil                                                |
-| --------------------------------- | --------------------------- | ------------------- | ---------------------------------------------------- |
-| LAN/offline (default)             | unset / `false`             | apa pun             | **OFF** — tak ada widget/CSP/outbound                |
-| LAN dengan flag Turnstile menyala | `false` / profil `disabled` | `true`              | **OFF total** (gerbang profil menang)                |
-| Full-online, Turnstile mati       | `true` + `full_online`      | `false` / unset     | OFF (menyiapkan kredensial lebih dulu diperbolehkan) |
-| Full-online, Turnstile hidup      | `true` + `full_online`      | `true`              | **AKTIF** — enforcement fail-closed                  |
+| Profile                        | `AUTH_ONLINE_SECURITY_*`     | `TURNSTILE_ENABLED` | Result                                         |
+| ------------------------------ | ---------------------------- | ------------------- | ---------------------------------------------- |
+| LAN/offline (default)          | unset / `false`              | anything            | **OFF** — no widget/CSP/outbound               |
+| LAN with the Turnstile flag on | `false` / profile `disabled` | `true`              | **FULLY OFF** (the profile gate wins)          |
+| Full-online, Turnstile off     | `true` + `full_online`       | `false` / unset     | OFF (staging the credentials first is allowed) |
+| Full-online, Turnstile on      | `true` + `full_online`       | `true`              | **ACTIVE** — fail-closed enforcement           |
 
-Widget (`login.astro`), origin CSP (`security-headers.ts`), dan enforcement (`login.ts`/`initialize.ts`) semuanya digerbangi fungsi yang sama, sehingga tak mungkin drift (mis. CSP terbuka tapi widget tak dirender).
+The widget (`login.astro`), the CSP origin (`security-headers.ts`), and the enforcement (`login.ts`/`initialize.ts`) are all gated by the same function, so drift is impossible (e.g. the CSP opened but the widget not rendered).
 
-## 2. Referensi konfigurasi / env
+## 2. Configuration / env reference
 
-Semua var opsional; LAN/offline default lulus `config:validate` tanpa satu pun diisi. Lihat `.env.example`.
+All vars are optional; the LAN/offline default passes `config:validate` without a single one of them set. See `.env.example`.
 
-| Var                            | Tipe                           | Default    | Keterangan                                                                                                                      |
-| ------------------------------ | ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `AUTH_ONLINE_SECURITY_ENABLED` | bool                           | `false`    | Master gerbang profil full-online.                                                                                              |
-| `AUTH_ONLINE_SECURITY_PROFILE` | enum `disabled`\|`full_online` | `disabled` | `full_online` wajib saat gerbang menyala.                                                                                       |
-| `TURNSTILE_ENABLED`            | bool                           | `false`    | Flag fitur Turnstile.                                                                                                           |
-| `TURNSTILE_SITE_KEY`           | string (**publik**)            | —          | Site key; disematkan di widget. **Bukan** secret. Wajib saat enabled.                                                           |
-| `TURNSTILE_SECRET_KEY`         | string (**secret**)            | —          | Secret siteverify server-side. Tak pernah ke klien/log/audit/DB. Wajib saat enabled.                                            |
-| `TURNSTILE_EXPECTED_HOSTNAME`  | string                         | —          | Hostname publik tempat widget disajikan; token dari hostname lain ditolak. Wajib saat enabled (fail-closed hostname-confusion). |
-| `TURNSTILE_VERIFY_TIMEOUT_MS`  | int > 0                        | `5000`     | Timeout siteverify (span fetch + baca body).                                                                                    |
-| `TURNSTILE_MAX_TOKEN_AGE_SEC`  | int > 0                        | `300`      | Jendela freshness `challenge_ts`.                                                                                               |
-| `TURNSTILE_MAX_RESPONSE_BYTES` | int > 0                        | `16384`    | Cap ukuran respons siteverify.                                                                                                  |
+| Var                            | Type                           | Default    | Notes                                                                                                                                           |
+| ------------------------------ | ------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_ONLINE_SECURITY_ENABLED` | bool                           | `false`    | Master gate for the full-online profile.                                                                                                        |
+| `AUTH_ONLINE_SECURITY_PROFILE` | enum `disabled`\|`full_online` | `disabled` | `full_online` is required when the gate is on.                                                                                                  |
+| `TURNSTILE_ENABLED`            | bool                           | `false`    | Turnstile feature flag.                                                                                                                         |
+| `TURNSTILE_SITE_KEY`           | string (**public**)            | —          | Site key; embedded in the widget. **Not** a secret. Required when enabled.                                                                      |
+| `TURNSTILE_SECRET_KEY`         | string (**secret**)            | —          | Server-side siteverify secret. Never goes to the client/log/audit/DB. Required when enabled.                                                    |
+| `TURNSTILE_EXPECTED_HOSTNAME`  | string                         | —          | The public hostname the widget is served on; a token from another hostname is rejected. Required when enabled (fail-closed hostname-confusion). |
+| `TURNSTILE_VERIFY_TIMEOUT_MS`  | int > 0                        | `5000`     | Siteverify timeout (spanning the fetch + reading the body).                                                                                     |
+| `TURNSTILE_MAX_TOKEN_AGE_SEC`  | int > 0                        | `300`      | `challenge_ts` freshness window.                                                                                                                |
+| `TURNSTILE_MAX_RESPONSE_BYTES` | int > 0                        | `16384`    | Cap on the siteverify response size.                                                                                                            |
 
 **Cross-rule preflight** (`bun run config:validate`):
 
-- `AUTH_ONLINE_SECURITY_ENABLED=true` mewajibkan `AUTH_ONLINE_SECURITY_PROFILE=full_online` — ini yang membedakan **misconfigured** dari **disabled intentionally**.
-- `TURNSTILE_ENABLED=true` mewajibkan `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, dan `TURNSTILE_EXPECTED_HOSTNAME` non-kosong (independen dari gerbang profil, sehingga kredensial bisa di-stage lebih dulu).
+- `AUTH_ONLINE_SECURITY_ENABLED=true` requires `AUTH_ONLINE_SECURITY_PROFILE=full_online` — this is what distinguishes **misconfigured** from **disabled intentionally**.
+- `TURNSTILE_ENABLED=true` requires non-empty `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_EXPECTED_HOSTNAME` (independent of the profile gate, so credentials can be staged first).
 
-`bun run security:readiness` menambah dua cek bernama — `checkOnlineAuthSecurityReady` dan `checkTurnstileReady` — critical saat misconfigured, informational-pass saat disabled-intentionally, dan **tak pernah mencetak nilai secret** (hanya nama var yang hilang).
+`bun run security:readiness` adds two named checks — `checkOnlineAuthSecurityReady` and `checkTurnstileReady` — critical when misconfigured, informational-pass when disabled-intentionally, and they **never print a secret value** (only the name of the missing var).
 
-## 3. Alur auth (login flow)
+## 3. Auth flow (login flow)
 
 ```
-Klien (login.astro)                     Server (login.ts)                 Cloudflare
-──────────────────                      ─────────────────                 ──────────
+Client (login.astro)                    Server (login.ts)                 Cloudflare
+────────────────────                    ─────────────────                 ──────────
 [widget cf-turnstile] --solve-->
   hidden cf-turnstile-response
 POST /auth/login {..,turnstileToken} -->
-                                        1. cek header tenant
+                                        1. check tenant header
                                         2. rate limit (source+tenant)
-                                        3. validasi bentuk body
+                                        3. validate body shape
                                         4. enforceTurnstileIfRequired ------ siteverify -->
-                                           (SEBELUM withTenant & password)   <-- success/action/
+                                           (BEFORE withTenant & password)   <-- success/action/
                                                                                  hostname/ts
-                                           - required?  tidak → lanjut (LAN)
-                                           - token hilang → 400 TURNSTILE_REQUIRED
+                                           - required?  no → continue (LAN)
+                                           - token missing → 400 TURNSTILE_REQUIRED
                                            - invalid/mismatch/outage → 400 TURNSTILE_INVALID
-                                        5. withTenant → lookup identity
+                                        5. withTenant → identity lookup
                                         6. verifyPasswordOrDummy (argon2id)
-                                        7. deny-block → cabang break-glass (#185)
-                                           → cabang MFA (#184) → sesi
+                                        7. deny-block → break-glass branch (#185)
+                                           → MFA branch (#184) → session
 ```
 
-Kunci ordering: Turnstile berjalan **setelah** rate-limit/bentuk-request, **sebelum** kerja password mahal dan **di luar** transaksi DB — mendahului cabang MFA & OIDC break-glass, tanpa meregresinya. Karena berjalan sebelum lookup identity, kegagalan Turnstile tak pernah jadi oracle enumerasi akun (respons identik untuk identifier dikenal/tak dikenal).
+The ordering is the key: Turnstile runs **after** the rate-limit/request-shape checks, **before** the expensive password work and **outside** the DB transaction — it precedes the MFA & OIDC break-glass branches without regressing them. Because it runs before the identity lookup, a Turnstile failure is never an account-enumeration oracle (identical response for known/unknown identifiers).
 
-Setup (`POST /api/v1/setup/initialize`) mengikuti pola sama dengan action `setup` (token login tak bisa dipakai ulang di sini). Base ini tak punya halaman UI setup, jadi enforcement setup adalah pertahanan bagi operator yang menjalankan bootstrap pada deployment full-online.
+Setup (`POST /api/v1/setup/initialize`) follows the same pattern with the `setup` action (a login token cannot be reused here). This base has no setup UI page, so setup enforcement is a defence for the operator running bootstrap on a full-online deployment.
 
-## 4. Setup Cloudflare & rotasi secret
+## 4. Cloudflare setup & secret rotation
 
 **Provisioning:**
 
-1. Dashboard Cloudflare → Turnstile → Add Site. Domain = hostname publik deployment (mis. `app.example.com`). Widget mode sesuai kebutuhan (managed direkomendasikan).
-2. Salin **Site Key** → `TURNSTILE_SITE_KEY` (publik, boleh di-commit ke config non-secret env). Salin **Secret Key** → `TURNSTILE_SECRET_KEY` (secret manager, **jangan** commit).
-3. Set `TURNSTILE_EXPECTED_HOSTNAME` = hostname publik yang sama dengan domain widget.
-4. (Opsional) Set `action` per widget di dashboard tak diperlukan — base ini mengirim `data-action="login"` dan memvalidasi echo-nya server-side.
-5. Nyalakan: `AUTH_ONLINE_SECURITY_ENABLED=true`, `AUTH_ONLINE_SECURITY_PROFILE=full_online`, `TURNSTILE_ENABLED=true`.
-6. Jalankan `bun run config:validate` lalu `bun run security:readiness` — keduanya harus hijau sebelum go-live.
+1. Cloudflare dashboard → Turnstile → Add Site. Domain = the deployment's public hostname (e.g. `app.example.com`). Widget mode as needed (managed recommended).
+2. Copy the **Site Key** → `TURNSTILE_SITE_KEY` (public, may be committed to non-secret env config). Copy the **Secret Key** → `TURNSTILE_SECRET_KEY` (secret manager, **do not** commit).
+3. Set `TURNSTILE_EXPECTED_HOSTNAME` = the same public hostname as the widget's domain.
+4. (Optional) Setting an `action` per widget in the dashboard is not needed — this base sends `data-action="login"` and validates its echo server-side.
+5. Turn it on: `AUTH_ONLINE_SECURITY_ENABLED=true`, `AUTH_ONLINE_SECURITY_PROFILE=full_online`, `TURNSTILE_ENABLED=true`.
+6. Run `bun run config:validate` then `bun run security:readiness` — both must be green before go-live.
 
-**Rotasi Secret Key (zero-downtime):**
+**Secret Key rotation (zero-downtime):**
 
-1. Cloudflare dashboard → widget → rotate secret. Cloudflare menerima secret lama **dan** baru selama masa transisi singkat.
-2. Perbarui `TURNSTILE_SECRET_KEY` di secret manager → rolling-restart instance. Karena verifikasi stateless (tak ada state di DB), tak ada migrasi/backfill.
-3. Validasi login sukses pada satu instance, lalu selesaikan rollout.
-4. Site key jarang dirotasi; bila diganti, perbarui `TURNSTILE_SITE_KEY` (redeploy agar widget membawa key baru) bersamaan.
+1. Cloudflare dashboard → widget → rotate secret. Cloudflare accepts the old **and** the new secret for a short transition period.
+2. Update `TURNSTILE_SECRET_KEY` in the secret manager → rolling-restart the instances. Because verification is stateless (no state in the DB), there is no migration/backfill.
+3. Validate a successful login on one instance, then finish the rollout.
+4. The site key is rarely rotated; if it is replaced, update `TURNSTILE_SITE_KEY` (redeploy so the widget carries the new key) at the same time.
 
-Secret **tidak pernah** disimpan di DB/source/log/audit — hanya di env/secret manager. Backup DB tak pernah menghasilkan secret Turnstile.
+The secret is **never** stored in the DB/source/log/audit — only in env/the secret manager. A DB backup never yields a Turnstile secret.
 
 ## 5. Incident / fallback SOP (Turnstile unavailable)
 
-Pada profil full-online, kegagalan Cloudflare **fail-closed**: login/setup ditolak `TURNSTILE_INVALID` selama outage (circuit breaker `turnstile` membuka setelah kegagalan transport beruntun dan menolak cepat). Ini disengaja — bukan bug.
+On the full-online profile, a Cloudflare failure is **fail-closed**: login/setup are rejected with `TURNSTILE_INVALID` for the duration of the outage (the `turnstile` circuit breaker opens after consecutive transport failures and rejects fast). This is deliberate — not a bug.
 
-Opsi mitigasi, dari paling aman:
+Mitigation options, safest first:
 
-1. **Tunggu pemulihan.** Breaker mencoba ulang otomatis setelah `openDurationMs`. Log `turnstile.circuit_breaker_open` (warning) menandai outage berkelanjutan.
-2. **Downgrade profil sementara** bila outage Cloudflare berkepanjangan dan akses admin kritis: set `TURNSTILE_ENABLED=false` (atau `AUTH_ONLINE_SECURITY_ENABLED=false`) → rolling-restart. Rate limit + lockout **tetap** melindungi login. Kembalikan setelah pulih. Catat keputusan di audit operasional.
-3. **Jangan** menonaktifkan rate limit/lockout sebagai "kompensasi" — itu justru menghapus lapisan yang tetap bekerja.
+1. **Wait for recovery.** The breaker retries automatically after `openDurationMs`. The `turnstile.circuit_breaker_open` log (warning) marks an ongoing outage.
+2. **Temporarily downgrade the profile** if the Cloudflare outage drags on and admin access is critical: set `TURNSTILE_ENABLED=false` (or `AUTH_ONLINE_SECURITY_ENABLED=false`) → rolling-restart. Rate limit + lockout **still** protect login. Restore it once recovered. Record the decision in the operational audit.
+3. **Do not** disable rate limit/lockout as "compensation" — that removes exactly the layer that still works.
 
-Break-glass admin (OIDC #185) dan lockout tak bergantung pada Turnstile; jalur password lokal untuk identity break-glass tetap tunduk pada rate limit + Turnstile (bila masih enabled) — matikan flag bila benar-benar terkunci oleh outage provider.
+Admin break-glass (OIDC #185) and lockout do not depend on Turnstile; the local password path for a break-glass identity remains subject to rate limit + Turnstile (if still enabled) — turn the flag off if you are genuinely locked out by a provider outage.
 
 ## 6. Threat model
 
-| Ancaman                                            | Mitigasi di base ini                                                                                                                                                                                                                                                            |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Bot abuse / credential stuffing**                | Widget managed Cloudflare + verifikasi server-side sebelum argon2id verify; berlapis dengan rate limit source+tenant dan lockout per-principal (ADR-0086 — satu penghitung per manusia, lintas seluruh tenant; merotasi `x-awcms-tenant-id` tidak lagi memperbanyak percobaan). |
-| **Token replay (lintas request)**                  | Cloudflare menjadikan token single-use (verify kedua → `success:false` → ditolak). Verifier juga cek freshness `challenge_ts` (`TURNSTILE_MAX_TOKEN_AGE_SEC`). Turnstile berjalan sebelum lapisan idempotency dan tak menyentuh store-nya → tak bisa mem-bypass idempotency.    |
-| **Token replay (lintas action)**                   | `action` divalidasi per-endpoint (`login` vs `setup`); token yang di-solve untuk login ditolak di setup. Mutation test membuktikannya (hapus cek action → test merah).                                                                                                          |
-| **Fail-open**                                      | Semua kegagalan (misconfig/outage/timeout/malformed/mismatch/stale) kolaps ke penolakan `TURNSTILE_INVALID`. Misconfig runtime (enabled tanpa secret/hostname) fail-closed, bukan skip.                                                                                         |
-| **Hostname confusion**                             | `hostname` respons divalidasi terhadap `TURNSTILE_EXPECTED_HOSTNAME` (wajib saat enabled). Token yang di-solve pada halaman attacker yang menyematkan site key kita ditolak. Mutation test membuktikannya.                                                                      |
-| **Provider outage → lockout massal lintas-tenant** | Circuit breaker hanya trip pada kegagalan **transport**; `success:false`/mismatch dihitung sukses provider, jadi token sampah tak bisa mengunci login semua tenant.                                                                                                             |
-| **Account enumeration oracle**                     | Enforcement berjalan sebelum lookup identity; semua kegagalan kode generik tunggal; token/secret tak pernah di respons/log/audit.                                                                                                                                               |
-| **Secret exposure**                                | Secret dari env saja; tak pernah di DB/source/log/audit/response/health output (readiness hanya cetak nama var). Redaction defense-in-depth pada pesan error verifier.                                                                                                          |
-| **SSRF via verify endpoint**                       | URL siteverify tetap (`config.verifyUrl` hanya dari konfigurasi, tak pernah input request).                                                                                                                                                                                     |
-| **DoS via respons besar**                          | Cap ukuran respons (`TURNSTILE_MAX_RESPONSE_BYTES`) + timeout satu-`AbortController` yang menutup fetch dan baca body (anti slow-drip).                                                                                                                                         |
+| Threat                                          | Mitigation in this base                                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Bot abuse / credential stuffing**             | Cloudflare managed widget + server-side verification before the argon2id verify; layered with the source+tenant rate limit and per-principal lockout (ADR-0086 — one counter per human, across all tenants; rotating `x-awcms-tenant-id` no longer multiplies the attempts).     |
+| **Token replay (across requests)**              | Cloudflare makes the token single-use (a second verify → `success:false` → rejected). The verifier also checks `challenge_ts` freshness (`TURNSTILE_MAX_TOKEN_AGE_SEC`). Turnstile runs before the idempotency layer and never touches its store → it cannot bypass idempotency. |
+| **Token replay (across actions)**               | The `action` is validated per endpoint (`login` vs `setup`); a token solved for login is rejected at setup. A mutation test proves it (remove the action check → the test goes red).                                                                                             |
+| **Fail-open**                                   | Every failure (misconfig/outage/timeout/malformed/mismatch/stale) collapses into a `TURNSTILE_INVALID` rejection. A runtime misconfig (enabled without secret/hostname) is fail-closed, not skipped.                                                                             |
+| **Hostname confusion**                          | The response `hostname` is validated against `TURNSTILE_EXPECTED_HOSTNAME` (required when enabled). A token solved on an attacker page that embeds our site key is rejected. A mutation test proves it.                                                                          |
+| **Provider outage → mass cross-tenant lockout** | The circuit breaker only trips on **transport** failures; `success:false`/mismatch counts as a provider success, so garbage tokens cannot lock out login for every tenant.                                                                                                       |
+| **Account enumeration oracle**                  | Enforcement runs before the identity lookup; every failure gets a single generic code; the token/secret never appear in a response/log/audit.                                                                                                                                    |
+| **Secret exposure**                             | The secret comes from env only; never in the DB/source/log/audit/response/health output (readiness prints only the var name). Defense-in-depth redaction on the verifier's error messages.                                                                                       |
+| **SSRF via the verify endpoint**                | The siteverify URL is fixed (`config.verifyUrl` comes only from configuration, never from request input).                                                                                                                                                                        |
+| **DoS via a large response**                    | A response size cap (`TURNSTILE_MAX_RESPONSE_BYTES`) + a single-`AbortController` timeout covering both the fetch and reading the body (anti slow-drip).                                                                                                                         |
 
 ## 7. Testing
 
-- `tests/turnstile-verifier.test.ts` — verifier terhadap fake siteverify (`Bun.serve`): success, reject, timeout, malformed, non-2xx, oversize, breaker open, hostname/action/stale mismatch (mutation proofs), dan token/secret tak pernah bocor ke log/detail.
-- `tests/turnstile-enforcement.test.ts` — enforcement: LAN/disabled **nol outbound** (spy `globalThis.fetch`), full-online fail-closed (missing/misconfig/reject/mismatch → satu kode generik), plus matriks preflight LAN / full-online valid / full-online misconfigured (`validateEnv` + `checkTurnstileReady` + `checkOnlineAuthSecurityReady`).
-- `tests/security-headers-csp.test.ts` — origin CSP terbuka hanya saat enabled, sempit ke satu origin Cloudflare, dan enabled vs disabled berbeda **hanya** pada dua direktif.
+- `tests/turnstile-verifier.test.ts` — the verifier against a fake siteverify (`Bun.serve`): success, reject, timeout, malformed, non-2xx, oversize, breaker open, hostname/action/stale mismatch (mutation proofs), and that the token/secret never leak into logs/details.
+- `tests/turnstile-enforcement.test.ts` — enforcement: LAN/disabled has **zero outbound** calls (spying on `globalThis.fetch`), full-online is fail-closed (missing/misconfig/reject/mismatch → one generic code), plus the preflight matrix LAN / full-online valid / full-online misconfigured (`validateEnv` + `checkTurnstileReady` + `checkOnlineAuthSecurityReady`).
+- `tests/security-headers-csp.test.ts` — the CSP origin opens only when enabled, is narrowed to a single Cloudflare origin, and enabled vs disabled differ in **only** two directives.

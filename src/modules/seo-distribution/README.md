@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # seo_distribution
 
 Admitted by ADR-0038 (adapting awcms-micro ADR-0028), ported additively net-new

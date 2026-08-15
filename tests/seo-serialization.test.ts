@@ -20,6 +20,7 @@ describe("robots.txt serialization", () => {
   test("normal: disallows /admin/ + /api/ and advertises the absolute sitemap", () => {
     const body = renderRobotsTxt({
       primaryHost: "example.com",
+      siteScheme: "https",
       siteNoindex: false,
       sitemapEnabled: true
     });
@@ -32,6 +33,7 @@ describe("robots.txt serialization", () => {
   test("whole-site noindex: Disallow: / and NO sitemap advertised", () => {
     const body = renderRobotsTxt({
       primaryHost: "example.com",
+      siteScheme: "https",
       siteNoindex: true,
       sitemapEnabled: true
     });
@@ -43,6 +45,7 @@ describe("robots.txt serialization", () => {
   test("no primary host: omits the Sitemap line (never invents a host)", () => {
     const body = renderRobotsTxt({
       primaryHost: null,
+      siteScheme: "https",
       siteNoindex: false,
       sitemapEnabled: true
     });
@@ -52,6 +55,7 @@ describe("robots.txt serialization", () => {
   test("sitemap disabled: omits the Sitemap line even with a host", () => {
     const body = renderRobotsTxt({
       primaryHost: "example.com",
+      siteScheme: "https",
       siteNoindex: false,
       sitemapEnabled: false
     });

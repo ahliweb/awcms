@@ -71,6 +71,13 @@ export const domainEventRuntimeModule = defineModule({
   jobs: [
     {
       command: "bun run domain-events:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "* * * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Drains the domain-event outbox. It has never run on this deployment, so the first pass delivers every event accumulated since the module landed — fanning out to every registered consumer at once. Dry-run and read the pending count first."
+      },
       purpose:
         "Claim/execute/finalize due awcms_domain_event_deliveries rows for every active tenant and every registered consumer, applying per-order-key ordering, exponential backoff, and dead-letter transitions. A no-op tick when there is no due backlog.",
       recommendedSchedule: "Every 30-60 seconds via cron/systemd timer.",
@@ -80,6 +87,13 @@ export const domainEventRuntimeModule = defineModule({
     },
     {
       command: "bun run domain-events:deliveries:purge",
+      schedule: {
+        mode: "cron",
+        expression: "25 3 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes delivery records past retention. Run it only AFTER `domain-events:dispatch` has drained the backlog — purging first destroys the record of what was never delivered."
+      },
       purpose:
         "Delete settled (`delivered`/`skipped`) delivery rows past their retention window, never dead-lettered ones and never a row a replay still references (legal-hold gated, bounded batches).",
       recommendedSchedule: "Daily, off-peak.",

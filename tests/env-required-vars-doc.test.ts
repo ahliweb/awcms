@@ -40,7 +40,7 @@ const VALIDATOR = "scripts/validate-env.ts";
 const DOC = "docs/awcms/deployment-profiles.md";
 
 /** `- Wajib non-kosong: \`A\`, \`B\`, \`C\`.` — the bullet operators read. */
-const DOC_BULLET = /^- Wajib non-kosong:([^.]*)\./m;
+const DOC_BULLET = /^- Must be non-empty:([^.]*)\./m;
 
 function repoFile(relative: string): Promise<string> {
   return readFile(path.resolve(process.cwd(), relative), "utf8");
@@ -124,7 +124,9 @@ describe("documented mandatory env vars match the validator", () => {
 
         // A mention is fine only when the same line says it does not exist.
         if (
-          /tidak ada|tidak dibaca|does not exist|pernah tercantum/.test(line)
+          /tidak ada|tidak dibaca|does not exist|pernah tercantum|neither exists|no code reads|used to be listed|have been removed/.test(
+            line
+          )
         ) {
           continue;
         }

@@ -1,28 +1,30 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0006-offline-first-sync-outbox.id.md)
+
 # ADR-0006 — Offline-first + transactional outbox + sync HMAC
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-05
-- **Terkait:** `docs/awcms/15_frontend_architecture_integration.md`, `docs/awcms/16_backend_data_access_integration.md`, `docs/awcms/10_template_kode_coding_standard.md` (§Sync HMAC)
+- **Date:** 2026-07-05
+- **Related:** `docs/awcms/15_frontend_architecture_integration.md`, `docs/awcms/16_backend_data_access_integration.md`, `docs/awcms/10_template_kode_coding_standard.md` (§Sync HMAC)
 
-## Konteks
+## Context
 
-Aplikasi turunan dapat berjalan di lingkungan LAN/offline. Alur operasional kritikal tidak boleh bergantung pada koneksi internet atau provider eksternal. Sinkronisasi antar-node dan pemanggilan provider harus andal tanpa mengorbankan konsistensi database.
+Derived applications may run in a LAN/offline environment. Critical operational flows must not depend on an internet connection or an external provider. Node-to-node synchronisation and provider calls must be reliable without sacrificing database consistency.
 
-## Keputusan
+## Decision
 
-Kami memutuskan pola **offline-first**:
+We decided on the **offline-first** pattern:
 
-- **Transactional outbox** — domain event, pesan provider, dan payload sync ditulis dalam transaksi yang sama dengan perubahan data, lalu dikirim worker terpisah. Provider eksternal **tidak pernah** dipanggil di dalam DB transaction.
-- **Sync HMAC** — push/pull antar-node ditandatangani `HMAC(timestamp.body)` dengan anti-replay (skew maks default 300 detik, timing-safe compare) dan idempotency (event duplikat aman).
-- **Conflict manual** — konflik tidak diselesaikan otomatis; ditandai untuk resolusi manual + audit.
+- **Transactional outbox** — domain events, provider messages, and sync payloads are written in the same transaction as the data change, then sent by a separate worker. External providers are **never** called inside a DB transaction.
+- **Sync HMAC** — node-to-node push/pull is signed with `HMAC(timestamp.body)` with anti-replay (max skew 300 seconds by default, timing-safe compare) and idempotency (duplicate events are safe).
+- **Manual conflict** — conflicts are not resolved automatically; they are flagged for manual resolution + audit.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** alur kritikal tahan gangguan koneksi; konsistensi DB terjaga; sync aman dari replay/duplikasi.
-- **Trade-off:** perlu worker dispatcher, tabel outbox, dan mekanisme resolusi konflik.
-- **Netral:** provider (R2, pesan) bersifat opsional via feature flag; fitur off tidak menghentikan aplikasi.
+- **Positive:** critical flows survive connection disruption; DB consistency is preserved; sync is safe against replay/duplication.
+- **Trade-off:** requires a worker dispatcher, an outbox table, and a conflict resolution mechanism.
+- **Neutral:** providers (R2, messaging) are optional via a feature flag; a feature being off does not stop the application.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Pemanggilan provider langsung di request/transaction** — ditolak: menautkan alur kritikal ke ketersediaan eksternal dan berisiko partial commit.
-- **Auto-merge konflik** — ditolak: berisiko kehilangan/menimpa data tanpa jejak.
+- **Calling providers directly in the request/transaction** — rejected: ties critical flows to external availability and risks a partial commit.
+- **Auto-merging conflicts** — rejected: risks losing/overwriting data without a trace.

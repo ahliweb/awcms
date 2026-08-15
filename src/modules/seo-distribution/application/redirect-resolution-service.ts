@@ -67,6 +67,7 @@ import {
 } from "./redirect-directory";
 import { resolveTenantAllowedHosts } from "./tenant-allowed-hosts";
 import { resolveTenantPrimaryHost } from "./resolve-canonical-host";
+import { resolveSiteScheme } from "../../../lib/http/site-origin";
 
 /** Context the middleware needs to record a privacy-minimized 404 observation later. */
 export type NotFoundCaptureContext = {
@@ -145,7 +146,7 @@ async function resolveRetiredNewsRedirect(
     if (!primaryHost) return null; // no canonical host — cannot safely redirect
 
     const allowedHosts = await resolveTenantAllowedHosts(tx, tenant.tenantId);
-    const target = `https://${primaryHost}${buildLegacyBlogPath(tenant.tenantCode, rest)}${options.search}`;
+    const target = `${resolveSiteScheme(request)}://${primaryHost}${buildLegacyBlogPath(tenant.tenantCode, rest)}${options.search}`;
 
     try {
       assertSafeRedirectTarget(target, allowedHosts);

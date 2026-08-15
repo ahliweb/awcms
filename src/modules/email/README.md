@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Email
 
 Reusable, provider-neutral email service ported from awcms-mini (epic #492).
@@ -70,7 +72,7 @@ app registers its own `derived.<name>` category via
 rejected at create (fail-closed).
 
 - Body columns are `jsonb` per-locale (`{"en": "...", "id": "..."}`, doc 04
-  §Konten multi-bahasa). Rendering (`domain/email-template-render.ts`)
+  §Multi-language content). Rendering (`domain/email-template-render.ts`)
   resolves the locale, filters caller variables through the category
   allowlist (unlisted variables are silently dropped, never substituted),
   then substitutes `{{key}}` tokens — HTML-escaped for `htmlBody` only.

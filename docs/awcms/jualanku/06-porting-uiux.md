@@ -1,123 +1,125 @@
-# 06 — Porting UI/UX dan design system
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](06-porting-uiux.id.md)
 
-> Rencana. Lihat [README](README.md) untuk status.
+# 06 — Porting the UI/UX and design system
 
-Dokumen ini menetapkan **cara** desain Elementor diterjemahkan. Spesifikasi
-layar publik dan portal ada di repo `awcms-astro`; bagian yang mengikat di sini
-adalah layar **admin internal** dan design token yang dipakai bersama.
+> Plan. See the [README](README.md) for status.
 
-## 1. Definisi porting
+This document sets out **how** the Elementor design is translated. The specification
+for the public and portal screens lives in the `awcms-astro` repo; the binding part here
+is the **internal admin** screens and the design tokens shared between them.
 
-Porting = menerjemahkan tujuan pengguna, hierarki informasi, pola visual, copy,
-state, dan perilaku komponen dari prototipe Elementor menjadi komponen Astro +
-spesifikasi layar.
+## 1. Definition of porting
 
-Porting **bukan** menyalin DOM, kelas CSS, widget, shortcode, plugin, atau model
-data WordPress. Tidak ada satu baris pun markup WordPress yang masuk.
+Porting = translating user goals, information hierarchy, visual patterns, copy,
+states, and component behaviour from the Elementor prototype into Astro components +
+a screen specification.
 
-| Artefak Elementor               | Keputusan                                                 |
-| ------------------------------- | --------------------------------------------------------- |
-| Hero, kategori, card, pricing   | Ekstrak design token + kontrak komponen                   |
-| Listing manual                  | Ganti projection/taksonomi dari `awcms`                   |
-| Form login WordPress            | Ganti `identity_access` lewat BFF                         |
-| Dashboard berupa gambar panjang | Bangun rute + komponen HTML nyata                         |
-| Placeholder/lorem ipsum         | REMOVE — tidak pernah masuk produksi                      |
-| Tautan hard-coded               | Generator rute dari slug + typed route                    |
-| Data demo sensitif              | Tidak dimigrasikan ke seed produksi                       |
-| Copy klaim manfaat              | Masuk content review + evidence owner + persetujuan legal |
+Porting is **not** copying WordPress DOM, CSS classes, widgets, shortcodes, plugins, or the
+data model. Not a single line of WordPress markup comes across.
+
+| Elementor artifact               | Decision                                                      |
+| -------------------------------- | ------------------------------------------------------------- |
+| Hero, categories, cards, pricing | Extract design tokens + component contracts                   |
+| Manual listing                   | Replace with a projection/taxonomy from `awcms`               |
+| WordPress login form             | Replace with `identity_access` via the BFF                    |
+| A dashboard that is a long image | Build real routes + HTML components                           |
+| Placeholder/lorem ipsum          | REMOVE — never reaches production                             |
+| Hard-coded links                 | Route generator from slug + typed routes                      |
+| Sensitive demo data              | Not migrated into the production seed                         |
+| Benefit-claim copy               | Goes through content review + evidence owner + legal sign-off |
 
 ## 2. Migration disposition
 
-| Kode       | Makna                                  | Contoh                                        |
-| ---------- | -------------------------------------- | --------------------------------------------- |
-| `PORT`     | Tujuan dan struktur dipertahankan      | Hero, category card                           |
-| `REDESIGN` | Tujuan tetap, alur/struktur diperbaiki | Dashboard penjual                             |
-| `DYNAMIC`  | Komponen statis diganti data `awcms`   | Kategori, listing, pricing                    |
-| `REMOVE`   | Tidak layak dibawa                     | Placeholder, catatan internal, seksi duplikat |
-| `DEFER`    | Bernilai tetapi bukan MVP              | Rekomendasi AI, checkout marketplace          |
+| Code       | Meaning                                        | Example                                          |
+| ---------- | ---------------------------------------------- | ------------------------------------------------ |
+| `PORT`     | Goal and structure are kept                    | Hero, category card                              |
+| `REDESIGN` | Goal stays, flow/structure is fixed            | Seller dashboard                                 |
+| `DYNAMIC`  | A static component is replaced by `awcms` data | Categories, listings, pricing                    |
+| `REMOVE`   | Not worth bringing across                      | Placeholders, internal notes, duplicate sections |
+| `DEFER`    | Valuable but not MVP                           | AI recommendations, marketplace checkout         |
 
-Inventaris per rute/seksi dibuat sebagai lembar kerja tersendiri sebelum layar
-pertama dikerjakan (tindakan P0 #7 pada dokumen validasi). Setiap baris punya:
-rute, seksi, disposition, pemilik data, dan catatan aksesibilitas.
+A per-route/per-section inventory is produced as its own worksheet before the first
+screen is built (P0 action #7 in the validation document). Every row has:
+route, section, disposition, data owner, and accessibility notes.
 
-## 3. Design token
+## 3. Design tokens
 
-Jualanku **tidak** membuat sistem token baru. Ia memakai token AWCMS yang sudah
-distandarkan di [`../14_ui_ux_design_system.md`](../14_ui_ux_design_system.md)
-(`--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, token motion), dan
-menyetel nilainya lewat modul `theming` per tenant.
+Jualanku does **not** create a new token system. It uses the AWCMS tokens already
+standardised in [`../14_ui_ux_design_system.md`](../14_ui_ux_design_system.md)
+(`--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, motion tokens), and
+sets their values through the `theming` module per tenant.
 
-Aturan yang berlaku:
+The rules that apply:
 
-- Warna semantik dipakai sesuai perannya; untuk fill solid + teks putih pakai
-  varian `-strong` (token polos tidak lulus kontras AA pada sebagian kombinasi).
-- Status verifikasi/payout/moderasi **tidak boleh** dibedakan hanya dengan warna:
-  selalu ada label teks dan/atau ikon.
-- Tidak ada gaya sekali pakai. Komponen baru memakai token yang sudah ada; token
-  baru butuh alasan tertulis dan audit kontras ulang.
+- Semantic colours are used according to their role; for a solid fill + white text use
+  the `-strong` variant (the plain token does not pass AA contrast in some combinations).
+- Verification/payout/moderation status **must not** be distinguished by colour alone:
+  there is always a text label and/or an icon.
+- No one-off styles. New components use existing tokens; a new
+  token requires a written justification and a fresh contrast audit.
 
-## 4. Komponen lintas permukaan
+## 4. Components across surfaces
 
-| Fondasi UI                      | Publik                   | Portal                | Admin internal                     |
-| ------------------------------- | ------------------------ | --------------------- | ---------------------------------- |
-| Button / FormField / StatusPill | CTA, filter              | Form & mutasi         | Form & approval                    |
-| Card / Panel                    | Merchant, produk         | KPI, task             | Ringkasan operasional              |
-| DataTable / Pagination          | Opsional (listing padat) | Katalog, lead         | Merchant, payout, moderasi         |
-| Empty / Error / Loading         | Direktori kosong         | Wajib di setiap layar | Wajib di setiap layar              |
-| Dialog / Drawer / Toast         | Minimal                  | Aksi mobile           | Aksi high-risk (dengan konfirmasi) |
-| MaskedText / MoneyText          | Harga publik             | Rekening, invoice     | PII & keuangan                     |
-| Breadcrumb / Nav                | SEO & navigasi           | Navigasi portal       | Navigasi admin sadar-role          |
+| UI foundation                   | Public                    | Portal                   | Internal admin                        |
+| ------------------------------- | ------------------------- | ------------------------ | ------------------------------------- |
+| Button / FormField / StatusPill | CTAs, filters             | Forms & mutations        | Forms & approvals                     |
+| Card / Panel                    | Merchants, products       | KPIs, tasks              | Operational summary                   |
+| DataTable / Pagination          | Optional (dense listings) | Catalogue, leads         | Merchants, payouts, moderation        |
+| Empty / Error / Loading         | Empty directory           | Required on every screen | Required on every screen              |
+| Dialog / Drawer / Toast         | Minimal                   | Mobile actions           | High-risk actions (with confirmation) |
+| MaskedText / MoneyText          | Public prices             | Bank accounts, invoices  | PII & finance                         |
+| Breadcrumb / Nav                | SEO & navigation          | Portal navigation        | Role-aware admin navigation           |
 
-Komponen admin dibangun di `awcms` mengikuti pola layar admin yang sudah ada
-(`src/pages/admin/**`) — termasuk aturan CSP: **tidak ada script inline**; script
-di-import dan di-bundle.
+Admin components are built in `awcms` following the existing admin screen patterns
+(`src/pages/admin/**`) — including the CSP rule: **no inline scripts**; scripts are
+imported and bundled.
 
-## 5. Layar admin internal Jualanku
+## 5. Jualanku internal admin screens
 
-Ditambahkan di `awcms` sebagai SSR di bawah `/admin/jualanku/**`, dan
-**didaftarkan lewat `navigation` descriptor modul** (menu admin dibangun dari
-registry; entri menu yang menunjuk 404 memerahkan test navigasi).
+Added in `awcms` as SSR under `/admin/jualanku/**`, and
+**registered through the module's `navigation` descriptor** (the admin menu is built from
+the registry; a menu entry pointing at a 404 turns the navigation test red).
 
-| Layar                                  | Isi utama                                                 | Kontrol khusus                        |
-| -------------------------------------- | --------------------------------------------------------- | ------------------------------------- |
-| `dashboard`                            | Ringkasan operasional, antrean SLA                        | —                                     |
-| `merchants`                            | Daftar + detail + suspend/restore                         | Alasan wajib, audit                   |
-| `verifications`                        | Antrean case, bukti **ter-masking**, keputusan            | Step-up; akses bukti ter-audit        |
-| `catalog` / `moderation`               | Listing bermasalah, keputusan tahan/terbit                | Alasan wajib                          |
-| `leads`                                | Kesehatan lead (agregat), bukan isi percakapan            | PII minimal                           |
-| `affiliates` / `commissions`           | Profil, konversi, ledger, reversal                        | Reversal ber-alasan, append-only      |
-| `payouts`                              | Antrean maker/checker                                     | **SoD**; approver ≠ pembuat           |
-| `plans` / `subscriptions` / `invoices` | Paket, entitlement, tagihan                               | Perubahan harga = `configure` + audit |
-| `complaints`                           | Pengaduan konsumen + resolusi                             | SLA & jejak                           |
-| `onboarding-operations`                | Assignment pendamping, masa berlaku, persetujuan merchant | Grant bertenggat                      |
-| `reports` / `risk` / `audit`           | Laporan, anomali, jejak keputusan akses                   | Ekspor PII = high-risk                |
-| `settings`                             | Konfigurasi modul Jualanku per tenant                     | `configure`                           |
+| Screen                                 | Main content                                         | Special controls                     |
+| -------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
+| `dashboard`                            | Operational summary, SLA queues                      | —                                    |
+| `merchants`                            | List + detail + suspend/restore                      | Reason required, audited             |
+| `verifications`                        | Case queue, **masked** evidence, decisions           | Step-up; evidence access is audited  |
+| `catalog` / `moderation`               | Problem listings, hold/publish decisions             | Reason required                      |
+| `leads`                                | Lead health (aggregate), not conversation contents   | Minimal PII                          |
+| `affiliates` / `commissions`           | Profiles, conversions, ledger, reversals             | Reversals need a reason, append-only |
+| `payouts`                              | Maker/checker queue                                  | **SoD**; approver ≠ maker            |
+| `plans` / `subscriptions` / `invoices` | Plans, entitlements, billing                         | A price change = `configure` + audit |
+| `complaints`                           | Consumer complaints + resolution                     | SLA & trail                          |
+| `onboarding-operations`                | Assigning a coach, validity period, merchant consent | Time-bounded grants                  |
+| `reports` / `risk` / `audit`           | Reports, anomalies, access-decision trail            | PII export = high-risk               |
+| `settings`                             | Jualanku module configuration per tenant             | `configure`                          |
 
-Merchant dan affiliate tidak punya rute, entri navigasi, role, maupun audience
-sesi ke layar mana pun di atas.
+Merchants and affiliates have no route, no navigation entry, no role, and no session
+audience for any of the screens above.
 
-## 6. Aksesibilitas
+## 6. Accessibility
 
-Baseline **WCAG 2.2 Level AA** (diadopsi sebagai ISO/IEC 40500:2025) — naik dari
-2.1 AA yang dipakai template sebelumnya.
+Baseline **WCAG 2.2 Level AA** (adopted as ISO/IEC 40500:2025) — up from
+the 2.1 AA used by the previous template.
 
-- Seluruh fungsi primer dapat dioperasikan keyboard, dengan fokus terlihat.
-- Target sentuh CTA utama portal minimal 44 CSS px.
-- Setiap form: label, hint, asosiasi error, pengumuman status, dan validasi
-  server-side (validasi klien bukan kontrol).
-- Status tidak pernah hanya-warna.
-- `prefers-reduced-motion` dihormati — animasi dekoratif **dimatikan**, bukan
-  dipercepat.
-- Hierarki heading, landmark, skip link, caption/header tabel, dan atribut
-  bahasa diuji otomatis **dan** manual pada alur kritis.
-- Mobile-first dari lebar 360 px.
+- Every primary function is keyboard-operable, with a visible focus indicator.
+- The touch target for the portal's main CTAs is at least 44 CSS px.
+- Every form: labels, hints, error association, status announcements, and server-side
+  validation (client validation is not a control).
+- Status is never colour-only.
+- `prefers-reduced-motion` is honoured — decorative animation is **turned off**, not
+  sped up.
+- Heading hierarchy, landmarks, skip links, table caption/headers, and language
+  attributes are tested automatically **and** manually on the critical flows.
+- Mobile-first from a width of 360 px.
 
-## 7. Bahasa & konten
+## 7. Language & content
 
-- String UI lewat katalog i18n (`bahasa Indonesia` sebagai locale utama produk),
-  bukan literal di komponen.
-- Angka, mata uang, dan tanggal diformat lewat helper i18n; jangan pernah
-  merangkai string mata uang manual.
-- Klaim pemasaran, harga, dan janji layanan punya pemilik bukti dan persetujuan
-  sebelum tayang — dicatat di claims register (lihat
+- UI strings go through the i18n catalogue (`Indonesian` as the product's primary locale),
+  not literals in components.
+- Numbers, currency, and dates are formatted through the i18n helpers; never
+  assemble a currency string by hand.
+- Marketing claims, prices, and service promises have an evidence owner and sign-off
+  before going live — recorded in the claims register (see
   [07](07-roadmap-gates-kepatuhan.md)).

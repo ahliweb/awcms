@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # media_library
 
 Tenant-scoped media object registry and upload flow — a System Foundation module
@@ -186,29 +188,29 @@ Responsive `srcset` render (micro step 5b) and the PDF media type (step 5c).
 The allowed MIME set stays the four raster types. Step 5d — the lifecycle API
 and `/admin/media` — is now ported in full.
 
-## Resolusi referensi media (`GET /api/v1/media/objects`)
+## Media reference resolution (`GET /api/v1/media/objects`)
 
-Registry ini sebelumnya **tidak punya permukaan baca sama sekali** — hanya
-upload session dan flag enforcement. Akibatnya konsumen di luar proses bisa
-melihat bahwa sebuah post PUNYA gambar (`featured_media_id`,
-`seo_image_media_id`) tanpa cara apa pun mengetahui URL-nya; `article-images.ts`
-di `awcms-astro` mengembalikan `src: undefined` justru karena itu, dan setiap
-artikel terbit tanpa gambarnya sementara tak ada yang gagal.
+This registry previously had **no read surface at all** — only upload sessions
+and the enforcement flag. The consequence was that an out-of-process consumer
+could see that a post HAS an image (`featured_media_id`, `seo_image_media_id`)
+with no way whatsoever to learn its URL; `article-images.ts` in `awcms-astro`
+returned `src: undefined` for exactly that reason, and every article shipped
+without its image while nothing failed.
 
-`GET /api/v1/media/objects?ids=<uuid>,<uuid>` me-resolve maksimal 100 id sekali
-jalan (gerbang `media_library.media.read` — permission yang sudah diseed sejak
-`sql/052` sambil menunggu permukaannya, ADR-0026 langkah 5d). Logikanya BUKAN
-baru: `MediaLibraryPort.resolveMediaReferences` sudah melakukan hal yang sama
-untuk konsumen in-process. Ini panggilan yang sama, lewat HTTP, dengan aturan
-keamanan yang sama — hanya objek `verified`/`attached`, satu tenant, tidak
-soft-deleted, yang resolve.
+`GET /api/v1/media/objects?ids=<uuid>,<uuid>` resolves at most 100 ids in one
+pass (gated on `media_library.media.read` — a permission seeded since `sql/052`
+while it waited for its surface, ADR-0026 step 5d). The logic is NOT new:
+`MediaLibraryPort.resolveMediaReferences` already does the same thing for
+in-process consumers. This is the same call, over HTTP, with the same security
+rules — only `verified`/`attached` objects, one tenant, not soft-deleted,
+resolve.
 
-Id yang tidak resolve **dilaporkan** di `unresolved`, tidak dibuang: mengembalikan
-hanya yang berhasil membuat "resource ini tidak punya gambar" dan "referensi
-gambarnya rusak" jadi respons yang sama — ambiguitas yang membuat celah gambar
-hilang ini bertahan tanpa disadari. Id yang bukan uuid ditolak 400, karena
-"Anda mengirim sampah" dan "objek itu tak boleh dirujuk" adalah dua fakta
-berbeda.
+Ids that do not resolve are **reported** in `unresolved`, not dropped: returning
+only the successful ones makes "this resource has no image" and "its image
+reference is broken" the same response — the ambiguity that let this
+missing-image gap survive unnoticed. An id that is not a uuid is rejected with
+400, because "you sent garbage" and "that object may not be referenced" are two
+different facts.
 
-Read-only, jadi kredensial mesin ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
-boleh memegangnya.
+Read-only, so machine credentials ([ADR-0049](../../../docs/adr/0049-machine-credentials-and-session-introspection.md))
+may hold it.

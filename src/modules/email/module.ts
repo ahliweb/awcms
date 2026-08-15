@@ -151,6 +151,11 @@ export const emailModule = defineModule({
   jobs: [
     {
       command: "bun run email:dispatch",
+      schedule: {
+        mode: "cron",
+        expression: "*/2 * * * *",
+        backlog: "bounded"
+      },
       purpose:
         "Drain the due email delivery queue (claim-lease, retry/backoff, circuit breaker) for every active tenant.",
       recommendedSchedule: "Every 1-2 minutes via cron/systemd timer.",
@@ -160,6 +165,11 @@ export const emailModule = defineModule({
     },
     {
       command: "bun run email:provider:health",
+      schedule: {
+        mode: "manual",
+        because:
+          "An operator probe used while diagnosing delivery problems, and a deploy smoke check. On a timer it would poll a third-party API for no consumer."
+      },
       purpose:
         "Live network check against the configured email provider's health endpoint.",
       recommendedSchedule:
@@ -170,6 +180,11 @@ export const emailModule = defineModule({
     },
     {
       command: "bun run email:templates:seed-defaults",
+      schedule: {
+        mode: "manual",
+        because:
+          "Runs once per tenant, right after that tenant is created. There is nothing periodic about it, and re-running it on a schedule would fight an operator who deliberately edited a template."
+      },
       purpose:
         "Seed the default system email templates for one tenant (idempotent — skips any template_key that already has an active row).",
       recommendedSchedule:
@@ -180,6 +195,13 @@ export const emailModule = defineModule({
     },
     {
       command: "bun run email:queue:purge",
+      schedule: {
+        mode: "cron",
+        expression: "20 3 * * *",
+        backlog: "review-before-first-run",
+        backlogNote:
+          "Deletes sent/failed email rows past retention, including the delivery-attempt trail used to debug provider problems. Dry-run and read the count."
+      },
       purpose:
         "Delete terminal email queue rows and spent delivery attempts past their retention windows (legal-hold gated, bounded batches).",
       recommendedSchedule: "Daily, off-peak.",

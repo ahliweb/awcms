@@ -1,117 +1,119 @@
 ---
 name: awcms-visitor-analytics
-description: Modul visitor_analytics SUDAH di-port ke repo ini (dari awcms-micro epic #617-#624) sebagai modul standalone `type:"system"`. Gunakan saat menambah/mengubah `/api/v1/analytics/*`, skema session/event/rollup (`awcms_visitor_sessions`/`awcms_visit_events`/`awcms_visitor_daily_rollups`, migrasi 049/050/051), helper klasifikasi identity/UA/bot + sanitasi path, endpoint ingest publik `POST /api/v1/analytics/collect`, dashboard `/admin/analytics`, enrichment geolokasi, atau job `analytics:rollup`/`analytics:purge`. Merangkum keputusan port (kopling legal-hold data_lifecycle RE-WIRED per ADR-0037 — `purgeVisitorAnalyticsData` param ke-5 `legalHoldGuard`; hold (scoped/tenant-wide) melewati SELURUH purge (events + sesi + rollup), lebih luas dari micro; wiring news_portal preset DEFERRED; koleksi = endpoint ingest publik BUKAN middleware; TIDAK ada SECURITY DEFINER) supaya perubahan lanjutan tidak meregresi privasi/RLS.
+description: The visitor_analytics module HAS ALREADY been ported into this repo (from the awcms-micro epic #617-#624) as a standalone `type:"system"` module. Use when adding/changing `/api/v1/analytics/*`, the session/event/rollup schema (`awcms_visitor_sessions`/`awcms_visit_events`/`awcms_visitor_daily_rollups`, migrations 049/050/051), the identity/UA/bot classification helpers + path sanitisation, the public ingest endpoint `POST /api/v1/analytics/collect`, the `/admin/analytics` dashboard, geolocation enrichment, or the `analytics:rollup`/`analytics:purge` jobs. It summarises the port decisions (the data_lifecycle legal-hold coupling RE-WIRED per ADR-0037 — `purgeVisitorAnalyticsData` 5th param `legalHoldGuard`; a hold (scoped/tenant-wide) skips the WHOLE purge (events + sessions + rollups), broader than micro; the news_portal preset wiring DEFERRED; collection = a public ingest endpoint NOT middleware; there is NO SECURITY DEFINER) so that follow-up changes do not regress privacy/RLS.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Visitor Analytics (code guide)
 
-Modul **SUDAH ADA** di repo ini: `src/modules/visitor-analytics/`,
-migrasi `sql/049`–`sql/051`, terdaftar di `src/modules/index.ts`. Ini panduan
-kode yang bisa dipanggil — bukan spesifikasi target. Baca juga
+The module **ALREADY EXISTS** in this repo: `src/modules/visitor-analytics/`,
+migrations `sql/049`–`sql/051`, registered in `src/modules/index.ts`. This is a guide to
+code you can call — not a target specification. Also read
 `src/modules/visitor-analytics/README.md`.
 
-## Bentuk modul (apa yang ada di kode)
+## Module shape (what is in the code)
 
 - **Descriptor** `module.ts`: `key: "visitor_analytics"`, `type: "system"`,
   `dependencies: [tenant_admin, identity_access, logging, reporting]`, 8
-  permission, `navigation` `/admin/analytics`, `jobs` (rollup+purge),
-  `settings.schemaVersion:1`. Field `dataLifecycle`
-  (`visitor_analytics.visit_events`, delegated) SUDAH ada — kopling legal-hold
-  di-RE-WIRE (ADR-0037), lihat §Port.
-- **domain/** (murni, unit-tested tanpa DB): `visitor-analytics-config.ts`
-  (env resolver privacy-first), `visitor-key.ts` (HMAC-SHA256 bersalt +
-  visitor-key anonim), `user-agent.ts`, `human-classifier.ts`,
+  permissions, `navigation` `/admin/analytics`, `jobs` (rollup+purge),
+  `settings.schemaVersion:1`. The `dataLifecycle` field
+  (`visitor_analytics.visit_events`, delegated) ALREADY exists — the legal-hold coupling
+  was RE-WIRED (ADR-0037), see §Port.
+- **domain/** (pure, unit-tested without a DB): `visitor-analytics-config.ts`
+  (privacy-first env resolver), `visitor-key.ts` (salted HMAC-SHA256 +
+  anonymous visitor key), `user-agent.ts`, `human-classifier.ts`,
   `path-sanitizer.ts`, `referrer.ts`, `request-area.ts`, `client-ip.ts`,
   `geo-enrichment.ts`, `analytics-range.ts`, `analytics-response-shaping.ts`
-  (gerbang raw-detail), `dashboard-view.ts`, `visitor-key-cookie.ts`.
-- **application/**: `collector.ts` (satu-satunya penulis session/event, fail-open,
+  (the raw-detail gate), `dashboard-view.ts`, `visitor-key-cookie.ts`.
+- **application/**: `collector.ts` (the only writer of sessions/events, fail-open,
   `workClass:"background_sync"` `queueTimeoutMs:200`), `analytics-queries.ts`,
   `rollup.ts`, `retention-purge.ts`, `event-directory.ts`, `session-directory.ts`.
 - **api**: `src/pages/api/v1/analytics/{collect,summary,realtime,sessions,events,pages,devices,locations,security,settings}.ts`
   - `retention/purge.ts`.
-- **admin**: `src/pages/admin/analytics.astro` (SSR-render).
+- **admin**: `src/pages/admin/analytics.astro` (SSR-rendered).
 - **jobs**: `scripts/visitor-analytics-rollup.ts` (`bun run analytics:rollup`),
   `scripts/visitor-analytics-purge.ts` (`bun run analytics:purge`).
 
-## Invarian privasi (JANGAN regresi)
+## Privacy invariants (DO NOT regress)
 
-1. **Off by default.** `VISITOR_ANALYTICS_ENABLED=false`. `collector` &
-   endpoint ingest tidak menulis apa pun saat disabled.
-2. **Identifier di-hash bersalt, tidak pernah mentah.** visitor-key/IP/UA →
+1. **Off by default.** `VISITOR_ANALYTICS_ENABLED=false`. The `collector` &
+   the ingest endpoint write nothing while disabled.
+2. **Identifiers are salted-hashed, never raw.** visitor-key/IP/UA →
    `hashVisitorKey/hashIpAddress/hashUserAgent` (`domain/visitor-key.ts`),
-   di-key oleh `VISITOR_ANALYTICS_HASH_SALT`. `scripts/validate-env.ts`
-   MEWAJIBKAN salt nyata saat modul enabled (cross-rule) — jangan longgarkan.
-3. **Raw detail opt-in ganda.** `ip_address` mentah hanya saat
-   `rawIpEnabled`; `login_identifier_snapshot` tak pernah untuk anonim.
-   API menutup raw field via `shapeVisitorSession/shapeVisitEvent(row,
+   keyed by `VISITOR_ANALYTICS_HASH_SALT`. `scripts/validate-env.ts`
+   REQUIRES a real salt when the module is enabled (cross-rule) — do not loosen it.
+3. **Raw detail is doubly opt-in.** A raw `ip_address` only when
+   `rawIpEnabled`; `login_identifier_snapshot` never for anonymous visitors.
+   The API closes raw fields via `shapeVisitorSession/shapeVisitEvent(row,
 canSeeRawDetail)` — `canSeeRawDetail = grantedPermissionKeys.has(
-"visitor_analytics.raw_detail.read")`. Gerbang server-side SATU kali;
-   dashboard TIDAK boleh jadi gerbang kedua.
-4. **`sanitizePath` fail-safe** (path tak-terparse → buang seluruh query),
-   `extractReferrerDomain` hanya hostname. Jangan simpan raw path/query/referrer.
-5. **jsonb** `user_agent_parsed`/`geo` diisi OBJEK JS (bukan
-   `${JSON.stringify}::jsonb`) supaya SELECT balik jadi objek, bukan string.
+"visitor_analytics.raw_detail.read")`. The server-side gate happens ONCE;
+   the dashboard MUST NOT become a second gate.
+4. **`sanitizePath` is fail-safe** (an unparseable path → drop the whole query),
+   `extractReferrerDomain` returns only the hostname. Do not store raw path/query/referrer.
+5. **jsonb** `user_agent_parsed`/`geo` are filled with JS OBJECTS (not
+   `${JSON.stringify}::jsonb`) so a SELECT reads back an object, not a string.
 
-## Koleksi = endpoint ingest publik (BUKAN middleware)
+## Collection = a public ingest endpoint (NOT middleware)
 
-`POST /api/v1/analytics/collect` publik/anonim: body `{tenantCode, path, referrer?}`.
-Resolve tenant via `resolvePublicTenantByCode` (tabel `awcms_tenants` **RLS-free**,
-ADR-0009 — sama seperti rute `/blog/{tenantCode}`), lalu `collectVisitorTelemetry`.
-**`src/middleware.ts` sengaja TIDAK disentuh** (jaminan login/Turnstile/CSP tetap).
-IP/UA dari header request (bukan body). Fire-and-forget selalu `202`; hanya
-rekam area `public` (anonim tak bisa buktikan admin/api). **TIDAK ada SECURITY
-DEFINER** — karena `awcms_tenants` RLS-free (lain dari `tenant_domain` yang
-butuh sql/048). `operationId analyticsCollect` ada di `ALLOWED_PUBLIC_OPERATIONS`
+`POST /api/v1/analytics/collect` is public/anonymous: body `{tenantCode, path, referrer?}`.
+Resolve the tenant via `resolvePublicTenantByCode` (the `awcms_tenants` table is **RLS-free**,
+ADR-0009 — same as the `/blog/{tenantCode}` route), then `collectVisitorTelemetry`.
+**`src/middleware.ts` is deliberately UNTOUCHED** (login/Turnstile/CSP guarantees stay).
+IP/UA come from request headers (not the body). Fire-and-forget always `202`; it only
+records the `public` area (an anonymous caller cannot prove admin/api). **There is NO SECURITY
+DEFINER** — because `awcms_tenants` is RLS-free (unlike `tenant_domain`, which
+needs sql/048). `operationId analyticsCollect` is in `ALLOWED_PUBLIC_OPERATIONS`
 (`scripts/api-spec-check.ts`).
 
-## RLS & FK (migrasi 050)
+## RLS & FK (migration 050)
 
-- Tiga tabel `ENABLE`+`FORCE RLS` + policy `tenant_isolation`. `awcms_worker`
-  DIBERI GRANT eksplisit (default privileges hanya `awcms_app`) — job jalan
-  sebagai worker; jangan hapus grant itu.
-- `awcms_visit_events` pakai **composite FK** `(tenant_id, visitor_session_id)`
-  → `awcms_visitor_sessions(tenant_id, id)` (ada `UNIQUE(tenant_id,id)`).
-  `identity_id` FK polos (selalu null di ingest).
+- All three tables are `ENABLE`+`FORCE RLS` + a `tenant_isolation` policy. `awcms_worker`
+  is GRANTed explicitly (default privileges cover `awcms_app` only) — the jobs run
+  as the worker; do not remove those grants.
+- `awcms_visit_events` uses a **composite FK** `(tenant_id, visitor_session_id)`
+  → `awcms_visitor_sessions(tenant_id, id)` (there is a `UNIQUE(tenant_id,id)`).
+  `identity_id` is a plain FK (always null at ingest).
 
-## Keyset (konvensi base ini, bukan micro)
+## Keyset (this base's convention, not micro's)
 
-`event-directory.ts`/`session-directory.ts` mengembalikan `{rows, nextCursor}`
-dengan cursor teks presisi-penuh dari `to_char(occurred_at/last_seen_at ... US
-...)` — JANGAN pakai `encodeKeysetCursor(row.date_as_JS_Date, id)` (micro
-begitu; `encodeKeysetCursor` di sini menerima TEKS, dan `Date` JS membuang
-mikrodetik → lewatkan baris di batas halaman, Issue #158).
+`event-directory.ts`/`session-directory.ts` return `{rows, nextCursor}`
+with a full-precision text cursor from `to_char(occurred_at/last_seen_at ... US
+...)` — DO NOT use `encodeKeysetCursor(row.date_as_JS_Date, id)` (micro
+does that; here `encodeKeysetCursor` takes TEXT, and a JS `Date` throws away
+microseconds → it skips rows at the page boundary, Issue #158).
 
-## Port (keputusan yang sudah diambil)
+## Port (decisions already taken)
 
-- **RE-WIRED (ADR-0037)** descriptor `dataLifecycle`
+- **RE-WIRED (ADR-0037)** the `dataLifecycle` descriptor
   (`visitor_analytics.visit_events`, delegated) + `LegalHoldGuardPort`.
-  `data_lifecycle` sudah di-port, jadi `purgeVisitorAnalyticsData(tx, tenantId,
-config, now, legalHoldGuard)` — param ke-5 WAJIB. Hold yang mencakup
-  `visitor_analytics.visit_events` (descriptor-scoped ATAU tenant-wide) melewati
-  SELURUH purge (events + step 2-4: raw-detail sesi, sesi, rollup) → semua data
-  analitik terpreservasi. SENGAJA lebih luas dari awcms-micro (yang hanya
-  menggerbangi DELETE events) karena step 2-4 juga memusnahkan data
-  relevan-litigasi. Adaptor `legalHoldGuardPortAdapter` di-inject di composition
+  `data_lifecycle` has been ported, so `purgeVisitorAnalyticsData(tx, tenantId,
+config, now, legalHoldGuard)` — the 5th param is MANDATORY. A hold covering
+  `visitor_analytics.visit_events` (descriptor-scoped OR tenant-wide) skips
+  the WHOLE purge (events + steps 2-4: session raw detail, sessions, rollups) → all
+  analytics data is preserved. This is DELIBERATELY broader than awcms-micro (which only
+  gated the events DELETE) because steps 2-4 also destroy
+  litigation-relevant data. The `legalHoldGuardPortAdapter` adapter is injected at the composition
   root (`POST /api/v1/analytics/retention/purge`,
-  `scripts/visitor-analytics-purge.ts`). Const kunci:
-  `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` di `module.ts`.
-- **DEFER** wiring preset `news_portal_full_online_r2`. Modul ini standalone.
-  Catatan (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan): preset itu kini urusan `blog_content`, dan tetap tidak
-  disentuh dari sini.
-- **Admin** = SSR-render (`admin/offices.astro` pattern), bukan client-fetch
-  SPA micro (base ini tak punya i18n framework / `components/ui`).
+  `scripts/visitor-analytics-purge.ts`). The key const:
+  `VISITOR_ANALYTICS_VISIT_EVENTS_LIFECYCLE_KEY` in `module.ts`.
+- **DEFER** the `news_portal_full_online_r2` preset wiring. This module is standalone.
+  Note (the `news_portal` module was MERGED into `blog_content` — ADR-0044/#300; its table names were kept): that preset is now `blog_content`'s business, and it is still not
+  touched from here.
+- **Admin** = SSR-rendered (the `admin/offices.astro` pattern), not micro's client-fetch
+  SPA (this base has no i18n framework / `components/ui`).
 
-## Gate saat mengubah modul ini
+## Gates when changing this module
 
-`bun run check` penuh. Yang paling relevan: `api:spec:check` (route-parity —
-setiap route file WAJIB punya path OpenAPI di
-`openapi/modules/visitor-analytics.openapi.yaml`, lalu `bun run openapi:bundle`
+The full `bun run check`. The most relevant ones: `api:spec:check` (route parity —
+every route file MUST have an OpenAPI path in
+`openapi/modules/visitor-analytics.openapi.yaml`, then `bun run openapi:bundle`
 
-- commit bundle); `modules:composition:inventory:check` (regen
-  `bun run modules:composition:inventory:generate`); `logging:lint:check` (log
-  pakai field terstruktur + `moduleKey`); `typecheck`; `test`. Fragment OpenAPI
-  hanya boleh menyumbang `paths` + `components.schemas` (parameter di-inline;
-  `ModuleSettingsView` di-`$ref` ke milik module-management, jangan didefinisikan
-  ulang). Tes: unit `tests/visitor-analytics-*.test.ts` + integrasi DB-gated
-  `tests/integration/visitor-analytics.integration.test.ts` (RLS bawah
+- commit the bundle); `modules:composition:inventory:check` (regenerate with
+  `bun run modules:composition:inventory:generate`); `logging:lint:check` (logs
+  use structured fields + `moduleKey`); `typecheck`; `test`. An OpenAPI fragment
+  may only contribute `paths` + `components.schemas` (parameters are inlined;
+  `ModuleSettingsView` is `$ref`-ed to module-management's own, do not redefine
+  it). Tests: unit `tests/visitor-analytics-*.test.ts` + the DB-gated integration
+  `tests/integration/visitor-analytics.integration.test.ts` (RLS under
   `awcms_app`, composite FK, purge).

@@ -1,52 +1,54 @@
 ---
 name: awcms-sensitive-data
-description: Tangani data sensitif AWCMS (email, phone, WhatsApp, NPWP, NIK, NITKU, receipt token) dengan normalize, hash lookup, dan masking. Gunakan saat menyimpan/menampilkan identifier, membuat profile identifier, atau menyusun DTO/response/log. Sesuai doc 04.
+description: Handle AWCMS sensitive data (email, phone, WhatsApp, NPWP, NIK, NITKU, receipt token) with normalize, hash lookup, and masking. Use when storing/displaying an identifier, creating a profile identifier, or assembling a DTO/response/log. Per doc 04.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Sensitive Data Handling
 
-Ikuti `docs/awcms/04_erd_data_dictionary.md` (klasifikasi & masking).
+Follow `docs/awcms/04_erd_data_dictionary.md` (classification & masking).
 
-## Pipeline identifier
+## Identifier pipeline
 
 ```mermaid
 flowchart LR
-  In[Raw identifier] --> Norm[Normalisasi] --> Hash[value_hash - lookup/dedup unik]
-  Norm --> Mask[masked_value - tampilan]
-  Hash & Mask --> DB[(Simpan)]
-  DB -. tidak pernah .-> Raw[Response/log/audit mentah]
+  In[Raw identifier] --> Norm[Normalization] --> Hash[value_hash - unique lookup/dedup]
+  Norm --> Mask[masked_value - display]
+  Hash & Mask --> DB[(Store)]
+  DB -. never .-> Raw[Raw response/log/audit]
 ```
 
-## Aturan
+## Rules
 
-1. Simpan `normalized_value`, `value_hash`, `masked_value`. Unik `(tenant_id, identifier_type, value_hash)`.
-2. Response umum hanya tampilkan `masked_value`; nilai penuh hanya untuk role berwenang lewat `awcms-abac-guard`.
-3. **Jangan** kirim raw value ke response/log/audit/event.
-   **Satu pengecualian, dan ia BUKAN pelonggaran aturan ini:** ekspor hak
-   subjek (ADR-0094) adalah pengungkapan yang SAH kepada orang yang datanya
-   itu sendiri, digerbangi permission `data_lifecycle.subject_request.export`
-   dan diaudit sebagai pengungkapan. Bahkan di sana kontrolnya tetap berlaku
-   lewat `redactedColumns` pada descriptor `subjectData` — `awcms_profile_identifiers`
-   meredaksi `normalized_value` (identifier terang) DAN `value_hash` (kunci
-   lookup turunannya), karena mengembalikan salah satunya mengubah ekspor
-   milik satu subjek menjadi oracle re-identifikasi bagi skema hashing yang
-   dipakai SETIAP baris lain di tabel itu. Kalau menambah kolom sensitif ke
-   tabel mana pun, tanyakan apakah ia harus masuk `redactedColumns`; gerbang
-   `subject-data:registry:check` memverifikasi kolom yang kamu sebut memang
-   ada, tapi tidak bisa menebak mana yang seharusnya kamu sebut.
-4. Gunakan `normalizeIdentifier`/`hashIdentifier`/`maskIdentifier`
-   (`src/modules/profile-identity/domain/identifier.ts`) untuk mengubah
-   raw value → safe DTO — dipanggil langsung dari caller (mis.
+1. Store `normalized_value`, `value_hash`, `masked_value`. Unique on `(tenant_id, identifier_type, value_hash)`.
+2. General responses only show `masked_value`; the full value only for authorized roles via `awcms-abac-guard`.
+3. **Do not** send the raw value to a response/log/audit/event.
+   **One exception, and it is NOT a loosening of this rule:** the subject
+   rights export (ADR-0094) is a LEGITIMATE disclosure to the very person
+   whose data it is, gated by the permission `data_lifecycle.subject_request.export`
+   and audited as a disclosure. Even there the control still applies
+   through `redactedColumns` on the `subjectData` descriptor — `awcms_profile_identifiers`
+   redacts `normalized_value` (the identifier in clear) AND `value_hash` (its
+   derived lookup key), because returning either one turns one subject's
+   export into a re-identification oracle for the hashing scheme used by
+   EVERY other row in that table. If you add a sensitive column to any
+   table, ask whether it must go into `redactedColumns`; the
+   `subject-data:registry:check` gate verifies that the columns you name really
+   exist, but it cannot guess which ones you should have named.
+4. Use `normalizeIdentifier`/`hashIdentifier`/`maskIdentifier`
+   (`src/modules/profile-identity/domain/identifier.ts`) to turn a
+   raw value → safe DTO — called directly from the caller (e.g.
    `identity-access/application/password-reset.ts`,
-   `email/application/suppression-directory.ts`), **tidak** ada layer
-   mapper terpisah (`infrastructure/mappers.ts` tidak pernah dibangun;
-   sebagian besar modul bahkan tidak punya folder `infrastructure/`).
-5. Receipt token: non-sequential, tidak mudah ditebak.
-6. Password hanya hash modern; `password_hash` tidak pernah keluar.
+   `email/application/suppression-directory.ts`), there is **no** separate
+   mapper layer (`infrastructure/mappers.ts` was never built;
+   most modules do not even have an `infrastructure/` folder).
+5. Receipt token: non-sequential, not easily guessable.
+6. Passwords only as modern hashes; `password_hash` never goes out.
 
-## Klasifikasi
+## Classification
 
-| Data                         | Level       | Kontrol                   |
+| Data                         | Level       | Control                   |
 | ---------------------------- | ----------- | ------------------------- |
 | Password hash, API key/token | Critical    | Never expose / env only   |
 | NPWP/NIK/NITKU               | High        | Mask + ABAC tax role      |
@@ -54,11 +56,11 @@ flowchart LR
 | Address                      | Medium/High | Need-to-know              |
 | Tax invoice/XML              | High        | Tax role, audit, checksum |
 
-## Verifikasi
+## Verification
 
-- Response/log tidak memuat nilai sensitif penuh.
-- Duplicate identifier tidak membuat profile baru (dedup via hash).
-- Konsisten dengan redaction logger & `awcms-audit-log`.
-- Kolom sensitif baru sudah dipertimbangkan terhadap `redactedColumns`
-  descriptor `subjectData` modul pemiliknya (skill `awcms-data-lifecycle`
-  §Hak subjek data), lalu `bun run subject-data:registry:check` hijau.
+- Responses/logs contain no full sensitive values.
+- A duplicate identifier does not create a new profile (dedup via hash).
+- Consistent with the redaction logger & `awcms-audit-log`.
+- Any new sensitive column has been weighed against the `redactedColumns`
+  of the owning module's `subjectData` descriptor (skill `awcms-data-lifecycle`
+  §Data subject rights), then `bun run subject-data:registry:check` is green.

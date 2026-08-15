@@ -1,105 +1,108 @@
-# ADR-0057 — Siklus hidup page `blog_content`: page yang tidak pernah bisa terbit
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0057-blog-page-lifecycle.id.md)
+
+# ADR-0057 — `blog_content` page lifecycle: the page that could never be published
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-02
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) (seluruh layar admin dibangun di sini), [ADR-0056](0056-media-library-admin-surface.md) (preseden: permukaan dulu, layar belakangan), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (`blog_content` menyerap `news_portal`; layar admin disebut sebagai pekerjaan tersisa terbesar)
+- **Date:** 2026-08-02
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0051](0051-admin-screens-consolidated-in-awcms.md) (every admin screen is built here), [ADR-0056](0056-media-library-admin-surface.md) (precedent: surface first, screen later), [ADR-0044](0044-merge-news-portal-into-blog-content.md) (`blog_content` absorbs `news_portal`; the admin screen is named as the largest remaining work)
 
-## Konteks
+## Context
 
-[ADR-0044](0044-merge-news-portal-into-blog-content.md) menutup dengan kalimat
-bahwa layar admin `blog_content` "land one issue per screen". `/admin/blog`
-(#340) mengambil siklus hidup post — sebelas dari 43 permission — dan
-descriptor modul mencatat lima layar saudara yang menyusul: **pages**, taxonomy,
+[ADR-0044](0044-merge-news-portal-into-blog-content.md) closes with the sentence
+that the `blog_content` admin screens "land one issue per screen". `/admin/blog`
+(#340) took the post lifecycle — eleven of 43 permissions — and the
+module descriptor records five sibling screens to follow: **pages**, taxonomy,
 presentation, settings, homepage composition.
 
-Audit permukaan `pages.*` sebelum menulis layar itu menemukan hal yang sama
-dengan yang ADR-0056 temukan pada `media_library`, dan lebih tajam.
+Auditing the `pages.*` surface before writing that screen found the same thing
+ADR-0056 found on `media_library`, and sharper.
 
-### 1. Empat dari delapan permission `pages.*` tidak digerbangi apa pun
+### 1. Four of the eight `pages.*` permissions are gated by nothing
 
-`sql/036` men-seed delapan permission `pages.*` ke katalog global, dan
-descriptor mendeklarasikan kedelapannya. Empat punya penegak nyata:
+`sql/036` seeds eight `pages.*` permissions into the global catalogue, and the
+descriptor declares all eight. Four have real enforcers:
 
-| Permission     | Penegak                                                      |
+| Permission     | Enforcer                                                     |
 | -------------- | ------------------------------------------------------------ |
 | `pages.read`   | `GET /api/v1/blog/pages`, `/{id}`, `/{id}/quality-checklist` |
 | `pages.create` | `POST /api/v1/blog/pages`                                    |
 | `pages.update` | `PATCH /api/v1/blog/pages/{id}`                              |
 | `pages.delete` | `DELETE /api/v1/blog/pages/{id}`                             |
 
-**Empat tidak punya sama sekali:** `pages.publish`, `pages.archive`,
-`pages.restore`, `pages.purge`. Tidak ada route, tidak ada fungsi aplikasi,
-tidak ada job yang memeriksanya. Keempatnya di-grant ke role `owner` tiap tenant
-baru dan tidak ada satu pun jalur kode yang membacanya.
+**Four have none at all:** `pages.publish`, `pages.archive`,
+`pages.restore`, `pages.purge`. There is no route, no application function,
+no job that checks them. All four are granted to the `owner` role of every new
+tenant and no code path reads them.
 
-### 2. Lubangnya lebih dalam dari route — lapisan aplikasi juga tidak punya
+### 2. The hole is deeper than the routes — the application layer does not have it either
 
-Pada `media_library` tiga fungsi lifecycle sudah ditulis dan sekadar tak
-dipanggil. Di sini fungsinya **tidak ada**. `application/blog-page-directory.ts`
-mengekspor `createBlogPage`, `fetchBlogPageById`, `listBlogPages`,
-`listBlogPagesForAdmin`, `updateBlogPage`, dan `softDeleteBlogPage` — itu saja.
-Header berkasnya sendiri mencatat kenapa:
+On `media_library` three lifecycle functions were already written and merely not
+called. Here the functions **do not exist**. `application/blog-page-directory.ts`
+exports `createBlogPage`, `fetchBlogPageById`, `listBlogPages`,
+`listBlogPagesForAdmin`, `updateBlogPage`, and `softDeleteBlogPage` — that is all.
+The file's own header records why:
 
 > Pages get plain CRUD only (no publish/schedule/archive/restore/purge lifecycle
 > actions … those permissions are already seeded (#537) for a future issue to
 > wire up, not this one).
 
-Issue lanjutan itu tidak pernah datang. Yang tertinggal adalah katalog
-permission yang menjanjikan siklus hidup dan kode yang tak punya satu pun
-langkahnya.
+That follow-up issue never came. What is left behind is a permission catalogue
+promising a lifecycle and code that has not a single one of its
+steps.
 
-### 3. Akibatnya: setiap page permanen `draft`, dan halaman publik permanen kosong
+### 3. The consequence: every page is permanently `draft`, and the public page is permanently empty
 
-Ini bagian yang mengubah temuan dari "permission menganggur" menjadi cacat
-fungsional, dan ia bisa dibuktikan dari tiga baris kode:
+This is the part that turns the finding from "idle permissions" into a
+functional defect, and it can be proven from three lines of code:
 
-- `createBlogPage` menulis `status` sebagai literal `'draft'`;
-- `updateBlogPage` tidak menyentuh `status` maupun `published_at`, dan
-  `UpdateBlogPageInput` tidak punya field-nya;
-- `blog-scheduled-publish.ts` hanya menyentuh `awcms_blog_posts`.
+- `createBlogPage` writes `status` as the literal `'draft'`;
+- `updateBlogPage` touches neither `status` nor `published_at`, and
+  `UpdateBlogPageInput` has no field for them;
+- `blog-scheduled-publish.ts` only touches `awcms_blog_posts`.
 
-Tidak ada penulis lain untuk `awcms_blog_pages.status` di seluruh repo. **Sebuah
-page karena itu tidak pernah bisa meninggalkan `draft`.**
+There is no other writer of `awcms_blog_pages.status` in the whole repo. **A
+page therefore can never leave `draft`.**
 
-Konsekuensinya sudah hidup di permukaan publik hari ini:
-`blog-search.ts` menyaring cabang page dengan
+The consequence is already live on the public surface today:
+`blog-search.ts` filters the page branch with
 `status = 'published' AND visibility = 'public' AND published_at IS NOT NULL`,
-sehingga **hasil pencarian publik untuk page selalu nol baris**, berapa pun
-banyak page yang dibuat tenant. `sql/035` bahkan membuat index
-`awcms_blog_pages_tenant_status_published_idx` pada `(tenant_id, status,
-published_at DESC)` — index untuk query terbit yang tidak pernah bisa
-mengembalikan apa pun.
+so **public search results for pages are always zero rows**, no matter how
+many pages a tenant creates. `sql/035` even builds the index
+`awcms_blog_pages_tenant_status_published_idx` on `(tenant_id, status,
+published_at DESC)` — an index for a published-content query that can never
+return anything.
 
-### 4. Tidak ada gerbang yang menangkap kelas cacat ini
+### 4. No gate catches this class of defect
 
-`tests/admin-navigation-registry.test.ts` menangkap entri navigasi yang
-path-nya tak punya halaman. `tests/admin-*-page-contract.test.ts` mengikat key
-halaman ke yang route tegakkan. Tidak satu pun bertanya **"apakah tiap
-permission ter-seed punya penegak"** — pertanyaan yang, bila ditanyakan, akan
-memerahkan `media_library` (lima) dan `blog_content` (empat) sekaligus, jauh
-sebelum keduanya jadi temuan audit manual.
+`tests/admin-navigation-registry.test.ts` catches navigation entries whose
+path has no page. `tests/admin-*-page-contract.test.ts` bind page keys
+to what the routes enforce. Not one of them asks **"does every
+seeded permission have an enforcer"** — a question that, had it been asked, would
+have reddened `media_library` (five) and `blog_content` (four) at once, long
+before either became a manual audit finding.
 
-## Keputusan
+## Decision
 
-### A. Page mendapat siklus hidup, bukan pencabutan
+### A. Pages get a lifecycle, not a revocation
 
-Keempat permission tak-tergerbangi itu **diberi permukaan**, bukan dicabut.
-Alasannya bukan simetri dengan post melainkan bahwa alternatifnya memutuskan
-sesuatu yang tak seorang pun bermaksud putuskan: mencabut `pages.publish`
-berarti menyatakan page memang selamanya draft — yaitu memberkati cacat nomor 3
-sebagai desain, sementara index, kolom, CHECK constraint, dan penyaring
-pencarian publik semuanya ditulis dengan asumsi sebaliknya.
+Those four ungated permissions are **given a surface**, not revoked.
+The reason is not symmetry with posts but that the alternative decides
+something nobody meant to decide: revoking `pages.publish`
+means declaring that pages really are drafts forever — that is, blessing defect
+number 3 as design, while the index, the columns, the CHECK constraint, and the
+public search filter were all written on the opposite assumption.
 
-Ini kebalikan dari putusan ADR-0056 §A untuk `attach`/`detach`, dan bedanya
-bermakna: attach/detach usang karena ADR lain memindahkan kepemilikannya ke
-tempat lain yang bekerja. Tidak ada tempat lain yang menerbitkan page.
+This is the inverse of ADR-0056 §A's ruling for `attach`/`detach`, and the
+difference is meaningful: attach/detach are obsolete because another ADR moved
+their ownership somewhere else that works. There is no other place that
+publishes a page.
 
-### B. Siklus hidupnya lebih sempit dari post: tanpa `scheduled`, tanpa `review`
+### B. Its lifecycle is narrower than posts': no `scheduled`, no `review`
 
-Post punya lima status dan permission `posts.schedule` tersendiri. Page **tidak
-punya `pages.schedule`** — dan itu keputusan yang sudah dibuat `sql/036`, bukan
-kelalaian yang perlu ditambal. Transisi yang diizinkan untuk page:
+Posts have five statuses and a `posts.schedule` permission of their own. Pages
+**have no `pages.schedule`** — and that is a decision `sql/036` already made, not
+an oversight that needs patching. The transitions allowed for pages:
 
 ```
 draft ──────► published ──────► archived
@@ -107,158 +110,158 @@ draft ──────► published ──────► archived
   └───────────────┴─────────────────┘
 ```
 
-`review` dan `scheduled` **tidak** dipakai untuk page, meskipun CHECK
-`awcms_blog_pages_status_check` menerimanya (kolom itu dibuat identik dengan
-post di `sql/035`). Aturan transisi tinggal di `domain/`, terpisah dari
-`ALLOWED_STATUS_TRANSITIONS` milik post, karena keduanya kini **memang** aturan
-yang berbeda — membaginya berarti satu tabel yang benar untuk satu pemanggil dan
-terlalu longgar untuk yang lain.
+`review` and `scheduled` are **not** used for pages, even though the CHECK
+`awcms_blog_pages_status_check` accepts them (that column was created identical
+to posts' in `sql/035`). The transition rules live in `domain/`, separate from
+posts' `ALLOWED_STATUS_TRANSITIONS`, because the two now **really are** different
+rules — sharing them means one table that is correct for one caller and
+too loose for the other.
 
-Alasan substansinya: page adalah konten struktural situs (about, kontak,
-kebijakan privasi). Alur editorial "ajukan untuk direview" dan penerbitan
-terjadwal adalah kebutuhan redaksi berita, dan `blog_content` sudah punya
-keduanya di tempat yang benar — pada post. Menyalin keduanya ke page berarti
-menambah dua permission yang harus di-seed, digerbangi, dan dilayari untuk alur
-kerja yang belum ada yang minta.
+The substantive reason: a page is structural site content (about, contact,
+privacy policy). The "submit for review" editorial flow and scheduled publishing
+are newsroom needs, and `blog_content` already has both in the right place —
+on posts. Copying both onto pages means
+adding two permissions that must be seeded, gated, and navigated for a workflow
+nobody has asked for.
 
-### C. `purge` page memakai prasyarat yang sama dengan post
+### C. Page `purge` uses the same precondition as posts
 
-`canPurgePost` menuntut baris sudah soft-deleted **atau** berstatus `archived` —
-"purge dilarang untuk konten terbit kecuali diarsipkan atau dihapus lunak
-dahulu". Aturan itu berlaku untuk page tanpa perubahan, dan dipakai ulang alih-alih
-ditulis kembali.
+`canPurgePost` demands the row already be soft-deleted **or** have status
+`archived` — "purge is forbidden for published content unless archived or soft
+deleted first". That rule applies to pages unchanged, and is reused instead of
+being rewritten.
 
-**Rujukan ad placement yang menggantung TIDAK memblokir purge**, dan itu bukan
-kelonggaran melainkan kontrak yang modul ini sudah tetapkan.
-`awcms_news_portal_ad_placements` menargetkan page lewat pasangan
-`target_type = 'page'` dan `target_id` polimorfik yang, karena tak ada FK yang
-bisa menjangkau tiga tabel, hanya diperiksa **saat tulis** oleh
-`application/ad-placement-reference-validation.ts`. Header berkas itu sudah
-memutuskan apa artinya bila target hilang belakangan:
+**Dangling ad placement references do NOT block purge**, and that is not
+leniency but the contract this module has already set.
+`awcms_news_portal_ad_placements` targets a page through the pair
+`target_type = 'page'` and a polymorphic `target_id` which, because no FK can
+reach three tables, is only checked **at write time** by
+`application/ad-placement-reference-validation.ts`. That file's header already
+decided what it means when the target disappears later:
 
 > A target deleted LATER is not an error and never becomes one. The render
 > query joins nothing on `target_id`, so the ad simply stops matching —
 > degrade, don't error.
 
-Dan itu benar sampai ke query-nya: `listActiveAdPlacementsForRendering`
-mencocokkan `p.target_id = ${targetId}` dengan id **page yang sedang dirender**.
-Page yang sudah di-purge tidak pernah dirender, jadi placement-nya tidak pernah
-dicocokkan — ia menjadi inert, bukan rusak. Soft delete, yang sudah ada hari ini
-dan tak digerbangi apa pun soal ini, punya efek render yang **persis sama**.
-Purge karena itu tidak memperkenalkan mode kegagalan baru.
+And it is true right down to the query: `listActiveAdPlacementsForRendering`
+matches `p.target_id = ${targetId}` against the id of the **page being
+rendered**. A purged page is never rendered, so its placements are never
+matched — they become inert, not broken. Soft delete, which exists today
+and is gated by nothing in this respect, has **exactly the same** render effect.
+Purge therefore introduces no new failure mode.
 
-> **Koreksi terhadap draf pertama ADR ini.** Draf itu memutuskan purge
-> **menolak dengan 409** selama ada ad placement menargetkan page tersebut.
-> Itu salah, dan salahnya bukan soal selera: ia menolak sebuah operasi demi
-> mencegah kondisi yang modul ini sudah nyatakan tak berbahaya, dan akan
-> membuat operator terhalang menghapus page oleh iklan yang toh sudah berhenti
-> tampil. Ditemukan dengan membaca `ad-placement-reference-validation.ts` dan
-> query render-nya, bukan dengan menalar dari bentuk skema — pelajaran yang
-> sama yang §4 catat tentang memindai route saja.
+> **Correction to the first draft of this ADR.** That draft decided purge would
+> **refuse with a 409** as long as an ad placement targeted the page.
+> That is wrong, and the wrongness is not a matter of taste: it refuses an
+> operation in order to prevent a condition this module has already declared
+> harmless, and it would leave an operator blocked from deleting a page by an ad
+> that had stopped showing anyway. Found by reading
+> `ad-placement-reference-validation.ts` and its render query, not by reasoning
+> from the shape of the schema — the same lesson §4 records about scanning
+> routes only.
 
-Yang purge **wajib** lakukan adalah membuat perubahan itu terlihat: responsnya
-membawa jumlah ad placement yang kini menargetkan page yang tiada. Sebuah baris
-yang diam-diam menjadi inert adalah persis "menghilang tanpa catatan" yang
-ADR-0044 §4 tolak untuk iklan yang tak bisa dimigrasikan. Melaporkan bukan
-menolak — operator melihat akibatnya tanpa dihalangi olehnya.
+What purge **must** do is make that change visible: its response carries the
+number of ad placements now targeting a page that no longer exists. A row that
+silently becomes inert is exactly the "disappearing without a record" that
+ADR-0044 §4 rejected for ads that could not be migrated. Report, don't
+refuse — the operator sees the consequence without being blocked by it.
 
-### D. Nol migrasi
+### D. Zero migrations
 
-Tidak ada migrasi dalam perubahan ini, dan itu bukan kebetulan yang beruntung
-melainkan konsekuensi dari bentuk cacatnya:
+There is no migration in this change, and that is not lucky coincidence but a
+consequence of the shape of the defect:
 
-- delapan permission sudah di-seed (`sql/036`) — tidak ada yang ditambah atau
-  dicabut;
-- `awcms_blog_pages` sudah punya `status`, `published_at`, `scheduled_at`,
-  `deleted_at`/`deleted_by`/`delete_reason`, `restored_at`/`restored_by`, dan
+- the eight permissions are already seeded (`sql/036`) — nothing is added or
+  revoked;
+- `awcms_blog_pages` already has `status`, `published_at`, `scheduled_at`,
+  `deleted_at`/`deleted_by`/`delete_reason`, `restored_at`/`restored_by`, and
   `version` (`sql/035`);
-- CHECK dan index yang dibutuhkan sudah ada.
+- the required CHECK and indexes already exist.
 
-Yang hilang selama ini murni lapisan aplikasi dan route. Sebuah migrasi di sini
-justru akan menjadi tanda bahwa sesuatu salah dibaca.
+What has been missing all along is purely the application and route layer. A
+migration here would in fact be a sign that something was misread.
 
-### E. Urutan: permukaan dulu, layar belakangan
+### E. Order: surface first, screen later
 
-Mengikuti ADR-0056 persis:
+Following ADR-0056 exactly:
 
-1. **ADR ini.**
-2. **Permukaan** — `transitionBlogPageStatus`, `restoreBlogPage`,
-   `purgeBlogPage` di `blog-page-directory.ts`, plus
+1. **This ADR.**
+2. **The surface** — `transitionBlogPageStatus`, `restoreBlogPage`,
+   `purgeBlogPage` in `blog-page-directory.ts`, plus
    `POST /api/v1/blog/pages/{id}/publish`, `/archive`, `/restore`, `/purge`,
-   ter-guard, ter-audit, ber-`Idempotency-Key`, dengan OpenAPI sinkron.
-3. **Layar** `/admin/blog/pages` menggerakkan **kedelapan** permission, dengan
-   entri `navigation` mendarat di PR yang sama dan contract test per-halaman
-   yang mutation-proven.
+   guarded, audited, carrying an `Idempotency-Key`, with OpenAPI in sync.
+3. **The screen** `/admin/blog/pages` driving **all eight** permissions, with the
+   `navigation` entry landing in the same PR and a mutation-proven per-page
+   contract test.
 
-Layar tidak mendahului permukaan. Konsol yang bisa membuat dan menyunting page
-tapi tak pernah bisa menerbitkannya adalah jalan buntu yang terlihat seperti
-fitur.
+The screen does not precede the surface. A console that can create and edit pages
+but can never publish them is a dead end that looks like a feature.
 
-### F. Gerbang untuk kelas cacatnya, bukan hanya untuk instansnya
+### F. A gate for the class of defect, not just for its instance
 
-Dua modul kini pernah mengirim permission ter-seed tanpa penegak, dan keduanya
-ditemukan hanya karena seseorang hendak membangun layarnya. Perubahan permukaan
-(langkah 2) membawa serta sebuah gate yang **tidak** spesifik `blog_content`:
-setiap permission yang dideklarasikan descriptor modul **mana pun** harus punya
-call site `authorizeInTransaction`, atau terdaftar sebagai pengecualian
-ber-alasan. Ia berjalan sebagai bagian `bun run check` dan tidak menyentuh
-database — pertanyaannya seluruhnya bisa dijawab dari registry modul dan sumber
-`src/`.
+Two modules have now shipped seeded permissions with no enforcer, and both were
+found only because someone was about to build their screen. The surface change
+(step 2) brings with it a gate that is **not** specific to `blog_content`:
+every permission declared by **any** module descriptor must have an
+`authorizeInTransaction` call site, or be listed as a reasoned exception.
+It runs as part of `bun run check` and does not touch the
+database — its questions can be answered entirely from the module registry and
+the `src/` sources.
 
-Dua pengecualian yang sudah diketahui dan akan didaftarkan sejak awal, keduanya
-sudah tercatat di `/admin/blog`:
+Two known exceptions that will be listed from the outset, both already recorded
+in `/admin/blog`:
 
-- `blog_content.posts.export` — dideklarasikan dan di-seed, tak ada endpoint
-  mana pun yang menegakkannya (kandidat pencabutan, ADR tersendiri);
-- gerbang yang hidup di dalam fungsi aplikasi alih-alih berkas route
-  (`media.verify` di `media-finalize-upload-session.ts`) — bukan pengecualian
-  melainkan alasan gate harus memindai `src/` seluruhnya, bukan `src/pages/api/`
-  saja.
+- `blog_content.posts.export` — declared and seeded, with no endpoint
+  anywhere enforcing it (a revocation candidate, its own ADR);
+- gates that live inside an application function instead of a route file
+  (`media.verify` in `media-finalize-upload-session.ts`) — not an exception
+  but the reason the gate must scan all of `src/`, not just `src/pages/api/`.
 
-## Konsekuensi
+## Consequences
 
-- **Tidak ada perubahan otorisasi.** Katalog tidak bergerak; empat permission
-  yang selama ini tak diperiksa mulai diperiksa. Tenant yang sudah memegangnya
-  memperoleh kemampuan yang selama ini dijanjikan role-nya.
-- **Perubahan perilaku yang terlihat pengguna:** page bisa terbit. Hasil
-  pencarian publik untuk page berhenti selalu-kosong, dan `seo_facts`/sitemap
-  konsumen akan mulai melihat page terbit — yang benar, dan yang harus
-  disebut di changeset sebagai `minor`, bukan `patch`.
-- **`purge` melaporkan, tidak menolak.** Responsnya membawa jumlah ad placement
-  yang kini menargetkan page yang tiada — field baru yang harus ada di OpenAPI.
-  Tidak ada kode error baru untuk kasus itu, dan itu memang keputusannya.
-- **Empat layar saudara masih tersisa** setelah ini (taxonomy, presentation,
-  settings, homepage composition). Sejauh audit ini, permukaan keempatnya
-  lengkap — seluruhnya pasangan `read`/`configure` yang punya route. Gate §F
-  akan mengubah "sejauh audit ini" menjadi klaim yang dijaga.
+- **No authorization change.** The catalogue does not move; four permissions
+  that have gone unchecked start being checked. Tenants that already hold them
+  gain the capability their role has been promising all along.
+- **A user-visible behaviour change:** pages can be published. Public
+  search results for pages stop being always-empty, and `seo_facts`/sitemap
+  consumers will start seeing published pages — which is correct, and which must
+  be called `minor` in the changeset, not `patch`.
+- **`purge` reports, it does not refuse.** Its response carries the number of ad
+  placements now targeting a page that no longer exists — a new field that must
+  be in OpenAPI. There is no new error code for that case, and that is exactly
+  the decision.
+- **Four sibling screens remain** after this one (taxonomy, presentation,
+  settings, homepage composition). As far as this audit goes, all four surfaces
+  are complete — all of them `read`/`configure` pairs that have routes. The §F
+  gate will turn "as far as this audit goes" into a guarded claim.
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-- **Bangun layar CRUD sekarang, lifecycle nanti.** Paling cepat, dan ia
-  mengirim konsol yang setiap tombolnya bekerja kecuali satu-satunya yang
-  membuat sebuah page berguna. Ia juga meninggalkan empat permission menganggur
-  di katalog — bahan baku cacat latent-authz yang repo ini sudah dua kali
-  kirim.
-- **Cabut keempat permission, nyatakan page CRUD-only.** Rapi dan salah, dengan
-  cara yang mahal: ia memberkati pencarian publik page yang permanen kosong
-  sebagai desain, dan membuang kolom, CHECK, serta index yang `sql/035` sudah
-  bayar.
-- **Beri page siklus hidup post seutuhnya (review + scheduled).** Berarti
-  menambah dua permission baru untuk alur kerja yang belum ada yang minta, dan
-  menyeret `blog-scheduled-publish.ts` ke resource kedua demi penerbitan
-  terjadwal halaman "tentang kami".
-- **Purge ikut menghapus ad placement yang menargetkan page.** Menghapus baris
-  milik permukaan lain sebagai efek samping — kepemilikan yang ADR-0044 baru
-  saja rapikan, dan penghapusan senyap yang persis dilarang ADR-0044 §4 untuk
-  ad yang tak bisa dimigrasikan.
-- **Purge menolak (409) selama ada ad placement menargetkan page itu.** Ini
-  putusan draf pertama ADR ini, dan ia ditolak setelah membaca kode alih-alih
-  menalar dari skema: `ad-placement-reference-validation.ts` sudah menyatakan
-  target yang hilang belakangan "is not an error and never becomes one", query
-  render tak pernah mencocokkan placement milik page yang tak dirender, dan
-  soft delete — yang sudah ada dan tak digerbangi — punya efek yang sama
-  persis. Menolak berarti menghalangi operator demi mencegah kondisi yang tidak
-  merusak apa pun.
-- **Purge diam saja soal placement yang jadi inert.** Aman secara teknis dan
-  buruk secara operasional: sebuah slot iklan berhenti terisi tanpa satu pun
-  jejak yang menghubungkannya ke page yang dihapus tiga minggu lalu.
+- **Build the CRUD screen now, lifecycle later.** Fastest, and it
+  ships a console where every button works except the only one that
+  makes a page useful. It also leaves four permissions idle
+  in the catalogue — the raw material of the latent-authz defect this repo has
+  already shipped twice.
+- **Revoke all four permissions, declare pages CRUD-only.** Tidy and wrong, in
+  an expensive way: it blesses permanently empty public page search
+  as design, and throws away the columns, CHECK, and index `sql/035` already
+  paid for.
+- **Give pages the full post lifecycle (review + scheduled).** That means
+  adding two new permissions for a workflow nobody has asked for, and
+  dragging `blog-scheduled-publish.ts` onto a second resource for the sake of
+  scheduled publishing of the "about us" page.
+- **Have purge also delete ad placements targeting the page.** Deleting rows
+  owned by another surface as a side effect — ownership that ADR-0044 has just
+  tidied up, and exactly the silent deletion ADR-0044 §4 forbids for
+  ads that cannot be migrated.
+- **Have purge refuse (409) while an ad placement targets that page.** This was
+  this ADR's first-draft ruling, and it was rejected after reading the code
+  rather than reasoning from the schema: `ad-placement-reference-validation.ts`
+  already states that a target lost later "is not an error and never becomes
+  one", the render query never matches placements belonging to an unrendered
+  page, and soft delete — which exists and is gated by nothing — has exactly the
+  same effect. Refusing means blocking an operator in order to prevent a
+  condition that damages nothing.
+- **Have purge say nothing about placements that go inert.** Technically safe
+  and operationally bad: an ad slot stops being filled without a single
+  trace connecting it to a page deleted three weeks ago.

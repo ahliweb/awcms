@@ -1,12 +1,14 @@
-# Bagian 19 — Glossary dan Terminologi
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](19_glossary_terminology.id.md)
 
-> **Status implementasi (2026-07-14).** Diadaptasi dari `docs/awcms-mini/19_glossary_terminology.md`. Istilah arsitektur/keamanan generik dipertahankan apa adanya (sudah terbukti di base asal). Istilah domain CMS/retail-POS (blog, article, news portal, visitor analytics, checkout POS) **dihapus/diganti** dengan istilah domain ERP (general ledger, SKU, purchase order, BOM, payroll run) yang menjadi skop platform `awcms`. Belum ada satu pun modul di bawah yang terimplementasi — tabel di dokumen ini adalah rujukan terminologi untuk pekerjaan mendatang, bukan cerminan kode yang sudah berjalan.
+# Part 19 — Glossary and Terminology
 
-## Tujuan
+> **Implementation status (2026-07-14).** Adapted from `docs/awcms-mini/19_glossary_terminology.md`. Generic architecture/security terms are kept as they are (already proven in the originating base). CMS/retail-POS domain terms (blog, article, news portal, visitor analytics, POS checkout) are **removed/replaced** with ERP domain terms (general ledger, SKU, purchase order, BOM, payroll run) that are the scope of the `awcms` platform. Not a single module below is implemented yet — the tables in this document are a terminology reference for future work, not a reflection of code that is already running.
 
-Dokumen ini menjadi rujukan istilah AWCMS agar seluruh paket dokumen dan implementasi memakai definisi yang sama. Istilah dikelompokkan: arsitektur, keamanan/akses, finance & accounting, inventory & warehouse, procurement, manufacturing, HR & payroll, pajak/Coretax, integrasi bisnis eksternal, sync/offline, database, dan frontend/UI.
+## Purpose
 
-## Peta konsep inti
+This document is the AWCMS term reference so that the whole document package and the implementation use the same definitions. Terms are grouped into: architecture, security/access, finance & accounting, inventory & warehouse, procurement, manufacturing, HR & payroll, tax/Coretax, external business integration, sync/offline, database, and frontend/UI.
+
+## Core concept map
 
 ```mermaid
 flowchart LR
@@ -22,206 +24,206 @@ flowchart LR
   Movement --> Warehouse --> Bin
 ```
 
-## Arsitektur
+## Architecture
 
-| Istilah                           | Definisi                                                                                                                                                  |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **AWCMS**                         | Platform ERP modular monolith (finance, inventory, procurement, manufacturing, HR/payroll) + integrasi bisnis eksternal yang dirancang paket dokumen ini. |
-| **Modular monolith**              | Satu aplikasi yang dibagi menjadi modul berbatas jelas, siap dipecah ke microservice bila perlu, tetapi tidak dipisah sejak awal.                         |
-| **Module descriptor**             | Metadata modul (`module.ts`): key, versi, dependency, path OpenAPI/AsyncAPI, event publish/subscribe.                                                     |
-| **Offline-first / LAN-first**     | Prinsip bahwa sistem berjalan penuh di jaringan lokal tanpa internet; internet hanya untuk sync/provider opsional.                                        |
-| **Domain event**                  | Fakta bisnis yang sudah terjadi (mis. `finance.ledger_entry.posted`), dikirim via envelope AsyncAPI.                                                      |
-| **Envelope**                      | Struktur pembungkus standar event (eventId, eventType, tenantId, payload, metadata).                                                                      |
-| **OpenAPI**                       | Kontrak REST API. **AsyncAPI**                                                                                                                            | Kontrak domain event. |
-| **Correlation ID / Causation ID** | ID untuk menelusuri satu request lintas log/event; causation menghubungkan event ke event pemicunya.                                                      |
+| Term                              | Definition                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AWCMS**                         | The modular monolith ERP platform (finance, inventory, procurement, manufacturing, HR/payroll) + external business integrations that this document package designs. |
+| **Modular monolith**              | One application split into modules with clear boundaries, ready to be broken out into microservices if needed, but not separated from the start.                    |
+| **Module descriptor**             | Module metadata (`module.ts`): key, version, dependencies, OpenAPI/AsyncAPI paths, published/subscribed events.                                                     |
+| **Offline-first / LAN-first**     | The principle that the system runs fully on the local network without internet; internet is only for sync/optional providers.                                       |
+| **Domain event**                  | A business fact that has already happened (e.g. `finance.ledger_entry.posted`), delivered via the AsyncAPI envelope.                                                |
+| **Envelope**                      | The standard event wrapper structure (eventId, eventType, tenantId, payload, metadata).                                                                             |
+| **OpenAPI**                       | The REST API contract. **AsyncAPI**                                                                                                                                 | The domain event contract. |
+| **Correlation ID / Causation ID** | The ID used to trace one request across logs/events; causation links an event to the event that triggered it.                                                       |
 
-## Arsitektur ekstensi
+## Extension architecture
 
-> Konsep lapisan ekstensi (Core/System/Official Optional/SaaS Control Plane/ERP Extension/Derived Application) mengikuti pola yang sama dengan base `awcms-mini`. Karena `awcms` **sendiri** adalah platform ERP (bukan aplikasi turunan di atas base lain), konsep "ERP Extension" dan "Derived Application" di sini merujuk pada modul domain ERP dan integrasi bisnis di dalam repo ini sendiri, bukan repo eksternal. Lihat doc 21 §Lima kategori modul untuk pemetaan definitif.
+> The extension layer concept (Core/System/Official Optional/SaaS Control Plane/ERP Extension/Derived Application) follows the same pattern as the `awcms-mini` base. Because `awcms` **itself** is an ERP platform (not a derived application on top of another base), the "ERP Extension" and "Derived Application" concepts here refer to ERP domain modules and business integrations inside this repo itself, not an external repo. See doc 21 §Five module categories for the definitive mapping.
 
-| Istilah                         | Definisi                                                                                                                                                                                                                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Tenant**                      | Unit isolasi data & langganan platform (`awcms_tenants`) — **batas keamanan (RLS)**, satu tenant = satu dataset terisolasi. Tidak pernah dilemahkan oleh legal entity/organization unit.                                                |
-| **Legal entity**                | Badan hukum/usaha di **dalam** satu tenant (mis. satu PT/CV dalam grup usaha) — batas bisnis/akuntansi, bukan batas keamanan. Relevan untuk konsolidasi finance multi-entitas.                                                          |
-| **Organization unit**           | Subdivisi bisnis (departemen/cabang/cost center) di dalam legal entity/tenant — batas bisnis/akuntansi/workflow, berbeda dari `awcms_offices` (register lokasi fisik).                                                                  |
-| **Profile / Party**             | Entitas kanonis (orang/organisasi — karyawan, supplier, customer) yang dikenal platform, dimiliki `profile_identity` (Core) — lapisan lain mereferensikan lewat `profile_entity_links`/capability port, tidak membuat registry sendiri. |
-| **Business-role**               | Kapasitas fungsional seorang profile/party di dalam legal entity/organization unit (mis. approver PO, approver payroll) untuk segregation-of-duties/workflow — berbeda dari RBAC **Role** (permission sistem).                          |
-| **Extension layer**             | Salah satu dari kategori Core, System Foundation, Official Optional Business Foundation, ERP domain module, Integration — arah dependency selalu DAG menuju Core.                                                                       |
-| **ERP domain module**           | Modul domain inti platform: finance-accounting, inventory-warehouse, procurement, manufacturing, hr-payroll. Hidup **di dalam** repo ini (bukan di repo turunan terpisah).                                                              |
-| **Business integration module** | Adapter integrasi bisnis eksternal: payment gateway, marketplace, tax/Coretax, logistik.                                                                                                                                                |
-| **Capability port**             | Interface TypeScript murni (`_shared/ports/*.ts`) yang memisahkan kapabilitas dari implementasi modul pemiliknya — mekanisme kolaborasi lintas-modul yang diizinkan, pengganti import langsung.                                         |
-| **Lifecycle dependency**        | `ModuleDescriptor.dependencies` — urutan enable/disable, selalu required (doc 21).                                                                                                                                                      |
-| **Capability dependency**       | `ModuleDescriptor.capabilities.consumes` — hubungan level-source lewat port/adapter, `optional` dinyatakan eksplisit (doc 21).                                                                                                          |
-| **No shared-table write**       | Aturan: hanya kode modul pemilik yang boleh menulis tabelnya sendiri; pemilik lain berkolaborasi lewat capability port/API/event, tidak pernah tabel bersama.                                                                           |
+| Term                            | Definition                                                                                                                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tenant**                      | The data isolation & platform subscription unit (`awcms_tenants`) — the **security boundary (RLS)**, one tenant = one isolated dataset. Never weakened by a legal entity/organization unit.                                                             |
+| **Legal entity**                | A legal/business body **inside** one tenant (e.g. one PT/CV within a business group) — a business/accounting boundary, not a security boundary. Relevant for multi-entity finance consolidation.                                                        |
+| **Organization unit**           | A business subdivision (department/branch/cost center) inside a legal entity/tenant — a business/accounting/workflow boundary, different from `awcms_offices` (the physical location register).                                                         |
+| **Profile / Party**             | The canonical entity (person/organisation — employee, supplier, customer) known to the platform, owned by `profile_identity` (Core) — other layers reference it through `profile_entity_links`/a capability port, they do not build their own registry. |
+| **Business-role**               | The functional capacity of a profile/party inside a legal entity/organization unit (e.g. PO approver, payroll approver) for segregation-of-duties/workflow — different from the RBAC **Role** (system permissions).                                     |
+| **Extension layer**             | One of the categories Core, System Foundation, Official Optional Business Foundation, ERP domain module, Integration — the dependency direction is always a DAG toward Core.                                                                            |
+| **ERP domain module**           | A core platform domain module: finance-accounting, inventory-warehouse, procurement, manufacturing, hr-payroll. Lives **inside** this repo (not in a separate derived repo).                                                                            |
+| **Business integration module** | An external business integration adapter: payment gateway, marketplace, tax/Coretax, logistics.                                                                                                                                                         |
+| **Capability port**             | A pure TypeScript interface (`_shared/ports/*.ts`) that separates a capability from the implementation of its owning module — the permitted cross-module collaboration mechanism, replacing direct imports.                                             |
+| **Lifecycle dependency**        | `ModuleDescriptor.dependencies` — enable/disable ordering, always required (doc 21).                                                                                                                                                                    |
+| **Capability dependency**       | `ModuleDescriptor.capabilities.consumes` — a source-level relationship via port/adapter, `optional` stated explicitly (doc 21).                                                                                                                         |
+| **No shared-table write**       | The rule: only the owning module's code may write its own tables; other owners collaborate through a capability port/API/event, never through a shared table.                                                                                           |
 
-## Keamanan dan akses
+## Security and access
 
-| Istilah                   | Definisi                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **RBAC**                  | Role-Based Access Control — akses berdasarkan peran user.                                                                 |
-| **ABAC**                  | Attribute-Based Access Control — akses berdasarkan atribut (module, activity, resource, office, environment).             |
-| **Default deny**          | Semua akses ditolak kecuali diizinkan eksplisit.                                                                          |
-| **Deny overrides allow**  | Bila ada aturan deny yang cocok, ia mengalahkan semua allow.                                                              |
-| **RLS**                   | Row-Level Security PostgreSQL — filter baris per tenant di level database.                                                |
-| **Tenant context**        | Konteks tenant aktif yang diset di transaction (`app.current_tenant_id`) untuk RLS.                                       |
-| **Decision log**          | Catatan keputusan ABAC (terutama deny high-risk).                                                                         |
-| **Audit log**             | Catatan aksi high-risk untuk akuntabilitas (`awcms_audit_events`).                                                        |
-| **Masking / Redaction**   | Menyembunyikan sebagian/seluruh data sensitif pada tampilan (mask) dan pada log (redact).                                 |
-| **HMAC**                  | Hash-based Message Authentication Code — tanda tangan integritas untuk sync.                                              |
-| **Idempotency**           | Sifat mutation yang menghasilkan efek sama walau diulang dengan `Idempotency-Key` sama.                                   |
-| **Soft delete**           | Penghapusan logis dengan `deleted_at`/actor/reason; list default menyembunyikan data, restore/purge butuh izin dan audit. |
-| **Segregation of duties** | Prinsip pemisahan wewenang (mis. pembuat PO tidak boleh sekaligus approver-nya) untuk mencegah fraud finansial.           |
+| Term                      | Definition                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **RBAC**                  | Role-Based Access Control — access based on a user's role.                                                                         |
+| **ABAC**                  | Attribute-Based Access Control — access based on attributes (module, activity, resource, office, environment).                     |
+| **Default deny**          | All access is denied unless explicitly allowed.                                                                                    |
+| **Deny overrides allow**  | If a matching deny rule exists, it beats every allow.                                                                              |
+| **RLS**                   | PostgreSQL Row-Level Security — per-tenant row filtering at the database level.                                                    |
+| **Tenant context**        | The active tenant context set in the transaction (`app.current_tenant_id`) for RLS.                                                |
+| **Decision log**          | The record of ABAC decisions (especially high-risk denies).                                                                        |
+| **Audit log**             | The record of high-risk actions for accountability (`awcms_audit_events`).                                                         |
+| **Masking / Redaction**   | Hiding part/all of sensitive data in the display (mask) and in logs (redact).                                                      |
+| **HMAC**                  | Hash-based Message Authentication Code — the integrity signature for sync.                                                         |
+| **Idempotency**           | The property of a mutation that produces the same effect even when repeated with the same `Idempotency-Key`.                       |
+| **Soft delete**           | Logical deletion with `deleted_at`/actor/reason; the default list hides the data, restore/purge need permission and audit.         |
+| **Segregation of duties** | The principle of separating authority (e.g. the person who creates a PO must not also be its approver) to prevent financial fraud. |
 
 ## Finance & Accounting
 
-| Istilah                   | Definisi                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Chart of accounts**     | Daftar akun buku besar (aset, liabilitas, ekuitas, pendapatan, beban) per tenant/legal entity.               |
-| **Journal**               | Header transaksi akuntansi sebelum diposting (kumpulan ledger entry berpasangan debit/kredit).               |
-| **Ledger entry**          | Baris posting buku besar, **append-only** setelah journal diposting; koreksi lewat reversal, bukan edit.     |
-| **Posting**               | Mengubah journal menjadi ledger entry final secara atomic dan immutable.                                     |
-| **Fiscal period**         | Periode akuntansi (bulan/kuartal/tahun) yang bisa berstatus open/closed; period closed menolak posting baru. |
-| **General ledger (GL)**   | Kumpulan seluruh ledger entry — sumber kebenaran laporan keuangan.                                           |
-| **AR / AP**               | Account Receivable (piutang) / Account Payable (utang).                                                      |
-| **Reversal / Adjustment** | Mekanisme koreksi resmi tanpa mengubah entry yang sudah posted.                                              |
+| Term                      | Definition                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Chart of accounts**     | The list of general ledger accounts (asset, liability, equity, revenue, expense) per tenant/legal entity.                 |
+| **Journal**               | The accounting transaction header before posting (a set of paired debit/credit ledger entries).                           |
+| **Ledger entry**          | A general ledger posting row, **append-only** once the journal is posted; corrections go through a reversal, not an edit. |
+| **Posting**               | Turning a journal into final ledger entries atomically and immutably.                                                     |
+| **Fiscal period**         | An accounting period (month/quarter/year) that can be open/closed; a closed period rejects new postings.                  |
+| **General ledger (GL)**   | The collection of all ledger entries — the source of truth for the financial statements.                                  |
+| **AR / AP**               | Account Receivable / Account Payable.                                                                                     |
+| **Reversal / Adjustment** | The official correction mechanism that does not change an entry that has already been posted.                             |
 
 ## Inventory & Warehouse
 
-| Istilah                    | Definisi                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Item / SKU**             | Kode unik barang/jasa per tenant (item master) — pengganti istilah "produk" pada domain retail.                     |
-| **Stock balance**          | Saldo stok per item per warehouse/bin (on hand, reserved, available).                                               |
-| **Stock movement**         | Mutasi stok **append-only** (opening, purchase receipt, sale, adjustment, transfer, production consumption/output). |
-| **Opening balance**        | Saldo stok awal saat implementasi.                                                                                  |
-| **Tracking type**          | Cara pelacakan item: none / lot / serial / lot_serial.                                                              |
-| **Warehouse / Zone / Bin** | Hierarki lokasi fisik gudang; bin = lokasi rak terkecil.                                                            |
-| **Bin balance**            | Saldo stok detail per bin/lot/serial.                                                                               |
-| **Lot / Batch**            | Kelompok stok dengan atribut sama (mis. tanggal produksi/expired).                                                  |
-| **Serial**                 | Identitas unit tunggal yang dilacak individual.                                                                     |
-| **Transfer order**         | Perintah pemindahan stok antar gudang (draft→...→received).                                                         |
-| **In-transit**             | Stok yang sudah dikirim (shipped) tetapi belum diterima.                                                            |
-| **Partial receipt**        | Penerimaan sebagian dari yang dikirim.                                                                              |
-| **Quarantine**             | Lokasi karantina untuk barang rusak/expired.                                                                        |
-| **Cycle count**            | Perhitungan stok berkala untuk menemukan variance.                                                                  |
-| **Variance**               | Selisih antara stok sistem dan hasil hitung fisik.                                                                  |
-| **FEFO**                   | First Expired First Out — prioritas keluar untuk stok yang lebih dulu kedaluwarsa.                                  |
+| Term                       | Definition                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Item / SKU**             | The unique code of a good/service per tenant (item master) — the replacement for the term "product" in the retail domain. |
+| **Stock balance**          | The stock balance per item per warehouse/bin (on hand, reserved, available).                                              |
+| **Stock movement**         | An **append-only** stock mutation (opening, purchase receipt, sale, adjustment, transfer, production consumption/output). |
+| **Opening balance**        | The initial stock balance at implementation time.                                                                         |
+| **Tracking type**          | How an item is tracked: none / lot / serial / lot_serial.                                                                 |
+| **Warehouse / Zone / Bin** | The physical warehouse location hierarchy; a bin = the smallest shelf location.                                           |
+| **Bin balance**            | The detailed stock balance per bin/lot/serial.                                                                            |
+| **Lot / Batch**            | A group of stock with the same attributes (e.g. production/expiry date).                                                  |
+| **Serial**                 | The identity of a single unit tracked individually.                                                                       |
+| **Transfer order**         | The order to move stock between warehouses (draft→...→received).                                                          |
+| **In-transit**             | Stock that has been shipped but not yet received.                                                                         |
+| **Partial receipt**        | Receiving part of what was shipped.                                                                                       |
+| **Quarantine**             | The quarantine location for damaged/expired goods.                                                                        |
+| **Cycle count**            | Periodic stock counting to find variance.                                                                                 |
+| **Variance**               | The difference between system stock and the physical count result.                                                        |
+| **FEFO**                   | First Expired First Out — outbound priority for stock that expires sooner.                                                |
 
 ## Procurement
 
-| Istilah                   | Definisi                                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| **Supplier / Vendor**     | Pihak eksternal pemasok barang/jasa.                                                     |
-| **Purchase request (PR)** | Permintaan pembelian internal sebelum menjadi purchase order.                            |
-| **Purchase order (PO)**   | Pesanan resmi ke supplier setelah PR disetujui.                                          |
-| **Goods receipt**         | Penerimaan barang dari PO, memicu stock movement masuk.                                  |
-| **Three-way match**       | Verifikasi kecocokan PO – goods receipt – invoice supplier sebelum pembayaran disetujui. |
+| Term                      | Definition                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| **Supplier / Vendor**     | The external party supplying goods/services.                                               |
+| **Purchase request (PR)** | An internal purchase request before it becomes a purchase order.                           |
+| **Purchase order (PO)**   | The official order to the supplier after the PR is approved.                               |
+| **Goods receipt**         | Receiving goods from a PO, triggering an inbound stock movement.                           |
+| **Three-way match**       | Verifying that the PO – goods receipt – supplier invoice match before payment is approved. |
 
 ## Manufacturing
 
-| Istilah                     | Definisi                                                                               |
-| --------------------------- | -------------------------------------------------------------------------------------- |
-| **Bill of materials (BOM)** | Daftar komponen/bahan baku yang dibutuhkan untuk memproduksi satu unit item jadi.      |
-| **Work order**              | Perintah produksi yang mengonsumsi bahan baku sesuai BOM dan menghasilkan barang jadi. |
-| **Material consumption**    | Mutasi stok keluar bahan baku saat work order berjalan (append-only).                  |
-| **Finished goods output**   | Mutasi stok masuk barang jadi hasil produksi.                                          |
+| Term                        | Definition                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| **Bill of materials (BOM)** | The list of components/raw materials needed to produce one unit of a finished item.       |
+| **Work order**              | The production order that consumes raw materials per the BOM and produces finished goods. |
+| **Material consumption**    | The outbound stock mutation of raw materials while a work order runs (append-only).       |
+| **Finished goods output**   | The inbound stock mutation of finished goods produced.                                    |
 
 ## HR & Payroll
 
-| Istilah         | Definisi                                                                                              |
-| --------------- | ----------------------------------------------------------------------------------------------------- |
-| **Employee**    | Profil karyawan (subset dari Profile/Party) dengan data kepegawaian.                                  |
-| **Attendance**  | Catatan kehadiran karyawan, dasar perhitungan payroll.                                                |
-| **Payroll run** | Proses batch perhitungan & posting gaji periode tertentu; append-only setelah posted.                 |
-| **Payslip**     | Dokumen rincian gaji per karyawan per payroll run; akses terbatas (karyawan bersangkutan/HR/finance). |
+| Term            | Definition                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Employee**    | An employee profile (a subset of Profile/Party) with employment data.                                           |
+| **Attendance**  | The employee attendance record, the basis for payroll calculation.                                              |
+| **Payroll run** | The batch process of calculating & posting salaries for a given period; append-only once posted.                |
+| **Payslip**     | The salary detail document per employee per payroll run; restricted access (the employee concerned/HR/finance). |
 
-## Pajak / Coretax
+## Tax / Coretax
 
-| Istilah                         | Definisi                                                                                                               |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **Coretax**                     | Sistem administrasi pajak DJP Indonesia; AWCMS bersifat **Coretax-ready** (XML/staging), bukan integrasi upload resmi. |
-| **NPWP**                        | Nomor Pokok Wajib Pajak. **NIK**                                                                                       | Nomor Induk Kependudukan. |
-| **NITKU / ID TKU**              | Nomor Identitas Tempat Kegiatan Usaha — identitas unit usaha untuk pajak.                                              |
-| **PPN / VAT**                   | Pajak Pertambahan Nilai / Value Added Tax.                                                                             |
-| **DPP**                         | Dasar Pengenaan Pajak — basis nilai untuk menghitung PPN.                                                              |
-| **VAT invoice (faktur)**        | Faktur pajak yang di-stage dari transaksi finance/sales posted.                                                        |
-| **Coretax batch**               | Kumpulan VAT invoice tervalidasi yang diekspor sebagai XML + checksum.                                                 |
-| **Party / Product tax profile** | Konfigurasi pajak untuk pihak (customer/supplier) / item.                                                              |
-| **Checksum**                    | Nilai verifikasi integritas file ekspor.                                                                               |
+| Term                            | Definition                                                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Coretax**                     | The Indonesian DJP tax administration system; AWCMS is **Coretax-ready** (XML/staging), not an official upload integration. |
+| **NPWP**                        | Nomor Pokok Wajib Pajak (taxpayer identification number). **NIK**                                                           | Nomor Induk Kependudukan (national identity number). |
+| **NITKU / ID TKU**              | Nomor Identitas Tempat Kegiatan Usaha — the identity of a business activity location for tax purposes.                      |
+| **PPN / VAT**                   | Pajak Pertambahan Nilai / Value Added Tax.                                                                                  |
+| **DPP**                         | Dasar Pengenaan Pajak — the value basis for calculating VAT.                                                                |
+| **VAT invoice (faktur)**        | The tax invoice staged from a posted finance/sales transaction.                                                             |
+| **Coretax batch**               | A set of validated VAT invoices exported as XML + checksum.                                                                 |
+| **Party / Product tax profile** | The tax configuration for a party (customer/supplier) / an item.                                                            |
+| **Checksum**                    | The integrity verification value of an export file.                                                                         |
 
-## Integrasi bisnis eksternal
+## External business integration
 
-| Istilah                 | Definisi                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| **Payment gateway**     | Provider pembayaran online (mis. gaya Midtrans/Xendit) — adapter di dalam modul integrasi bisnis. |
-| **Marketplace channel** | Adapter integrasi ke marketplace (mis. gaya Tokopedia/Shopee) untuk sinkronisasi order/produk.    |
-| **Logistics provider**  | Adapter integrasi ke penyedia jasa logistik/ekspedisi untuk tracking pengiriman.                  |
-| **Webhook**             | Callback HTTP dari provider eksternal; wajib diverifikasi signature-nya sebelum diproses.         |
-| **Idempotent callback** | Callback yang aman diproses ulang tanpa efek ganda (mis. payment settlement).                     |
+| Term                    | Definition                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Payment gateway**     | An online payment provider (e.g. Midtrans/Xendit style) — an adapter inside the business integration module. |
+| **Marketplace channel** | An integration adapter to a marketplace (e.g. Tokopedia/Shopee style) for order/product synchronisation.     |
+| **Logistics provider**  | An integration adapter to a logistics/shipping provider for delivery tracking.                               |
+| **Webhook**             | An HTTP callback from an external provider; its signature must be verified before processing.                |
+| **Idempotent callback** | A callback that is safe to reprocess without a double effect (e.g. payment settlement).                      |
 
-## Sync dan offline
+## Sync and offline
 
-| Istilah                    | Definisi                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Sync node**              | Instance offline/LAN yang bersinkron dengan server pusat.                                                                |
-| **Outbox / Inbox**         | Antrean event keluar / masuk untuk sinkronisasi.                                                                         |
-| **Transactional outbox**   | Pola menulis event dalam transaction yang sama dengan data, lalu dikirim worker terpisah.                                |
-| **Push / Pull**            | Mengirim / menarik event antar node dan server.                                                                          |
-| **Checkpoint**             | Penanda posisi sinkronisasi terakhir.                                                                                    |
-| **Conflict**               | Perbedaan data antar node yang perlu diselesaikan (high-risk = manual + audit).                                          |
-| **Anti-replay / Skew**     | Perlindungan terhadap pengiriman ulang; skew = toleransi selisih waktu (default 300 detik).                              |
-| **Object sync queue / R2** | Antrean upload file ke object storage (Cloudflare R2 opsional).                                                          |
-| **Tombstone**              | Event/penanda bahwa resource di-soft-delete agar node sync lain ikut menyembunyikan data tanpa physical delete langsung. |
-| **Immutable**              | Tidak dapat diubah/dihapus; koreksi lewat cancel/return/reversal/adjustment.                                             |
+| Term                       | Definition                                                                                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Sync node**              | An offline/LAN instance that synchronises with the central server.                                                                |
+| **Outbox / Inbox**         | The outbound / inbound event queue for synchronisation.                                                                           |
+| **Transactional outbox**   | The pattern of writing the event in the same transaction as the data, then delivering it with a separate worker.                  |
+| **Push / Pull**            | Sending / pulling events between node and server.                                                                                 |
+| **Checkpoint**             | The marker of the last synchronisation position.                                                                                  |
+| **Conflict**               | A data difference between nodes that needs resolving (high-risk = manual + audit).                                                |
+| **Anti-replay / Skew**     | Protection against re-sending; skew = the tolerated time difference (default 300 seconds).                                        |
+| **Object sync queue / R2** | The queue for uploading files to object storage (Cloudflare R2, optional).                                                        |
+| **Tombstone**              | An event/marker that a resource was soft-deleted so that other sync nodes hide the data too without an immediate physical delete. |
+| **Immutable**              | Cannot be changed/deleted; corrections go through cancel/return/reversal/adjustment.                                              |
 
-## Database dan performa
+## Database and performance
 
-| Istilah                     | Definisi                                                                                                                   |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Migration**               | Perubahan schema berurutan (`NNN_awcms_<area>_<desc>.sql`) yang tercatat & audit-ready.                                    |
-| **Partial unique index**    | Unique index dengan kondisi, mis. `WHERE deleted_at IS NULL`, agar kode bisnis aktif tetap unik saat data lama diarsipkan. |
-| **Schema migrations table** | `awcms_schema_migrations` — catatan migration yang sudah dijalankan + checksum.                                            |
-| **`SET LOCAL`**             | Menetapkan variabel hanya untuk transaction berjalan (aman dengan PgBouncer transaction pooling).                          |
-| **`FOR UPDATE`**            | Mengunci baris terpilih hingga transaction selesai (mencegah race pada stok/saldo).                                        |
-| **Connection pool**         | Kumpulan koneksi DB yang dipakai ulang.                                                                                    |
-| **Work class**              | Kategori beban (critical_transaction, interactive, reporting, background_sync, maintenance) untuk prioritas pool.          |
-| **Backpressure**            | Menahan/menolak beban saat pool jenuh (`503 DATABASE_BUSY`).                                                               |
-| **Circuit breaker**         | Memutus akses sementara saat DB tidak sehat.                                                                               |
-| **PgBouncer**               | Connection pooler eksternal (mode transaction) opsional.                                                                   |
-| **Keyset pagination**       | Paginasi berbasis kunci (bukan offset besar) untuk data besar.                                                             |
-| **Idempotency store**       | `awcms_idempotency_keys` — penyimpanan hasil mutation high-risk.                                                           |
+| Term                        | Definition                                                                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Migration**               | A sequential schema change (`NNN_awcms_<area>_<desc>.sql`) that is recorded & audit-ready.                                              |
+| **Partial unique index**    | A unique index with a condition, e.g. `WHERE deleted_at IS NULL`, so that active business codes stay unique while old data is archived. |
+| **Schema migrations table** | `awcms_schema_migrations` — the record of migrations already run + checksums.                                                           |
+| **`SET LOCAL`**             | Setting a variable only for the running transaction (safe with PgBouncer transaction pooling).                                          |
+| **`FOR UPDATE`**            | Locking the selected rows until the transaction finishes (preventing races on stock/balances).                                          |
+| **Connection pool**         | The set of reused DB connections.                                                                                                       |
+| **Work class**              | The load category (critical_transaction, interactive, reporting, background_sync, maintenance) for pool priority.                       |
+| **Backpressure**            | Holding back/rejecting load when the pool is saturated (`503 DATABASE_BUSY`).                                                           |
+| **Circuit breaker**         | Temporarily cutting off access when the DB is unhealthy.                                                                                |
+| **PgBouncer**               | An optional external connection pooler (transaction mode).                                                                              |
+| **Keyset pagination**       | Key-based pagination (not a large offset) for large datasets.                                                                           |
+| **Idempotency store**       | `awcms_idempotency_keys` — where high-risk mutation results are stored.                                                                 |
 
-## Frontend dan UI
+## Frontend and UI
 
-| Istilah                  | Definisi                                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **SSR**                  | Server-Side Rendering — halaman dirender di server (Astro output server).                                                            |
-| **Island**               | Bagian interaktif yang di-hydrate di klien (Astro islands).                                                                          |
-| **PWA / Service worker** | Progressive Web App; service worker meng-cache app shell & mengelola background sync.                                                |
-| **IndexedDB**            | Penyimpanan klien untuk outbox transaksi offline & cache master.                                                                     |
-| **Design token**         | Variabel desain (warna, tipografi, spacing) sebagai CSS custom properties.                                                           |
-| **State pattern**        | Loading / empty / error / success yang wajib di tiap layar.                                                                          |
-| **Optimistic UI**        | Menampilkan hasil sebelum konfirmasi server, rollback bila ditolak.                                                                  |
-| **i18n / locale**        | Internasionalisasi; min en+id (default **en**). String UI statis via `.po` gettext; konten data multi-bahasa di DB per locale aktif. |
-| **WCAG 2.1 AA**          | Standar aksesibilitas target AWCMS.                                                                                                  |
-| **Sync indicator**       | Komponen UI penunjuk status koneksi & antrean sync.                                                                                  |
+| Term                     | Definition                                                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SSR**                  | Server-Side Rendering — the page is rendered on the server (Astro server output).                                                               |
+| **Island**               | An interactive part hydrated on the client (Astro islands).                                                                                     |
+| **PWA / Service worker** | Progressive Web App; the service worker caches the app shell & manages background sync.                                                         |
+| **IndexedDB**            | Client storage for the offline transaction outbox & the master data cache.                                                                      |
+| **Design token**         | A design variable (colour, typography, spacing) as a CSS custom property.                                                                       |
+| **State pattern**        | Loading / empty / error / success, mandatory on every screen.                                                                                   |
+| **Optimistic UI**        | Showing the result before server confirmation, rolling back if rejected.                                                                        |
+| **i18n / locale**        | Internationalisation; min en+id (default **en**). Static UI strings via `.po` gettext; multi-language content data in the DB per active locale. |
+| **WCAG 2.1 AA**          | The accessibility standard AWCMS targets.                                                                                                       |
+| **Sync indicator**       | The UI component showing connection status & the sync queue.                                                                                    |
 
-## Peran (persona)
+## Roles (personas)
 
-| Peran                  | Ringkas                                       |
-| ---------------------- | --------------------------------------------- |
-| **Owner**              | Akses penuh & approval utama.                 |
-| **Admin**              | Kelola sistem, user, master data, laporan.    |
-| **Finance/Accounting** | Posting jurnal, closing period, rekonsiliasi. |
-| **Procurement Staff**  | PR/PO, goods receipt.                         |
-| **Inventory Staff**    | Item, stok, adjustment terbatas.              |
-| **Petugas Gudang**     | Transfer, receiving, cycle count.             |
-| **Production Staff**   | Work order, material consumption.             |
-| **HR/Payroll Staff**   | Employee master, attendance, payroll run.     |
-| **Tax Officer**        | Pajak & Coretax.                              |
-| **Manager**            | Approval transaksi/stok/operasional/PO.       |
-| **Business Analyst**   | Laporan agregat & AI analyst.                 |
-| **Auditor**            | Audit trail read-only.                        |
+| Role                   | Summary                                         |
+| ---------------------- | ----------------------------------------------- |
+| **Owner**              | Full access & primary approval.                 |
+| **Admin**              | Manage the system, users, master data, reports. |
+| **Finance/Accounting** | Post journals, close periods, reconcile.        |
+| **Procurement Staff**  | PR/PO, goods receipt.                           |
+| **Inventory Staff**    | Items, stock, limited adjustments.              |
+| **Warehouse Staff**    | Transfer, receiving, cycle count.               |
+| **Production Staff**   | Work order, material consumption.               |
+| **HR/Payroll Staff**   | Employee master, attendance, payroll run.       |
+| **Tax Officer**        | Tax & Coretax.                                  |
+| **Manager**            | Transaction/stock/operational/PO approval.      |
+| **Business Analyst**   | Aggregate reports & AI analyst.                 |
+| **Auditor**            | Read-only audit trail.                          |
 
-## Singkatan cepat
+## Quick abbreviations
 
 `ABAC` · `RBAC` · `RLS` · `GL` · `AR` · `AP` · `PO` · `BOM` · `WMS` · `PPN/VAT` · `DPP` · `NPWP` · `NIK` · `NITKU` · `HMAC` · `FEFO` · `SSR` · `PWA` · `R2` · `SKU` · `DTO` · `SOP` · `PRD` · `SRS` · `ERD` · `DoD`.

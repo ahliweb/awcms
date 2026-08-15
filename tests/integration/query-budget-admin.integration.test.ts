@@ -71,6 +71,20 @@ import {
   type SeoDiscoveryContext
 } from "../../src/modules/seo-distribution/application/seo-discovery-service";
 
+/**
+ * These assertions expect host-ABSOLUTE `https://` output. That used to hold
+ * because `seo_distribution` hardcoded the literal `https://`; it no longer
+ * does — the scheme comes from `src/lib/http/site-origin.ts`, so an offline-LAN
+ * deployment serving plain HTTP stops publishing URLs at a scheme it does not
+ * answer on.
+ *
+ * `APP_URL` is REQUIRED in a real deployment (`scripts/validate-env.ts`), so
+ * "unset" is a misconfiguration rather than a supported mode — but a test
+ * process never runs the env validator. Declaring it here is the test stating
+ * the deployment it is asserting about, which is what it always meant.
+ */
+process.env.APP_URL ??= "https://example.com";
+
 const TENANT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ACTOR = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 /** Fixed HISTORICAL instant (not a "now" anchor — those must come from the DB). */

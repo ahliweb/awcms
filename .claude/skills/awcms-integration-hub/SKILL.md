@@ -1,240 +1,240 @@
 ---
 name: awcms-integration-hub
-description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan port.** `awcms-mini`/`awcms-micro` kini ARSIP — boleh dibaca sebagai spesifikasi, tetapi jalur "port dari mini" DICABUT. Mengerjakannya berarti: ADR admission dulu, lalu bangun di repo ini dengan penjagaan ADR-0055 §3 (ADR wajib, security review untuk auth/access/sync, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS FORCE, ABAC default-deny). BACAAN SAJA / SPESIFIKASI TARGET — modul integration_hub TIDAK ADA di repo ini (ada di awcms-mini; `ls src/modules` tidak memuat `integration-hub`, tidak ada migration-nya di `sql/`). Rujukan modul/tabel/adapter di dalamnya adalah artefak awcms-mini. Pakai sebagai spesifikasi target saat MEMBANGUNNYA di sini (ADR admission dulu), bukan panduan implementasi kode yang bisa dipanggil — verifikasi `ls src/modules` dulu. Konteks port (Issue #754, epic platform-evolution #738 Wave 3). Gunakan saat menambah inbound webhook endpoint, outbound event subscription, adapter provider baru, atau mengubah SSRF guard/replay protection/circuit-breaker/secret-reference validation. Modul ini punya security surface tinggi (2 findings PR #784 sebelum merge) — merangkum invariant yang wajib dipertahankan supaya tidak diregresi.
+description: **ADR-0055 (2 August 2026): this is a BUILD-IT-HERE candidate, not a port.** `awcms-mini`/`awcms-micro` are now ARCHIVES — they may be read as a specification, but the "port from mini" path is REVOKED. Working on it means: ADR admission first, then build it in this repo under the ADR-0055 §3 guardrails (ADR mandatory, security review for auth/access/sync, full `bun run check`, OpenAPI/AsyncAPI in sync, RLS FORCE, ABAC default-deny). READ-ONLY / TARGET SPECIFICATION — the integration_hub module DOES NOT EXIST in this repo (it exists in awcms-mini; `ls src/modules` does not contain `integration-hub`, and there is no migration for it in `sql/`). The module/table/adapter references inside are awcms-mini artifacts. Use it as the target specification when BUILDING it here (ADR admission first), not as a guide to code you can call — verify `ls src/modules` first. Port context (Issue #754, epic platform-evolution #738 Wave 3). Use when adding an inbound webhook endpoint, an outbound event subscription, a new provider adapter, or when changing the SSRF guard/replay protection/circuit-breaker/secret-reference validation. This module has a high security surface (2 findings on PR #784 before merge) — it summarises the invariants that must be preserved so they are not regressed.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Integration Hub Module
 
-> **STATUS — BACAAN SAJA: modul ini BELUM di-port ke repo ini.**
-> `integration_hub` ada di **awcms-mini**, bukan di sini: `ls src/modules`
-> TIDAK memuat `integration-hub`, dan `sql/` tidak memuat migration-nya.
-> Semua rujukan `src/modules/integration-hub/...`, tabel
-> `awcms_integration_hub_*`, dan ADR-0019 di bawah adalah artefak
-> awcms-mini — **jangan `import`/`SELECT`/mengklaim ada** di repo ini. Pakai
-> skill ini sebagai spesifikasi target port (via ADR admission; `awcms-port-from-mini` HISTORIS),
-> bukan peta kode yang bisa dipanggil. Verifikasi `ls src/modules` sebelum
-> mengklaim apa pun ada.
+> **STATUS — READ-ONLY: this module has NOT been ported into this repo yet.**
+> `integration_hub` lives in **awcms-mini**, not here: `ls src/modules`
+> does NOT contain `integration-hub`, and `sql/` does not contain its migration.
+> Every reference to `src/modules/integration-hub/...`, the
+> `awcms_integration_hub_*` tables, and ADR-0019 below is an awcms-mini
+> artifact — **do not `import`/`SELECT`/claim it exists** in this repo. Use
+> this skill as the target specification for the port (via ADR admission;
+> `awcms-port-from-mini` is HISTORICAL), not as a code map you can call.
+> Verify `ls src/modules` before claiming anything exists.
 
 `integration_hub` (`src/modules/integration-hub`, Issue #754, epic
 `platform-evolution` #738 Wave 3, `type: "system"` — ADR-0013 §1/§6, admission
-decision `docs/adr/0019-integration-hub-module-admission.md`) adalah
-**generic, provider-neutral integration boundary**: signed inbound webhook
-(HMAC + replay protection lewat DB uniqueness constraint nyata), normalized
-event (via `domain_event_runtime`), outbound event subscription (delivery
-reliable dengan retry/dead-letter), dan provider health tracking — mekanisme
-yang HARUSNYA sudah dipakai ulang tiap modul provider-owning baru
+decision `docs/adr/0019-integration-hub-module-admission.md`) is a
+**generic, provider-neutral integration boundary**: signed inbound webhooks
+(HMAC + replay protection through a real DB uniqueness constraint), normalized
+events (via `domain_event_runtime`), outbound event subscriptions (reliable
+delivery with retry/dead-letter), and provider health tracking — the mechanism
+that every new provider-owning module SHOULD have been reusing
 (Mailketing/`email`, R2/`sync_storage`+`media_library`, Cloudflare DNS/
-`tenant_domain`, Telegram/Meta/`social_publishing`) daripada masing-masing
-reinvent. Baca `src/modules/integration-hub/README.md` untuk detail lengkap.
+`tenant_domain`, Telegram/Meta/`social_publishing`) instead of each one
+reinventing it. Read `src/modules/integration-hub/README.md` for the full
+detail.
 
-## Kapan pakai skill ini vs skill generik
+## When to use this skill vs the generic skills
 
-Melengkapi (bukan menggantikan) `awcms-integration` (ADR-0006 outbox
-generik), `awcms-sync-hmac` (pola HMAC/timing-safe compare yang
-sudah ada duluan di `sync_storage`), `awcms-idempotency`,
-`awcms-abac-guard`. Skill ini menyediakan konteks security-invariant
-spesifik modul ini — terutama SSRF guard yang sudah ketemu bug redirect
-bypass sebelum merge, jadi jangan re-derive validasinya dari nol.
+It complements (does not replace) `awcms-integration` (ADR-0006 generic
+outbox), `awcms-sync-hmac` (the HMAC/timing-safe compare pattern that
+already existed earlier in `sync_storage`), `awcms-idempotency`,
+`awcms-abac-guard`. This skill provides the security-invariant context
+specific to this module — in particular the SSRF guard, where a redirect
+bypass bug was already found before merge, so do not re-derive its validation
+from scratch.
 
-## Apa yang modul ini TIDAK PERNAH lakukan
+## What this module NEVER does
 
-- **Tidak** memanggil API provider bisnis spesifik apa pun — tidak ada
-  panggilan HTTP Meta/Telegram/Mailketing di modul ini, hanya `fetch()`
-  generik ke `target_url` yang dikonfigurasi tenant (outbound) dan
-  penerimaan pasif webhook (inbound). Mapping/credential provider-spesifik
-  tetap dimiliki modul yang punya kapabilitas itu, lewat
+- It does **not** call any specific business provider API — there is no
+  Meta/Telegram/Mailketing HTTP call in this module, only a generic `fetch()`
+  to the tenant-configured `target_url` (outbound) and passive webhook
+  reception (inbound). Provider-specific mapping/credentials remain owned by
+  the module that has that capability, via
   `_shared/ports/integration-adapter-port.ts`.
-- **Tidak** mengirim adapter bisnis nyata — hanya dua skema signature
-  fixture self-contained (`fixture_hmac_sha256`,
-  `fixture_shared_secret_nonce`) dan satu adapter outbound HTTP generik
-  (`generic_http_webhook`) — pola "foundation issue kirim nol integrasi
-  bisnis nyata" yang sama dengan #643/#742.
-- **Tidak** memanggil provider di dalam transaksi database — verifikasi
-  inbound murni/lokal (HMAC compare saja). Delivery outbound adalah worker
-  step terpisah, timeout-bounded, retriable
-  (`bun run integration-hub:outbound:dispatch`), TEGAS di luar transaksi
-  mana pun (ADR-0006).
+- It does **not** ship a real business adapter — only two self-contained
+  fixture signature schemes (`fixture_hmac_sha256`,
+  `fixture_shared_secret_nonce`) and one generic outbound HTTP adapter
+  (`generic_http_webhook`) — the same "the foundation issue ships zero real
+  business integrations" pattern as #643/#742.
+- It does **not** call a provider inside a database transaction — inbound
+  verification is pure/local (HMAC compare only). Outbound delivery is a
+  separate worker step, timeout-bounded, retriable
+  (`bun run integration-hub:outbound:dispatch`), FIRMLY outside any
+  transaction (ADR-0006).
 
-## Alur inbound
+## Inbound flow
 
-1. Operator mendaftarkan **endpoint**
-   (`POST /api/v1/integration-hub/endpoints`) — `endpointToken` opaque
-   server-generated (segmen URL yang di-POST provider) + pointer
-   `secretReference` (`env:VAR_NAME`, TIDAK PERNAH nilai secret mentah).
-2. Provider POST ke `POST /api/v1/integration-hub/inbound/{endpointToken}`
-   — endpoint PUBLIK (tanpa tenant JWT). Tenant di-resolve dari token
-   opaque lewat fungsi bootstrap `SECURITY DEFINER` sempit
-   (`awcms_resolve_integration_endpoint_lookup`, migration 071 — pola
-   sama `awcms_resolve_tenant_domain_lookup`, migration 033) SEBELUM
-   transaksi `withTenant(...)` mana pun jalan.
-3. `application/inbound-webhook-intake.ts`'s `processInboundWebhook`
-   menjalankan gate chain lengkap (status endpoint/tenant, content type,
-   ukuran body, verifikasi signature) dan — untuk delivery yang
-   TERVERIFIKASI — INSERT baris inbound delivery dengan
-   `ON CONFLICT (tenant_id, endpoint_id, replay_key) DO NOTHING`. Hasil
-   nol baris = delivery ini SUDAH pernah diproses (replay), tidak ada
-   efek lanjutan. Baris baru = genuinely baru: payload dinormalisasi dan
-   `appendDomainEvent` dipanggil (event type
-   `awcms.integration-hub.inbound-message.normalized`) — semua
-   dalam transaksi YANG SAMA.
+1. An operator registers an **endpoint**
+   (`POST /api/v1/integration-hub/endpoints`) — an opaque server-generated
+   `endpointToken` (the URL segment the provider POSTs to) + a
+   `secretReference` pointer (`env:VAR_NAME`, NEVER a raw secret value).
+2. The provider POSTs to `POST /api/v1/integration-hub/inbound/{endpointToken}`
+   — a PUBLIC endpoint (no tenant JWT). The tenant is resolved from the opaque
+   token through a narrow `SECURITY DEFINER` bootstrap function
+   (`awcms_resolve_integration_endpoint_lookup`, migration 071 — same pattern
+   as `awcms_resolve_tenant_domain_lookup`, migration 033) BEFORE any
+   `withTenant(...)` transaction runs.
+3. `application/inbound-webhook-intake.ts`'s `processInboundWebhook` runs the
+   full gate chain (endpoint/tenant status, content type, body size, signature
+   verification) and — for VERIFIED deliveries — INSERTs an inbound delivery
+   row with `ON CONFLICT (tenant_id, endpoint_id, replay_key) DO NOTHING`. A
+   zero-row result = this delivery has ALREADY been processed (a replay), with
+   no further effect. A new row = genuinely new: the payload is normalized and
+   `appendDomainEvent` is called (event type
+   `awcms.integration-hub.inbound-message.normalized`) — all in the SAME
+   transaction.
 
-## Alur outbound
+## Outbound flow
 
-1. Operator mendaftarkan **subscription**
-   (`POST /api/v1/integration-hub/subscriptions`) — event type internal
-   yang didengar, `targetUrl` (SSRF-validated saat write), `filter`
-   deklaratif bounded opsional.
-2. Consumer statis `integration_hub` sendiri
+1. An operator registers a **subscription**
+   (`POST /api/v1/integration-hub/subscriptions`) — the internal event type it
+   listens for, a `targetUrl` (SSRF-validated at write time), and an optional
+   bounded declarative `filter`.
+2. `integration_hub`'s own static consumer
    (`integrationHubOutboundFanoutConsumer`,
-   `application/outbound-fanout-consumer.ts`) terdaftar di
-   `domain-event-runtime/infrastructure/consumer-registry.ts`'s array —
-   titik ekstensi additive yang sama dipakai `workflow_approval`/
-   `organization_structure` untuk jadi PRODUCER event nyata; modul ini
-   adalah CONSUMER pihak-ketiga nyata pertama. Berjalan dalam transaksi
-   YANG SAMA dengan commit event sumbernya — handler same-process, DB-only
-   (nol network call) yang membuat baris `pending`
-   `awcms_integration_outbound_deliveries` untuk tiap subscription
-   aktif yang cocok.
+   `application/outbound-fanout-consumer.ts`) is registered in
+   `domain-event-runtime/infrastructure/consumer-registry.ts`'s array — the
+   same additive extension point used by `workflow_approval`/
+   `organization_structure` to become real event PRODUCERs; this module is the
+   first real third-party CONSUMER. It runs in the SAME transaction as the
+   source event's commit — a same-process, DB-only (zero network calls)
+   handler that creates `pending` `awcms_integration_outbound_deliveries` rows
+   for every matching active subscription.
 3. `bun run integration-hub:outbound:dispatch`
-   (`application/outbound-dispatch.ts`) claim baris due, resolve
-   target/secret subscription, panggil
+   (`application/outbound-dispatch.ts`) claims due rows, resolves the
+   subscription's target/secret, calls
    `infrastructure/outbound-http-client.ts`'s `deliverOutboundWebhook`
-   (SSRF-guarded) DI LUAR transaksi mana pun, lalu finalisasi
+   (SSRF-guarded) OUTSIDE any transaction, then finalizes
    (`delivered` / `retry_wait` exponential backoff / `dead_letter`).
-   `dead_letter` bisa di-replay lewat admin action permission-gated,
-   reason-required, `Idempotency-Key`-required, teraudit
-   (`application/delivery-replay.ts`) — membuat baris delivery BARU yang
-   mereferensikan yang lama, TIDAK PERNAH memutasi/re-queue baris lama.
+   A `dead_letter` can be replayed through a permission-gated,
+   reason-required, `Idempotency-Key`-required, audited admin action
+   (`application/delivery-replay.ts`) — which creates a NEW delivery row
+   referencing the old one, NEVER mutating/re-queueing the old row.
 
-## Security invariant — WAJIB dipertahankan (jangan regresi)
+## Security invariants — MUST be preserved (do not regress)
 
 - **Timing-safe signature verification**: `domain/signature-primitives.ts`'s
-  `timingSafeEqualHex` pakai `node:crypto`'s `timingSafeEqual` (TIDAK
-  PERNAH `===` untuk membandingkan signature) — pola sama
+  `timingSafeEqualHex` uses `node:crypto`'s `timingSafeEqual` (NEVER `===` to
+  compare signatures) — same pattern as
   `sync-storage/domain/sync-hmac.ts`.
-- **Replay protection = constraint DB nyata**:
-  `UNIQUE (tenant_id, endpoint_id, replay_key)` di
-  `awcms_integration_inbound_deliveries` — bukan in-memory check,
-  survive restart/multi-instance deployment.
-- **Key rotation dengan overlap**: `secretReferencePrevious`/
-  `previousSecretExpiresAt` biarkan request yang ditandatangani secret
-  LAMA tetap terverifikasi sampai overlap window habis
+- **Replay protection = a real DB constraint**:
+  `UNIQUE (tenant_id, endpoint_id, replay_key)` on
+  `awcms_integration_inbound_deliveries` — not an in-memory check, it survives
+  restarts/multi-instance deployments.
+- **Key rotation with overlap**: `secretReferencePrevious`/
+  `previousSecretExpiresAt` let requests signed with the OLD secret keep
+  verifying until the overlap window elapses
   (`application/secret-resolver.ts`'s `resolvePreviousSecretIfInOverlap`).
-- **SSRF protection — DUA lapis, keduanya wajib**: `domain/ssrf-guard.ts`
-  memblokir literal IP private/link-local/metadata/reserved dan hostname
-  metadata dikenal saat WRITE-TIME subscription;
-  `infrastructure/outbound-http-client.ts` re-validasi LAGI DAN mengecek
-  setiap address hasil resolusi DNS saat DISPATCH-TIME — DAN, kritis,
-  `fetch()` dipanggil dengan `redirect: "manual"`, SETIAP header
-  `Location` redirect di-re-validasi lewat cek YANG SAMA sebelum diikuti
-  (dibatasi `MAX_REDIRECT_HOPS`, saat ini 2; melebihi itu = hard failure
-  non-retryable). **Versi sebelumnya** mengandalkan default redirect-follow
-  `fetch()` dan hanya pernah memvalidasi `target_url` ASLI — subscription
-  target bisa 302/303/307 ke `169.254.169.254` (cloud IMDS) atau IP
-  private mana pun dan worker akan mengikutinya tanpa syarat, bypass
-  100%-reliable tanpa timing race (reviewer finding, PR #784, DIPERBAIKI
-  sebelum merge — **jangan hapus `redirect: "manual"` + re-validation
-  loop-nya untuk alasan apa pun**). Body respons juga byte-capped
-  (`MAX_RESPONSE_BODY_READ_BYTES`, 8 KiB) dalam window timeout YANG SAMA
-  dengan fetch itu sendiri. Opt-out deployment-wide untuk LAN-first:
+- **SSRF protection — TWO layers, both mandatory**: `domain/ssrf-guard.ts`
+  blocks private/link-local/metadata/reserved IP literals and known metadata
+  hostnames at subscription WRITE-TIME;
+  `infrastructure/outbound-http-client.ts` re-validates AGAIN AND checks every
+  address returned by DNS resolution at DISPATCH-TIME — AND, critically,
+  `fetch()` is called with `redirect: "manual"`, and EVERY redirect `Location`
+  header is re-validated through the SAME check before being followed (capped
+  by `MAX_REDIRECT_HOPS`, currently 2; exceeding it = a non-retryable hard
+  failure). **The previous version** relied on `fetch()`'s default
+  redirect-following and only ever validated the ORIGINAL `target_url` — a
+  subscription target could 302/303/307 to `169.254.169.254` (cloud IMDS) or
+  any private IP and the worker would follow it unconditionally, a
+  100%-reliable bypass with no timing race (reviewer finding, PR #784, FIXED
+  before merge — **do not remove `redirect: "manual"` + its re-validation loop
+  for any reason whatsoever**). The response body is also byte-capped
+  (`MAX_RESPONSE_BODY_READ_BYTES`, 8 KiB) within the SAME timeout window as
+  the fetch itself. Deployment-wide opt-out for LAN-first:
   `INTEGRATION_HUB_ALLOW_PRIVATE_TARGETS=true` (doc 18).
-  **Limitasi residual terdokumentasi**: TIDAK pin resolved IP untuk
-  panggilan `fetch()` sesungguhnya, jadi race TOCTOU DNS-rebinding (DNS
-  record tujuan berubah antara validasi dan koneksi sesungguhnya) belum
-  tertutup penuh — lihat header comment `ssrf-guard.ts`. Gap ini SEMPIT
-  dan timing-dependent, BEDA dari (dan sudah tidak tercampur dengan) bug
-  redirect di atas yang sudah tertutup penuh.
-- **Secret reference naming dibatasi saat write-time**:
-  `domain/secret-reference-validation.ts` mewajibkan setiap
-  `secretReference` (endpoint create/rotate-secret, subscription create)
-  menunjuk env var yang namanya diawali `INTEGRATION_HUB_` — menutup gap
-  confused-deputy equality-oracle (security-auditor finding, PR #784) di
-  mana `env:<ANY_VAR_NAME>` tanpa batas mengizinkan tenant yang HANYA
-  punya permission `endpoints.create`/`.configure`/`subscriptions.create`
-  biasa mereferensikan secret proses-wide yang TIDAK TERKAIT dan memakai
-  percobaan signed-webhook berulang (200 vs 401) sebagai boolean equality
-  oracle terhadapnya. **Endpoint/subscription create/rotate baru wajib
-  lewat validator ini** — jangan terima `secretReference` mentah tanpa
-  prefix check.
-- **Data minimization**: `raw_body_snippet` (dibatasi 2000 char,
-  secret-pattern-redacted) HANYA diisi untuk delivery signature-VALID;
-  attempt ditolak/invalid hanya simpan hash+size. Body JSON ternormalisasi
-  yang di-relay ke subscriber juga kena PII-key redaction
-  (`_shared/redaction.ts`'s `redactSensitiveAttributes`) di ATAS
-  secret-pattern redaction raw snippet (security-auditor Low finding, PR
+  **Documented residual limitation**: the resolved IP is NOT pinned for the
+  actual `fetch()` call, so the DNS-rebinding TOCTOU race (the target's DNS
+  record changing between validation and the actual connection) is not fully
+  closed — see the `ssrf-guard.ts` header comment. That gap is NARROW and
+  timing-dependent, and is DIFFERENT from (and no longer conflated with) the
+  redirect bug above, which is fully closed.
+- **Secret reference naming is constrained at write time**:
+  `domain/secret-reference-validation.ts` requires every `secretReference`
+  (endpoint create/rotate-secret, subscription create) to point at an env var
+  whose name starts with `INTEGRATION_HUB_` — closing the confused-deputy
+  equality-oracle gap (security-auditor finding, PR #784) where an unbounded
+  `env:<ANY_VAR_NAME>` let a tenant that ONLY has the ordinary
+  `endpoints.create`/`.configure`/`subscriptions.create` permissions reference
+  an UNRELATED process-wide secret and use repeated signed-webhook attempts
+  (200 vs 401) as a boolean equality oracle against it. **Every new
+  endpoint/subscription create/rotate must go through this validator** — do
+  not accept a raw `secretReference` without the prefix check.
+- **Data minimization**: `raw_body_snippet` (capped at 2000 chars,
+  secret-pattern-redacted) is populated ONLY for signature-VALID deliveries;
+  rejected/invalid attempts only store hash+size. The normalized JSON body
+  relayed to subscribers also gets PII-key redaction
+  (`_shared/redaction.ts`'s `redactSensitiveAttributes`) ON TOP OF the raw
+  snippet's secret-pattern redaction (security-auditor Low finding, PR
   #784).
-- **Tidak pernah log/simpan nilai secret mentah** — field
-  `secret_reference` hanya pointer (`env:VAR_NAME`); nilai ter-resolve
-  dipakai in-memory untuk TEPAT SATU komputasi HMAC, tidak pernah
-  dikembalikan/di-log.
-- **Stale `sending` lease di-reclaim**:
-  `application/outbound-dispatch.ts`'s claim query juga me-reclaim
-  delivery yang macet di `sending` yang lease 2 menitnya sudah expired
-  (`OR (status = 'sending' AND next_attempt_at <= now)`), pola sama
-  `sync-storage/application/object-dispatch.ts` — worker crash/kill
-  di tengah `fetch()` tidak lagi men-strand delivery selamanya (reviewer
-  finding, PR #784, diperbaiki sebelum merge).
+- **Never log/store raw secret values** — the `secret_reference` field is only
+  a pointer (`env:VAR_NAME`); the resolved value is used in memory for EXACTLY
+  ONE HMAC computation, and is never returned/logged.
+- **Stale `sending` leases are reclaimed**:
+  `application/outbound-dispatch.ts`'s claim query also reclaims deliveries
+  stuck in `sending` whose 2-minute lease has expired
+  (`OR (status = 'sending' AND next_attempt_at <= now)`), same pattern as
+  `sync-storage/application/object-dispatch.ts` — a worker crash/kill in the
+  middle of a `fetch()` no longer strands a delivery forever (reviewer
+  finding, PR #784, fixed before merge).
 
-## Tabel (migration `073`)
+## Tables (migration `073`)
 
 `awcms_integration_endpoints` (soft-deletable), `_inbound_deliveries`
 (append-only, replay-protected), `_subscriptions` (soft-deletable),
 `_outbound_deliveries` (state per subscription+source event),
 `_delivery_attempts` (append-only), `_adapter_health` (per
-tenant+adapter+direction up/degraded/down). Semua `ENABLE`+`FORCE ROW
-LEVEL SECURITY`, `tenant_id` filter eksplisit di setiap query (defense in
-depth) selain RLS.
+tenant+adapter+direction up/degraded/down). All of them `ENABLE`+`FORCE ROW
+LEVEL SECURITY`, with an explicit `tenant_id` filter in every query (defense in
+depth) on top of RLS.
 
 ## Jobs
 
 `bun run integration-hub:outbound:dispatch`
-(`scripts/integration-hub-outbound-dispatch.ts`) — rekomendasi tiap 1-2
-menit via cron/systemd timer, dibangun di atas shared worker runner
+(`scripts/integration-hub-outbound-dispatch.ts`) — recommended every 1-2
+minutes via cron/systemd timer, built on top of the shared worker runner
 (`src/lib/jobs/job-runner.ts`).
 
-## 4 known limitations terdokumentasi (README §Known limitations) — jangan asumsikan sudah diperbaiki
+## 4 documented known limitations (README §Known limitations) — do not assume they are already fixed
 
-1. `_outbound_deliveries`/`_delivery_attempts` BELUM terdaftar di
-   `data_lifecycle` — engine generik `data_lifecycle` mengeluarkan
-   `DELETE FROM <tableName>` per descriptor TANPA cross-descriptor
-   FK-aware ordering; `_delivery_attempts.delivery_id` FK ke
-   `_outbound_deliveries.id`, dan `_outbound_deliveries.replay_of_delivery_id`
-   self-reference — registrasi tanpa ordering/`ON DELETE` semantics
-   lebih dulu berisiko purge failure FK-violation nyata. Follow-up issue
-   terpisah, jangan daftarkan begitu saja tanpa fix ordering-nya.
-2. **SSRF DNS-rebinding TOCTOU gap** — lihat §Security invariant di atas,
-   lebih sempit dari bug redirect yang sudah ditutup.
-3. **Tidak ada circuit-breaker persistence lintas restart**:
-   `getProviderCircuitBreaker` in-memory (fail-fast gate) reset saat
-   worker restart; `awcms_integration_adapter_health` (sinyal
-   persisted, visible lintas-restart) HANYA observability, TIDAK
-   men-gate percobaan dispatch itu sendiri.
-4. **Fan-out subscription outbound baru scoped ke event type
-   `integration_hub` sendiri** (`awcms.integration-hub.inbound-message.
-normalized`) — modul producer masa depan yang ingin fan-out webhook
-   outbound untuk event type-nya SENDIRI menambahkannya ke
+1. `_outbound_deliveries`/`_delivery_attempts` are NOT yet registered with
+   `data_lifecycle` — the generic `data_lifecycle` engine issues
+   `DELETE FROM <tableName>` per descriptor WITHOUT cross-descriptor
+   FK-aware ordering; `_delivery_attempts.delivery_id` FKs to
+   `_outbound_deliveries.id`, and `_outbound_deliveries.replay_of_delivery_id`
+   self-references — registering them without sorting out ordering/`ON DELETE`
+   semantics first risks a real FK-violation purge failure. A separate
+   follow-up issue; do not just register them without fixing the ordering.
+2. **The SSRF DNS-rebinding TOCTOU gap** — see §Security invariants above,
+   narrower than the redirect bug, which is already closed.
+3. **No circuit-breaker persistence across restarts**:
+   `getProviderCircuitBreaker` is in-memory (a fail-fast gate) and resets when
+   the worker restarts; `awcms_integration_adapter_health` (a persisted
+   signal, visible across restarts) is ONLY observability, it does NOT gate
+   the dispatch attempts themselves.
+4. **Outbound subscription fan-out is so far scoped to `integration_hub`'s own
+   event type** (`awcms.integration-hub.inbound-message.
+normalized`) — a future producer module that wants outbound webhook fan-out
+   for its OWN event types adds them to
    `integrationHubOutboundFanoutConsumer`'s `eventTypes` array
-   (`domain-event-runtime/infrastructure/consumer-registry.ts`) DAN ke
-   allowlist check `subscription-directory.ts` — pola registrasi
-   reviewed-source-code yang sama dipakai producer/consumer lain.
+   (`domain-event-runtime/infrastructure/consumer-registry.ts`) AND to the
+   allowlist check in `subscription-directory.ts` — the same
+   reviewed-source-code registration pattern used by other
+   producers/consumers.
 
-## Pitfall umum
+## Common pitfalls
 
-1. Jangan hapus/lemahkan `redirect: "manual"` + re-validation loop di
-   `outbound-http-client.ts` — itu menutup bug SSRF redirect-bypass nyata
-   yang ditemukan sebelum merge (PR #784).
-2. Jangan terima `secretReference` tanpa validasi prefix
-   `INTEGRATION_HUB_` — confused-deputy oracle nyata.
-3. Jangan panggil provider/`fetch()` di dalam transaksi database (ADR-0006).
-4. Jangan daftarkan `_outbound_deliveries`/`_delivery_attempts` ke
-   `data_lifecycle` tanpa fix FK-ordering purge dulu.
-5. Jangan copy pola HMAC compare modul ini tanpa `timingSafeEqualHex` —
-   `===` pada signature adalah timing side-channel.
+1. Do not remove/weaken `redirect: "manual"` + the re-validation loop in
+   `outbound-http-client.ts` — it closes a real SSRF redirect-bypass bug found
+   before merge (PR #784).
+2. Do not accept a `secretReference` without validating the
+   `INTEGRATION_HUB_` prefix — a real confused-deputy oracle.
+3. Do not call a provider/`fetch()` inside a database transaction (ADR-0006).
+4. Do not register `_outbound_deliveries`/`_delivery_attempts` with
+   `data_lifecycle` without fixing the FK-ordering purge first.
+5. Do not copy this module's HMAC compare pattern without `timingSafeEqualHex`
+   — `===` on a signature is a timing side-channel.
 
-## Verifikasi
+## Verification
 
-Lihat `tests/integration/integration-hub*.integration.test.ts` (bila ada)
-untuk test replay-protection, SSRF guard (redirect bypass + private-IP),
-dan stale-lease reclaim. Jalankan `bun test` dengan `DATABASE_URL` —
-`bun run check` tanpa `DATABASE_URL` melewatkan test integration secara
-diam-diam.
+See `tests/integration/integration-hub*.integration.test.ts` (where present)
+for the replay-protection, SSRF guard (redirect bypass + private-IP), and
+stale-lease reclaim tests. Run `bun test` with `DATABASE_URL` —
+`bun run check` without `DATABASE_URL` silently skips the integration tests.

@@ -1,155 +1,160 @@
-# ADR-0042 — Lapisan cache tepi Varnish dengan aktivasi otomatis berbasis tekanan origin
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0042-varnish-edge-cache-auto-activation.id.md)
+
+# ADR-0042 — A Varnish edge cache layer with automatic activation driven by origin pressure
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-25
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** ADR-0003 (RLS multi-tenant), ADR-0006 (outbox — pola enqueue-in-commit dipakai ulang di sini), ADR-0009 (rute publik path-scoped `/blog/{tenantCode}`), ADR-0010 (routing host→tenant), ADR-0035 (positioning online-first), ADR-0038 (validator cache discovery SEO), ADR-0039 (redirect/404)
+- **Date:** 2026-07-25
+- **Decision maker:** @ahliweb
+- **Related:** ADR-0003 (multi-tenant RLS), ADR-0006 (outbox — the enqueue-in-commit pattern is reused here), ADR-0009 (path-scoped public routes `/blog/{tenantCode}`), ADR-0010 (host→tenant routing), ADR-0035 (online-first positioning), ADR-0038 (SEO discovery cache validators), ADR-0039 (redirect/404)
 
-## Konteks
+## Context
 
-`awcms` kini online-first (ADR-0035) dan menargetkan SaaS multi-tenant dengan
-subdomain tak terbatas. Konsekuensinya: **setiap pembaca anonim yang membuka
-halaman publik yang sama memicu kerja database yang sama**. Feed, sitemap, indeks
-blog, halaman post, dan token tema adalah fungsi murni dari konten terbit +
-konfigurasi tenant — jawabannya identik untuk semua pengunjung, tetapi hari ini
-dihitung ulang per permintaan.
+`awcms` is now online-first (ADR-0035) and targets multi-tenant SaaS with
+unlimited subdomains. The consequence: **every anonymous reader opening the same
+public page triggers the same database work**. Feeds, sitemaps, blog indexes,
+post pages, and theme tokens are pure functions of published content + tenant
+configuration — the answer is identical for every visitor, yet today it is
+recomputed per request.
 
-Yang sudah ada **bukan** solusi untuk ini:
+What already exists is **not** a solution for this:
 
-- **Validator HTTP `seo_distribution` (ADR-0038 §7).** ETag/Last-Modified
-  menghemat _bandwidth_ saat klien mengirim permintaan bersyarat. Origin tetap
-  menjalankan seluruh query untuk menghitung signature-nya. Beban database tidak
-  berkurang.
-- **`src/lib/redis/`.** Cache nilai di dalam aplikasi. Berguna, tetapi permintaan
-  tetap sampai ke proses aplikasi, tetap melewati middleware, tetap merender.
+- **The `seo_distribution` HTTP validators (ADR-0038 §7).** ETag/Last-Modified
+  save _bandwidth_ when the client sends a conditional request. The origin still
+  runs the whole query to compute its signature. Database load is not reduced.
+- **`src/lib/redis/`.** An in-application value cache. Useful, but the request
+  still reaches the application process, still passes through middleware, still
+  renders.
 
-Yang hilang adalah lapisan yang **menjawab tanpa menyentuh aplikasi sama sekali**.
+What is missing is a layer that **answers without touching the application at
+all**.
 
-Kendala yang membentuk keputusan ini: cache bersama di depan aplikasi multi-tenant
-adalah **mesin kebocoran lintas-tenant** secara default. VCL bawaan Varnish
-men-cache respons `200` tanpa direktif cache selama `default_ttl` (120 detik).
-Satu halaman `/admin` yang ter-cache = data tenant lain disajikan ke pengunjung
-berikutnya. Tidak ada satu pun mekanisme Varnish yang mencegah itu secara bawaan.
+The constraint that shapes this decision: a shared cache in front of a
+multi-tenant application is a **cross-tenant leak machine** by default. Varnish's
+built-in VCL caches `200` responses without cache directives for `default_ttl`
+(120 seconds). One cached `/admin` page = another tenant's data served to the next
+visitor. Not a single Varnish mechanism prevents that out of the box.
 
-## Keputusan
+## Decision
 
-### 1. Varnish sebagai tier opsional, **default mati, no-op saat mati**
+### 1. Varnish as an optional tier, **off by default, a no-op when off**
 
-Cache tepi adalah lapisan infrastruktur opsional (`src/lib/edge-cache/`, bukan
-modul: tak ada tabel tenant-facing, tak ada permission, tak ada layar admin).
-Tanpa `EDGE_CACHE_MODE`, `annotateEdgeCache` keluar setelah satu pemeriksaan
-boolean — tanpa alokasi, tanpa query, tanpa penulisan header. Menambah subsistem
-ke jalur panas setiap permintaan publik hanya sah bila "mati" benar-benar gratis.
+The edge cache is an optional infrastructure layer (`src/lib/edge-cache/`, not a
+module: no tenant-facing tables, no permissions, no admin screen). Without
+`EDGE_CACHE_MODE`, `annotateEdgeCache` returns after one boolean check — no
+allocation, no query, no header writing. Adding a subsystem to the hot path of
+every public request is only legitimate if "off" is genuinely free.
 
-### 2. Kelayakan-cache adalah **allow-list fail-closed**, terpisah dari beban
+### 2. Cacheability is a **fail-closed allow-list**, separate from load
 
-`decideCacheability` (murni) menolak secara default. Sebuah respons hanya
-cacheable bila lolos SELURUH pemeriksaan: surface terdaftar → metode GET/HEAD →
-tanpa header `Authorization` → tanpa cookie ber-prefix `awcms_` → status aman →
-tanpa `Set-Cookie` → tanpa `Cache-Control: private/no-store/no-cache` → bukan
-`Vary: *` → tenant ter-resolve → query param termasuk allow-list.
+`decideCacheability` (pure) denies by default. A response is cacheable only if it
+passes EVERY check: registered surface → GET/HEAD method → no `Authorization`
+header → no cookie with the `awcms_` prefix → safe status → no `Set-Cookie` → no
+`Cache-Control: private/no-store/no-cache` → not `Vary: *` → tenant resolved →
+query params within the allow-list.
 
-Rute baru **tidak cacheable sampai seseorang mendeklarasikannya**. Lupa = aman.
+A new route is **not cacheable until somebody declares it**. Forgetting is safe.
 
-Cookie identitas dicocokkan lewat **prefix** `awcms_`, bukan daftar nama, supaya
-cookie identitas baru besok tidak diam-diam membuka lubang. Ada test yang membaca
-`ssr-session.ts` dan menegakkan bahwa nama cookie sesungguhnya masih cocok
-prefix itu.
+Identity cookies are matched by **prefix** `awcms_`, not by a list of names, so
+that a new identity cookie tomorrow does not silently open a hole. There is a test
+that reads `ssr-session.ts` and enforces that the actual cookie names still match
+that prefix.
 
-### 3. Tekanan origin hanya mengubah **berapa lama**, tidak pernah **apa**
+### 3. Origin pressure only changes **how long**, never **what**
 
-Mode `auto` mengukur laju permintaan + latensi origin dalam jendela bergulir. Saat
-origin santai, TTL yang diiklankan **0** — pengunjung dapat data hidup, cache
-dingin. Saat ambang terlampaui, TTL naik bertahap hingga TTL penuh pada dua kali
-ambang, dengan histeresis agar tidak berosilasi.
+`auto` mode measures request rate + origin latency in a rolling window. When the
+origin is relaxed, the advertised TTL is **0** — visitors get live data, the cache
+stays cold. When the threshold is exceeded, the TTL rises gradually up to the full
+TTL at twice the threshold, with hysteresis so it does not oscillate.
 
-Ini yang dimaksud "diaktifkan otomatis apabila diperlukan": cache tidak menambah
-kebasian saat tidak dibutuhkan, dan menyerap pengulangan tepat ketika database
-mulai tertekan.
+That is what "activated automatically when needed" means: the cache does not add
+staleness when it is not needed, and absorbs repetition exactly when the database
+starts to come under pressure.
 
-**Tekanan bukan input `decideCacheability`.** Secara struktural mustahil sebuah
-lonjakan beban mengubah respons privat menjadi publik. Pemisahan ini disengaja.
+**Pressure is not an input to `decideCacheability`.** It is structurally
+impossible for a load spike to turn a private response into a public one. That
+separation is deliberate.
 
-### 4. Pertahanan berlapis untuk perilaku cache-by-default Varnish
+### 4. Layered defence against Varnish's cache-by-default behaviour
 
-Tiga mekanisme independen harus gagal sebelum respons tak-bertanda ter-cache:
+Three independent mechanisms have to fail before an unmarked response is cached:
 
-1. Aplikasi menandai **setiap** respons — `/admin` dan `/api` termasuk — dengan
-   `Surrogate-Control` (cache) atau `Cache-Control: private, no-store` (jangan).
-   Tidak ada keadaan ketiga yang senyap.
-2. VCL **default-deny**: `vcl_backend_response` hanya men-cache yang membawa
+1. The application marks **every** response — `/admin` and `/api` included — with
+   either `Surrogate-Control` (cache) or `Cache-Control: private, no-store` (do
+   not). There is no silent third state.
+2. **Default-deny VCL**: `vcl_backend_response` only caches what carries a
    `Surrogate-Control`.
 3. `varnishd -p default_ttl=0`.
 
-### 5. Invalidasi lewat surrogate key + antrean tahan-lama (`sql/068`)
+### 5. Invalidation via surrogate keys + a durable queue (`sql/068`)
 
-Respons ditandai `Surrogate-Key` (`t:<tenant>`, `t:<tenant>:m:<module>`,
-`t:<tenant>:s:<surface>`, `t:<tenant>:r:<type>:<id>`). Invalidasi = `ban()` regex
-atas header itu.
+Responses are tagged with `Surrogate-Key` (`t:<tenant>`, `t:<tenant>:m:<module>`,
+`t:<tenant>:s:<surface>`, `t:<tenant>:r:<type>:<id>`). Invalidation = a `ban()`
+regex over that header.
 
-Karena key masuk ke **regex**, key dibatasi ke `[A-Za-z0-9:._-]` saat dibangun DAN
-divalidasi ulang di VCL: sebuah key `.*` akan mengubah satu invalidasi menjadi
-"buang seluruh cache ke origin" — denial-of-service satu permintaan. Pencocokan
-juga di-anchor `(^|[[:space:]])key([[:space:]]|$)` agar ban `t:abc` tidak ikut
-membuang `t:abcdef` milik tenant lain.
+Because keys go into a **regex**, keys are restricted to `[A-Za-z0-9:._-]` when
+built AND re-validated in the VCL: a key of `.*` would turn one invalidation into
+"dump the entire cache onto the origin" — a one-request denial-of-service. The
+match is also anchored `(^|[[:space:]])key([[:space:]]|$)` so that a ban on
+`t:abc` does not also dump another tenant's `t:abcdef`.
 
-`[[:space:]]` bukan pilihan gaya. Varnish memecah ekspresi ban pada **whitespace**
-menjadi `<field> <operator> <argument>`; spasi literal di dalam regex — persis
-yang ditulis versi pertama, `(^| )` — membuat jumlah token salah dan ban ditolak
-`Wrong number of arguments`. Handler BAN tetap membalas `200`, sehingga origin
-mencatat purge terkirim, baris antrean ditandai selesai, dan objek tetap
-ter-cache sampai TTL habis: **invalidasi tidak pernah bekerja sama sekali**.
-Ditemukan hanya setelah Varnish benar-benar dipasang di depan staging dan
-`X-Cache` tetap `HIT` sesudah purge. Mengutip regex tidak menolong — pemecahan
-token terjadi lebih dulu.
+`[[:space:]]` is not a style choice. Varnish splits a ban expression on
+**whitespace** into `<field> <operator> <argument>`; a literal space inside the
+regex — exactly what the first version wrote, `(^| )` — makes the token count
+wrong and the ban is rejected with `Wrong number of arguments`. The BAN handler
+still replies `200`, so the origin records the purge as sent, the queue row is
+marked done, and the object stays cached until its TTL expires: **invalidation
+never worked at all**. Found only after Varnish was actually placed in front of
+staging and `X-Cache` stayed `HIT` after a purge. Quoting the regex does not help
+— the token split happens first.
 
-Enqueue terjadi di **transaksi konten yang sama** (pola outbox ADR-0006), bukan
-panggilan HTTP di dalam transaksi. Pengiriman dilakukan `bun run edge-cache:purge`
-dengan lease + retry, sehingga Varnish yang sedang restart tidak berarti konten
-basi selamanya.
+Enqueue happens in the **same content transaction** (the ADR-0006 outbox
+pattern), not an HTTP call inside a transaction. Delivery is performed by
+`bun run edge-cache:purge` with lease + retry, so a restarting Varnish does not
+mean permanently stale content.
 
-### 6. Batas ruang kunci cache
+### 6. Bounding the cache key space
 
-Edge mengunci pada URL penuh termasuk query string, jadi query tak terbatas =
-entri cache tak terbatas: siapa pun bisa menggusur objek panas dengan permintaan
-murah berulang. Setiap surface mendeklarasikan `allowedQueryParams`; parameter di
-luar itu membuat permintaan tidak cacheable.
+The edge keys on the full URL including the query string, so unbounded queries =
+unbounded cache entries: anyone can evict hot objects with repeated cheap
+requests. Every surface declares `allowedQueryParams`; a parameter outside that
+list makes the request non-cacheable.
 
-## Konsekuensi
+## Consequences
 
-- **Gate baru** `bun run edge-cache:surfaces:check` (murni, tanpa DB) di rantai
-  `bun run check`. Ia memeriksa key unik & aman, pola ter-anchor tanpa wildcard
-  rakus, TTL berbatas, dan **memprobe 16 path yang tidak boleh pernah cacheable**
-  (termasuk `/admin`, `/api/v1/*`, dan bentuk traversal). Terbukti merah saat
-  di-drift.
-- **Migrasi `sql/068`** — `awcms_edge_cache_purges`, ENABLE + FORCE RLS, grant
-  worker `SELECT, UPDATE, DELETE` (DELETE dipakai nyata untuk prune; bukan grant
-  spekulatif) dan entri identik di `WORKER_ROLE_GRANTS`.
-- **`security:readiness`** menambah `checkEdgeCacheConfigured`. Satu-satunya
-  temuan `critical`-nya adalah endpoint purge tanpa token — kombinasi yang membuat
-  setiap invalidasi gagal 403 secara senyap.
-- **Middleware** kini menyalurkan semua cabang melalui satu titik keluar. Perilaku
-  `/admin`, Turnstile, CSP, redirect SEO, dan penangkapan 404 tidak berubah.
-- **Belum tercakup, dan disebut eksplisit** (bukan kelalaian): surface discovery
-  ber-resolusi-host (`/robots.txt`, `/sitemap.xml`, `/feed.xml`, `/atom.xml`,
-  `/feed.json`) — kandidat cache terbaik di repo, tetapi tenant-nya ditetapkan di
-  dalam `withSeoPublicTenant` sementara `serveDiscovery(request, …)` tidak
-  menerima `locals`, sehingga rute tak bisa mempublikasikan `edgeCacheTenantId`.
-  Mendeklarasikannya tetap akan menghasilkan surface yang cocok, gagal resolve,
-  lalu ditolak setiap permintaan — entri registry yang terbaca "ter-cache" padahal
-  tidak. Deklarasi mati lebih buruk daripada kelalaian yang jujur.
-- **Belum tercakup:** emisi purge dari event konten (publish post/tema) belum
-  disambungkan; `enqueueEdgeCachePurge` siap dipanggil, pemanggilnya belum ada.
-  Sampai itu ada, invalidasi bergantung pada TTL. TTL surface sengaja pendek
-  (120–600 detik) justru karena itu.
+- **A new gate** `bun run edge-cache:surfaces:check` (pure, no DB) in the
+  `bun run check` chain. It checks unique & safe keys, anchored patterns without
+  greedy wildcards, bounded TTLs, and **probes 16 paths that must never be
+  cacheable** (including `/admin`, `/api/v1/*`, and traversal shapes). Proven to
+  go red when drifted.
+- **Migration `sql/068`** — `awcms_edge_cache_purges`, ENABLE + FORCE RLS, worker
+  grants `SELECT, UPDATE, DELETE` (DELETE is genuinely used for pruning; not a
+  speculative grant) and identical entries in `WORKER_ROLE_GRANTS`.
+- **`security:readiness`** gains `checkEdgeCacheConfigured`. Its only `critical`
+  finding is a purge endpoint without a token — the combination that makes every
+  invalidation fail 403 silently.
+- **Middleware** now funnels every branch through a single exit point. The
+  behaviour of `/admin`, Turnstile, CSP, SEO redirects, and 404 capture is
+  unchanged.
+- **Not yet covered, and named explicitly** (not an oversight): the host-resolved
+  discovery surfaces (`/robots.txt`, `/sitemap.xml`, `/feed.xml`, `/atom.xml`,
+  `/feed.json`) — the best cache candidates in the repo, but their tenant is
+  established inside `withSeoPublicTenant` while `serveDiscovery(request, …)` does
+  not receive `locals`, so the route cannot publish `edgeCacheTenantId`. Declaring
+  them anyway would produce a surface that matches, fails to resolve, and is then
+  denied on every request — a registry entry that reads as "cached" while it is
+  not. A dead declaration is worse than an honest omission.
+- **Not yet covered:** purge emission from content events (post/theme publish) is
+  not wired up; `enqueueEdgeCachePurge` is ready to be called, its caller does not
+  exist yet. Until it does, invalidation depends on the TTL. Surface TTLs are
+  deliberately short (120–600 seconds) precisely because of that.
 
-## Alternatif yang ditolak
+## Rejected alternatives
 
-- **Nginx `proxy_cache`.** Tanpa invalidasi bertag; `proxy_cache_purge` ada di
-  varian komersial. Invalidasi per-tag adalah syarat, bukan tambahan.
-- **Hanya CDN.** Menyerahkan isolasi tenant ke konfigurasi pihak ketiga dan tidak
-  membantu deployment LAN/on-prem yang tetap didukung ADR-0035.
-- **Memperluas `src/lib/redis/`.** Tidak menghilangkan hop aplikasi; tujuannya
-  justru menjawab tanpa membangunkan aplikasi.
-- **Deny-list ("cache semua kecuali `/admin`").** Persis mode kegagalan yang
-  membuat cache bersama berbahaya: rute privat baru ter-cache secara default.
+- **Nginx `proxy_cache`.** No tagged invalidation; `proxy_cache_purge` lives in
+  the commercial variant. Per-tag invalidation is a requirement, not an extra.
+- **CDN only.** Hands tenant isolation to a third party's configuration and does
+  not help the LAN/on-prem deployments ADR-0035 still supports.
+- **Extending `src/lib/redis/`.** Does not remove the application hop; the whole
+  point is to answer without waking the application.
+- **A deny-list ("cache everything except `/admin`").** Exactly the failure mode
+  that makes a shared cache dangerous: a new private route is cached by default.

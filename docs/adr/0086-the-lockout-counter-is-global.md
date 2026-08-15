@@ -1,109 +1,110 @@
-# ADR-0086 — Penghitung lockout menjadi GLOBAL
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0086-the-lockout-counter-is-global.id.md)
 
-- **Status:** Diterima (2026-08-12).
-- **Konteks:** Issue #423 Gelombang 7 PR 7.2. **Menutup
-  [#430](https://github.com/ahliweb/awcms/issues/430).** Migrasi `sql/113`.
-- **Membangun di atas:**
+# ADR-0086 — The lockout counter becomes GLOBAL
+
+- **Status:** Accepted (2026-08-12).
+- **Context:** Issue #423 Wave 7 PR 7.2. **Closes
+  [#430](https://github.com/ahliweb/awcms/issues/430).** Migration `sql/113`.
+- **Builds on:**
   [ADR-0085](0085-one-human-one-credential-many-tenants.md) (`awcms_principals`,
-  tanpanya temuan ini tidak punya tempat untuk diperbaiki),
-  [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (rate
-  limit bersama yang sengaja fail-open — dan bersandar pada lockout sisi basis
-  data justru karena ia TIDAK fail-open), dan
-  [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md) (kolom
-  lama menjadi sejarah, bukan dihapus).
+  without which this finding has nowhere to be fixed),
+  [ADR-0066](0066-shared-rate-limiting-and-full-auth-surface-coverage.md) (the
+  shared rate limit that is deliberately fail-open — and leans on the
+  database-side lockout precisely because that one is NOT fail-open), and
+  [ADR-0079](0079-the-legacy-grant-table-becomes-read-only-history.md) (the old
+  column becomes history, not deleted).
 
-## Keputusan
+## Decision
 
-`awcms_identities.failed_login_count`/`locked_until` berhenti memutuskan apa pun.
-Penghitungnya pindah ke `awcms_principals`, yang punya tepat satu baris per
-manusia dan **tidak punya kolom tenant untuk dirotasi**.
+`awcms_identities.failed_login_count`/`locked_until` stop deciding anything. The
+counter moves to `awcms_principals`, which has exactly one row per human and
+**has no tenant column to rotate**.
 
-## Kenapa ini menutup #430
+## Why this closes #430
 
-`awcms_identities` UNIQUE pada `(tenant_id, login_identifier)`, jadi satu manusia
-anggota N tenant punya N penghitung. `POST /api/v1/auth/login` menuntut
-`x-awcms-tenant-id` di muka, dan nilainya bukan rahasia — halaman `/login`
-menerbitkan pemilih tenant.
+`awcms_identities` is UNIQUE on `(tenant_id, login_identifier)`, so one human who
+is a member of N tenants has N counters. `POST /api/v1/auth/login` demands
+`x-awcms-tenant-id` up front, and its value is not a secret — the `/login` page
+publishes a tenant picker.
 
-Rotasi header itu karena itu memilih baris identitas yang berbeda, dan setiap
-baris membawa penghitungnya sendiri. Setelah ADR ini, rotasi yang sama memilih
-identitas berbeda tetapi **principal yang SAMA** — dan principal-lah yang
-di-increment.
+Rotating that header therefore selects a different identity row, and each row
+carries its own counter. After this ADR, the same rotation selects a different
+identity but the **SAME principal** — and it is the principal that gets
+incremented.
 
-Properti yang sebenarnya menutup temuan ini bisa dinyatakan dalam satu kalimat:
-**baris yang di-increment jalur login wajib dipilih oleh sesuatu yang tidak bisa
-divariasikan penyerang.**
+The property that actually closes this finding can be stated in one sentence:
+**the row the login path increments must be selected by something an attacker
+cannot vary.**
 
-## Kenapa test regresinya berbasis SOURCE
+## Why its regression test is SOURCE-based
 
-Test perilaku menuntut basis data, sementara suite default berjalan tanpa satu —
-sehingga asersi yang paling penting hanya akan hidup di workflow DB-gated. Lebih
-buruk: test perilaku LULUS DENGAN ALASAN YANG SALAH begitu penghitungnya diam-diam
-jatuh kembali ke identitas. Lima kegagalan dalam satu tenant tetap mengunci; kasus
-rotasinya justru yang tak seorang pun menulis.
+A behavioural test demands a database, while the default suite runs without one
+— so the most important assertion would live only in the DB-gated workflow.
+Worse: a behavioural test PASSES FOR THE WRONG REASON as soon as the counter
+silently falls back to the identity. Five failures within one tenant still lock;
+it is the rotation case that nobody writes.
 
-`tests/global-lockout-regression.test.ts` karena itu menegakkan bentuk
-strukturalnya, dan dibuktikan dengan **mengembalikan cacat #430 yang asli** —
-mutasi itu memerahkannya.
+`tests/global-lockout-regression.test.ts` therefore enforces the structural
+shape, and it was proven by **restoring the original #430 defect** — that
+mutation turns it red.
 
-## Yang paling mudah salah, dan sudah pernah menggigit repo ini
+## What is easiest to get wrong, and has already bitten this repo
 
-Memindahkan PENULIS tanpa memindahkan PEMBACANYA. Lockout GLOBAL dengan reset
-PER-TENANT bukan setengah perbaikan — ia **lebih buruk daripada yang
-digantikannya**: penyerang yang mengunci `alice@corp.com` dari semua tenant tidak
-bisa dibatalkan oleh tautan reset yang baru saja dikirimkan kepadanya.
+Moving the WRITER without moving its READERS. A GLOBAL lockout with a PER-TENANT
+reset is not half a fix — it is **worse than what it replaces**: an attacker who
+locks `alice@corp.com` out of every tenant cannot be undone by the reset link
+just sent to them.
 
-Empat jalur wajib ikut pindah, dan **dua di antaranya ditemukan dengan grep, bukan
-dengan penalaran**:
+Four paths must move too, and **two of them were found by grep, not by
+reasoning**:
 
-| Jalur                        | Kewajiban                                                             |
-| ---------------------------- | --------------------------------------------------------------------- |
-| `/auth/login` sukses         | bersihkan penghitung global                                           |
-| reset password               | ganti kredensial principal + bersihkan                                |
-| ganti password               | sama                                                                  |
-| **SSO callback**             | bersihkan — membuktikan identitas lewat IdP adalah autentikasi sukses |
-| **verifikasi enrolment MFA** | sama                                                                  |
+| Path                           | Obligation                                                              |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `/auth/login` success          | clear the global counter                                                |
+| password reset                 | replace the principal credential + clear                                |
+| password change                | same                                                                    |
+| **SSO callback**               | clear — proving identity through the IdP is a successful authentication |
+| **MFA enrolment verification** | same                                                                    |
 
-Dua yang terakhir sebelumnya hanya membersihkan salinan tenant-scoped. Tanpa
-perbaikan, orang yang terkunci oleh percobaan password akan masuk lewat IdP
-dengan sukses **dan tetap terkunci** di jalur password, sementara tuas yang dulu
-melepaskannya sudah tidak memutuskan apa pun.
+The last two previously cleared only the tenant-scoped copy. Without the fix, a
+person locked out by password attempts would sign in through the IdP
+successfully **and remain locked** on the password path, while the lever that
+used to release them no longer decides anything.
 
-## Trade-off yang diambil dengan sadar: DoS lockout
+## A trade-off taken knowingly: lockout DoS
 
-Penghitung global berarti penyerang yang tahu sebuah alamat bisa mengunci
-korbannya dari **semua** tenant, bukan satu. Itu memperbesar blast radius, dan
-issue-nya menuntut trade-off ini diambil BERSAMA tuas pemulihannya — bukan
-sesudahnya.
+A global counter means an attacker who knows an address can lock their victim out
+of **all** tenants, not one. That widens the blast radius, and the issue demands
+this trade-off be taken TOGETHER with its recovery levers — not afterwards.
 
-Karena itu kelima jalur pemulihan di tabel atas mendarat **di PR yang sama**.
-Reset password lewat surat tetap bekerja, dan kini bekerja **lintas tenant
-sekaligus**, yang justru merupakan pemulihan yang lebih baik daripada sebelumnya.
+That is why all five recovery paths in the table above land **in the same PR**.
+Password reset by mail still works, and now works **across every tenant at
+once**, which is in fact a better recovery than before.
 
-Yang DITOLAK sebagai mitigasi sementara sebelum gelombang ini: penghitung global
-berbasis Redis (ia fail-open justru saat dibutuhkan, dan `checkSharedRateLimit`
-sendiri fail-open), dan fungsi `SECURITY DEFINER` yang mengagregasi lintas tenant
-(ia membawa DoS yang sama tanpa satu pun tuas pemulihannya).
+What was REJECTED as an interim mitigation before this wave: a Redis-based global
+counter (it fails open exactly when it is needed, and `checkSharedRateLimit`
+itself fails open), and a `SECURITY DEFINER` function aggregating across tenants
+(it carries the same DoS without a single one of its recovery levers).
 
-## Migrasi tidak boleh melemahkan kontrol yang dipindahkannya
+## A migration must not weaken the control it is moving
 
-Backfill mengambil `MAX(failed_login_count)` dan `MAX(locked_until)` lintas
-identitas milik principal itu. Mengambil `0` — atau penghitung baris mana pun
-yang kebetulan terurut pertama — akan **melepaskan setiap lockout yang sedang
-berlaku** pada saat deploy. `MAX` adalah satu-satunya agregat yang tidak bisa
-melemahkan kontrol yang sedang dimigrasikannya.
+The backfill takes `MAX(failed_login_count)` and `MAX(locked_until)` across the
+identities belonging to that principal. Taking `0` — or whichever row's counter
+happens to sort first — would **release every lockout in force** at deploy time.
+`MAX` is the only aggregate that cannot weaken the control it is migrating.
 
-Kolom identitas DIBIARKAN di tempatnya dan tetap terisi — sejarah, preseden
-ADR-0079. Menghapusnya di migrasi yang sama yang berhenti membacanya akan
-memusnahkan satu-satunya bukti tentang apa yang dipegang penghitung per-tenant.
+The identity columns are LEFT in place and remain populated — history, the
+ADR-0079 precedent. Dropping them in the same migration that stops reading them
+would destroy the only evidence of what the per-tenant counter held.
 
-## Konsekuensi
+## Consequences
 
-- **#430 ditutup.**
-- Increment tetap dihitung DI-DB, bukan read-modify-write — cacat Issue #483
-  diwarisi sebagai perbaikan, bukan diulang sebagai kesalahan baru.
-- Kredensial dipromosikan ke principal saat login sukses pertama, satu login pada
-  satu waktu, alih-alih dalam satu jendela migrasi.
-- Reset dan ganti password kini mengubah kredensial **di semua tenant** — itulah
-  arti "satu manusia, satu kredensial", dan surat resetnya perlu mengatakannya.
-- PR 7.3 memindahkan MFA; PR 7.4 menambahkan pemilihan dan perpindahan tenant.
+- **#430 is closed.**
+- The increment is still computed IN-DB, not read-modify-write — the Issue #483
+  defect is inherited as a fix, not repeated as a new mistake.
+- Credentials are promoted to the principal on the first successful login, one
+  login at a time, rather than in a single migration window.
+- Password reset and change now alter the credential **across all tenants** —
+  that is what "one human, one credential" means, and the reset mail needs to say
+  so.
+- PR 7.3 moves MFA; PR 7.4 adds tenant selection and switching.

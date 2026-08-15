@@ -1,8 +1,10 @@
-# theming — tenant-selectable presentation (ADR-0034 Fase 3)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
+# theming — tenant-selectable presentation (ADR-0034 Phase 3)
 
 The FIRST website module implemented **directly in the awcms base** — the evidence
 for ADR-0034's decision that content/website modules may live in `src/modules/`
-here ("template dipakai-langsung"), superseding the old `no-content-website-modules`
+here ("templates are used directly"), superseding the old `no-content-website-modules`
 restriction. Adapted from awcms-micro's `theming` (Issue #269 / awcms-micro
 ADR-0029).
 
@@ -19,7 +21,7 @@ arbitrary templates, no raw CSS/HTML/JS**.
 
 There is no database-stored executable template anywhere. awcms has no
 derived-repo theme seam (the derived-application pathway was removed in ADR-0034
-Fase 2); new themes live directly in this base registry.
+Phase 2); new themes live directly in this base registry.
 
 ## Security spine — `domain/css-value-validation.ts`
 
@@ -76,10 +78,10 @@ audited.
   `src/pages/theming/preview/[token].astro` + `preview-tokens/[token].css.ts`.
 - `src/layouts/PublicThemeLayout.astro` — the trusted render layout.
 
-## Port adaptations vs awcms-micro (ADR-0034 Fase 3)
+## Port adaptations vs awcms-micro (ADR-0034 Phase 3)
 
 - **No derived-repo theme seam** — the derived-application pathway was removed
-  (ADR-0034 Fase 2); themes live in `theme-registry.ts` directly.
+  (ADR-0034 Phase 2); themes live in `theme-registry.ts` directly.
 - **`media_library` dropped** — not part of this base. Asset-URL resolution
   (`src/lib/theming/theme-media.ts`) is a documented no-op returning an empty map;
   assets are omitted from render and the theme degrades safely. Stored asset ids

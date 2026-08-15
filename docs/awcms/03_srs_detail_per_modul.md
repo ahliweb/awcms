@@ -1,14 +1,16 @@
-# Bagian 3 — SRS Detail Per Modul
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](03_srs_detail_per_modul.id.md)
 
-> **Status dokumen:** target/rencana teknis, bukan status implementasi. Belum ada modul ERP yang diimplementasikan di repo ini — dokumen ini menjabarkan kebutuhan teknis yang **akan** dipenuhi modul saat dibangun di atas base modular monolith (lihat `01_canvas_induk.md`).
+# Part 3 — Detailed SRS Per Module
 
-> **Contoh domain (ilustratif).** Dokumen ini memakai domain ERP (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) sebagai contoh berjalan. **Pola & standar**-nya reusable untuk base AWCMS; **entitas, endpoint, layar, dan istilah domain** adalah ilustrasi yang akan disempurnakan seiring modul dibangun. Lihat [README paket dokumen](README.md) §Reusable vs domain ERP.
+> **Document status:** target/technical plan, not implementation status. No ERP module has been implemented in this repo yet — this document sets out the technical requirements the modules **will** satisfy once they are built on top of the modular monolith base (see `01_canvas_induk.md`).
 
-## Tujuan SRS
+> **Domain example (illustrative).** This document uses the ERP domain (finance/accounting, inventory/warehouse, procurement, manufacturing, HR/payroll) as a running example. The **patterns & standards** are reusable for the AWCMS base; the **entities, endpoints, screens, and domain terms** are illustrations that will be refined as the modules are built. See [documentation package README](README.md) §Reusable vs ERP domain.
 
-Dokumen ini menjabarkan kebutuhan teknis AWCMS per modul, mencakup functional requirement, non-functional requirement, validation, audit, security, dan integration point.
+## SRS purpose
 
-## Pipeline request lintas modul
+This document sets out the technical requirements of AWCMS per module, covering functional requirements, non-functional requirements, validation, audit, security, and integration points.
+
+## Cross-module request pipeline
 
 ```mermaid
 sequenceDiagram
@@ -21,62 +23,62 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant AU as Audit
   C->>A: Request + Bearer token
-  A->>A: Validasi token
+  A->>A: Validate token
   A->>T: Set tenant context
   T->>DB: SET app.current_tenant_id
-  T->>G: Evaluasi akses (default deny)
-  G-->>C: 403 ACCESS_DENIED (jika ditolak)
-  G->>I: Cek Idempotency-Key (mutation high-risk)
-  I-->>C: 409 IDEMPOTENCY_CONFLICT (jika hash beda)
-  I->>S: Jalankan service
-  S->>DB: Query/mutation (FOR UPDATE bila stok/jurnal)
+  T->>G: Evaluate access (default deny)
+  G-->>C: 403 ACCESS_DENIED (if denied)
+  G->>I: Check Idempotency-Key (high-risk mutation)
+  I-->>C: 409 IDEMPOTENCY_CONFLICT (if hash differs)
+  I->>S: Run service
+  S->>DB: Query/mutation (FOR UPDATE when stock/journal)
   S->>AU: Audit high-risk
-  S-->>C: Response standar (data ter-mask)
+  S-->>C: Standard response (masked data)
 ```
 
-## Requirement umum lintas modul
+## Cross-module general requirements
 
 ### Multi-tenant
 
-- Semua tabel tenant-scoped wajib memiliki `tenant_id`.
-- Semua query tenant-scoped wajib memfilter tenant aktif.
-- RLS wajib aktif pada tabel tenant-scoped.
-- Tenant context wajib diset dalam transaction.
+- Every tenant-scoped table must have `tenant_id`.
+- Every tenant-scoped query must filter by the active tenant.
+- RLS must be active on tenant-scoped tables.
+- The tenant context must be set inside the transaction.
 
 ### Security
 
-- Auth wajib kecuali endpoint public eksplisit.
+- Auth is mandatory except on explicitly public endpoints.
 - ABAC default deny.
-- Data sensitif wajib dimasking.
-- Error response tidak boleh expose stack trace.
-- Provider secret hanya dari environment.
+- Sensitive data must be masked.
+- Error responses must not expose a stack trace.
+- Provider secrets come only from the environment.
 
 ### Transaction safety
 
-- Mutation high-risk wajib `Idempotency-Key`.
-- Transaksi finance/procurement/gudang wajib atomic.
-- Stock row/bin balance/saldo akun yang berubah wajib dikunci.
-- Posted financial document (jurnal, invoice) immutable.
-- Movement stok dan jurnal append-only.
+- High-risk mutations require an `Idempotency-Key`.
+- Finance/procurement/warehouse transactions must be atomic.
+- A stock row/bin balance/account balance that changes must be locked.
+- A posted financial document (journal, invoice) is immutable.
+- Stock movements and journals are append-only.
 
 ### Soft delete
 
-- Resource master/config/draft yang deletable wajib memakai soft delete: isi `deleted_at`, `deleted_by`, dan `delete_reason`; jangan `DELETE` fisik pada jalur operasional normal.
-- Query list/detail default wajib `deleted_at IS NULL`; include archived/deleted hanya lewat permission eksplisit dan parameter API terdokumentasi.
-- Restore dan purge adalah aksi high-risk: butuh ABAC, audit, dan idempotency bila endpoint mutation dapat diulang.
-- Posted jurnal, posted stock movement, audit log, security event, sync conflict, VAT invoice exported/accepted, dan Coretax batch exported tidak boleh di-soft-delete; koreksi lewat reversal/cancel/return/adjustment atau status lifecycle.
-- Soft-deleted record tetap tenant-scoped, tetap terkena RLS, dan tetap masuk retention/legal hold.
+- Deletable master/config/draft resources must use soft delete: fill `deleted_at`, `deleted_by`, and `delete_reason`; do not do a physical `DELETE` on the normal operational path.
+- Default list/detail queries must apply `deleted_at IS NULL`; including archived/deleted rows happens only through an explicit permission and a documented API parameter.
+- Restore and purge are high-risk actions: they need ABAC, audit, and idempotency when the mutation endpoint can be repeated.
+- Posted journals, posted stock movements, audit logs, security events, sync conflicts, exported/accepted VAT invoices, and exported Coretax batches must not be soft-deleted; correct them through reversal/cancel/return/adjustment or a lifecycle status.
+- A soft-deleted record is still tenant-scoped, is still subject to RLS, and is still covered by retention/legal hold.
 
 ### Audit
 
-Audit wajib untuk:
+Audit is mandatory for:
 
 - Login failed/success.
 - Access assignment.
 - Profile merge.
-- Perubahan harga/cost item.
-- Soft delete, restore, dan purge resource tenant-scoped.
-- Jurnal posted/reversal.
+- Item price/cost changes.
+- Soft delete, restore, and purge of a tenant-scoped resource.
+- Journal posted/reversal.
 - Purchase order approve/cancel.
 - Stock adjustment.
 - Warehouse transfer.
@@ -89,42 +91,42 @@ Audit wajib untuk:
 
 ### Functional requirement
 
-- Sistem dapat membuat tenant pertama melalui setup wizard.
-- Sistem dapat membuat office dengan tipe `head_office`, `branch`, `store`, `warehouse`, `factory`, `other`.
-- Sistem dapat mengunci setup setelah selesai.
-- Sistem dapat menonaktifkan tenant/office.
+- The system can create the first tenant through the setup wizard.
+- The system can create an office of type `head_office`, `branch`, `store`, `warehouse`, `factory`, `other`.
+- The system can lock setup once it is finished.
+- The system can deactivate a tenant/office.
 
 ### Validation
 
-- `tenant_code` unik.
-- `office_code` unik per tenant.
-- Setup initialize ditolak jika setup locked.
+- `tenant_code` is unique.
+- `office_code` is unique per tenant.
+- Setup initialize is rejected when setup is locked.
 
 ### Security
 
-- Endpoint setup hanya public sebelum setup locked.
-- Setelah locked, setup initialize ditolak.
-- Tenant inactive tidak dapat dipakai transaksi.
+- The setup endpoint is public only before setup is locked.
+- After it is locked, setup initialize is rejected.
+- An inactive tenant cannot be used for transactions.
 
 ## 2. Identity & Access
 
 ### Functional requirement
 
-- User dapat login.
-- User terkait ke tenant melalui `tenant_user`.
-- Role dapat diassign.
-- ABAC mengevaluasi action berdasarkan module, activity, resource, context, dan environment.
+- A user can log in.
+- A user is linked to a tenant through `tenant_user`.
+- Roles can be assigned.
+- ABAC evaluates an action based on module, activity, resource, context, and environment.
 
 ### Validation
 
-- Password wajib memenuhi policy.
-- Login identifier unik.
-- Tenant user inactive ditolak.
+- Passwords must satisfy the policy.
+- The login identifier is unique.
+- An inactive tenant user is rejected.
 
 ### Security
 
-- Password disimpan dalam hash modern.
-- Failed login dicatat.
+- Passwords are stored in a modern hash.
+- Failed logins are recorded.
 - Default deny.
 - Deny overrides allow.
 
@@ -132,99 +134,99 @@ Audit wajib untuk:
 
 ### Functional requirement
 
-- Membuat profile person/organization.
-- Menambahkan identifier.
-- Resolve profile berdasarkan email/phone/WhatsApp/NPWP/NIK/vendor code.
-- Link profile ke entity lintas modul (karyawan, vendor, customer, tax party).
-- Merge profile melalui workflow.
+- Create a person/organization profile.
+- Add an identifier.
+- Resolve a profile by email/phone/WhatsApp/NPWP/NIK/vendor code.
+- Link a profile to an entity across modules (employee, vendor, customer, tax party).
+- Merge profiles through a workflow.
 
 ### Validation
 
-- Identifier dinormalisasi.
-- Identifier hash unik per tenant/type.
-- Profile merge tidak boleh source = target.
+- Identifiers are normalized.
+- The identifier hash is unique per tenant/type.
+- A profile merge must not have source = target.
 
 ### Security
 
-- Identifier sensitif dimasking.
-- Raw value tidak tampil ke response umum.
-- Merge high-risk diaudit dan membutuhkan approval.
+- Sensitive identifiers are masked.
+- Raw values do not appear in general responses.
+- A high-risk merge is audited and requires approval.
 
 ## 4. Master Data & Inventory
 
 ### Functional requirement
 
-- CRUD item/produk (bahan baku, barang jadi, jasa).
-- Item search by kode, barcode, nama.
-- Harga/cost aktif berdasarkan periode.
-- Stok per office/gudang.
-- Stock movement append-only.
+- CRUD for items/products (raw materials, finished goods, services).
+- Item search by code, barcode, name.
+- Active price/cost by period.
+- Stock per office/warehouse.
+- Append-only stock movements.
 
 ### Validation
 
-- Kode item unik per tenant.
-- Barcode unik jika ada.
-- Quantity tidak boleh negatif kecuali movement delta yang valid.
-- Item inactive tidak boleh dipakai transaksi baru.
+- The item code is unique per tenant.
+- The barcode is unique when present.
+- Quantity must not be negative except for a valid movement delta.
+- An inactive item must not be used in new transactions.
 
 ### Security
 
-- Price/cost update butuh permission.
-- Adjustment stok butuh reason dan audit.
+- Price/cost updates need a permission.
+- Stock adjustments need a reason and an audit.
 
 ## 5. Finance & General Ledger
 
 ### Functional requirement
 
-- Membuat jurnal manual dan otomatis dari modul lain.
-- Menambahkan/mengubah/menghapus baris jurnal draft.
-- Menghitung total debit/kredit server-side.
-- Posting jurnal.
-- Membuat financial document, lines, audit, domain event.
+- Create manual journals and automatic journals from other modules.
+- Add/change/remove draft journal lines.
+- Compute total debit/credit server-side.
+- Post a journal.
+- Create the financial document, lines, audit, domain event.
 
 ### Validation
 
-- Jurnal status harus `draft` sebelum posting.
-- Total debit harus sama dengan total kredit.
-- Periode akuntansi harus terbuka.
-- Idempotency key wajib untuk posting.
+- The journal status must be `draft` before posting.
+- Total debit must equal total credit.
+- The accounting period must be open.
+- An idempotency key is mandatory for posting.
 
 ### Security
 
-- Staf keuangan hanya akses entitas/office sesuai ABAC.
-- Perubahan chart of account mengikuti permission.
-- Error validasi user-friendly.
-- Provider eksternal tidak dipanggil dalam DB transaction.
+- Finance staff only access the entities/offices allowed by ABAC.
+- Chart of account changes follow the permission.
+- Validation errors are user-friendly.
+- External providers are not called inside a DB transaction.
 
 ## 6. Shared Stock Routing
 
 ### Functional requirement
 
-- Membuat stock pool.
-- Menambahkan member tenant/entitas.
-- Mapping item antar tenant/entitas.
-- Routing transaksi berdasarkan rule.
-- Mencatat routing decision.
+- Create a stock pool.
+- Add tenant/entity members.
+- Map items between tenants/entities.
+- Route transactions based on rules.
+- Record the routing decision.
 
 ### Validation
 
-- Rule harus punya legal basis.
-- Effective date valid.
-- Target tenant harus member pool.
+- A rule must have a legal basis.
+- The effective date is valid.
+- The target tenant must be a member of the pool.
 
 ### Security
 
-- Routing rule create/approve butuh permission.
-- Routing decision diaudit.
+- Routing rule create/approve needs a permission.
+- Routing decisions are audited.
 
 ## 7. Warehouse Management
 
 ### Functional requirement
 
-- Warehouse dari office.
-- Zone dan bin.
+- Warehouse from an office.
+- Zone and bin.
 - Bin balance.
-- Lot/batch/serial/expired.
+- Lot/batch/serial/expiry.
 - Transfer order, shipment, receipt.
 - In-transit balance.
 - Cycle count.
@@ -232,85 +234,85 @@ Audit wajib untuk:
 
 ### Validation
 
-- Source dan destination warehouse tidak boleh sama.
-- Ship tidak boleh melebihi approved quantity.
-- Receive tidak boleh melebihi shipped quantity.
-- Expired/damaged masuk quarantine.
+- The source and destination warehouse must not be the same.
+- Ship must not exceed the approved quantity.
+- Receive must not exceed the shipped quantity.
+- Expired/damaged goods go into quarantine.
 
 ### Security
 
 - Warehouse scope via ABAC.
-- Adjustment membutuhkan reason.
-- High-risk adjustment membutuhkan approval.
+- Adjustments require a reason.
+- High-risk adjustments require approval.
 
 ## 8. Accounting Tax/Coretax
 
 ### Functional requirement
 
-- Tax profile tenant.
+- Tenant tax profile.
 - Tax business unit/NITKU.
-- Party tax profile (vendor/customer/karyawan).
+- Party tax profile (vendor/customer/employee).
 - Product/item tax profile.
-- Generate VAT invoice dari transaksi posted.
-- Validate VAT invoice.
+- Generate a VAT invoice from a posted transaction.
+- Validate a VAT invoice.
 - Coretax XML batch export.
 
 ### Validation
 
-- Missing NPWP/NITKU/product tax profile menghasilkan error validasi.
-- VAT invoice exported/accepted locked.
-- Batch export menyimpan checksum.
+- A missing NPWP/NITKU/product tax profile produces a validation error.
+- An exported/accepted VAT invoice is locked.
+- Batch export stores a checksum.
 
 ### Security
 
-- Tax data dimasking untuk non-tax role.
-- Export membutuhkan audit dan approval jika policy aktif.
+- Tax data is masked for non-tax roles.
+- Export requires audit and approval when the policy is active.
 
 ## 9. Procurement & Vendor Management
 
 ### Functional requirement
 
-- Membuat purchase request.
-- Approve/reject purchase request via workflow.
-- Membuat purchase order dari purchase request disetujui.
-- Mencatat goods receipt.
+- Create a purchase request.
+- Approve/reject a purchase request via a workflow.
+- Create a purchase order from an approved purchase request.
+- Record a goods receipt.
 - Vendor invoice matching (three-way match).
-- Vendor portal tokenized.
+- Tokenized vendor portal.
 
 ### Validation
 
-- Purchase request status harus `approved` sebelum jadi PO.
-- Goods receipt tidak boleh melebihi quantity PO.
-- Idempotency key wajib untuk approve/PO create.
+- The purchase request status must be `approved` before it becomes a PO.
+- A goods receipt must not exceed the PO quantity.
+- An idempotency key is mandatory for approve/PO create.
 
 ### Security
 
-- Provider API key (notifikasi vendor) dari env.
-- Data kontak vendor dimasking.
-- Token vendor portal tidak sequential.
+- The provider API key (vendor notification) comes from env.
+- Vendor contact data is masked.
+- Vendor portal tokens are not sequential.
 
 ## 10. Sync Storage
 
 ### Functional requirement
 
-- Register sync node.
-- Push/pull event.
-- Store checkpoint.
-- Detect conflict.
-- Resolve conflict manual.
-- Upload object queue to R2 optional.
+- Register a sync node.
+- Push/pull events.
+- Store a checkpoint.
+- Detect conflicts.
+- Resolve conflicts manually.
+- Optionally upload the object queue to R2.
 
 ### Validation
 
-- HMAC valid.
-- Timestamp anti replay.
-- Duplicate event idempotent.
+- The HMAC is valid.
+- Timestamp anti-replay.
+- Duplicate events are idempotent.
 
 ### Security
 
-- Node inactive ditolak.
-- Posted transaction immutable.
-- Conflict high-risk butuh audit.
+- An inactive node is rejected.
+- A posted transaction is immutable.
+- A high-risk conflict needs an audit.
 
 ## 11. AI Business Analyst
 
@@ -319,7 +321,7 @@ Audit wajib untuk:
 - Chat endpoint.
 - Safe aggregate tools.
 - Tool policy.
-- Audit tool call.
+- Audit tool calls.
 
 ### Security
 
@@ -333,16 +335,16 @@ Audit wajib untuk:
 ### Functional requirement
 
 - Admin dashboard.
-- Layar operasional finance/gudang/procurement fullscreen.
+- Fullscreen finance/warehouse/procurement operational screens.
 - Vendor/employee self-service portal.
-- Navigation role-aware.
+- Role-aware navigation.
 - Dark/light/system theme.
-- i18n minimal EN/ID (default **EN**), string UI via katalog `.po` gettext.
+- i18n minimum EN/ID (default **EN**), UI strings via the gettext `.po` catalogue.
 
 ### Security
 
-- UI hiding bukan kontrol utama.
-- Backend tetap validasi permission.
+- UI hiding is not the primary control.
+- The backend still validates the permission.
 
 ## 13. Observability, Pooling, Workflow, Security
 
@@ -358,44 +360,44 @@ Audit wajib untuk:
 
 ### Security
 
-- Redaction wajib.
-- Critical security control fail memblokir go-live.
+- Redaction is mandatory.
+- A failing critical security control blocks go-live.
 
-## Error code standar
+## Standard error codes
 
 ```mermaid
 flowchart TD
-  E[Exception di service] --> K{Tipe error}
-  K -->|Validasi| V[400 VALIDATION_ERROR]
-  K -->|Belum login| A1[401 AUTH_REQUIRED]
-  K -->|Tak berhak| A2[403 ACCESS_DENIED]
+  E[Exception in service] --> K{Error type}
+  K -->|Validation| V[400 VALIDATION_ERROR]
+  K -->|Not logged in| A1[401 AUTH_REQUIRED]
+  K -->|Not authorized| A2[403 ACCESS_DENIED]
   K -->|Idempotency| I[400/409 IDEMPOTENCY_*]
-  K -->|Stok kurang| ST[409 STOCK_NOT_AVAILABLE]
-  K -->|Konflik sync| SY[409 SYNC_CONFLICT]
-  K -->|Pool sibuk| D[503 DATABASE_BUSY]
-  K -->|Tak terduga| IN[500 INTERNAL_ERROR<br/>tanpa stack trace]
-  V & A1 & A2 & I & ST & SY & D & IN --> R[Response error standar + correlationId]
+  K -->|Insufficient stock| ST[409 STOCK_NOT_AVAILABLE]
+  K -->|Sync conflict| SY[409 SYNC_CONFLICT]
+  K -->|Pool busy| D[503 DATABASE_BUSY]
+  K -->|Unexpected| IN[500 INTERNAL_ERROR<br/>no stack trace]
+  V & A1 & A2 & I & ST & SY & D & IN --> R[Standard error response + correlationId]
 ```
 
-| Code                   | HTTP | Arti                        |
-| ---------------------- | ---: | --------------------------- |
-| `VALIDATION_ERROR`     |  400 | Data tidak valid            |
-| `AUTH_REQUIRED`        |  401 | Belum login                 |
-| `ACCESS_DENIED`        |  403 | Tidak punya akses           |
-| `TENANT_REQUIRED`      |  400 | Tenant wajib                |
-| `RESOURCE_NOT_FOUND`   |  404 | Resource tidak ditemukan    |
-| `IDEMPOTENCY_REQUIRED` |  400 | Idempotency key wajib       |
-| `IDEMPOTENCY_CONFLICT` |  409 | Key dipakai request berbeda |
-| `STOCK_NOT_AVAILABLE`  |  409 | Stok tidak cukup            |
-| `SYNC_CONFLICT`        |  409 | Konflik sync                |
-| `DATABASE_BUSY`        |  503 | Pool/DB sibuk               |
-| `INTERNAL_ERROR`       |  500 | Kesalahan internal          |
+| Code                   | HTTP | Meaning                         |
+| ---------------------- | ---: | ------------------------------- |
+| `VALIDATION_ERROR`     |  400 | Data is not valid               |
+| `AUTH_REQUIRED`        |  401 | Not logged in                   |
+| `ACCESS_DENIED`        |  403 | No access                       |
+| `TENANT_REQUIRED`      |  400 | Tenant is mandatory             |
+| `RESOURCE_NOT_FOUND`   |  404 | Resource not found              |
+| `IDEMPOTENCY_REQUIRED` |  400 | Idempotency key is mandatory    |
+| `IDEMPOTENCY_CONFLICT` |  409 | Key used by a different request |
+| `STOCK_NOT_AVAILABLE`  |  409 | Not enough stock                |
+| `SYNC_CONFLICT`        |  409 | Sync conflict                   |
+| `DATABASE_BUSY`        |  503 | Pool/DB busy                    |
+| `INTERNAL_ERROR`       |  500 | Internal error                  |
 
-## Testing requirement minimum
+## Minimum testing requirement
 
-- Unit test untuk business logic.
-- Integration test untuk migration, RLS, posting jurnal, warehouse transfer.
-- API contract test untuk OpenAPI.
+- Unit tests for business logic.
+- Integration tests for migration, RLS, journal posting, warehouse transfer.
+- API contract tests for OpenAPI.
 - AsyncAPI event validation.
-- Security test untuk cross-tenant dan access denied.
-- Performance test untuk transaksi concurrent dan DB pool.
+- Security tests for cross-tenant and access denied.
+- Performance tests for concurrent transactions and the DB pool.

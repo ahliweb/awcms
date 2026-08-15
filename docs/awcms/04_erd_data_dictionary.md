@@ -1,28 +1,30 @@
-# Bagian 4 — ERD dan Data Dictionary Detail
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](04_erd_data_dictionary.id.md)
 
-> **Status dokumen:** target/rencana skema database, bukan status implementasi. Belum ada migration modul ERP yang dijalankan di repo ini — dokumen ini menjabarkan baseline skema yang **direncanakan**, mengikuti pola base modular monolith yang sudah terbukti pada base sebelumnya.
+# Part 4 — ERD and Detailed Data Dictionary
 
-> **Contoh domain (ilustratif).** Dokumen ini memakai domain ERP (keuangan/akuntansi, inventori/gudang, procurement, manufaktur, HR/payroll) sebagai contoh berjalan. **Pola & standar**-nya reusable untuk base AWCMS; **entitas, tabel, dan istilah domain** adalah ilustrasi awal yang akan disempurnakan seiring modul dibangun. Lihat [README paket dokumen](README.md) §Reusable vs domain ERP.
+> **Document status:** target/planned database schema, not implementation status. No ERP module migration has been run in this repo yet — this document lays out the **planned** schema baseline, following the modular-monolith base pattern already proven on the previous base.
 
-## Tujuan
+> **Domain example (illustrative).** This document uses the ERP domain (finance/accounting, inventory/warehouse, procurement, manufacturing, HR/payroll) as a running example. Its **patterns & standards** are reusable for the AWCMS base; the **entities, tables, and domain terms** are an initial illustration that will be refined as modules are built. See the [document package README](README.md) §Reusable vs ERP domain.
 
-Dokumen ini menjadi baseline database AWCMS: ERD konseptual, ownership tabel, data dictionary ringkas, index, RLS, klasifikasi data, migration order, dan retention — sebagai target rancangan sebelum implementasi dimulai.
+## Purpose
 
-## Prinsip database
+This document is the AWCMS database baseline: conceptual ERD, table ownership, a concise data dictionary, indexes, RLS, data classification, migration order, and retention — as a design target before implementation starts.
 
-1. Semua tabel tenant-scoped wajib `tenant_id`.
-2. Primary key menggunakan UUID.
-3. Timestamp menggunakan `timestamptz`.
-4. Monetary/quantity menggunakan `numeric`, bukan floating point.
-5. Posted jurnal dan posted stock movement append-only.
-6. Koreksi memakai reversal/return/adjustment.
-7. FK child wajib index.
-8. Tabel tenant-scoped wajib RLS.
-9. Data sensitif dimasking, di-hash untuk lookup/dedup jika relevan.
-10. Migration harus berurutan dan audit-ready.
-11. Resource yang deletable memakai soft delete; physical delete hanya untuk purge retention/legal yang berizin.
+## Database principles
 
-## ERD konseptual utama (rencana)
+1. Every tenant-scoped table must have `tenant_id`.
+2. Primary keys use UUID.
+3. Timestamps use `timestamptz`.
+4. Monetary/quantity values use `numeric`, not floating point.
+5. Posted journals and posted stock movements are append-only.
+6. Corrections use reversal/return/adjustment.
+7. Child FKs must be indexed.
+8. Tenant-scoped tables must have RLS.
+9. Sensitive data is masked, and hashed for lookup/dedup where relevant.
+10. Migrations must be sequential and audit-ready.
+11. Deletable resources use soft delete; physical delete is only for authorized retention/legal purge.
+
+## Main conceptual ERD (plan)
 
 ```mermaid
 erDiagram
@@ -54,28 +56,28 @@ erDiagram
 
 ## Global column standard
 
-| Kolom             | Tipe        | Fungsi                                        |
+| Column            | Type        | Function                                      |
 | ----------------- | ----------- | --------------------------------------------- |
 | `id`              | uuid        | Primary key                                   |
-| `tenant_id`       | uuid        | Isolasi tenant                                |
-| `code`            | text        | Kode bisnis                                   |
-| `status`          | text        | Status lifecycle                              |
-| `created_at`      | timestamptz | Waktu dibuat                                  |
-| `updated_at`      | timestamptz | Waktu update                                  |
-| `created_by`      | uuid        | Actor pembuat                                 |
-| `updated_by`      | uuid        | Actor update                                  |
-| `deleted_at`      | timestamptz | Soft delete jika relevan                      |
-| `deleted_by`      | uuid        | Actor yang mengarsipkan/menghapus soft        |
-| `delete_reason`   | text        | Alasan soft delete/purge                      |
-| `restored_at`     | timestamptz | Waktu restore jika resource mendukung restore |
-| `restored_by`     | uuid        | Actor restore                                 |
-| `sync_version`    | bigint      | Version untuk sync                            |
-| `origin_node_id`  | uuid        | Node asal offline/sync                        |
-| `idempotency_key` | text        | Idempotency mutation                          |
+| `tenant_id`       | uuid        | Tenant isolation                              |
+| `code`            | text        | Business code                                 |
+| `status`          | text        | Lifecycle status                              |
+| `created_at`      | timestamptz | Creation time                                 |
+| `updated_at`      | timestamptz | Update time                                   |
+| `created_by`      | uuid        | Creating actor                                |
+| `updated_by`      | uuid        | Updating actor                                |
+| `deleted_at`      | timestamptz | Soft delete where relevant                    |
+| `deleted_by`      | uuid        | Actor who archived/soft-deleted               |
+| `delete_reason`   | text        | Reason for soft delete/purge                  |
+| `restored_at`     | timestamptz | Restore time if the resource supports restore |
+| `restored_by`     | uuid        | Restoring actor                               |
+| `sync_version`    | bigint      | Version for sync                              |
+| `origin_node_id`  | uuid        | Origin offline/sync node                      |
+| `idempotency_key` | text        | Mutation idempotency                          |
 
-## Table ownership matrix (rencana)
+## Table ownership matrix (plan)
 
-| Module                | Table utama (rencana)                                                                                                                                                                                                |
+| Module                | Main tables (plan)                                                                                                                                                                                                   |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Foundation            | `awcms_modules`, `awcms_schema_migrations`, `awcms_system_events`                                                                                                                                                    |
 | Tenant Admin          | `awcms_tenants`, `awcms_offices`, `awcms_physical_locations`, `awcms_tenant_settings`                                                                                                                                |
@@ -97,242 +99,242 @@ erDiagram
 | Module Management     | `awcms_modules` (extended), `awcms_tenant_modules`, `awcms_module_dependencies`, `awcms_module_settings`, `awcms_module_navigation`, `awcms_module_jobs`, `awcms_module_health_checks`                               |
 | Data Lifecycle        | `awcms_data_lifecycle_legal_holds`, `awcms_data_lifecycle_cursors`, `awcms_data_lifecycle_archive_manifests`, `awcms_data_lifecycle_runs`                                                                            |
 
-Modul lanjutan seperti Manufacturing dan HR/Payroll belum memiliki table ownership matrix final — akan ditambahkan saat modul tersebut dirancang detail (mengikuti pola penamaan `awcms_<domain>_<entity>` yang sama).
+Follow-on modules such as Manufacturing and HR/Payroll do not yet have a final table ownership matrix — it will be added when those modules are designed in detail (following the same `awcms_<domain>_<entity>` naming pattern).
 
-## Data dictionary ringkas per modul (rencana)
+## Concise per-module data dictionary (plan)
 
 ### `awcms_tenants`
 
-| Kolom            | Tipe | Keterangan                |
+| Column           | Type | Description               |
 | ---------------- | ---- | ------------------------- |
 | `id`             | uuid | PK                        |
-| `tenant_code`    | text | Unik global               |
-| `tenant_name`    | text | Nama operasional          |
-| `legal_name`     | text | Nama legal                |
+| `tenant_code`    | text | Globally unique           |
+| `tenant_name`    | text | Operational name          |
+| `legal_name`     | text | Legal name                |
 | `status`         | text | active/inactive/suspended |
 | `default_locale` | text | en/id/ms/ar               |
 | `default_theme`  | text | light/dark/system         |
 
 Index: unique `tenant_code`.
 
-`default_locale` — locale default tenant (min **en**, **id**), target default `'en'`. Locale efektif = preferensi per-user (bila ada) → `default_locale` tenant.
+`default_locale` — the tenant's default locale (minimum **en**, **id**), target default `'en'`. Effective locale = per-user preference (when present) → the tenant's `default_locale`.
 
 ### `awcms_offices`
 
-| Kolom              | Tipe | Keterangan                                       |
+| Column             | Type | Description                                      |
 | ------------------ | ---- | ------------------------------------------------ |
 | `tenant_id`        | uuid | Tenant scope                                     |
-| `office_code`      | text | Unik per tenant                                  |
-| `office_name`      | text | Nama kantor/toko/gudang/pabrik                   |
+| `office_code`      | text | Unique per tenant                                |
+| `office_name`      | text | Office/store/warehouse/factory name              |
 | `office_type`      | text | head_office/branch/store/warehouse/factory/other |
-| `parent_office_id` | uuid | Hierarki                                         |
+| `parent_office_id` | uuid | Hierarchy                                        |
 | `status`           | text | active/inactive                                  |
 
 Index: `(tenant_id, office_code)`, `(tenant_id, office_type)`.
 
 ### `awcms_profiles`
 
-Canonical profile untuk user/karyawan/vendor/customer/contact.
+Canonical profile for user/employee/vendor/customer/contact.
 
-Kolom penting: `tenant_id`, `profile_type`, `display_name`, `legal_name`, `status`, `verification_status`, `risk_level`, `merged_into_profile_id`.
+Important columns: `tenant_id`, `profile_type`, `display_name`, `legal_name`, `status`, `verification_status`, `risk_level`, `merged_into_profile_id`.
 
 ### `awcms_profile_identifiers`
 
-Identifier sensitif seperti email, phone, WhatsApp, NPWP, NIK.
+Sensitive identifiers such as email, phone, WhatsApp, NPWP, NIK.
 
-Kolom penting: `identifier_type`, `normalized_value`, `value_hash`, `masked_value`, `is_primary`, `verification_status`.
+Important columns: `identifier_type`, `normalized_value`, `value_hash`, `masked_value`, `is_primary`, `verification_status`.
 
 Constraint: unique `(tenant_id, identifier_type, value_hash)`.
 
 ### `awcms_principals`
 
-**Terimplementasi** (`sql/112`, [ADR-0085](../adr/0085-one-human-one-credential-many-tenants.md)). Satu baris per **manusia**, ber-kunci alamat email ter-normalisasi. **GLOBAL — tanpa `tenant_id`, tanpa RLS**; yang menggantikan RLS adalah empat kontrol yang ditegakkan (hak DB dipersempit tanpa `DELETE`, invarian bentuk-baca lewat `bun run identity:principal-access:check`, `password_hash` tak pernah meninggalkan modul store, dan batas otorisasi yang tidak bergerak). Kalimat yang membuat ketiadaan RLS itu bisa dipertahankan: **principal adalah fakta AUTENTIKASI, tidak pernah fakta OTORISASI** — memegangnya tidak memberi apa pun, dan setiap permission tetap di-resolve lewat `awcms_tenant_users` di bawah FORCE RLS.
+**Implemented** (`sql/112`, [ADR-0085](../adr/0085-one-human-one-credential-many-tenants.md)). One row per **human**, keyed by a normalized email address. **GLOBAL — no `tenant_id`, no RLS**; what replaces RLS is four enforced controls (DB privileges narrowed with no `DELETE`, read-shape invariants via `bun run identity:principal-access:check`, `password_hash` never leaving the store module, and an authorization boundary that does not move). The sentence that makes the absence of RLS defensible: **a principal is an AUTHENTICATION fact, never an AUTHORIZATION fact** — holding one grants nothing, and every permission is still resolved through `awcms_tenant_users` under FORCE RLS.
 
-Kolom penting: `email_normalized` (unik), `password_hash`, `failed_login_count`, `locked_until`.
+Important columns: `email_normalized` (unique), `password_hash`, `failed_login_count`, `locked_until`.
 
 ### `awcms_principal_mfa_factors`
 
-**Terimplementasi** (`sql/114`, [ADR-0087](../adr/0087-mfa-moves-to-the-principal.md)). Faktor MFA milik **manusia**, bukan identitas per-tenant: satu enrolment mengautentikasi setiap tenant yang ia ikuti. **GLOBAL — tanpa `tenant_id`, tanpa RLS**, berdiri di atas empat kontrol pengganti yang sama dengan `awcms_principals`. Enkripsi secret tidak berubah dari `sql/024`.
+**Implemented** (`sql/114`, [ADR-0087](../adr/0087-mfa-moves-to-the-principal.md)). MFA factors belong to the **human**, not to a per-tenant identity: one enrolment authenticates every tenant they belong to. **GLOBAL — no `tenant_id`, no RLS**, standing on the same four substitute controls as `awcms_principals`. Secret encryption is unchanged from `sql/024`.
 
-Kolom penting: `principal_id`, `factor_type`, `secret_ciphertext`, `status` (`pending`/`active`/`disabled`), `last_used_step` (penjaga replay, juga penyeleksi backfill), `failed_verify_count`, `locked_until`, `disabled_by_tenant_id`.
+Important columns: `principal_id`, `factor_type`, `secret_ciphertext`, `status` (`pending`/`active`/`disabled`), `last_used_step` (the replay guard, and also the backfill selector), `failed_verify_count`, `locked_until`, `disabled_by_tenant_id`.
 
-Constraint: unique parsial `(principal_id, factor_type) WHERE status <> 'disabled'` — **satu faktor hidup per manusia**. Melonggarkannya berarti satu tebakan kode diuji terhadap N secret sekaligus dan `failed_verify_count` tersebar di N baris.
+Constraint: partial unique `(principal_id, factor_type) WHERE status <> 'disabled'` — **one live factor per human**. Loosening it means one code guess is tested against N secrets at once and `failed_verify_count` is spread across N rows.
 
-`disabled_by_tenant_id` mencatat tenant yang **memerintahkan** reset administratif (NULL untuk `disable` mandiri). Ia ada karena ADR-0087 menolak menulis baris audit ke setiap tenant terjangkau: FORCE RLS membuat `INSERT` ber-`tenant_id` lain ditolak policy, dan mengenumerasi tenant terjangkau adalah **oracle keanggotaan lintas-tenant**. Tanpa FK — ia menyebut tenant yang pemilik barisnya mungkin sudah tidak ikuti lagi, dan cascade tidak boleh menulis ulang sejarah MFA.
+`disabled_by_tenant_id` records the tenant that **ordered** the administrative reset (NULL for a self-service `disable`). It exists because ADR-0087 refuses to write an audit row into every reachable tenant: FORCE RLS makes an `INSERT` carrying another `tenant_id` policy-rejected, and enumerating reachable tenants is a **cross-tenant membership oracle**. No FK — it names a tenant whose row owner may no longer belong to it, and a cascade must not rewrite MFA history.
 
 ### `awcms_principal_mfa_recovery_codes`
 
-**Terimplementasi** (`sql/114`, ADR-0087). Backup code sekali-pakai milik principal, konstruksi sha256 yang sama dengan `sql/024`. Kolom penting: `principal_id`, `factor_id` (cascade dari faktor), `code_hash`, `used_at`.
+**Implemented** (`sql/114`, ADR-0087). Single-use backup codes belonging to the principal, the same sha256 construction as `sql/024`. Important columns: `principal_id`, `factor_id` (cascades from the factor), `code_hash`, `used_at`.
 
-Constraint: unique `(principal_id, code_hash)` — **bukan** `code_hash` global, karena tabrakan 40-bit antara dua manusia yang tak berhubungan akan muncul sebagai 23505 → 500, dan error itu sendiri sinyal lintas-akun yang samar.
+Constraint: unique `(principal_id, code_hash)` — **not** a global `code_hash`, because a 40-bit collision between two unrelated humans would surface as 23505 → 500, and that error is itself a faint cross-account signal.
 
 ### `awcms_identity_mfa_factors` / `awcms_identity_mfa_recovery_codes`
 
-**DI-SUPERSEDE** oleh kedua tabel di atas (`sql/114`, ADR-0087). Dipertahankan **terisi sebagai sejarah** mengikuti preseden ADR-0079, dan hak `awcms_app` diturunkan ke `SELECT` saja (`RETIRED_TENANT_TABLE_PRIVILEGES`). Penurunan hak itu yang membuat supersession-nya nyata: tabel faktor lama yang masih bisa DITULIS adalah tempat kedua untuk meng-enroll faktor, dan satu manusia dengan dua faktor kedua yang hanya salah satunya diperiksa login lebih buruk daripada salah satu tabel saja.
+**SUPERSEDED** by the two tables above (`sql/114`, ADR-0087). Kept **populated as history** following the ADR-0079 precedent, and `awcms_app` privileges are downgraded to `SELECT` only (`RETIRED_TENANT_TABLE_PRIVILEGES`). That privilege downgrade is what makes the supersession real: an old factor table that is still WRITABLE is a second place to enroll a factor, and one human with two second factors of which only one is checked at login is worse than either table alone.
 
-`awcms_mfa_challenges` dan `awcms_tenant_mfa_policies` **tidak** ikut pindah dan tetap tenant-scoped di bawah FORCE RLS: sebuah challenge adalah satu percobaan login di satu tenant (global akan membuatnya bisa ditukar menjadi sesi di tenant lain), dan sebuah policy adalah keputusan produk sebuah tenant (global akan memberi satu tenant kuasa atas postur keamanan tenant lain).
+`awcms_mfa_challenges` and `awcms_tenant_mfa_policies` did **not** move and remain tenant-scoped under FORCE RLS: a challenge is one login attempt in one tenant (making it global would let it be exchanged for a session in another tenant), and a policy is one tenant's product decision (making it global would give one tenant power over another tenant's security posture).
 
 ### `awcms_identities`
 
-Login identity **per tenant** (unik pada `(tenant_id, login_identifier)`).
+Login identity **per tenant** (unique on `(tenant_id, login_identifier)`).
 
-Kolom penting: `profile_id`, `login_identifier`, `password_hash`, `status`, `principal_id` (nullable), `last_login_at`.
+Important columns: `profile_id`, `login_identifier`, `password_hash`, `status`, `principal_id` (nullable), `last_login_at`.
 
-Catatan: `password_hash` tidak pernah keluar response/API/log.
+Note: `password_hash` never leaves in a response/API/log.
 
-**`failed_login_count` dan `locked_until` di tabel ini adalah SEJARAH, bukan kontrol** — sejak `sql/113` ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md)) keduanya berhenti memutuskan apa pun dan penghitung lockout yang berlaku ada di `awcms_principals`. Kolomnya dibiarkan terisi mengikuti preseden ADR-0079. Membacanya untuk mengambil keputusan login akan mengembalikan cacat #430: satu manusia anggota N tenant kembali punya N penghitung, dan nilai tenant bukan rahasia.
+**`failed_login_count` and `locked_until` in this table are HISTORY, not controls** — since `sql/113` ([ADR-0086](../adr/0086-the-lockout-counter-is-global.md)) they stopped deciding anything and the effective lockout counter lives in `awcms_principals`. The columns are left populated following the ADR-0079 precedent. Reading them to make a login decision would bring back defect #430: one human belonging to N tenants gets N counters again, and a tenant's value is not a secret.
 
 ### `awcms_password_reset_tokens`
 
-Token reset password sekali-pakai. Kolom penting: `identity_id`, `token_hash` (unik — hanya hash yang disimpan), `expires_at`, `used_at` (single-use). RLS FORCE. Request baru menandai token outstanding sebelumnya sebagai `used_at = now()` (superseded) sebelum membuat yang baru.
+Single-use password reset tokens. Important columns: `identity_id`, `token_hash` (unique — only the hash is stored), `expires_at`, `used_at` (single-use). RLS FORCE. A new request marks previously outstanding tokens as `used_at = now()` (superseded) before creating a new one.
 
 ### `awcms_items`
 
-Item/produk master (bahan baku, barang jadi, jasa).
+Item/product master (raw materials, finished goods, services).
 
-Kolom penting: `tenant_id`, `sku`, `barcode`, `item_name`, `category_id`, `base_unit_id`, `tracking_type`, `status`.
+Important columns: `tenant_id`, `sku`, `barcode`, `item_name`, `category_id`, `base_unit_id`, `tracking_type`, `status`.
 
-Constraint: unique `(tenant_id, sku)`, unique `(tenant_id, barcode)` jika barcode tidak null.
+Constraint: unique `(tenant_id, sku)`, unique `(tenant_id, barcode)` when barcode is not null.
 
 ### `awcms_stock_balances`
 
-Saldo stok per office/gudang.
+Stock balance per office/warehouse.
 
-Kolom penting: `tenant_id`, `item_id`, `office_id`, `quantity_on_hand`, `quantity_reserved`, `quantity_available`.
+Important columns: `tenant_id`, `item_id`, `office_id`, `quantity_on_hand`, `quantity_reserved`, `quantity_available`.
 
 Constraint: unique `(tenant_id, item_id, office_id)`.
 
 ### `awcms_stock_movements`
 
-Mutasi stok append-only.
+Append-only stock movements.
 
-Kolom penting: `item_id`, `office_id`, `movement_type`, `quantity_delta`, `reference_module`, `reference_type`, `reference_id`, `posted_at`.
+Important columns: `item_id`, `office_id`, `movement_type`, `quantity_delta`, `reference_module`, `reference_type`, `reference_id`, `posted_at`.
 
 ### `awcms_journal_batches`
 
-Batch jurnal draft/posted.
+Draft/posted journal batches.
 
-Kolom penting: `tenant_id`, `office_id`, `period_id`, `status`, `total_debit`, `total_credit`, `posted_at`.
+Important columns: `tenant_id`, `office_id`, `period_id`, `status`, `total_debit`, `total_credit`, `posted_at`.
 
 ### `awcms_financial_documents`
 
-Dokumen keuangan posted immutable (invoice, payment voucher).
+Immutable posted financial documents (invoice, payment voucher).
 
-Kolom penting: `source_journal_batch_id`, `document_no`, `office_id`, `party_profile_id`, `status`, `gross_total`, `tax_total`, `net_total`, `posted_at`.
+Important columns: `source_journal_batch_id`, `document_no`, `office_id`, `party_profile_id`, `status`, `gross_total`, `tax_total`, `net_total`, `posted_at`.
 
 Constraint: unique `(tenant_id, document_no)`.
 
 ### `awcms_warehouse_bin_balances`
 
-Saldo stok detail per bin/lot/serial.
+Detailed stock balance per bin/lot/serial.
 
-Kolom penting: `warehouse_id`, `zone_id`, `bin_id`, `item_id`, `lot_id`, `serial_id`, `quantity_on_hand`, `quantity_reserved`, `quantity_available`.
+Important columns: `warehouse_id`, `zone_id`, `bin_id`, `item_id`, `lot_id`, `serial_id`, `quantity_on_hand`, `quantity_reserved`, `quantity_available`.
 
 ### `awcms_vat_invoices`
 
 VAT invoice staging.
 
-Kolom penting: `financial_document_id`, `tax_profile_id`, `tax_business_unit_id`, `invoice_no`, `status`, `dpp_total`, `vat_total`, `luxury_tax_total`.
+Important columns: `financial_document_id`, `tax_profile_id`, `tax_business_unit_id`, `invoice_no`, `status`, `dpp_total`, `vat_total`, `luxury_tax_total`.
 
 ### `awcms_purchase_orders`
 
-Purchase order ke vendor.
+Purchase order to a vendor.
 
-Kolom penting: `vendor_profile_id`, `source_purchase_request_id`, `office_id`, `status`, `gross_total`, `tax_total`, `net_total`, `approved_at`.
+Important columns: `vendor_profile_id`, `source_purchase_request_id`, `office_id`, `status`, `gross_total`, `tax_total`, `net_total`, `approved_at`.
 
 ### `awcms_message_outbox`
 
-Queue notifikasi vendor/karyawan (WhatsApp/email).
+Vendor/employee notification queue (WhatsApp/email).
 
-Kolom penting: `contact_id`, `channel_type`, `provider_code`, `message_type`, `payload_json`, `status`, `next_retry_at`.
+Important columns: `contact_id`, `channel_type`, `provider_code`, `message_type`, `payload_json`, `status`, `next_retry_at`.
 
-### Email (base, generik)
+### Email (base, generic)
 
-Infrastruktur base reusable untuk password reset, system announcement, dan workflow notification — berbeda dari `awcms_message_outbox` di atas (contoh domain procurement/HR). RLS FORCE di keempat tabel; hanya `email_templates` yang soft-deletable, tiga lainnya berbasis status transition + purge fisik.
+Reusable base infrastructure for password reset, system announcements, and workflow notifications — different from `awcms_message_outbox` above (a procurement/HR domain example). RLS FORCE on all four tables; only `email_templates` is soft-deletable, the other three are based on status transitions + physical purge.
 
-- **`awcms_email_templates`** — `template_key` (format `area.name`, mis. `auth.password_reset`), `subject_template`/`text_body_template`/`html_body_template` **jsonb per-locale** (`{"en": "...", "id": "..."}`), `is_active`. Unik `(tenant_id, template_key)` WHERE `deleted_at IS NULL`.
-- **`awcms_email_messages`** — outbox, satu baris = satu unit pengiriman ke satu alamat. `category`, `template_key` (denormalized, bukan FK), `to_address`/`to_address_hash`/`to_address_masked`, `variables` (jsonb, untuk rendering ulang oleh dispatcher — bukan rendered body tersimpan), `variables_hash`, `status` (`queued → sending → sent | failed → retry_wait → cancelled | suppressed`), `retry_count`, `next_attempt_at`.
-- **`awcms_email_delivery_attempts`** — riwayat percobaan per pesan (`message_id` FK), `outcome` (`success`/`failure`), `provider_response_snippet` (sudah diredaksi sebelum insert).
-- **`awcms_email_suppression_list`** — block-list bounce/complaint/manual/unsubscribe, key lookup `recipient_hash` (bukan raw address).
+- **`awcms_email_templates`** — `template_key` (format `area.name`, e.g. `auth.password_reset`), `subject_template`/`text_body_template`/`html_body_template` as **per-locale jsonb** (`{"en": "...", "id": "..."}`), `is_active`. Unique `(tenant_id, template_key)` WHERE `deleted_at IS NULL`.
+- **`awcms_email_messages`** — the outbox, one row = one delivery unit to one address. `category`, `template_key` (denormalized, not an FK), `to_address`/`to_address_hash`/`to_address_masked`, `variables` (jsonb, for re-rendering by the dispatcher — not a stored rendered body), `variables_hash`, `status` (`queued → sending → sent | failed → retry_wait → cancelled | suppressed`), `retry_count`, `next_attempt_at`.
+- **`awcms_email_delivery_attempts`** — per-message attempt history (`message_id` FK), `outcome` (`success`/`failure`), `provider_response_snippet` (already redacted before insert).
+- **`awcms_email_suppression_list`** — bounce/complaint/manual/unsubscribe block-list, lookup key `recipient_hash` (not the raw address).
 
 ### `awcms_sync_outbox`
 
-Event lokal yang perlu disinkronkan.
+Local events that need to be synchronised.
 
-Kolom penting: `node_id`, `event_type`, `aggregate_type`, `aggregate_id`, `payload_json`, `status`.
+Important columns: `node_id`, `event_type`, `aggregate_type`, `aggregate_id`, `payload_json`, `status`.
 
 ### Module Management
 
-Registry modul database-backed sekaligus tenant-aware (perluasan `awcms_modules` sejak migration foundation). Tabel "registry" (dependencies/navigation/jobs/health-checks) RLS-free — metadata code-derived, sama untuk semua tenant; dua tabel tenant-writable (`tenant_modules`/`module_settings`) RLS FORCE.
+A database-backed and tenant-aware module registry (an extension of `awcms_modules` since the foundation migration). The "registry" tables (dependencies/navigation/jobs/health-checks) are RLS-free — code-derived metadata, identical for every tenant; the two tenant-writable tables (`tenant_modules`/`module_settings`) are RLS FORCE.
 
-- **`awcms_tenant_modules`** — status aktif/nonaktif modul per tenant. Baris tidak ada = default enabled. Unik `(tenant_id, module_key)`. RLS FORCE.
-- **`awcms_module_dependencies`** — graph dependency antar modul. Composite PK `(module_key, depends_on_module_key)`, `CHECK` menolak self-dependency.
-- **`awcms_module_settings`** — override pengaturan non-secret per tenant (`settings` jsonb, `schema_version`). Tidak boleh berisi secret/token mentah — ditegakkan di application layer. Unik `(tenant_id, module_key)`. RLS FORCE.
-- **`awcms_module_navigation`** — entri navigasi admin per modul (`label_key`, `path`, `sort_order`, `nav_group`, `required_permission`).
-- **`awcms_module_jobs`** — registry command operasional (dokumentasi, tidak eksekusi).
-- **`awcms_module_health_checks`** — riwayat hasil health check, instance-level. `status` (`healthy`/`degraded`/`failed`/`unknown`), `message` (redaction-ready).
+- **`awcms_tenant_modules`** — per-tenant module enabled/disabled status. No row = enabled by default. Unique `(tenant_id, module_key)`. RLS FORCE.
+- **`awcms_module_dependencies`** — the dependency graph between modules. Composite PK `(module_key, depends_on_module_key)`, a `CHECK` rejects self-dependency.
+- **`awcms_module_settings`** — per-tenant non-secret settings override (`settings` jsonb, `schema_version`). Must not contain raw secrets/tokens — enforced in the application layer. Unique `(tenant_id, module_key)`. RLS FORCE.
+- **`awcms_module_navigation`** — admin navigation entries per module (`label_key`, `path`, `sort_order`, `nav_group`, `required_permission`).
+- **`awcms_module_jobs`** — registry of operational commands (documentation, not execution).
+- **`awcms_module_health_checks`** — health check result history, instance-level. `status` (`healthy`/`degraded`/`failed`/`unknown`), `message` (redaction-ready).
 
-Aksi lifecycle/config modul tercatat lewat `awcms_audit_events` generik (`module_key = 'module_management'`), bukan tabel event terpisah.
+Module lifecycle/config actions are recorded through the generic `awcms_audit_events` (`module_key = 'module_management'`), not a separate event table.
 
-### Business scope (Issue #180, base, generik)
+### Business scope (Issue #180, base, generic)
 
-Lapis authorization organisasi **generik** milik `identity_access` — membatasi akses berdasarkan hierarki organisasi tanpa memasukkan entitas domain ERP nyata ke base. `scope_type`/`scope_id` adalah **referensi generik** (text + uuid), **bukan** FK ke tabel modul organisasi mana pun: validitas/ancestry di-resolve di application layer lewat capability port `BusinessScopeHierarchyPort` yang disediakan aplikasi turunan (base mengirim resolver no-op → `resolved: false`). Kedua tabel RLS `ENABLE`+`FORCE`. Lihat ADR-0030.
+A **generic** organisational authorization layer owned by `identity_access` — it restricts access by organisational hierarchy without pulling real ERP domain entities into the base. `scope_type`/`scope_id` are **generic references** (text + uuid), **not** FKs to any organisation module's table: validity/ancestry is resolved in the application layer through the `BusinessScopeHierarchyPort` capability port supplied by the derived application (the base ships a no-op resolver → `resolved: false`). Both tables are RLS `ENABLE`+`FORCE`. See ADR-0030.
 
-- **`awcms_business_scope_assignments`** — satu baris = satu `tenant_user` diberi role/permission context yang dibatasi pada satu business scope. Kolom: `tenant_user_id`, `role_id` (nullable), `scope_type` (snake_case, CHECK `^[a-z][a-z0-9_]*$`), `scope_id`, `effective_from`/`effective_to` (effective dating; `effective_to > effective_from`; assignment temporer WAJIB `effective_to`), `is_temporary`, `status` (`active`/`expired`/`revoked`), `revoked_at`/`revoked_by_tenant_user_id`/`revoke_reason` (konsisten via CHECK), `granted_by_tenant_user_id`, `approved_by_tenant_user_id`. **FK komposit `(tenant_id, …)`** untuk subject/role/grantor/approver/revoker (target `UNIQUE (tenant_id, id)` di `awcms_tenant_users`/`awcms_roles`/tabel ini sendiri) — RI check PostgreSQL melewati RLS, jadi FK single-column bisa lintas-tenant (GHSA-r7cx-c4jh-cvvw); komposit memaksa baris tereferensi sated tenant yang sama. Gerbang otoritatif "sedang berlaku" adalah `now` vs effective dating, bukan `status` (revocation/expiry berdampak segera). Tidak dihapus fisik — hanya transisi status.
-- **`awcms_business_scope_assignment_events`** — riwayat lifecycle **append-only** (`granted`/`revoked`/`expired`/`renewed`), FK komposit `(tenant_id, assignment_id)` + `(tenant_id, actor_tenant_user_id)`. Tidak pernah UPDATE/DELETE.
+- **`awcms_business_scope_assignments`** — one row = one `tenant_user` granted a role/permission context bounded to one business scope. Columns: `tenant_user_id`, `role_id` (nullable), `scope_type` (snake_case, CHECK `^[a-z][a-z0-9_]*$`), `scope_id`, `effective_from`/`effective_to` (effective dating; `effective_to > effective_from`; a temporary assignment MUST have `effective_to`), `is_temporary`, `status` (`active`/`expired`/`revoked`), `revoked_at`/`revoked_by_tenant_user_id`/`revoke_reason` (kept consistent by a CHECK), `granted_by_tenant_user_id`, `approved_by_tenant_user_id`. **Composite FKs `(tenant_id, …)`** for subject/role/grantor/approver/revoker (targeting `UNIQUE (tenant_id, id)` on `awcms_tenant_users`/`awcms_roles`/this table itself) — PostgreSQL's RI check bypasses RLS, so a single-column FK can cross tenants (GHSA-r7cx-c4jh-cvvw); a composite forces the referenced row to sit in the same tenant. The authoritative "currently in force" gate is `now` vs the effective dating, not `status` (revocation/expiry take effect immediately). Never physically deleted — only status transitions.
+- **`awcms_business_scope_assignment_events`** — **append-only** lifecycle history (`granted`/`revoked`/`expired`/`renewed`), composite FKs `(tenant_id, assignment_id)` + `(tenant_id, actor_tenant_user_id)`. Never UPDATEd/DELETEd.
 
-Job `identity-access:business-scope:expiry` (worker, sql/027 grants `SELECT,UPDATE` assignments + `INSERT` events) membalik assignment `active` yang `effective_to`-nya lewat menjadi `expired` + tulis event + audit agregat per tenant.
+The `identity-access:business-scope:expiry` job (worker, sql/027 grants `SELECT,UPDATE` on assignments + `INSERT` on events) flips `active` assignments whose `effective_to` has passed to `expired` + writes an event + an aggregate audit per tenant.
 
-### Segregation of duties (Issue #181, base, generik)
+### Segregation of duties (Issue #181, base, generic)
 
-Lapis pembatas SoD **generik** milik `identity_access` (`sql/029`, RLS `ENABLE`+`FORCE`). Base tidak men-hardcode rule domain: `SoDRuleDescriptor` dideklarasikan `module.ts` modul turunan (di-validasi `bun run identity-access:sod-registry:check`); `rule_key` di sini merujuk registry **kode**, bukan FK tabel. Lihat ADR-0031.
+A **generic** SoD restriction layer owned by `identity_access` (`sql/029`, RLS `ENABLE`+`FORCE`). The base does not hardcode domain rules: a `SoDRuleDescriptor` is declared in the derived module's `module.ts` (validated by `bun run identity-access:sod-registry:check`); the `rule_key` here refers to the **code** registry, not an FK to a table. See ADR-0031.
 
-- **`awcms_sod_conflict_exceptions`** — override bounded-lifetime ("administrative override" yang di-sanksi) untuk konflik terdeteksi. Kolom: `rule_key` (CHECK `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), `subject_tenant_user_id`, `scope_type`/`scope_id` (keduanya set = scope-spesifik, keduanya null = blanket; CHECK), `justification`, `requested_by_tenant_user_id`, `approved_by_tenant_user_id` (nullable), `status` (`pending`/`approved`/`rejected`/`expired`/`revoked`), `effective_from`/`effective_to` (**`effective_to` NOT NULL** — no indefinite override; `effective_to > effective_from`). **FK komposit `(tenant_id, …)`** untuk subject/requester/approver (RI check melewati RLS — GHSA-r7cx-c4jh-cvvw). Gerbang otoritatif berlaku = `effective_to` vs `now` (status hanya cache) → expired/revoked segera tak berlaku. Self-approval (`approver == requester`) ditolak di application layer (dicek-ulang dari baris). Index parsial `WHERE status='approved'` untuk lookup validitas + sweep expiry.
-- **`awcms_sod_conflict_evaluations`** — decision log SoD **append-only** (setiap cek `assignment_create`/`high_risk_decision`, apa pun hasil). Kolom: `rule_key`, `subject_tenant_user_id` (nullable), `trigger_context` (CHECK), `conflict_detected`, `resolved_via` (`none`/`exception`/`denied`, CHECK), `decision_reason`, `occurred_at`, `metadata`. Proyeksi aman (tanpa payload request/resource). Tidak pernah UPDATE/DELETE.
+- **`awcms_sod_conflict_exceptions`** — a bounded-lifetime override (a sanctioned "administrative override") for a detected conflict. Columns: `rule_key` (CHECK `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), `subject_tenant_user_id`, `scope_type`/`scope_id` (both set = scope-specific, both null = blanket; CHECK), `justification`, `requested_by_tenant_user_id`, `approved_by_tenant_user_id` (nullable), `status` (`pending`/`approved`/`rejected`/`expired`/`revoked`), `effective_from`/`effective_to` (**`effective_to` NOT NULL** — no indefinite override; `effective_to > effective_from`). **Composite FKs `(tenant_id, …)`** for subject/requester/approver (the RI check bypasses RLS — GHSA-r7cx-c4jh-cvvw). The authoritative in-force gate is `effective_to` vs `now` (status is only a cache) → expired/revoked stop applying immediately. Self-approval (`approver == requester`) is rejected in the application layer (re-checked from the row). Partial index `WHERE status='approved'` for validity lookup + expiry sweep.
+- **`awcms_sod_conflict_evaluations`** — the **append-only** SoD decision log (every `assignment_create`/`high_risk_decision` check, whatever the outcome). Columns: `rule_key`, `subject_tenant_user_id` (nullable), `trigger_context` (CHECK), `conflict_detected`, `resolved_via` (`none`/`exception`/`denied`, CHECK), `decision_reason`, `occurred_at`, `metadata`. A safe projection (no request/resource payload). Never UPDATEd/DELETEd.
 
-Job `identity-access:business-scope:expiry` juga membalik `awcms_sod_conflict_exceptions` `approved` yang `effective_to`-nya lewat menjadi `expired` (sql/029 grant `SELECT,UPDATE` ke worker; audit per baris `critical`). Seed permission SoD di `sql/030` (`business_scope_conflicts.read`, `business_scope_exceptions.read/create/approve/reject/revoke`).
+The `identity-access:business-scope:expiry` job also flips `approved` `awcms_sod_conflict_exceptions` whose `effective_to` has passed to `expired` (sql/029 grants `SELECT,UPDATE` to the worker; a `critical` audit per row). SoD permission seeds are in `sql/030` (`business_scope_conflicts.read`, `business_scope_exceptions.read/create/approve/reject/revoke`).
 
-## Konten multi-bahasa (translatable content)
+## Multi-language content (translatable content)
 
-Berbeda dari **string UI statis** (label/tombol/pesan error) yang memakai katalog `.po` gettext di sisi aplikasi, **data input pengguna** yang perlu tampil multi-bahasa (mis. deskripsi item, term & condition vendor) disimpan **di database, satu nilai per bahasa aktif**.
+Unlike **static UI strings** (labels/buttons/error messages) which use the gettext `.po` catalogue on the application side, **user-entered data** that needs to appear in multiple languages (e.g. item descriptions, vendor terms & conditions) is stored **in the database, one value per active language**.
 
-Pola yang diizinkan (pilih per kebutuhan, konsisten dalam satu modul):
+Allowed patterns (choose per need, be consistent within a module):
 
-- **JSONB per-locale** — kolom `<field>_i18n jsonb` berisi `{ "en": "...", "id": "..." }` untuk semua bahasa aktif tenant. Cocok untuk field bebas yang jarang di-query per-bahasa. Fallback ke `default_locale` bila key locale aktif kosong.
-- **Tabel translasi terpisah** — `<entity>_translations (entity_id, locale, field, value)` dengan unique `(entity_id, locale, field)`. Cocok bila konten di-query/urut/cari per-bahasa. Tetap tenant-scoped + RLS.
-- **Baris-per-locale + link group** — untuk entitas yang keseluruhannya berbeda per bahasa dan perlu jadi baris independen dengan slug/status/lifecycle sendiri: satu kolom `locale` di baris utama, slug unik per `(tenant_id, locale, slug)`, dan kolom penaut opsional (`translation_group_id uuid`, nullable) untuk mengelompokkan beberapa baris locale-variant.
+- **Per-locale JSONB** — a `<field>_i18n jsonb` column holding `{ "en": "...", "id": "..." }` for every language the tenant has active. Suited to free-form fields that are rarely queried per language. Falls back to `default_locale` when the active locale's key is empty.
+- **Separate translation table** — `<entity>_translations (entity_id, locale, field, value)` with unique `(entity_id, locale, field)`. Suited when content is queried/sorted/searched per language. Still tenant-scoped + RLS.
+- **Row-per-locale + link group** — for entities that differ entirely per language and need to be independent rows with their own slug/status/lifecycle: a `locale` column on the main row, a slug unique per `(tenant_id, locale, slug)`, and an optional linking column (`translation_group_id uuid`, nullable) to group several locale-variant rows.
 
-Aturan:
+Rules:
 
-- Wajib menyimpan nilai untuk setiap locale aktif tenant (minimal `en`+`id`); tampilan memilih nilai locale aktif dengan fallback ke `default_locale`.
-- Tetap ikut RLS tenant isolation, soft delete (bila entity-nya soft-deletable), dan masking bila field sensitif.
-- Nilai locale bukan secret; tetap divalidasi & di-escape saat render (anti-XSS, auto-escape Astro).
+- A value must be stored for every locale the tenant has active (minimum `en`+`id`); the presentation picks the active locale's value with a fallback to `default_locale`.
+- It still follows tenant isolation RLS, soft delete (when the entity is soft-deletable), and masking when the field is sensitive.
+- A locale value is not a secret; it is still validated & escaped at render time (anti-XSS, Astro auto-escaping).
 
 ## Soft delete standard
 
-Soft delete adalah mekanisme default untuk master/config/draft tenant-scoped yang perlu bisa diarsipkan tanpa memutus referensi historis.
+Soft delete is the default mechanism for tenant-scoped master/config/draft data that needs to be archivable without breaking historical references.
 
-| Kategori data                                                                                              | Kebijakan                                                                                |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Tenant/office/location, profile/contact/channel, item/category/brand/unit, warehouse zone/bin, rule/config | Soft delete didukung jika tidak melanggar constraint bisnis aktif                        |
-| Draft jurnal/PO/PR                                                                                         | Boleh cancel/soft delete sesuai lifecycle                                                |
-| Posted jurnal, posted financial document, posted stock movement, audit/security log, exported tax batch    | Tidak boleh soft delete; gunakan reversal/cancel/return/adjustment/status                |
-| Data sensitif PII/tax/payroll                                                                              | Soft delete tidak menghapus kewajiban masking; purge/anonymize mengikuti retention/legal |
+| Data category                                                                                                  | Policy                                                                                      |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Tenant/office/location, profile/contact/channel, item/category/brand/unit, warehouse zone/bin, rule/config     | Soft delete is supported when it does not violate an active business constraint             |
+| Journal/PO/PR drafts                                                                                           | May be cancelled/soft-deleted according to lifecycle                                        |
+| Posted journals, posted financial documents, posted stock movements, audit/security logs, exported tax batches | Must not be soft-deleted; use reversal/cancel/return/adjustment/status                      |
+| Sensitive PII/tax/payroll data                                                                                 | Soft delete does not remove the masking obligation; purge/anonymize follows retention/legal |
 
-Aturan implementasi:
+Implementation rules:
 
-- Kolom minimum: `deleted_at`, `deleted_by`, `delete_reason`; tambahkan `restored_at`/`restored_by` bila restore didukung.
-- Query list/detail default wajib menambahkan `deleted_at IS NULL`.
-- API hanya boleh menampilkan soft-deleted record bila ada permission eksplisit dan parameter seperti `includeDeleted=true`.
-- Unique business key yang boleh dipakai ulang setelah delete memakai partial unique index, contoh `UNIQUE (tenant_id, sku) WHERE deleted_at IS NULL`.
-- FK dari transaksi historis tetap mengarah ke record soft-deleted; mapper menampilkan status archived tanpa membuka data sensitif.
-- Restore wajib validasi konflik partial unique index, status lifecycle, dan ABAC.
-- Purge hanya untuk retention/legal hold yang memenuhi syarat, harus diaudit, dan tidak boleh memutus FK penting.
-- Untuk sync, soft delete dikirim sebagai tombstone event; jangan physical delete sebelum semua node menerima tombstone atau retention terpenuhi.
+- Minimum columns: `deleted_at`, `deleted_by`, `delete_reason`; add `restored_at`/`restored_by` when restore is supported.
+- Default list/detail queries must add `deleted_at IS NULL`.
+- The API may only show soft-deleted records when there is an explicit permission and a parameter such as `includeDeleted=true`.
+- A unique business key that may be reused after deletion uses a partial unique index, e.g. `UNIQUE (tenant_id, sku) WHERE deleted_at IS NULL`.
+- FKs from historical transactions still point at the soft-deleted record; the mapper shows an archived status without exposing sensitive data.
+- Restore must validate partial unique index conflicts, lifecycle status, and ABAC.
+- Purge is only for qualifying retention/legal hold, must be audited, and must not break important FKs.
+- For sync, a soft delete is sent as a tombstone event; do not physically delete before every node has received the tombstone or retention is met.
 
 ## RLS standard
 
-Setiap tabel tenant-scoped:
+Every tenant-scoped table:
 
 ```sql
 ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
@@ -342,59 +344,59 @@ CREATE POLICY table_name_tenant_isolation
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
 ```
 
-RLS mengisolasi tenant; filter soft delete tetap wajib di query/repository agar arsip tidak bocor pada list/detail default.
+RLS isolates tenants; the soft delete filter is still mandatory in the query/repository so archives do not leak into default list/detail results.
 
 ## Index standard
 
-- `(tenant_id)` untuk semua tabel tenant-scoped.
-- `(tenant_id, created_at DESC)` untuk transaksi/log/event.
-- `(tenant_id, status, created_at)` untuk workflow/outbox/task.
-- `(tenant_id, deleted_at)` atau partial index `WHERE deleted_at IS NULL` untuk tabel soft-deletable yang sering di-list.
-- FK child index.
-- Search index untuk item/profile jika data besar.
+- `(tenant_id)` for every tenant-scoped table.
+- `(tenant_id, created_at DESC)` for transactions/logs/events.
+- `(tenant_id, status, created_at)` for workflow/outbox/task.
+- `(tenant_id, deleted_at)` or a partial index `WHERE deleted_at IS NULL` for soft-deletable tables that are listed often.
+- Child FK indexes.
+- Search indexes for item/profile when the data is large.
 
-## Alur perlindungan data sensitif
+## Sensitive data protection flow
 
 ```mermaid
 flowchart LR
-  In[Input identifier<br/>email/phone/NPWP/NIK] --> Norm[Normalisasi]
-  Norm --> Hash[value_hash - untuk lookup/dedup unik]
-  Norm --> Mask[masked_value - untuk tampilan]
-  Hash --> Store[(Simpan di DB)]
+  In[Identifier input<br/>email/phone/NPWP/NIK] --> Norm[Normalisation]
+  Norm --> Hash[value_hash - for unique lookup/dedup]
+  Norm --> Mask[masked_value - for display]
+  Hash --> Store[(Store in DB)]
   Mask --> Store
   Store --> Access{Role & ABAC}
-  Access -->|tax/HR/authorized| Reveal[Nilai ter-mask sesuai kebijakan]
-  Access -->|umum| Masked[Hanya masked_value]
-  Store -. tidak pernah .-> Raw[Response/log/audit mentah]
+  Access -->|tax/HR/authorized| Reveal[Masked value per policy]
+  Access -->|general| Masked[masked_value only]
+  Store -. never .-> Raw[Raw response/log/audit]
 ```
 
 ## Sensitive data classification
 
-| Data                   | Level       | Kontrol                   |
+| Data                   | Level       | Control                   |
 | ---------------------- | ----------- | ------------------------- |
 | Password hash          | Critical    | Never expose              |
 | API key/provider token | Critical    | Env only                  |
 | NPWP/NIK/NITKU         | High        | Mask, ABAC tax role       |
-| Data gaji/payroll      | Critical    | Mask, ABAC HR role        |
+| Salary/payroll data    | Critical    | Mask, ABAC HR role        |
 | Phone/WhatsApp/email   | High        | Mask/hash lookup          |
 | Address                | Medium/High | Need-to-know              |
-| Transaksi finance      | Medium      | Tenant RLS, audit         |
+| Finance transactions   | Medium      | Tenant RLS, audit         |
 | Tax invoice/XML        | High        | Tax role, audit, checksum |
 | AI prompt/tool call    | Medium      | No raw PII                |
 
-## Retention awal
+## Initial retention
 
-| Data                                        | Retention                                                                                                                                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Idempotency key                             | 7–30 hari                                                                                                                                                                                         |
-| HTTP request log                            | 30–90 hari                                                                                                                                                                                        |
-| Security/audit log                          | 1–5 tahun sesuai kebutuhan                                                                                                                                                                        |
-| `awcms_audit_events`                        | Default 730 hari (2 tahun), dikonfigurasi via `AUDIT_LOG_RETENTION_DAYS`; dipurge oleh job terjadwal internal, batch per tenant per pass, aksi purge itu sendiri direkam sebagai audit event baru |
-| Tax records                                 | Sesuai regulasi dan SOP                                                                                                                                                                           |
-| Notifikasi vendor/HR log                    | 1 tahun                                                                                                                                                                                           |
-| `awcms_email_messages`/`_delivery_attempts` | Kandidat purge fisik setelah status terminal melewati retention window, meniru pola `awcms_audit_events`                                                                                          |
-| AI session                                  | 90–365 hari                                                                                                                                                                                       |
-| Sync conflict                               | Resolved + 1 tahun                                                                                                                                                                                |
-| Jurnal/stock movement                       | Long-term/archive                                                                                                                                                                                 |
+| Data                                        | Retention                                                                                                                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idempotency key                             | 7–30 days                                                                                                                                                                                             |
+| HTTP request log                            | 30–90 days                                                                                                                                                                                            |
+| Security/audit log                          | 1–5 years as required                                                                                                                                                                                 |
+| `awcms_audit_events`                        | Default 730 days (2 years), configured via `AUDIT_LOG_RETENTION_DAYS`; purged by an internal scheduled job, batched per tenant per pass, and the purge action itself is recorded as a new audit event |
+| Tax records                                 | Per regulation and SOP                                                                                                                                                                                |
+| Vendor/HR notification log                  | 1 year                                                                                                                                                                                                |
+| `awcms_email_messages`/`_delivery_attempts` | Candidate for physical purge once a terminal status passes the retention window, mirroring the `awcms_audit_events` pattern                                                                           |
+| AI session                                  | 90–365 days                                                                                                                                                                                           |
+| Sync conflict                               | Resolved + 1 year                                                                                                                                                                                     |
+| Journal/stock movement                      | Long-term/archive                                                                                                                                                                                     |
 
-Catatan: kebijakan retensi detail per tabel modul ERP baru (finance, procurement, manufaktur, HR/payroll) akan ditetapkan saat modul tersebut dirancang, mengikuti mekanisme `data_lifecycle` generik yang sama (legal hold, dry-run, archive-purge) yang sudah terbukti pada base sebelumnya.
+Note: detailed retention policies for the tables of the new ERP modules (finance, procurement, manufacturing, HR/payroll) will be set when those modules are designed, following the same generic `data_lifecycle` mechanism (legal hold, dry-run, archive-purge) already proven on the previous base.

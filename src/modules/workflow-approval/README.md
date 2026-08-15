@@ -1,3 +1,5 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Workflow Approval
 
 Implementation of Issue 11.1 (`docs/awcms/06_github_issues_detail.md` §Issue 11.1), evolved by **Issue #747** (epic `platform-evolution` #738, Wave 2) into a managed, versioned, graph-based enterprise workflow minimum — while keeping the base's original guardrail: no domain-specific business terms/actions (base ships no POS cancel/Coretax export/warehouse transfer), no external BPMN engine, and no runtime code execution in conditions/actions (doc 21 §3 decision tree, node Q5).

@@ -1,79 +1,81 @@
 ---
 name: awcms-media-library
-description: Modul media_library ADA di repo ini (INVERSI ADR-0036, migrasi `sql/052`–`sql/054`). System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) yang MEMILIKI registry media per-tenant `awcms_news_media_objects` (tabel TIDAK di-rename — FK komposit keras dari `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verifikasi, lifecycle orphan, job `news-media:reconcile`, dan penyalaan enforcement (`GET/POST /api/v1/media/enforcement`, satu arah). Menyediakan capability `media_library` (`_shared/ports/media-library-port.ts`) yang dikonsumsi `blog_content` — konsumen kedua `news_portal` DILEBUR ke `blog_content` (ADR-0044/#300), jadi nama tabel `awcms_news_*` di sini bukan lagi petunjuk modul mana pun. Gunakan saat mengubah/menambah upload media, registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, atau enforcement. Env var `NEWS_MEDIA_R2_*` + nama tabel + command `news-media:reconcile` DIPERTAHANKAN (ADR-0036 §3/§4). Layar `/admin/media` SUDAH ADA (ADR-0056, PR #345 — `src/pages/admin/media.astro`): browse ber-filter + delete/restore/purge, tiap mutasi ber-`Idempotency-Key`. ADR-0056 SELESAI SELURUHNYA — `attach`/`detach` DICABUT (`sql/087`), `delete`/`restore`/`purge` diberi permukaan, dan rute daftar sendiri `GET /api/v1/media/objects/list` (keyset, kursor TEKS presisi mikrodetik) ditambahkan karena `?ids=` adalah resolver batch, bukan browse. Modul kini mendeklarasikan **9 permission** (7 `media.*` + 2 `enforcement.*`), nol di antaranya tak-tergerbangi. Yang sengaja TIDAK ada di layar: unggah (alur tiga langkah di browser), `enforcement.*` (saklar kebijakan tenant, tempatnya `/admin/security`), dan pratinjau `<img>`. Step 5c/5d micro (srcset, PDF) belum ada.
+description: The media_library module EXISTS in this repo (ADR-0036 INVERSION, migrations `sql/052`–`sql/054`). A System Foundation (`type: system`, `isCore: false`, deps `[tenant_admin, identity_access]`) that OWNS the per-tenant media registry `awcms_news_media_objects` (the table was NOT renamed — hard composite FK from `awcms_news_portal_ad_placements`), presigned direct-to-R2 upload/finalize/cancel (`/api/v1/media/news-images/upload-sessions/*`, magic-byte MIME sniff + SHA-256), verification, orphan lifecycle, the `news-media:reconcile` job, and enforcement activation (`GET/POST /api/v1/media/enforcement`, one-way). It provides the `media_library` capability (`_shared/ports/media-library-port.ts`) consumed by `blog_content` — the second consumer `news_portal` was MERGED into `blog_content` (ADR-0044/#300), so the `awcms_news_*` table names here are no longer a hint about any module. Use when changing/adding media upload, the registry, R2 config (`NEWS_MEDIA_R2_*`), reconcile, or enforcement. The `NEWS_MEDIA_R2_*` env vars + table names + the `news-media:reconcile` command are KEPT (ADR-0036 §3/§4). The `/admin/media` screen ALREADY EXISTS (ADR-0056, PR #345 — `src/pages/admin/media.astro`): filtered browse + delete/restore/purge, every mutation carrying an `Idempotency-Key`. ADR-0056 IS FULLY DONE — `attach`/`detach` were REVOKED (`sql/087`), `delete`/`restore`/`purge` were given a surface, and a dedicated list route `GET /api/v1/media/objects/list` (keyset, TEXT cursor with microsecond precision) was added because `?ids=` is a batch resolver, not a browse. The module now declares **9 permissions** (7 `media.*` + 2 `enforcement.*`), zero of them ungated. Deliberately NOT on the screen: upload (a three-step flow in the browser), `enforcement.*` (a tenant policy switch, which belongs in `/admin/security`), and `<img>` preview. Micro steps 5c/5d (srcset, PDF) do not exist yet.
 ---
 
-# AWCMS — Media Library (registry media per-tenant, ADR-0036 ownership inversion)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
-<!-- sql-refs: awcms — nomor `sql/NNN` di skill ini adalah penomoran awcms NYATA -->
+# AWCMS — Media Library (per-tenant media registry, ADR-0036 ownership inversion)
 
-> **STATUS — modul `media_library` ADA (inversi ADR-0036).** Ia lahir dari
-> pemindahan registry media KELUAR dari `news_portal` (bukan port aditif); modul
-> asal itu sendiri kemudian DILEBUR ke `blog_content` (ADR-0044/#300), jadi
-> konsumen `media_library` untuk ad placement kini `blog_content`. Baca
+<!-- sql-refs: awcms — the `sql/NNN` numbers in this skill are REAL awcms numbering -->
+
+> **STATUS — the `media_library` module EXISTS (ADR-0036 inversion).** It was born
+> from moving the media registry OUT of `news_portal` (not an additive port); that
+> origin module itself was later MERGED into `blog_content` (ADR-0044/#300), so the
+> consumer of `media_library` for ad placement is now `blog_content`. Read
 > `docs/adr/0036-media-library-module-admission-ownership-inversion.md` +
-> `src/modules/media-library/README.md` + `sql/` nyata sebelum mengubah.
+> `src/modules/media-library/README.md` + the real `sql/` before changing anything.
 
-## Apa yang dimiliki modul ini
+## What this module owns
 
-- **Registry** `awcms_news_media_objects` (`sql/041`, FORCE RLS; tabel **tidak
-  di-rename** — dirujuk `sql/041`/`042`/`045` + FK komposit keras dari
+- **Registry** `awcms_news_media_objects` (`sql/041`, FORCE RLS; the table is **not
+  renamed** — referenced by `sql/041`/`042`/`045` + a hard composite FK from
   `awcms_news_portal_ad_placements`). Application: `media-object-directory.ts`
-  (symbol internal DIPERTAHANKAN: `fetchNewsMediaObjectById`,
+  (internal symbols KEPT: `fetchNewsMediaObjectById`,
   `fetchNewsMediaObjectsByIds`, `NewsMediaObjectView`,
   `isNewsMediaObjectSafeForPublicReference`).
-- **Upload flow** presigned direct-to-R2: `POST /api/v1/media/news-images/upload-sessions`
-  (create), `.../{id}/finalize` (R2 GET nyata + magic-byte MIME sniff + SHA-256,
+- **Upload flow**, presigned direct-to-R2: `POST /api/v1/media/news-images/upload-sessions`
+  (create), `.../{id}/finalize` (real R2 GET + magic-byte MIME sniff + SHA-256,
   high-risk + `Idempotency-Key`), `.../{id}/cancel`. Guard: `media_library.media.*`.
-- **Domain**: `media-r2-config.ts` (`NEWS_MEDIA_R2_*` — nama env DIPERTAHANKAN,
-  wajib TERPISAH dari `R2_*` milik sync-storage), `media-mime-sniffer.ts`,
-  `media-object-key.ts` (prefix objek `news-media/{tenantId}/...` DIPERTAHANKAN),
+- **Domain**: `media-r2-config.ts` (`NEWS_MEDIA_R2_*` — env names KEPT, must be
+  SEPARATE from sync-storage's own `R2_*`), `media-mime-sniffer.ts`,
+  `media-object-key.ts` (object prefix `news-media/{tenantId}/...` KEPT),
   `media-finalize-decision.ts`, `media-upload-session-validation.ts`,
   `media-reconciliation-categorization.ts`, `managed-media-readiness.ts`.
 - **Infrastructure**: `media-r2-client.ts`. **Job**: `news-media:reconcile`
-  (`scripts/news-media-r2-reconcile.ts` — nama command DIPERTAHANKAN, hanya
-  meng-import `media_library`).
-- **Port** `_shared/ports/media-library-port.ts` (`MediaLibraryPort`, 3 method):
+  (`scripts/news-media-r2-reconcile.ts` — the command name is KEPT, it only
+  imports `media_library`).
+- **Port** `_shared/ports/media-library-port.ts` (`MediaLibraryPort`, 3 methods):
   `isManagedMediaEnforcementActiveForTenant`, `isMediaReferenceSafe`,
   `resolveMediaReferences`. Adapter `media-library-port-adapter.ts`
-  (`mediaLibraryPortAdapter`, import HANYA dari `media_library` — jangan pernah
-  import `blog-content`, itu inversi ADR-0013 §1 yang dihapus; direktori
-  `news-portal/` sendiri sudah tidak ada — ADR-0044/#300).
+  (`mediaLibraryPortAdapter`, imports ONLY from `media_library` — never import
+  `blog-content`, that is the ADR-0013 §1 inversion that was removed; the
+  `news-portal/` directory itself no longer exists — ADR-0044/#300).
 
-## Enforcement per-tenant (step 5a) — SATU ARAH, jangan "lengkapi API"
+## Per-tenant enforcement (step 5a) — ONE-WAY, do not "complete the API"
 
-- Flag di `awcms_media_library_tenant_state` (`sql/053`, PK tenant_id, RLS
-  ENABLE+FORCE). Penulis SATU-SATUNYA = `markManagedMediaEnforced`
-  (`media-library-tenant-state.ts`), dipanggil HANYA dari entry point tersanksi
-  `enable-managed-media-enforcement.ts` (gate readiness dulu + audit).
+- The flag lives in `awcms_media_library_tenant_state` (`sql/053`, PK tenant_id, RLS
+  ENABLE+FORCE). The ONLY writer is `markManagedMediaEnforced`
+  (`media-library-tenant-state.ts`), called ONLY from the sanctioned entry point
+  `enable-managed-media-enforcement.ts` (readiness gate first + audit).
 - Endpoint `GET/POST /api/v1/media/enforcement` (`sql/054`:
-  `media_library.enforcement.{read,enable}` — activity code TERPISAH dari
-  `media`). POST hanya bisa MENYALAKAN.
-- **DILARANG menambah**: action `enforcement.disable`, fungsi unmark/clear/
-  disable, atau DELETE terhadap `awcms_media_library_tenant_state`. Itu
-  mengembalikan eksploit yang dicatat header `sql/043` (tenant mematikan
-  validasi medianya sendiri). Dijaga `tests/media-enforcement-one-way.test.ts`.
-- `isManagedMediaEnforcementActiveForTenant` = readiness deployment
-  (`evaluateManagedMediaReadiness`, pure) **DAN** flag per-tenant. Kedua paruh
-  wajib; readiness gagal → fail-closed tanpa query DB.
+  `media_library.enforcement.{read,enable}` — an activity code SEPARATE from
+  `media`). POST can only TURN IT ON.
+- **FORBIDDEN to add**: an `enforcement.disable` action, an unmark/clear/
+  disable function, or a DELETE against `awcms_media_library_tenant_state`. That
+  would bring back the exploit recorded in the `sql/043` header (a tenant turning
+  off its own media validation). Guarded by `tests/media-enforcement-one-way.test.ts`.
+- `isManagedMediaEnforcementActiveForTenant` = deployment readiness
+  (`evaluateManagedMediaReadiness`, pure) **AND** the per-tenant flag. Both halves
+  are required; if readiness fails → fail-closed with no DB query.
 
-## Aturan saat mengubah
+## Rules when changing things
 
-1. Migrasi terapan immutable — koreksi via migrasi baru (skill `awcms-new-migration`).
-2. Tabel tenant-scoped → RLS FORCE + tenant_id; uji di bawah role `awcms_app`
-   LOGIN (`tests/integration/media-library-tenant-state.integration.test.ts`).
-3. Perubahan port/kapabilitas → update `_shared/capability-contract-versions.ts`
-   (`media_library`) + manifest `awcms-family-compatibility.yaml` (harus cocok
+1. Applied migrations are immutable — correct via a new migration (skill `awcms-new-migration`).
+2. Tenant-scoped table → RLS FORCE + tenant_id; test under the `awcms_app` LOGIN
+   role (`tests/integration/media-library-tenant-state.integration.test.ts`).
+3. Port/capability change → update `_shared/capability-contract-versions.ts`
+   (`media_library`) + the `awcms-family-compatibility.yaml` manifest (must match
    key-for-key — `family:conformance:check`).
-4. Perubahan endpoint → OpenAPI fragment `openapi/modules/media-library.openapi.yaml`
+4. Endpoint change → OpenAPI fragment `openapi/modules/media-library.openapi.yaml`
    - `bun run openapi:bundle` (skill `awcms-new-endpoint`).
 5. High-risk (finalize/enforcement) → audit log (moduleKey `media_library`).
-6. Jangan sentuh `blog_content` untuk urusan media kecuali rewire
-   composition-root (ia konsumen via port; `news_portal` sudah dilebur ke
-   dalamnya).
+6. Do not touch `blog_content` for media matters except to rewire the
+   composition root (it is a consumer via the port; `news_portal` has already
+   been merged into it).
 
-## Belum di-port (aditif, gelombang lanjutan)
+## Not yet ported (additive, a later wave)
 
 Step 5d media lifecycle/browser (`/api/v1/media/objects/*`, `/admin/media`),
-step 5b `srcset` render, step 5c tipe PDF. Modul menyatakannya PORT DROP; MIME
-tetap empat tipe raster; `navigation` belum dideklarasikan.
+step 5b `srcset` rendering, step 5c PDF type. The module declares them a PORT
+DROP; MIME stays at the four raster types; `navigation` is not declared yet.

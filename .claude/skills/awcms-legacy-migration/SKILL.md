@@ -1,79 +1,77 @@
 ---
 name: awcms-legacy-migration
-description: BACAAN SAJA — migrasi data legacy sengaja DIDESKOP dari base repo AWCMS (lihat doc 06 §"Riwayat perubahan backlog"). Gunakan skill ini untuk memahami KENAPA fitur ini tidak ada di sini dan ke mana konsep ini harus dibangun (aplikasi turunan, mis. AWPOS) — jangan pakai sebagai panduan implementasi. Command/tabel/issue yang dulu dirujuk di skill ini (`legacy:preflight`, `awcms_legacy_migration_runs`, Issue 1.1/1.2) tidak ada di repo ini.
+description: READ-ONLY — legacy data migration was deliberately DESCOPED from the AWCMS base repo (see doc 06 §"Backlog change history"). Use this skill to understand WHY the feature does not exist here and where the concept must be built instead (a derived application, e.g. AWPOS) — do not use it as an implementation guide. The commands/tables/issues this skill used to reference (`legacy:preflight`, `awcms_legacy_migration_runs`, Issue 1.1/1.2) do not exist in this repo.
 ---
 
-# AWCMS — Legacy Data Migration (DIDESKOP — bukan bagian base repo ini)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
-## Status: sengaja tidak dibangun di sini
+# AWCMS — Legacy Data Migration (DESCOPED — not part of this base repo)
 
-Epic "Legacy Migration" (semula Epic 1, Issue 1.1–1.2) ada di backlog awal
-38-issue AWCMS, tapi **ditutup `not planned`** di GitHub bersama 18
-issue domain POS/retail lain (POS MVP, Warehouse Management, CRM Receipt
-Delivery, Accounting & Coretax, dst.) — total 20 issue domain ditutup,
-Legacy Migration sendiri 2 di antaranya — karena tidak sesuai konteks
-AWCMS sebagai **contoh repo pengembangan umum** (generic base, bukan
-aplikasi retail). Kontennya **dipindahkan ke aplikasi turunan contoh**
-(mis. AWPOS), bukan dihapus historisnya — lihat memory proyek
-`awpos-standard-refactor` untuk arah standar itu.
+## Status: deliberately not built here
 
-Sumber keputusan: `docs/awcms/06_github_issues_detail.md` §"Riwayat
-perubahan backlog (2026-07-04)". Doc itu sekarang lompat langsung dari
-`EPIC 0 — Repository Foundation` ke `EPIC 2 — Tenant, Identity, Profile`
-— tidak ada lagi "EPIC 1" di daftar epic aktif, konsisten dengan status
-`not planned`-nya.
+The "Legacy Migration" epic (originally Epic 1, Issue 1.1–1.2) existed in the
+initial 38-issue AWCMS backlog, but was **closed `not planned`** on GitHub
+together with 18 other POS/retail domain issues (POS MVP, Warehouse Management,
+CRM Receipt Delivery, Accounting & Coretax, etc.) — 20 domain issues closed in
+total, Legacy Migration being 2 of them — because it did not fit the context of
+AWCMS as a **general-purpose development example repo** (a generic base, not a
+retail application). Its content was **moved to the example derived
+application** (e.g. AWPOS), its history not deleted — see the project memory
+`awpos-standard-refactor` for that standardisation direction.
 
-## Yang TIDAK ada di repo ini — jangan diimplementasikan seolah "melengkapi yang belum selesai"
+Source of the decision: `docs/awcms/06_github_issues_detail.md` §"Riwayat
+perubahan backlog (2026-07-04)". That doc now jumps straight from
+`EPIC 0 — Repository Foundation` to `EPIC 2 — Tenant, Identity, Profile` —
+there is no longer an "EPIC 1" in the list of active epics, consistent with its
+`not planned` status.
 
-Semua berikut ini adalah sisa konten epic yang dideskop, **tidak pernah
-dibangun**, dan bukan gap yang perlu diisi di base repo ini:
+## What is NOT in this repo — do not implement it as if you were "finishing something unfinished"
 
-- Script/command `legacy:preflight` — **tidak ada** di `package.json`
-  (`grep -n "legacy" package.json` kosong).
-- Tabel `awcms_legacy_migration_runs` (atau mapping/row-count/
-  validation-error/backfill-task terkait) — **tidak ada** satu pun
-  migration di `sql/*.sql` yang membuatnya.
-- Schema Postgres terpisah bernama `legacy`.
-- GitHub Issue 1.1/1.2 (referensi lama "#4"/"#5" di repo ini) — kedua
-  nomor itu **tidak resolve** ke issue apa pun di `ahliweb/awcms`
+Everything below is leftover content from the descoped epic, **never built**,
+and is not a gap that needs filling in this base repo:
+
+- The `legacy:preflight` script/command — **does not exist** in `package.json`
+  (`grep -n "legacy" package.json` returns nothing).
+- The `awcms_legacy_migration_runs` table (or its related mapping/row-count/
+  validation-error/backfill-task tables) — **not a single** migration in
+  `sql/*.sql` creates it.
+- A separate Postgres schema named `legacy`.
+- GitHub Issue 1.1/1.2 (the old "#4"/"#5" references in this repo) — neither
+  number **resolves** to any issue in `ahliweb/awcms`
   (`gh issue view 4`/`gh issue view 5` → "could not resolve").
-- Section "Legacy migration checklist" yang mungkin masih tersisa di
-  `docs/awcms/07_sprint_testing_production_readiness.md` adalah sisa
-  dokumentasi dari epic yang sama — jangan jadikan acuan implementasi
-  tanpa memverifikasi ulang statusnya dulu.
+- The "Legacy migration checklist" section that may still linger in
+  `docs/awcms/07_sprint_testing_production_readiness.md` is documentation
+  residue from that same epic — do not treat it as an implementation reference
+  without re-verifying its status first.
 
-Jangan menulis migration, script, endpoint, atau test baru berdasarkan
-daftar di atas seakan itu backlog aktif yang tinggal dilengkapi — itu
-bukan, dan tidak ada trace GitHub issue yang mendukungnya di repo ini.
+Do not write new migrations, scripts, endpoints, or tests based on the list
+above as if it were an active backlog that just needs completing — it is not,
+and there is no GitHub issue trace in this repo backing it.
 
-## Kalau butuh migrasi data legacy sungguhan
+## If you genuinely need legacy data migration
 
-Migrasi data legacy adalah **concern aplikasi turunan**, bukan base repo
-generik ini. Base repo (`awcms`) menyediakan modul/pola reusable
-(migration toolkit, sensitive-data masking, module scaffold, dst.) yang
-bisa dipakai aplikasi turunan untuk membangun migrasi legacy-nya sendiri
-sesuai domain masing-masing — misalnya AWPOS (retail/POS) menangani
-migrasi data POS/retail legacy-nya sendiri di repo turunannya sendiri,
-bukan di `awcms`.
+Legacy data migration is a **derived-application concern**, not a concern of
+this generic base repo. The base repo (`awcms`) provides reusable
+modules/patterns (migration toolkit, sensitive-data masking, module scaffold,
+etc.) that a derived application can use to build its own legacy migration for
+its own domain — for instance AWPOS (retail/POS) handles its own legacy
+POS/retail data migration in its own derived repo, not in `awcms`.
 
-Kalau kebutuhan itu muncul di sebuah aplikasi turunan:
+If that need arises in a derived application:
 
-1. Jangan salin isi lama skill ini sebagai starting point — kontennya
-   (alur dry-run/backfill, nama tabel, command) tidak pernah
-   diimplementasikan atau divalidasi terhadap kode nyata mana pun.
-2. Desain ulang dari kebutuhan domain aplikasi turunan yang sebenarnya
-   (mapping tabel/field sumber, strategi dry-run, verifikasi row count,
-   dsb.), dibangun di atas pola umum base repo yang memang nyata ada:
+1. Do not copy this skill's old content as a starting point — its content
+   (dry-run/backfill flow, table names, commands) was never implemented or
+   validated against any real code.
+2. Redesign from the derived application's actual domain needs (source
+   table/field mapping, dry-run strategy, row-count verification, and so on),
+   built on top of the base repo's general patterns that do actually exist:
    `awcms-new-migration` (schema/RLS), `awcms-sensitive-data`
-   (normalize/hash/mask identifier), `awcms-testing` (strategi test
-   berlapis).
-3. Prinsip umum yang tetap berlaku di mana pun migrasi legacy dibangun:
-   password/credential legacy tidak boleh diimpor ulang — user hasil
-   migrasi harus melalui reset flow, hash lama tidak pernah dipakai
-   langsung untuk login.
+   (normalize/hash/mask identifier), `awcms-testing` (layered test strategy).
+3. A general principle that holds wherever legacy migration is built: legacy
+   passwords/credentials must never be re-imported — migrated users must go
+   through a reset flow, the old hash is never used directly for login.
 
-## Skill terkait
+## Related skills
 
-`awcms-new-migration` (schema toolkit umum), `awcms-sensitive-data`
-(normalize/hash/mask identifier), `awcms-testing` (strategi test
-berlapis).
+`awcms-new-migration` (general schema toolkit), `awcms-sensitive-data`
+(normalize/hash/mask identifier), `awcms-testing` (layered test strategy).

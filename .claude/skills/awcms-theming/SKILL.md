@@ -1,206 +1,213 @@
 ---
 name: awcms-theming
-description: Kelola/konsumsi modul theming AWCMS — presentasi tenant-selectable via theme descriptor build-time tepercaya (ADR-0034 Fase 3, modul website pertama yang di-port LANGSUNG ke base ini). Gunakan saat menambah/mengubah endpoint `/api/v1/theming/*`, mengubah lifecycle draft→validate→preview→publish→rollback/retire, menyentuh security spine validasi CSS by-rejection, atau menambah theme baru ke registry base. Sesuai src/modules/theming/README.md dan ADR-0034 (awcms-micro ADR-0029).
+description: Manage/consume the AWCMS theming module — tenant-selectable presentation via trusted build-time theme descriptors (ADR-0034 Phase 3, the first website module ported DIRECTLY into this base). Use when adding/changing `/api/v1/theming/*` endpoints, changing the draft→validate→preview→publish→rollback/retire lifecycle, touching the by-rejection CSS validation security spine, or adding a new theme to the base registry. Per src/modules/theming/README.md and ADR-0034 (awcms-micro ADR-0029).
 ---
 
-# AWCMS — Theming (presentasi tenant-selectable)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
-Baca `src/modules/theming/README.md` dan `src/modules/theming/module.ts` untuk
-detail penuh — skill ini merangkum keputusan yang sudah dibuat supaya tidak
-di-re-derive. Modul `theming` (`type: "domain"`, `status: "active"`, versi
-`1.0.0`) adalah modul website **pertama yang diimplementasikan LANGSUNG di base
-awcms** (ADR-0034 Fase 3, "template dipakai-langsung"; diadaptasi dari
-awcms-micro `theming` / ADR-0029). ADR-0034 mencabut larangan
-`no-content-website-modules`, jadi modul konten/website memang boleh hidup di
-`src/modules/` — **tidak ada** repo turunan, `application-registry.ts`, atau
-`extension:check`. Registry base naik 10 → 11 modul.
+# AWCMS — Theming (tenant-selectable presentation)
 
-Skema di repo ini: `sql/033_awcms_theming_config_schema.sql` (tiga tabel
-tenant-scoped) dan `sql/034_awcms_theming_permissions.sql` (seed permission
-katalog global). Verifikasi selalu dengan `ls sql/ | grep theming` sebelum
-mengutip nomor migrasi.
+Read `src/modules/theming/README.md` and `src/modules/theming/module.ts` for the
+full detail — this skill summarises decisions that have already been made so they
+are not re-derived. The `theming` module (`type: "domain"`, `status: "active"`,
+version `1.0.0`) is the **first website module implemented DIRECTLY in the awcms
+base** (ADR-0034 Phase 3, "templates are used-directly"; adapted from awcms-micro
+`theming` / ADR-0029). ADR-0034 revoked the `no-content-website-modules`
+prohibition, so content/website modules may indeed live in `src/modules/` —
+there is **no** derived repo, `application-registry.ts`, or `extension:check`.
+The base registry went from 10 → 11 modules.
 
-## Kapan pakai skill ini vs skill generik
+Schema in this repo: `sql/033_awcms_theming_config_schema.sql` (three
+tenant-scoped tables) and `sql/034_awcms_theming_permissions.sql` (global catalog
+permission seed). Always verify with `ls sql/ | grep theming` before quoting a
+migration number.
 
-Melengkapi (bukan menggantikan) `awcms-new-endpoint`, `awcms-new-migration`,
-`awcms-abac-guard`, `awcms-idempotency`, `awcms-audit-log` — itu tetap dipakai
-untuk cara membangun endpoint/migration/guard/idempotency/audit. Skill ini
-menyediakan konteks domain `theming` spesifik: pemisahan theme (kode) vs config
-(data), security spine validasi CSS, immutability published version, dan model
-preview.
+## When to use this skill vs the generic skills
 
-## Dua hal yang dipisahkan KETAT (theme = kode, config = data)
+It complements (does not replace) `awcms-new-endpoint`, `awcms-new-migration`,
+`awcms-abac-guard`, `awcms-idempotency`, `awcms-audit-log` — those are still used
+for how to build an endpoint/migration/guard/idempotency/audit. This skill
+supplies the `theming`-specific domain context: the theme (code) vs config (data)
+split, the CSS validation security spine, published-version immutability, and the
+preview model.
 
-- **Theme** = `ThemeDescriptor` yang disusun `theme-registry.ts` dari theme base
-  in-repo yang sudah direview, di-bundle saat BUILD-TIME. Sumber tepercaya,
-  **bukan** baris database, **bukan** artefak upload. Theme baru ditambahkan
-  LANGSUNG ke `theme-registry.ts` (contoh: `themes/default-theme.ts` = theme
-  `aria`) — tidak ada seam theme repo turunan (dihapus ADR-0034 Fase 2).
-- **`ThemeConfig`** = DATA konfigurasi tenant ATAS sebuah theme: override design
-  token, pilihan slot variant, id media asset, urutan section, penempatan nav.
-  Tersimpan di DB (`awcms_theming_config_versions` + `awcms_theming_tenant_state`,
-  sql/033, RLS FORCE), di-schema-validate & dibatasi di `domain/theme-config.ts`
-  sebelum disimpan.
+## Two things kept STRICTLY apart (theme = code, config = data)
 
-Yang me-render HANYA `src/layouts/PublicThemeLayout.astro` (build-time
-tepercaya). **Tidak ada kolom template eksekutabel di mana pun di skema** — tidak
-ada Astro/JS/SQL/eval/raw HTML yang di-authoring tenant.
+- **Theme** = the `ThemeDescriptor` that `theme-registry.ts` assembles from
+  reviewed in-repo base themes, bundled at BUILD TIME. A trusted source,
+  **not** a database row, **not** an uploaded artifact. New themes are added
+  DIRECTLY to `theme-registry.ts` (example: `themes/default-theme.ts` = theme
+  `aria`) — there is no derived-repo theme seam (removed by ADR-0034 Phase 2).
+- **`ThemeConfig`** = the tenant's configuration DATA ON TOP OF a theme: design
+  token overrides, slot variant choices, media asset ids, section ordering, nav
+  placement. Stored in the DB (`awcms_theming_config_versions` +
+  `awcms_theming_tenant_state`, sql/033, RLS FORCE), schema-validated & bounded
+  in `domain/theme-config.ts` before being stored.
 
-## Security spine — `domain/css-value-validation.ts` (validasi by-rejection)
+The ONLY renderer is `src/layouts/PublicThemeLayout.astro` (trusted build-time).
+**There is no executable template column anywhere in the schema** — no
+tenant-authored Astro/JS/SQL/eval/raw HTML.
 
-Setiap NILAI design-token divalidasi dengan **PENOLAKAN, bukan sanitasi**
-(menolak, bukan strip → menyingkirkan seluruh kelas
-`js/incomplete-multi-character-sanitization`):
+## Security spine — `domain/css-value-validation.ts` (by-rejection validation)
 
-- `assertSafeCssPrimitive` — charset-terbatas, panjang-dibatasi
-  (`MAX_CSS_TOKEN_VALUE_LENGTH`), bebas control-char, menolak
+Every design-token VALUE is validated by **REJECTION, not sanitisation**
+(reject, do not strip → eliminates the entire
+`js/incomplete-multi-character-sanitization` class):
+
+- `assertSafeCssPrimitive` — charset-restricted, length-bounded
+  (`MAX_CSS_TOKEN_VALUE_LENGTH`), control-char free, rejects
   `url(` / `expression` / `@import` / `javascript:` / `/*` / `;{}<>` /
-  backslash / paren tak seimbang.
-- `validateColorValue` / `validateDimensionValue` (unit dari
+  backslash / unbalanced parens.
+- `validateColorValue` / `validateDimensionValue` (units from
   `DIMENSION_UNIT_ALLOW_LIST`) / `validateNumberValue` / `validateFontStack` —
-  grammar ketat & linear (no-ReDoS).
-- Font family dipilih dari **allow-list per-theme**; stack CSS yang di-emit
-  adalah milik descriptor, jadi tidak ada nilai font yang pernah di-authoring
-  tenant.
+  strict & linear grammars (no-ReDoS).
+- Font families are picked from a **per-theme allow-list**; the emitted CSS stack
+  belongs to the descriptor, so no font value is ever tenant-authored.
 
-`serializeThemeTokensCss` aman by-construction (re-validasi tiap nilai) dan
-meng-emit blok `:root { --awcms-theme-* }` yang disajikan sebagai **stylesheet
-EXTERNAL same-origin** (`/theming/{tenantCode}/tokens.css`,
-`src/pages/theming/[tenantCode]/tokens.css.ts`) — jadi CSP `style-src 'self'`
-aplikasi TIDAK PERNAH dilemahkan (tak ada `<style>` inline per-request). Jangan
-regresi ini menjadi inline style.
+`serializeThemeTokensCss` is safe by construction (it re-validates every value)
+and emits a `:root { --awcms-theme-* }` block served as an **EXTERNAL same-origin
+stylesheet** (`/theming/{tenantCode}/tokens.css`,
+`src/pages/theming/[tenantCode]/tokens.css.ts`) — so the application's CSP
+`style-src 'self'` is NEVER weakened (no per-request inline `<style>`). Do not
+regress this into an inline style.
 
 ## Lifecycle — draft → validate → preview → publish → rollback/retire
 
-Route admin di `src/pages/api/v1/theming/*`:
+Admin routes in `src/pages/api/v1/theming/*`:
 
-- **draft** (`PUT /api/v1/theming/draft`, `draft.ts`) — satu working copy mutable
+- **draft** (`PUT /api/v1/theming/draft`, `draft.ts`) — one mutable working copy
   per tenant. Guard `theming.config.update`.
-- **validate** (`POST /api/v1/theming/validate`, `validate.ts`) — dry-run
-  read-only, mengembalikan token CSS yang AKAN diproduksi. Guard
-  `theming.config.read` (bukan mutasi).
-- **preview** (`POST /api/v1/theming/preview`, `preview.ts` → halaman
+- **validate** (`POST /api/v1/theming/validate`, `validate.ts`) — read-only
+  dry-run, returns the CSS tokens that WOULD be produced. Guard
+  `theming.config.read` (not a mutation).
+- **preview** (`POST /api/v1/theming/preview`, `preview.ts` → page
   `src/pages/theming/preview/[token].astro` + `preview-tokens/[token].css.ts`) —
-  sesi terautorisasi berumur pendek & **non-indexable**. Token disimpan sebagai
-  **hash SHA-256** (`domain/preview-token.ts`), `X-Robots-Tag: noindex`,
-  `private, no-store`, namespace URL berbeda dari stylesheet publik (tidak bisa
-  meracuni cache publik/CDN). Guard `theming.preview.create`.
-- **publish** (`POST /api/v1/theming/publish`, `publish.ts`) — INSERT versi baru
-  **immutable** lalu jadikan tampilan live. Guard `theming.version.publish`.
-- **rollback** (`POST /api/v1/theming/rollback`, `rollback.ts`) — pindahkan
-  active pointer ke versi published lebih awal. Guard `theming.version.restore`.
+  a short-lived, authorized & **non-indexable** session. The token is stored as a
+  **SHA-256 hash** (`domain/preview-token.ts`), `X-Robots-Tag: noindex`,
+  `private, no-store`, a URL namespace distinct from the public stylesheet
+  (cannot poison the public/CDN cache). Guard `theming.preview.create`.
+- **publish** (`POST /api/v1/theming/publish`, `publish.ts`) — INSERT a new
+  **immutable** version then make it the live view. Guard
+  `theming.version.publish`.
+- **rollback** (`POST /api/v1/theming/rollback`, `rollback.ts`) — move the active
+  pointer to an earlier published version. Guard `theming.version.restore`.
 
-> **Ketiganya WAJIB meng-enqueue purge cache tepi** (#246). `publish.ts`,
-> `rollback.ts`, dan `retire.ts` masing-masing memanggil
-> `enqueueModuleContentPurge(tx, tenantId, THEMING_MODULE_KEY, …)` **di dalam
-> transaksi yang sama** dengan perubahannya (disiplin outbox ADR-0006 — enqueue
-> di luar transaksi bisa mem-purge perubahan yang lalu di-rollback). Gate
-> `bun run edge-cache:surfaces:check` menegakkannya: tiap modul yang memiliki
-> surface ter-deklarasi wajib punya call-site purge, jadi menambah rute mutasi
-> theming baru tanpa purge = CI merah. Lihat `awcms-edge-cache`.
+> **All three MUST enqueue an edge cache purge** (#246). `publish.ts`,
+> `rollback.ts`, and `retire.ts` each call
+> `enqueueModuleContentPurge(tx, tenantId, THEMING_MODULE_KEY, …)` **inside the
+> same transaction** as their change (the ADR-0006 outbox discipline — enqueuing
+> outside the transaction can purge a change that is then rolled back). The gate
+> `bun run edge-cache:surfaces:check` enforces it: every module that owns a
+> declared surface must have a purge call site, so adding a new theming mutation
+> route without a purge = red CI. See `awcms-edge-cache`.
 
-- **retire** (`POST /api/v1/theming/retire`, `retire.ts`) — kosongkan active
-  pointer; situs fallback ke theme default. Guard `theming.version.archive`.
-- **index** (`GET /api/v1/theming`, `index.ts`) — baca state, theme tersedia,
-  draft, dan histori versi. Guard `theming.config.read`.
+- **retire** (`POST /api/v1/theming/retire`, `retire.ts`) — clear the active
+  pointer; the site falls back to the default theme. Guard
+  `theming.version.archive`.
+- **index** (`GET /api/v1/theming`, `index.ts`) — read state, available themes,
+  draft, and version history. Guard `theming.config.read`.
 
-## Immutability published version — TIGA lapis
+## Published-version immutability — THREE layers
 
-`awcms_theming_config_versions` memegang satu `draft` mutable per tenant PLUS
-versi `published` bernomor (monotonic per tenant). Published **tidak pernah**
-bisa dimutasi, ditegakkan di **tiga lapis**: (1) engine aplikasi hanya
-INSERT-only, tak pernah UPDATE baris published lama; (2) trigger
-`BEFORE UPDATE OR DELETE` di sql/033 RAISES pada percobaan mutasi/hapus baris
-`status = 'published'`; (3) active pointer (theme + versi mana yang live) hidup
-di `awcms_theming_tenant_state`, jadi rollback/retire **memindahkan pointer**,
-tak pernah menyentuh baris versi. "Sebuah perubahan = sebuah versi baru".
+`awcms_theming_config_versions` holds one mutable `draft` per tenant PLUS
+numbered `published` versions (monotonic per tenant). Published can **never** be
+mutated, enforced in **three layers**: (1) the application engine is INSERT-only,
+it never UPDATEs an old published row; (2) a `BEFORE UPDATE OR DELETE` trigger in
+sql/033 RAISES on any attempt to mutate/delete a `status = 'published'` row;
+(3) the active pointer (which theme + which version is live) lives in
+`awcms_theming_tenant_state`, so rollback/retire **move the pointer** and never
+touch a version row. "One change = one new version".
 
-## Preview retention — read-filter, bukan purge job
+## Preview retention — a read filter, not a purge job
 
-`awcms_theming_preview_sessions` TIDAK punya background purge. Sesi tetap aman
-karena **setiap read memfilter `expires_at >= now()`**
-(`application/theme-preview-directory.ts`) — sesi kedaluwarsa jadi inert.
-Jangan asumsikan ada job pembersih.
+`awcms_theming_preview_sessions` has NO background purge. Sessions stay safe
+because **every read filters `expires_at >= now()`**
+(`application/theme-preview-directory.ts`) — an expired session is inert. Do not
+assume a cleanup job exists.
 
-> **Alasan aslinya sudah kedaluwarsa.** Versi sebelumnya menerangkan ketiadaan purge dengan "engine generik `data_lifecycle` tidak ada di base ini" dan "tak ada `awcms_worker`".
-> **Dua-duanya sekarang ada** — `data_lifecycle` modul
-> terdaftar (ADR-0037, `sql/055`–`056`) dengan 7 modul adopter, dan role
-> `awcms_worker` dibuat `sql/022`. Read-filter tetap desain yang sah dan tidak
-> perlu diubah; yang tidak sah adalah menyebut penyebabnya sesuatu yang keliru,
-> karena itu menutup opsi mendaftarkan deskriptor `dataLifecycle` di sini kalau
-> nanti memang diinginkan.
+> **The original reason has expired.** An earlier version explained the absence of a purge with "the generic `data_lifecycle` engine does not exist in this base" and "there is no `awcms_worker`".
+> **Both now exist** — the `data_lifecycle` module is
+> registered (ADR-0037, `sql/055`–`056`) with 7 adopter modules, and the
+> `awcms_worker` role was created in `sql/022`. The read filter is still a
+> legitimate design and does not need to change; what is not legitimate is naming
+> a cause that is wrong, because that closes off the option of registering a
+> `dataLifecycle` descriptor here if that is later wanted.
 
 ## Guard, idempotency, audit
 
-- **ABAC** — setiap route memakai `authorizeInTransaction` di dalam `withTenant`
-  dengan `{ moduleKey: "theming", activityCode, action }`. Konstanta di
+- **ABAC** — every route uses `authorizeInTransaction` inside `withTenant` with
+  `{ moduleKey: "theming", activityCode, action }`. Constants live in
   `domain/theme-permissions.ts` (`THEMING_CONFIG_ACTIVITY_CODE = "config"`,
   `THEMING_VERSION_ACTIVITY_CODE = "version"`, `THEMING_PREVIEW_ACTIVITY_CODE =
-"preview"`) — reuse konstanta, jangan re-type literal (mirror persis seed
-  sql/034). Default-deny; akses ditolak → `403`, tidak pernah data kosong diam.
-- **Idempotency** — SEMUA mutasi high-risk (publish/rollback/retire) WAJIB
-  `Idempotency-Key` (`findIdempotencyRecord`/`saveIdempotencyRecord`; key ulang
-  dengan payload beda → `409`). Lihat `awcms-idempotency`.
-- **AccessAction** — `archive` DITAMBAHKAN ke union `AccessAction` dan ke
+"preview"`) — reuse the constants, do not re-type the literals (they mirror the
+  sql/034 seed exactly). Default-deny; access denied → `403`, never silently
+  empty data.
+- **Idempotency** — ALL high-risk mutations (publish/rollback/retire) MUST carry
+  an `Idempotency-Key` (`findIdempotencyRecord`/`saveIdempotencyRecord`; a
+  repeated key with a different payload → `409`). See `awcms-idempotency`.
+- **AccessAction** — `archive` was ADDED to the `AccessAction` union and to
   `HIGH_RISK_ACTIONS` (`identity-access/domain/access-control.ts`; retire = high
-  risk karena mengubah tampilan publik). `publish`/`restore` sudah high-risk
-  sebelumnya. `config.update`/`config.read`/`preview.create` bukan anggota
-  `HIGH_RISK_ACTIONS`, tapi `config.update` & `preview.create` tetap diaudit.
-- **Audit** — publish/rollback/retire mencatat audit event (`recordAuditEvent`,
-  hook sinkron; BELUM domain event — lihat follow-up). Lihat `awcms-audit-log`.
+  risk because it changes the public appearance). `publish`/`restore` were
+  already high-risk. `config.update`/`config.read`/`preview.create` are not
+  members of `HIGH_RISK_ACTIONS`, but `config.update` & `preview.create` are
+  still audited.
+- **Audit** — publish/rollback/retire record an audit event (`recordAuditEvent`,
+  a synchronous hook; NOT YET a domain event — see follow-up). See
+  `awcms-audit-log`.
 
 ## Permission catalog
 
-Enam permission `theming.*` (sql/034, katalog GLOBAL `awcms_permissions` tanpa
-tenant_id/RLS, unik `(module_key, activity_code, action)`, seed idempotent
+Six `theming.*` permissions (sql/034, GLOBAL catalog `awcms_permissions` with no
+tenant_id/RLS, unique on `(module_key, activity_code, action)`, idempotent seed
 `ON CONFLICT DO NOTHING`): `config.read`, `config.update`, `version.publish`,
 `version.restore` (rollback), `version.archive` (retire), `preview.create`.
-Tenant lama TIDAK retroaktif mendapatkannya — hanya tenant yang dibuat setelah
-migrasi ini jalan (di-seed owner saat setup-wizard bootstrap).
+Existing tenants do NOT get them retroactively — only tenants created after this
+migration runs (seeded to the owner during setup-wizard bootstrap).
 
-## Port adaptations vs awcms-micro (ADR-0034 Fase 3)
+## Port adaptations vs awcms-micro (ADR-0034 Phase 3)
 
-- **Resolusi URL asset SUDAH ter-wire** (#251). `src/modules/theming/presentation/theme-media.ts`
-  me-resolve `config.assetRefs` (slotKey -> media object id) lewat
-  `MediaLibraryPort` — capability yang sama yang dikonsumsi `blog_content` dan
-  `news_portal` — dan `theming` mendeklarasikannya di `capabilities.consumes`.
-  Catatan (modul `news_portal` DILEBUR ke `blog_content` — ADR-0044/#300; nama tabelnya dipertahankan).
-  Port-nya injectable (`media` parameter ke-4, default adapter nyata), jadi
-  jalur omission bisa diuji tanpa DB.
+- **Asset URL resolution IS wired up** (#251). `src/modules/theming/presentation/theme-media.ts`
+  resolves `config.assetRefs` (slotKey -> media object id) through the
+  `MediaLibraryPort` — the same capability consumed by `blog_content` and
+  `news_portal` — and `theming` declares it in `capabilities.consumes`.
+  Note (the `news_portal` module was MERGED into `blog_content` — ADR-0044/#300; its table names were kept).
+  The port is injectable (`media`, 4th parameter, defaulting to the real
+  adapter), so the omission path can be tested without a DB.
 
-  **Keamanan datang dari port, bukan dari berkas ini.**
-  `resolveMediaReferences` hanya mengembalikan id yang ADA, milik tenant ini,
-  dan `verified`/`attached`; id tak-aman/lintas-tenant/terhapus cuma ABSEN dari
-  map — tidak pernah dilempar. Jadi slot yang gagal resolve **dihilangkan**, dan
-  itu disengaja: halaman tema publik tidak boleh 500 karena satu id asset basi.
-  JANGAN menambah pengecekan kepemilikan/status di sini — itu menduplikasi
-  kontrak port di tempat kedua yang bisa menyimpang darinya.
+  **The security comes from the port, not from this file.**
+  `resolveMediaReferences` only returns ids that EXIST, belong to this tenant,
+  and are `verified`/`attached`; unsafe/cross-tenant/deleted ids are simply
+  ABSENT from the map — never thrown. So a slot that fails to resolve is
+  **dropped**, and that is deliberate: a public theme page must not 500 because
+  of one stale asset id. DO NOT add ownership/status checks here — that
+  duplicates the port contract in a second place that can drift from it.
 
-  Sebelum #251 fungsi ini mengembalikan map kosong tanpa syarat, dan header-nya
-  menerangkan itu karena `media_library` tidak ada — penjelasan yang berhenti
-  benar saat ADR-0036 mendarat. Akibatnya: logo yang diunggah tenant tidak
-  pernah tampil, dan kodenya menyatakan itu benar. Perilaku dikunci
-  `tests/theme-media-resolution.test.ts`.
+  Before #251 this function returned an empty map unconditionally, and its header
+  explained that as being because `media_library` did not exist — an explanation
+  that stopped being true when ADR-0036 landed. The consequence: a tenant's
+  uploaded logo never appeared, and the code asserted that was correct. The
+  behaviour is locked down by `tests/theme-media-resolution.test.ts`.
 
-- **Resolusi tenant publik `tenantCode`-based** (ADR-0009), bukan Host-based —
-  stylesheet publik di `/theming/{tenantCode}/tokens.css`.
-- **Tanpa migration/GRANT worker** — tabel mewarisi grant `awcms_app` dari
-  `ALTER DEFAULT PRIVILEGES` sql/019; tak ada GRANT eksplisit.
+- **`tenantCode`-based public tenant resolution** (ADR-0009), not Host-based —
+  the public stylesheet is at `/theming/{tenantCode}/tokens.css`.
+- **No worker migration/GRANT** — the tables inherit the `awcms_app` grant from
+  `ALTER DEFAULT PRIVILEGES` in sql/019; there is no explicit GRANT.
 
-## Belum tersedia (follow-up terdokumentasi, API-first)
+## Not yet available (documented follow-ups, API-first)
 
-Layar admin UI penuh (token editor + preview dashboard responsif) — `navigation`
-sengaja tidak dideklarasikan. Domain event
+A full admin UI screen (token editor + responsive preview dashboard) —
+`navigation` is deliberately not declared. Domain events
 (`awcms.theming.version.published/.rolled-back/.retired`) — publish/rollback/
-retire masih hook sinkron teraudit, `events` tidak dideklarasikan. Rendering
-media asset — menanti modul media di-port. Adopsi public-route (mewire home
-route publik ke `PublicThemeLayout`) — layout + stylesheet siap, wiring
-menyusul. Verifikasi status ini di `module.ts`/README sebelum mengklaim ada.
+retire are still audited synchronous hooks, `events` is not declared. Media asset
+rendering — awaiting the media module being ported. Public-route adoption (wiring
+the public home route to `PublicThemeLayout`) — the layout + stylesheet are
+ready, the wiring follows. Verify this status in `module.ts`/README before
+claiming any of it exists.
 
-## Skill terkait
+## Related skills
 
-`awcms-new-endpoint`, `awcms-new-migration` (RLS FORCE + trigger immutability),
-`awcms-abac-guard` (permission `theming.*`), `awcms-idempotency` (publish/
-rollback/retire), `awcms-audit-log`, `awcms-module-management` (registry base +
-komposisi build-time, ADR-0034), `awcms-new-module` (pola menambah modul domain
-LANGSUNG ke `src/modules/`).
+`awcms-new-endpoint`, `awcms-new-migration` (RLS FORCE + immutability trigger),
+`awcms-abac-guard` (the `theming.*` permissions), `awcms-idempotency` (publish/
+rollback/retire), `awcms-audit-log`, `awcms-module-management` (base registry +
+build-time composition, ADR-0034), `awcms-new-module` (the pattern for adding a
+domain module DIRECTLY to `src/modules/`).

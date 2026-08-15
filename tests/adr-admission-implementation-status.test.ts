@@ -40,7 +40,7 @@ import { listModules } from "../src/modules";
  * be unmissable in the rendered document rather than a tidy machine token: the
  * reader it protects is a human skimming for "can I use this".
  */
-const NOT_IMPLEMENTED_MARKER = "BELUM DIIMPLEMENTASIKAN DI REPO INI";
+const NOT_IMPLEMENTED_MARKER = "NOT YET IMPLEMENTED IN THIS REPO";
 
 /** `# ADR-00NN — Admission of \`module_key\` as …` */
 const ADMISSION_TITLE = /Admission of `([a-z_]+)`/;
@@ -48,6 +48,12 @@ const ADMISSION_TITLE = /Admission of `([a-z_]+)`/;
 async function readAdrs(): Promise<{ name: string; body: string }[]> {
   const dir = path.resolve(process.cwd(), "docs/adr");
   const names = (await readdir(dir))
+    // `NNNN-slug.id.md` is the Indonesian MIRROR of an ADR, not a second ADR
+    // (ADR-0097). The `.*` swallows the `.id`, so without this guard every
+    // mirror is scanned as its own decision — and it fails, because the marker
+    // it must carry is a controlled ENGLISH phrase while the mirror translates
+    // its prose. The mirror is already held to its source by `i18n-source-hash`.
+    .filter((name) => !name.endsWith(".id.md"))
     .filter((name) => /^\d{4}-.*\.md$/.test(name))
     .sort();
 
@@ -67,7 +73,15 @@ describe("admission ADRs agree with the module registry", () => {
     let admissions = 0;
 
     for (const adr of adrs) {
-      const match = adr.body.split("\n")[0]?.match(ADMISSION_TITLE);
+      // The TITLE line, not line zero. Under ADR-0097 every document opens with
+      // a bilingual banner (`🇬🇧 English (source) · …`), so line zero stopped
+      // being the heading — and this loop silently matched nothing, leaving
+      // `admissions` at 0. That is why the count assertion below exists: without
+      // it the suite would have gone green while checking no ADR at all.
+      const match = adr.body
+        .split("\n")
+        .find((line) => line.startsWith("# "))
+        ?.match(ADMISSION_TITLE);
 
       if (!match?.[1]) {
         continue;

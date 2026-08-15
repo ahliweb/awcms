@@ -1,498 +1,500 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](README.id.md)
+
 # Identity & Access
 
-Login identity, sesi, tenant user membership, dan RBAC/ABAC dasar.
+Login identity, sessions, tenant user membership, and basic RBAC/ABAC.
 
 ## Schema
 
-- `awcms_identities` — `login_identifier` unik per tenant, `password_hash` (Bun native argon2id, tidak pernah diekspos), lockout (`failed_login_count`/`locked_until`).
-- `awcms_tenant_users` — membership identity di tenant, `status` (active/inactive).
-- `awcms_sessions` — token buram: hanya `token_hash` (SHA-256) yang disimpan; token mentah dikembalikan sekali saat login.
-- `awcms_permissions` — katalog `(module_key, activity_code, action)`, diseed lewat migration.
-- `awcms_roles`/`awcms_role_permissions`/`awcms_access_assignments` — role per tenant + permission per role + assignment tenant_user->role.
-- `awcms_abac_policies` — belum dipakai evaluator (evaluator generik di `domain/access-control.ts`); disiapkan untuk Sprint 3.
-- `awcms_abac_decision_logs` — setiap keputusan allow/deny tercatat.
+- `awcms_identities` — `login_identifier` unique per tenant, `password_hash` (Bun native argon2id, never exposed), lockout (`failed_login_count`/`locked_until`).
+- `awcms_tenant_users` — identity membership in a tenant, `status` (active/inactive).
+- `awcms_sessions` — opaque tokens: only the `token_hash` (SHA-256) is stored; the raw token is returned once at login.
+- `awcms_permissions` — catalogue of `(module_key, activity_code, action)`, seeded through a migration.
+- `awcms_roles`/`awcms_role_permissions`/`awcms_access_assignments` — roles per tenant + permissions per role + tenant_user->role assignment.
+- `awcms_abac_policies` — not yet used by the evaluator (generic evaluator in `domain/access-control.ts`); prepared for Sprint 3.
+- `awcms_abac_decision_logs` — every allow/deny decision is recorded.
 
-Skema: `sql/004_awcms_identity_login_schema.sql`, `sql/005_awcms_abac_access_control_schema.sql`.
+Schema: `sql/004_awcms_identity_login_schema.sql`, `sql/005_awcms_abac_access_control_schema.sql`.
 
 ## Access-management reads (admin, read-only — Issue #166)
 
-`application/access-directory.ts` mengekspos tiga list bertenant, semua di-gate
-`identity_access.access_control.read` dan dipakai oleh endpoint JSON **dan**
-layar admin SSR (`src/pages/admin/{users,roles,abac-policies}.astro`):
+`application/access-directory.ts` exposes three tenant-scoped lists, all gated by
+`identity_access.access_control.read` and used by the JSON endpoints **and**
+the SSR admin screens (`src/pages/admin/{users,roles,abac-policies}.astro`):
 
-- `listTenantUsers` → `GET /api/v1/users` — user tenant + kode role yang
-  di-assign. `login_identifier` **selalu ter-mask** via `maskIdentifierValue`
-  (PII tak pernah dikembalikan mentah di list).
-- `listRoles` → `GET /api/v1/roles` — role tenant non-deleted + jumlah permission.
-- `listAbacPolicies` → `GET /api/v1/abac/policies` — policy ABAC tenant
-  (default seeded-kosong; evaluator generik memakai aturan built-in).
+- `listTenantUsers` → `GET /api/v1/users` — tenant users + the role codes
+  assigned to them. `login_identifier` is **always masked** via `maskIdentifierValue`
+  (PII is never returned raw in a list).
+- `listRoles` → `GET /api/v1/roles` — non-deleted tenant roles + permission count.
+- `listAbacPolicies` → `GET /api/v1/abac/policies` — tenant ABAC policies
+  (seeded empty by default; the generic evaluator uses built-in rules).
 
-Semua bounded `LIMIT 100` (config low-cardinality, tanpa cursor), tenant-filtered,
-dan berjalan di dalam `withTenant` (RLS FORCE batas nyata).
+All are bounded by `LIMIT 100` (low-cardinality config, no cursor), tenant-filtered,
+and run inside `withTenant` (RLS FORCE is the real boundary).
 
 ## Access-management writes (admin — Issue #171)
 
-Layar admin `roles`/`abac-policies`/`users` kini punya aksi tulis, masing-masing
-di-gate default-deny oleh `authorizeInTransaction` di dalam `withTenant`; gate
-UI hanya UX, endpoint-lah otoritasnya. Setiap tulis adalah high-risk →
-menulis audit event (severity `warning`) SETELAH tulis sukses (tak ada audit
-di jalur 409/404).
+The `roles`/`abac-policies`/`users` admin screens now have write actions, each
+gated default-deny by `authorizeInTransaction` inside `withTenant`; the UI gate
+is only UX, the endpoint is the authority. Every write is high-risk →
+it writes an audit event (severity `warning`) AFTER the write succeeds (no audit
+on the 409/404 paths).
 
-**Catatan permission (penting).** Katalog `awcms_permissions` (`sql/005`)
-menyemai aktivitas `identity_access.access_control` HANYA dengan
-`read`/`assign`/`configure` — TIDAK ada `create`/`update`/`delete`. Owner
-di-grant seluruh baris katalog saat bootstrap, jadi guard pada action
-tak-ter-seed akan men-deny bahkan owner. Karena itu semua tulis di sini memakai
-action ter-seed:
+**Permission note (important).** The `awcms_permissions` catalogue (`sql/005`)
+seeds the `identity_access.access_control` activity with ONLY
+`read`/`assign`/`configure` — there is NO `create`/`update`/`delete`. The owner
+is granted every catalogue row at bootstrap, so a guard on an un-seeded action
+will deny even the owner. That is why every write here uses a seeded
+action:
 
 - `POST /api/v1/roles`, `PATCH`/`DELETE /api/v1/roles/{id}`,
   `POST /api/v1/roles/{id}/restore`, `POST`/`DELETE /api/v1/roles/{id}/permissions`
-  (`application/role-admin.ts`) — buat/rename/soft-delete/restore role + grant/
+  (`application/role-admin.ts`) — create/rename/soft-delete/restore role + grant/
   revoke permission. Gate **`configure`** ("Manage roles and role permissions").
-  Role sistem (`is_system`) tak bisa di-soft-delete (409). Duplikat role code /
-  duplikat grant → 409 di dalam `withTenant`.
+  System roles (`is_system`) cannot be soft-deleted (409). Duplicate role code /
+  duplicate grant → 409 inside `withTenant`.
 - `POST /api/v1/abac/policies`, `PATCH /api/v1/abac/policies/{id}`
-  (`application/abac-admin.ts`) — author + edit + enable/disable policy. Gate
-  **`configure`** (administrasi access-control). Duplikat `policyCode` → 409.
+  (`application/abac-admin.ts`) — author + edit + enable/disable a policy. Gate
+  **`configure`** (access-control administration). Duplicate `policyCode` → 409.
 - `PATCH /api/v1/users/{id}` (`application/user-admin.ts` `setTenantUserStatus`)
-  — activate/deactivate (tak ada `deleted_at`; `status` `active`/`inactive`).
+  — activate/deactivate (there is no `deleted_at`; `status` is `active`/`inactive`).
   Gate **`configure`**.
 - `POST`/`DELETE /api/v1/access/assignments` (`application/user-admin.ts`
   `assignRole`/`unassignRole`) — assign/unassign role↔user. Gate **`assign`**.
-  Assign idempotent di unique index `(tenant_id, tenant_user_id, role_id)`
-  (23505→409); target tak ada → 404 sebelum tulis (anti existence-oracle).
+  Assign is idempotent on the unique index `(tenant_id, tenant_user_id, role_id)`
+  (23505→409); a missing target → 404 before the write (anti existence-oracle).
 
-Klien admin memakai helper `sendJson(method, url, body?)`
-(`src/lib/ui/admin-form-client.ts`) untuk PATCH/DELETE — script eksternal
+The admin client uses the `sendJson(method, url, body?)` helper
+(`src/lib/ui/admin-form-client.ts`) for PATCH/DELETE — an external script
 (CSP-safe).
 
 ## Auth flow
 
-`POST /api/v1/auth/login` — header `X-AWCMS-Tenant-ID` wajib, rate limit per `clientIp:tenantId` (backstop di luar lockout per-identity), verifikasi password, set cookie httpOnly (`awcms_session`/`awcms_tenant_id`) + kembalikan token untuk klien API. `POST /api/v1/auth/logout` merevoke sesi. `GET /api/v1/auth/me` hanya menerima bearer token.
+`POST /api/v1/auth/login` — the `X-AWCMS-Tenant-ID` header is mandatory, rate limit per `clientIp:tenantId` (a backstop outside the per-identity lockout), password verification, sets httpOnly cookies (`awcms_session`/`awcms_tenant_id`) + returns a token for API clients. `POST /api/v1/auth/logout` revokes the session. `GET /api/v1/auth/me` only accepts a bearer token.
 
-Pembagian layer login: `domain/login-policy.ts` murni fungsi keputusan (`evaluateLoginAttempt`); `application/login-policy.ts` memegang bagian yang bergantung environment/infra — ambang dari env (`resolveLoginPolicyConfig`), argon2id verify (`verifyPasswordOrDummy`), dan bentuk response tiap deny reason (`resolveLoginDenyResponse`) — sehingga route tetap tipis dan aturannya bisa diuji tanpa database.
+Login layer split: `domain/login-policy.ts` is a pure decision function (`evaluateLoginAttempt`); `application/login-policy.ts` holds the environment/infra-dependent parts — thresholds from env (`resolveLoginPolicyConfig`), argon2id verify (`verifyPasswordOrDummy`), and the response shape for each deny reason (`resolveLoginDenyResponse`) — so the route stays thin and the rules can be tested without a database.
 
-### Audit & pengerasan login (Issue #145, #147)
+### Login audit & hardening (Issue #145, #147)
 
-- **Audit** — login menulis `login_succeeded`/`login_failed` ke `awcms_audit_events` (`module_key: identity_access`, `resource_type: identity`). Baris `login_failed` ditulis di transaksi yang sama dengan UPDATE `failed_login_count` sehingga ikut commit; bila transaksi rollback, recorder out-of-band menulis ulang `reason: internal_error` di transaksi baru lalu error asli tetap dilempar. Ini yang membuat reset `failed_login_count = 0` saat login sukses tidak lagi menghapus jejak brute-force yang mendahuluinya.
-- **Atribut audit** — hanya `method`, `reason`, `ipHash`, `userAgent`. **Tidak pernah** IP mentah (`redactSensitiveAttributes` akan mengubahnya jadi `[REDACTED]` — kolom kosong permanen) dan **tidak pernah** `loginIdentifier` (umumnya email/PII, dan menyimpan string dari penyerang pada percobaan gagal justru menciptakan kebocoran enumerasi). `ipHash` = HMAC-SHA256 ber-key dari `src/lib/security/client-fingerprint.ts`: stabil untuk pengelompokan per sumber, tapi tidak reversible.
-- **Anti-enumerasi** — identifier tak dikenal tetap membayar satu argon2id verify melawan dummy hash konstan (menghapus oracle timing ~75 ms vs ~0 ms), dan deny reason `locked` menjawab persis sama dengan `invalid_credentials`. `tenant_inactive` sengaja tetap dibedakan (tenant disebut caller di header, jadi tidak membocorkan identity mana yang ada).
-- **Ambang env** — dibaca lewat `parsePositiveIntEnv`: nilai non-numerik/nol/negatif jatuh ke default disertai `log("warning", ...)`, bukan `NaN` yang membuat `failedLoginCount >= NaN` selalu false dan mematikan lockout secara diam-diam.
-- **Env baru** — `TRUSTED_PROXY_ENABLED` (default `false`): `X-Forwarded-For` hanya dipercaya sebagai kunci rate limit bila di-set `true`; selain itu `clientAddress` yang dipakai, supaya penyerang pada topologi terekspos-langsung tak bisa memalsukan header per request untuk selalu dapat bucket baru. `TRUSTED_PROXY_HOP_COUNT` (default `1`) menentukan entri mana yang dibaca: dihitung **dari kanan** sejauh angka itu, karena entri di kiri hop tepercaya Anda ditulis oleh sesuatu yang tidak Anda kendalikan (#438) — sebelumnya entri paling kiri yang dibaca, dan di belakang proxy yang MENAMBAH (bukan menimpa) header itu penyerang bisa memilih bucket-nya sendiri kembali. `AUTH_IP_HASH_SECRET` (opsional) meng-key HMAC `ipHash`; bila kosong/placeholder, kunci acak per proses dipakai (tetap non-reversible, tapi `ipHash` tak bisa dibandingkan lintas restart/instance) dan satu warning ditulis.
+- **Audit** — login writes `login_succeeded`/`login_failed` to `awcms_audit_events` (`module_key: identity_access`, `resource_type: identity`). The `login_failed` row is written in the same transaction as the `failed_login_count` UPDATE so it commits with it; if the transaction rolls back, an out-of-band recorder rewrites it with `reason: internal_error` in a new transaction and the original error is still thrown. This is what makes resetting `failed_login_count = 0` on a successful login no longer erase the brute-force trail that preceded it.
+- **Audit attributes** — only `method`, `reason`, `ipHash`, `userAgent`. **Never** the raw IP (`redactSensitiveAttributes` would turn it into `[REDACTED]` — a permanently empty column) and **never** `loginIdentifier` (usually email/PII, and storing an attacker-supplied string on failed attempts actually creates an enumeration leak). `ipHash` = keyed HMAC-SHA256 from `src/lib/security/client-fingerprint.ts`: stable for grouping per source, but not reversible.
+- **Anti-enumeration** — an unknown identifier still pays for one argon2id verify against a constant dummy hash (removing the ~75 ms vs ~0 ms timing oracle), and the `locked` deny reason answers exactly the same as `invalid_credentials`. `tenant_inactive` is deliberately kept distinct (the tenant is named by the caller in the header, so it does not leak which identities exist).
+- **Env thresholds** — read via `parsePositiveIntEnv`: non-numeric/zero/negative values fall back to the default with a `log("warning", ...)`, rather than a `NaN` that would make `failedLoginCount >= NaN` always false and silently disable lockout.
+- **New env** — `TRUSTED_PROXY_ENABLED` (default `false`): `X-Forwarded-For` is only trusted as a rate-limit key when set to `true`; otherwise `clientAddress` is used, so an attacker on a directly-exposed topology cannot forge the header per request to always get a fresh bucket. `TRUSTED_PROXY_HOP_COUNT` (default `1`) determines which entry is read: counted **from the right** by that number, because the entries to the left of your trusted hop are written by something you do not control (#438) — previously the leftmost entry was read, and behind a proxy that APPENDS (rather than overwrites) that header an attacker could pick their own bucket again. `AUTH_IP_HASH_SECRET` (optional) keys the `ipHash` HMAC; if empty/placeholder, a per-process random key is used (still non-reversible, but `ipHash` cannot be compared across restarts/instances) and one warning is written.
 
 ## RBAC/ABAC
 
-`domain/access-control.ts` — `evaluateAccess()`: default deny, deny overrides allow, permission diidentifikasi `module_key.activity_code.action`. `application/access-guard.ts` — `authorizeInTransaction()` adalah satu-satunya chokepoint yang dipanggil setiap route terproteksi.
+`domain/access-control.ts` — `evaluateAccess()`: default deny, deny overrides allow, a permission is identified as `module_key.activity_code.action`. `application/access-guard.ts` — `authorizeInTransaction()` is the single chokepoint called by every protected route.
 
-Status disabled sebuah modul bukan sekadar sinyal UI: `authorizeInTransaction` mengecek `resolveModuleEnabled(tx, tenantId, guard.moduleKey)` (`auth-context.ts`) **sebelum** permission di-lookup, sehingga modul yang dinonaktifkan untuk sebuah tenant ditolak `403 MODULE_DISABLED` apa pun permission yang dipegang aktor, dan penolakannya tetap tercatat di decision log (`matchedPolicy: "module_disabled"`). Karena guard ini dipakai setiap endpoint terproteksi, satu cek ini menutup seluruh endpoint milik modul nonaktif tanpa menyentuh tiap route. `module_management` sendiri `isCore` (tidak bisa dinonaktifkan), jadi tenant tak pernah terkunci dari mengaktifkannya kembali.
+A module's disabled status is not merely a UI signal: `authorizeInTransaction` checks `resolveModuleEnabled(tx, tenantId, guard.moduleKey)` (`auth-context.ts`) **before** the permission is looked up, so a module disabled for a tenant is denied `403 MODULE_DISABLED` whatever permissions the actor holds, and the denial is still recorded in the decision log (`matchedPolicy: "module_disabled"`). Because this guard is used by every protected endpoint, this single check closes every endpoint of a disabled module without touching any individual route. `module_management` itself is `isCore` (cannot be disabled), so a tenant is never locked out of re-enabling it.
 
 ## Dynamic ABAC policy evaluator (Issue #179)
 
-Sampai Issue #179, `evaluateAccess` tidak pernah membaca baris `awcms_abac_policies` — otorisasi hanya RBAC + guard bawaan (dan CRUD flat #171 di `/api/v1/abac/policies` menulis tabel yang tak pernah dievaluasi). Issue ini menghubungkan **kebijakan tersimpan** ke chokepoint `authorizeInTransaction` secara **default-deny** tanpa melemahkan guard yang ada. Keputusan penuh (DSL, precedence, cache, dua permukaan) ada di **[ADR-0033](../../../docs/adr/0033-abac-dynamic-policy-evaluator.md)**; ringkasannya:
+Until Issue #179, `evaluateAccess` never read `awcms_abac_policies` rows — authorization was RBAC + built-in guards only (and the flat #171 CRUD at `/api/v1/abac/policies` wrote to a table that was never evaluated). This issue connects **stored policies** to the `authorizeInTransaction` chokepoint in a **default-deny** way without weakening the existing guards. The full decision (DSL, precedence, cache, two surfaces) is in **[ADR-0033](../../../docs/adr/0033-abac-dynamic-policy-evaluator.md)**; a summary:
 
-- **DSL (`domain/abac-policy.ts`).** `conditions` = AST jsonb terbatas: node `allOf`/`anyOf`/`not` dan leaf `{attr, op, value}` atau `{attr, op, valueAttr}` (attr-ke-attr untuk cek kepemilikan). Attribute dari **allow-list server-side** (`subject.*` dari context terautentikasi — bukan body klien; `resource.*` dari `request.resourceAttributes` yang wajib diisi endpoint dari resource nyata; `action`; `env.*` server-derived, `env.ipTrusted` default `false`). Operator: `eq/ne/in/nin/lt/lte/gt/gte/exists` (perbandingan hanya numeric/date). `dsl_version` mulai 1. Parser/validator **fail-closed**; keanggotaan allow-list **own-property saja** (`hasOwnProperty`) agar key prototype (`__proto__`/`constructor`/…) tak lolos.
-- **Evaluator (`domain/abac-evaluator.ts`).** Interpreter **murni** atas AST — tanpa `eval`/`new Function`/dynamic import/SQL. `evaluateAccess` memperoleh param opsional ke-5 `abac?: { policies, env }` (setelah `businessScopeFacts` param ke-4); bila absen/kosong → ABAC no-op (semua call site lama ≤4 argumen tak terpengaruh).
-- **Precedence (fail-closed).** Setelah guard bawaan (tenant isolation, self-approval, force-decision, business-scope #180) dan filter applicability (nullable = wildcard): (1) **DENY eksplisit menang** — `deny` terpenuhi, kebijakan aktif invalid, atau error evaluasi apa pun → DENY, **sebelum** cek RBAC; (2) **permission RBAC tetap wajib** — `allow` tak pernah menciptakan permission; (3) `allow` sebagai **constraint** — bila ada yang applicable, minimal satu harus terpenuhi, jika tidak → DENY (`abac_allow_unsatisfied`). Enforcement SoD #181 tetap additif setelah keputusan ini.
-- **Cache (`application/policy-cache.ts`).** Kebijakan aktif **DSL-managed** dikompilasi sekali per tenant, di-cache in-process **tenant-keyed**, di-invalidasi **deterministik** oleh setiap create/update/enable/disable **dari kedua permukaan** (`invalidatePolicyCache` **setelah commit**). `queryAndCompile` memfilter `is_active AND is_dsl_managed` — hanya kebijakan DSL yang dievaluasi. Load selalu di `withTenant` (RLS + `awcms_app`). Batasan: invalidasi per-proses (multi-instance butuh LISTEN/NOTIFY/TTL).
-- **Dua permukaan authoring — hanya DSL yang dikonsumsi.** Baru (DSL, #179): `GET/POST /api/v1/access/policies`, `GET/PUT /api/v1/access/policies/{id}`, `POST /api/v1/access/policies/{id}/{enable,disable}` (guard `identity_access.abac_policies.{read,configure}`, DSL penuh, audited) + `POST /api/v1/access/policies/simulate` (guard `.analyze`, read-only, audit tanpa decision log; subjek asing juga butuh `access_control.read`) + `POST /api/v1/access/evaluate` (mencerminkan keputusan nyata). Permission di-seed `sql/032`, kolom DSL `sql/031`. Lama (#171): `/api/v1/abac/policies` flat — hanya `effect`/`description`/`is_active`, **tak bisa** di-scope/dikondisikan. **Diskriminator `is_dsl_managed`** (`sql/031`, default `false`): baris flat **tidak pernah dibaca evaluator** (kalau tidak, sebuah `deny` flat = wildcard + selalu-benar = men-deny SETIAP request = brick tenant tanpa pemulihan in-band); **hanya** permukaan DSL menyetel `is_dsl_managed = true` (INSERT + UPDATE). Baris flat tetap inert (perilaku pra-#179); invalidasi cache-nya kini no-op defensif; migrasi `sql/031` deploy-safe. **Part B**: validator DSL (`validateAbacPolicyInput`) menolak `deny` yang unscoped + unconditional (`{allOf:[]}`) — footgun deny-semua ditutup di kedua permukaan. Lihat [ADR-0033](../../../docs/adr/0033-abac-dynamic-policy-evaluator.md) §3.
-- **Contoh (bukan base).** Base **tidak** menyertakan kebijakan domain. Lima contoh ERP ada di `fixtures/abac-example-policies.json` untuk di-author lewat API.
+- **DSL (`domain/abac-policy.ts`).** `conditions` = a restricted jsonb AST: `allOf`/`anyOf`/`not` nodes and `{attr, op, value}` or `{attr, op, valueAttr}` leaves (attr-to-attr for ownership checks). Attributes come from a **server-side allow-list** (`subject.*` from the authenticated context — not the client body; `resource.*` from `request.resourceAttributes`, which the endpoint must fill from the real resource; `action`; `env.*` server-derived, `env.ipTrusted` default `false`). Operators: `eq/ne/in/nin/lt/lte/gt/gte/exists` (comparisons numeric/date only). `dsl_version` starts at 1. The parser/validator is **fail-closed**; allow-list membership is **own-property only** (`hasOwnProperty`) so prototype keys (`__proto__`/`constructor`/…) do not slip through.
+- **Evaluator (`domain/abac-evaluator.ts`).** A **pure** interpreter over the AST — no `eval`/`new Function`/dynamic import/SQL. `evaluateAccess` gains an optional 5th param `abac?: { policies, env }` (after `businessScopeFacts` as the 4th param); if absent/empty → ABAC is a no-op (every old call site with ≤4 arguments is unaffected).
+- **Precedence (fail-closed).** After the built-in guards (tenant isolation, self-approval, force-decision, business-scope #180) and the applicability filter (nullable = wildcard): (1) **explicit DENY wins** — a satisfied `deny`, an invalid active policy, or any evaluation error → DENY, **before** the RBAC check; (2) **the RBAC permission is still required** — `allow` never creates a permission; (3) `allow` acts as a **constraint** — if any are applicable, at least one must be satisfied, otherwise → DENY (`abac_allow_unsatisfied`). SoD enforcement #181 remains additive after this decision.
+- **Cache (`application/policy-cache.ts`).** Active **DSL-managed** policies are compiled once per tenant, cached in-process **tenant-keyed**, and invalidated **deterministically** by every create/update/enable/disable **from both surfaces** (`invalidatePolicyCache` **after commit**). `queryAndCompile` filters `is_active AND is_dsl_managed` — only DSL policies are evaluated. Loading always happens in `withTenant` (RLS + `awcms_app`). Limitation: invalidation is per-process (multi-instance needs LISTEN/NOTIFY/TTL).
+- **Two authoring surfaces — only the DSL one is consumed.** New (DSL, #179): `GET/POST /api/v1/access/policies`, `GET/PUT /api/v1/access/policies/{id}`, `POST /api/v1/access/policies/{id}/{enable,disable}` (guard `identity_access.abac_policies.{read,configure}`, full DSL, audited) + `POST /api/v1/access/policies/simulate` (guard `.analyze`, read-only, audited without a decision log; a foreign subject also needs `access_control.read`) + `POST /api/v1/access/evaluate` (mirrors the real decision). Permissions are seeded by `sql/032`, the DSL columns by `sql/031`. Old (#171): `/api/v1/abac/policies` flat — only `effect`/`description`/`is_active`, it **cannot** be scoped/conditioned. **The `is_dsl_managed` discriminator** (`sql/031`, default `false`): flat rows are **never read by the evaluator** (otherwise a flat `deny` = wildcard + always-true = denying EVERY request = bricking the tenant with no in-band recovery); **only** the DSL surface sets `is_dsl_managed = true` (INSERT + UPDATE). Flat rows stay inert (pre-#179 behaviour); their cache invalidation is now a defensive no-op; the `sql/031` migration is deploy-safe. **Part B**: the DSL validator (`validateAbacPolicyInput`) rejects a `deny` that is unscoped + unconditional (`{allOf:[]}`) — the deny-everything footgun is closed on both surfaces. See [ADR-0033](../../../docs/adr/0033-abac-dynamic-policy-evaluator.md) §3.
+- **Examples (not base).** The base does **not** ship domain policies. Five ERP examples live in `fixtures/abac-example-policies.json` to be authored through the API.
 
 ## Business-scope hierarchy (Issue #180)
 
-Lapis authorization organisasi **generik** di atas tenant + role — membatasi akses berdasarkan hierarki organisasi (legal entity, branch, office, department, cost center, project) tanpa memasukkan entitas domain ERP nyata ke base. Diport dari awcms-mini (Issue #746), **dilucuti** dari segregation-of-duties (SoD, itu Issue #181). Detail penuh: [ADR-0030](../../../docs/adr/0030-business-scope-hierarchy-generic-authorization-layer.md).
+A **generic** organisational authorization layer on top of tenant + role — restricting access by organisational hierarchy (legal entity, branch, office, department, cost center, project) without pulling real ERP domain entities into the base. Ported from awcms-mini (Issue #746), **stripped** of segregation-of-duties (SoD, that is Issue #181). Full detail: [ADR-0030](../../../docs/adr/0030-business-scope-hierarchy-generic-authorization-layer.md).
 
-- **Referensi generik + capability port.** `scope_type`/`scope_id` adalah referensi generik (bukan FK ke tabel organisasi). Validitas/ancestry di-resolve lewat `BusinessScopeHierarchyPort` (`_shared/ports/business-scope-hierarchy-port.ts`, ADR-0011) yang disediakan sebuah **modul penyedia** capability tersebut. Sejak [ADR-0060](../../../docs/adr/0060-business-scope-hierarchy-provided-by-tenant-admin.md) penyedianya adalah **`tenant_admin`** (`office-scope-hierarchy-port-adapter.ts`): scope type `office` di-resolve terhadap `awcms_offices` (hanya baris hidup — bukan soft-deleted, bukan `inactive` — milik tenant sendiri; berbatas kedalaman/jumlah dan aman-siklus), scope type lain tetap `resolved: false`. Sebelumnya base mengirim resolver **no-op** yang menunggu aplikasi turunan; ADR-0034 menghapus jalur itu, sehingga create assignment menolak `scope_unresolved` untuk SEMUA input di SEMUA deployment. Scope type tenant-wide (`tenant`) tak pernah menyentuh port: service me-resolve-nya intrinsik dan **mewajibkan `scope_id` = id tenant itu sendiri**. `identity_access` tetap mendeklarasikan `capabilities.consumes` `business_scope_hierarchy` (`optional: true` — tenant tanpa office tetap jalan, fail-closed); fixture `tests/fixtures/example-domain-modules/` mengirim resolver dummy untuk ancestry heterogen.
-- **Skema (`sql/027`, seed `sql/028`)** — dua tabel tenant-scoped RLS `FORCE`: `awcms_business_scope_assignments` (subject→scope, role opsional, effective dating, `is_temporary`, status active/expired/revoked, grantor/approver/revoker) + `awcms_business_scope_assignment_events` (lifecycle **append-only**). Setiap FK subject/role/actor adalah **FK komposit `(tenant_id, …)`** — RI check PostgreSQL melewati RLS (GHSA-r7cx-c4jh-cvvw/sql/020), jadi FK single-column bisa lintas-tenant walau FORCE aktif; komposit + RLS menutupnya (dibuktikan `tests/integration/business-scope.integration.test.ts` di bawah `awcms_app`).
-- **Integrasi `evaluateAccess`.** Parameter ke-4 opsional `businessScopeFacts` (backward-compatible — call site lama tak berubah). Request opt-in lewat `resourceAttributes.requiredScopeType`/`.requiredScopeId` (+ `requiredScopeRelations`, subset `exact`/`descendant`/`ancestor`, default `["exact"]`). Relasi didukung: **exact, descendant, ancestor, tenant-wide** (`scopeType === "tenant"`). Fakta subjek di-resolve dulu (`business-scope-facts.ts`) agar evaluator tetap murni. `authorizeInTransaction` menerima `options.hierarchyPort` opsional untuk me-resolve + thread fakta.
-- **Fail-closed.** Unknown scope type / unresolved / stale hierarchy → default-**DENY** untuk aksi high-risk. `resolved: false` ≠ "resolved dengan ancestor kosong": coverage descendant/ancestor hanya dari fakta `resolved`, dan exact-match aksi high-risk butuh `resolved: true` (predikat mutation-tested RED).
-- **Effective dating & revocation segera.** `isBusinessScopeAssignmentCurrentlyActive(row, now)` adalah gerbang otoritatif (status = cache). Revoke/expiry berdampak pada keputusan authz berikutnya **tanpa** menunggu job. Job terjadwal `identity-access:business-scope:expiry` (worker) membalik `status` + tulis event/audit sebagai housekeeping.
-- **Endpoint** — `GET`/`POST /api/v1/identity/business-scope/assignments` (list/create; create high-risk, `Idempotency-Key` wajib, self-grant ditolak), `POST …/{id}/revoke`. Guard `identity_access.business_scope_assignments.{read,create,revoke}` default-deny; create/revoke/expire diaudit.
+- **Generic references + capability port.** `scope_type`/`scope_id` are generic references (not FKs to an organisation table). Validity/ancestry is resolved through `BusinessScopeHierarchyPort` (`_shared/ports/business-scope-hierarchy-port.ts`, ADR-0011), which is supplied by a **provider module** for that capability. Since [ADR-0060](../../../docs/adr/0060-business-scope-hierarchy-provided-by-tenant-admin.md) the provider is **`tenant_admin`** (`office-scope-hierarchy-port-adapter.ts`): the `office` scope type resolves against `awcms_offices` (only live rows — not soft-deleted, not `inactive` — belonging to the tenant itself; depth/count bounded and cycle-safe), other scope types stay `resolved: false`. Previously the base shipped a **no-op** resolver waiting for a derived application; ADR-0034 removed that pathway, so creating an assignment rejects `scope_unresolved` for ALL inputs in ALL deployments. The tenant-wide scope type (`tenant`) never touches the port: the service resolves it intrinsically and **requires `scope_id` = the tenant's own id**. `identity_access` still declares `capabilities.consumes` `business_scope_hierarchy` (`optional: true` — a tenant without offices still works, fail-closed); the `tests/fixtures/example-domain-modules/` fixture ships a dummy resolver for heterogeneous ancestry.
+- **Schema (`sql/027`, seed `sql/028`)** — two tenant-scoped RLS `FORCE` tables: `awcms_business_scope_assignments` (subject→scope, optional role, effective dating, `is_temporary`, status active/expired/revoked, grantor/approver/revoker) + `awcms_business_scope_assignment_events` (**append-only** lifecycle). Every subject/role/actor FK is a **composite FK `(tenant_id, …)`** — PostgreSQL RI checks bypass RLS (GHSA-r7cx-c4jh-cvvw/sql/020), so a single-column FK can point across tenants even with FORCE on; composite + RLS closes that (proven by `tests/integration/business-scope.integration.test.ts` running as `awcms_app`).
+- **`evaluateAccess` integration.** An optional 4th parameter `businessScopeFacts` (backward-compatible — old call sites unchanged). Requests opt in through `resourceAttributes.requiredScopeType`/`.requiredScopeId` (+ `requiredScopeRelations`, a subset of `exact`/`descendant`/`ancestor`, default `["exact"]`). Supported relations: **exact, descendant, ancestor, tenant-wide** (`scopeType === "tenant"`). Subject facts are resolved first (`business-scope-facts.ts`) so the evaluator stays pure. `authorizeInTransaction` accepts an optional `options.hierarchyPort` to resolve + thread the facts.
+- **Fail-closed.** Unknown scope type / unresolved / stale hierarchy → default-**DENY** for high-risk actions. `resolved: false` ≠ "resolved with an empty ancestor set": descendant/ancestor coverage comes only from `resolved` facts, and exact-match on high-risk actions requires `resolved: true` (a mutation-tested RED predicate).
+- **Effective dating & immediate revocation.** `isBusinessScopeAssignmentCurrentlyActive(row, now)` is the authoritative gate (status = cache). Revoke/expiry affects the very next authz decision **without** waiting for a job. The scheduled job `identity-access:business-scope:expiry` (worker) flips `status` + writes events/audit as housekeeping.
+- **Endpoints** — `GET`/`POST /api/v1/identity/business-scope/assignments` (list/create; create is high-risk, `Idempotency-Key` mandatory, self-grant rejected), `POST …/{id}/revoke`. Guard `identity_access.business_scope_assignments.{read,create,revoke}` default-deny; create/revoke/expire are audited.
 
 ## Segregation of duties (SoD, Issue #181)
 
-Lapis pembatas SoD **generik** di atas business-scope hierarchy #180 — deteksi konflik pasangan/kelompok permission + exception/override, default-deny, audit-ready. Diport dari awcms-mini (Issue #746), mengisi seam yang #180 tinggalkan. Detail penuh: [ADR-0031](../../../docs/adr/0031-segregation-of-duties-conflict-enforcement.md).
+A **generic** SoD restriction layer on top of the #180 business-scope hierarchy — detection of conflicting permission pairs/groups + exception/override, default-deny, audit-ready. Ported from awcms-mini (Issue #746), filling the seam #180 left behind. Full detail: [ADR-0031](../../../docs/adr/0031-segregation-of-duties-conflict-enforcement.md).
 
-- **Rule descriptor code-only (#178/#181).** `SoDRuleDescriptor` (`_shared/module-contract.ts`) dideklarasikan `module.ts` modul pemilik (`sodRules`) — pasangan `conflictingPermissionKeys` (≥2), `scopeApplicability` (`same_scope_only`/`global_within_tenant`/`any`), `severity`, `exceptionPolicy`. **Base tidak men-hardcode rule domain**; rule mengalir lewat `listModules()` dari modul domain. Contoh ilustratif (≥5) hidup di fixture test-support `tests/fixtures/example-domain-modules/`, **bukan** modul base. Gate `bun run identity-access:sod-registry:check` (`domain/sod-rule-registry.ts`) memvalidasi registry; drift (duplicate ruleKey/owner mismatch) → CI merah.
-- **Matcher murni + dua sumber fakta.** `domain/sod-conflict-evaluation.ts` (tanpa I/O) mendeteksi konflik; fakta subjek di-resolve `business-scope-facts.ts` (`resolveSoDAssignmentFacts`), **menggabung** permission dari assignment business-scope **dan** grant RBAC biasa (`awcms_access_assignments`). `same_scope_only` hierarchy-aware (fakta di ancestor/descendant scope dihitung match); tanpa `requestedScope` → INDETERMINATE (default-deny).
-- **Enforcement dua titik.** Assignment-time: `createBusinessScopeAssignment` menolak `sod_conflict`. Action-time (**fail-closed**): `high-risk-sod-guard.ts` di-wire ke `authorizeInTransaction` untuk setiap aksi high-risk (deny-overrides-allow) — konflik diperiksa saat **eksekusi**, bukan hanya assignment.
-- **Exception = administrative override tersanksi (`sql/029`).** `awcms_sod_conflict_exceptions` (RLS FORCE): scope-bound, time-bound (`effective_to` NOT NULL), revocable, audit `critical`. **Tidak boleh self-approved** (approver ≠ requester, dicek-ulang dari baris; permission approve khusus). Expired/revoked **segera** tak berlaku (`isSoDConflictExceptionCurrentlyValid`: `effective_to` vs `now`, status hanya cache). FK komposit `(tenant_id, …)` + RLS → exception tenant A tak bisa dipakai tenant B (dibuktikan di bawah `awcms_app`).
-- **Decision log append-only.** `awcms_sod_conflict_evaluations` merekam setiap cek (proyeksi aman, tanpa payload). Evaluasi bounded/non-N+1 (query count tetap terhadap ukuran subjek). Job expiry membalik exception `approved` yang lewat menjadi `expired`.
-- **Endpoint** — `GET /api/v1/identity/business-scope/conflicts` (preview/log, keyset), `GET`/`POST …/exceptions` (list/request; create `Idempotency-Key` wajib), `POST …/exceptions/{id}/approve|reject|revoke`. Guard `identity_access.business_scope_conflicts.read` + `business_scope_exceptions.{read,create,approve,reject,revoke}` default-deny (seed `sql/030`).
+- **Code-only rule descriptors (#178/#181).** `SoDRuleDescriptor` (`_shared/module-contract.ts`) is declared in the owning module's `module.ts` (`sodRules`) — a pair of `conflictingPermissionKeys` (≥2), `scopeApplicability` (`same_scope_only`/`global_within_tenant`/`any`), `severity`, `exceptionPolicy`. **The base does not hardcode domain rules**; rules flow in through `listModules()` from domain modules. The illustrative examples (≥5) live in the test-support fixture `tests/fixtures/example-domain-modules/`, **not** in a base module. The gate `bun run identity-access:sod-registry:check` (`domain/sod-rule-registry.ts`) validates the registry; drift (duplicate ruleKey/owner mismatch) → CI red.
+- **A pure matcher + two fact sources.** `domain/sod-conflict-evaluation.ts` (no I/O) detects conflicts; subject facts are resolved by `business-scope-facts.ts` (`resolveSoDAssignmentFacts`), **merging** permissions from business-scope assignments **and** ordinary RBAC grants (`awcms_access_assignments`). `same_scope_only` is hierarchy-aware (facts in an ancestor/descendant scope count as a match); without a `requestedScope` → INDETERMINATE (default-deny).
+- **Enforcement at two points.** Assignment-time: `createBusinessScopeAssignment` rejects `sod_conflict`. Action-time (**fail-closed**): `high-risk-sod-guard.ts` is wired into `authorizeInTransaction` for every high-risk action (deny-overrides-allow) — conflicts are checked at **execution**, not only at assignment.
+- **An exception is a sanctioned administrative override (`sql/029`).** `awcms_sod_conflict_exceptions` (RLS FORCE): scope-bound, time-bound (`effective_to` NOT NULL), revocable, audit `critical`. It **must not be self-approved** (approver ≠ requester, re-checked from the row; a dedicated approve permission). Expired/revoked stops applying **immediately** (`isSoDConflictExceptionCurrentlyValid`: `effective_to` vs `now`, status is only a cache). Composite FK `(tenant_id, …)` + RLS → tenant A's exception cannot be used by tenant B (proven as `awcms_app`).
+- **Append-only decision log.** `awcms_sod_conflict_evaluations` records every check (a safe projection, no payload). Evaluation is bounded/non-N+1 (query count is constant with respect to subject size). The expiry job flips lapsed `approved` exceptions to `expired`.
+- **Endpoints** — `GET /api/v1/identity/business-scope/conflicts` (preview/log, keyset), `GET`/`POST …/exceptions` (list/request; create requires `Idempotency-Key`), `POST …/exceptions/{id}/approve|reject|revoke`. Guard `identity_access.business_scope_conflicts.read` + `business_scope_exceptions.{read,create,approve,reject,revoke}` default-deny (seed `sql/030`).
 
-## MFA TOTP, recovery codes, dan step-up (Issue #184)
+## MFA TOTP, recovery codes, and step-up (Issue #184)
 
-Diport dari awcms-mini, diadaptasi: mini menggerbangi MFA di balik gate "full-online" (#587) yang **tidak ada** di base ini, jadi feature switch di sini adalah `AUTH_MFA_ENABLED` saja — dan itu hanya menggerbangi permukaan **enrollment**. Challenge login, disable, dan step-up digerakkan **state database** (baris factor `active`), bukan flag, sehingga mematikan flag tak pernah bisa membuat identity yang sudah enroll melewati faktor kedua (fail-closed).
+Ported from awcms-mini, adapted: mini gated MFA behind a "full-online" gate (#587) that **does not exist** in this base, so the feature switch here is `AUTH_MFA_ENABLED` alone — and it only gates the **enrollment** surface. Login challenge, disable, and step-up are driven by **database state** (an `active` factor row), not the flag, so turning the flag off can never let an already-enrolled identity skip the second factor (fail-closed).
 
-- **Skema (`sql/024`, dipindahkan `sql/114`)** — sejak [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md) faktor dan recovery code milik **manusia**: `awcms_principal_mfa_factors` (secret TOTP terenkripsi AES-256-GCM — konstruksi `sql/024` dipakai apa adanya, `status` pending/active/disabled, `last_used_step` untuk anti-replay, `disabled_by_tenant_id` untuk jejak reset administratif) dan `awcms_principal_mfa_recovery_codes` (hash sha256, single-use), keduanya **GLOBAL tanpa RLS** ber-kunci `principal_id`, berdiri di atas empat kontrol pengganti ADR-0085 dan gerbang `bun run identity:principal-access:check`. Tetap tenant-scoped RLS `FORCE`: `awcms_mfa_challenges` (jembatan efemeral password→sesi — satu percobaan login di satu tenant) dan `awcms_tenant_mfa_policies` (keputusan produk sebuah tenant). Kedua tabel `awcms_identity_mfa_*` lama dipertahankan sebagai sejarah, hak `awcms_app` diturunkan ke `SELECT`. Plus kolom assurance di `awcms_sessions` (`assurance_level` aal1/aal2, `last_authenticated_at`, `stepped_up_at`).
+- **Schema (`sql/024`, moved by `sql/114`)** — since [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md) factors and recovery codes belong to the **human**: `awcms_principal_mfa_factors` (AES-256-GCM encrypted TOTP secret — the `sql/024` construction is used as-is, `status` pending/active/disabled, `last_used_step` for anti-replay, `disabled_by_tenant_id` for the administrative reset trail) and `awcms_principal_mfa_recovery_codes` (sha256 hash, single-use), both **GLOBAL without RLS** keyed by `principal_id`, standing on ADR-0085's four substitute controls and the gate `bun run identity:principal-access:check`. Still tenant-scoped RLS `FORCE`: `awcms_mfa_challenges` (the ephemeral password→session bridge — one login attempt in one tenant) and `awcms_tenant_mfa_policies` (a tenant's product decision). Both old `awcms_identity_mfa_*` tables are kept as history, with `awcms_app` privileges reduced to `SELECT`. Plus the assurance columns on `awcms_sessions` (`assurance_level` aal1/aal2, `last_authenticated_at`, `stepped_up_at`).
 
-  Permukaan HTTP dan setiap fungsi yang diekspor `application/mfa.ts` **tetap** ber-parameter `(tenantId, identityId)`: yang pindah penyimpanannya, bukan modelnya — Anda bertindak sebagai anggota sebuah tenant. Hop identitas→principal ber-kunci `(tenant_id, id)`, sehingga id identitas dari tenant lain tidak me-resolve apa pun.
+  The HTTP surface and every function exported by `application/mfa.ts` **still** take `(tenantId, identityId)`: what moved is the storage, not the model — you act as a member of a tenant. The identity→principal hop is keyed by `(tenant_id, id)`, so an identity id from another tenant resolves to nothing.
 
-- **Enkripsi secret** — `AUTH_MFA_SECRET_ENCRYPTION_KEY` (32 byte base64), **tanpa default key**: `resolveMfaEncryptionKey` mengembalikan `null` bila hilang/invalid → semua path fail-closed `MFA_MISCONFIGURED`. Backup DB saja tak cukup untuk memperoleh secret. Recovery code di-hash satu arah, verify constant-time (via UPDATE CAS), single-use, regenerable, ditampilkan sekali.
-- **Anti-replay concurrency-safe** — `verifyTotpCode` mengembalikan step absolut; hanya diterima bila `step > last_used_step` DAN advance-nya compare-and-swap (`WHERE ... AND last_used_step < ${step}`). Dua request konkuren pada timestep sama: yang kalah meng-UPDATE nol baris → ditolak sebagai replay. Recovery code dikonsumsi dengan CAS `used_at IS NULL` yang sama. Window drift dibatasi (`AUTH_MFA_TOTP_WINDOW_STEPS`, maks 10).
-- **Challenge login dua tahap** — di `login.ts`, cabang MFA hanya tercapai **setelah** password valid (blok deny sudah `return`), jadi tak ada oracle enumerasi baru: penyerang tanpa password tak pernah sampai. Password valid + factor aktif → `401 MFA_REQUIRED` + `mfaChallengeToken` (bukan sesi). `POST /auth/mfa/totp/verify` (publik, diautentikasi kepemilikan token challenge) menyelesaikannya → sesi **aal2**. Semua jalur deny challenge kolaps ke `MFA_CHALLENGE_INVALID`.
-- **Enforcement policy tenant (nyata)** — `optional` (default) / `required_for_privileged` (memegang permission non-read apa pun) / `required_for_all` via `PUT /api/v1/auth/mfa/policy` (guard `configure`). Bila policy mewajibkan MFA untuk user yang password-nya valid tapi **belum punya factor**, login tidak menerbitkan sesi penuh: ia mengembalikan `401 MFA_ENROLLMENT_REQUIRED` + `mfaEnrollmentToken` (grant `awcms_mfa_challenges` `purpose='enrollment'`) yang **hanya** mengotorisasi `enroll/start`/`enroll/verify` (header `X-AWCMS-MFA-Enrollment-Token`); enrollment selesai → grant dikonsumsi + sesi `aal2`. Fail-closed tapi self-recoverable (tak ada lockout admin); digerbangi `isMfaFeatureEnabled()`.
-- **Assurance & step-up** — sesi punya `assurance_level`. `requireStepUp` adalah gate reusable, dipanggil **setelah** `authorizeInTransaction`. `AUTH_MFA_STEPUP_TTL_SEC` pendek & server-controlled. Kenaikan aal1→aal2 **merotasi** sesi (anti-fixation). **Sudah di-wire** ke seluruh aksi high-risk modul ini: self-service `disable`, `recovery-codes/regenerate`, `admin/reset`, dan `PUT policy` (aplikasi ERP turunan memasang `requireStepUp` pada aksi sensitifnya sendiri, #179/#181).
-- **Lockout per-factor** — `failed_verify_count`/`locked_until` kumulatif (independen source IP & rotasi challenge; `AUTH_MFA_MAX_VERIFY_ATTEMPTS`/`AUTH_MFA_LOCKOUT_MINUTES`), reset saat verify sukses. Factor terkunci kolaps ke `MFA_CHALLENGE_INVALID` (login) / `MFA_LOCKED` (step-up).
-- **Pemilihan & perpindahan tenant** ([ADR-0088](../../../docs/adr/0088-tenant-selection-and-switching.md), `sql/115`) — login **tanpa** `x-awcms-tenant-id` menjawab `409 MEMBERSHIP_SELECTION_REQUIRED` + **token seleksi** (≤120 detik, sekali pakai, dua kolom di `awcms_principals`), ditukar di `POST /api/v1/auth/session/tenant` menjadi sesi pada tenant yang **disebut pemanggil** — tanpa daftar keanggotaan, karena membacanya menuntut scan lintas-tenant yang FORCE RLS tolak. `POST /api/v1/auth/session/switch` memindahkan sesi hidup; sesi ber-`origin_auth` `sso`/`handoff` **ditolak** (`SESSION_NOT_SWITCHABLE`), kalau tidak administrator IdP tenant B bisa meng-assert sebuah alamat lalu berpindah ke tenant A. Keduanya melewati `evaluateTenantEntry`, yang menerapkan ulang serviceability, keanggotaan, kebijakan auth, dan **kebijakan MFA tenant tujuan** — tanpa itu perpindahan tenant adalah bypass MFA. Assurance tidak ikut berpindah (sesi baru selalu `aal1`).
-  - **Invarian yang wajib dipertahankan:** token seleksi TIDAK PERNAH mengautentikasi `authorizeInTransaction`. Jenisnya dibawa namespace hash (`pt-sha256:`) dan ditolak sebagai pernyataan PERTAMA di gerbang, tanpa satu query pun — `tests/principal-selection-token.test.ts` memerah bila penolakan itu dipindahkan ke bawah.
+- **Secret encryption** — `AUTH_MFA_SECRET_ENCRYPTION_KEY` (32 bytes base64), with **no default key**: `resolveMfaEncryptionKey` returns `null` when missing/invalid → every path fails closed with `MFA_MISCONFIGURED`. A DB backup alone is not enough to obtain a secret. Recovery codes are hashed one-way, verified constant-time (via an UPDATE CAS), single-use, regenerable, and shown once.
+- **Concurrency-safe anti-replay** — `verifyTotpCode` returns the absolute step; it is only accepted when `step > last_used_step` AND the advance is a compare-and-swap (`WHERE ... AND last_used_step < ${step}`). Two concurrent requests on the same timestep: the loser UPDATEs zero rows → rejected as a replay. Recovery codes are consumed with the same `used_at IS NULL` CAS. Drift window is bounded (`AUTH_MFA_TOTP_WINDOW_STEPS`, max 10).
+- **Two-stage login challenge** — in `login.ts`, the MFA branch is only reached **after** the password is valid (the deny block has already `return`ed), so there is no new enumeration oracle: an attacker without the password never gets there. Valid password + active factor → `401 MFA_REQUIRED` + `mfaChallengeToken` (not a session). `POST /auth/mfa/totp/verify` (public, authenticated by possession of the challenge token) completes it → an **aal2** session. Every challenge deny path collapses to `MFA_CHALLENGE_INVALID`.
+- **Real tenant policy enforcement** — `optional` (default) / `required_for_privileged` (holding any non-read permission) / `required_for_all` via `PUT /api/v1/auth/mfa/policy` (guard `configure`). When the policy requires MFA for a user whose password is valid but who has **no factor yet**, login does not issue a full session: it returns `401 MFA_ENROLLMENT_REQUIRED` + an `mfaEnrollmentToken` (an `awcms_mfa_challenges` grant with `purpose='enrollment'`) that **only** authorizes `enroll/start`/`enroll/verify` (header `X-AWCMS-MFA-Enrollment-Token`); once enrollment completes → the grant is consumed + an `aal2` session. Fail-closed but self-recoverable (no admin lockout); gated by `isMfaFeatureEnabled()`.
+- **Assurance & step-up** — sessions carry an `assurance_level`. `requireStepUp` is a reusable gate, called **after** `authorizeInTransaction`. `AUTH_MFA_STEPUP_TTL_SEC` is short & server-controlled. Raising aal1→aal2 **rotates** the session (anti-fixation). It is **already wired** into every high-risk action of this module: self-service `disable`, `recovery-codes/regenerate`, `admin/reset`, and `PUT policy` (a derived ERP application installs `requireStepUp` on its own sensitive actions, #179/#181).
+- **Per-factor lockout** — `failed_verify_count`/`locked_until` are cumulative (independent of source IP & challenge rotation; `AUTH_MFA_MAX_VERIFY_ATTEMPTS`/`AUTH_MFA_LOCKOUT_MINUTES`), reset on a successful verify. A locked factor collapses to `MFA_CHALLENGE_INVALID` (login) / `MFA_LOCKED` (step-up).
+- **Tenant selection & switching** ([ADR-0088](../../../docs/adr/0088-tenant-selection-and-switching.md), `sql/115`) — a login **without** `x-awcms-tenant-id` answers `409 MEMBERSHIP_SELECTION_REQUIRED` + a **selection token** (≤120 seconds, single-use, two columns on `awcms_principals`), exchanged at `POST /api/v1/auth/session/tenant` for a session on the tenant **named by the caller** — with no membership list, because reading one demands a cross-tenant scan that FORCE RLS refuses. `POST /api/v1/auth/session/switch` moves a live session; sessions with `origin_auth` `sso`/`handoff` are **rejected** (`SESSION_NOT_SWITCHABLE`), otherwise tenant B's IdP administrator could assert an address and then switch into tenant A. Both go through `evaluateTenantEntry`, which re-applies serviceability, membership, auth policy, and **the destination tenant's MFA policy** — without that, tenant switching is an MFA bypass. Assurance does not travel (a new session is always `aal1`).
+  - **Invariant that must be preserved:** a selection token NEVER authenticates `authorizeInTransaction`. Its kind is carried by the hash namespace (`pt-sha256:`) and rejected as the FIRST statement in the gate, without a single query — `tests/principal-selection-token.test.ts` goes red if that rejection is moved further down.
 
-- **Admin reset** — `POST /api/v1/auth/mfa/admin/reset` guard `identity_access.mfa_admin.reset`, `reason` wajib, **step-up segar wajib**, audit `critical`, **self-reset dilarang**. **Sejak ADR-0087 ia menjangkau KELUAR tenant yang bertindak** (satu-satunya di repo ini): faktornya milik manusia, jadi reset di tenant A mencabut authenticator yang sama di tenant B. Dicatat sebagai `crossTenantReach: true` pada baris auditnya dan `disabled_by_tenant_id` pada baris faktornya — menyatakan BAHWA ia menjangkau keluar, bukan ke mana. Daftar tenant seberang sengaja tidak dibangun: mustahil dibaca di bawah FORCE RLS, dan ia oracle keanggotaan lintas-tenant.
+- **Admin reset** — `POST /api/v1/auth/mfa/admin/reset` guard `identity_access.mfa_admin.reset`, `reason` mandatory, **a fresh step-up mandatory**, audit `critical`, **self-reset forbidden**. **Since ADR-0087 it reaches OUTSIDE the acting tenant** (the only such action in this repo): the factor belongs to the human, so a reset in tenant A revokes the same authenticator in tenant B. This is recorded as `crossTenantReach: true` on its audit row and `disabled_by_tenant_id` on the factor row — stating THAT it reached outward, not where to. The list of tenants on the other side is deliberately not built: it is impossible to read under FORCE RLS, and it is a cross-tenant membership oracle.
 
-Detail lengkap (auth flow, referensi env, SOP recovery admin, threat model, mapping OWASP ASVS/ISO): [`docs/awcms/mfa-totp-step-up.md`](../../../docs/awcms/mfa-totp-step-up.md), [ADR-0027](../../../docs/adr/0027-mfa-totp-session-assurance-step-up.md), dan [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md). Sebelum jendela deploy `sql/114`: `bun run identity:mfa-collisions:preflight` melaporkan setiap manusia yang memegang lebih dari satu faktor hidup, beserta mana yang dipertahankan.
+Full detail (auth flow, env reference, admin recovery SOP, threat model, OWASP ASVS/ISO mapping): [`docs/awcms/mfa-totp-step-up.md`](../../../docs/awcms/mfa-totp-step-up.md), [ADR-0027](../../../docs/adr/0027-mfa-totp-session-assurance-step-up.md), and [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md). Before the `sql/114` deploy window: `bun run identity:mfa-collisions:preflight` reports every human holding more than one live factor, along with which one is kept.
 
-## OIDC/SSO tenant-aware, account linking, dan break-glass (Issue #185)
+## Tenant-aware OIDC/SSO, account linking, and break-glass (Issue #185)
 
-Diport dari awcms-mini (Issue #590/#591), diadaptasi + dikeraskan. Feature switch `AUTH_SSO_ENABLED` menggerbangi flow login/callback/link/unlink (admin provider/policy CRUD selalu bisa). Konfigurasi provider adalah DATA per tenant, bukan env. Sukses OIDC mencetak **opaque session AWCMS** (bukan ID token sebagai session); authorization tetap lewat RBAC/ABAC/RLS.
+Ported from awcms-mini (Issue #590/#591), adapted + hardened. The feature switch `AUTH_SSO_ENABLED` gates the login/callback/link/unlink flow (admin provider/policy CRUD is always available). Provider configuration is per-tenant DATA, not env. A successful OIDC flow mints an **opaque AWCMS session** (not the ID token as the session); authorization still goes through RBAC/ABAC/RLS.
 
-- **Skema (`sql/025`)** — empat tabel tenant-scoped RLS `FORCE`: `awcms_auth_providers` (config provider; client secret ciphertext AES-256-GCM ATAU referensi env, tak pernah plaintext), `awcms_tenant_auth_policies` (password/SSO/JIT/break-glass, satu baris per tenant), `awcms_external_identities` (linking di-key `(tenant_id, provider_id, issuer, subject)` — immutable `sub`, tak pernah email; FK komposit terikat-tenant), `awcms_oidc_auth_requests` (jembatan efemeral: `state_hash` bearer, `nonce` + PKCE `code_verifier` plaintext single-use, `redirect_after` tervalidasi). Seed permission `sql/026`.
-- **SSRF guard (`lib/auth/ssrf-guard.ts`)** — risiko #1: semua fetch discovery/JWKS/token HTTPS-only, blok private/loopback/link-local/ULA/CGNAT/metadata IPv4+IPv6 (termasuk IPv4-mapped/NAT64), validasi semua hasil DNS sebelum connect, redirect manual + re-validasi tiap hop, timeout + response-size cap. Escape hatch loopback hanya via `AUTH_SSO_ALLOW_INSECURE_HOSTS` (ditolak di produksi). Kebalikan keputusan risk-acceptance mini.
-- **Auth Code + PKCE + state + nonce** — `state` bearer di-hash, single-use (`FOR UPDATE` + CAS), TTL pendek, terikat tenant sejak `start`. `code_challenge` S256; `code_verifier` server-side.
-- **Validasi ID token fail-closed** (`domain/oidc-policy.ts` + `lib/auth/jwt-verify.ts`) — algorithm allow-list `{RS256, ES256}` yang cocok dengan tipe key (tolak `none` + alg-confusion), signature WebCrypto native (tanpa dependency `jose`), issuer + audience + `azp` + expiry + `iat` + nonce.
-- **JWKS/discovery cache** — TTL terbatas + negative-TTL + circuit-breaker keyed `${tenantId}:${providerKey}`, **di luar** transaksi DB. Breaker hanya trip pada kegagalan transport/SSRF.
-- **Account linking eksplisit + step-up** — `POST /sso/{providerKey}/link` & `unlink` butuh sesi valid **dan** `requireStepUp` (#184). Identity diambil server-side dari sesi ter-step-up. Tak auto-link hanya karena email sama.
-- **Auto-link & JIT default OFF** — auto-link butuh master switch tenant + email verified + domain provider (dan domain policy bila diset). JIT membuat identity baru pada **privilege minimum** (tanpa role).
-- **Break-glass** — di-enforce saat SAVE policy (`saveTenantAuthPolicy`): `sso_required`/`password_login_disabled` butuh ≥1 owner break-glass aktif, else `409 BREAK_GLASS_REQUIRED`. Login-time `isPasswordLoginDisabledForIdentity` (digerbangi `isSsoEnabled`, dijalankan **sebelum** cabang MFA) menolak password-login non-break-glass. Outage IdP tak memblok break-glass.
-- **Break-glass, sisi kedua (drift setelah save).** Jaminan di atas adalah jaminan **saat simpan**, dan eligibility bukan properti policy — ia properti `awcms_identities`/`awcms_tenant_users`. Menonaktifkan identity itu lewat `PATCH /api/v1/users/{id}` (atau mencabut membership-nya) membuat policy yang tersimpan menjadi salah **tanpa policy-nya pernah disentuh**, lewat aksi administrasi user biasa yang tak terlihat berkaitan dengan SSO. `scripts/security-readiness.ts` `checkSsoBreakGlassReady` (critical) menutup itu: menurunkan ULANG eligibility tiap tenant aktif dengan `fetchEligibleBreakGlassIdentityIds` + `evaluateBreakGlassRequirement` yang **sama** (bukan salinan aturan), satu `withTenant` per tenant karena tabel policy FORCE RLS, tanpa cap. Terbukti lewat mutasi: mengganti hitungan eligible dengan `breakGlassIdentityIds.length` memerahkan 4 test integrasi. Lihat [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) §4.
-- **Admin & audit** — provider CRUD (`sso_providers.{read,create,update,delete}`) & policy (`sso_policy.{read,update}`), soft delete, audit high severity (link/unlink/provider/policy/JIT/login outcome) tanpa token/claim/secret mentah.
+- **Schema (`sql/025`)** — four tenant-scoped RLS `FORCE` tables: `awcms_auth_providers` (provider config; the client secret is AES-256-GCM ciphertext OR an env reference, never plaintext), `awcms_tenant_auth_policies` (password/SSO/JIT/break-glass, one row per tenant), `awcms_external_identities` (linking keyed by `(tenant_id, provider_id, issuer, subject)` — the immutable `sub`, never email; tenant-bound composite FK), `awcms_oidc_auth_requests` (the ephemeral bridge: `state_hash` bearer, `nonce` + PKCE `code_verifier` plaintext single-use, a validated `redirect_after`). Permission seed `sql/026`.
+- **SSRF guard (`lib/auth/ssrf-guard.ts`)** — risk #1: every discovery/JWKS/token fetch is HTTPS-only, blocking private/loopback/link-local/ULA/CGNAT/metadata IPv4+IPv6 (including IPv4-mapped/NAT64), validating every DNS result before connecting, manual redirects + re-validation on every hop, timeout + response-size cap. The loopback escape hatch only exists via `AUTH_SSO_ALLOW_INSECURE_HOSTS` (refused in production). The opposite of mini's risk-acceptance decision.
+- **Auth Code + PKCE + state + nonce** — the `state` bearer is hashed, single-use (`FOR UPDATE` + CAS), short TTL, tenant-bound since `start`. `code_challenge` S256; `code_verifier` server-side.
+- **Fail-closed ID token validation** (`domain/oidc-policy.ts` + `lib/auth/jwt-verify.ts`) — an algorithm allow-list `{RS256, ES256}` that must match the key type (rejecting `none` + alg-confusion), signatures via native WebCrypto (without a `jose` dependency), issuer + audience + `azp` + expiry + `iat` + nonce.
+- **JWKS/discovery cache** — bounded TTL + negative-TTL + a circuit-breaker keyed `${tenantId}:${providerKey}`, **outside** the DB transaction. The breaker only trips on transport/SSRF failures.
+- **Explicit account linking + step-up** — `POST /sso/{providerKey}/link` & `unlink` require a valid session **and** `requireStepUp` (#184). The identity is taken server-side from the stepped-up session. No auto-linking just because the email matches.
+- **Auto-link & JIT default OFF** — auto-link requires the tenant master switch + a verified email + the provider domain (and the policy domain when set). JIT creates a new identity at **minimum privilege** (no roles).
+- **Break-glass** — enforced when the policy is SAVED (`saveTenantAuthPolicy`): `sso_required`/`password_login_disabled` requires ≥1 active break-glass owner, else `409 BREAK_GLASS_REQUIRED`. At login time `isPasswordLoginDisabledForIdentity` (gated by `isSsoEnabled`, run **before** the MFA branch) rejects non-break-glass password login. An IdP outage does not block break-glass.
+- **Break-glass, the second half (drift after save).** The guarantee above is a guarantee **at save time**, and eligibility is not a property of the policy — it is a property of `awcms_identities`/`awcms_tenant_users`. Deactivating that identity through `PATCH /api/v1/users/{id}` (or revoking its membership) makes the stored policy wrong **without the policy ever being touched**, through an ordinary user administration action that looks unrelated to SSO. `scripts/security-readiness.ts` `checkSsoBreakGlassReady` (critical) closes that: it RE-derives eligibility for every active tenant using the **same** `fetchEligibleBreakGlassIdentityIds` + `evaluateBreakGlassRequirement` (not a copy of the rules), one `withTenant` per tenant because the policy table is FORCE RLS, with no cap. Proven by mutation: replacing the eligible count with `breakGlassIdentityIds.length` turns 4 integration tests red. See [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) §4.
+- **Admin & audit** — provider CRUD (`sso_providers.{read,create,update,delete}`) & policy (`sso_policy.{read,update}`), soft delete, high-severity audit (link/unlink/provider/policy/JIT/login outcome) without raw tokens/claims/secrets.
 
-Detail lengkap (auth flow, setup provider, break-glass SOP, privacy mapping, threat model): [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) dan [ADR-0028](../../../docs/adr/0028-oidc-sso-tenant-aware-account-linking-break-glass.md).
+Full detail (auth flow, provider setup, break-glass SOP, privacy mapping, threat model): [`docs/awcms/oidc-sso.md`](../../../docs/awcms/oidc-sso.md) and [ADR-0028](../../../docs/adr/0028-oidc-sso-tenant-aware-account-linking-break-glass.md).
 
-## Password reset lewat email (Gelombang 2 delta auth)
+## Password reset via email (Wave 2 auth delta)
 
-Diadaptasi dari awcms-micro Issue #496. Dua endpoint publik + dua halaman:
+Adapted from awcms-micro Issue #496. Two public endpoints + two pages:
 `POST /api/v1/auth/password/forgot`, `POST /api/v1/auth/password/reset`,
 `/forgot-password`, `/reset-password`.
 
-- **Skema (`sql/073`)** — satu tabel tenant-scoped RLS `ENABLE`+`FORCE`:
-  `awcms_password_reset_tokens` (`token_hash` sha256 dari 32 byte CSPRNG —
-  token mentah TIDAK PERNAH disimpan, `expires_at`, `used_at` untuk single-use).
-  Grant `awcms_worker` hanya `SELECT, DELETE` (mesin purge `data_lifecycle`
-  `generic`; worker tak pernah menerbitkan maupun menebus token).
-- **Aman terhadap enumerasi akun, secara konstruksi** — `requestPasswordReset`
-  mengembalikan `outcome: "ineligible"` yang **identik** untuk identifier tak
-  dikenal, identity/tenant-user non-aktif, tenant non-aktif, identity SSO-only,
-  dan identifier yang bukan alamat email; route selalu membalas 200 dengan body
-  yang sama. Perbedaannya hanya hidup di audit log (tenant-scoped, RLS,
-  tak pernah jadi bagian response). `login.ts` sudah memakai prinsip yang sama
-  untuk 401-nya.
-- **Sisi gagal juga generik** — `PASSWORD_RESET_INVALID` untuk not-found,
-  expired, already-used, identity dinonaktifkan setelah token terbit, dan
-  password-login dimatikan setelah token terbit. Endpoint ini karena itu bukan
-  oracle status token.
-- **Single-use di DATABASE, bukan di JS** — pembacaan token memakai
-  `FOR UPDATE`. Tanpa row lock, dua penebusan link yang sama sama-sama membaca
-  `used_at IS NULL` dan **keduanya** berhasil me-reset password (terbukti merah
-  saat mutasi di `tests/integration/password-reset.integration.test.ts`). Pola
-  yang sama dengan counter anti-replay MFA (#184).
-- **Menghormati policy SSO-only** — `isPasswordLoginDisabledForIdentity`
-  dicek di JALUR PERMINTAAN **dan** dibaca ULANG saat penebusan, jadi link yang
-  masih hidup tidak selamat dari tenant yang mematikan password login. Tanpa
-  ini, reset password adalah cara resmi tanpa autentikasi untuk membuat password
-  yang berfungsi pada tenant yang sengaja mematikannya.
-- **Reset mencabut SEMUA sesi** — `revokeAllSessionsForIdentity`; sesi `aal2`
-  ikut mati karena `mfa-session-assurance.ts` memperlakukan `revoked_at` sebagai
-  hilang. Lockout (`failed_login_count`/`locked_until`) dibersihkan: pemegang
-  link sudah membuktikan kendali atas mailbox.
-- **Pengiriman lewat capability port** — `identity_access` TIDAK menulis ke
-  `awcms_email_messages` (tabel milik `email`, ADR-0013 §6; original micro
-  menulis langsung). Port `auth_notification`
-  (`_shared/ports/auth-notification-port.ts`), adapter dimiliki `email`, di-wire
-  di composition root (route). Bukan `dependencies`: `email` sudah bergantung
-  pada `identity_access`, jadi arah sebaliknya akan menutup siklus.
-  Tenant tanpa template `auth.password_reset` aktif → `delivery_unavailable`
-  (warning di log + audit), response tetap generik.
-- **Link** — `${APP_URL}/reset-password?token=…&tenantId=…`, atau satu `?p=`
-  opaque AES-256-GCM bila `AUTH_URL_PARAM_ENCRYPTION_KEY` diset
-  (`lib/security/secure-url-params.ts`). Fallback plain bukan kelemahan: token
-  sudah 256-bit CSPRNG dan tenant id bukan rahasia.
-- **Rate limit + Turnstile** — per `clientIp:tenantId` pada KEDUA endpoint,
-  dicek sebelum menyentuh DB; Turnstile memakai action `password_reset` sendiri
-  (token dari form login tidak bisa di-replay ke sini).
+- **Schema (`sql/073`)** — one tenant-scoped RLS `ENABLE`+`FORCE` table:
+  `awcms_password_reset_tokens` (`token_hash` sha256 of 32 CSPRNG bytes —
+  the raw token is NEVER stored, `expires_at`, `used_at` for single-use).
+  `awcms_worker` is granted only `SELECT, DELETE` (the `data_lifecycle`
+  `generic` purge engine; the worker never issues nor redeems a token).
+- **Safe against account enumeration by construction** — `requestPasswordReset`
+  returns an **identical** `outcome: "ineligible"` for an unknown identifier,
+  an inactive identity/tenant-user, an inactive tenant, an SSO-only identity,
+  and an identifier that is not an email address; the route always replies 200 with
+  the same body. The difference only lives in the audit log (tenant-scoped, RLS,
+  never part of the response). `login.ts` already uses the same principle
+  for its 401.
+- **The failure side is generic too** — `PASSWORD_RESET_INVALID` for not-found,
+  expired, already-used, an identity deactivated after the token was issued, and
+  password login being disabled after the token was issued. This endpoint is
+  therefore not a token-status oracle.
+- **Single-use in the DATABASE, not in JS** — reading the token uses
+  `FOR UPDATE`. Without the row lock, two redemptions of the same link both read
+  `used_at IS NULL` and **both** succeed in resetting the password (proven red
+  by mutation in `tests/integration/password-reset.integration.test.ts`). The same
+  pattern as the MFA anti-replay counter (#184).
+- **Honouring the SSO-only policy** — `isPasswordLoginDisabledForIdentity`
+  is checked on the REQUEST PATH **and** RE-read at redemption, so a still-live link
+  does not survive a tenant turning password login off. Without
+  this, password reset is the official unauthenticated way to create a working
+  password on a tenant that deliberately disabled it.
+- **A reset revokes ALL sessions** — `revokeAllSessionsForIdentity`; `aal2` sessions
+  die too because `mfa-session-assurance.ts` treats `revoked_at` as
+  gone. The lockout (`failed_login_count`/`locked_until`) is cleared: whoever holds
+  the link has already proven control of the mailbox.
+- **Delivery through a capability port** — `identity_access` does NOT write to
+  `awcms_email_messages` (a table owned by `email`, ADR-0013 §6; the original micro
+  wrote to it directly). The `auth_notification` port
+  (`_shared/ports/auth-notification-port.ts`), with the adapter owned by `email`, is wired
+  at the composition root (the route). Not a `dependencies` entry: `email` already depends
+  on `identity_access`, so the reverse direction would close a cycle.
+  A tenant without an active `auth.password_reset` template → `delivery_unavailable`
+  (a warning in the log + audit), the response stays generic.
+- **The link** — `${APP_URL}/reset-password?token=…&tenantId=…`, or a single opaque
+  AES-256-GCM `?p=` when `AUTH_URL_PARAM_ENCRYPTION_KEY` is set
+  (`lib/security/secure-url-params.ts`). The plain fallback is not a weakness: the token
+  is already 256-bit CSPRNG and the tenant id is not a secret.
+- **Rate limit + Turnstile** — per `clientIp:tenantId` on BOTH endpoints,
+  checked before touching the DB; Turnstile uses its own `password_reset` action
+  (a token from the login form cannot be replayed here).
 
-## Self-registration ber-persetujuan admin (Gelombang 2 delta auth)
+## Self-registration with admin approval (Wave 2 auth delta)
 
-Diadaptasi dari awcms-micro. `POST /api/v1/auth/register` (publik) +
-`/register`, antrean `/admin/registrations`, dan tiga endpoint admin
+Adapted from awcms-micro. `POST /api/v1/auth/register` (public) +
+`/register`, the `/admin/registrations` queue, and three admin endpoints
 (`GET /api/v1/registration-requests`, `.../{id}/approve`, `.../{id}/reject`).
 
-- **MATI secara default** (`AUTH_SELF_REGISTRATION_ENABLED`, `sql/074`–`075`).
-  Endpoint publik yang selalu hidup dan menulis baris adalah permukaan spam yang
-  akan diwarisi SETIAP deployment. Saat mati endpoint menjawab `404` — jawaban
-  yang sama dengan rute yang tidak ada, jadi saklarnya tak bisa ditemukan lewat
-  probing. Ini gerbang tingkat DEPLOYMENT (seperti `AUTH_MFA_ENABLED`), jadi
-  menyalakannya membuka registrasi untuk SEMUA tenant; granularitas per-tenant
-  adalah follow-up yang dicatat, bukan yang dipura-purakan ada.
-- **Tidak pernah membuat akun.** Submit publik hanya menulis baris `pending` di
-  `awcms_registration_requests`; ia menolak field privilese apa pun (`roleIds`,
-  `status`, `tenantUserId`) dan TIDAK menerima password sama sekali.
-  Validator mengembalikan tepat dua field, dan itu ditegakkan dua arah (runtime
-  key-set + struktural "field apa saja yang dibaca dari body").
-- **TIDAK menyimpan kredensial — menyimpang dari micro secara sengaja.** Versi
-  micro menyimpan hash argon2id yang dipilih penyubmit anonim tak terverifikasi
-  untuk akun yang mungkin tak pernah ada. Di sini approval membuat identity
-  dengan **password tak terpakai** (hash dari 32 byte CSPRNG yang langsung
-  dibuang) lalu menerbitkan link password-reset lewat jalur `requestPasswordReset`
-  yang sama dengan `/forgot-password`. Pelamar membuktikan kendali mailbox
-  sebelum bisa masuk; request yang ditolak/terbengkalai tak meninggalkan
-  kredensial apa pun; dan banjir spam tak lagi berarti banjir hash argon2id.
-- **Aman terhadap enumerasi.** Alamat yang sudah punya akun, request yang sudah
-  pending, tenant non-aktif, dan request baru semuanya membalas 200 identik.
-  "Alamat ini sudah terdaftar" adalah kalimat paling berguna yang bisa didapat
-  penyerang di sini — justru itu tak pernah diucapkan. Audit mencatat mana yang
-  terjadi (TANPA alamatnya, untuk submit yang gagal).
-- **`approve` dan `reject` permission TERPISAH** (`registration_requests.*`,
-  activity baru — `access_control` adalah katalog RBAC, bukan otoritas menerima
-  orang; `/api/v1/users` di repo ini read-only, jadi approval adalah jalur admin
-  PERTAMA yang memunculkan identity). Hanya salah satunya membuat akun.
-- **Approval anti-balapan.** Baris dikunci `FOR UPDATE` dengan predikat
-  `status = 'pending'`. Tanpa lock, dua reviewer bersamaan memicu 23505 di
-  tengah transaksi → 500 bagi reviewer yang tak salah apa-apa; dengan lock yang
-  kedua dapat `not_found` → 404 yang bersih. Terbukti lewat mutasi.
-- **`roleIds` opsional dan default kosong** — approval tak pernah memberi role
-  diam-diam. Role tak dikenal menolak SELURUH approval, bukan memberi subset.
-- **Reject tak memberi tahu siapa pun** — email penolakan mengonfirmasi ke
-  penyubmit anonim bahwa tenant ini ada dan me-review mereka, yaitu justru
-  pengungkapan yang ditolak endpoint publiknya.
-- Baris ter-review dipurge mesin `data_lifecycle` GENERIC (default 90 hari,
-  lantai 7 hari agar audit `registration_approved` masih menunjuk sesuatu);
-  grant worker `SELECT, DELETE` saja.
+- **OFF by default** (`AUTH_SELF_REGISTRATION_ENABLED`, `sql/074`–`075`).
+  A public endpoint that is always live and writes rows is a spam surface that
+  EVERY deployment would inherit. When off, the endpoint answers `404` — the same
+  answer as a route that does not exist, so the switch cannot be discovered by
+  probing. This is a DEPLOYMENT-level gate (like `AUTH_MFA_ENABLED`), so
+  turning it on opens registration for ALL tenants; per-tenant
+  granularity is a recorded follow-up, not something pretended to exist.
+- **It never creates an account.** A public submit only writes a `pending` row in
+  `awcms_registration_requests`; it rejects any privileged field (`roleIds`,
+  `status`, `tenantUserId`) and does NOT accept a password at all.
+  The validator returns exactly two fields, and that is enforced in both directions (a runtime
+  key-set + a structural "which fields are read from the body").
+- **It does NOT store credentials — a deliberate divergence from micro.** The
+  micro version stored an argon2id hash chosen by an unverified anonymous submitter
+  for an account that might never exist. Here approval creates the identity
+  with an **unusable password** (a hash of 32 CSPRNG bytes that are immediately
+  discarded) and then issues a password-reset link through the same `requestPasswordReset`
+  path as `/forgot-password`. The applicant proves mailbox control
+  before they can get in; rejected/abandoned requests leave behind no
+  credential at all; and a spam flood no longer means a flood of argon2id hashes.
+- **Safe against enumeration.** An address that already has an account, an already
+  pending request, an inactive tenant, and a brand-new request all reply with an identical 200.
+  "This address is already registered" is the most useful sentence an attacker
+  could obtain here — which is exactly why it is never spoken. The audit records which one
+  happened (WITHOUT the address, for failed submits).
+- **`approve` and `reject` are SEPARATE permissions** (`registration_requests.*`,
+  a new activity — `access_control` is the RBAC catalogue, not the authority to admit
+  people; `/api/v1/users` in this repo is read-only, so approval is the FIRST
+  admin path that brings an identity into existence). Only one of them creates an account.
+- **Race-proof approval.** The row is locked `FOR UPDATE` with the predicate
+  `status = 'pending'`. Without the lock, two simultaneous reviewers trigger a 23505 in
+  the middle of the transaction → a 500 for the reviewer who did nothing wrong; with the lock the
+  second gets `not_found` → a clean 404. Proven by mutation.
+- **`roleIds` is optional and defaults to empty** — approval never silently grants a
+  role. An unknown role rejects the WHOLE approval rather than granting a subset.
+- **Reject tells nobody** — a rejection email confirms to the
+  anonymous submitter that this tenant exists and reviewed them, which is precisely the
+  disclosure its public endpoint refuses.
+- Reviewed rows are purged by the GENERIC `data_lifecycle` engine (default 90 days,
+  with a 7-day floor so the `registration_approved` audit still points at something);
+  the worker is granted `SELECT, DELETE` only.
 
-## Layar admin `/admin/security` (Gelombang 2 delta auth)
+## The `/admin/security` screen (Wave 2 auth delta)
 
-Endpoint policy autentikasi sudah ada sejak #184/#185; **layarnya belum**, jadi
-sampai sekarang satu-satunya cara mengubah policy tenant adalah `curl` tangan.
+The authentication policy endpoints have existed since #184/#185; **the screen has not**, so
+until now the only way to change a tenant's policy was a hand-written `curl`.
 
-- **Tidak menambah enforcement apa pun.** Setiap mutasi mem-POST ke endpoint
-  asli (`PATCH /api/v1/auth/sso-policy`, `PUT /api/v1/auth/mfa/policy`) dan
-  mewarisi guard ABAC, aturan break-glass, serta baris auditnya. Pengecekan
-  permission di halaman itu UX belaka.
-- **Gate memakai kunci permission PERSIS milik endpoint**, termasuk
-  `mfa_admin.reset` sebagai gate BACA MFA — terlihat seperti salah tapi memang
-  itu yang diminta `GET /api/v1/auth/mfa/policy`. Mengarang `mfa_admin.read`
-  yang tak di-seed migrasi mana pun = jebakan latent-authz yang sudah dua kali
-  menggigit repo ini; `tests/admin-security-page-contract.test.ts` memerahkan
-  3 test bila kunci halaman menyimpang dari kunci endpoint.
-- **Postur deployment ditampilkan read-only** (profil online-security,
-  Turnstile, saklar MFA/SSO). Tanpa itu, policy tenant tak bisa dinilai:
-  `ssoRequired` saat `AUTH_SSO_ENABLED=false` menghasilkan tenant yang tak bisa
-  login sama sekali — kontradiksi yang sekarang muncul sebagai peringatan,
-  bukan diam. Tak ada nilai secret yang dirender.
-- **Picker break-glass memakai IDENTITY id**, bukan tenant_user id (kolom
-  policy menyimpan identity id; keduanya uuid, jadi salah pilih akan diterima
-  endpoint lalu disaring jadi daftar kosong — no-op senyap tepat di tempat
-  operator berusaha menjaga dirinya tetap bisa masuk). `listBreakGlassCandidates`
-  memakai predikat yang identik dengan `fetchEligibleBreakGlassIdentityIds`;
-  `tests/integration/admin-security-policy.integration.test.ts` mengikat
-  keduanya (identity non-aktif, membership non-aktif, identity locked, lintas
+- **It adds no enforcement whatsoever.** Every mutation POSTs to the original
+  endpoint (`PATCH /api/v1/auth/sso-policy`, `PUT /api/v1/auth/mfa/policy`) and
+  inherits its ABAC guard, break-glass rules, and audit rows. The permission
+  checks on the page are pure UX.
+- **The gate uses the endpoint's EXACT permission keys**, including
+  `mfa_admin.reset` as the MFA READ gate — it looks wrong but that is genuinely
+  what `GET /api/v1/auth/mfa/policy` demands. Inventing an `mfa_admin.read`
+  that no migration seeds = the latent-authz trap that has already bitten this
+  repo twice; `tests/admin-security-page-contract.test.ts` turns 3 tests red
+  if the page's keys diverge from the endpoint's.
+- **Deployment posture is shown read-only** (online-security profile,
+  Turnstile, the MFA/SSO switches). Without it, a tenant policy cannot be judged:
+  `ssoRequired` while `AUTH_SSO_ENABLED=false` produces a tenant that cannot
+  log in at all — a contradiction that now surfaces as a warning
+  rather than silence. No secret values are rendered.
+- **The break-glass picker uses IDENTITY ids**, not tenant_user ids (the policy
+  column stores identity ids; both are uuids, so picking wrong would be accepted by the
+  endpoint and then filtered down to an empty list — a silent no-op exactly where the
+  operator is trying to keep themselves able to log in). `listBreakGlassCandidates`
+  uses a predicate identical to `fetchEligibleBreakGlassIdentityIds`;
+  `tests/integration/admin-security-policy.integration.test.ts` binds
+  the two (inactive identity, inactive membership, locked identity, cross
   tenant).
-- **`409 BREAK_GLASS_REQUIRED` ditampilkan spesifik**, bukan dikolaps jadi
-  "gagal menyimpan": pemanggilnya admin terautentikasi yang sudah memegang
-  `sso_policy.update`, jadi tak ada yang bocor — sementara pesan generik akan
-  membuatnya mencoba ulang perubahan yang tak akan pernah diterima server.
-- CRUD provider OIDC tetap API-only (daftar read-only di layar). Form yang
-  mem-POST client secret layak jadi perubahan tersendiri.
+- **`409 BREAK_GLASS_REQUIRED` is shown specifically**, not collapsed into
+  "save failed": the caller is an authenticated admin who already holds
+  `sso_policy.update`, so nothing leaks — whereas a generic message would
+  make them retry a change the server will never accept.
+- OIDC provider CRUD stays API-only (a read-only list on the screen). A form that
+  POSTs a client secret deserves to be its own change.
 
-## Kredensial mesin + introspeksi sesi (ADR-0049)
+## Machine credentials + session introspection (ADR-0049)
 
-Fitur fondasi PERTAMA yang dirintis langsung di repo ini di bawah pembekuan
-[ADR-0047](../../../docs/adr/0047-mini-micro-frozen-foundation-built-here.md) —
-dan karenanya tercatat sebagai divergence di `awcms-family-compatibility.yaml`.
-Skema: `sql/082` (tabel + kolom `machine_credential_id` pada decision log),
-`sql/083` (permission).
+The FIRST foundation feature broken ground on directly in this repo under the
+[ADR-0047](../../../docs/adr/0047-mini-micro-frozen-foundation-built-here.md) freeze —
+and therefore recorded as a divergence in `awcms-family-compatibility.yaml`.
+Schema: `sql/082` (the table + a `machine_credential_id` column on the decision log),
+`sql/083` (permissions).
 
-**Masalah yang ditutupnya.** Satu-satunya bearer yang diterima repo ini adalah
-token **sesi** ber-hash. Sebuah build tidak bisa memegangnya: sesi kedaluwarsa,
-dicabut seluruhnya saat password reset (`sql/073`), dan dirotasi step-up MFA
-(`sql/024`). Akibatnya `awcms-astro` tidak bisa menarik kontennya sendiri.
+**The problem it closes.** The only bearer this repo accepts is a hashed
+**session** token. A build cannot hold one: sessions expire, are
+revoked wholesale on password reset (`sql/073`), and are rotated by MFA step-up
+(`sql/024`). As a result `awcms-astro` could not fetch its own content.
 
-**Bentuknya.**
+**Its shape.**
 
-- `awcms_machine_credentials` — tenant-scoped, `FORCE` RLS, terikat komposit
-  `(tenant_id, tenant_user_id)` ke satu **service account** yang sudah ada.
-- Token: `awcmsm_<tenantIdHex32>_<rahasia>`; **membawa tenant-nya sendiri**,
-  jadi klien build cukup satu env var dan header tenant tidak relevan untuknya
-  (header yang berbeda diabaikan — token yang menang).
-- Hash disimpan di ruang nama `mc-sha256:`. `hashSessionToken()`
-  **men-dispatch** berdasarkan prefix token, sehingga 183 rute yang sudah
-  memanggilnya di antara `resolveAuthInputs` dan `authorizeInTransaction`
-  mendapat perilaku ini tanpa perubahan tanda tangan.
-- **MENGAUTENTIKASI, tidak pernah MENGOTORISASI**: setelah prinsipal resolve,
-  rantai module-enabled → RBAC → ABAC → decision log → SoD berjalan apa adanya.
-- **Baca-saja**, ditegakkan SEBELUM izin dilihat: hanya action `read`. Token
-  yang bocor tak bisa mengubah apa pun walau service account-nya `owner`.
-- **Menyempitkan, tak pernah melebarkan**: izin efektif = irisan
-  `allowed_permission_keys` dengan izin service account.
-- `expires_at` wajib (maks 365 hari), pencabutan berlaku di permintaan
-  berikutnya, `last_used_at` disegarkan paling sering sekali per jam.
-- **Deaktivasi service account langsung mematikan kredensialnya** — jalur mesin
-  mensyaratkan `awcms_tenant_users.status` DAN `awcms_identities.status` aktif,
-  sengaja lebih ketat dari jalur sesi (yang tidak memeriksa keduanya, tetapi
-  dibatasi masa berlaku sesi). Tanpa itu, "nonaktifkan akun ini" akan diam-diam
-  meninggalkan kunci yang masih bekerja selama berbulan-bulan, karena tidak ada
-  apa pun yang mencabut kredensial saat akun dinonaktifkan.
-- Decision log mencatat **kredensial mana** yang bertindak, bukan hanya akunnya.
+- `awcms_machine_credentials` — tenant-scoped, `FORCE` RLS, bound by composite
+  `(tenant_id, tenant_user_id)` to one existing **service account**.
+- Token: `awcmsm_<tenantIdHex32>_<secret>`; it **carries its own tenant**,
+  so a build client needs a single env var and the tenant header is irrelevant to it
+  (a differing header is ignored — the token wins).
+- The hash is stored in the `mc-sha256:` namespace. `hashSessionToken()`
+  **dispatches** on the token prefix, so the 183 routes that already
+  call it between `resolveAuthInputs` and `authorizeInTransaction`
+  get this behaviour without a signature change.
+- **It AUTHENTICATES, never AUTHORIZES**: once the principal resolves,
+  the module-enabled → RBAC → ABAC → decision log → SoD chain runs as-is.
+- **Read-only**, enforced BEFORE permissions are consulted: the `read` action only. A
+  leaked token cannot change anything even if its service account is an `owner`.
+- **It narrows, never widens**: effective permissions = the intersection of
+  `allowed_permission_keys` with the service account's permissions.
+- `expires_at` is mandatory (max 365 days), revocation takes effect on the very next
+  request, `last_used_at` is refreshed at most once per hour.
+- **Deactivating the service account immediately kills its credentials** — the machine
+  path requires `awcms_tenant_users.status` AND `awcms_identities.status` to be active,
+  deliberately stricter than the session path (which checks neither, but
+  is bounded by the session lifetime). Without it, "deactivate this account" would silently
+  leave a key that keeps working for months, because nothing
+  revokes credentials when an account is deactivated.
+- The decision log records **which credential** acted, not just the account.
 
-**Endpoint.** `GET`/`POST /api/v1/access/machine-credentials`,
-`POST /api/v1/access/machine-credentials/{id}/revoke` (permission
-`identity_access.machine_credentials.read`/`create`/`revoke`). Plaintext token
-hanya muncul **sekali** saat penerbitan (respons 201-nya `private, no-store` —
-satu-satunya respons di sistem ini yang badannya membawa kredensial hidup);
-tidak ada endpoint yang bisa mengembalikannya lagi — dan penerbitan sengaja **tidak** ber-`Idempotency-Key`,
-karena me-replay-nya berarti menyimpan token plaintext di
+**Endpoints.** `GET`/`POST /api/v1/access/machine-credentials`,
+`POST /api/v1/access/machine-credentials/{id}/revoke` (permissions
+`identity_access.machine_credentials.read`/`create`/`revoke`). The plaintext token
+appears **once only**, at issuance (its 201 response is `private, no-store` —
+the only response in this system whose body carries a live credential);
+no endpoint can return it again — and issuance deliberately does **not** take an `Idempotency-Key`,
+because replaying it would mean storing the plaintext token in
 `awcms_idempotency_keys`.
 
-**`GET /api/v1/auth/session`** — introspeksi sesi untuk BFF lintas-origin
-(ADR-0045). Klaim aman saja (`identityId`, `tenantId`, `displayName`, `roles`,
-`assuranceLevel`, `expiresAt`, `scopes`), **tanpa** identifier mentah yang
-`GET /auth/me` kembalikan. Satu bentuk 401 untuk semua kegagalan — termasuk
-saat kredensial mesin yang disodorkan, supaya endpoint ini tak bisa dipakai
-mengklasifikasi bearer. `private, no-store` di setiap jalur, dibatasi laju
-per sumber.
+**`GET /api/v1/auth/session`** — session introspection for the cross-origin BFF
+(ADR-0045). Safe claims only (`identityId`, `tenantId`, `displayName`, `roles`,
+`assuranceLevel`, `expiresAt`, `scopes`), **without** the raw identifier that
+`GET /auth/me` returns. A single 401 shape for every failure — including
+when a machine credential is presented, so this endpoint cannot be used
+to classify bearers. `private, no-store` on every path, rate-limited
+per source.
 
-**Jebakan yang ditemukan saat membangunnya.** `Bun.SQL` **tidak** mem-bind array
-JS sebagai array Postgres: `${["a","b"]}` sampai ke server sebagai teks `a,b`
-(22P02 "malformed array literal"), dan bentuk satu elemen paling berbahaya
-karena tiba sebagai `a` yang terlihat seperti string biasa. Pakai
+**A trap found while building it.** `Bun.SQL` does **not** bind a JS
+array as a Postgres array: `${["a","b"]}` reaches the server as the text `a,b`
+(22P02 "malformed array literal"), and the single-element shape is the most dangerous
+because it arrives as `a`, which looks like an ordinary string. Use
 `toPostgresTextArray(...)::text[]`.
 
-## Handoff sesi untuk BFF (ADR-0050)
+## Session handoff for the BFF (ADR-0050)
 
-Skema: `sql/088` (`awcms_bff_clients` + `awcms_session_handoff_codes`).
+Schema: `sql/088` (`awcms_bff_clients` + `awcms_session_handoff_codes`).
 
-**Masalah yang ditutupnya.** ADR-0049 menyelesaikan setengah pertanyaan: BFF
-yang SUDAH memegang token sesi bisa menanyakan "sesi ini milik siapa". Yang
-belum terjawab adalah dari mana token itu datang. Cookie `awcms_session` milik
-origin `awcms`; browser di origin `awcms-astro` tidak akan pernah mengirimnya,
-dan tidak boleh — itu batas origin yang bekerja, bukan celah yang perlu
-ditambal.
+**The problem it closes.** ADR-0049 answered half the question: a BFF
+that ALREADY holds a session token can ask "whose session is this". What
+remained unanswered is where that token came from. The `awcms_session` cookie belongs to
+the `awcms` origin; a browser on the `awcms-astro` origin will never send it,
+and must not — that is an origin boundary working, not a hole that needs
+patching.
 
-Jalan pintas yang jelas (form login di `awcms-astro` yang mem-proksi
-`POST /api/v1/auth/login`) ditolak dua kali: password melintasi repo yang bukan
-identity store, dan **login di sini bukan satu langkah** — ia bisa membalas
-`401 MFA_REQUIRED`, mengalihkan ke provider OIDC tenant, atau menuntut token
-Turnstile. Mem-proksinya berarti salinan kedua dari alur MFA, callback OIDC, dan
-widget Turnstile di repo kedua.
+The obvious shortcut (a login form in `awcms-astro` proxying
+`POST /api/v1/auth/login`) was rejected twice over: the password crosses a repo that is not the
+identity store, and **login here is not one step** — it can reply
+`401 MFA_REQUIRED`, redirect to the tenant's OIDC provider, or demand a
+Turnstile token. Proxying it means a second copy of the MFA flow, the OIDC callback, and the
+Turnstile widget in a second repo.
 
-**Bentuknya.** Dua endpoint, dua prinsipal berbeda:
+**Its shape.** Two endpoints, two different principals:
 
-- `POST /api/v1/auth/session-handoff/issue` — **manusia yang sudah login**
-  meminta kode sekali-pakai (≤60 detik). Self-service, bukan ber-permission:
-  identitas dan assurance diambil dari SESI, tak pernah dari body, jadi pemanggil
-  hanya bisa mencetak kode untuk dirinya sendiri. Mengarang permission di sini
-  adalah jebakan latent-authz yang repo ini sudah kirim dua kali.
-- `POST /api/v1/auth/session-handoff/redeem` — **klien terdaftar**, server-ke-server,
-  dengan client secret. Satu-satunya endpoint di repo ini yang diautentikasi
-  begitu (`defineClientCredentialTenantRoute`): ia adalah permintaan yang
-  MEMPEROLEH sesi, jadi belum ada sesi untuk disodorkan. Bukan kredensial mesin
-  juga — itu baca-saja secara konstruksi, dan prinsipal baca-saja yang bisa
-  mencetak sesi manusia adalah jalur eskalasi.
+- `POST /api/v1/auth/session-handoff/issue` — **an already logged-in human**
+  requests a single-use code (≤60 seconds). Self-service, not permission-based:
+  the identity and assurance are taken from the SESSION, never from the body, so a caller
+  can only mint a code for themselves. Inventing a permission here
+  is the latent-authz trap this repo has already shipped twice.
+- `POST /api/v1/auth/session-handoff/redeem` — **a registered client**, server-to-server,
+  with a client secret. The only endpoint in this repo authenticated
+  that way (`defineClientCredentialTenantRoute`): it is the request that
+  OBTAINS a session, so there is no session yet to present. Not a machine credential
+  either — those are read-only by construction, and a read-only principal that can
+  mint a human session is an escalation path.
 
-**Yang mengikat keamanannya.**
+**What binds its security.**
 
-- **Allow-list `redirect_uri` cocok-persis.** ADR-0050 menamai open-redirect di
-  sini sebagai cara desain ini gagal. Bukan prefix (`https://app.example.com`
-  ber-prefix-sama dengan `https://app.example.com.evil.test`), bukan pula
-  origin (penyerang yang bisa memilih path di origin yang diizinkan sudah
-  cukup). Query dan fragment DITOLAK, bukan dibuang.
-- **Kode tidak membawa token.** Barisnya menyimpan `identity_id` + assurance
-  yang login benar-benar CAPAI; redeem mencetak sesi baru lewat
-  `createSessionWithAssurance`. Tidak ada kredensial hidup tersimpan selain
-  hash satu-arah kodenya sendiri — dan assurance tak pernah naik, jadi login
-  `aal1` tak bisa dicuci jadi sesi `aal2`.
-- **Sekali pakai di bawah konkurensi.** Klaimnya `UPDATE … WHERE redeemed_at IS
-NULL RETURNING …`, primitif mutual-exclusion tabel ini. Versi
-  baca-lalu-tulis membiarkan dua redemption serentak dua-duanya berhasil —
-  dibuktikan MERAH di `tests/integration/session-handoff.integration.test.ts`.
-- **Baris terpakai DISIMPAN, tidak dihapus.** Replay dijawab dari bukti, bukan
-  dari ketiadaan bukti: baris yang dihapus dan kode yang tak pernah ada tak
-  bisa dibedakan.
-- **Satu jawaban untuk semua kegagalan** (`401 HANDOFF_REJECTED`), termasuk body
-  cacat. Bedanya dicatat di audit trail; memberikannya ke pemanggil memberi tahu
-  pemegang kode curian apakah kode itu pernah sah.
-- TTL ≤60 detik ditegakkan **CHECK database**, bukan hanya konstanta TypeScript.
+- **An exact-match `redirect_uri` allow-list.** ADR-0050 names open-redirect
+  here as the way this design fails. Not a prefix (`https://app.example.com`
+  shares a prefix with `https://app.example.com.evil.test`), and not an
+  origin either (an attacker who can choose a path on an allowed origin is already
+  enough). Query and fragment are REJECTED, not stripped.
+- **The code carries no token.** Its row stores the `identity_id` + the assurance
+  the login actually REACHED; redeem mints a new session through
+  `createSessionWithAssurance`. No live credential is stored other than
+  the one-way hash of the code itself — and assurance never rises, so an
+  `aal1` login cannot be laundered into an `aal2` session.
+- **Single-use under concurrency.** The claim is `UPDATE … WHERE redeemed_at IS
+NULL RETURNING …`, this table's mutual-exclusion primitive. A
+  read-then-write version lets two simultaneous redemptions both succeed —
+  proven RED in `tests/integration/session-handoff.integration.test.ts`.
+- **Used rows are KEPT, not deleted.** A replay is answered from evidence, not
+  from the absence of evidence: a deleted row and a code that never existed cannot
+  be told apart.
+- **One answer for every failure** (`401 HANDOFF_REJECTED`), including a malformed
+  body. The difference is recorded in the audit trail; giving it to the caller tells
+  whoever holds a stolen code whether that code was ever valid.
+- The ≤60 second TTL is enforced by a **database CHECK**, not just a TypeScript constant.
 
-**Jebakan yang ditemukan saat membangunnya.** `created_at` DEFAULT `now()`
-adalah instant MULAI TRANSAKSI, sedangkan `expires_at` diturunkan dari jam
-aplikasi — dua jam berbeda, sehingga CHECK `expires_at <= created_at + 60 detik`
-menolak kode yang sepenuhnya normal begitu transaksi sudah terbuka sesaat.
-Aplikasi menulis KEDUANYA dari satu jam. Ditemukan oleh integration test, bukan
-oleh pembacaan.
+**A trap found while building it.** `created_at` DEFAULT `now()`
+is the TRANSACTION START instant, whereas `expires_at` is derived from the application
+clock — two different clocks, so the CHECK `expires_at <= created_at + 60 seconds`
+rejects a perfectly normal code as soon as the transaction has been open for a moment.
+The application writes BOTH from one clock. Found by an integration test, not
+by reading.
 
-**Yang masih milik `awcms-astro`:** rute `/internal/login`, penyimpanan sesi BFF
-server-side, cookie portal, CSRF, dan pemanggilan introspeksi per permintaan.
-Sisi `awcms` sudah lengkap.
+**What still belongs to `awcms-astro`:** the `/internal/login` route, server-side
+BFF session storage, the portal cookie, CSRF, and calling introspection per request.
+The `awcms` side is complete.
 
-## Undangan (Gelombang 4, ADR-0082)
+## Invitations (Wave 4, ADR-0082)
 
-Arah yang berlawanan dengan self-registration: registrasi adalah **tarik**
-(orang asing meminta, admin memutuskan), undangan adalah **dorong** (admin
-menawarkan, orang asing memutuskan). Keduanya tetap ada, masing-masing dengan
-permission dan cerita auditnya sendiri.
+The opposite direction from self-registration: registration is **pull**
+(a stranger asks, an admin decides), an invitation is **push** (an admin
+offers, a stranger decides). Both remain, each with its own
+permissions and its own audit story.
 
-- **Skema (`sql/106`, permission `sql/107`)** — `awcms_invitations` (tenant-scoped,
-  RLS `ENABLE`+`FORCE`) menyimpan `token_hash` sha256 dari 32 byte CSPRNG —
-  token mentah TIDAK PERNAH disimpan — plus `status`, `expires_at`,
-  `resend_count` (CHECK `<= 5`), dan `skip_email_confirmation`.
-  `awcms_invitation_policies` adalah grant yang dibawa tawaran itu.
-- **Sebuah tawaran BUKAN grant.** `activeRoleGrants` tidak membaca tabel ini dan
-  tak boleh diajari — subjek yang memegang peran karena sebuah baris menyatakan
-  ia pernah diundang adalah jalur grant KEDUA yang ADR-0079 runtuhkan.
-  Penerimaan memanggil `grantRolePolicy`, dan baris `awcms_access_policies`
-  yang dihasilkannya adalah satu-satunya yang dilihat pembaca mana pun.
-- **Mengundang dan MEMBERI PERAN dua otoritas.** Undangan ber-peran menuntut
-  `invitations.create` DAN `access_control.assign` (pemisahan ADR-0081, dengan
-  taruhan lebih tinggi: grant lewat undangan menjangkau orang yang belum ada).
-  Penolakan `is_system` diperiksa saat dibuat DAN lagi saat diterima — peran
-  bisa berubah di antara kedua momen itu.
-- **Scope dipatok tenant-wide** oleh CHECK basis data. Kolomnya ada supaya
-  pelebaran nanti satu `DROP`/`ADD CONSTRAINT`; CHECK-nya ada karena ADR-0080
-  melarang mengirim penulis grant ber-scope sebelum rute menyatakan required
-  scope-nya.
-- **`skip_email_confirmation` PLATFORM-scoped** (`invitations.configure`,
-  satu-satunya permission platform modul ini) kecuali alamatnya sudah memegang
-  identitas aktif di tenant ini. Ia menghapus satu-satunya bukti kendali
-  mailbox, dan setelah Gelombang 7 objek yang dicetaknya adalah principal
-  GLOBAL.
-- **Resend MEROTASI token** dan digerbangi `create`, bukan action tersendiri.
-  Tanpa rotasi, "kirim ulang" adalah permukaan perbanyakan token: satu undangan
-  menumbuhkan N tautan hidup dan mencabutnya berarti mencabut N rahasia yang tak
-  seorang pun hitung.
-- **Endpoint admin** — `GET`/`POST /api/v1/invitations` (list keyset + create,
-  `Idempotency-Key` wajib), `POST /api/v1/invitations/{id}/revoke`,
-  `POST /api/v1/invitations/{id}/resend`. Alamat SELALU ter-mask di list.
-- **Endpoint publik** — `GET /api/v1/auth/invitations/{token}` (preview:
-  nama tenant + nama pengundang, **tidak pernah** alamatnya) dan
-  `POST …/accept`. Keduanya `checkAuthRateLimit`; accept ber-Turnstile action
-  sendiri. Tak dikenal / tercabut / sudah diterima / kedaluwarsa / tenant salah
-  semuanya **404** — bukan 410, yang akan memberi tahu pemegang token bahwa
-  token itu pernah sah.
-- **Penerimaan tidak menerbitkan sesi.** Sesi dari sini melangkahi kebijakan MFA
-  tenant, `isPasswordLoginDisabledForIdentity` pada tenant SSO-only, dan rate
-  limit login. Undangan mencetak AKUN; `/login` yang memutuskan sesi.
+- **Schema (`sql/106`, permissions `sql/107`)** — `awcms_invitations` (tenant-scoped,
+  RLS `ENABLE`+`FORCE`) stores a `token_hash` sha256 of 32 CSPRNG bytes —
+  the raw token is NEVER stored — plus `status`, `expires_at`,
+  `resend_count` (CHECK `<= 5`), and `skip_email_confirmation`.
+  `awcms_invitation_policies` are the grants that offer carries.
+- **An offer is NOT a grant.** `activeRoleGrants` does not read this table and
+  must not be taught to — a subject holding a role because some row states
+  they were once invited is the SECOND grant path that ADR-0079 collapsed.
+  Acceptance calls `grantRolePolicy`, and the `awcms_access_policies` row
+  it produces is the only thing any reader sees.
+- **Inviting and GRANTING A ROLE are two authorities.** An invitation carrying a role demands
+  `invitations.create` AND `access_control.assign` (the ADR-0081 separation, with
+  higher stakes: a grant via invitation reaches a person who does not exist yet).
+  The `is_system` rejection is checked at creation AND again at acceptance — a role
+  can change between those two moments.
+- **Scope is pinned tenant-wide** by a database CHECK. The column exists so that
+  widening later is a single `DROP`/`ADD CONSTRAINT`; the CHECK exists because ADR-0080
+  forbids shipping a scoped grant writer before the routes declare their required
+  scope.
+- **`skip_email_confirmation` is PLATFORM-scoped** (`invitations.configure`,
+  this module's only platform permission) unless the address already holds an
+  active identity in this tenant. It removes the only proof of mailbox
+  control, and after Wave 7 the object it mints is a GLOBAL
+  principal.
+- **Resend ROTATES the token** and is gated by `create`, not by a separate action.
+  Without rotation, "send again" is a token-multiplication surface: one invitation
+  grows N live links and revoking it means revoking N secrets that
+  nobody counted.
+- **Admin endpoints** — `GET`/`POST /api/v1/invitations` (keyset list + create,
+  `Idempotency-Key` mandatory), `POST /api/v1/invitations/{id}/revoke`,
+  `POST /api/v1/invitations/{id}/resend`. Addresses are ALWAYS masked in the list.
+- **Public endpoints** — `GET /api/v1/auth/invitations/{token}` (preview:
+  tenant name + inviter name, **never** their address) and
+  `POST …/accept`. Both `checkAuthRateLimit`; accept has its own Turnstile
+  action. Unknown / revoked / already accepted / expired / wrong tenant
+  are all **404** — not 410, which would tell whoever holds the token that
+  it was once valid.
+- **Acceptance does not issue a session.** A session from here would step over the tenant's
+  MFA policy, `isPasswordLoginDisabledForIdentity` on an SSO-only tenant, and the login rate
+  limit. An invitation mints an ACCOUNT; `/login` decides the session.
 - **`materializeMembership()`** (`application/membership-materialization.ts`)
-  adalah SATU fungsi dengan satu pemanggil, sengaja: Gelombang 7 butuh persis
-  satu tempat untuk diarahkan ulang saat identity menjadi principal global.
-- **Kunci baris load-bearing** — `acceptInvitation` membaca `FOR UPDATE`.
-  Tanpanya dua penerimaan tautan yang sama sama-sama lolos cek status dan yang
-  kalah menabrak `awcms_identities_tenant_login_key` di tengah transaksi
-  (dibuktikan MERAH lewat mutasi di
+  is ONE function with one caller, deliberately: Wave 7 needs exactly
+  one place to redirect when identities become global principals.
+- **The row lock is load-bearing** — `acceptInvitation` reads `FOR UPDATE`.
+  Without it two acceptances of the same link both pass the status check and the
+  loser hits `awcms_identities_tenant_login_key` mid-transaction
+  (proven RED by mutation in
   `tests/integration/invitations.integration.test.ts`).
-- **Pengiriman lewat capability port** — `identity_access` tidak menulis
-  `awcms_email_*` (ADR-0013 §6). `AuthNotificationPort` mendapat operasi KEDUA
-  (`enqueueAuthAddressNotification`) karena undangan belum punya baris
-  `awcms_tenant_users` untuk dialamati. Tenant tanpa template `auth.invitation`
-  aktif → `delivery: "unavailable"` di respons (pemanggilnya admin
-  terautentikasi; menyembunyikannya hanya membuatnya menunggu tautan yang tak
-  akan pernah tiba).
-- **Belum ada layar admin** untuk undangan — keempat permission-nya duduk di
-  ledger `NOT_YET_SCREENED`, urutan yang sama dengan ADR-0056 (`media_library`
-  mendapat permukaan API lebih dulu, layarnya menyusul). Path-nya sengaja tidak
-  ditulis di sini: `skills:check` menuntut tiap URL `/admin/…` berbacktick
-  resolve ke halaman nyata, dan menyebutnya sekarang akan menjadi persis
-  kebohongan percaya diri yang gerbang itu ada untuk mencegah.
+- **Delivery through a capability port** — `identity_access` does not write
+  `awcms_email_*` (ADR-0013 §6). `AuthNotificationPort` gains a SECOND operation
+  (`enqueueAuthAddressNotification`) because an invitation has no
+  `awcms_tenant_users` row to be addressed by yet. A tenant without an active
+  `auth.invitation` template → `delivery: "unavailable"` in the response (the caller is an
+  authenticated admin; hiding it would only leave them waiting for a link that
+  will never arrive).
+- **There is no admin screen yet** for invitations — its four permissions sit in the
+  `NOT_YET_SCREENED` ledger, the same order as ADR-0056 (`media_library`
+  got its API surface first, its screen followed). The path is deliberately not
+  written here: `skills:check` demands that every backticked `/admin/…` URL
+  resolves to a real page, and naming it now would be exactly the
+  confident lie that gate exists to prevent.
 
-## Belum tersedia (Sprint 3+)
+## Not yet available (Sprint 3+)
 
-Endpoint manajemen user/role lanjutan. Follow-up yang dicatat:
-self-registration masih gerbang tingkat deployment (belum per-tenant), dan CRUD
-provider OIDC masih API-only (daftar read-only saja di `/admin/security`).
+Advanced user/role management endpoints. Recorded follow-ups:
+self-registration is still a deployment-level gate (not yet per-tenant), and OIDC
+provider CRUD is still API-only (a read-only list only, on `/admin/security`).

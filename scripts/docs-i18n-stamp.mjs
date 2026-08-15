@@ -38,6 +38,42 @@ const CHECK_ONLY = process.argv.includes("--check");
 const BANNER_REGEX = /^(?:🇬🇧|🇮🇩).*$/u;
 
 /**
+ * A leading YAML frontmatter block, which must stay the FIRST bytes of the file.
+ *
+ * All 55 `.claude/skills/*​/SKILL.md` files open with one, and the loader that
+ * reads them requires `---` at byte zero. Prepending the banner above it would
+ * not fail loudly — it would silently stop the frontmatter being frontmatter, so
+ * every skill would lose the `name`/`description` that decide when it is
+ * selected. The banner therefore goes AFTER the block, not before the file.
+ */
+const FRONTMATTER_REGEX = /^---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n/;
+
+/**
+ * @param {string} content
+ * @returns {{ frontmatter: string, body: string }}
+ */
+function splitFrontmatter(content) {
+  const match = content.match(FRONTMATTER_REGEX);
+  if (!match) return { frontmatter: "", body: content };
+  const block = match[0];
+  return { frontmatter: block, body: content.slice(block.length) };
+}
+
+/**
+ * Apply `transform` to the body only, leaving any frontmatter block untouched
+ * and still first.
+ *
+ * @param {string} content
+ * @param {(body: string) => string} transform
+ * @returns {string}
+ */
+function inBody(content, transform) {
+  const { frontmatter, body } = splitFrontmatter(content);
+  if (!frontmatter) return transform(body);
+  return `${frontmatter}\n${transform(body.replace(/^\s*\n/, ""))}`;
+}
+
+/**
  * @param {string} mirrorPath
  * @returns {string}
  */
@@ -157,20 +193,21 @@ for (const mirrorPath of listMirrors()) {
   const originalSource = readFileIfPresent(sourceFull);
   if (originalSource === null) continue;
 
-  const nextSource = withBanner(
-    withoutMarker(originalSource),
-    englishBanner(mirrorPath)
+  const nextSource = inBody(originalSource, (body) =>
+    withBanner(withoutMarker(body), englishBanner(mirrorPath))
   );
 
   const mirrorFull = join(ROOT, mirrorPath);
   const originalMirror = readFileIfPresent(mirrorFull);
   if (originalMirror === null) continue;
-  const nextMirror = withMarker(
-    withBanner(originalMirror, indonesianBanner(sourcePath)),
-    // Hash the source AS IT WILL BE WRITTEN, not as it was read — otherwise the
-    // banner rewrite below changes the file after we hashed it and the gate
-    // fails on a tree this tool just produced.
-    computeSourceHash(nextSource)
+  const nextMirror = inBody(originalMirror, (body) =>
+    withMarker(
+      withBanner(body, indonesianBanner(sourcePath)),
+      // Hash the source AS IT WILL BE WRITTEN, not as it was read — otherwise
+      // the banner rewrite above changes the file after we hashed it and the
+      // gate fails on a tree this tool just produced.
+      computeSourceHash(nextSource)
+    )
   );
 
   if (nextSource !== originalSource) {
@@ -196,6 +233,9 @@ if (CHECK_ONLY) {
   console.log(
     changed.length === 0
       ? "docs:i18n:stamp — nothing to do."
-      : `docs:i18n:stamp — updated ${changed.length} file(s). Run \`bun run format\`.`
+      : `docs:i18n:stamp — updated ${changed.length} file(s).\n` +
+          "  If `bun run format` then changes an English source, its mirror's hash goes\n" +
+          "  STALE and `check:docs:translation` fails on files nothing translated wrongly.\n" +
+          "  The order is FORMAT FIRST, THEN STAMP. Re-run this after formatting."
   );
 }

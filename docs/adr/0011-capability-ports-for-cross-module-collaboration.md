@@ -1,36 +1,38 @@
-# ADR-0011 — Capability ports untuk kolaborasi lintas-modul
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0011-capability-ports-for-cross-module-collaboration.id.md)
+
+# ADR-0011 — Capability ports for cross-module collaboration
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-11
-- **Pengambil keputusan:** Tim modul `blog_content`/`news_portal`
-- **Terkait:** Issue #681 (epic #679, platform-hardening), Issue #636/#637 (asal mula import lintas-modul yang diperbaiki di sini), `src/modules/_shared/module-contract.ts` (`ModuleCapabilityContract`)
+- **Date:** 2026-07-11
+- **Decision makers:** The `blog_content`/`news_portal` module team
+- **Related:** Issue #681 (epic #679, platform-hardening), Issue #636/#637 (the origin of the cross-module imports fixed here), `src/modules/_shared/module-contract.ts` (`ModuleCapabilityContract`)
 
-## Konteks
+## Context
 
-`blog_content` dan `news_portal` saling meng-import kode `application`/`domain` satu sama lain secara langsung sejak Issue #636 (`blog_content` butuh registry media R2 milik `news_portal`) dan Issue #637 (`news_portal`'s homepage composer butuh query post/kategori milik `blog_content`). Kedua arah ini terdokumentasi eksplisit sebagai keputusan sadar saat itu ("cross-module TypeScript import ≠ `dependencies` array, yang cuma mengatur urutan enable/disable") — tapi hasil akhirnya tetap sebuah cycle di level SOURCE CODE: `blog-content/application/news-media-reference-gate.ts` meng-import `news-portal/application/news-media-object-directory.ts`, sementara `news-portal/application/homepage-section-composer.ts` meng-import `blog-content/application/public-blog-directory.ts` DAN `blog-content/application/news-media-reference-gate.ts` (yang, seperti disebut di atas, balik meng-import `news-portal`) — rantai tiga-hop yang sama sekali tidak terlihat dari `module.ts`'s `dependencies` array manapun.
+`blog_content` and `news_portal` have been importing each other's `application`/`domain` code directly since Issue #636 (`blog_content` needed `news_portal`'s R2 media registry) and Issue #637 (`news_portal`'s homepage composer needed `blog_content`'s post/category queries). Both directions were documented explicitly as a conscious decision at the time ("a cross-module TypeScript import ≠ the `dependencies` array, which only governs enable/disable ordering") — but the end result is still a cycle at the SOURCE CODE level: `blog-content/application/news-media-reference-gate.ts` imports `news-portal/application/news-media-object-directory.ts`, while `news-portal/application/homepage-section-composer.ts` imports `blog-content/application/public-blog-directory.ts` AND `blog-content/application/news-media-reference-gate.ts` (which, as noted above, imports `news-portal` right back) — a three-hop chain that is completely invisible from any `module.ts` `dependencies` array.
 
-Audit statis epic #679 menandai ini sebagai risiko: dua modul tidak bisa dipahami, diuji, atau (secara hipotetis) dipisah tanpa yang lain, meski registry metadata terlihat bersih.
+Epic #679's static audit flagged this as a risk: two modules that cannot be understood, tested, or (hypothetically) separated without each other, even though the registry metadata looks clean.
 
-## Keputusan
+## Decision
 
-Kami memutuskan untuk memisahkan **kapabilitas** (interface yang disepakati) dari **implementasi** (kode nyata satu modul), lewat pola ports-and-adapters minimal:
+We decide to separate the **capability** (the agreed interface) from the **implementation** (one module's real code), via a minimal ports-and-adapters pattern:
 
-1. **Port** — interface TypeScript murni di `src/modules/_shared/ports/*.ts`, TIDAK meng-import apa pun dari modul mana pun. `NewsMediaPort` (kapabilitas milik `news_portal`, dipakai `blog_content`) dan `PublicContentPort` (kapabilitas milik `blog_content`, dipakai `news_portal`).
-2. **Adapter** — implementasi konkret satu port, hidup di modul PEMILIK kapabilitas itu sendiri (`news-portal/application/news-media-port-adapter.ts`, `blog-content/application/public-content-port-adapter.ts`). Modul lain TIDAK PERNAH meng-import file adapter modul lain secara langsung.
-3. **Composition root** — route handler (`src/pages/api/v1/**`, `src/pages/news/**`, `src/pages/blog/**`) yang meng-import adapter konkret dan menyuntikkannya (parameter fungsi biasa, bukan DI framework) ke fungsi `application` modul lain yang butuh kapabilitas itu. Route handler SUDAH menjadi lapisan terluar yang boleh meng-import lintas-modul (konvensi yang sudah ada, bukan baru) — inilah yang menjadikannya composition root yang natural, tanpa infrastruktur baru.
-4. `renderContentJsonToHtml`'s bagian gallery-rendering (dipakai KEDUA modul, sebelumnya `news_portal` meng-import fungsi `blog_content` untuk ini) dipindah ke `_shared/rendering/gallery-block-renderer.ts` — kode yang genuinely dipakai bersama pindah ke tanah netral, bukan salah satu modul "meminjam" dari yang lain.
-5. `ModuleDescriptor` (`_shared/module-contract.ts`) mendapat field opsional baru, `capabilities?: {provides, consumes}` — dokumentasi terstruktur tentang hubungan port ini, terpisah dari `dependencies` (yang tetap murni untuk urutan enable/disable lifecycle).
-6. Test struktural baru (`tests/unit/module-boundary.test.ts`) men-scan `blog-content`/`news-portal`'s `application`/`domain` tree untuk import langsung ke tree modul lain, gagal loud bila ditemukan — mencegah regresi diam-diam ke pola lama.
+1. **Port** — a pure TypeScript interface in `src/modules/_shared/ports/*.ts`, importing NOTHING from any module. `NewsMediaPort` (a capability owned by `news_portal`, consumed by `blog_content`) and `PublicContentPort` (a capability owned by `blog_content`, consumed by `news_portal`).
+2. **Adapter** — a concrete implementation of one port, living in the module that OWNS the capability itself (`news-portal/application/news-media-port-adapter.ts`, `blog-content/application/public-content-port-adapter.ts`). Other modules NEVER import another module's adapter file directly.
+3. **Composition root** — the route handler (`src/pages/api/v1/**`, `src/pages/news/**`, `src/pages/blog/**`) that imports the concrete adapter and injects it (an ordinary function parameter, not a DI framework) into the other module's `application` function that needs the capability. Route handlers ALREADY are the outermost layer allowed to import across modules (an existing convention, not a new one) — which is what makes them the natural composition root, with no new infrastructure.
+4. The gallery-rendering part of `renderContentJsonToHtml` (used by BOTH modules; previously `news_portal` imported the `blog_content` function for it) moves to `_shared/rendering/gallery-block-renderer.ts` — code that is genuinely shared moves to neutral ground, rather than one module "borrowing" from the other.
+5. `ModuleDescriptor` (`_shared/module-contract.ts`) gets a new optional field, `capabilities?: {provides, consumes}` — structured documentation of this port relationship, kept separate from `dependencies` (which stays purely about enable/disable lifecycle ordering).
+6. A new structural test (`tests/unit/module-boundary.test.ts`) scans `blog-content`/`news-portal`'s `application`/`domain` trees for direct imports into another module's tree and fails loudly when it finds one — preventing a silent regression to the old pattern.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** `blog_content`/`news_portal`'s `application`/`domain` masing-masing sekarang genuinely tidak tahu-menahu soal implementasi satu sama lain — hanya soal bentuk data (DTO) dan interface (port) yang independen dari siapa yang mengimplementasikannya. Diverifikasi otomatis, bukan cuma didokumentasikan.
-- **Positif:** DTO port (`PublicContentPostSummaryDTO`, dll) sengaja BUKAN re-export tipe asli modul pemilik — port tidak pernah menciptakan source dependency ke implementasi hari ini.
-- **Negatif/trade-off:** setiap fungsi yang butuh kapabilitas lintas-modul sekarang menerima satu parameter tambahan (port), dan setiap route handler pemanggilnya harus meng-import adapter konkret + menyuntikkannya — sedikit lebih verbose dibanding import langsung yang lama, harga yang sepadan untuk menghapus cycle nyata.
-- **Netral:** `dependencies` array KEDUA modul tetap sengaja TIDAK menyertakan satu sama lain (keputusan Issue #632 yang masih berlaku) — `capabilities` adalah lapisan dokumentasi/verifikasi TERPISAH untuk hubungan level-source, bukan pengganti atau tambahan pada graf lifecycle enable/disable.
+- **Positive:** `blog_content`/`news_portal`'s `application`/`domain` layers now genuinely know nothing about each other's implementation — only about data shapes (DTOs) and interfaces (ports) that are independent of who implements them. Verified automatically, not merely documented.
+- **Positive:** the port DTOs (`PublicContentPostSummaryDTO`, etc.) are deliberately NOT re-exports of the owning module's original types — a port never creates a source dependency on today's implementation.
+- **Negative/trade-off:** every function that needs a cross-module capability now takes one extra parameter (the port), and every calling route handler has to import the concrete adapter and inject it — slightly more verbose than the old direct import, a price worth paying to remove a real cycle.
+- **Neutral:** BOTH modules' `dependencies` arrays still deliberately do NOT list each other (the Issue #632 decision, still in force) — `capabilities` is a SEPARATE documentation/verification layer for the source-level relationship, not a replacement for or an addition to the enable/disable lifecycle graph.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Biarkan cycle apa adanya, cukup dokumentasikan** — ditolak: audit epic #679 eksplisit menandainya sebagai risiko P0, dan tanpa test struktural, siapa pun bisa diam-diam menambah edge baru di masa depan tanpa sadar sedang memperdalam cycle yang sama.
-- **Gabungkan `blog_content`+`news_portal` jadi satu modul** — eksplisit di luar cakupan issue #681 sendiri ("Merging the two modules" ada di §Out of scope) — kedua modul punya lifecycle/permission/scope produk yang genuinely berbeda (blog dasar vs. lapisan editorial R2-only), menggabungkannya menghapus fleksibilitas enable/disable independen yang sudah ada.
-- **Service-locator/registry global untuk adapter** (bukan parameter injeksi manual) — ditolak: repo ini tidak punya DI framework/container di manapun, menambah satu HANYA untuk dua modul ini adalah kompleksitas baru yang tidak proporsional; parameter fungsi biasa cukup dan konsisten dengan gaya "fungsi murni + `tx: Bun.SQL` eksplisit" yang sudah dipakai di seluruh codebase.
+- **Leave the cycle as it is and just document it** — rejected: epic #679's audit explicitly flags it as a P0 risk, and without a structural test anyone could silently add a new edge in the future without realising they are deepening the same cycle.
+- **Merge `blog_content`+`news_portal` into one module** — explicitly outside the scope of issue #681 itself ("Merging the two modules" is in §Out of scope) — the two modules have genuinely different lifecycles/permissions/product scopes (basic blog vs. an R2-only editorial layer), and merging them removes the independent enable/disable flexibility that already exists.
+- **A global service-locator/registry for adapters** (instead of manual parameter injection) — rejected: this repo has no DI framework/container anywhere, and adding one JUST for these two modules is new complexity out of all proportion; an ordinary function parameter is enough and is consistent with the "pure functions + an explicit `tx: Bun.SQL`" style already used across the codebase.

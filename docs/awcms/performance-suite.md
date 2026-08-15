@@ -1,135 +1,137 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](performance-suite.id.md)
+
 # Performance Suite — Representative Load, Soak, and Query-Plan Regression Budgets
 
-> **Status dokumen:** standar target, bukan status implementasi. Repo `awcms` belum punya `src/lib/performance/`, `scripts/performance-suite.ts`, atau modul ERP apa pun untuk diukur — dokumen ini mengadaptasi arsitektur performance suite yang sudah terbukti di basis `awcms-mini` menjadi desain wajib yang harus diimplementasikan begitu modul-modul domain ERP (finance, inventory, procurement, manufacturing, HR/payroll) mulai dibangun. Mekanisme (fixture deterministik, skenario load/soak/saturasi-dan-recovery, budget regresi query-plan versioned, safety interlock) dipertahankan sebagai standar wajib; contoh workload/tabel disesuaikan ke domain ERP.
+> **Document status:** a target standard, not an implementation status. The `awcms` repo does not yet have `src/lib/performance/`, `scripts/performance-suite.ts`, or any ERP module to measure — this document adapts the performance suite architecture already proven in the `awcms-mini` base into a mandatory design that must be implemented as soon as the ERP domain modules (finance, inventory, procurement, manufacturing, HR/payroll) start being built. The mechanism (deterministic fixtures, load/soak/saturation-and-recovery scenarios, versioned query-plan regression budgets, safety interlock) is kept as a mandatory standard; the example workloads/tables are adjusted to the ERP domain.
 
-Bergantung pada model kapasitas koneksi berbasis deployment (`database-capacity-runbook.md`, menyusul) dan direncanakan menggunakan ulang safety interlock serta bentuk scenario-runner yang sama dengan DR/chaos drill (`resilience-dr-verification.md`, menyusul) alih-alih menciptakan ulang keduanya. Companion untuk disiplin audit/tuning "ukur sebelum optimasi".
+It depends on the deployment-based connection capacity model (`database-capacity-runbook.md`, forthcoming) and is planned to reuse the same safety interlock and scenario-runner shape as the DR/chaos drill (`resilience-dr-verification.md`, forthcoming) instead of reinventing either. A companion to the "measure before optimising" audit/tuning discipline.
 
-## Kenapa ini dibutuhkan
+## Why this is needed
 
-Tanpa suite ini, "performance" di repo ERP manapun cenderung berarti `EXPLAIN ANALYZE` ad hoc saat sesi tuning, plus paling banter satu micro-benchmark yang membuktikan pencatatan metrics sendiri tidak menambah overhead material. Tidak ada yang membuktikan apa pun tentang skala multi-tenant representatif, stabilitas memori jangka panjang, query plan RLS pada volume nyata, atau bagaimana workload interaktif (mis. input transaksi kasir/PO) dan workload pelaporan (laporan keuangan, rekonsiliasi stok) berebut connection pool yang sama di bawah beban. Suite ini menutup celah tersebut: fixture sintetik deterministik, skenario load/soak/mixed-workload/saturation-and-recovery, dan budget regresi query-plan versioned — semuanya bisa dijalankan lokal, di CI (subset aman), atau terjadwal (lane penuh).
+Without this suite, "performance" in any ERP repo tends to mean ad hoc `EXPLAIN ANALYZE` during a tuning session, plus at best one micro-benchmark proving that recording metrics itself adds no material overhead. Nothing proves anything about representative multi-tenant scale, long-run memory stability, RLS query plans at real volume, or how interactive workloads (e.g. cashier/PO transaction entry) and reporting workloads (financial reports, stock reconciliation) fight over the same connection pool under load. This suite closes that gap: deterministic synthetic fixtures, load/soak/mixed-workload/saturation-and-recovery scenarios, and versioned query-plan regression budgets — all runnable locally, in CI (the safe subset), or on a schedule (the full lane).
 
-## Arsitektur (rencana)
+## Architecture (planned)
 
 ```text
 src/lib/performance/
-  prng.ts                    PRNG seeded deterministik (mulberry32) — akar dari
-                              seluruh jaminan reproduktibilitas di bawah
-  scale-profiles.ts          profil skala safe/standard/large: jumlah tenant,
-                              jumlah baris per tabel, multiplier noisy-neighbor,
-                              durasi soak yang didokumentasikan
-  fixture-generator.ts       generator baris murni (tanpa I/O) — seed + profil
-                              yang sama selalu menghasilkan fixture plan yang sama
-  fixture-seeder.ts          I/O: bulk-insert baris hasil generate lewat
-                              withTenant (RLS-enforced, tidak pernah privileged
-                              bypass) memakai pola unnest(...) + sql.array(...)
-  metrics-aggregate.ts       murni: p50/p95/p99 latency, throughput, error rate
-                              dari raw call sample
-  process-metrics.ts         I/O tipis: sampling CPU/memori proses, plus
-                              passthrough read-only ke snapshot work-class gate
-                              NYATA (getWorkClassSaturation) dan
-                              pg_stat_activity/pg_locks untuk sinyal koneksi/lock
-  redaction.ts               murni: redaksi kredensial DSN, pseudonymization
-                              UUID deterministik per-run
-  query-plan-budgets.ts      murni: registry budget regresi versioned +
-                              evaluator EXPLAIN (FORMAT JSON)
-  query-plan-runner.ts       I/O: menjalankan EXPLAIN di bawah RLS, selalu
+  prng.ts                    deterministic seeded PRNG (mulberry32) — the root of
+                              every reproducibility guarantee below
+  scale-profiles.ts          safe/standard/large scale profiles: tenant count,
+                              row count per table, noisy-neighbor multiplier,
+                              the documented soak duration
+  fixture-generator.ts       pure row generator (no I/O) — the same seed + profile
+                              always produces the same fixture plan
+  fixture-seeder.ts          I/O: bulk-inserts the generated rows through
+                              withTenant (RLS-enforced, never a privileged
+                              bypass) using the unnest(...) + sql.array(...) pattern
+  metrics-aggregate.ts       pure: p50/p95/p99 latency, throughput, error rate
+                              from raw call samples
+  process-metrics.ts         thin I/O: process CPU/memory sampling, plus a
+                              read-only passthrough to the REAL work-class gate
+                              snapshot (getWorkClassSaturation) and
+                              pg_stat_activity/pg_locks for connection/lock signals
+  redaction.ts               pure: DSN credential redaction, deterministic
+                              per-run UUID pseudonymization
+  query-plan-budgets.ts      pure: versioned regression budget registry +
+                              EXPLAIN (FORMAT JSON) evaluator
+  query-plan-runner.ts       I/O: runs EXPLAIN under RLS, always
                               rolled back
-  workload.ts                I/O: satu operasi nyata withTenant-gated per work
+  workload.ts                I/O: one real withTenant-gated operation per work
                               class (interactive/critical_transaction/reporting/
                               background_sync/maintenance)
   scenario-context.ts        shared mutable state (sql client, fixture plan,
-                              scale profile) — diset sekali oleh orchestrator
-  scenarios/*.ts              implementasi ScenarioDefinition, MENGGUNAKAN ULANG
-                              tipe scenario-runner resilience yang sama
-                              (runScenario, computeDrOverall) — bukan runner
-                              paralel/duplikat
-  report.ts                  builder laporan machine-readable + human, dengan
-                              redaksi diterapkan sebelum apa pun ditulis ke disk
+                              scale profile) — set once by the orchestrator
+  scenarios/*.ts              ScenarioDefinition implementations, REUSING
+                              the same resilience scenario-runner types
+                              (runScenario, computeDrOverall) — not a
+                              parallel/duplicate runner
+  report.ts                  machine-readable + human report builder, with
+                              redaction applied before anything is written to disk
 
 scripts/
   performance-suite.ts            bun run performance:suite
   performance-query-plan-check.ts bun run performance:query-plan:check
 ```
 
-## Safety interlock — digunakan ulang, bukan diciptakan ulang
+## Safety interlock — reused, not reinvented
 
-Kedua script direncanakan mengimpor `authorizeDrDrill` dari `src/lib/resilience/target-guard.ts` TANPA MODIFIKASI — guard target produksi non-overridable yang sama yang dipakai `scripts/dr-drill.ts`:
+Both scripts are planned to import `authorizeDrDrill` from `src/lib/resilience/target-guard.ts` UNMODIFIED — the same non-overridable production target guard used by `scripts/dr-drill.ts`:
 
-- `APP_ENV=production` ditolak tanpa syarat, tidak ada flag override.
-- Host `DATABASE_URL` wajib entri allowlist lokal/isolated yang dikenal (default-deny untuk apa pun yang tidak dikenal).
-- `--confirm-non-production=<nilai APP_ENV>` adalah typo-catcher wajib.
+- `APP_ENV=production` is rejected unconditionally, with no override flag.
+- The `DATABASE_URL` host must be a known local/isolated allowlist entry (default-deny for anything unknown).
+- `--confirm-non-production=<APP_ENV value>` is a mandatory typo-catcher.
 
-Lihat `resilience-dr-verification.md` (menyusul) untuk flowchart safety-interlock lengkap — berlaku identik di sini.
+See `resilience-dr-verification.md` (forthcoming) for the full safety-interlock flowchart — it applies identically here.
 
-## Data sintetik — deterministik, dapat dikonfigurasi, distribusi terdokumentasi
+## Synthetic data — deterministic, configurable, documented distribution
 
-`scale-profiles.ts` mendefinisikan tiga profil versioned:
+`scale-profiles.ts` defines three versioned profiles:
 
-| Profil     | Tenants | Multiplier noisy-neighbor |  Durasi soak | Dipakai oleh                           |
-| ---------- | ------: | ------------------------: | -----------: | -------------------------------------- |
-| `safe`     |       5 |                        6x | 0 (dilewati) | `quality` job CI, default kedua script |
-| `standard` |      20 |                       10x |          60s | investigasi manual                     |
-| `large`    |      50 |                       15x |         600s | lane `--full` terjadwal/manual         |
+| Profile    | Tenants | Noisy-neighbor multiplier | Soak duration | Used by                                   |
+| ---------- | ------: | ------------------------: | ------------: | ----------------------------------------- |
+| `safe`     |       5 |                        6x |   0 (skipped) | CI `quality` job, default of both scripts |
+| `standard` |      20 |                       10x |           60s | manual investigation                      |
+| `large`    |      50 |                       15x |          600s | scheduled/manual `--full` lane            |
 
-Setiap profil menyediakan seed tabel representatif per tenant — direncanakan mencakup: audit event, ABAC decision log, outbox/delivery sync, antrian sync objek eksternal, idempotency key, dan tabel bisnis tenant-scoped representatif per domain ERP (mis. `awcms_finance_journal_entries` untuk finance, `awcms_inventory_stock_movements` untuk inventory — driving table budget query-plan full-text/laporan). Tenant TERAKHIR di setiap profil adalah tenant noisy-neighbor yang ditunjuk, jumlah barisnya dikalikan — tidak pernah kebetulan skala, selalu posisi deterministik yang sama untuk seed tertentu.
+Every profile provides a representative set of seeded tables per tenant — planned to cover: audit events, the ABAC decision log, sync outbox/deliveries, the external object sync queue, idempotency keys, and a representative tenant-scoped business table per ERP domain (e.g. `awcms_finance_journal_entries` for finance, `awcms_inventory_stock_movements` for inventory — the driving tables of the full-text/reporting query-plan budgets). The LAST tenant in every profile is the designated noisy-neighbor tenant, its row counts multiplied — never an accidental scale, always the same deterministic position for a given seed.
 
-Seluruh randomness mengalir lewat generator seeded `mulberry32` di `prng.ts` — `Math.random()`/`crypto.randomUUID()` tidak pernah muncul di generator manapun, jadi `buildFixturePlan(profile, seed)` byte-identical lintas run/mesin untuk input yang sama. Setiap field string diambil dari kosakata tetap yang kecil — data sintetik murni, tidak pernah menyerupai identitas pelanggan nyata, kredensial, NPWP/NIK, nominal transaksi riil, atau PII lain.
+All randomness flows through the seeded `mulberry32` generator in `prng.ts` — `Math.random()`/`crypto.randomUUID()` never appear in any generator, so `buildFixturePlan(profile, seed)` is byte-identical across runs/machines for the same inputs. Every string field is drawn from a small fixed vocabulary — purely synthetic data, never resembling real customer identities, credentials, NPWP/NIK, real transaction amounts, or any other PII.
 
-TIMESTAMP baris sama-sama seed-deterministik, bukan hanya jumlah baris/id: setiap generator baris menghitung `createdAt` relatif terhadap sebuah fungsi anchor murni dari seed saja, tidak pernah `Date.now()`/`new Date()` — memastikan `(scaleProfile, seed)` yang sama menghasilkan timestamp baris absolut yang sama terlepas hari nyata suite dijalankan, menjaga komparabilitas rilis-ke-rilis.
+Row TIMESTAMPS are just as seed-deterministic as the row counts/ids: every row generator computes `createdAt` relative to an anchor function that is pure in the seed alone, never `Date.now()`/`new Date()` — ensuring the same `(scaleProfile, seed)` produces the same absolute row timestamps regardless of the real-world day the suite is run, preserving release-to-release comparability.
 
-Fixture seeding menulis lewat `withTenant` (`fixture-seeder.ts`), chokepoint SAMA yang dilalui setiap mutasi produksi — RLS benar-benar ditegakkan selama seeding, bukan dilewati koneksi privileged, jadi database yang baru diseed adalah bukti nyata bahwa "test negatif RLS lintas-tenant tetap aktif di environment data besar", bukan asumsi.
+Fixture seeding writes through `withTenant` (`fixture-seeder.ts`), the SAME chokepoint every production mutation goes through — RLS is genuinely enforced during seeding, not bypassed by a privileged connection, so a freshly seeded database is real evidence that "the cross-tenant negative RLS tests are still active in a large-data environment", not an assumption.
 
-## Skenario workload — operasi work-class-gated nyata, bukan simulasi
+## Workload scenarios — real work-class-gated operations, not simulations
 
-`workload.ts` memetakan model workload ke lima work class repo ini (`src/lib/database/work-class.ts`), masing-masing lewat `withTenant` nyata:
+`workload.ts` maps the workload models onto this repo's five work classes (`src/lib/database/work-class.ts`), each through a real `withTenant`:
 
-| Work class             | Model workload                 | Operasi nyata (contoh ERP)                                                                                        |
-| ---------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `interactive`          | read/write API interaktif      | Pembacaan audit-event/list transaksi scoped RLS keyset-style (bentuk sama seperti `GET /api/v1/finance/journals`) |
-| `critical_transaction` | transaksi idempoten kritikal   | Store idempotency nyata — mis. posting jurnal/payroll run yang tidak boleh terduplikasi                           |
-| `reporting`            | pembacaan pelaporan/analitik   | Agregat laporan keuangan/stok scoped RLS (mis. neraca saldo, ringkasan stok per gudang)                           |
-| `background_sync`      | workload sync/event/job        | Probe klaim outbox `FOR UPDATE SKIP LOCKED` (bentuk sama seperti dispatcher sync integrasi eksternal)             |
-| `maintenance`          | degradasi terkendali / retensi | Purge retensi nyata (audit/log), retention window diset agar cocok nol baris terhadap data fixture                |
+| Work class             | Workload model                     | Real operation (ERP example)                                                                                     |
+| ---------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `interactive`          | interactive API read/write         | RLS-scoped keyset-style audit-event/transaction list reads (the same shape as `GET /api/v1/finance/journals`)    |
+| `critical_transaction` | critical idempotent transaction    | A real idempotency store — e.g. a journal posting/payroll run that must not be duplicated                        |
+| `reporting`            | reporting/analytics reads          | RLS-scoped financial/stock report aggregates (e.g. trial balance, stock summary per warehouse)                   |
+| `background_sync`      | sync/event/job workload            | An outbox claim probe with `FOR UPDATE SKIP LOCKED` (the same shape as the external integration sync dispatcher) |
+| `maintenance`          | controlled degradation / retention | A real retention purge (audit/log), with the retention window set to match zero rows against the fixture data    |
 
-Skenario (`src/lib/performance/scenarios/*.ts`), masing-masing `ScenarioDefinition` yang menggunakan ulang `runScenario`/`computeDrOverall` milik resilience scenario-runner:
+The scenarios (`src/lib/performance/scenarios/*.ts`), each a `ScenarioDefinition` reusing the resilience scenario-runner's `runScenario`/`computeDrOverall`:
 
-| Skenario                         | Tier | Yang dibuktikan                                                                                                                                                                                                                                                                          |
-| -------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interactive-load`               | safe | p50/p95/p99/throughput/error-rate di bawah pembacaan interaktif konkuren                                                                                                                                                                                                                 |
-| `critical-transaction-integrity` | safe | N racer konkuren untuk KUNCI idempotency yang SAMA (mis. posting jurnal duplikat) -> tepat 1 baris persisten (atomisitas di bawah beban)                                                                                                                                                 |
-| `reporting-under-load`           | safe | Pembacaan pelaporan konkuren tidak pernah merusak korektnas critical-transaction konkuren                                                                                                                                                                                                |
-| `background-sync-claim-load`     | safe | Throughput/error-rate klaim `FOR UPDATE SKIP LOCKED` di bawah konkurensi                                                                                                                                                                                                                 |
-| `saturation-and-recovery`        | safe | **Bukti inti**: sengaja over-subscribe gate work-class "maintenance" nyata (kapasitas 5), menegaskan jumlah tepat penolakan langsung `503 DATABASE_BUSY` + `Retry-After: 2`, mengonfirmasi gate kembali kosong (`active=0/queued=0`), dan panggilan susulan berhasil (recovery terbukti) |
-| `soak-stability`                 | full | Panggilan interaktif berulang selama `soakDurationMs` profil skala; menegaskan pertumbuhan RSS tetap di bawah plafon longgar (tidak ada pertumbuhan tak terbatas) — self-skip pada profil `safe` (`soakDurationMs = 0`)                                                                  |
+| Scenario                         | Tier | What it proves                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interactive-load`               | safe | p50/p95/p99/throughput/error-rate under concurrent interactive reads                                                                                                                                                                                                                                            |
+| `critical-transaction-integrity` | safe | N concurrent racers for the SAME idempotency KEY (e.g. a duplicate journal posting) -> exactly 1 persisted row (atomicity under load)                                                                                                                                                                           |
+| `reporting-under-load`           | safe | Concurrent reporting reads never break the correctness of concurrent critical transactions                                                                                                                                                                                                                      |
+| `background-sync-claim-load`     | safe | `FOR UPDATE SKIP LOCKED` claim throughput/error-rate under concurrency                                                                                                                                                                                                                                          |
+| `saturation-and-recovery`        | safe | **The core proof**: deliberately over-subscribes the real "maintenance" work-class gate (capacity 5), asserts the exact number of immediate `503 DATABASE_BUSY` + `Retry-After: 2` rejections, confirms the gate drains back to empty (`active=0/queued=0`), and that follow-up calls succeed (recovery proven) |
+| `soak-stability`                 | full | Repeated interactive calls for the scale profile's `soakDurationMs`; asserts RSS growth stays under a loose ceiling (no unbounded growth) — self-skips on the `safe` profile (`soakDurationMs = 0`)                                                                                                             |
 
-`saturation-and-recovery` adalah jawaban konkret untuk kriteria "perilaku saturasi cocok dengan model kapasitas dan recovery terbukti" — tidak mensimulasikan backpressure, benar-benar menjalankan antrean FIFO bounded nyata sampai kapasitas terdokumentasinya dan menegaskan perilaku 503+`Retry-After` yang sudah ada.
+`saturation-and-recovery` is the concrete answer to the criterion "saturation behaviour matches the capacity model and recovery is proven" — it does not simulate backpressure, it genuinely drives the real bounded FIFO queue up to its documented capacity and asserts the existing 503+`Retry-After` behaviour.
 
-## Budget regresi query-plan
+## Query-plan regression budgets
 
-`query-plan-budgets.ts` adalah artefak governance versioned — direncanakan mencakup shape query produksi nyata per kategori yang relevan untuk ERP (paginasi scoped RLS, full-text search/pencarian dokumen, klaim outbox, batch purge retensi, agregat pelaporan keuangan/inventori), masing-masing dengan:
+`query-plan-budgets.ts` is a versioned governance artifact — planned to cover the real production query shapes per category relevant to ERP (RLS-scoped pagination, full-text/document search, outbox claims, retention purge batches, financial/inventory reporting aggregates), each with:
 
-- `forbiddenNodeTypes`/`requiredNodeTypesAny` — asersi SHAPE plan (mis. "tidak boleh mengandung Seq Scan", "wajib mengandung Index/Bitmap scan").
-- `maxTotalCost`/`maxExecutionTimeMs` — budget numerik versioned.
-- `approval: { approvedBy, approvedAt, reason }` — proses eksplisit untuk menyetujui perubahan threshold yang disengaja. Tidak ada env var atau flag yang melonggarkan budget — SATU-SATUNYA cara mengubahnya adalah diff source yang direview, pola governance yang sama dengan registry work-class.
+- `forbiddenNodeTypes`/`requiredNodeTypesAny` — plan SHAPE assertions (e.g. "must not contain a Seq Scan", "must contain an Index/Bitmap scan").
+- `maxTotalCost`/`maxExecutionTimeMs` — versioned numeric budgets.
+- `approval: { approvedBy, approvedAt, reason }` — an explicit process for approving a deliberate threshold change. There is no env var or flag that loosens a budget — the ONLY way to change one is a reviewed source diff, the same governance pattern as the work-class registry.
 
-`query-plan-runner.ts` menjalankan `EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS)` untuk SQL nyata tiap budget terhadap koneksi RLS-enforced NYATA (`app.current_tenant_id` diset via `SET LOCAL`, persis seperti `withTenant`), di dalam transaksi yang SELALU di-rollback — bahkan dua query berbentuk write (klaim outbox `UPDATE`, `SELECT` internal purge retensi) tidak pernah memutasi data fixture yang sudah diseed secara permanen.
+`query-plan-runner.ts` runs `EXPLAIN (FORMAT JSON, ANALYZE, BUFFERS)` for each budget's real SQL against a REAL RLS-enforced connection (`app.current_tenant_id` set via `SET LOCAL`, exactly like `withTenant`), inside a transaction that is ALWAYS rolled back — so even the two write-shaped queries (the outbox claim `UPDATE`, the retention purge's internal `SELECT`) never permanently mutate the seeded fixture data.
 
-### Bukti adversarial (kenapa gate ini bisa dipercaya)
+### Adversarial evidence (why this gate can be trusted)
 
-Checker yang hanya pernah diuji terhadap input yang sudah baik tidak membuktikan apa pun soal kemampuannya menangkap regresi nyata. Suite ini wajib mengirimkan DUA bukti adversarial independen:
+A checker that has only ever been tested against already-good input proves nothing about its ability to catch a real regression. This suite must ship TWO independent adversarial proofs:
 
-1. **Bukti pure-function** — `EXPLAIN` JSON hand-built yang mengandung `Seq Scan`, menegaskan `evaluateQueryPlan` menggagalkannya.
-2. **Bukti Postgres nyata** — query fixture regresi (deliberately BUKAN bagian dari registry `QUERY_PLAN_BUDGETS` nyata) dijalankan pada tabel yang sama dengan strategi index/bitmap-scan planner dipaksa mati (`SET LOCAL enable_indexscan = off`, dst.) untuk satu `EXPLAIN` itu — mereproduksi persis seperti apa insiden index yang hilang/nonaktif/dikalahkan terlihat di output `EXPLAIN` nyata, menegaskan gate benar-benar melaporkan hasil `Seq Scan` gagal terhadap planner PostgreSQL NYATA, bukan sekadar fixture hand-built.
+1. **A pure-function proof** — a hand-built `EXPLAIN` JSON containing a `Seq Scan`, asserting `evaluateQueryPlan` fails it.
+2. **A real-Postgres proof** — a regression fixture query (deliberately NOT part of the real `QUERY_PLAN_BUDGETS` registry) run against the same tables with the planner's index/bitmap-scan strategies forcibly disabled (`SET LOCAL enable_indexscan = off`, etc.) for that one `EXPLAIN` — reproducing exactly what a missing/disabled/outvoted index incident looks like in real `EXPLAIN` output, asserting the gate really does report the `Seq Scan` result as a failure against the REAL PostgreSQL planner, not just a hand-built fixture.
 
-   (Catatan desain dari basis: menambahkan predikat `ILIKE` tak berindeks di atas filter `tenant_id` berindeks TIDAK cukup — PostgreSQL tetap memilih Index Scan efisien pada prefix `tenant_id` karena RLS selalu menyuntikkan filter `tenant_id = current_setting(...)` dan setiap tabel RLS-scoped punya index berawalan `(tenant_id, ...)`. Memaksa GUC planner adalah cara yang jujur untuk mereproduksi "index hilang/nonaktif", bukan workaround untuk test yang flaky.)
+   (A design note from the base: adding an unindexed `ILIKE` predicate on top of an indexed `tenant_id` filter is NOT enough — PostgreSQL still picks an efficient Index Scan on the `tenant_id` prefix, because RLS always injects the `tenant_id = current_setting(...)` filter and every RLS-scoped table has an index prefixed with `(tenant_id, ...)`. Forcing the planner GUCs is the honest way to reproduce "missing/disabled index", not a workaround for a flaky test.)
 
-## Artefak laporan machine-readable + human
+## Machine-readable + human report artifacts
 
-Kedua script direncanakan menerima `--json-output=<path>` (machine-readable) dan `performance-suite.ts` tambahan menerima `--report-path=<path>` (Markdown human ringkas). Setiap laporan melalui `redaction.ts`'s `redactReport` sebelum ditulis — tiga pass berurutan: redaksi `DATABASE_URL` di sumber, backstop defensif atas SELURUH pohon laporan untuk substring berbentuk DSN di mana pun, dan backstop defensif kedua untuk substring berbentuk UUID di mana pun (diganti pseudonym stabil per-run `id#1`, `id#2`, ..., tidak pernah tenant/user id nyata).
+Both scripts are planned to accept `--json-output=<path>` (machine-readable) and `performance-suite.ts` additionally accepts `--report-path=<path>` (a concise human Markdown). Every report goes through `redaction.ts`'s `redactReport` before being written — three sequential passes: redacting `DATABASE_URL` at the source, a defensive backstop over the ENTIRE report tree for DSN-shaped substrings anywhere, and a second defensive backstop for UUID-shaped substrings anywhere (replaced with stable per-run pseudonyms `id#1`, `id#2`, ..., never real tenant/user ids).
 
-Section `environment` laporan JSON mendokumentasikan konfigurasi hardware/container/database secara eksplisit (platform, arch, jumlah CPU, total memori, versi Bun, profil skala, jumlah tenant, total baris terencana) plus disclaimer eksplisit: **angka hanya bisa dibandingkan rilis-ke-rilis pada environment yang SAMA, tidak pernah jaminan kapasitas produksi universal**.
+The JSON report's `environment` section documents the hardware/container/database configuration explicitly (platform, arch, CPU count, total memory, Bun version, scale profile, tenant count, total planned rows) plus an explicit disclaimer: **the numbers are only comparable release-to-release on the SAME environment, never a universal production capacity guarantee**.
 
-Contoh (redacted):
+Example (redacted):
 
 ```json
 {
@@ -164,48 +166,48 @@ Contoh (redacted):
 }
 ```
 
-## Safe subset vs. lane penuh
+## Safe subset vs. the full lane
 
-- **Safe (CI, setiap PR — direncanakan sebagai bagian `quality` job):** `bun run performance:suite -- --confirm-non-production=test` (skala `safe` default, 5 skenario) dan `bun run performance:query-plan:check -- --confirm-non-production=test`. Keduanya berjalan sebagai role least-privilege `awcms_app` sehingga RLS benar-benar ditegakkan, bukan dilewati. Bersama-sama selesai dalam beberapa detik terhadap skala fixture `safe`.
-- **Penuh (`--full`, terjadwal/manual saja — TIDAK PERNAH di-wire ke `bun run check` atau setiap-PR CI):**
+- **Safe (CI, every PR — planned as part of the `quality` job):** `bun run performance:suite -- --confirm-non-production=test` (the default `safe` scale, 5 scenarios) and `bun run performance:query-plan:check -- --confirm-non-production=test`. Both run as the least-privilege role `awcms_app` so that RLS is genuinely enforced, not bypassed. Together they finish in a few seconds against the `safe` fixture scale.
+- **Full (`--full`, scheduled/manual only — NEVER wired into `bun run check` or every-PR CI):**
   ```bash
   APP_ENV=test DATABASE_URL=<isolated-url> \
   bun run performance:suite -- --confirm-non-production=test --full \
     --json-output=/tmp/performance-report.json \
     --report-path=/tmp/performance-report.md
   ```
-  Memakai profil skala `large` sebagai default (override dengan `--scale=`), menambahkan skenario `soak-stability`. Kadensi disarankan: berdampingan dengan rehearsal rilis atau sebelum perubahan infrastruktur/kapasitas besar.
+  It uses the `large` scale profile as the default (override with `--scale=`), adding the `soak-stability` scenario. Suggested cadence: alongside a release rehearsal or before a major infrastructure/capacity change.
 
-## Membandingkan dua rilis/commit
+## Comparing two releases/commits
 
-Jalankan lane safe atau penuh dengan `--seed` YANG SAMA pada dua commit berbeda (atau terhadap perubahan infrastruktur before/after), diff section `scenarios[].metrics` dan `queryPlanChecks[]` dari dua laporan `--json-output`, dan konfirmasi `environment` cocok cukup dekat untuk dibandingkan (profil skala sama, hardware serupa). Regresi metrik atau query-plan di antara dua run adalah sinyal untuk diinvestigasi — bukan gate CI keras pada delta latensi (sengaja: angka wall-clock absolut hanya pernah bisa dibandingkan pada hardware yang cocok).
+Run the safe or the full lane with the SAME `--seed` on two different commits (or against a before/after infrastructure change), diff the `scenarios[].metrics` and `queryPlanChecks[]` sections of the two `--json-output` reports, and confirm the `environment` matches closely enough to be comparable (same scale profile, similar hardware). A metric or query-plan regression between two runs is a signal to investigate — not a hard CI gate on latency deltas (deliberately: absolute wall-clock numbers are only ever comparable on matching hardware).
 
-## Menjalankan lokal
+## Running locally
 
 ```bash
-# Safe subset (cepat, beberapa detik):
+# Safe subset (fast, a few seconds):
 APP_ENV=test DATABASE_URL=postgres://...@localhost:.../db \
 bun run performance:suite -- --confirm-non-production=test
 APP_ENV=test DATABASE_URL=postgres://...@localhost:.../db \
 bun run performance:query-plan:check -- --confirm-non-production=test
 
-# Lane penuh (skala besar + soak, menit):
+# Full lane (large scale + soak, minutes):
 APP_ENV=test DATABASE_URL=postgres://...@localhost:.../db \
 bun run performance:suite -- --confirm-non-production=test --full
 ```
 
-`DATABASE_URL` harus menunjuk ke role least-privilege `awcms_app` (atau koneksi mana pun di mana RLS benar-benar ditegakkan) — koneksi superuser tetap berjalan tanpa error, tapi bukti penegakan RLS yang menjadi tujuan suite ini hanya bermakna di bawah role least-privilege nyata, persis seperti setiap integration test RLS-sensitive lain di repo ini.
+`DATABASE_URL` must point at the least-privilege role `awcms_app` (or any connection where RLS is genuinely enforced) — a superuser connection still runs without error, but the RLS-enforcement evidence this suite exists for is only meaningful under a real least-privilege role, exactly like every other RLS-sensitive integration test in this repo.
 
-## Keterbatasan yang diketahui
+## Known limitations
 
-- Angka latensi absolut sangat bergantung pada konfigurasi container/hardware/database tempat pengukuran dilakukan (lihat field `disclaimer` laporan sendiri) — tidak pernah disajikan sebagai jaminan produksi universal.
-- Skenario `soak-stability` hanya berjalan di lane `full` (`soakDurationMs > 0`); lane `safe` tidak bisa membuktikan stabilitas memori jangka panjang by design (harus tetap cepat).
-- Konkurensi job background (berbeda dari budget koneksi) belum digerbangi lewat `work-class.ts` untuk seluruh worker script nyata — workload `background_sync`/`maintenance` suite ini menguji gate WORK-CLASS secara langsung (mekanisme yang dibuktikan suite ini), bukan serialisasi advisory-lock job-runner sendiri, yang sudah punya bukti khusus sendiri (skenario resilience `worker-interruption`).
+- Absolute latency numbers depend heavily on the container/hardware/database configuration where the measurement was taken (see the report's own `disclaimer` field) — they are never presented as a universal production guarantee.
+- The `soak-stability` scenario only runs in the `full` lane (`soakDurationMs > 0`); the `safe` lane cannot prove long-run memory stability by design (it has to stay fast).
+- Background job concurrency (as distinct from the connection budget) is not yet gated through `work-class.ts` for every real worker script — this suite's `background_sync`/`maintenance` workloads exercise the WORK-CLASS gate directly (the mechanism this suite proves), not the job-runner's own advisory-lock serialisation, which already has its own dedicated evidence (the `worker-interruption` resilience scenario).
 
-## Dokumen terkait
+## Related documents
 
-- `database-capacity-runbook.md` (menyusul) — model connection-budget fleet-wide yang diuji separuh process-local-nya oleh skenario `saturation-and-recovery` suite ini.
-- `resilience-dr-verification.md` (menyusul) — pola target-guard/scenario-runner yang digunakan ulang langsung suite ini.
-- `database-pooling.md` (menyusul) — plafon konkurensi work-class/rumus queue-depth yang didorong ke kapasitas oleh skenario suite ini.
-- [`observability-metrics.md`](observability-metrics.md) — arsitektur metrics port yang dibaca langsung skenario `saturation-and-recovery`, tanpa mekanisme akuntansi kedua.
-- Disiplin audit/tuning "ukur -> temukan bottleneck -> perbaiki -> ukur ulang" yang dilengkapi suite ini.
+- `database-capacity-runbook.md` (forthcoming) — the fleet-wide connection-budget model whose process-local half is exercised by this suite's `saturation-and-recovery` scenario.
+- `resilience-dr-verification.md` (forthcoming) — the target-guard/scenario-runner pattern this suite reuses directly.
+- `database-pooling.md` (forthcoming) — the work-class concurrency ceilings/queue-depth formula that this suite's scenarios drive to capacity.
+- [`observability-metrics.md`](observability-metrics.md) — the metrics port architecture the `saturation-and-recovery` scenario reads directly, with no second accounting mechanism.
+- The "measure -> find the bottleneck -> fix -> measure again" audit/tuning discipline that this suite completes.

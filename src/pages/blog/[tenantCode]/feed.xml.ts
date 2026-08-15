@@ -4,6 +4,7 @@ import { getDatabaseClient } from "../../../lib/database/client";
 import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
+import { resolveRequestOrigin } from "../../../lib/http/site-origin";
 import {
   notFoundXmlResponse,
   serverErrorXmlResponse
@@ -29,7 +30,7 @@ import { resolveMetaDescription } from "../../../modules/blog-content/domain/seo
  * feed). Issue #564 adds the same generic 404 when the tenant's
  * `legacyTenantRouteEnabled` setting is `false`.
  */
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, request, url }) => {
   const tenantCode = params.tenantCode;
 
   if (!tenantCode) {
@@ -56,7 +57,7 @@ export const GET: APIRoute = async ({ params, url }) => {
       }
 
       const posts = await listPublicBlogPostsForFeed(tx, tenant.tenantId);
-      const channelLink = `${url.origin}/blog/${tenantCode}`;
+      const channelLink = `${resolveRequestOrigin(url, request)}/blog/${tenantCode}`;
 
       // Issue #649 — see `/news/feed.xml.ts`'s identical comment: resolved
       // sequentially, one query at a time on the shared transaction.

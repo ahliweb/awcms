@@ -46,6 +46,6 @@ if (import.meta.main) {
   const json = await buildModuleCompositionInventoryJson();
   await writeFile(MODULE_COMPOSITION_INVENTORY_PATH, json, "utf8");
   console.log(
-    `Diperbarui: ${MODULE_COMPOSITION_INVENTORY_PATH}. Jalankan \`bun run modules:composition:inventory:check\` untuk verifikasi.`
+    `Updated: ${MODULE_COMPOSITION_INVENTORY_PATH}. Run \`bun run modules:composition:inventory:check\` untuk verifikasi.`
   );
 }

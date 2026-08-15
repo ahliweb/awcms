@@ -1,108 +1,108 @@
 ---
 name: awcms-wizard-form
-description: **ADR-0055 (2 Agustus 2026): ini kandidat BANGUN-DI-SINI, bukan port.** `awcms-mini`/`awcms-micro` kini ARSIP — boleh dibaca sebagai spesifikasi, tetapi jalur "port dari mini" DICABUT. Mengerjakannya berarti: ADR admission dulu, lalu bangun di repo ini dengan penjagaan ADR-0055 §3 (ADR wajib, security review untuk auth/access/sync, `bun run check` penuh, OpenAPI/AsyncAPI sinkron, RLS FORCE, ABAC default-deny). BACAAN SAJA / SPESIFIKASI TARGET — reusable wizard-form component library (WizardStepper/WizardPanel/WizardActions, `wizard-client.ts`) BELUM di-port ke repo ini (ada di awcms-mini; `find src -iname "*wizard*"` tidak menemukan apa pun di sini, `src/components/ui` bahkan tidak ada). Jangan disamakan dengan "Setup Wizard" (`/setup`, onboarding tenant pertama) yang memang ada di repo ini tapi merupakan fitur berbeda. Pakai skill ini sebagai spesifikasi target saat MEMBANGUNNYA di sini (ADR admission dulu) form multi-step, bukan panduan implementasi kode yang bisa dipanggil hari ini — verifikasi dulu.
+description: **ADR-0055 (2 August 2026): this is a BUILD-IT-HERE candidate, not a port.** `awcms-mini`/`awcms-micro` are now ARCHIVES — they may be read as a specification, but the "port from mini" path is REVOKED. Working on it means: ADR admission first, then build it in this repo under the ADR-0055 §3 guardrails (ADR mandatory, security review for auth/access/sync, full `bun run check`, OpenAPI/AsyncAPI in sync, RLS FORCE, ABAC default-deny). READ-ONLY / TARGET SPECIFICATION — the reusable wizard-form component library (WizardStepper/WizardPanel/WizardActions, `wizard-client.ts`) has NOT been ported into this repo (it exists in awcms-mini; `find src -iname "*wizard*"` finds nothing here, and `src/components/ui` does not even exist). Do not confuse it with the "Setup Wizard" (`/setup`, first-tenant onboarding) which DOES exist in this repo but is a different feature. Use this skill as the target specification when BUILDING a multi-step form here (ADR admission first), not as a guide to implementation code you can call today — verify first.
 ---
 
-# AWCMS — Reusable Wizard Form (belum ada di sini)
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
-> **STATUS — BACAAN SAJA: pola/komponen wizard form multi-step ini BELUM
-> ada di repo ini.** Seluruh komponen (`src/components/ui/WizardStepper.astro`,
-> `WizardPanel.astro`, `WizardActions.astro`), state helper
-> (`src/lib/ui/wizard-client.ts`), dokumen
-> (`docs/awcms/examples/wizard-form-pattern.md`,
-> `wizard-derived-module-example.md`), fixture
-> (`src/pages/admin/examples/wizard.astro`), dan test
-> (`tests/wizard-accessibility.test.ts`, `tests/wizard-client.test.ts`) yang
-> dirujuk di bawah adalah artefak **awcms-mini** — repo ini bahkan tidak
-> punya `src/components/ui` sama sekali (verifikasi:
-> `find src -iname "*wizard*"` kosong, `find src/components -type d` gagal
-> "No such file or directory"). **Jangan disamakan dengan "Setup Wizard"**
-> (`/setup`, onboarding owner+tenant pertama kali — lihat
-> `src/modules/tenant-admin/README.md` §Setup wizard, skill
-> `awcms-tenant-admin`) — itu fitur berbeda yang memang ada di repo ini.
-> Pakai skill ini sebagai spesifikasi target saat MEMBANGUNNYA di sini (ADR
-> admission dulu, ADR-0055 §1), bukan peta kode yang bisa dipanggil — verifikasi
-> `find src -iname "*wizard*"` sebelum mengklaim apa pun ada di sini.
+# AWCMS — Reusable Wizard Form (does not exist here yet)
 
-Spesifikasi asal (di repo arsip **awcms-mini**, belum ada di sini):
-`docs/awcms-mini/examples/wizard-form-pattern.md` (spesifikasi komponen +
-pola i18n) dan `docs/awcms-mini/examples/wizard-derived-module-example.md`
-(contoh end-to-end pada modul domain). Fixture rujukan di awcms-mini:
+> **STATUS — READ-ONLY: this multi-step wizard form pattern/component set does
+> NOT exist in this repo yet.** Every component
+> (`src/components/ui/WizardStepper.astro`, `WizardPanel.astro`,
+> `WizardActions.astro`), the state helper (`src/lib/ui/wizard-client.ts`), the
+> documents (`docs/awcms/examples/wizard-form-pattern.md`,
+> `wizard-derived-module-example.md`), the fixture
+> (`src/pages/admin/examples/wizard.astro`), and the tests
+> (`tests/wizard-accessibility.test.ts`, `tests/wizard-client.test.ts`)
+> referenced below are **awcms-mini** artifacts — this repo does not even have
+> `src/components/ui` at all (verify: `find src -iname "*wizard*"` is empty,
+> `find src/components -type d` fails with "No such file or directory").
+> **Do not confuse it with the "Setup Wizard"** (`/setup`, first-time
+> owner+tenant onboarding — see `src/modules/tenant-admin/README.md` §Setup
+> wizard, skill `awcms-tenant-admin`) — that is a different feature which does
+> exist in this repo. Use this skill as the target specification when BUILDING
+> it here (ADR admission first, ADR-0055 §1), not as a map of code you can call
+> — verify `find src -iname "*wizard*"` before claiming anything exists here.
+
+Original specification (in the **awcms-mini** archive repo, not here yet):
+`docs/awcms-mini/examples/wizard-form-pattern.md` (component specification +
+i18n pattern) and `docs/awcms-mini/examples/wizard-derived-module-example.md`
+(end-to-end example on a domain module). Reference fixture in awcms-mini:
 `src/pages/admin/examples/wizard.astro` (`/admin/examples/wizard`).
 
-## Kapan pakai wizard, bukan form biasa (spesifikasi target)
+## When to use a wizard instead of a plain form (target specification)
 
-Salah satu: banyak field lintas kategori, urutan input jelas dibutuhkan,
-perlu review akhir sebelum submit, atau field-nya cukup banyak sehingga
-satu form besar rawan salah input. Tetap pakai form biasa untuk input
-sederhana (ganti nama, ubah status, satu-dua field) — form biasa di repo
-ini sendiri memakai hand-rolled markup + `lockElement`/`sendJson`/`postJson`
-(`src/lib/ui/admin-form-client.ts`, lihat skill `awcms-ui-screen`), bukan
-komponen wizard apa pun.
+Any one of: many fields across categories, a clear input order is needed, a
+final review is needed before submit, or there are enough fields that one big
+form invites input mistakes. Keep using a plain form for simple input (rename,
+change status, one or two fields) — plain forms in this repo itself use
+hand-rolled markup + `lockElement`/`sendJson`/`postJson`
+(`src/lib/ui/admin-form-client.ts`, see skill `awcms-ui-screen`), not any
+wizard component.
 
-## Komponen (spesifikasi target — ada di awcms-mini, BELUM di sini)
+## Components (target specification — exist in awcms-mini, NOT here yet)
 
-`src/components/ui/WizardStepper.astro` (progress + status step) +
-`WizardPanel.astro` (satu step, `hidden` untuk step tidak aktif — bukan
-di-unmount, supaya input tidak hilang) + `WizardActions.astro`
-(Back/Next/Submit/Save-draft) + `src/lib/ui/wizard-client.ts` (state
-murni: `createWizardState`, `advanceWizard`, `rewindWizard`,
-`toFieldErrorMap`, `mapValidationDetailsToFieldErrors`,
-`createWizardIdempotencyKey`) — **semuanya hanya ada di awcms-mini**.
-Kalau membangun wizard di repo ini, ini adalah spesifikasi yang dibaca dan
-diputuskan ulang, bukan sesuatu yang bisa langsung diimpor.
+`src/components/ui/WizardStepper.astro` (progress + step status) +
+`WizardPanel.astro` (one step, `hidden` for the inactive step — not unmounted,
+so input is not lost) + `WizardActions.astro` (Back/Next/Submit/Save-draft) +
+`src/lib/ui/wizard-client.ts` (pure state: `createWizardState`,
+`advanceWizard`, `rewindWizard`, `toFieldErrorMap`,
+`mapValidationDetailsToFieldErrors`, `createWizardIdempotencyKey`) — **all of
+it exists only in awcms-mini**. If you build a wizard in this repo, this is a
+specification to read and decide on again, not something you can import
+directly.
 
-## Aturan wajib (spesifikasi — pertahankan keputusan ini saat membangunnya di sini)
+## Mandatory rules (specification — keep these decisions when building it here)
 
-1. **Semua string via prop** — komponen wizard tidak pernah menerjemahkan
-   sendiri; halaman pemanggil wajib `createTranslator(locale)` lalu isi
-   tiap prop label (`label`/`currentLabel`/`completedLabel`/`pendingLabel`
-   di `WizardStepper`, `errorSummaryHeading` di `WizardPanel`,
-   `backLabel`/`nextLabel`/`submitLabel` di `WizardActions`) — skill
+1. **All strings via props** — a wizard component never translates on its own;
+   the calling page must `createTranslator(locale)` and then fill in every
+   label prop (`label`/`currentLabel`/`completedLabel`/`pendingLabel` in
+   `WizardStepper`, `errorSummaryHeading` in `WizardPanel`,
+   `backLabel`/`nextLabel`/`submitLabel` in `WizardActions`) — skill
    `awcms-i18n`.
-2. **Validasi client hanya UX** — server tetap sumber kebenaran; peta
-   `VALIDATION_ERROR.details` balik ke field via
-   `mapValidationDetailsToFieldErrors`, jangan validasi ulang terpisah.
-3. **Submit final high-risk** — `createWizardIdempotencyKey()` sekali per
-   attempt submit (bukan per klik tombol) — skill `awcms-idempotency`.
-4. **Anti-double-submit** — di awcms-mini pakai `lockElement`/`submitJson`/
-   `showBanner` (`src/lib/ui/admin-form-client.ts` versi awcms-mini, yang
-   punya export lebih banyak daripada versi repo ini). **Repo ini sendiri
-   hari ini hanya punya `lockElement`/`sendJson`/`postJson`** (verifikasi:
-   `grep -n "^export" src/lib/ui/admin-form-client.ts`) — kalau wizard
-   dibangun sebelum fungsi tambahan itu ada, adaptasi ke tiga
-   fungsi yang ada, jangan asumsikan `submitJson`/`showBanner` sudah ada di
-   sini.
-5. **Fokus berpindah ke judul panel** setiap step berubah (`tabindex="-1"`
-   sesaat lalu `.focus()`) — lihat `focusPanelHeading()` di fixture
-   awcms-mini.
-6. **Stepper butuh `data-step-key`** pada tiap item bila halaman
-   memperbarui state stepper via JS setelah render awal (SSR-only, tidak
-   reaktif sendiri).
-7. **Draft client-side hanya data non-sensitif**, dan tidak persisten
-   (tidak ada `localStorage`). Butuh resume lintas sesi/perangkat, atau
-   payload mengandung apa pun yang lebih dari UX scratch state? Pola
-   target adalah server-side draft persistence — skill `awcms-form-drafts`.
-   Modul `form_drafts` **SUDAH di-port** (`sql/062` schema + `sql/063`
-   permission, endpoint `/api/v1/form-drafts/*`), jadi skill itu **bukan**
-   bacaan-saja lagi. Yang masih belum ada adalah pustaka KOMPONEN wizard
-   (`WizardStepper`/`wizard-client.ts`) — itulah sebabnya skill INI tetap
-   bacaan-saja.
+2. **Client validation is UX only** — the server remains the source of truth;
+   map `VALIDATION_ERROR.details` back to fields via
+   `mapValidationDetailsToFieldErrors`, do not validate again separately.
+3. **The final submit is high-risk** — `createWizardIdempotencyKey()` once per
+   submit attempt (not per button click) — skill `awcms-idempotency`.
+4. **Anti-double-submit** — in awcms-mini this uses `lockElement`/`submitJson`/
+   `showBanner` (the awcms-mini version of `src/lib/ui/admin-form-client.ts`,
+   which has more exports than this repo's version). **This repo itself today
+   only has `lockElement`/`sendJson`/`postJson`** (verify:
+   `grep -n "^export" src/lib/ui/admin-form-client.ts`) — if the wizard is
+   built before those extra functions exist, adapt to the three functions that
+   do exist, do not assume `submitJson`/`showBanner` are already here.
+5. **Focus moves to the panel heading** every time the step changes
+   (`tabindex="-1"` momentarily, then `.focus()`) — see `focusPanelHeading()`
+   in the awcms-mini fixture.
+6. **The stepper needs `data-step-key`** on each item if the page updates the
+   stepper state via JS after the initial render (SSR-only, not reactive on its
+   own).
+7. **Client-side drafts hold non-sensitive data only**, and are not persistent
+   (no `localStorage`). Need resume across sessions/devices, or does the
+   payload contain anything beyond UX scratch state? The target pattern is
+   server-side draft persistence — skill `awcms-form-drafts`. The `form_drafts`
+   module **HAS been ported** (`sql/062` schema + `sql/063` permissions,
+   endpoints `/api/v1/form-drafts/*`), so that skill is **no longer**
+   read-only. What is still missing is the wizard COMPONENT library
+   (`WizardStepper`/`wizard-client.ts`) — that is why THIS skill remains
+   read-only.
 
-## Verifikasi (ada di awcms-mini — belum ada padanannya di repo ini)
+## Verification (exists in awcms-mini — no counterpart in this repo yet)
 
-Regression guard atribut aksesibilitas: `tests/wizard-accessibility.test.ts`.
-Test state helper: `tests/wizard-client.test.ts`. Walkthrough
-keyboard-only manual: `wizard-form-pattern.md` §Walkthrough manual
-keyboard-only. Saat membangunnya di sini, bangun juga kedua test ini beserta
-implementasinya sebelum menganggapnya selesai.
+Accessibility-attribute regression guard: `tests/wizard-accessibility.test.ts`.
+State helper test: `tests/wizard-client.test.ts`. Manual keyboard-only
+walkthrough: `wizard-form-pattern.md` §Manual keyboard-only walkthrough. When
+building it here, build both of these tests along with the implementation
+before considering it done.
 
-## Skill terkait
+## Related skills
 
-`awcms-port-from-mini` (HISTORIS — alur port dari awcms-mini, dicabut ADR-0055 §1),
-`awcms-ui-screen` (pola layar/token/a11y/markup nyata yang ADA di repo
-ini hari ini), `awcms-i18n` (katalog `.po`), `awcms-idempotency` (submit
-final high-risk), `awcms-new-endpoint` (endpoint domain target submit),
-`awcms-form-drafts` (resume-on-load lintas sesi via server — juga BACAAN
-SAJA), `awcms-tenant-admin` (Setup Wizard yang berbeda dan memang ada di
-repo ini).
+`awcms-port-from-mini` (HISTORICAL — the port-from-awcms-mini flow, revoked by
+ADR-0055 §1), `awcms-ui-screen` (the screen/token/a11y/markup patterns that DO
+exist in this repo today), `awcms-i18n` (`.po` catalogs),
+`awcms-idempotency` (the high-risk final submit), `awcms-new-endpoint` (the
+domain endpoint the submit targets), `awcms-form-drafts` (resume-on-load across
+sessions via the server — also READ-ONLY), `awcms-tenant-admin` (the different
+Setup Wizard that does exist in this repo).

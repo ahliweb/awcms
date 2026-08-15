@@ -1,60 +1,63 @@
-# ADR-0068 — Postur standar keluarga: edisi di-pin di sini, dan tiga selisih dicatat
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0068-family-standards-posture-editions-and-recorded-divergences.id.md)
+
+# ADR-0068 — Family standards posture: editions pinned here, and three divergences recorded
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0032](0032-family-compatibility-manifest-and-ci-conformance.md) (manifest kompatibilitas keluarga + mekanisme divergence), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (pengembangan hanya di dua repo), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) (aturan tanpa pemeriksa akan dilanggar), `awcms-astro` ADR-0028 (repo itu menyatakan mengikuti edisi OWASP repo ini), `awcms-astro` ADR-0029 (HSTS tanpa `includeSubDomains` di sana)
+- **Date:** 2026-08-04
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0032](0032-family-compatibility-manifest-and-ci-conformance.md) (family compatibility manifest + divergence mechanism), [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (development confined to two repos), [ADR-0062](0062-skills-are-gated-against-the-code-they-describe.md) (a rule with no checker will be broken), `awcms-astro` ADR-0028 (that repo states it follows this repo's OWASP edition), `awcms-astro` ADR-0029 (HSTS without `includeSubDomains` over there)
 
-## Konteks
+## Context
 
-### 1. Repo sebelah menunggu keputusan yang tidak pernah diambil di sini
+### 1. The neighbouring repo is waiting on a decision that was never taken here
 
-`awcms-astro` ADR-0028 §A menyatakan, tertulis, bahwa ia **menyamakan edisi
-OWASP dengan repo ini dan tidak akan mendahuluinya**. Alasannya benar: dua repo
-keluarga yang memetakan diri ke dua edisi berbeda menghasilkan dua matriks yang
-tidak bisa dijumlahkan, dan pembacanya akan membaca selisih penomoran sebagai
-celah kontrol.
+`awcms-astro` ADR-0028 §A states, in writing, that it **matches its OWASP
+edition to this repo's and will not get ahead of it**. The reasoning is right:
+two family repos mapping themselves to two different editions produce two
+matrices that cannot be added together, and a reader will read the numbering
+difference as a control gap.
 
-Masalahnya, keputusan yang ia ikuti **tidak pernah ada**. Pin OWASP Top 10
-**2021** dan ASVS **4.0.3** di repo ini berasal dari skill
-`awcms-security-hardening` — ditulis saat itu edisi terbaru, lalu diikuti karena
-sudah tertulis. Tidak ada ADR, tidak ada tanggal tinjau, tidak ada pemilik.
+The problem is that the decision it follows **never existed**. The OWASP Top 10
+**2021** and ASVS **4.0.3** pins in this repo come from the
+`awcms-security-hardening` skill — written when those were the latest editions,
+then followed because they were already written down. No ADR, no review date, no
+owner.
 
-Jadi salah satu repo menunggu sinyal dari repo lain yang tidak tahu bahwa ia
-memegang sinyal itu. Itu bukan selisih teknis; itu keputusan yatim.
+So one repo is waiting for a signal from another repo that does not know it
+holds that signal. That is not a technical difference; it is an orphaned
+decision.
 
-### 2. Dua selisih nyata dengan `awcms-astro`, dan daftar divergence-nya kosong
+### 2. Two real differences from `awcms-astro`, and its divergence list is empty
 
-[`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml) punya
-mekanisme divergence lengkap sejak ADR-0032 — `id`, `summary`, `reason`,
-`owner`, `reviewDate`, `adr` — dengan gerbang yang **gagal saat `reviewDate`
-lewat atau ADR-nya hilang. Daftarnya **kosong**, dan berkas itu sendiri menulis
-bahwa "kontrak yang harus di-diverge-i repo ini — milik `awcms-astro`, misalnya
-— akan mengisinya".
+[`awcms-family-compatibility.yaml`](../../awcms-family-compatibility.yaml) has
+had a complete divergence mechanism since ADR-0032 — `id`, `summary`, `reason`,
+`owner`, `reviewDate`, `adr` — with a gate that **fails when the `reviewDate`
+has passed or the ADR is missing. The list is **empty**, and the file itself
+writes that "a contract this repo has to diverge on — `awcms-astro`'s, for
+example — will fill it in".
 
-Sementara itu ada dua selisih yang nyata, disengaja, dan tidak tercatat di sisi
-sini:
+Meanwhile there are two differences that are real, deliberate, and unrecorded on
+this side:
 
-- **HSTS.** Repo ini mengirim `max-age=31536000; includeSubDomains`; `awcms-astro`
-  mengirim `max-age=31536000` saja (ADR-0029 di sana). **Keduanya benar**: repo
-  ini SATU deployment yang operatornya tahu subdomainnya, repo itu TEMPLATE yang
-  berjalan di domain organisasi yang hampir pasti punya layanan lain di subdomain
-  lain — dan `includeSubDomains` memaksa seluruhnya HTTPS-saja selama setahun di
-  browser setiap pengunjung, akibat yang ditanggung layanan yang pemiliknya tidak
-  ikut memutuskan.
-- **Pemeriksaan tipe `.astro`.** `awcms-astro` menjalankan `astro check` di rantai
-  `check`-nya. Repo ini **tidak bisa**, dan alasannya eksternal — lihat §3.
+- **HSTS.** This repo sends `max-age=31536000; includeSubDomains`; `awcms-astro`
+  sends `max-age=31536000` only (its ADR-0029). **Both are correct**: this repo
+  is ONE deployment whose operator knows its subdomains, that repo is a TEMPLATE
+  running on an organisation's domain that almost certainly has other services on
+  other subdomains — and `includeSubDomains` forces all of them to HTTPS-only for
+  a year in every visitor's browser, a consequence borne by services whose owners
+  took no part in the decision.
+- **`.astro` type checking.** `awcms-astro` runs `astro check` in its `check`
+  chain. This repo **cannot**, and the reason is external — see §3.
 
-### 3. `astro check` tidak bisa dijalankan di sini, dan itu bukan kelalaian
+### 3. `astro check` cannot be run here, and that is not negligence
 
-Asesmen 4 Agustus 2026 §9.4 mencatat celah nyata: **42 berkas `.astro` (22.328
-baris)** — seluruh 31 layar admin, halaman login, halaman publik — tidak pernah
-diperiksa tipe. `tsc` tidak bisa mengurai `.astro` dan melewatinya diam-diam
-meskipun `tsconfig.json` menulis `"include": ["src/**/*"]`, dan `astro build`
-tidak memeriksa tipe.
+The 4 August 2026 assessment §9.4 records a real gap: **42 `.astro` files
+(22,328 lines)** — all 31 admin screens, the login page, the public pages — have
+never been type-checked. `tsc` cannot parse `.astro` and skips them silently even
+though `tsconfig.json` writes `"include": ["src/**/*"]`, and `astro build` does
+not type-check.
 
-Perbaikan yang jelas adalah menambahkan `astro check`. Dicoba, dan ia **menolak
-berjalan**:
+The obvious fix is to add `astro check`. It was tried, and it **refuses to run**:
 
 ```
 The TypeScript module loaded (found 7.0.2) does not expose the programmatic API
@@ -62,93 +65,92 @@ that `astro check` relies on. TypeScript's native compiler (7.0 and later) does
 not ship this API yet.
 ```
 
-Repo ini memakai TypeScript **7.0.2**; `@astrojs/check` menuntut API programatik
-yang hanya ada di TypeScript **6.x**. `awcms-astro` memakai TypeScript `^6.0.3`,
-dan itulah satu-satunya alasan ia bisa menjalankan gerbang yang repo ini tidak
-bisa. Selisihnya **bukan disiplin**, melainkan versi toolchain.
+This repo uses TypeScript **7.0.2**; `@astrojs/check` demands a programmatic API
+that only exists in TypeScript **6.x**. `awcms-astro` uses TypeScript `^6.0.3`,
+and that is the only reason it can run a gate this repo cannot. The difference is
+**not discipline**, it is toolchain version.
 
-Menurunkan TypeScript ke 6.x untuk memuaskan gerbang ini ditolak: ia meregresi
-toolchain seluruh repo — 33 gerbang, ~156.000 baris, dan `tsc --noEmit` yang
-hari ini bersih — demi satu pemeriksa yang bahkan belum tentu bersih saat
-pertama dijalankan.
+Downgrading TypeScript to 6.x to satisfy this gate is rejected: it regresses the
+whole repo's toolchain — 33 gates, ~156,000 lines, and a `tsc --noEmit` that is
+clean today — for the sake of one checker that is not even guaranteed to be clean
+the first time it runs.
 
-## Keputusan
+## Decision
 
-### §A — Pin edisi standar adalah keputusan repo ini, dan sekarang tertulis
+### §A — Pinning standard editions is this repo's decision, and it is now written down
 
-| Standar                   | Edisi           | Ditinjau ulang |
-| ------------------------- | --------------- | -------------- |
-| OWASP Top 10              | 2021            | 2027-02-04     |
-| OWASP ASVS                | 4.0.3 (L1/L2)   | 2027-02-04     |
-| OWASP API Security Top 10 | 2023            | 2027-02-04     |
-| ISO/IEC 27001             | 2022, Annex A   | 2027-02-04     |
-| NIST SSDF                 | SP 800-218 v1.1 | 2027-02-04     |
+| Standard                  | Edition         | Review again |
+| ------------------------- | --------------- | ------------ |
+| OWASP Top 10              | 2021            | 2027-02-04   |
+| OWASP ASVS                | 4.0.3 (L1/L2)   | 2027-02-04   |
+| OWASP API Security Top 10 | 2023            | 2027-02-04   |
+| ISO/IEC 27001             | 2022, Annex A   | 2027-02-04   |
+| NIST SSDF                 | SP 800-218 v1.1 | 2027-02-04   |
 
-**Menaikkan edisi adalah keputusan tingkat keluarga dan butuh ADR-nya sendiri**,
-karena ia memetakan ulang seluruh matriks di
+**Raising an edition is a family-level decision and needs its own ADR**, because
+it re-maps the entire matrix in
 [`standar-performa-dan-keamanan.md`](../awcms/standar-performa-dan-keamanan.md)
-§3–§7 **dan** mewajibkan `awcms-astro` diberi tahu dalam napas yang sama.
-Sampai ADR itu ditulis, pin di atas berlaku — dan yang berubah hari ini adalah
-bahwa ia **terbaca sebagai pin**, bukan sebagai kemutakhiran.
+§3–§7 **and** requires `awcms-astro` to be told in the same breath. Until that
+ADR is written, the pins above hold — and what changes today is that they **read
+as pins**, not as being up to date.
 
-Yang **tidak** diputuskan di sini: apakah edisi yang lebih baru layak diambil.
-Itu pekerjaan pemetaan, bukan pekerjaan penamaan, dan mencampurnya ke ADR ini
-akan membuat keputusan "kami memakai edisi X" dan keputusan "kami sudah
-memetakan ulang ke edisi X" hidup di satu berkas padahal yang kedua jauh lebih
-mahal.
+What is **not** decided here: whether a newer edition is worth taking. That is
+mapping work, not naming work, and mixing it into this ADR would make the
+decision "we use edition X" and the decision "we have re-mapped to edition X"
+live in one file when the second is far more expensive.
 
-### §B — Tiga divergence dicatat di manifest, dengan tanggal tinjau yang menggigit
+### §B — Three divergences recorded in the manifest, with review dates that bite
 
-`awcms-family-compatibility.yaml` mendapat entri untuk masing-masing. Gerbang
-`bun run family:conformance:check` **sudah** menolak entri yang `reviewDate`-nya
-lewat atau yang ADR-nya tidak ada, jadi ketiganya otomatis kembali ke meja pada
-tanggalnya — tanpa seorang pun harus mengingat.
+`awcms-family-compatibility.yaml` gets an entry for each. The gate
+`bun run family:conformance:check` **already** rejects an entry whose
+`reviewDate` has passed or whose ADR does not exist, so all three automatically
+come back to the table on their date — without anyone having to remember.
 
-Yang membuat pencatatan ini bernilai bukan kerapian: sebuah selisih yang tidak
-tercatat akan **ditemukan ulang sebagai temuan** enam bulan kemudian, dan
-"diperbaiki" ke arah yang salah. `includeSubDomains` khususnya: menyalinnya ke
-`awcms-astro` demi "paritas keluarga" adalah perubahan satu kata yang
-memindahkan keputusan bergantung-konteks ke tempat yang tidak punya konteksnya.
+What makes this recording valuable is not tidiness: a difference that is not
+recorded will be **rediscovered as a finding** six months later, and "fixed" in
+the wrong direction. `includeSubDomains` especially: copying it into
+`awcms-astro` for the sake of "family parity" is a one-word change that moves a
+context-dependent decision into a place that does not have its context.
 
-### §C — `.astro` tetap tak-terperiksa, dan itu dinyatakan sebagai utang bertanggal
+### §C — `.astro` stays unchecked, and that is declared as dated debt
 
-Bukan "akan dikerjakan nanti", melainkan divergence ber-`reviewDate` yang
-memerahkan CI saat jatuh tempo. Yang ditunggu bersifat eksternal — dukungan
-TypeScript 7 di `@astrojs/check` — jadi tanggalnya adalah kapan kita
-**memeriksa ulang**, bukan kapan kita berjanji selesai.
+Not "we will get to it later", but a divergence with a `reviewDate` that reddens
+CI when it comes due. What is being waited on is external — TypeScript 7 support
+in `@astrojs/check` — so the date is when we **re-check**, not when we promise to
+be done.
 
-Sampai itu terjadi, mitigasinya bukan berharap: skill `awcms-testing` dan
-`awcms-pr-review` sudah memuat instruksi bahwa diff yang menyentuh `.astro`
-harus dibaca tipenya dengan mata, beserta kelas cacat yang paling mungkin lolos
-(`withTenant` di tempat `withTenantOrThrow`).
+Until that happens, the mitigation is not hope: the `awcms-testing` and
+`awcms-pr-review` skills already carry the instruction that a diff touching
+`.astro` must have its types read by eye, together with the defect class most
+likely to slip through (`withTenant` where `withTenantOrThrow` belongs).
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Repo sebelah berhenti menunggu keputusan yang tidak ada. Tiga
-selisih punya nama, alasan, pemilik, dan tanggal — dan gerbang yang sudah ada
-menegakkan ketiganya tanpa satu baris mekanisme baru.
+**What is gained.** The neighbouring repo stops waiting on a decision that does
+not exist. Three differences have a name, a reason, an owner, and a date — and an
+already-existing gate enforces all three without one line of new mechanism.
 
-**Yang dibayar.** Tiga `reviewDate` yang akan memerahkan CI pada harinya, dan
-seseorang harus benar-benar menjawabnya. Itu biaya yang disengaja: alternatifnya
-adalah catatan yang membusuk diam-diam, dan repo ini sudah punya cukup banyak
-bukti tentang bagaimana itu berakhir.
+**What is paid.** Three `reviewDate`s that will redden CI on their day, and
+someone has to actually answer them. That is a deliberate cost: the alternative
+is a record that rots silently, and this repo already has plenty of evidence
+about how that ends.
 
-**Yang TIDAK dilakukan.** Nol perubahan pada header, nol perubahan toolchain,
-nol pemetaan ulang matriks. ADR ini menamai keadaan; ia tidak mengubahnya.
+**What is NOT done.** Zero header changes, zero toolchain changes, zero matrix
+re-mapping. This ADR names the state; it does not change it.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Menurunkan TypeScript ke 6.x agar `astro check` jalan.** Ditolak — lihat §3.
-  Meregresi toolchain seluruh repo demi satu pemeriksa adalah menukar cacat yang
-  diketahui dengan risiko yang tidak diketahui.
-- **Menaikkan edisi OWASP sekalian di ADR ini.** Ditolak: pemetaan ulang §3–§7
-  adalah pekerjaan nyata dengan hasil yang harus diperiksa baris per baris, dan
-  menggabungkannya membuat ADR ini tidak bisa dibedakan dari pekerjaan yang
-  mengklaim lebih dari yang dilakukannya.
-- **Menyalin `includeSubDomains` ke `awcms-astro` demi paritas.** Ditolak, dan
-  ADR-0029 di repo itu sudah menuliskan alasannya lebih baik daripada yang bisa
-  ditulis dari sini.
-- **Membiarkan pin edisi hidup di skill saja.** Ditolak: skill DIIKUTI, bukan
-  dinegosiasikan. Sebuah keputusan tingkat keluarga yang hanya hidup di dalam
-  halaman panduan akan dibongkar oleh orang berikutnya yang menyunting halaman
-  itu, tanpa menyadari repo lain terikat padanya.
+- **Downgrade TypeScript to 6.x so `astro check` runs.** Rejected — see §3.
+  Regressing the whole repo's toolchain for one checker is trading a known defect
+  for an unknown risk.
+- **Raise the OWASP edition in this ADR while we are at it.** Rejected: re-mapping
+  §3–§7 is real work whose output has to be checked line by line, and merging it
+  in would make this ADR indistinguishable from work that claims more than it
+  does.
+- **Copy `includeSubDomains` into `awcms-astro` for parity.** Rejected, and
+  ADR-0029 in that repo already writes the reason better than it could be written
+  from here.
+- **Leave the edition pins living in the skill alone.** Rejected: skills are
+  FOLLOWED, not negotiated. A family-level decision that lives only inside a
+  guidance page will be dismantled by the next person who edits that page,
+  without realising another repo is bound to it.

@@ -1,89 +1,93 @@
-# Data Lifecycle — panduan operasional dan kepatuhan
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](data-lifecycle.id.md)
 
-> **Status dokumen (AWCMS, tahap foundation-rebuild).** Modul
-> `data_lifecycle` di bawah adalah mekanisme generik yang pada base
-> `awcms-mini` sudah diimplementasikan penuh (registry descriptor, mesin
-> dry-run/archive/purge, legal hold, job terjadwal, test integrasi
-> lengkap). Di AWCMS, **belum ada implementasi kode untuk modul ini**, dan
-> belum ada satu pun descriptor tabel bervolume tinggi terdaftar karena
-> belum ada modul ERP yang menghasilkan tabel semacam itu. Dokumen ini
-> menjelaskan **target arsitektur dan kontrak** yang akan diporting dan
-> diperluas dengan descriptor ERP begitu modul finance/inventory/HR-
-> payroll dibangun. Baca klaim "sudah terdaftar"/"sudah berjalan" sebagai
-> spesifikasi target, bukan status implementasi hari ini.
+# Data Lifecycle — operational and compliance guide
+
+> **Document status (AWCMS, foundation-rebuild stage).** The
+> `data_lifecycle` module below is a generic mechanism that on the
+> `awcms-mini` base is already fully implemented (descriptor registry, the
+> dry-run/archive/purge engine, legal hold, scheduled job, complete
+> integration tests). In AWCMS, **there is no code implementation for this
+> module yet**, and not a single high-volume table descriptor is registered
+> because there is no ERP module yet producing tables of that kind. This
+> document describes the **target architecture and contracts** that will be
+> ported and extended with ERP descriptors once the finance/inventory/HR-
+> payroll modules are built. Read any "already registered"/"already
+> running" claim as a target specification, not as today's implementation
+> status.
 >
-> **Catatan retensi khusus ERP.** Data finansial dan payroll pada platform
-> ERP umumnya tunduk pada periode retensi hukum/pajak yang jauh lebih
-> ketat dan lebih panjang daripada retensi konten CMS (mis. kewajiban
-> penyimpanan bukti transaksi/pajak/pembukuan sesuai UU KUP dan peraturan
-> perpajakan terkait, umumnya bertahun-tahun, seringkali melebihi retensi
-> tipikal 1-5 tahun untuk log audit keamanan). Setiap descriptor untuk
-> tabel finance/payroll (ledger entries, payroll records, tax invoice)
-> WAJIB meninjau kebutuhan retensi legal/kontraktual aktualnya sendiri
-> sebelum menetapkan `retentionMinDays`/`retentionMaxDays` — jangan
-> mewarisi begitu saja angka retensi CMS/telemetry generik dari base.
+> **ERP-specific retention note.** Financial and payroll data on an ERP
+> platform is generally subject to legal/tax retention periods that are far
+> stricter and far longer than CMS content retention (e.g. the obligation
+> to store transaction/tax/bookkeeping evidence under the KUP law and the
+> related tax regulations, generally for years, often exceeding the typical
+> 1-5 years for security audit logs). Every descriptor for a finance/payroll
+> table (ledger entries, payroll records, tax invoice) MUST review its own
+> actual legal/contractual retention requirement before setting
+> `retentionMinDays`/`retentionMaxDays` — do not simply inherit the generic
+> CMS/telemetry retention numbers from the base.
 
-Modul `data_lifecycle` (`type: "system"`) — registry tabel
-bervolume tinggi kontribusi-modul dan mesin lifecycle aman (retensi,
-partisi, arsip, legal hold, purge). Dokumen ini fokus pada panduan
-operasional dan pemetaan kepatuhan; detail teknis lengkap akan ada di
-`src/modules/data-lifecycle/README.md` begitu modul ini diimplementasikan.
+The `data_lifecycle` module (`type: "system"`) — a registry of
+module-contributed high-volume tables and a safe lifecycle engine
+(retention, partitioning, archive, legal hold, purge). This document
+focuses on the operational guide and the compliance mapping; the full
+technical detail will live in
+`src/modules/data-lifecycle/README.md` once this module is implemented.
 
-## Ringkasan modul
+## Module summary
 
-Base teknis AWCMS (`awcms-mini`) sudah punya pola beberapa job retensi/
-purge spesifik-resource (audit log purge, analytics purge, form-draft
-purge) yang masing-masing mengimplementasikan retensi/batching/audit
-sendiri-sendiri. `data_lifecycle` menambah **registry kontribusi-modul**
-(kontrak statis kode yang dideklarasikan tiap modul pemilik tentang tabel
-bervolume tingginya sendiri) plus **mesin lifecycle aman** (dry-run
-planning, bounded archive/purge, legal hold) yang beroperasi lewat
-kontrak itu — tidak pernah langsung ke skema modul lain ("no shared-table
-write").
+The AWCMS technical base (`awcms-mini`) already has a pattern of several
+resource-specific retention/purge jobs (audit log purge, analytics purge,
+form-draft purge), each implementing its own retention/batching/audit.
+`data_lifecycle` adds a **module-contributed registry** (a static code
+contract declared by each owning module about its own high-volume tables)
+plus a **safe lifecycle engine** (dry-run planning, bounded archive/purge,
+legal hold) that operates through that contract — never directly against
+another module's schema ("no shared-table write").
 
-## Registry descriptor (target, contoh ERP)
+## Descriptor registry (target, ERP example)
 
-Setiap modul pemilik mendeklarasikan `HighVolumeTableDescriptor` di
-`module.ts`-nya sendiri (`dataLifecycle` array,
-`src/modules/_shared/module-contract.ts`) — nama tabel, kolom
-tenant/cursor, kelas retensi + batas aman, kelayakan partisi, kebijakan
-arsip, perilaku deletion, keberlakuan legal hold, index wajib, batas
-batch, dan mode eksekusi (`"delegated"` — adopter mekanisme yang sudah
-ada; atau `"generic"` — dieksekusi langsung oleh mesin ini). Divalidasi
-`bun run data-lifecycle:registry:check` (bagian `bun run check`) dan
+Every owning module declares a `HighVolumeTableDescriptor` in its own
+`module.ts` (the `dataLifecycle` array,
+`src/modules/_shared/module-contract.ts`) — table name, tenant/cursor
+columns, retention class + safety bounds, partitioning eligibility, archive
+policy, deletion behaviour, legal hold applicability, mandatory indexes,
+batch limits, and execution mode (`"delegated"` — an adopter of an existing
+mechanism; or `"generic"` — executed directly by this engine). Validated by
+`bun run data-lifecycle:registry:check` (part of `bun run check`) and by
 `security:readiness`'s `checkDataLifecycleRegistryValid`.
 
-### Tabel yang tidak punya modul pemilik ([ADR-0076](../adr/0076-infrastructure-tables-may-hold-lifecycle-descriptors.md))
+### Tables with no owning module ([ADR-0076](../adr/0076-infrastructure-tables-may-hold-lifecycle-descriptors.md))
 
-Sebagian kecil tabel dimiliki **infrastruktur** (`src/lib/`), bukan modul —
-sengaja, sama seperti subsistem database dan rate limit. Tabel seperti itu tidak
-punya `module.ts` untuk menaruh deskriptornya, dan `ownerModuleKey` tidak
-dilonggarkan untuknya: melonggarkannya akan membuat deskriptor modul yang **lupa**
-menyebut pemilik berhenti menjadi kesalahan dan mulai berarti "infrastruktur".
+A small number of tables are owned by **infrastructure** (`src/lib/`), not by
+a module — deliberately, the same way the database and rate limit subsystems
+are. Such tables have no `module.ts` to hold their descriptor, and
+`ownerModuleKey` is not relaxed for them: relaxing it would make a module
+descriptor that **forgot** to name an owner stop being an error and start
+meaning "infrastructure".
 
-Deskriptornya tinggal di
-`src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry.ts`, memakai
-`ownerPath` (direktori `src/lib/…/`) sebagai ganti `ownerModuleKey`, dan **wajib**
-`executionMode: "delegated"` — mesin generik menghapus atas nama modul pemilik,
-dan tabel ini tidak punya.
+Their descriptors live in
+`src/modules/data-lifecycle/domain/infrastructure-lifecycle-registry.ts`, use
+`ownerPath` (a `src/lib/…/` directory) instead of `ownerModuleKey`, and MUST
+be `executionMode: "delegated"` — the generic engine deletes on behalf of the
+owning module, and these tables have none.
 
-Yang menjaga registry itu dari menjadi tempat parkir bukan aturan tertulis:
-`data-lifecycle:registry:check` memindai `src/` dengan `ownerOfFile()` — fungsi
-yang sama yang dipakai `modules:table-writes:check` — dan menolak deskriptor
-infrastruktur untuk tabel yang penulisnya sebuah modul, maupun untuk tabel yang
-tidak ditulis siapa pun.
+What keeps that registry from becoming a parking lot is not a written rule:
+`data-lifecycle:registry:check` scans `src/` with `ownerOfFile()` — the same
+function `modules:table-writes:check` uses — and rejects an infrastructure
+descriptor for a table whose writer is a module, as well as for a table that
+nobody writes to.
 
-| Descriptor key      | Tabel                     | Owner                 | Mode        | Kelas retensi       | Jendela                          |
+| Descriptor key      | Table                     | Owner                 | Mode        | Retention class     | Window                           |
 | ------------------- | ------------------------- | --------------------- | ----------- | ------------------- | -------------------------------- |
-| `edge_cache.purges` | `awcms_edge_cache_purges` | `src/lib/edge-cache/` | `delegated` | `operational_queue` | `done` 7 hari, `failed` 180 hari |
+| `edge_cache.purges` | `awcms_edge_cache_purges` | `src/lib/edge-cache/` | `delegated` | `operational_queue` | `done` 7 days, `failed` 180 days |
 
-Purge-nya dijalankan `bun run edge-cache:purge` dan menghormati legal hold atas
-`edge_cache.purges` seperti setiap adopter terdelegasi lain.
+Its purge is run by `bun run edge-cache:purge` and honours legal holds over
+`edge_cache.purges` like every other delegated adopter.
 
-Descriptor di bawah adalah **contoh target ERP** (belum terdaftar di
-kode — belum ada modul finance/inventory/HR-payroll):
+The descriptors below are **target ERP examples** (not registered in code
+yet — there is no finance/inventory/HR-payroll module yet):
 
-| Descriptor key                        | Tabel                           | Owner            | Mode        | Kelas retensi           |
+| Descriptor key                        | Table                           | Owner            | Mode        | Retention class         |
 | ------------------------------------- | ------------------------------- | ---------------- | ----------- | ----------------------- |
 | `logging.audit_events`                | `awcms_audit_events`            | `logging`        | `delegated` | `audit_security`        |
 | `finance.ledger_entries`              | `awcms_ledger_entries`          | `finance`        | `delegated` | `financial_record`      |
@@ -91,302 +95,299 @@ kode — belum ada modul finance/inventory/HR-payroll):
 | `integration.webhook_delivery_events` | `awcms_webhook_delivery_events` | `integration`    | `delegated` | `operational_telemetry` |
 | `data_lifecycle.data_lifecycle_runs`  | `awcms_data_lifecycle_runs`     | `data_lifecycle` | `generic`   | `operational_queue`     |
 
-## Retensi data (per descriptor)
+## Data retention (per descriptor)
 
-Prinsip: **tidak ada satu periode retensi legal universal** — setiap
-descriptor mendeklarasikan kelas retensi dan batas amannya sendiri,
-dipetakan ke kebutuhan bisnis/kepatuhan tabel itu spesifik, bukan angka
-generik yang dipaksakan ke semua data. Untuk AWCMS, ini berarti kelas
-`financial_record`/`payroll_record` HARUS ditinjau terhadap kewajiban
-retensi pajak/pembukuan aktual (lihat catatan di atas), bukan sekadar
-disalin dari kelas `audit_security`/`analytics_telemetry` warisan base.
+Principle: **there is no single universal legal retention period** — each
+descriptor declares its own retention class and safety bounds, mapped to that
+table's specific business/compliance needs, not a generic number forced onto
+all data. For AWCMS this means the `financial_record`/`payroll_record`
+classes MUST be reviewed against the actual tax/bookkeeping retention
+obligations (see the note above), not simply copied from the base's inherited
+`audit_security`/`analytics_telemetry` classes.
 
-| Descriptor                            | Default (ilustratif) | Batas aman (min–max, ilustratif)       | Rasional                                                                                                                                         |
-| ------------------------------------- | -------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `logging.audit_events`                | 730 hari             | 365–1825 hari                          | Security/audit log: 1–5 tahun sesuai kebutuhan — titik tengah rentang                                                                            |
-| `finance.ledger_entries`              | **belum ditetapkan** | **wajib review legal/pajak**           | Kewajiban penyimpanan bukti pembukuan/transaksi finansial biasanya jauh melebihi retensi audit log teknis — jangan default ke angka generik base |
-| `hr_payroll.payroll_records`          | **belum ditetapkan** | **wajib review legal/ketenagakerjaan** | Kewajiban retensi data gaji/ketenagakerjaan bervariasi per yurisdiksi/kontrak — perlu keputusan eksplisit, bukan warisan default                 |
-| `integration.webhook_delivery_events` | 90 hari              | 7–730 hari                             | Telemetry integrasi eksternal (payment gateway/marketplace/logistik) — retensi jauh lebih pendek dari data finansial itu sendiri                 |
-| `data_lifecycle.data_lifecycle_runs`  | 180 hari             | 30–1825 hari                           | Riwayat eksekusi lifecycle ITU SENDIRI adalah bukti kepatuhan (ISO 27001/22301) — retensi menengah, diarsipkan sebelum purge fisik               |
+| Descriptor                            | Default (illustrative) | Safety bounds (min–max, illustrative) | Rationale                                                                                                                                                      |
+| ------------------------------------- | ---------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `logging.audit_events`                | 730 days               | 365–1825 days                         | Security/audit log: 1–5 years as needed — the midpoint of the range                                                                                            |
+| `finance.ledger_entries`              | **not yet set**        | **legal/tax review required**         | The obligation to store bookkeeping/financial transaction evidence usually far exceeds technical audit log retention — do not default to a generic base number |
+| `hr_payroll.payroll_records`          | **not yet set**        | **legal/labour review required**      | Payroll/employment data retention obligations vary by jurisdiction/contract — an explicit decision is required, not an inherited default                       |
+| `integration.webhook_delivery_events` | 90 days                | 7–730 days                            | External integration telemetry (payment gateway/marketplace/logistics) — retention far shorter than the financial data itself                                  |
+| `data_lifecycle.data_lifecycle_runs`  | 180 days               | 30–1825 days                          | The lifecycle execution history ITSELF is compliance evidence (ISO 27001/22301) — medium retention, archived before physical purge                             |
 
-`retentionDaysOverride` (dry-run on-demand, `POST
-/api/v1/data-lifecycle/dry-run`) selalu di-clamp ke `[retentionMinDays,
-retentionMaxDays]` descriptor — operator tidak bisa memaksa retensi di
-luar batas aman yang dideklarasikan pemilik tabel, dan **legal hold
-tetap menang** di atas override apa pun (lihat §Legal hold).
+`retentionDaysOverride` (on-demand dry-run, `POST
+/api/v1/data-lifecycle/dry-run`) is always clamped to the descriptor's
+`[retentionMinDays, retentionMaxDays]` — an operator cannot force retention
+outside the safety bounds declared by the table's owner, and **legal hold
+still wins** over any override (see §Legal hold).
 
 ## Legal hold
 
 `awcms_data_lifecycle_legal_holds` (RLS FORCE, tenant-scoped).
-Field: `descriptorKey` (nullable = tenant-wide), `scopeDescription`,
-`reason` (wajib, minimum 10 karakter), `authorityReference` (wajib —
-nomor surat pengadilan/regulator/otoritas pajak), `authorityMetadata`
+Fields: `descriptorKey` (nullable = tenant-wide), `scopeDescription`,
+`reason` (required, minimum 10 characters), `authorityReference` (required —
+the court/regulator/tax authority letter number), `authorityMetadata`
 (jsonb, non-secret), `status` (`active`/`released`), `startsAt`/`endsAt`
-(informational — `endsAt` TIDAK otomatis melepas hold, lihat di bawah),
-`requestedBy`/`approvedBy`, `releasedBy`/`releasedAt`/`releaseReason`.
+(informational — `endsAt` does NOT automatically release the hold, see
+below), `requestedBy`/`approvedBy`, `releasedBy`/`releasedAt`/`releaseReason`.
 
-**Precedence tidak bisa dilewati**: hold aktif (tenant-wide atau
-menyasar descriptor spesifik) membuat SEMUA baris eligible pada
-descriptor itu dilaporkan `held`, bukan `purgeable` — dicek di
-`planLifecycleDryRun` SEBELUM cabang archive/purge apa pun, dan
-`retentionDaysOverride` agresif sekalipun tidak bisa membuka jalan
-purge. Field `legalHold.applicable` pada descriptor adalah metadata
-dokumentasi murni (apakah kelas data ini masuk akal untuk di-hold) —
-**bukan** gerbang teknis; hold record nyata selalu berlaku terlepas dari
-nilai field itu (mencegah modul pemilik mendeklarasikan tabelnya sendiri
-"tidak berlaku hold" untuk menghindar). Untuk data finansial/payroll,
-legal hold ini adalah mekanisme yang relevan saat ada audit pajak atau
-sengketa ketenagakerjaan yang mewajibkan preservasi data melebihi
-retensi rutin.
+**Precedence cannot be bypassed**: an active hold (tenant-wide or targeting
+a specific descriptor) makes ALL eligible rows on that descriptor be
+reported as `held`, not `purgeable` — checked in `planLifecycleDryRun`
+BEFORE any archive/purge branch, and even an aggressive
+`retentionDaysOverride` cannot open a purge path. The `legalHold.applicable`
+field on the descriptor is pure documentation metadata (whether this data
+class plausibly makes sense to hold) — **not** a technical gate; a real hold
+record always applies regardless of that field's value (which prevents an
+owning module from declaring its own table "hold not applicable" to escape).
+For financial/payroll data this legal hold is the relevant mechanism when a
+tax audit or an employment dispute requires preserving data beyond routine
+retention.
 
-**Default-deny release**: `data_lifecycle.legal_hold.create` dan
-`data_lifecycle.legal_hold.release` adalah permission TERPISAH — role
-yang bisa membuat hold tidak otomatis bisa melepasnya. Release wajib
-`releaseReason` (≥10 karakter), permission eksplisit, `Idempotency-Key`,
-dan audit `critical`. Hold yang `endsAt`-nya sudah lewat TETAP `active`
-sampai ada aksi release eksplisit — mencegah hold "kedaluwarsa diam-diam"
-saat data yang dilindungi masih relevan secara hukum.
+**Default-deny release**: `data_lifecycle.legal_hold.create` and
+`data_lifecycle.legal_hold.release` are SEPARATE permissions — a role that
+can create a hold cannot automatically release it. Release requires a
+`releaseReason` (≥10 characters), an explicit permission, an
+`Idempotency-Key`, and a `critical` audit. A hold whose `endsAt` has already
+passed STAYS `active` until an explicit release action — preventing a hold
+from "silently expiring" while the protected data is still legally relevant.
 
 ## Dry-run lifecycle planning
 
-`GET /api/v1/data-lifecycle/registry` (daftar descriptor) →
+`GET /api/v1/data-lifecycle/registry` (descriptor list) →
 `POST /api/v1/data-lifecycle/dry-run` (`{ descriptorKey,
-retentionDaysOverride? }`) — murni `SELECT count(*)`, tanpa mutasi sama
-sekali, tanpa `Idempotency-Key` (tidak ada efek samping untuk
-diamankan), tanpa persist row (berbeda dari dry-run job terjadwal di
-bawah, yang MEMANG mencatat snapshot run history untuk visibilitas
-backlog dari waktu ke waktu). Melaporkan `eligibleCount`/`heldCount`/
-`archivedCount`/`purgeableCount`/`blockedCount`.
+retentionDaysOverride? }`) — pure `SELECT count(*)`, with no mutation at
+all, without an `Idempotency-Key` (there is no side effect to make safe),
+without persisting a row (unlike the scheduled job dry-run below, which DOES
+record a run history snapshot for backlog visibility over time). Reports
+`eligibleCount`/`heldCount`/`archivedCount`/`purgeableCount`/`blockedCount`.
 
-## Job terjadwal (`bun run data-lifecycle:archive-purge`)
+## Scheduled job (`bun run data-lifecycle:archive-purge`)
 
-`scripts/data-lifecycle-archive-purge.ts` — dibangun di atas shared
-worker runner: advisory lock, timeout, SIGTERM/SIGINT-aware cancellation,
-JSON telemetry. Iterasi tenant-first; legal hold di-fetch ulang tiap
-tenant tiap invocation (hold baru berlaku mulai pass berikutnya, bukan
-menunggu invocation berikutnya).
+`scripts/data-lifecycle-archive-purge.ts` — built on the shared worker
+runner: advisory lock, timeout, SIGTERM/SIGINT-aware cancellation, JSON
+telemetry. Iterates tenant-first; legal holds are re-fetched for each tenant
+on each invocation (a new hold takes effect starting on the next pass, not
+waiting for the next invocation).
 
-- Descriptor `"generic"` (`data_lifecycle.data_lifecycle_runs`): archive
-  batch (bila `archive.archivable`) lalu purge batch, keduanya bounded
-  (`batchLimit` per pass, `maxPasses` safety bound). Hanya
-  `deletion.mode === "hard_delete"` yang dieksekusi.
-- Descriptor `"delegated"` (audit/finance/payroll/integration): snapshot
-  dry-run saja, TIDAK PERNAH mutasi — purge asli tetap lewat job masing-
-  masing yang sudah ada (atau akan dibangun bersamaan modul pemiliknya).
-- `--dry-run`: tanpa mutasi untuk kedua mode, snapshot tetap dicatat.
+- `"generic"` descriptors (`data_lifecycle.data_lifecycle_runs`): archive
+  batch (if `archive.archivable`) then purge batch, both bounded
+  (`batchLimit` per pass, `maxPasses` safety bound). Only
+  `deletion.mode === "hard_delete"` is executed.
+- `"delegated"` descriptors (audit/finance/payroll/integration): a dry-run
+  snapshot only, NEVER a mutation — the real purge still goes through each
+  existing job (or one that will be built alongside its owning module).
+- `--dry-run`: no mutation for either mode, the snapshot is still recorded.
 
-`bun run data-lifecycle:archive-purge --dry-run --json-output=<path>`
-aman dijalankan produksi untuk pratinjau sebelum dijadwalkan nyata.
+`bun run data-lifecycle:archive-purge --dry-run --json-output=<path>` is safe
+to run in production as a preview before scheduling it for real.
 
-### Ketepatan batas cursor (microsecond vs millisecond)
+### Cursor boundary precision (microsecond vs millisecond)
 
-`timestamptz` PostgreSQL presisi mikrodetik; `Date` JavaScript hanya
-milidetik. Setiap perbandingan batas cursor (`archivedThrough` untuk
-purge, `resumeAfter` untuk resume archive) perlu di-pad
-`CURSOR_BOUNDARY_SAFETY_MARGIN_MS` (1ms) — tanpa ini, baris batas
-sendiri gagal memenuhi perbandingan `<=`/`>` terhadap nilai dirinya
-sendiri yang sudah terpotong presisi (dibuktikan empiris di base
-`awcms-mini` lewat test volume besar — lihat dokumentasi teknis modul
-untuk detail lengkap begitu diporting). Dampak bila tidak ditangani:
-purge kehilangan tepat satu baris tiap siklus (baris batas tidak pernah
-terhapus), dan archive resume mengarsipkan ulang baris terakhir tanpa
-henti sampai batas `DEFAULT_MAX_PASSES`.
+PostgreSQL `timestamptz` has microsecond precision; JavaScript `Date` only
+milliseconds. Every cursor boundary comparison (`archivedThrough` for purge,
+`resumeAfter` for resuming an archive) needs padding with
+`CURSOR_BOUNDARY_SAFETY_MARGIN_MS` (1ms) — without it, the boundary row
+itself fails the `<=`/`>` comparison against its own precision-truncated
+value (proven empirically on the `awcms-mini` base through a large-volume
+test — see the module's technical documentation for the full detail once it
+is ported). The impact if not handled: purge loses exactly one row per cycle
+(the boundary row is never deleted), and archive resume re-archives the last
+row endlessly up to the `DEFAULT_MAX_PASSES` bound.
 
-## Archive port dan restore procedure (local/offline archive)
+## Archive port and restore procedure (local/offline archive)
 
-Provider-neutral (`domain/archive-port.ts`); default DAN target adapter
-pertama: `local_offline` (`infrastructure/local-archive-adapter.ts`) —
-menulis artefak JSONL/CSV ke `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH`,
-checksum SHA-256, manifest tercatat di
-`awcms_data_lifecycle_archive_manifests` (lokasi, jumlah baris, rentang
-cursor, checksum, versi skema, referensi prosedur restore).
-`external_object_storage` adalah nilai valid untuk `archive.port`
-(typing forward-compatible) tapi belum ada adapter nyata.
+Provider-neutral (`domain/archive-port.ts`); the default AND first target
+adapter: `local_offline` (`infrastructure/local-archive-adapter.ts`) —
+writes JSONL/CSV artifacts to `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH`, SHA-256
+checksum, manifest recorded in
+`awcms_data_lifecycle_archive_manifests` (location, row count, cursor range,
+checksum, schema version, restore procedure reference).
+`external_object_storage` is a valid value for `archive.port`
+(forward-compatible typing) but there is no real adapter yet.
 
-**Prosedur restore (local/offline archive):**
+**Restore procedure (local/offline archive):**
 
-1. Cari manifest lewat `GET /api/v1/data-lifecycle/runs` (korelasi
-   `jobRunId`/`correlationId`) atau langsung query
-   `awcms_data_lifecycle_archive_manifests` (akses admin/operator).
-2. Verifikasi integritas SEBELUM memakai artefak apa pun:
-   `ArchivePort.verify(artifactLocation, checksumHex)` — recompute
-   SHA-256 dan bandingkan; harus `true` sebelum lanjut.
-3. Baca isi artefak: `ArchivePort.read(artifactLocation)` — mengembalikan
-   baris sebagai `Record<string, unknown>[]`. **Nilai balik JSON/CSV-
-   native** (string/number/boolean/null/object), BUKAN otomatis
-   ter-cast ke tipe kolom Postgres aslinya (mis. kolom `timestamptz`
-   kembali sebagai string ISO, bukan objek `Date`) — operator restore
-   HARUS meng-cast ulang per kolom sesuai skema tujuan, tidak diasumsikan
-   sudah tepat. Untuk data finansial (mis. kolom `numeric` untuk nilai
-   uang), casting yang salah adalah risiko integritas data yang lebih
-   serius daripada pada data CMS — validasi tipe dan presisi secara
-   eksplisit.
-4. Restore-KE-tabel-sumber adalah **prosedur manual operator terpisah**
-   yang terdokumentasi — port ini sengaja TIDAK menulis balik ke tabel
-   sumber secara otomatis (batasan "no shared-table write" yang sama
-   berlaku: hanya kode modul PEMILIK tabel yang boleh menulis ke
-   tabelnya). Restore berarti operator (dengan akses admin DB langsung,
-   di luar API) menjalankan `INSERT` manual dari baris yang sudah dibaca
-   ke tabel tujuan, memvalidasi `tenant_id`/constraint sebelum insert.
-5. Rekonsiliasi: bandingkan `rowCount` manifest dengan jumlah baris hasil
-   `read()` — harus sama persis; ketidakcocokan berarti artefak korup
-   atau salah lokasi, HENTIKAN restore dan investigasi sebelum lanjut.
+1. Find the manifest via `GET /api/v1/data-lifecycle/runs` (correlate on
+   `jobRunId`/`correlationId`) or query
+   `awcms_data_lifecycle_archive_manifests` directly (admin/operator access).
+2. Verify integrity BEFORE using any artifact:
+   `ArchivePort.verify(artifactLocation, checksumHex)` — recompute SHA-256
+   and compare; it must be `true` before continuing.
+3. Read the artifact contents: `ArchivePort.read(artifactLocation)` — returns
+   rows as `Record<string, unknown>[]`. **The returned values are JSON/CSV-
+   native** (string/number/boolean/null/object), NOT automatically cast back
+   to their original Postgres column types (e.g. a `timestamptz` column comes
+   back as an ISO string, not a `Date` object) — the restoring operator MUST
+   re-cast per column according to the target schema, never assume it is
+   already correct. For financial data (e.g. `numeric` columns for monetary
+   values), a wrong cast is a more serious data integrity risk than on CMS
+   data — validate type and precision explicitly.
+4. Restore-INTO-the-source-table is a **separate manual operator procedure**
+   that is documented — this port deliberately does NOT write back into the
+   source table automatically (the same "no shared-table write" constraint
+   applies: only the code of the module that OWNS the table may write to its
+   table). Restore means an operator (with direct DB admin access, outside
+   the API) runs a manual `INSERT` of the already-read rows into the target
+   table, validating `tenant_id`/constraints before inserting.
+5. Reconciliation: compare the manifest's `rowCount` against the number of
+   rows returned by `read()` — they must match exactly; a mismatch means the
+   artifact is corrupt or the location is wrong, STOP the restore and
+   investigate before continuing.
 
-Target pengujian end-to-end (checksum + read + rekonsiliasi jumlah baris)
-mengikuti pola test integrasi base `awcms-mini` begitu modul ini
-diimplementasikan di AWCMS.
+The end-to-end testing target (checksum + read + row count reconciliation)
+follows the `awcms-mini` base integration test pattern once this module is
+implemented in AWCMS.
 
-## Kebijakan partisi dan panduan runbook
+## Partitioning policy and runbook guidance
 
-`partition.eligible`/`partition.granularity` pada descriptor adalah
-**panduan**, bukan otomasi — otomasi operasi partisi hanya dilakukan bila
-keamanan PostgreSQL bisa dibuktikan, dan migrasi destruktif seluruh tabel
-yang sudah ada dalam satu PR tetap di luar cakupan. Descriptor bervolume
-tinggi (mis. `logging.audit_events` bulanan; tabel transaksi finance/
-inventory volume tinggi begitu modulnya ada) adalah kandidat masa depan;
-descriptor volume rendah (form drafts, run history) menandai
-`eligible: false` (volume belum menjustifikasi kompleksitas partisi).
+`partition.eligible`/`partition.granularity` on a descriptor are
+**guidance**, not automation — partitioning operations are only automated
+once PostgreSQL safety can be proven, and a destructive migration of an
+entire existing table in one PR remains out of scope. High-volume
+descriptors (e.g. `logging.audit_events` monthly; high-volume
+finance/inventory transaction tables once their modules exist) are future
+candidates; low-volume descriptors (form drafts, run history) mark
+`eligible: false` (the volume does not yet justify the complexity of
+partitioning).
 
-**Runbook (bila suatu saat diimplementasikan — checklist evaluasi, bukan
-langkah eksekusi yang sudah teruji):**
+**Runbook (if it is ever implemented — an evaluation checklist, not proven
+execution steps):**
 
-1. Buktikan volume nyata menjustifikasi partisi (metrik row count/growth
-   rate, bukan asumsi) — lihat §Metrics di bawah.
-2. Migrasi partisi PostgreSQL WAJIB non-destruktif: buat tabel baru
-   ter-partisi, salin data via batch (bukan `ALTER TABLE` langsung pada
-   tabel besar aktif), swap nama via transaksi pendek, verifikasi jumlah
-   baris cocok persis sebelum drop tabel lama.
-3. RLS policy dan index harus dibuat ulang PERSIS sama pada setiap child
-   partition — tidak cukup pada tabel induk saja (PostgreSQL declarative
-   partitioning mewarisi RLS dari induk hanya untuk beberapa operasi;
-   uji eksplisit sebelum mengklaim aman).
-4. Grant role aplikasi (`awcms_worker`/`awcms_app`) harus diverifikasi
-   ulang berlaku pada partition baru (grant pada tabel induk partitioned
-   tidak selalu otomatis mewarisi ke semua child yang dibuat belakangan,
-   tergantung strategi `ALTER DEFAULT PRIVILEGES`).
-5. Uji beban nyata (query plan `EXPLAIN ANALYZE` pada query
-   representatif) SEBELUM dan SESUDAH partisi — partisi yang salah
-   granularitas bisa memperlambat, bukan mempercepat.
-6. Rencana rollback eksplisit sebelum cutover produksi.
+1. Prove that real volume justifies partitioning (row count/growth rate
+   metrics, not assumptions) — see §Metrics below.
+2. A PostgreSQL partitioning migration MUST be non-destructive: create a new
+   partitioned table, copy the data in batches (not a direct `ALTER TABLE` on
+   a large live table), swap names in a short transaction, verify the row
+   counts match exactly before dropping the old table.
+3. RLS policies and indexes must be recreated EXACTLY the same on every child
+   partition — doing it on the parent table alone is not enough (PostgreSQL
+   declarative partitioning inherits RLS from the parent only for some
+   operations; test explicitly before claiming it is safe).
+4. Application role grants (`awcms_worker`/`awcms_app`) must be re-verified
+   as applying to the new partitions (a grant on a partitioned parent table
+   does not always automatically inherit to every child created later,
+   depending on the `ALTER DEFAULT PRIVILEGES` strategy).
+5. Run a real load test (`EXPLAIN ANALYZE` query plans on representative
+   queries) BEFORE and AFTER partitioning — a partitioning scheme with the
+   wrong granularity can slow things down, not speed them up.
+6. An explicit rollback plan before the production cutover.
 
-## Config dan readiness checks
+## Config and readiness checks
 
-Satu var baru (target): `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` (default
-`./var/data-lifecycle-archive`). `security:readiness` menambah dua check
-(`checkDataLifecycleRegistryValid` — critical, memvalidasi ulang seluruh
-registry; `checkDataLifecycleLegalHoldReleaseSeparate` — critical,
-memverifikasi `legal_hold.create`/`.release` tetap permission terpisah
-dan `release` tetap terklasifikasi high-risk).
+One new var (target): `DATA_LIFECYCLE_ARCHIVE_ROOT_PATH` (default
+`./var/data-lifecycle-archive`). `security:readiness` adds two checks
+(`checkDataLifecycleRegistryValid` — critical, revalidates the entire
+registry; `checkDataLifecycleLegalHoldReleaseSeparate` — critical, verifies
+that `legal_hold.create`/`.release` remain separate permissions and that
+`release` remains classified high-risk).
 
 ## Metrics
 
-Mengikuti pola `src/lib/observability/metrics-port.ts` — label
-berkardinalitas rendah, tidak pernah tenant id/row content:
-`job_run_total`/`job_run_duration_ms`/`job_run_item_count` (generik dari
-shared worker runner, otomatis berlaku untuk
-`data-lifecycle:archive-purge` tanpa instrumentasi tambahan). Volume/
-backlog/held-data per descriptor tersedia lewat `GET /api/v1/
-data-lifecycle/runs` (riwayat run, count teragregasi) dan
-`GET /api/v1/data-lifecycle/registry` (deskriptor terdaftar) — bukan
-metrik Prometheus khusus tambahan (agregat run history sudah menjawab
-"backlog seberapa besar" tanpa menduplikasi mekanisme metrics-port untuk
-data yang sama).
+Follows the `src/lib/observability/metrics-port.ts` pattern — low-cardinality
+labels, never a tenant id or row content:
+`job_run_total`/`job_run_duration_ms`/`job_run_item_count` (generic, from the
+shared worker runner, automatically applying to
+`data-lifecycle:archive-purge` with no extra instrumentation).
+Volume/backlog/held-data per descriptor is available through `GET /api/v1/
+data-lifecycle/runs` (run history, aggregated counts) and
+`GET /api/v1/data-lifecycle/registry` (registered descriptors) — not an extra
+dedicated Prometheus metric (the run history aggregate already answers "how
+big is the backlog" without duplicating the metrics-port mechanism for the
+same data).
 
-## Pemetaan kepatuhan
+## Compliance mapping
 
-Prinsip yang berlaku pada SETIAP baris tabel di bawah: **retensi adalah
-keputusan per data class yang dideklarasikan pemilik tabel** (lihat
-§Retensi data), bukan satu angka legal universal yang diklaim benar
-untuk semua yurisdiksi/jenis data. Modul ini menyediakan MEKANISME
-(registry, dry-run, legal hold, archive, purge aman) — organisasi
-pengguna AWCMS tetap wajib menetapkan periode retensi aktual sesuai
-regulasi perpajakan, ketenagakerjaan, dan kebijakan internalnya sendiri
-untuk data finance/payroll — ini adalah tanggung jawab tambahan
-dibanding base CMS generik, bukan sesuatu yang otomatis benar begitu
-kode diporting.
+The principle that applies to EVERY row of the tables below: **retention is a
+per-data-class decision declared by the table's owner** (see §Data
+retention), not one universal legal number claimed to be correct for every
+jurisdiction/data type. This module provides the MECHANISM (registry,
+dry-run, legal hold, archive, safe purge) — the organisation using AWCMS is
+still obliged to set the actual retention periods according to its own tax
+regulations, employment law, and internal policy for finance/payroll data —
+this is an additional responsibility compared with a generic CMS base, not
+something that becomes automatically correct once the code is ported.
 
-### UU PDP (Undang-Undang Pelindungan Data Pribadi, UU No. 27/2022)
+### UU PDP (Personal Data Protection Law, Law No. 27/2022)
 
-| Prinsip UU PDP                                                     | Implementasi (target)                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pembatasan penyimpanan (data disimpan tidak lebih lama dari perlu) | Setiap descriptor mendeklarasikan `retentionMinDays`/`retentionMaxDays`/`defaultRetentionDays` eksplisit; dry-run mengekspos backlog "eligible" sebelum purge nyata dijalankan                                                                                                                                   |
-| Hak penghapusan/permintaan subjek data                             | Purge bounded + audit ada sebagai MEKANISME; keputusan KAPAN menghapus atas permintaan subjek tetap keputusan operasional operator, bukan otomatis dari modul ini — untuk data payroll/HR, keputusan ini juga harus mempertimbangkan kewajiban retensi ketenagakerjaan yang mungkin mengalahkan permintaan hapus |
-| Akuntabilitas pemrosesan                                           | Setiap purge (mode `"generic"`) diaudit `critical` dengan `descriptorKey`/`purgedCount`/`cutoffIso`; run history menyimpan bukti eksekusi teragregasi                                                                                                                                                            |
-| Legal hold vs hak hapus                                            | Legal hold OVERRIDE hak penghapusan rutin — kepatuhan terhadap kewajiban hukum lain (mis. audit pajak, sengketa ketenagakerjaan) yang sah secara hukum mengalahkan permintaan hapus rutin, konsisten dengan pengecualian lazim UU PDP untuk kewajiban hukum                                                      |
+| UU PDP principle                                        | Implementation (target)                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Storage limitation (data kept no longer than necessary) | Every descriptor declares explicit `retentionMinDays`/`retentionMaxDays`/`defaultRetentionDays`; the dry-run exposes the "eligible" backlog before a real purge is run                                                                                                                                       |
+| Right to erasure / data subject requests                | Bounded purge + audit exist as a MECHANISM; the decision of WHEN to delete on a subject's request remains an operational decision by the operator, not automatic from this module — for payroll/HR data that decision must also weigh employment retention obligations that may override the erasure request |
+| Processing accountability                               | Every purge (`"generic"` mode) is audited as `critical` with `descriptorKey`/`purgedCount`/`cutoffIso`; the run history holds aggregated execution evidence                                                                                                                                                  |
+| Legal hold vs the right to erasure                      | Legal hold OVERRIDES the routine right to erasure — compliance with another, legally valid obligation (e.g. a tax audit, an employment dispute) beats a routine erasure request, consistent with the usual UU PDP exemption for legal obligations                                                            |
 
-### PP PSTE (Penyelenggaraan Sistem dan Transaksi Elektronik, PP No. 71/2019)
+### PP PSTE (Electronic Systems and Transactions Operation, Government Regulation No. 71/2019)
 
-| Aspek                                                             | Implementasi (target)                                                                                                                                                                           |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kewajiban retensi data elektronik untuk keperluan penegakan hukum | Legal hold mechanism eksplisit memungkinkan operator mem-preserve data melebihi retensi rutin saat diminta otoritas berwenang, dengan `authorityReference` sebagai bukti dasar hukum permintaan |
-| Keandalan sistem elektronik                                       | Bounded batch (tidak pernah unbounded DELETE), advisory lock (tidak pernah purge ganda konkuren), checksum arsip (integritas terverifikasi)                                                     |
+| Aspect                                                            | Implementation (target)                                                                                                                                                                              |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Obligation to retain electronic data for law enforcement purposes | The explicit legal hold mechanism lets an operator preserve data beyond routine retention when a competent authority requests it, with `authorityReference` as evidence of the request's legal basis |
+| Electronic system reliability                                     | Bounded batches (never an unbounded DELETE), advisory lock (never a concurrent double purge), archive checksums (verified integrity)                                                                 |
 
-### ISO/IEC 27001:2022 Annex A (kontrol relevan-kode)
+### ISO/IEC 27001:2022 Annex A (code-relevant controls)
 
-| Kontrol                              | Implementasi (target)                                                                                                                              |
+| Control                              | Implementation (target)                                                                                                                            |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A.5.33 Protection of records         | Archive manifest + checksum + restore procedure sebelum purge fisik (untuk descriptor archivable)                                                  |
-| A.5.34 Privacy and protection of PII | Dry-run/run history mengagregasi count, tidak pernah row content/PII individual                                                                    |
-| A.8.10 Information deletion          | Bounded, audited, permission-gated purge; `deletion.mode` eksplisit per tabel                                                                      |
-| A.5.15 Access control                | ABAC default-deny + RLS pada semua endpoint; permission terpisah create/release legal hold                                                         |
-| A.8.15 Logging                       | Setiap purge (`"generic"`) dan aksi legal hold diaudit `critical`/`warning` via `recordAuditEvent` yang sudah ada (tidak ada mekanisme audit baru) |
+| A.5.33 Protection of records         | Archive manifest + checksum + restore procedure before the physical purge (for archivable descriptors)                                             |
+| A.5.34 Privacy and protection of PII | Dry-run/run history aggregate counts, never row content/individual PII                                                                             |
+| A.8.10 Information deletion          | Bounded, audited, permission-gated purge; explicit `deletion.mode` per table                                                                       |
+| A.5.15 Access control                | ABAC default-deny + RLS on every endpoint; separate create/release legal hold permissions                                                          |
+| A.8.15 Logging                       | Every purge (`"generic"`) and every legal hold action is audited `critical`/`warning` via the existing `recordAuditEvent` (no new audit mechanism) |
 
-### ISO/IEC 27002:2022 (panduan implementasi kontrol di atas)
+### ISO/IEC 27002:2022 (implementation guidance for the controls above)
 
-Panduan retensi berbasis-kelas (bukan satu angka global) selaras 27002
+Class-based retention guidance (not one global number) aligns with 27002
 §5.33 ("retention periods should take into account... legal, statutory,
-regulatory and contractual requirements" — plural, per jenis data).
-Panduan penghapusan aman (27002 §8.10) tercermin di `deletion.mode`
-eksplisit per descriptor (`hard_delete`/`anonymize`/
-`status_transition_then_purge`) alih-alih satu strategi seragam.
+regulatory and contractual requirements" — plural, per data type). Secure
+deletion guidance (27002 §8.10) is reflected in the explicit per-descriptor
+`deletion.mode` (`hard_delete`/`anonymize`/`status_transition_then_purge`)
+instead of one uniform strategy.
 
-### ISO/IEC 27005:2023 (manajemen risiko)
+### ISO/IEC 27005:2023 (risk management)
 
-| Risiko                                                  | Mitigasi (target)                                                                                                                                                                                        |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Purge tak terbatas mengunci tabel lama                  | `batchLimit` wajib per descriptor (divalidasi registry gate, maksimum absolut 50.000), statement bounded, tidak pernah `DELETE` tanpa `LIMIT`                                                            |
-| Legal hold dilewati diam-diam                           | Precedence dicek unconditional sebelum cabang purge mana pun; `legalHold.applicable` bukan gerbang teknis (lihat §Legal hold)                                                                            |
-| Purge lintas-tenant tak sengaja                         | RLS FORCE + filter `tenant_id` eksplisit di setiap query; job iterasi tenant SATU PER SATU via transaksi tenant-scoped terpisah, tidak pernah satu query lintas-tenant                                   |
-| Artefak arsip korup/tidak bisa dipulihkan               | Checksum SHA-256 wajib per manifest, `verify()` sebelum pemakaian, diuji end-to-end                                                                                                                      |
-| Kredensial bocor lewat log/arsip                        | `artifactLocation` selalu path/URI, tidak pernah kredensial; tidak ada mekanisme baru yang menulis raw secret ke log                                                                                     |
-| Purge dini data finance/payroll melanggar retensi hukum | Descriptor `finance.*`/`hr_payroll.*` wajib review legal sebelum `retentionMinDays`/`retentionMaxDays` ditetapkan (lihat catatan di awal dokumen) — risiko yang tidak ada padanannya di base CMS generik |
+| Risk                                                            | Mitigation (target)                                                                                                                                                                                                |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| An unbounded purge locking an old table                         | A mandatory `batchLimit` per descriptor (validated by the registry gate, absolute maximum 50,000), bounded statements, never a `DELETE` without a `LIMIT`                                                          |
+| Legal hold silently bypassed                                    | Precedence is checked unconditionally before any purge branch; `legalHold.applicable` is not a technical gate (see §Legal hold)                                                                                    |
+| Accidental cross-tenant purge                                   | RLS FORCE + an explicit `tenant_id` filter in every query; the job iterates tenants ONE BY ONE via separate tenant-scoped transactions, never one cross-tenant query                                               |
+| A corrupt/unrecoverable archive artifact                        | A mandatory SHA-256 checksum per manifest, `verify()` before use, tested end-to-end                                                                                                                                |
+| Credentials leaking through logs/archives                       | `artifactLocation` is always a path/URI, never a credential; no new mechanism writes a raw secret to a log                                                                                                         |
+| An early purge of finance/payroll data breaking legal retention | `finance.*`/`hr_payroll.*` descriptors require a legal review before `retentionMinDays`/`retentionMaxDays` are set (see the note at the start of this document) — a risk with no counterpart in a generic CMS base |
 
-### ISO/IEC 27701:2025 (ekstensi privasi untuk ISO 27001, PIMS)
+### ISO/IEC 27701:2025 (privacy extension to ISO 27001, PIMS)
 
-Dry-run dan run history mengagregasi (count per descriptor per tenant),
-tidak pernah mengekspos identifier/nilai baris individual — selaras
-prinsip minimisasi data PIMS. Legal hold `authorityMetadata` (jsonb)
-didokumentasikan sebagai non-secret tapi tetap tenant-scoped RLS — tidak
-pernah lintas tenant meski berisi metadata otoritas eksternal.
+The dry-run and the run history aggregate (a count per descriptor per
+tenant), never exposing individual row identifiers/values — aligned with the
+PIMS data minimisation principle. The legal hold's `authorityMetadata`
+(jsonb) is documented as non-secret but is still tenant-scoped under RLS —
+never cross-tenant even when it holds external authority metadata.
 
-### ISO/IEC 22301 (kontinuitas bisnis)
+### ISO/IEC 22301 (business continuity)
 
-Archive-sebelum-purge (untuk descriptor archivable) adalah bukti retensi
-yang bisa dipulihkan pasca insiden — manifest + checksum + restore
-procedure yang terdokumentasi dan teruji (bukan hanya diklaim) adalah
-bagian dari kesiapan pemulihan data historis. Lihat juga
-[`resilience-dr-verification.md`](resilience-dr-verification.md) untuk
-cakupan backup/restore penuh basis data (independen dari mekanisme
-arsip modul ini — archive manifest melengkapi, bukan menggantikan,
-backup database rutin).
+Archive-before-purge (for archivable descriptors) is evidence of retention
+that can be recovered after an incident — a manifest + checksum + a restore
+procedure that is documented and tested (not merely claimed) is part of
+historical data recovery readiness. See also
+[`resilience-dr-verification.md`](resilience-dr-verification.md) for full
+database backup/restore coverage (independent of this module's archive
+mechanism — the archive manifest complements, and does not replace, routine
+database backups).
 
-## Batasan yang dicatat, bukan diabaikan
+## Limitations recorded, not ignored
 
-- **Belum ada modul ini sama sekali di AWCMS** — gap utama pada tahap
-  fondasi saat ini, terpisah dari batasan-batasan teknis di bawah yang
-  berlaku begitu porting dari base selesai.
-- **Descriptor ERP di atas hanyalah contoh ilustratif** — belum ada
-  modul finance/inventory/HR-payroll/integration nyata untuk didaftarkan;
-  daftar aktual akan ditentukan saat modul-modul tersebut dibangun.
-- **`scope: "global"` descriptor** perlu diterima registry validator
-  (forward-compatible) tapi dilewati (bukan salah eksekusi) oleh dry-run
-  planner dan archive/purge engine begitu diimplementasikan.
-- **Tidak ada admin UI screen khusus** direncanakan sebagai bagian
-  acceptance criteria awal — API dulu, layar `/admin/data-lifecycle`
-  adalah follow-up yang masuk akal.
-- **Adapter object-storage eksternal** — `local_offline` saja pada
-  target implementasi awal.
-- **Cursor tie edge case** — lihat §Ketepatan batas cursor di atas; batas
-1ms yang mungkin tersisa setelah fix (berdasarkan pengalaman base),
-tidak dieliminasi sepenuhnya secara teoretis.
+- **This module does not exist at all in AWCMS yet** — the main gap at the
+  current foundation stage, separate from the technical limitations below
+  that apply once the port from the base is complete.
+- **The ERP descriptors above are merely illustrative examples** — there is
+  no real finance/inventory/HR-payroll/integration module to register yet;
+  the actual list will be determined when those modules are built.
+- **`scope: "global"` descriptors** need to be accepted by the registry
+  validator (forward-compatible) but skipped (not wrongly executed) by the
+  dry-run planner and the archive/purge engine once implemented.
+- **No dedicated admin UI screen** is planned as part of the initial
+  acceptance criteria — API first, an `/admin/data-lifecycle` screen is a
+  sensible follow-up.
+- **External object-storage adapter** — `local_offline` only in the initial
+  target implementation.
+- **Cursor tie edge case** — see §Cursor boundary precision above; the
+1ms bound that may remain after the fix (based on the base's experience) is
+not theoretically eliminated entirely.
 </content>

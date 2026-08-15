@@ -1,14 +1,17 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](resilience-dr-verification.id.md)
+
 # Resilience & Disaster-Recovery Verification
 
-> **Status dokumen (AWCMS, tahap foundation-rebuild).** `bun run
-resilience:dr-drill` dan seluruh skenario di bawah adalah mekanisme yang
-> pada base `awcms-mini` sudah diimplementasikan penuh dan diverifikasi
-> (real signal, real process, real backup/restore). Di AWCMS, **belum ada
-> implementasi kode untuk tool ini** — repo baru berisi ADR/governance
-> docs. Dokumen ini menjelaskan **target arsitektur dan kontrak** yang
-> akan diporting dari base sebagai bagian pembangunan fondasi teknis
-> AWCMS; baca klaim "implemented"/"real" di bawah sebagai spesifikasi
-> yang harus dipenuhi ulang saat porting, bukan status berjalan saat ini.
+> **Document status (AWCMS, foundation-rebuild phase).** `bun run
+resilience:dr-drill` and every scenario below are mechanisms that on the
+> `awcms-mini` base are already fully implemented and verified
+> (real signal, real process, real backup/restore). In AWCMS, **there is
+> no code implementation for this tool yet** — the repo so far contains
+> ADR/governance docs. This document describes the **target architecture
+> and contract** that will be ported from the base as part of building
+> AWCMS's technical foundation; read the "implemented"/"real" claims below
+> as a specification that has to be met again during the port, not as the
+> current running status.
 
 Companion to [`production-preflight-runbook.md`](production-preflight-runbook.md)
 and [`deployment-profiles.md`](deployment-profiles.md) — this doc covers
@@ -42,12 +45,12 @@ gate every run passes through before ANY scenario executes:
 ```mermaid
 flowchart TD
   Start[bun run resilience:dr-drill] --> AppEnv{APP_ENV == production?}
-  AppEnv -- Ya --> Block1[BLOCKED - no override, ever]
-  AppEnv -- Tidak --> Host{DATABASE_URL host recognized as local/isolated?}
-  Host -- Tidak dikenal / mirip produksi --> Block2[BLOCKED - default-deny]
-  Host -- Dikenal aman --> Confirm{--confirm-non-production matches APP_ENV?}
-  Confirm -- Tidak --> Block3[BLOCKED - typo-catcher]
-  Confirm -- Ya --> Run[Scenarios run]
+  AppEnv -- Yes --> Block1[BLOCKED - no override, ever]
+  AppEnv -- No --> Host{DATABASE_URL host recognized as local/isolated?}
+  Host -- Unrecognized / production-like --> Block2[BLOCKED - default-deny]
+  Host -- Known safe --> Confirm{--confirm-non-production matches APP_ENV?}
+  Confirm -- No --> Block3[BLOCKED - typo-catcher]
+  Confirm -- Yes --> Run[Scenarios run]
 ```
 
 Two properties make this stricter than `production:preflight`'s own
@@ -106,7 +109,7 @@ archive manifest checksum-verify-restore cycle would be a DIFFERENT
 concern from `backup-restore-drill` above (a full-database backup/
 restore) — it is a PER-TABLE, per-descriptor archive artifact independent
 of the database backup itself. See [`data-lifecycle.md`](data-lifecycle.md)
-§Archive port dan restore procedure for the operator-facing restore
+§Archive port and restore procedure for the operator-facing restore
 procedure once that module exists in AWCMS.
 
 ## RTO/RPO evidence
@@ -198,7 +201,7 @@ rather than a plain boolean:
 - **Full drill (`--full`, on demand or scheduled — NOT wired into every
   PR):** adds `backup-restore-drill`, a genuinely heavier real backup/
   restore round trip. Recommended cadence: alongside the existing
-  scheduled restore-drill cron/CI job (doc 07 §Restore SOP ringkas), and
+  scheduled restore-drill cron/CI job (doc 07 §Condensed restore SOP), and
   always as part of go-live H-7/H-3 rehearsal
   (`production-preflight-runbook.md` §Stage 1 — Rehearsal). Run it
   manually before a major release or infrastructure change:

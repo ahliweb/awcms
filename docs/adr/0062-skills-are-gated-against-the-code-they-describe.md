@@ -1,129 +1,131 @@
-# ADR-0062 — Skill digerbangi terhadap kode yang dijelaskannya
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0062-skills-are-gated-against-the-code-they-describe.id.md)
+
+# ADR-0062 — Skills are gated against the code they describe
 
 - **Status:** Accepted
-- **Tanggal:** 2026-08-04
-- **Pengambil keputusan:** @ahliweb
-- **Terkait:** [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (pengembangan hanya di `awcms` + `awcms-astro`; mini/micro jadi arsip), [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (jalur turunan dihapus), [ADR-0058](0058-unenforced-permissions-disposition.md) (preseden: daftar pengecualian ber-alasan sebagai artefak), [ADR-0057](0057-blog-page-lifecycle.md) §F (preseden: gerbang cakupan yang butuh tiga kali tulis ulang)
+- **Date:** 2026-08-04
+- **Decision maker:** @ahliweb
+- **Related:** [ADR-0055](0055-development-confined-to-awcms-and-awcms-astro.md) (development only in `awcms` + `awcms-astro`; mini/micro become archives), [ADR-0034](0034-awcms-family-direct-use-templates-and-derived-pathway-removal.md) (derived pathway removed), [ADR-0058](0058-unenforced-permissions-disposition.md) (precedent: a reasoned exception list as an artifact), [ADR-0057](0057-blog-page-lifecycle.md) §F (precedent: a coverage gate that needed three rewrites)
 
-## Konteks
+## Context
 
-### 1. Angka yang memaksa keputusan ini
+### 1. The numbers that forced this decision
 
-`.claude/skills/` memuat 55 skill. Saat ADR ini ditulis:
+`.claude/skills/` holds 55 skills. At the time this ADR was written:
 
-- **Sebelas ADR berurutan — 0051 sampai 0061 — mendarat tanpa SATU pun skill
-  menyebutnya.** Bukan sebagian: nol.
-- **Empat skill untuk modul HIDUP menunjuk `src/lib/<modul>/…`** untuk berkas
-  yang sebenarnya ada di `src/modules/<modul>/presentation/…`
-  (`seo_distribution` ×3, `comments`, `theming`). Berkasnya pindah; skill-nya
-  tidak.
-- **Beberapa mengumumkan layar admin "TIDAK di-port" berbulan-bulan setelah
-  layarnya mendarat** — `awcms-blog-content` menyatakan admin UI blog tidak ada
-  padahal ada empat layar, `awcms-media-library` menyatakan `/admin/media` belum
-  di-port padahal PR #345 membangunnya.
-- **Enam skill masih mengajarkan alur mini-first** yang ADR-0055 cabut dua hari
-  sebelumnya, termasuk satu skill yang SELURUHNYA adalah prosedur port.
+- **Eleven consecutive ADRs — 0051 through 0061 — landed without ONE skill
+  mentioning them.** Not some: zero.
+- **Four skills for LIVE modules point at `src/lib/<module>/…`** for files that
+  actually live in `src/modules/<module>/presentation/…`
+  (`seo_distribution` ×3, `comments`, `theming`). The files moved; the skills did
+  not.
+- **Several announce an admin screen as "NOT ported" months after the screen
+  landed** — `awcms-blog-content` states there is no blog admin UI when there are
+  four screens, `awcms-media-library` states `/admin/media` has not been ported
+  when PR #345 built it.
+- **Six skills still teach the mini-first flow** that ADR-0055 revoked two days
+  earlier, including one skill that is ENTIRELY a port procedure.
 
-### 2. Kenapa skill basi lebih berbahaya daripada dokumen basi
+### 2. Why a stale skill is more dangerous than a stale document
 
-Dokumen dibaca manusia yang bisa ragu. **Skill DIIKUTI.** Dan arah menuanya
-berlawanan dengan koreksi biasa: pernyataan "modul ini belum ada di repo ini"
-mulai benar, lalu modulnya dibangun, dan kalimat itu menua menjadi kebohongan
-yang percaya diri. Agen yang membacanya membangun ulang hal yang sudah ada —
-atau, lebih buruk sejak ADR-0055, mengambilnya dari arsip yang tidak bergerak.
+A document is read by a human who can doubt it. **A skill is FOLLOWED.** And its
+direction of ageing is the opposite of ordinary correction: the statement "this
+module does not exist in this repo yet" starts out true, then the module gets
+built, and the sentence ages into a confident lie. An agent reading it rebuilds
+something that already exists — or, worse since ADR-0055, takes it from an
+archive that no longer moves.
 
-Repo ini sudah mencatat pola itu sebagai kelas: sebuah pemeriksaan yang menjawab
-salah tidak berhenti pada satu laporan salah, **ia melahirkan dokumen**
-(ADR-0058 §1: dua tuduhan palsu scanner sempat ditulis sebagai KEPUTUSAN
-ber-alasan yang rutenya bantah baris demi baris; ADR-0059: sebuah dugaan tertulis
-sebagai temuan lalu tersalin ke `PROJECT_STATE.md` sebagai keputusan).
+This repo has already recorded that pattern as a class: a check that answers
+wrongly does not stop at one wrong report, **it breeds documents** (ADR-0058 §1:
+two false scanner accusations were briefly written up as reasoned DECISIONS that
+the routes refute line by line; ADR-0059: a guess was written up as a finding and
+then copied into `PROJECT_STATE.md` as a decision).
 
-### 3. Kenapa pengecualiannya dulu benar, dan kenapa sekarang tidak
+### 3. Why the exemption used to be right, and why it no longer is
 
-`docs/awcms/` dan `.claude/skills/` sengaja DILUAR `check:docs`. Alasannya sah
-saat ditulis: keduanya memuat catatan adaptasi `awcms-mini` yang memang boleh
-menyebut tooling yang tidak ada di sini.
+`docs/awcms/` and `.claude/skills/` were deliberately OUTSIDE `check:docs`. The
+reason was valid when it was written: both held `awcms-mini` adaptation notes
+that legitimately name tooling that does not exist here.
 
-ADR-0055 mencabut alasan itu **untuk skill**. Begitu mini/micro jadi arsip dan
-kemampuan DIBANGUN di sini, sebuah skill yang terbaca sebagai instruksi port
-bukan lagi sekadar usang — ia mengarahkan pekerjaan ke repo yang tidak bergerak.
-`docs/awcms/` tetap di luar gerbang ini: isinya memang campuran sejarah dan
-spesifikasi, dan tidak dieksekusi sebagai instruksi.
+ADR-0055 revokes that reason **for skills**. Once mini/micro became archives and
+capabilities are BUILT here, a skill that reads as port instructions is no longer
+merely outdated — it directs work at a repo that no longer moves. `docs/awcms/`
+stays outside this gate: its contents really are a mixture of history and
+specification, and it is not executed as instructions.
 
-## Keputusan
+## Decision
 
-`bun run skills:check` (`scripts/skills-check.ts`) masuk rantai `bun run check`.
-Murni — tanpa database, tanpa jaringan, tanpa git — dan **tidak membaca maksud**:
-prosa tidak bisa digerbangi, jadi tiap aturan bertumpu pada registry modul,
-otoritas yang sama yang dipakai `modules:*:check`.
+`bun run skills:check` (`scripts/skills-check.ts`) joins the `bun run check`
+chain. Pure — no database, no network, no git — and it **does not read intent**:
+prose cannot be gated, so every rule leans on the module registry, the same
+authority `modules:*:check` uses.
 
-**Aturan 1 — skill modul HIDUP menjelaskan kode HIDUP.** Bila subjek `awcms-<x>`
-ada di `listModules()`, setiap path `src/…` yang dikutipnya wajib ada. **Tanpa
-daftar pengecualian**, sengaja: skill untuk kode yang sudah rilis tidak punya
-alasan menyebut berkas yang tidak ada. Ini yang menangkap keempat misdireksi
-`src/lib/<modul>/`.
+**Rule 1 — a skill for a LIVE module describes LIVE code.** If the subject
+`awcms-<x>` exists in `listModules()`, every `src/…` path it quotes must exist.
+**No exception list**, deliberately: a skill for code that has already shipped
+has no reason to name a file that does not exist. This is what caught all four
+`src/lib/<module>/` misdirections.
 
-**Aturan 2 — setiap ADR yang dikutip ada.** `ADR-0042` wajib resolve ke
-`docs/adr/0042-*.md`. Rujukan ke ADR yang tak pernah ditulis adalah kutipan yang
-pembacanya juga tak bisa periksa.
+**Rule 2 — every ADR cited exists.** `ADR-0042` must resolve to
+`docs/adr/0042-*.md`. A reference to an ADR that was never written is a citation
+its reader cannot check either.
 
-**Aturan 3 — skill untuk kode yang TIDAK ada wajib menyatakannya, ber-alasan.**
-Skill spesifikasi-target dan historis itu sah: `awcms-social-publishing`
-memerikan modul yang layak dibangun, `awcms-news-portal` mencatat modul yang
-dilebur. Keduanya boleh mengutip path yang tidak ada — tetapi hanya dari
-`ASPIRATIONAL_SKILLS`, tempat tiap entri menyatakan ia `target-spec`,
-`historical`, atau `cross-cutting` **dan kenapa**.
+**Rule 3 — a skill for code that does NOT exist must say so, with a reason.**
+Target-specification and historical skills are legitimate: `awcms-social-publishing`
+describes a module worth building, `awcms-news-portal` records a module that was
+merged away. Both may quote paths that do not exist — but only from
+`ASPIRATIONAL_SKILLS`, where each entry declares itself `target-spec`,
+`historical`, or `cross-cutting` **and why**.
 
-Daftar itu sengaja per-SKILL, bukan per-PATH. Daftar path akan tumbuh setiap kali
-sebuah spesifikasi target disunting lalu berhenti dibaca; daftar skill hanya
-berubah ketika sebuah skill berubah SIFAT — persis saat seseorang memang harus
-melihat.
+That list is deliberately per-SKILL, not per-PATH. A path list would grow every
+time a target specification is edited and then stop being read; a skill list only
+changes when a skill changes its NATURE — exactly when someone does need to look.
 
-**Aturan 4 — perintah yang disuruh dijalankan harus ada.** Setiap
-`bun run <target>` di sebuah skill wajib ada di `package.json` ATAU terdaftar di
-`scripts/README.md` §Ditunda. Aturan ini **sengaja sempit**: §Ditunda secara
-eksplisit MENGIZINKAN skill menyebut target acuan yang belum dibangun, jadi
-gerbang ini tidak menggugat kebijakan itu — ia hanya menangkap target yang bukan
-keduanya. Hari ini itu tepat dua, dan salah satunya menyuruh pembacanya
-menjalankan `github:snapshot:refresh` yang tak pernah ada padahal mekanismenya
-`gh` CLI di halaman yang sama.
+**Rule 4 — a command you are told to run must exist.** Every `bun run <target>`
+in a skill must exist in `package.json` OR be listed in `scripts/README.md`
+§Deferred. This rule is **deliberately narrow**: §Deferred explicitly ALLOWS a
+skill to name a reference target that has not been built yet, so this gate does
+not litigate that policy — it only catches targets that are neither. Today that
+is exactly two, and one of them tells its reader to run
+`github:snapshot:refresh`, which never existed, while the actual mechanism is the
+`gh` CLI on the same page.
 
-Ini kelas yang sama yang `check:docs` sudah tangkap di komentar kode: enam
-komentar di `src/modules/module-management/` menyuruh menjalankan `modules:sync`,
-perintah yang tak pernah ada di sini. Itu sudah diperbaiki di `src/` — dan skill
-untuk modul yang SAMA masih menyebutnya, karena skill ada di luar semua gerbang.
+This is the same class `check:docs` already catches in code comments: six
+comments in `src/modules/module-management/` tell you to run `modules:sync`, a
+command that never existed here. That was already fixed in `src/` — and the skill
+for the SAME module still names it, because skills sit outside every gate.
 
-### Entri mati juga gagal
+### Dead entries fail too
 
-Dua cara sebuah entri `ASPIRATIONAL_SKILLS` jadi tak bermakna, dan yang kedua
-yang benar-benar akan terjadi: **modulnya DIBANGUN**, aturan 1 mulai
-menguasainya, dan entrinya diam-diam berhenti berarti apa pun sambil tetap
-terbaca sebagai keputusan. Gerbang melaporkan keduanya. Tiga entri sudah mati
-begitu ditulis (`awcms-blog-content`, `awcms-form-drafts`,
-`awcms-profile-identity`) dan langsung dihapus — bukti bahwa pemeriksaan itu
-bukan hipotesis.
+There are two ways an `ASPIRATIONAL_SKILLS` entry becomes meaningless, and the
+second is the one that will actually happen: **the module gets BUILT**, rule 1
+starts governing it, and its entry silently stops meaning anything while still
+reading as a decision. The gate reports both. Three entries were dead the moment
+they were written (`awcms-blog-content`, `awcms-form-drafts`,
+`awcms-profile-identity`) and were removed immediately — proof that the check is
+not hypothetical.
 
-## Konsekuensi
+## Consequences
 
-**Yang didapat.** Kelas cacat "skill mengaku kode tidak ada padahal ada" jadi
-merah di CI, bukan ditemukan bulan depan oleh agen yang sudah terlanjur
-mengikutinya. 55 skill kini konsisten dengan registry; 10 path salah diperbaiki;
-enam skill yang mengajarkan jalur ADR-0055 cabut sudah dibingkai ulang jadi
-"bangun di sini dengan ADR admission".
+**What we get.** The defect class "a skill claims the code does not exist when it
+does" turns red in CI, instead of being found next month by an agent that has
+already followed it. 55 skills are now consistent with the registry; 10 wrong
+paths were fixed; six skills teaching the pathway ADR-0055 revoked have been
+reframed as "build it here with an admission ADR".
 
-**Yang dibayar.** Menyunting skill kini bisa memerahkan CI, dan itu memang
-maksudnya. Satu efek samping yang perlu diketahui: badan banyak skill memuat
-spesifikasi awcms-mini apa adanya, dengan path milik repo SUMBER. Path itu
-sekarang harus ditulis sebagai milik sumber (`awcms-mini:src/…`) alih-alih
-`src/…`, karena menuliskannya seperti path repo ini persis kesalahan yang
-digerbangi.
+**What it costs.** Editing a skill can now turn CI red, and that is the point.
+One side effect worth knowing: the body of many skills carries the awcms-mini
+specification verbatim, with paths belonging to the SOURCE repo. Those paths must
+now be written as belonging to the source (`awcms-mini:src/…`) instead of
+`src/…`, because writing them as if they were this repo's paths is exactly the
+mistake being gated.
 
-**Yang TIDAK dilakukan.** Gerbang ini tidak menuntut setiap ADR dirujuk oleh
-suatu skill. Menuntutnya akan menghasilkan rujukan seremonial yang ditambahkan
-untuk menghijaukan CI — bentuk "upacara yang terlihat seperti cakupan" yang
-`edge-cache:surfaces:check` sudah tolak untuk purge modul tanpa surface. Angka
-0-dari-11 di §1 adalah GEJALA yang memicu ADR ini, bukan hal yang digerbangi;
-yang digerbangi adalah klaim yang bisa diperiksa.
+**What this does NOT do.** This gate does not demand that every ADR be referenced
+by some skill. Demanding that would produce ceremonial references added to turn
+CI green — the "ceremony that looks like coverage" form that
+`edge-cache:surfaces:check` already rejected for purging modules without a
+surface. The 0-of-11 figure in §1 is the SYMPTOM that triggered this ADR, not the
+thing being gated; what is gated is the checkable claim.
 
-Nol migrasi, nol permission, nol perubahan OpenAPI, nol perubahan runtime — tak
-satu berkas pun di `src/` berubah perilakunya.
+Zero migrations, zero permissions, zero OpenAPI changes, zero runtime changes —
+not one file in `src/` changes its behaviour.

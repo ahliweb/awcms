@@ -1,28 +1,32 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](database-capacity-runbook.id.md)
+
 # Database Capacity Runbook — Deployment-Aware Pool/Work-Class Budgets
 
-> **Status dokumen (AWCMS).** Mekanisme di bawah diwarisi dari base teknis
-> `awcms-mini` (Issue #743 di repo asal, epic `platform-evolution`) dan
-> berlaku generik terlepas dari modul ERP mana yang aktif — tapi statusnya
-> TERBELAH DUA. **`src/lib/database/capacity-config.ts` (library) sudah
-> ada dan aktif di runtime**: dipakai nyata oleh
-> `GET /api/v1/database/pool/health`'s field `capacity`, dan
-> `recordGauge` mencatat metrik `db_pool_capacity_*` lewat
-> `src/lib/observability/metrics-port.ts`. **`bun run
-database:capacity:check` (CLI wrapper berdiri sendiri) BELUM ada** —
-> tidak ada key ini di `package.json`, dan `production:preflight`'s stage
-> `database:capacity` yang dirujuk berulang di dokumen ini juga belum ada
-> (lihat [`production-preflight-runbook.md`](production-preflight-runbook.md)
-> dan `scripts/README.md` §Ditunda, yang sudah mendaftar
-> `database:capacity:check` sebagai butuh "validasi kapasitas
-> lintas-instance (preflight)" yang belum dibangun). Baca setiap contoh
-> `bun run database:capacity:check`/`production:preflight` di bawah
-> sebagai **prosedur target** begitu CLI wrapper-nya ditulis — hari ini,
-> validasi kapasitas hanya bisa dilakukan dengan memanggil fungsi
-> `capacity-config.ts` langsung. Terpisah dari itu, yang juga **belum
-> ada** adalah beban nyata dari modul ERP (finance/inventory/payroll dsb.)
-> untuk memvalidasi angka kapasitas terhadap trafik produksi — angka
-> contoh di dokumen ini tetap ilustratif sampai ada deployment nyata
-> untuk diukur.
+> **Document status (AWCMS).** The mechanism below is inherited from the
+> `awcms-mini` technical base (Issue #743 in the original repo, epic
+> `platform-evolution`) and applies generically regardless of which ERP
+> module is active — but its status is SPLIT IN TWO.
+> **`src/lib/database/capacity-config.ts` (the library) already exists
+> and is active at runtime**: really used by
+> `GET /api/v1/database/pool/health`'s `capacity` field, and
+> `recordGauge` records the `db_pool_capacity_*` metrics through
+> `src/lib/observability/metrics-port.ts`.
+> **`bun run database:capacity:check` (the standalone CLI wrapper) DOES
+> NOT EXIST YET** — there is no such key in `package.json`, and
+> `production:preflight`'s `database:capacity` stage, referenced
+> repeatedly in this document, does not exist yet either (see
+> [`production-preflight-runbook.md`](production-preflight-runbook.md)
+> and `scripts/README.md` §Deferred, which already lists
+> `database:capacity:check` as needing "cross-instance capacity
+> validation (preflight)" that has not been built). Read every
+> `bun run database:capacity:check`/`production:preflight` example below
+> as a **target procedure** for once the CLI wrapper is written — today,
+> capacity validation can only be done by calling `capacity-config.ts`'s
+> functions directly. Separately from that, what also **does not exist
+> yet** is real load from the ERP modules (finance/inventory/payroll
+> etc.) to validate the capacity numbers against production traffic —
+> the example numbers in this document remain illustrative until there
+> is a real deployment to measure.
 
 Companion to [`database-pooling.md`](database-pooling.md) (per-process
 pool config, work-class concurrency gate, circuit breaker) and
@@ -129,8 +133,9 @@ application does not introspect).
 
 ## Configuration reference
 
-Full env var table: configuration reference doc (mengikuti pola doc 18
-base `awcms-mini`) §Kapasitas deployment-aware. Every variable is OPTIONAL
+Full env var table: configuration reference doc (following the doc 18
+pattern of the `awcms-mini` base) §Deployment-aware capacity. Every
+variable is OPTIONAL
 with a conservative default that reproduces a single-instance offline/LAN
 topology — the underlying `capacity-config.ts` validator passes with zero
 of them set (verified today by calling the validator directly; via `bun

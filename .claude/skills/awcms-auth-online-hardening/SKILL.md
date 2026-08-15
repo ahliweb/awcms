@@ -1,31 +1,35 @@
 ---
 name: awcms-auth-online-hardening
-description: Konteks desain lintas-fitur untuk pengerasan auth online awcms (Turnstile, MFA/TOTP, OIDC/SSO, admin policy UI). PENTING — nomor issue #587-#593, nama file, nama tabel, nomor migrasi, dan path endpoint di badan skill ini milik repo LAIN (awcms-micro); di awcms semuanya bernama BEDA. Baca §Peta ke artefak nyata awcms lebih dulu, lalu perlakukan sisanya sebagai catatan alasan-desain, bukan rujukan path. Kapabilitasnya SENDIRI sudah ada di awcms per #184/#185/#186/#274 — jangan bangun ulang.
+description: Cross-feature design context for awcms online auth hardening (Turnstile, MFA/TOTP, OIDC/SSO, admin policy UI). IMPORTANT — the issue numbers #587-#593, file names, table names, migration numbers, and endpoint paths in the body of this skill belong to ANOTHER repo (awcms-micro); in awcms every one of them is named DIFFERENTLY. Read §Map to the real awcms artifacts first, then treat the rest as design-rationale notes, not path references. The capabilities THEMSELVES already exist in awcms per #184/#185/#186/#274 — do not rebuild them.
 ---
+
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](SKILL.id.md)
 
 # AWCMS — Full-Online Auth Security Hardening
 
-> **BACA INI DULU — dokumen ini punya dua lapis, dan hanya satu yang bisa
-> dipercaya sebagai path.** Badan skill di bawah disalin dari epic
-> `awcms-micro` "full-online auth security hardening". **Setiap nomor issue
-> (#587–#593, #598, #605), nama file (`auth-security-status.ts`), nomor
-> migrasi (`036`), dan path endpoint (`/api/v1/identity/sso/*`,
-> `/api/v1/auth/providers/google/*`) di bawah adalah milik repo ITU, bukan
-> repo ini.** Audit 2026-07-18 benar saat menyimpulkan tak satu pun ditemukan
-> di `src/` awcms — tapi kesimpulan yang ditarik saat itu ("epic ini fiktif,
-> bangun dari nol") **kini keliru arah sebaliknya**: kapabilitasnya sudah
-> dibangun di awcms sejak itu, dengan nama sendiri.
+> **READ THIS FIRST — this document has two layers, and only one of them can
+> be trusted as paths.** The body of the skill below was copied from the
+> `awcms-micro` epic "full-online auth security hardening". **Every issue
+> number (#587–#593, #598, #605), file name (`auth-security-status.ts`),
+> migration number (`036`), and endpoint path (`/api/v1/identity/sso/*`,
+> `/api/v1/auth/providers/google/*`) below belongs to THAT repo, not this
+> one.** The 2026-07-18 audit was right when it concluded that not one of
+> them is found in awcms `src/` — but the conclusion drawn at the time ("this
+> epic is fictional, build it from scratch") **is now wrong in the opposite
+> direction**: the capabilities have been built in awcms since then, under
+> their own names.
 >
-> **Yang harus diambil dari dokumen ini adalah ALASAN DESAINNYA** (gate
-> gabungan, fail-closed, anti-enumerasi, blast radius circuit breaker,
-> batas MFA-vs-reset) — itu tetap berlaku dan sudah terbukti mahal untuk
-> di-derive ulang. **Yang TIDAK boleh diambil adalah path/nama/nomornya.**
-> Lihat §Peta ke artefak nyata awcms tepat di bawah, lalu verifikasi ke kode.
+> **What must be taken from this document is its DESIGN RATIONALE** (the
+> combined gate, fail-closed, anti-enumeration, circuit breaker blast radius,
+> the MFA-vs-reset boundary) — that still holds and has already proven
+> expensive to re-derive. **What must NOT be taken are its paths/names/numbers.**
+> See §Map to the real awcms artifacts right below, then verify against the code.
 
-Enam fitur hardening auth **online-only** (Cloudflare Turnstile, MFA/TOTP,
-Google OIDC login, generic tenant OIDC SSO, admin policy UI, plus penutup
-docs/kontrak) di atas login lokal/password + session opaque, tanpa mengubah
-perilaku default offline/LAN/local. Model gate-nya di awcms:
+Six **online-only** auth hardening features (Cloudflare Turnstile, MFA/TOTP,
+Google OIDC login, generic tenant OIDC SSO, admin policy UI, plus the
+docs/contract closer) on top of local/password login + opaque sessions,
+without changing the default offline/LAN/local behaviour. Its gate model in
+awcms:
 
 ```txt
 AUTH_ONLINE_SECURITY_ENABLED + AUTH_ONLINE_SECURITY_PROFILE=full_online
@@ -33,113 +37,116 @@ AUTH_ONLINE_SECURITY_ENABLED + AUTH_ONLINE_SECURITY_PROFILE=full_online
     -> Turnstile boleh aktif
 ```
 
-**Divergensi penting dari model micro di atas.** Di awcms hanya **Turnstile**
-yang tetap digerbangi profil deployment. MFA dan OIDC/SSO **melepas** gerbang
-itu saat di-port (#184/#185): keduanya digerakkan **state DB per tenant**
-(enrollment MFA, baris `awcms_tenant_auth_policies`), bukan env global —
-`AUTH_MFA_ENABLED` hanya menggerbangi _enrollment baru_, sementara challenge
-dan step-up jalan dari state. Membaca dokumen ini seolah "semua fitur
-digerbangi `isFullOnlineSecurityActive`" akan salah.
+**An important divergence from the micro model above.** In awcms only
+**Turnstile** is still gated by the deployment profile. MFA and OIDC/SSO
+**dropped** that gate when they were ported (#184/#185): both are driven by
+**per-tenant DB state** (MFA enrollment, the `awcms_tenant_auth_policies`
+row), not a global env var — `AUTH_MFA_ENABLED` only gates _new enrollment_,
+while the challenge and step-up run off state. Reading this document as if
+"every feature is gated by `isFullOnlineSecurityActive`" will be wrong.
 
-## Peta ke artefak nyata awcms
+## Map to the real awcms artifacts
 
-Kolom kiri = nama yang dipakai di badan skill ini (milik awcms-micro).
-Kolom kanan = yang benar-benar ada di repo ini. **Selalu pakai kolom kanan.**
+Left column = the name used in the body of this skill (belonging to
+awcms-micro). Right column = what actually exists in this repo. **Always use
+the right column.**
 
-| Disebut di bawah (micro)             | Nyata di awcms                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `auth-security-status.ts`            | tidak ada padanan; postur dirakit langsung di `src/pages/admin/security.astro`       |
-| migration `036`                      | `sql/024` (MFA), `sql/025`+`sql/026` (OIDC/SSO + seed permission)                    |
-| `awcms_identity_mfa_factors`         | `awcms_principal_mfa_factors` sejak `sql/114` (ADR-0087) — lihat catatan di bawah    |
-| `awcms_identity_mfa_recovery_codes`  | `awcms_principal_mfa_recovery_codes` sejak `sql/114` (ADR-0087)                      |
-| `/api/v1/identity/sso/providers`     | `/api/v1/auth/sso-providers` (+ `/[id]`)                                             |
-| `/api/v1/identity/sso/policy`        | `/api/v1/auth/sso-policy` (`PATCH`)                                                  |
-| `/api/v1/auth/providers/google/*`    | **tidak ada** — awcms hanya punya OIDC generik `/api/v1/auth/sso/[providerKey]/*`    |
-| "admin policy UI #592"               | `src/pages/admin/security.astro` (#274) — lihat `identity-access/README.md`          |
-| Issue #587–#593, PR #598, Issue #605 | nomor micro; padanan awcms: #184 (MFA), #185 (OIDC/SSO), #186 (Turnstile), #274 (UI) |
+| Called below (micro)                 | Actually in awcms                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `auth-security-status.ts`            | no equivalent; the posture is assembled directly in `src/pages/admin/security.astro`       |
+| migration `036`                      | `sql/024` (MFA), `sql/025`+`sql/026` (OIDC/SSO + permission seed)                          |
+| `awcms_identity_mfa_factors`         | `awcms_principal_mfa_factors` since `sql/114` (ADR-0087) — see the note below              |
+| `awcms_identity_mfa_recovery_codes`  | `awcms_principal_mfa_recovery_codes` since `sql/114` (ADR-0087)                            |
+| `/api/v1/identity/sso/providers`     | `/api/v1/auth/sso-providers` (+ `/[id]`)                                                   |
+| `/api/v1/identity/sso/policy`        | `/api/v1/auth/sso-policy` (`PATCH`)                                                        |
+| `/api/v1/auth/providers/google/*`    | **does not exist** — awcms only has generic OIDC `/api/v1/auth/sso/[providerKey]/*`        |
+| "admin policy UI #592"               | `src/pages/admin/security.astro` (#274) — see `identity-access/README.md`                  |
+| Issue #587–#593, PR #598, Issue #605 | micro numbers; awcms equivalents: #184 (MFA), #185 (OIDC/SSO), #186 (Turnstile), #274 (UI) |
 
-Yang **memang ada** dengan nama sama: `src/lib/auth/online-security-config.ts`,
+What **does exist** under the same name: `src/lib/auth/online-security-config.ts`,
 `src/lib/security/turnstile.ts`, `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE`,
 `isFullOnlineSecurityActive`, `checkOnlineAuthSecurityReady`,
 `awcms_auth_providers`, `awcms_tenant_auth_policies`.
 
-**Perubahan yang membuat sebagian alasan-desain di bawah tidak lagi berlaku apa
-adanya — [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md),
-`sql/114`.** Faktor MFA dan recovery code kini milik **manusia**
-(`awcms_principal_mfa_factors` / `awcms_principal_mfa_recovery_codes`, ber-kunci
-`principal_id`, GLOBAL dan tanpa RLS), bukan identitas per-tenant. Yang **tetap
-benar** di badan skill: replay guard `last_used_step` wajib compare-and-swap
-atomik, konsumsi recovery code wajib `... AND used_at IS NULL RETURNING`, reset
-password bukan bypass MFA, dan re-enroll ditolak selagi faktor aktif — mekanisme
-`sql/024` dipakai ulang utuh, hanya barisnya yang pindah. Yang **tidak lagi
-benar**: nama tabelnya, klaim bahwa tabel MFA tenant-scoped di bawah FORCE RLS
-(kedua tabel principal sengaja tanpa RLS; penggantinya empat kontrol ADR-0085
-plus gerbang `bun run identity:principal-access:check`), dan asumsi bahwa reset
-administratif berhenti di batas tenant — **ia kini menjangkau keluar**, dicatat
-sebagai `crossTenantReach` di audit dan `disabled_by_tenant_id` di barisnya.
-Sebelum menyentuh MFA, baca `docs/awcms/mfa-totp-step-up.md` lebih dulu.
+**A change that makes part of the design rationale below no longer hold as
+written — [ADR-0087](../../../docs/adr/0087-mfa-moves-to-the-principal.md),
+`sql/114`.** MFA factors and recovery codes now belong to the **human**
+(`awcms_principal_mfa_factors` / `awcms_principal_mfa_recovery_codes`, keyed by
+`principal_id`, GLOBAL and without RLS), not to the per-tenant identity. What
+**remains true** in the body of the skill: the `last_used_step` replay guard
+must be an atomic compare-and-swap, recovery code consumption must be
+`... AND used_at IS NULL RETURNING`, a password reset is not an MFA bypass,
+and re-enroll is rejected while a factor is active — the `sql/024` mechanism
+is reused wholesale, only its rows moved. What is **no longer true**: the
+table names, the claim that the MFA tables are tenant-scoped under FORCE RLS
+(both principal tables are deliberately without RLS; their replacement is the
+four ADR-0085 controls plus the `bun run identity:principal-access:check`
+gate), and the assumption that an administrative reset stops at the tenant
+boundary — **it now reaches outward**, recorded as `crossTenantReach` in the
+audit and `disabled_by_tenant_id` on its row.
+Before touching MFA, read `docs/awcms/mfa-totp-step-up.md` first.
 
-Fitur auth yang ada di awcms tapi **tidak** dibahas dokumen ini sama sekali
-(jangan simpulkan "belum ada" dari kebisuannya): password reset lewat email
-(`sql/073`), self-registration ber-persetujuan admin (`sql/074`–`075`),
-business-scope, SoD, dan ABAC DSL. Rujuk
+Auth features that exist in awcms but are **not** discussed in this document
+at all (do not conclude "not there yet" from its silence): password reset by
+email (`sql/073`), self-registration with admin approval (`sql/074`–`075`),
+business-scope, SoD, and the ABAC DSL. Refer to
 `src/modules/identity-access/README.md`.
 
-## Kapan pakai skill ini vs skill generik
+## When to use this skill vs the generic skills
 
-Skill ini melengkapi (bukan menggantikan) `awcms-new-endpoint`,
+This skill complements (does not replace) `awcms-new-endpoint`,
 `awcms-new-migration`, `awcms-idempotency`,
-`awcms-abac-guard`, `awcms-audit-log`, dan
-`awcms-sensitive-data` (kredensial provider, TOTP seed, recovery
-code semua data sensitif). Skill ini menyediakan konteks **cross-cutting
-epic ini spesifik**: gate bersama yang wajib dicek setiap fitur, dan
-keputusan desain yang mengikat semua issue di epic ini sekaligus.
+`awcms-abac-guard`, `awcms-audit-log`, and
+`awcms-sensitive-data` (provider credentials, TOTP seeds, recovery
+codes are all sensitive data). This skill supplies the context that is
+**cross-cutting and specific to this epic**: the shared gate every feature
+must check, and the design decisions that bind every issue in this epic at once.
 
-## Status di awcms (jangan bangun ulang yang sudah ada)
+## Status in awcms (do not rebuild what already exists)
 
-Nomor issue di kolom kiri adalah penomoran **micro** yang dipakai badan skill
-ini; PR di kolom kanan adalah pekerjaan **awcms** yang sesungguhnya.
+The issue numbers in the left column are the **micro** numbering used by the
+body of this skill; the PRs in the right column are the actual **awcms** work.
 
-| Scope (penomoran micro)                                       | Status di awcms                                                                                             |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Gate bersama `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` (#587) | ✅ ada — `src/lib/auth/online-security-config.ts`, `checkOnlineAuthSecurityReady`                           |
-| Cloudflare Turnstile untuk form auth publik (#588)            | ✅ ada (#186) — `src/lib/security/turnstile.ts`; **satu-satunya** fitur yang masih digerbangi profil        |
-| MFA/TOTP login challenge (#589)                               | ✅ ada (#184, `sql/024`) — enforcement dari state DB, BUKAN dari gate profil                                |
-| Google OIDC login (#590)                                      | ❌ **tidak ada, dan sengaja** — awcms punya OIDC generik; port Google-spesifik hanya bila diminta (roadmap) |
-| Generic tenant OIDC SSO provider (#591)                       | ✅ ada (#185, `sql/025`/`026`) — path & migrasi beda, lihat §Peta                                           |
-| Admin UI kebijakan auth security online (#592)                | ✅ ada (#274) — `src/pages/admin/security.astro`; CRUD provider masih API-only                              |
-| Docs/kontrak/readiness penutup epic (#593)                    | 🟡 sebagian — readiness check & threat-model awcms punya jalur sendiri; jangan pakai daftar audit micro     |
+| Scope (micro numbering)                                      | Status in awcms                                                                                               |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Shared gate `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` (#587) | ✅ exists — `src/lib/auth/online-security-config.ts`, `checkOnlineAuthSecurityReady`                          |
+| Cloudflare Turnstile for public auth forms (#588)            | ✅ exists (#186) — `src/lib/security/turnstile.ts`; the **only** feature still gated by the profile           |
+| MFA/TOTP login challenge (#589)                              | ✅ exists (#184, `sql/024`) — enforcement comes from DB state, NOT from the profile gate                      |
+| Google OIDC login (#590)                                     | ❌ **absent, and deliberately so** — awcms has generic OIDC; a Google-specific port only on request (roadmap) |
+| Generic tenant OIDC SSO provider (#591)                      | ✅ exists (#185, `sql/025`/`026`) — different paths & migrations, see §Map                                    |
+| Admin UI for the online auth security policy (#592)          | ✅ exists (#274) — `src/pages/admin/security.astro`; provider CRUD is still API-only                          |
+| Docs/contract/readiness epic closer (#593)                   | 🟡 partial — awcms's readiness check & threat model have their own track; do not use the micro audit list     |
 
-## Yang sudah ada — pakai ulang, jangan re-derive
+## What already exists — reuse it, do not re-derive
 
-### Gate bersama (Issue #587, `src/lib/auth/online-security-config.ts`)
+### Shared gate (Issue #587, `src/lib/auth/online-security-config.ts`)
 
-Dua env var, **keduanya opsional/backward-compatible** — tidak di-set
-sama sekali (default setiap deployment offline/LAN/local), `config:validate`
-tetap PASS dan tidak ada perubahan perilaku login sama sekali:
+Two env vars, **both optional/backward-compatible** — not set at all
+(the default for every offline/LAN/local deployment), `config:validate`
+still PASSes and there is no change in login behaviour whatsoever:
 
-- `AUTH_ONLINE_SECURITY_ENABLED` — `"true"` mengaktifkan gate,
-  nilai lain (termasuk unset) berarti nonaktif.
-- `AUTH_ONLINE_SECURITY_PROFILE` — `"disabled"` (default) atau
-  `"full_online"`. **Wajib** `"full_online"` kalau `AUTH_ONLINE_SECURITY_ENABLED=true`
-  — kombinasi lain gagal `bun run config:validate`
+- `AUTH_ONLINE_SECURITY_ENABLED` — `"true"` activates the gate,
+  any other value (including unset) means off.
+- `AUTH_ONLINE_SECURITY_PROFILE` — `"disabled"` (default) or
+  `"full_online"`. **Must** be `"full_online"` if `AUTH_ONLINE_SECURITY_ENABLED=true`
+  — any other combination fails `bun run config:validate`
   (`checkOnlineAuthSecurityConfig`, `scripts/validate-env.ts`).
 
-Tiga fungsi diekspor:
+Three functions are exported:
 
-- `isOnlineSecurityEnabled(env)` — cek flag saja.
-- `resolveOnlineSecurityProfile(env)` — selalu jatuh ke `"disabled"`
-  untuk nilai kosong/tidak dikenal, tidak pernah throw.
-- **`isFullOnlineSecurityActive(env)` — satu-satunya fungsi yang WAJIB
-  dipanggil setiap fitur #588-#592 sebelum melakukan apa pun yang
-  online/provider-terkait.** Jangan re-derive aturan "keduanya harus
-  setuju" di modul lain — impor fungsi ini langsung.
+- `isOnlineSecurityEnabled(env)` — checks the flag only.
+- `resolveOnlineSecurityProfile(env)` — always falls back to `"disabled"`
+  for empty/unknown values, never throws.
+- **`isFullOnlineSecurityActive(env)` — the only function every feature
+  #588-#592 MUST call before doing anything
+  online/provider-related.** Do not re-derive the "both must
+  agree" rule in another module — import this function directly.
 
 `scripts/security-readiness.ts`'s `checkOnlineAuthSecurityReady`
-melaporkan status gate ini (severity `critical` supaya misconfiguration
-sungguhan tetap blokir go-live, tapi `status: pass` untuk kondisi
-disabled — informational, bukan kegagalan, sesuai acceptance criteria
-#587). Detail env var lengkap: `docs/awcms/18_configuration_env_reference.md`
+reports the status of this gate (severity `critical` so that a genuine
+misconfiguration still blocks go-live, but `status: pass` for the
+disabled condition — informational, not a failure, per #587's acceptance
+criteria). Full env var details: `docs/awcms/18_configuration_env_reference.md`
 §Full-online auth security hardening,
 `docs/awcms/deployment-profiles.md` §Full-online auth security
 hardening, `src/modules/identity-access/README.md` §Full-online-only
@@ -147,8 +154,8 @@ auth security feature gate.
 
 ### Cloudflare Turnstile (Issue #588, `src/lib/security/turnstile.ts`)
 
-Fitur konkret **pertama** yang dibangun di atas gate #587 — pola
-referensi untuk #589-#592 berikutnya. Gate gabungan:
+The **first** concrete feature built on top of the #587 gate — the
+reference pattern for #589-#592 that follow. Combined gate:
 
 ```txt
 isTurnstileRequired(env)
@@ -156,62 +163,62 @@ isTurnstileRequired(env)
   (isTurnstileEnabled = TURNSTILE_ENABLED === "true")
 ```
 
-- **Satu fungsi enforcement dipanggil dari 4 endpoint**:
-  `enforceTurnstileIfRequired(turnstileToken, remoteIp, env)` — dipanggil
-  di `POST /api/v1/auth/login`, `/auth/password/forgot`, `/auth/password/reset`,
-  dan `/setup/initialize`, tepat setelah body divalidasi tapi **sebelum**
-  DB/password hashing (issue's security note: verifikasi Turnstile lebih
-  murah, jangan buang kerja mahal untuk request yang bahkan tidak lolos
-  bot-check). Mengembalikan `{ok:true}` atau `{ok:false, code:
+- **One enforcement function called from 4 endpoints**:
+  `enforceTurnstileIfRequired(turnstileToken, remoteIp, env)` — called
+  in `POST /api/v1/auth/login`, `/auth/password/forgot`, `/auth/password/reset`,
+  and `/setup/initialize`, right after the body is validated but **before**
+  DB/password hashing (issue's security note: verifying Turnstile is
+  cheaper, do not burn expensive work on a request that does not even pass
+  the bot check). Returns `{ok:true}` or `{ok:false, code:
 "TURNSTILE_REQUIRED" | "TURNSTILE_INVALID"}` — **fail closed**:
-  misconfiguration (`resolveTurnstileConfig` → `null`) diperlakukan sama
-  seperti token invalid, bukan dilewati.
-- **Verifikasi env var independen dari gate #587**: `TURNSTILE_ENABLED=true`
-  sendiri sudah mewajibkan `TURNSTILE_SITE_KEY`+`TURNSTILE_SECRET_KEY`
-  di `config:validate`/`security-readiness` (`checkTurnstileConfig`,
-  `scripts/validate-env.ts`) — operator boleh isi kredensial ini lebih
-  dulu tanpa menyalakan `AUTH_ONLINE_SECURITY_ENABLED`; aktivasi runtime
-  tetap butuh KEDUA gate setuju.
-- **`verifyTurnstileToken`** memanggil Cloudflare siteverify server-side
+  a misconfiguration (`resolveTurnstileConfig` → `null`) is treated exactly
+  like an invalid token, not skipped.
+- **Env var verification is independent of the #587 gate**: `TURNSTILE_ENABLED=true`
+  on its own already requires `TURNSTILE_SITE_KEY`+`TURNSTILE_SECRET_KEY`
+  in `config:validate`/`security-readiness` (`checkTurnstileConfig`,
+  `scripts/validate-env.ts`) — an operator may fill these credentials in
+  first without switching `AUTH_ONLINE_SECURITY_ENABLED` on; runtime
+  activation still needs BOTH gates to agree.
+- **`verifyTurnstileToken`** calls Cloudflare siteverify server-side
   (issue's security note: "client widget alone is not security"),
   timeout-bounded (`withTimeout`) + circuit breaker
-  (`getProviderCircuitBreaker("turnstile")`), pola sama seperti
-  `cloudflare-dns-adapter.ts`/`mailketing-provider.ts` — **dengan satu
-  perbedaan penting yang wajib dipertahankan**: `breaker.recordFailure()`
-  HANYA dipanggil untuk kegagalan transport genuine ke Cloudflare (HTTP
-  non-2xx, body tak terparse, network error/timeout), TIDAK PERNAH untuk
-  respons 2xx yang sah dengan `success:false` (itu Cloudflare menjawab
-  dengan benar bahwa token client-nya salah — hasil normal yang bisa
-  dipicu siapa pun tanpa autentikasi). PR #596 security review menemukan
-  versi awal menyamakan keduanya: breaker ini shared/cross-tenant, dan
-  `enforceTurnstileIfRequired` fail-closed saat breaker terbuka, jadi
-  penyerang bisa mengunci login/password-reset/setup SEMUA tenant hanya
-  dengan mengirim segelintir token sampah setiap ~30 detik. Jangan
-  regresi pola ini di fitur online lain (#589-#592) yang menambah
-  circuit breaker provider baru — bedakan selalu "provider tidak sehat"
-  dari "input client ditolak provider dengan benar". Log
+  (`getProviderCircuitBreaker("turnstile")`), the same pattern as
+  `cloudflare-dns-adapter.ts`/`mailketing-provider.ts` — **with one
+  important difference that must be preserved**: `breaker.recordFailure()`
+  is called ONLY for genuine transport failures to Cloudflare (non-2xx
+  HTTP, unparseable body, network error/timeout), NEVER for a legitimate
+  2xx response with `success:false` (that is Cloudflare answering
+  correctly that the client's token is wrong — a normal outcome anyone
+  can trigger without authentication). The PR #596 security review found
+  the first version conflated the two: this breaker is shared/cross-tenant,
+  and `enforceTurnstileIfRequired` fails closed while the breaker is open, so
+  an attacker could lock login/password-reset/setup for ALL tenants just
+  by sending a handful of junk tokens every ~30 seconds. Do not
+  regress this pattern in other online features (#589-#592) that add a
+  new provider circuit breaker — always distinguish "the provider is unhealthy"
+  from "the provider correctly rejected the client's input". The
   `turnstile.circuit_breaker_open`/`turnstile.provider_call_failed`/
-  `turnstile.provider_call_errored` (severity `warning`,
-  `src/lib/logging/logger.ts`) memberi visibilitas operasional untuk
-  keduanya.
-- **CSP** (`astro.config.mjs`): `script-src`/`frame-src` mengizinkan
-  `https://challenges.cloudflare.com` **tanpa syarat** (tidak digerbangi
-  `TURNSTILE_ENABLED` di build time) — alasannya didokumentasikan
-  langsung di file itu: CSP Astro cuma bisa di-bake saat build,
-  sedangkan `TURNSTILE_ENABLED` didesain runtime-toggleable seperti flag
-  lain; widget sendiri tetap runtime-gated lewat `isTurnstileRequired()`
-  di `login.astro`.
-- **Widget UI** hanya di-render di `login.astro` (form publik lain —
-  forgot/reset/setup — belum punya halaman UI di repo ini, baru endpoint
-  API-nya) saat `isTurnstileRequired()` true; token dikirim sebagai field
-  opsional `turnstileToken` di body JSON, dibaca dari hidden field
-  `cf-turnstile-response` yang otomatis diisi widget.
-- Error code i18n: `error.turnstile_required`/`error.turnstile_invalid`
+  `turnstile.provider_call_errored` logs (severity `warning`,
+  `src/lib/logging/logger.ts`) give operational visibility into
+  both.
+- **CSP** (`astro.config.mjs`): `script-src`/`frame-src` allow
+  `https://challenges.cloudflare.com` **unconditionally** (not gated by
+  `TURNSTILE_ENABLED` at build time) — the reason is documented
+  right in that file: Astro's CSP can only be baked at build time,
+  whereas `TURNSTILE_ENABLED` is designed to be runtime-toggleable like every
+  other flag; the widget itself is still runtime-gated through `isTurnstileRequired()`
+  in `login.astro`.
+- **The widget UI** is only rendered in `login.astro` (the other public forms —
+  forgot/reset/setup — do not have UI pages in this repo yet, only their
+  API endpoints) when `isTurnstileRequired()` is true; the token is sent as the
+  optional `turnstileToken` field in the JSON body, read from the hidden
+  `cf-turnstile-response` field the widget fills in automatically.
+- i18n error codes: `error.turnstile_required`/`error.turnstile_invalid`
   (`src/lib/i18n/error-messages.ts`, `i18n/en.po`+`id.po`).
 
 ### MFA/TOTP (Issue #589, `src/modules/identity-access/application/mfa.ts`)
 
-Gate gabungan sama persis polanya dengan Turnstile:
+The combined gate follows exactly the same pattern as Turnstile:
 
 ```txt
 isMfaRequired(env)
@@ -219,89 +226,89 @@ isMfaRequired(env)
   (isMfaEnabled = AUTH_MFA_ENABLED === "true")
 ```
 
-- **MFA opt-in per identity, bukan mandatory tenant-wide** — bahkan
-  dengan gate aktif, identity yang belum pernah enroll tetap login
-  normal (`login.ts` mengecek `findActiveMfaFactor` per identity SETELAH
-  password valid, bukan hanya gate env). Jangan asumsikan mengaktifkan
-  `AUTH_MFA_ENABLED=true` otomatis mewajibkan MFA untuk semua user.
-- **Login yang dijeda, bukan ditolak**: password valid + factor `active`
-  → `login.ts` TIDAK membuat session, malah insert row
-  `awcms_mfa_challenges` dan balas `401 MFA_REQUIRED` berisi
-  `error.details.mfaChallengeToken` (bentuk `details` di sini SENGAJA
-  bukan `ErrorDetail[]` seperti endpoint lain — lihat OpenAPI schema
-  `LoginMfaRequiredResponse` — karena payload asli (token) harus
-  dikembalikan, bukan sekadar array pesan validasi).
-  `POST /auth/mfa/totp/verify` adalah **satu-satunya endpoint MFA yang
-  TIDAK butuh session** — diautentikasi lewat possession token
-  challenge, pola sama seperti `password/reset` diautentikasi lewat
-  possession token reset. Kode/recovery code valid → session dibuat
-  identik dengan `login.ts` (token, cookie, response shape sama), supaya
-  client tidak perlu logic berbeda untuk step kedua.
-- **Enkripsi-at-rest, bukan hash, untuk TOTP secret** —
+- **MFA is opt-in per identity, not mandatory tenant-wide** — even
+  with the gate active, an identity that has never enrolled still logs in
+  normally (`login.ts` checks `findActiveMfaFactor` per identity AFTER
+  the password is valid, not just the env gate). Do not assume that turning
+  `AUTH_MFA_ENABLED=true` on automatically makes MFA mandatory for all users.
+- **Login is suspended, not rejected**: valid password + an `active` factor
+  → `login.ts` does NOT create a session, and instead inserts an
+  `awcms_mfa_challenges` row and answers `401 MFA_REQUIRED` carrying
+  `error.details.mfaChallengeToken` (the shape of `details` here is
+  DELIBERATELY not `ErrorDetail[]` like other endpoints — see the OpenAPI
+  schema `LoginMfaRequiredResponse` — because an actual payload (the token)
+  has to be returned, not merely an array of validation messages).
+  `POST /auth/mfa/totp/verify` is **the only MFA endpoint that does
+  NOT need a session** — it is authenticated by the challenge
+  possession token, the same pattern as `password/reset` being authenticated by
+  the reset possession token. A valid code/recovery code → the session is
+  created identically to `login.ts` (same token, cookie, response shape), so
+  the client needs no different logic for the second step.
+- **Encryption-at-rest, not hashing, for the TOTP secret** —
   `src/lib/auth/mfa-secret-crypto.ts` (AES-256-GCM,
-  `AUTH_MFA_SECRET_ENCRYPTION_KEY`, base64 32-byte, divalidasi
-  `checkMfaConfig`) — satu-satunya secret di aplikasi ini yang
-  reversibel, karena verifikasi TOTP butuh menghitung ulang kode dari
-  secret asli setiap request, tidak seperti password/token yang cukup
-  dibandingkan hash-nya. Recovery code (`mfa-recovery-code.ts`) dan
-  challenge token (`mfa-challenge-token.ts`) tetap hash-only (sha256,
-  pola sama `session-token.ts`/`password-reset-token.ts`) — TIDAK
-  reversibel, karena keduanya tidak pernah perlu ditampilkan ulang
-  setelah reveal sekali di awal.
-- **Replay prevention, dan WAJIB atomik, bukan read-then-write** —
-  `awcms_identity_mfa_factors.last_used_step` menyimpan step
-  time-counter TOTP tertinggi yang pernah diterima; verifikasi hanya
-  diterima kalau step yang cocok STRICTLY LEBIH BESAR dari nilai ini
+  `AUTH_MFA_SECRET_ENCRYPTION_KEY`, base64 32-byte, validated by
+  `checkMfaConfig`) — the only secret in this application that is
+  reversible, because verifying TOTP requires recomputing the code from
+  the original secret on every request, unlike a password/token where
+  comparing the hash is enough. Recovery codes (`mfa-recovery-code.ts`) and
+  challenge tokens (`mfa-challenge-token.ts`) stay hash-only (sha256,
+  the same pattern as `session-token.ts`/`password-reset-token.ts`) — NOT
+  reversible, because neither ever needs to be displayed again
+  after being revealed once at the start.
+- **Replay prevention, and it MUST be atomic, not read-then-write** —
+  `awcms_identity_mfa_factors.last_used_step` stores the highest TOTP
+  time-counter step ever accepted; a verification is only
+  accepted if the matching step is STRICTLY GREATER than this value
   (`src/lib/auth/totp.ts`'s `verifyTotpCode`, default ±1 step window).
-  **PR #597 security review menemukan `verifyMfaChallenge` awalnya
-  melakukan SELECT lalu UPDATE terpisah** (untuk `last_used_step`,
-  `awcms_identity_mfa_recovery_codes.used_at`, DAN
-  `awcms_mfa_challenges.failed_attempts`) — di bawah READ COMMITTED
-  (default Postgres, `withTenant` tidak mengubah isolation level), request
-  verifikasi konkuren semuanya membaca state lama sebelum salah satu
-  commit, sehingga replay guard maupun batas `failed_attempts` bisa
-  dilewati sepenuhnya oleh penyerang yang mengirim tebakan paralel.
-  Diperbaiki dengan: (a) `SELECT ... FOR UPDATE` pada baris challenge di
-  awal `verifyMfaChallenge` (mengunci baris itu untuk sisa transaksi,
-  men-serialize semua request verifikasi terhadap challenge yang sama),
-  (b) compare-and-swap untuk `last_used_step`
-  (`UPDATE ... WHERE last_used_step < $step RETURNING id`, 0 baris = gagal
-  — melindungi replay lintas-challenge yang FOR UPDATE saja tidak
-  jangkau, mis. dua login attempt berbeda membuat dua challenge terpisah
-  untuk identity yang sama), (c) compare-and-swap yang sama untuk
-  recovery code (`UPDATE ... WHERE used_at IS NULL RETURNING id`). Fitur
-  online lain yang menambah state single-use/counter yang bisa
-  diverifikasi berkali-kali (kode OTP lain, dsb.) WAJIB pola atomik yang
-  sama — jangan pernah SELECT untuk mengevaluasi kondisi lalu UPDATE
-  terpisah untuk menandainya terpakai/gagal; regression test-nya:
+  **The PR #597 security review found that `verifyMfaChallenge` initially
+  did a separate SELECT then UPDATE** (for `last_used_step`,
+  `awcms_identity_mfa_recovery_codes.used_at`, AND
+  `awcms_mfa_challenges.failed_attempts`) — under READ COMMITTED
+  (Postgres's default; `withTenant` does not change the isolation level),
+  concurrent verification requests all read the old state before any of them
+  commits, so both the replay guard and the `failed_attempts` limit could be
+  bypassed entirely by an attacker sending parallel guesses.
+  Fixed with: (a) `SELECT ... FOR UPDATE` on the challenge row at the
+  start of `verifyMfaChallenge` (locking that row for the rest of the
+  transaction, serializing every verification request against the same challenge),
+  (b) compare-and-swap for `last_used_step`
+  (`UPDATE ... WHERE last_used_step < $step RETURNING id`, 0 rows = failure
+  — protecting against cross-challenge replay that FOR UPDATE alone does not
+  reach, e.g. two different login attempts creating two separate challenges
+  for the same identity), (c) the same compare-and-swap for the
+  recovery code (`UPDATE ... WHERE used_at IS NULL RETURNING id`). Other
+  online features that add single-use/counter state that can be
+  verified repeatedly (other OTP codes, etc.) MUST use the same atomic
+  pattern — never SELECT to evaluate a condition and then UPDATE
+  separately to mark it used/failed; its regression tests:
   `mfa-flow.integration.test.ts` §"concurrent verification attempts..."
-  dan §"concurrent wrong-code attempts...".
-- **Reset password BUKAN bypass MFA** — `completePasswordReset` tidak
-  menyentuh tabel `awcms_identity_mfa_factors` sama sekali;
-  diverifikasi test integrasi eksplisit (`mfa-flow.integration.test.ts`
+  and §"concurrent wrong-code attempts...".
+- **A password reset is NOT an MFA bypass** — `completePasswordReset` does not
+  touch the `awcms_identity_mfa_factors` table at all;
+  verified by an explicit integration test (`mfa-flow.integration.test.ts`
   §"password reset does not disable MFA").
-- **Re-enroll ditolak selagi factor aktif** (`409 MFA_ALREADY_ACTIVE`,
-  `POST /auth/mfa/totp/enroll/start`) — sesi yang di-hijack tidak bisa
-  diam-diam mengganti secret TOTP tanpa lebih dulu `disable`.
-- **Disable & regenerate recovery code = high-risk, diaudit**
+- **Re-enroll is rejected while a factor is active** (`409 MFA_ALREADY_ACTIVE`,
+  `POST /auth/mfa/totp/enroll/start`) — a hijacked session cannot
+  silently swap the TOTP secret without first calling `disable`.
+- **Disable & regenerate recovery codes = high-risk, audited**
   (`mfa_disabled`/`mfa_recovery_codes_regenerated`,
-  severity `warning`) — pola sama `awcms-audit-log`. **Catatan
-  desain yang belum ditutup** (PR #597 review, tidak blocking): kedua
-  endpoint ini hanya mensyaratkan sesi valid, tanpa re-autentikasi
-  tambahan (password saat ini/kode TOTP saat ini) — sesi yang dibajak
-  (bukan hanya dicuri sebelum MFA aktif) cukup untuk mematikan MFA korban
-  atau membuang recovery code lama. Diterima sebagai trade-off untuk
-  scope issue #589 saat ini; fitur online lanjutan (mis. #592 admin
-  policy UI) yang menyentuh area ini sebaiknya mempertimbangkan
-  step-up re-auth di titik ini.
-- Error code i18n: `error.mfa_required`/`_disabled`/`_already_active`/
+  severity `warning`) — the same pattern as `awcms-audit-log`. **A design
+  note that has not been closed** (PR #597 review, not blocking): both
+  of these endpoints only require a valid session, with no additional
+  re-authentication (the current password/the current TOTP code) — a hijacked
+  session (not merely one stolen before MFA was active) is enough to turn off
+  the victim's MFA or throw away their old recovery codes. Accepted as a
+  trade-off for issue #589's current scope; follow-on online features (e.g.
+  #592 admin policy UI) that touch this area should consider
+  step-up re-auth at this point.
+- i18n error codes: `error.mfa_required`/`_disabled`/`_already_active`/
   `_not_active`/`_enrollment_not_found`/`_invalid_code`/
   `_challenge_invalid`/`_misconfigured` (`error-messages.ts`,
   `i18n/en.po`+`id.po`).
 
 ### Google OIDC login (Issue #590, `src/modules/identity-access/application/google-oidc.ts`)
 
-Gate gabungan sama persis polanya dengan Turnstile/MFA:
+The combined gate follows exactly the same pattern as Turnstile/MFA:
 
 ```txt
 isGoogleLoginRequired(env)
@@ -309,101 +316,101 @@ isGoogleLoginRequired(env)
   (isGoogleLoginEnabled = AUTH_GOOGLE_LOGIN_ENABLED === "true")
 ```
 
-- **Tenant id lewat `state`, bukan header** — `GET .../callback` adalah
-  redirect target Google (navigasi browser murni), yang TIDAK BISA
-  membawa header `X-AWCMS-Tenant-ID` seperti endpoint lain. `state`
-  yang dikirim ke Google berbentuk `${tenantId}.${rawToken}`
+- **Tenant id travels in `state`, not a header** — `GET .../callback` is
+  Google's redirect target (a pure browser navigation), which CANNOT
+  carry the `X-AWCMS-Tenant-ID` header like other endpoints. The `state`
+  sent to Google has the form `${tenantId}.${rawToken}`
   (`src/lib/auth/oauth-state-token.ts`'s `buildOAuthStateParam`/
-  `parseOAuthStateParam`) — tenant id BUKAN secret, jadi aman muncul di
-  URL; bagian token (pertahanan CSRF/replay sesungguhnya, ≥32 byte
-  random) tetap di-hash at rest seperti `state`/session/reset/challenge
-  token lain di aplikasi ini. Fitur online lain yang butuh redirect ke
-  provider eksternal (mis. #591 generic SSO) WAJIB pola yang sama untuk
-  membawa tenant id — jangan asumsikan header selalu tersedia di
-  endpoint redirect-target.
-- **Dua flow berbeda dari satu orkestrator**: `GET .../start`
-  (unauthenticated, dari tombol "Continue with Google" di `/login`)
-  selalu `purpose='login'`. `POST .../link` (BUTUH session — identity
-  diambil server-side dari session yang sedang login, TIDAK PERNAH
-  dipercaya dari request callback) mengembalikan `authorizationUrl`
-  sebagai JSON (bukan redirect 302), karena dipanggil lewat `fetch()`
-  dari konteks yang sudah authenticated — client men-`window.location`
-  sendiri. `GET .../callback` (satu-satunya redirect target Google)
-  menangani KEDUA purpose lewat satu orkestrator
-  `completeGoogleOAuthCallback` (application layer) berdasarkan kolom
-  `purpose`/`identity_id` di baris `awcms_oidc_auth_requests` yang
-  tersimpan saat start/link — BUKAN dua implementasi terpisah yang bisa
-  divergen soal keamanan.
-- **Verifikasi ID token kriptografis PENUH, bukan sekadar decode JSON**
+  `parseOAuthStateParam`) — the tenant id is NOT a secret, so it is safe to
+  appear in the URL; the token part (the real CSRF/replay defence, ≥32
+  random bytes) is still hashed at rest like every other
+  `state`/session/reset/challenge token in this application. Other online
+  features that need a redirect to an external provider (e.g. #591 generic
+  SSO) MUST use the same pattern to carry the tenant id — do not assume a
+  header is always available on a redirect-target endpoint.
+- **Two different flows from one orchestrator**: `GET .../start`
+  (unauthenticated, from the "Continue with Google" button on `/login`)
+  is always `purpose='login'`. `POST .../link` (REQUIRES a session — the
+  identity is taken server-side from the currently logged-in session, NEVER
+  trusted from the callback request) returns the `authorizationUrl`
+  as JSON (not a 302 redirect), because it is called via `fetch()`
+  from an already-authenticated context — the client does its own
+  `window.location`. `GET .../callback` (the only Google redirect target)
+  handles BOTH purposes through one orchestrator,
+  `completeGoogleOAuthCallback` (application layer), based on the
+  `purpose`/`identity_id` columns of the `awcms_oidc_auth_requests` row
+  stored at start/link time — NOT two separate implementations that could
+  diverge on security.
+- **FULL cryptographic ID token verification, not merely a JSON decode**
   (issue's security note: "Do not trust query parameters alone; validate
-  ID token cryptographically") — signature RS256 lewat WebCrypto
-  `crypto.subtle` (`src/lib/auth/jwt-verify.ts`, TIDAK ada library JWT
-  eksternal), lalu issuer/audience/expiry/nonce
+  ID token cryptographically") — the RS256 signature via WebCrypto
+  `crypto.subtle` (`src/lib/auth/jwt-verify.ts`, NO external JWT
+  library), then issuer/audience/expiry/nonce
   (`google-oidc-policy.ts`'s `validateIdTokenClaims`, pure/testable).
-  Setiap kegagalan collapse ke `GOOGLE_ID_TOKEN_INVALID` generik
-  (anti-enumeration, pola sama `MFA_CHALLENGE_INVALID`) — JANGAN
-  bocorkan alasan spesifik (issuer salah vs audience salah vs signature
-  invalid) ke response.
-- **Provider account ditautkan via `sub`, TIDAK PERNAH via email**
+  Every failure collapses into a generic `GOOGLE_ID_TOKEN_INVALID`
+  (anti-enumeration, the same pattern as `MFA_CHALLENGE_INVALID`) — do NOT
+  leak the specific reason (wrong issuer vs wrong audience vs invalid
+  signature) into the response.
+- **Provider accounts are linked via `sub`, NEVER via email**
   (issue's security note: "Use `sub` as the stable provider key") —
   `awcms_identity_provider_accounts`, unique per
-  (tenant, provider, subject) DAN per (tenant, identity, provider).
-  Auto-link by email HANYA aktif bila `email_verified=true` DAN domain
-  email ada di `AUTH_GOOGLE_ALLOWED_DOMAINS` (`isEmailDomainAllowed` —
-  **fail-closed**: list kosong/tidak di-set = auto-link SELALU ditolak,
-  bukan "izinkan semua domain"). Kalau tidak ada provider account yang
-  cocok dan auto-link tidak berlaku → `401 GOOGLE_ACCOUNT_NOT_LINKED`,
-  TIDAK PERNAH provisioning identity baru (self-service registration via
-  Google eksplisit out-of-scope issue ini).
-- **Google login TIDAK PERNAH bypass MFA** (issue's acceptance
+  (tenant, provider, subject) AND per (tenant, identity, provider).
+  Auto-link by email is ONLY active when `email_verified=true` AND the
+  email domain is in `AUTH_GOOGLE_ALLOWED_DOMAINS` (`isEmailDomainAllowed` —
+  **fail-closed**: an empty/unset list = auto-link is ALWAYS refused,
+  not "allow every domain"). If no provider account matches
+  and auto-link does not apply → `401 GOOGLE_ACCOUNT_NOT_LINKED`,
+  NEVER provisioning a new identity (self-service registration via
+  Google is explicitly out of scope for this issue).
+- **Google login NEVER bypasses MFA** (issue's acceptance
   criterion: "If #589 is implemented and MFA is required, Google login
   still proceeds through MFA challenge before session creation") —
-  `completeGoogleOAuthCallback` memanggil `findActiveMfaFactor`/
-  `createMfaChallenge` yang SAMA persis dengan `login.ts` (bukan jalur
-  MFA terpisah yang bisa lupa di-wire). Endpoint `callback.ts`
-  mengembalikan `401 MFA_REQUIRED` dengan `mfaChallengeToken` yang sama
-  bentuknya seperti dari `login.ts` — client menyelesaikan lewat
-  `POST /auth/mfa/totp/verify` yang sudah ada, tidak perlu endpoint MFA
-  baru untuk provider OIDC lain.
-- **Circuit breaker HANYA trip pada kegagalan transport genuine** —
-  pelajaran langsung dari bug Turnstile (PR #596 security review, lihat
-  §Cloudflare Turnstile di atas): token exchange yang menjawab `400
-invalid_grant` untuk `code` yang salah/bekas/kedaluwarsa adalah Google
-  BENAR menolak input attacker-controlled, bukan tanda Google unhealthy
-  — `google-oauth-client.ts`'s `exchangeAuthorizationCode` HANYA
-  `recordFailure` pada 5xx/network error/timeout, tidak pernah pada
-  respons 4xx yang valid. JWKS di-cache 1 jam (`fetchGoogleJwks`) —
-  jangan fetch JWKS setiap request.
-- **JANGAN pernah INSERT/UPDATE dengan `tenantId` yang belum divalidasi
-  SEBELUM `SELECT` yang aman** — security review PR #598 menemukan
-  `GET .../start` awalnya langsung `INSERT INTO
-awcms_oidc_auth_requests` dengan `tenantId` dari query param
-  tak terautentikasi TANPA mengecek tenant itu benar-benar ada lebih
-  dulu. `tenant_id` punya FK ke `awcms_tenants` — tenant palsu
-  memicu foreign-key violation, dan exception itu ditangkap
-  `withTenant`'s catch-all lalu di-record ke
-  **`getDatabaseCircuitBreaker()`, breaker tunggal APLIKASI-LEBAR**
-  (beda dari breaker per-provider seperti punya Turnstile/Google
-  sendiri — breaker ini dipakai SEMUA endpoint, SEMUA tenant). Lima
-  request dengan `tenantId` acak dari penyerang tak terautentikasi bisa
-  membuka breaker ini dan menjatuhkan SELURUH aplikasi 30 detik,
-  diulang tanpa henti — blast radius lebih besar dari bug Turnstile
-  PR #596. Diperbaiki dengan `SELECT status FROM awcms_tenants
-WHERE id = tenantId` (aman, tidak pernah throw untuk baris kosong)
-  SEBELUM memanggil `createOAuthRequest`, plus rate limiting
-  (`checkRateLimit`, pola sama `login.ts`) sebagai lapis kedua. Fitur
-  online lain (mis. #591 generic SSO) yang punya endpoint tak
-  terautentikasi dengan INSERT/UPDATE ber-FK ke tabel tenant-scoped
-  WAJIB pola yang sama — cek keberadaan/status via SELECT dulu, jangan
-  pernah biarkan sebuah write yang bisa gagal FK constraint jadi baris
-  pertama yang menyentuh DB untuk input tak terautentikasi.
+  `completeGoogleOAuthCallback` calls exactly the SAME `findActiveMfaFactor`/
+  `createMfaChallenge` as `login.ts` (not a separate
+  MFA path that could be forgotten in the wiring). The `callback.ts` endpoint
+  returns `401 MFA_REQUIRED` with an `mfaChallengeToken` of the same
+  shape as the one from `login.ts` — the client finishes through the
+  existing `POST /auth/mfa/totp/verify`, no new MFA endpoint
+  is needed for other OIDC providers.
+- **The circuit breaker ONLY trips on genuine transport failures** —
+  a direct lesson from the Turnstile bug (PR #596 security review, see
+  §Cloudflare Turnstile above): a token exchange that answers `400
+invalid_grant` for a wrong/used/expired `code` is Google
+  CORRECTLY rejecting attacker-controlled input, not a sign that Google is unhealthy
+  — `google-oauth-client.ts`'s `exchangeAuthorizationCode` ONLY calls
+  `recordFailure` on 5xx/network error/timeout, never on a
+  valid 4xx response. The JWKS is cached for 1 hour (`fetchGoogleJwks`) —
+  do not fetch JWKS on every request.
+- **NEVER INSERT/UPDATE with a `tenantId` that has not been validated
+  BEFORE a safe `SELECT`** — the PR #598 security review found that
+  `GET .../start` initially went straight to `INSERT INTO
+awcms_oidc_auth_requests` with a `tenantId` from an
+  unauthenticated query param WITHOUT first checking that the tenant
+  actually exists. `tenant_id` has an FK to `awcms_tenants` — a bogus tenant
+  triggers a foreign-key violation, and that exception is caught by
+  `withTenant`'s catch-all and then recorded into
+  **`getDatabaseCircuitBreaker()`, the single APPLICATION-WIDE breaker**
+  (different from the per-provider breakers that Turnstile/Google have of
+  their own — this breaker is used by ALL endpoints, ALL tenants). Five
+  requests with random `tenantId`s from an unauthenticated attacker can
+  open this breaker and take the WHOLE application down for 30 seconds,
+  repeated endlessly — a blast radius bigger than the Turnstile bug in
+  PR #596. Fixed with `SELECT status FROM awcms_tenants
+WHERE id = tenantId` (safe, never throws for an empty row)
+  BEFORE calling `createOAuthRequest`, plus rate limiting
+  (`checkRateLimit`, the same pattern as `login.ts`) as a second layer. Other
+  online features (e.g. #591 generic SSO) that have an unauthenticated
+  endpoint with an INSERT/UPDATE carrying an FK to a tenant-scoped table
+  MUST use the same pattern — check existence/status via SELECT first, and
+  never let a write that can fail an FK constraint be the first row
+  that touches the DB for unauthenticated input.
   Regression test: `google-oidc-flow.integration.test.ts` §"start
   rejects a nonexistent tenant WITHOUT tripping the shared database
   circuit breaker".
-- `POST .../link`/`.../unlink`: high-risk, diaudit
-  (`google_account_linked`/`google_account_unlinked`); `callback.ts`
-  login sukses diaudit `google_login_succeeded`.
-- Error code i18n: `error.google_login_disabled`/
+- `POST .../link`/`.../unlink`: high-risk, audited
+  (`google_account_linked`/`google_account_unlinked`); a successful login in
+  `callback.ts` is audited as `google_login_succeeded`.
+- i18n error codes: `error.google_login_disabled`/
   `_oauth_state_invalid`/`_token_exchange_failed`/`_id_token_invalid`/
   `_account_not_linked`/`_already_linked`/`_not_linked`/`_misconfigured`
   (`error-messages.ts`, `i18n/en.po`+`id.po`).
@@ -431,7 +438,7 @@ PARALLEL implementation, not a refactor of `google-oidc.ts`:
   `auto_link_verified_email`, `allowed_email_domains` jsonb,
   `break_glass_identity_ids` jsonb, `mfa_required` reserved for future
   #589 compatibility, not yet enforced). Both RLS `ENABLE`+`FORCE`.
-- Gate gabungan `isSsoRequired(env)` (`src/lib/auth/sso-config.ts`) =
+- The combined gate `isSsoRequired(env)` (`src/lib/auth/sso-config.ts`) =
   `isFullOnlineSecurityActive(env)` (#587) ∧ `AUTH_SSO_ENABLED=true` —
   same shape as every other feature's gate in this epic.
 - **OIDC discovery is unavoidable here** (unlike Google's hardcoded
@@ -604,262 +611,262 @@ role="status">` notice (same inline pattern `offices.astro`/`roles.astro`
   endpoint (`awcms_setup_state`) almost always already claimed on
   any long-lived dev database.
 
-## Aturan lintas-issue yang wajib diikuti (#588-#593)
+## Cross-issue rules that must be followed (#588-#593)
 
-1. **Setiap fitur (#588-#592) WAJIB memanggil `isFullOnlineSecurityActive(env)`
-   sebelum melakukan apa pun online/provider-terkait** — jangan cek
-   `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` langsung atau bikin gate
-   sendiri. Tidak aktifnya gate ini harus berarti: tidak ada panggilan
-   Cloudflare/Google/OIDC apa pun, tidak ada MFA challenge, form login
-   tetap seperti hari ini persis.
-2. **`AUTH_ONLINE_SECURITY_ENABLED=false`/unset tidak boleh pernah
-   mewajibkan credential provider apa pun** — `.env.example` default dan
-   setiap deployment offline/LAN yang tidak pernah menyentuh var
+1. **Every feature (#588-#592) MUST call `isFullOnlineSecurityActive(env)`
+   before doing anything online/provider-related** — do not check
+   `AUTH_ONLINE_SECURITY_ENABLED`/`_PROFILE` directly or build your own
+   gate. This gate being inactive must mean: no
+   Cloudflare/Google/OIDC call whatsoever, no MFA challenge, and the login
+   form stays exactly as it is today.
+2. **`AUTH_ONLINE_SECURITY_ENABLED=false`/unset must never
+   require any provider credential** — the default `.env.example` and
+   every offline/LAN deployment that never touches the
    `AUTH_ONLINE_SECURITY_*`/`AUTH_SSO_*`/`AUTH_MFA_*`/`AUTH_GOOGLE_*`/
-   `TURNSTILE_*` harus tetap `config:validate` PASS dan berperilaku
-   identik dengan sebelum epic ini ada.
-3. **`APP_ENV=production` BUKAN setara dengan full-online** — deployment
-   offline/LAN bisa production-grade secara operasional (lihat
-   `deployment-profiles.md`) tanpa pernah mengaktifkan gate ini. Jangan
-   pernah menjadikan `APP_ENV=production` sebagai proxy untuk
+   `TURNSTILE_*` vars must still `config:validate` PASS and behave
+   identically to before this epic existed.
+3. **`APP_ENV=production` is NOT equivalent to full-online** — an
+   offline/LAN deployment can be production-grade operationally (see
+   `deployment-profiles.md`) without ever activating this gate. Never
+   make `APP_ENV=production` a proxy for
    `isFullOnlineSecurityActive`.
-4. **Login password lokal tidak pernah dihapus/dinonaktifkan secara
-   default** oleh fitur mana pun di epic ini — `sso_required`/
+4. **Local password login is never removed/disabled by
+   default** by any feature in this epic — `sso_required`/
    `password_login_enabled=false` (#591, `awcms_tenant_auth_policies`)
-   hanya boleh aktif kalau ada break-glass local owner/account valid,
-   dicek server-side (`saveTenantAuthPolicy`) sebelum kebijakan itu bisa
-   disimpan — sudah diimplementasikan konkret, lihat §Generic tenant
-   OIDC SSO provider di atas.
-5. **Kredensial provider (Google client secret, OIDC client secret,
-   Turnstile secret key, TOTP seed, recovery code) tidak pernah
-   disimpan plaintext** — dari environment variable/secret manager, atau
-   dienkripsi at-rest dengan key dari environment (`AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`/
-   `AUTH_MFA_SECRET_ENCRYPTION_KEY`, dsb.) — tidak pernah muncul di
-   response API, log, atau audit attributes (`awcms-sensitive-data`).
-6. **Link/unlink provider account, perubahan kebijakan auth, enroll/disable
-   MFA, dan regenerate recovery code semuanya high-risk actions** — wajib
-   diaudit (`awcms-audit-log`) dan idempotent kalau mutation
+   may only become active if there is a valid break-glass local owner/account,
+   checked server-side (`saveTenantAuthPolicy`) before that policy can be
+   saved — already implemented concretely, see §Generic tenant
+   OIDC SSO provider above.
+5. **Provider credentials (Google client secret, OIDC client secret,
+   Turnstile secret key, TOTP seed, recovery codes) are never
+   stored in plaintext** — either from an environment variable/secret manager, or
+   encrypted at-rest with a key from the environment (`AUTH_SSO_CREDENTIAL_ENCRYPTION_KEY`/
+   `AUTH_MFA_SECRET_ENCRYPTION_KEY`, etc.) — never appearing in an
+   API response, a log, or audit attributes (`awcms-sensitive-data`).
+6. **Linking/unlinking a provider account, auth policy changes, MFA
+   enroll/disable, and recovery code regeneration are all high-risk actions** — they must be
+   audited (`awcms-audit-log`) and idempotent if they are mutations
    (`awcms-idempotency`).
-7. **Provider identifier stabil adalah `sub` (subject OIDC), bukan
-   email** — auto-link by email wajib mensyaratkan email terverifikasi +
-   kebijakan allowed-domain eksplisit, tidak pernah linking implisit
-   murni dari kecocokan string email. Sudah diimplementasikan konkret di
-   #590 (`isEmailDomainAllowed`, fail-closed) DAN #591 (generic tenant
-   OIDC SSO, `isAutoLinkAllowedForProvider` — dua lapis: domain allow-list
-   PER PROVIDER ditambah master switch `auto_link_verified_email` per
+7. **The stable provider identifier is `sub` (the OIDC subject), not the
+   email** — auto-link by email must require a verified email +
+   an explicit allowed-domain policy, never implicit linking
+   purely from an email string match. Already implemented concretely in
+   #590 (`isEmailDomainAllowed`, fail-closed) AND #591 (generic tenant
+   OIDC SSO, `isAutoLinkAllowedForProvider` — two layers: a PER-PROVIDER
+   domain allow-list plus the `auto_link_verified_email` master switch in the
    tenant policy).
-8. **Semua panggilan provider eksternal (OIDC discovery/JWKS, Turnstile
-   siteverify, Google token exchange) wajib timeout-bounded DAN circuit
-   breaker-nya hanya boleh trip pada kegagalan transport genuine** — pola
-   sama seperti `cloudflare-dns-adapter.ts`/`mailketing-provider.ts`/
-   `turnstile.ts`/`google-oauth-client.ts` (`withTimeout`, circuit
-   breaker `getProviderCircuitBreaker`), dan tidak pernah dipanggil di
-   dalam DB transaction (ADR-0006). JANGAN treat respons 4xx yang valid
-   (input attacker-controlled ditolak provider dengan benar) sebagai
-   provider-failure — pelajaran dari bug Turnstile PR #596, diulang
-   benar di #590's `exchangeAuthorizationCode`. **Aturan yang sama
-   berlaku untuk breaker DATABASE bawaan** (`getDatabaseCircuitBreaker()`,
-   dipakai `withTenant` untuk SEMUA endpoint/tenant, bukan sekadar satu
-   provider) — endpoint tak terautentikasi TIDAK BOLEH melakukan
-   INSERT/UPDATE ber-FK ke tabel tenant-scoped dengan `tenantId` yang
-   belum divalidasi keberadaannya; exception (mis. foreign-key
-   violation) dari input attacker-controlled akan ditangkap
-   `withTenant`'s catch-all dan mentrip breaker aplikasi-lebar ini —
-   blast radius JAUH lebih besar dari breaker per-provider mana pun
-   (pelajaran PR #598, lihat §Google OIDC login di atas). Selalu
-   `SELECT` (aman, tidak throw untuk baris kosong) sebelum write
-   ber-FK di endpoint yang bisa dijangkau tanpa autentikasi.
-9. **Tabel baru yang tenant-scoped (`awcms_identity_provider_accounts`,
+8. **All external provider calls (OIDC discovery/JWKS, Turnstile
+   siteverify, Google token exchange) must be timeout-bounded AND their circuit
+   breaker may only trip on genuine transport failures** — the same
+   pattern as `cloudflare-dns-adapter.ts`/`mailketing-provider.ts`/
+   `turnstile.ts`/`google-oauth-client.ts` (`withTimeout`, the
+   `getProviderCircuitBreaker` circuit breaker), and never called
+   inside a DB transaction (ADR-0006). Do NOT treat a valid 4xx response
+   (attacker-controlled input correctly rejected by the provider) as a
+   provider failure — the lesson from the Turnstile bug in PR #596, repeated
+   correctly in #590's `exchangeAuthorizationCode`. **The same rule
+   applies to the built-in DATABASE breaker** (`getDatabaseCircuitBreaker()`,
+   used by `withTenant` for ALL endpoints/tenants, not just one
+   provider) — an unauthenticated endpoint MUST NOT perform an
+   INSERT/UPDATE with an FK to a tenant-scoped table using a `tenantId` whose
+   existence has not been validated; an exception (e.g. a foreign-key
+   violation) from attacker-controlled input will be caught by
+   `withTenant`'s catch-all and trip this application-wide breaker —
+   a blast radius FAR bigger than any per-provider breaker
+   (the PR #598 lesson, see §Google OIDC login above). Always
+   `SELECT` (safe, does not throw for an empty row) before an
+   FK-carrying write on an endpoint reachable without authentication.
+9. **New tenant-scoped tables (`awcms_identity_provider_accounts`,
    `awcms_oidc_auth_requests` — #590; `awcms_auth_providers`,
    `awcms_tenant_auth_policies` — #591; `awcms_identity_mfa_factors`
-   dkk. — #589) wajib RLS `ENABLE` + `FORCE`** — pola sama seperti setiap
-   migration sejak 013 (`awcms-new-migration`).
-10. **MFA reset password tidak boleh jadi bypass MFA** — reset password
-    yang berhasil tidak otomatis menonaktifkan MFA milik identity itu.
+   et al. — #589) must have RLS `ENABLE` + `FORCE`** — the same pattern as every
+   migration since 013 (`awcms-new-migration`).
+10. **An MFA password reset must not become an MFA bypass** — a successful
+    password reset does not automatically disable that identity's MFA.
 
-## Penutup epic — di micro vs di sini
+## Epic closer — in micro vs here
 
-> **Seluruh sub-bagian di bawah ini adalah catatan penutupan epic di
-> awcms-micro** (ditutup di sana 2026-07-10). Dipertahankan karena daftar
-> celah residual yang ditemukannya berlaku umum. **Path, nomor migrasi, dan
-> nomor issue-nya TIDAK berlaku di awcms** — lihat §Peta ke artefak nyata.
+> **Every sub-section below is the epic-closing note from
+> awcms-micro** (closed there on 2026-07-10). Kept because the list of
+> residual gaps it found applies generally. **Its paths, migration numbers, and
+> issue numbers do NOT apply in awcms** — see §Map to the real awcms artifacts.
 >
-> Padanan di awcms: gate + Turnstile (#186), MFA/TOTP (#184, `sql/024`),
-> OIDC/SSO generik + admin CRUD (#185, `sql/025`/`026`, endpoint
-> `/api/v1/auth/sso/*` dan `/api/v1/auth/sso-providers`), admin policy UI
-> (#274, `src/pages/admin/security.astro`). **Google OIDC spesifik
-> (`/api/v1/auth/providers/google/*`) TIDAK ADA di awcms** dan itu memang
-> keputusan — jangan menyimpulkan sebaliknya dari paragraf mana pun di bawah.
+> The equivalents in awcms: the gate + Turnstile (#186), MFA/TOTP (#184, `sql/024`),
+> generic OIDC/SSO + admin CRUD (#185, `sql/025`/`026`, endpoints
+> `/api/v1/auth/sso/*` and `/api/v1/auth/sso-providers`), the admin policy UI
+> (#274, `src/pages/admin/security.astro`). **Google-specific OIDC
+> (`/api/v1/auth/providers/google/*`) DOES NOT EXIST in awcms** and that is
+> a deliberate decision — do not conclude otherwise from any paragraph below.
 
-Catatan audit penutup (micro) — celah konkret yang ditemukannya:
+The closing audit notes (micro) — the concrete gaps it found:
 
-- `docs/awcms/18_configuration_env_reference.md` dan
-  `deployment-profiles.md` sebelumnya masih menulis "#592-#593 masih
-  backlog" walau #592 (admin policy UI) sudah merge — diperbaiki (stale
-  doc, ditemukan oleh audit #593 ini, bukan hipotetis).
-- `docs/awcms/20_threat_model_security_architecture.md` sebelumnya
-  NOL menyebut Turnstile/MFA/Google OIDC/SSO/break-glass sama sekali —
-  ditambah §Standar tambahan dipicu epic full-online auth security
-  hardening (Issue #587-#593) memetakan tujuh kategori risiko yang
-  diminta eksplisit issue ini (credential stuffing, bot abuse, OIDC
+- `docs/awcms/18_configuration_env_reference.md` and
+  `deployment-profiles.md` previously still said "#592-#593 are still
+  backlog" even though #592 (admin policy UI) had already merged — fixed (a stale
+  doc, found by this #593 audit, not hypothetical).
+- `docs/awcms/20_threat_model_security_architecture.md` previously
+  mentioned Turnstile/MFA/Google OIDC/SSO/break-glass ZERO times —
+  a §Additional standards triggered by the full-online auth security
+  hardening epic (Issue #587-#593) was added, mapping the seven risk categories
+  this issue explicitly asked for (credential stuffing, bot abuse, OIDC
   callback abuse, provider outage, MFA recovery abuse, SSO lockout,
-  offline dependency breakage) ke bukti konkret yang sudah ada.
-- `scripts/security-readiness.ts` menambah `checkSsoBreakGlassReady`
-  (critical) — celah residual yang sudah dicatat di atas (§Generic
-  tenant OIDC SSO provider): `saveTenantAuthPolicy` hanya memvalidasi
-  break-glass eligibility di titik SAVE; sebuah break-glass identity bisa
-  dinonaktifkan (atau tenant membership-nya dicabut) OLEH AKSI LAIN
-  setelahnya tanpa kebijakan itu sendiri pernah disimpan ulang. Check baru
-  ini mem-verifikasi ULANG eligibility setiap tenant aktif dari DB di
-  waktu readiness/go-live, memakai ulang `countEligibleBreakGlassIdentities`
-  (kini diekspor dari `tenant-auth-policy.ts`) — bukan aturan kedua yang
-  bisa divergen. Berbeda dari Issue #605 (break-glass picker/data-hygiene
-  UX di admin form) yang tetap dibiarkan terbuka sebagai issue terpisah —
-  check readiness ini mengaudit DB, bukan UX form.
-- `.env.example`, `scripts/validate-env.ts`, OpenAPI
-  (`openapi/awcms-public-api.openapi.yaml`), dan
-  `src/modules/identity-access/README.md` sudah akurat sejak #587-#591
-  masing-masing — dikonfirmasi ulang oleh #593, tidak diubah.
+  offline dependency breakage) onto the concrete evidence that already exists.
+- `scripts/security-readiness.ts` added `checkSsoBreakGlassReady`
+  (critical) — the residual gap already noted above (§Generic
+  tenant OIDC SSO provider): `saveTenantAuthPolicy` only validates
+  break-glass eligibility at SAVE time; a break-glass identity can be
+  deactivated (or its tenant membership revoked) BY SOME OTHER ACTION
+  afterwards without that policy itself ever being saved again. This new check
+  RE-verifies every active tenant's eligibility from the DB at
+  readiness/go-live time, reusing `countEligibleBreakGlassIdentities`
+  (now exported from `tenant-auth-policy.ts`) — not a second rule that
+  could diverge. Different from Issue #605 (break-glass picker/data-hygiene
+  UX in the admin form), which was left open as a separate issue —
+  this readiness check audits the DB, not the form UX.
+- `.env.example`, `scripts/validate-env.ts`, the OpenAPI
+  (`openapi/awcms-public-api.openapi.yaml`), and
+  `src/modules/identity-access/README.md` were already accurate as of #587-#591
+  respectively — re-confirmed by #593, unchanged.
 
 Issue #601 (SQLSTATE class 22 circuit-breaker exclusion), #605 (break-glass
-picker/data-hygiene UX admin), #603 (SSRF hardening untuk `issuer_url`
-OIDC tenant-configured), dan #610 (hardening tambahan atas keputusan
-#603 — rate limit agregat per-`providerKey` + negative-TTL cache) sudah
-**selesai** sebagai follow-up terpisah setelah #593 (lihat §Break-glass
-picker/data-hygiene di bawah untuk #605, dan §SSRF/`issuer_url` —
-keputusan accepted risk untuk #603, termasuk hardening #610 di
-sub-bagian yang sama).
+picker/data-hygiene UX in the admin form), #603 (SSRF hardening for the
+tenant-configured OIDC `issuer_url`), and #610 (additional hardening on top of
+decision #603 — an aggregate per-`providerKey` rate limit + negative-TTL cache) are
+**done** as separate follow-ups after #593 (see §Break-glass
+picker/data-hygiene below for #605, and §SSRF/`issuer_url` —
+the accepted-risk decision for #603, including #610's hardening in that
+same sub-section).
 
-### SSRF/`issuer_url` — keputusan accepted risk (Issue #603, selesai)
+### SSRF/`issuer_url` — the accepted-risk decision (Issue #603, done)
 
-**Diputuskan TIDAK menambah IP-range denylist** (resolve hostname, tolak
-private/loopback/link-local/metadata-endpoint) untuk `issuer_url` OIDC
-tenant-configured (#591). Ini SATU-SATUNYA outbound URL di base ini yang
-berasal dari data tenant-configured, bukan env server tepercaya (beda dari
-setiap provider lain — R2, Mailketing, Cloudflare DNS/Turnstile — yang
-semuanya SSRF-safe by convention: URL selalu dari `process.env`).
+**Decided NOT to add an IP-range denylist** (resolve the hostname, reject
+private/loopback/link-local/metadata-endpoint) for the tenant-configured
+OIDC `issuer_url` (#591). This is the ONLY outbound URL in this base that
+comes from tenant-configured data, not from trusted server env (unlike
+every other provider — R2, Mailketing, Cloudflare DNS/Turnstile — which are
+all SSRF-safe by convention: the URL always comes from `process.env`).
 
-**Kenapa TIDAK diblok — dikoreksi setelah audit keamanan PR #609** (versi
-awal keputusan ini salah menyebut LAN-first/offline sebagai alasan;
-faktanya fitur generic SSO ini HANYA aktif di profil `full_online`
-(`isFullOnlineSecurityActive`) — KEBALIKAN dari LAN-first/offline, yang
-tidak pernah memuat kode ini sama sekali karena gate-nya tidak aktif).
-Alasan yang benar: deployment `full_online` (cloud/registry) tetap sering
-perlu terhubung ke IdP enterprise milik tenant yang di-host on-prem dan
-hanya reachable lewat VPN/tunnel privat — pola "bring-your-own-IdP" yang
-umum di produk SaaS multi-tenant (WorkOS, Auth0 Enterprise Connections,
-dst. — BUKAN Okta/Auth0/Azure AD sendiri sebagai IdP, yang bukan analogi
-yang tepat karena AWCMS di sini berperan sebagai relying party yang
-memanggil issuer pihak ketiga, bukan sebagai IdP). Blanket private-IP
-block akan mematahkan skenario enterprise-IdP-via-VPN ini.
+**Why it is NOT blocked — corrected after the PR #609 security audit** (the
+first version of this decision wrongly cited LAN-first/offline as the reason;
+in fact this generic SSO feature is ONLY active in the `full_online` profile
+(`isFullOnlineSecurityActive`) — the OPPOSITE of LAN-first/offline, which
+never loads this code at all because its gate is not active).
+The correct reason: a `full_online` (cloud/registry) deployment still often
+needs to connect to a tenant's enterprise IdP hosted on-prem and
+only reachable over a VPN/private tunnel — the "bring-your-own-IdP" pattern
+common in multi-tenant SaaS products (WorkOS, Auth0 Enterprise Connections,
+etc. — NOT Okta/Auth0/Azure AD themselves as the IdP, which is not the right
+analogy because AWCMS here acts as the relying party that
+calls a third-party issuer, not as the IdP). A blanket private-IP
+block would break this enterprise-IdP-over-VPN scenario.
 
-**Batas mitigasi yang sebenarnya (dikoreksi)** — PENTING, jangan anggap
-sudah menutup risiko eksploitasi: gate ABAC
-(`identity_access.sso_providers.create`/`update`) dan audit log HANYA
-membatasi siapa yang bisa MENGONFIGURASI `issuer_url` jahat. Keduanya
-TIDAK membatasi siapa yang bisa MEMICU fetch keluar setelah provider
-dikonfigurasi — `GET /api/v1/auth/sso/{providerKey}/start` yang memicu
-`discoverOidcConfiguration` bersifat tanpa autentikasi, hanya rate-limit
-per-sumber+tenant (bukan per-`providerKey`), dan discovery cache hanya
-terisi pada request SUKSES — target internal yang tak pernah membalas
-JSON OIDC valid tak pernah ter-cache, sehingga endpoint publik ini bisa
-dipakai probe berulang tanpa batas nyata. Ini risiko residual yang
-diterima BERSAMA keputusan utama, bukan celah yang sudah tertutup oleh
-ABAC — segmentasi jaringan level operator untuk service internal yang
-sungguh sensitif tetap jadi lapis pertahanan yang sebenarnya, bukan ABAC.
+**The actual limit of the mitigation (corrected)** — IMPORTANT, do not assume
+the exploitation risk is closed: the ABAC gate
+(`identity_access.sso_providers.create`/`update`) and the audit log ONLY
+constrain who can CONFIGURE a malicious `issuer_url`. Neither
+constrains who can TRIGGER the outbound fetch once the provider is
+configured — `GET /api/v1/auth/sso/{providerKey}/start`, which triggers
+`discoverOidcConfiguration`, is unauthenticated, only rate-limited
+per-source+tenant (not per-`providerKey`), and the discovery cache is only
+filled on a SUCCESSFUL request — an internal target that never answers with
+valid OIDC JSON is never cached, so this public endpoint can be
+used to probe repeatedly without any real limit. This is a residual risk
+accepted TOGETHER WITH the main decision, not a gap already closed by
+ABAC — operator-level network segmentation for genuinely sensitive
+internal services remains the real line of defence, not ABAC.
 
-**Follow-up — selesai (Issue #610)**, revisi setelah DUA putaran security
+**Follow-up — done (Issue #610)**, revised after TWO rounds of security
 review:
 
-- **Fix Critical, sebenarnya bug pre-existing sejak #591**: SEMUA
-  cache/circuit-breaker di `generic-oidc-client.ts`
-  (`discoveryCache`/`jwksCache`, breaker discovery/jwks/token) sebelumnya
-  di-key HANYA oleh `providerKey`. `provider_key` cuma unik PER TENANT
-  (unique index migration 036 adalah `(tenant_id, provider_key)`), jadi
-  dua tenant berbeda yang sama-sama menamai provider mereka `"okta"`
-  (sangat umum) BERBAGI entry cache/breaker yang sama — tenant admin jahat
-  bisa mendaftarkan provider dengan slug vendor umum yang `issuer_url`-nya
-  menunjuk server attacker, memicu satu fetch, dan `authorization_endpoint`/
-  `jwks_uri` attacker itu ter-serve ke tenant LAIN yang punya provider
-  `"okta"` sungguhan — bukan sekadar kebocoran ketersediaan, tapi primitif
-  pengambilalihan SSO lintas-tenant (redirect ke phishing + ID token palsu
-  yang lolos verifikasi JWKS attacker sendiri). Diperbaiki:
+- **A Critical fix, actually a pre-existing bug since #591**: ALL the
+  caches/circuit-breakers in `generic-oidc-client.ts`
+  (`discoveryCache`/`jwksCache`, the discovery/jwks/token breakers) were
+  previously keyed ONLY by `providerKey`. `provider_key` is only unique PER TENANT
+  (migration 036's unique index is `(tenant_id, provider_key)`), so
+  two different tenants that both name their provider `"okta"`
+  (very common) SHARE the same cache/breaker entry — a malicious tenant admin
+  could register a provider with a common vendor slug whose `issuer_url`
+  points at the attacker's server, trigger a single fetch, and have that
+  attacker's `authorization_endpoint`/`jwks_uri` served to ANOTHER tenant
+  that has a real `"okta"` provider — not merely an availability leak, but a
+  cross-tenant SSO takeover primitive (redirect to phishing + a forged ID token
+  that passes verification against the attacker's own JWKS). Fixed:
   `discoverOidcConfiguration`/`fetchProviderJwks`/`exchangeAuthorizationCode`
-  kini menerima `tenantId` dan meng-key semua cache/breaker dengan
-  `${tenantId}:${providerKey}` (`scopedProviderKey`). Test:
+  now take a `tenantId` and key every cache/breaker with
+  `${tenantId}:${providerKey}` (`scopedProviderKey`). Tests:
   `tests/unit/generic-oidc-client.test.ts`'s "CRITICAL: two DIFFERENT
-  tenants using the SAME providerKey..." dan
+  tenants using the SAME providerKey..." and
   `tests/integration/tenant-sso-flow.integration.test.ts`'s "CRITICAL: two
   DIFFERENT tenants both naming their provider 'okta'...".
-- **Koreksi desain — draft awal PR ini menambah bug baru**: draft awal
-  menambah rate limit AGREGAT (bukan per-sumber) di `start.ts`, di-key
-  `${tenantId}:${providerKey}`, untuk membatasi prober yang merotasi
-  source IP. Putaran security-auditor KEDUA menemukan budget BERSAMA ini
-  sendiri adalah vektor DoS tanpa privilege apa pun: siapa pun, dari
-  sesedikit 3 source IP, bisa menghabiskan seluruh budget dan mengunci
-  SEMUA user sah tenant itu dari login SSO selama jendela rate limit,
-  berulang — test yang ditambahkan draft awal untuk membuktikan mekanisme
-  ini justru secara tidak sengaja MEMBUKTIKAN DoS tersebut. Rate limit
-  agregat ini **dihapus total**. Pertahanan sebenarnya terhadap probing
-  berkelanjutan adalah circuit breaker (kini benar-benar di-scope
-  tenant+provider) + negative-TTL cache di bawah — keduanya HANYA
-  membatasi percobaan yang GAGAL, jadi tidak pernah bisa memblokir login
-  sah ke provider yang sehat, beda dari rate limit HTTP-level bersama yang
-  memblokir semua request regardless hasil.
-- Negative/short-TTL cache (`NEGATIVE_CACHE_TTL_MS = 30s`,
-  `discoveryFailureCache`/`jwksFailureCache` di `generic-oidc-client.ts`,
-  kini di-key `${tenantId}:${providerKey}`) untuk percobaan discovery/JWKS
-  yang GAGAL — target yang tak pernah membalas JSON valid tidak lagi
-  memicu fetch baru di setiap hit, hanya sekali per jendela 30 detik.
-- Rekomendasi infra-layer blokir egress ke `169.254.169.254` (metadata
-  endpoint cloud) khusus deployment `full_online` didokumentasikan di
-  `deployment-profiles.md` §Generic tenant OIDC SSO (residual yang tetap
-  di luar cakupan aplikasi — tanggung jawab operator, bukan kode).
-  **Follow-up — selesai (Issue #612)**: tanpa cap, tenant admin jahat bisa
-  mendaftarkan banyak baris `awcms_auth_providers` (masing-masing dapat
-  budget cache/breaker independen sendiri-sendiri, sudah benar di-scope sejak
-  #610) untuk melipatgandakan volume probing total secara linear dengan
-  jumlah baris. Diperbaiki dengan cap `AUTH_SSO_MAX_PROVIDERS_PER_TENANT`
-  (default 20) di `createAuthProvider` (`auth-provider-directory.ts`) —
-  `POST /api/v1/identity/sso/providers` menolak dengan
-  `409 SSO_PROVIDER_LIMIT_EXCEEDED` begitu jumlah baris aktif (non-soft-
-  deleted) tenant mencapai batas. Hitung-lalu-insert, BUKAN atomik
-  (`SELECT ... FOR UPDATE`) dengan sengaja — ini bound probing budget, bukan
-  invariant keamanan seperti replay MFA (§MFA/TOTP di atas), jadi overshoot
-  kecil akibat create konkuren tidak berbahaya untuk apa yang mekanisme ini
-  cegah.
+- **A design correction — the first draft of this PR added a new bug**: the
+  first draft added an AGGREGATE (not per-source) rate limit in `start.ts`, keyed
+  `${tenantId}:${providerKey}`, to constrain a prober rotating
+  source IPs. The SECOND security-auditor round found that this SHARED budget
+  is itself a DoS vector requiring no privilege at all: anyone, from
+  as few as 3 source IPs, can exhaust the whole budget and lock
+  ALL of that tenant's legitimate users out of SSO login for the rate-limit
+  window, repeatedly — the test the first draft added to prove this
+  mechanism accidentally PROVED that DoS instead. This aggregate rate
+  limit was **removed entirely**. The real defence against sustained
+  probing is the circuit breaker (now genuinely scoped to
+  tenant+provider) + the negative-TTL cache below — both of which ONLY
+  limit FAILED attempts, so they can never block a legitimate login
+  to a healthy provider, unlike a shared HTTP-level rate limit that
+  blocks every request regardless of outcome.
+- A negative/short-TTL cache (`NEGATIVE_CACHE_TTL_MS = 30s`,
+  `discoveryFailureCache`/`jwksFailureCache` in `generic-oidc-client.ts`,
+  now keyed `${tenantId}:${providerKey}`) for FAILED discovery/JWKS
+  attempts — a target that never answers with valid JSON no longer
+  triggers a fresh fetch on every hit, only once per 30-second window.
+- The infra-layer recommendation to block egress to `169.254.169.254` (the cloud
+  metadata endpoint) specifically for `full_online` deployments is documented in
+  `deployment-profiles.md` §Generic tenant OIDC SSO (a residual that stays
+  outside the application's scope — the operator's responsibility, not the code's).
+  **Follow-up — done (Issue #612)**: without a cap, a malicious tenant admin could
+  register many `awcms_auth_providers` rows (each getting its own
+  independent cache/breaker budget, correctly scoped since
+  #610) to multiply the total probing volume linearly with the
+  number of rows. Fixed with the `AUTH_SSO_MAX_PROVIDERS_PER_TENANT` cap
+  (default 20) in `createAuthProvider` (`auth-provider-directory.ts`) —
+  `POST /api/v1/identity/sso/providers` rejects with
+  `409 SSO_PROVIDER_LIMIT_EXCEEDED` as soon as the tenant's active (non-soft-
+  deleted) row count reaches the limit. Count-then-insert, deliberately NOT atomic
+  (`SELECT ... FOR UPDATE`) — this bounds a probing budget, not a
+  security invariant like MFA replay (§MFA/TOTP above), so a small
+  overshoot from concurrent creates is harmless for what this mechanism
+  prevents.
 
-**Kalau butuh SSRF hardening lebih ketat di masa depan** (mis. operator
-`full_online` murni SaaS yang tidak butuh IdP on-prem sama sekali): jangan
-blanket-block — tambahkan sebagai opt-in per-deployment (env var terpisah,
-default off) supaya skenario enterprise-IdP-via-VPN tidak pernah terkena
-regresi diam-diam. Jangan reimplementasi keputusan ini tanpa membaca
-rasional di atas dulu.
+**If stricter SSRF hardening is needed in the future** (e.g. a purely SaaS
+`full_online` operator that does not need an on-prem IdP at all): do not
+blanket-block — add it as a per-deployment opt-in (a separate env var,
+default off) so that the enterprise-IdP-over-VPN scenario never silently
+regresses. Do not reimplement this decision without reading the
+rationale above first.
 
-### Break-glass picker/data-hygiene (Issue #605, selesai)
+### Break-glass picker/data-hygiene (Issue #605, done)
 
-Follow-up dari security-auditor review PR #604 (#592) — dua celah UX
-non-blocking (bukan bypass keamanan; `saveTenantAuthPolicy` selalu tetap
-jadi kontrol otoritatif) diperbaiki:
+Follow-up from the PR #604 (#592) security-auditor review — two non-blocking
+UX gaps (not a security bypass; `saveTenantAuthPolicy` always remains the
+authoritative control) were fixed:
 
-- **Picker checkbox `admin/security.astro` sekarang memfilter kandidat ke
+- **The `admin/security.astro` checkbox picker now filters candidates to
   `tenant_user.status === 'active' && identity.status === 'active'`**
-  sebelum dirender — sebelumnya menampilkan SEMUA tenant user (termasuk
-  yang suspended/inactive) sebagai pilihan break-glass, sehingga admin
-  bisa memilih identity yang jelas akan ditolak server baru diketahui
-  setelah submit. `fetchTenantUsersWithRoles` (dipakai bersama
-  `admin/access-users.astro`) sendiri TIDAK diubah — filternya di titik
-  pemakaian (`security.astro`), bukan di query yang dipakai bersama.
-- **`saveTenantAuthPolicy` sekarang memfilter `break_glass_identity_ids`
-  yang DIPERSIST ke hanya id yang dikonfirmasi eligible** oleh
-  `fetchEligibleBreakGlassIdentityIds` (fungsi baru — `countEligibleBreakGlassIdentities`
-  kini wrapper tipis di atasnya, `scripts/security-readiness.ts`'s
-  `checkSsoBreakGlassReady` tidak berubah karena signature count-nya
-  sama), bukan menyimpan list yang disubmit apa adanya. Sebelumnya,
-  submit "1 id valid + N id sampah/salah ketik" (mis. lewat manual
-  free-text fallback picker untuk admin tanpa `user_management.read`,
-  atau panggilan API langsung) akan menyimpan SEMUA id termasuk yang
-  sampah, walau hanya satu yang pernah menentukan hasil save. Regression
+  before rendering — previously it showed ALL tenant users (including
+  suspended/inactive ones) as break-glass options, so an admin
+  could pick an identity that the server would obviously reject and only find out
+  after submitting. `fetchTenantUsersWithRoles` (shared with
+  `admin/access-users.astro`) itself was NOT changed — the filter is at the
+  point of use (`security.astro`), not in the shared query.
+- **`saveTenantAuthPolicy` now filters the `break_glass_identity_ids`
+  it PERSISTS down to only the ids confirmed eligible** by
+  `fetchEligibleBreakGlassIdentityIds` (a new function — `countEligibleBreakGlassIdentities`
+  is now a thin wrapper over it, and `scripts/security-readiness.ts`'s
+  `checkSsoBreakGlassReady` is unchanged because its count signature is the
+  same), instead of storing the submitted list as-is. Previously,
+  submitting "1 valid id + N junk/typo ids" (e.g. through the manual
+  free-text fallback picker for admins without `user_management.read`,
+  or a direct API call) would store ALL the ids including the
+  junk, even though only one of them ever determined the save's outcome. Regression
   test: `tests/integration/tenant-sso-flow.integration.test.ts`'s
   "break-glass hygiene: saving policy with 1 valid + N garbage/ineligible
   ids persists ONLY the valid one".

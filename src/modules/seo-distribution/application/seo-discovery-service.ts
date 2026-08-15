@@ -72,6 +72,10 @@ import {
   fetchSeoTenantSettings
 } from "./seo-config-directory";
 import { resolveTenantPrimaryHost } from "./resolve-canonical-host";
+import {
+  resolveSiteScheme,
+  type SiteScheme
+} from "../../../lib/http/site-origin";
 
 /** Stable no-host sentinel used in cache keys when a tenant has no verified primary domain (never borrows the request host). */
 const NO_HOST_SENTINEL = "no-primary-domain.invalid";
@@ -103,9 +107,23 @@ export type DiscoveryPayload = {
 // Pure helpers (exported for unit testing).
 // ---------------------------------------------------------------------------
 
-/** Absolute `https://host/path` when a primary host is known, else the relative path (never invents a host). */
-export function absoluteUrl(primaryHost: string | null, path: string): string {
-  return primaryHost === null ? path : `https://${primaryHost}${path}`;
+/**
+ * Absolute `<scheme>://host/path` when a primary host is known, else the
+ * relative path (never invents a host).
+ *
+ * The scheme used to be the literal `https`. That is right for this deployment
+ * and wrong for the other two profiles: a LAN/offline install serving plain
+ * HTTP would publish sitemaps and feeds pointing at a scheme it does not answer
+ * on. It now comes from `resolveSiteScheme` — the same single source that
+ * decides it for request-derived URLs — so there is one answer to how this site
+ * is reached, not one per module.
+ */
+export function absoluteUrl(
+  primaryHost: string | null,
+  path: string,
+  scheme: SiteScheme = resolveSiteScheme()
+): string {
+  return primaryHost === null ? path : `${scheme}://${primaryHost}${path}`;
 }
 
 /** Config fingerprint — every settings value that shapes discovery output; a change invalidates the cache. */
@@ -438,6 +456,7 @@ export async function buildRobotsPayload(
   const { settings, primaryHost, settingsUpdatedAt } = await loadBase(ctx);
   const body = renderRobotsTxt({
     primaryHost,
+    siteScheme: resolveSiteScheme(),
     siteNoindex: settings.defaultRobotsNoindex,
     sitemapEnabled: settings.sitemapEnabled
   });

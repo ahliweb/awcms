@@ -1,139 +1,140 @@
+🇬🇧 English (source) · 🇮🇩 [Bahasa Indonesia](0010-public-host-tenant-routing.id.md)
+
 # ADR-0010 — Host/domain-based public tenant routing (online-public extension)
 
 - **Status:** Accepted
-- **Tanggal:** 2026-07-08
-- **Pengambil keputusan:** <maintainer>
-- **Terkait:** `docs/adr/0009-public-tenant-scoped-routes.md`, `docs/adr/0003-postgresql-rls-multi-tenant.md`, `docs/awcms/deployment-profiles.md` §Profil online, `docs/awcms/18_configuration_env_reference.md` §Public routing, `src/modules/blog-content/README.md` §`/news` (default) vs `/blog/{tenantCode}` (legacy), `.claude/skills/awcms-tenant-domain-routing/SKILL.md`, Issue #556-#561 (epic #555)
+- **Date:** 2026-07-08
+- **Decision maker:** <maintainer>
+- **Related:** `docs/adr/0009-public-tenant-scoped-routes.md`, `docs/adr/0003-postgresql-rls-multi-tenant.md`, `docs/awcms/deployment-profiles.md` §Online profile, `docs/awcms/18_configuration_env_reference.md` §Public routing, `src/modules/blog-content/README.md` §`/news` (default) vs `/blog/{tenantCode}` (legacy), `.claude/skills/awcms-tenant-domain-routing/SKILL.md`, Issue #556-#561 (epic #555)
 
-## Konteks
+## Context
 
-ADR-0009 memutuskan rute publik tenant-scoped (`/blog/{tenantCode}/...`,
-Issue #540) me-resolve tenant lewat **segmen path eksplisit** yang membawa
-`tenant_code`, dan secara eksplisit menolak subdomain/custom-domain per
-tenant sebagai _default_ base — karena butuh wildcard DNS/TLS dan
-bertentangan dengan topologi LAN-first/offline default AWCMS (doc 18).
-ADR-0009 §Alternatif yang dipertimbangkan sudah mencatat kedua alternatif
-itu ("subdomain per tenant", "domain custom per tenant") sebagai **valid
-sebagai ekstensi opsional untuk deployment online-only** — "bisa jadi ADR
-susulan bila dibutuhkan aplikasi turunan tertentu".
+ADR-0009 decided that public tenant-scoped routes (`/blog/{tenantCode}/...`,
+Issue #540) resolve the tenant through an **explicit path segment** carrying
+`tenant_code`, and explicitly rejected per-tenant subdomains/custom domains
+as the _default_ base — because they need wildcard DNS/TLS and conflict
+with AWCMS's default LAN-first/offline topology (doc 18).
+ADR-0009 §Alternatives considered already recorded both of those alternatives
+("subdomain per tenant", "custom domain per tenant") as **valid
+as an optional extension for online-only deployments** — "could become a
+follow-up ADR if a particular derived application needs it".
 
 Epic #555 ("online public tenant routing, news routes, and tenant domain
-management") merealisasikan ekstensi itu: config opsional
-`PUBLIC_TENANT_RESOLUTION_MODE` (Issue #556), skema pemetaan
-hostname→tenant `awcms_tenant_domains` (Issue #557), module descriptor
-`tenant_domain` (Issue #558), resolver host-based
-`resolvePublicTenantFromRequest` (Issue #559), dan rute publik baru `/news`
-yang tidak membawa segmen `tenantCode` sama sekali (Issue #560). Issue #561
-(ADR ini) mendokumentasikan keputusan yang sudah terwujud lewat empat issue
-itu, dan menegaskan hubungannya dengan ADR-0009.
+management") realises that extension: the optional config
+`PUBLIC_TENANT_RESOLUTION_MODE` (Issue #556), the hostname→tenant mapping
+schema `awcms_tenant_domains` (Issue #557), the module descriptor
+`tenant_domain` (Issue #558), the host-based resolver
+`resolvePublicTenantFromRequest` (Issue #559), and the new public route `/news`
+that carries no `tenantCode` segment at all (Issue #560). Issue #561
+(this ADR) documents the decision already realised through those four issues,
+and states its relationship to ADR-0009.
 
-## Keputusan
+## Decision
 
-Kami memutuskan untuk menambahkan **mode resolusi tenant berbasis
-host/domain** sebagai kapabilitas _tambahan_ untuk rute publik anonim, di
-atas (bukan menggantikan) resolusi berbasis path segment yang sudah
-diputuskan ADR-0009:
+We decide to add a **host/domain-based tenant resolution mode** as an
+_additional_ capability for anonymous public routes, on top of (not
+replacing) the path-segment-based resolution already decided in ADR-0009:
 
-- Mode dipilih lewat env var `PUBLIC_TENANT_RESOLUTION_MODE`
+- The mode is chosen through the env var `PUBLIC_TENANT_RESOLUTION_MODE`
   (`host_default | env_default | setup_default | tenant_code_legacy`,
-  Issue #556) — opsional, opt-in per deployment. Tidak diset sama sekali
-  (default semua deployment offline/LAN existing) tetap memakai perilaku
-  legacy sepenuhnya.
-- Saat `host_default`, `resolvePublicTenantFromRequest()` (Issue #559)
-  me-resolve tenant dari request `Host`/`X-Forwarded-Host` (hanya kalau
-  `PUBLIC_TRUST_PROXY=true` eksplisit) lewat tabel
-  `awcms_tenant_domains` (Issue #557), melalui fungsi lookup
-  `SECURITY DEFINER` yang sempit (satu tabel, empat kolom
-  non-sensitif, `EXECUTE` di-revoke dari `PUBLIC`). **Status:** modul
-  `tenant_domain` belum di-port ke repo ini; migrasi lookup ini direncanakan
-  saat port dilakukan, dengan nomor migrasi **TBD (≠ `033`, yang kini dipakai
-  skema `theming`)**.
-  Selain `host_default`, tersedia fallback berjenjang (`PUBLIC_DEFAULT_TENANT_ID`/
-  `_CODE`, lalu `awcms_setup_state`) sebelum akhirnya `null` (404
-  generik) — lihat `.claude/skills/awcms-tenant-domain-routing/SKILL.md`
-  §Resolver untuk urutan lengkap.
-- Rute publik baru `/news` (Issue #560) mengonsumsi resolver ini lewat
-  `withNewsTenant()` — **tanpa** segmen `tenantCode` di path sama sekali.
-  Rute lama `/blog/{tenantCode}` (ADR-0009, Issue #540) **tidak diubah**
-  dan tetap memakai `resolvePublicTenantByCode()` (path segment), tidak
-  pernah menyentuh resolver host-based ini.
-- Mode `tenant_code_legacy`, saat diset eksplisit, membuat resolver
-  langsung `null` untuk `/news` (tidak ada tebakan tenant default apa
-  pun) — keputusan sadar operator "tetap wajib `tenantCode` eksplisit di
-  path", didokumentasikan detail di Issue #560's `SKILL.md` §Keputusan
-  `tenant_code_legacy`.
+  Issue #556) — optional, opt-in per deployment. Not set at all
+  (the default for every existing offline/LAN deployment) keeps the
+  legacy behaviour entirely.
+- Under `host_default`, `resolvePublicTenantFromRequest()` (Issue #559)
+  resolves the tenant from the request `Host`/`X-Forwarded-Host` (only if
+  `PUBLIC_TRUST_PROXY=true` is set explicitly) through the table
+  `awcms_tenant_domains` (Issue #557), via a narrow
+  `SECURITY DEFINER` lookup function (one table, four
+  non-sensitive columns, `EXECUTE` revoked from `PUBLIC`). **Status:** the
+  `tenant_domain` module has not been ported into this repo yet; this lookup
+  migration is planned for when the port is done, with migration number
+  **TBD (≠ `033`, which is now used by the `theming` schema)**.
+  Besides `host_default`, there is a tiered fallback (`PUBLIC_DEFAULT_TENANT_ID`/
+  `_CODE`, then `awcms_setup_state`) before finally `null` (a generic 404) — see `.claude/skills/awcms-tenant-domain-routing/SKILL.md`
+  §Resolver for the full order.
+- The new public route `/news` (Issue #560) consumes this resolver through
+  `withNewsTenant()` — with **no** `tenantCode` segment in the path at all.
+  The old route `/blog/{tenantCode}` (ADR-0009, Issue #540) is **unchanged**
+  and keeps using `resolvePublicTenantByCode()` (path segment), never
+  touching this host-based resolver.
+- The `tenant_code_legacy` mode, when set explicitly, makes the resolver
+  return `null` outright for `/news` (no guessing at any default
+  tenant) — a deliberate operator decision of "an explicit `tenantCode` in the
+  path stays mandatory", documented in detail in Issue #560's `SKILL.md`
+  §`tenant_code_legacy` decision.
 
-Ini adalah **ekstensi di atas ADR-0009**, bukan penggantinya: kedua
-mekanisme resolusi (path segment vs host/domain) hidup berdampingan secara
-permanen. `/blog/{tenantCode}` tidak dijadwalkan untuk dihapus.
+This is an **extension on top of ADR-0009**, not a replacement for it: both
+resolution mechanisms (path segment vs host/domain) live side by side
+permanently. `/blog/{tenantCode}` is not scheduled for removal.
 
-## Konsekuensi
+## Consequences
 
-- **Positif:** Deployment online/public/SaaS dengan domain nyata mendapat
-  URL publik yang bersih, SEO-friendly, dan tenant-implisit (`/news/...`,
-  tidak membocorkan `tenant_code` di path) tanpa mengubah topologi
-  LAN-first/offline default AWCMS sama sekali — deployment yang tidak
-  pernah men-set `PUBLIC_*` apa pun tetap identik perilakunya
-  (`config:validate` tetap PASS, `/blog/{tenantCode}` tetap satu-satunya
-  rute publik yang relevan). Perubahan bersifat murni aditif/opt-in.
-- **Negatif/trade-off:** Dua mekanisme resolusi tenant paralel sekarang
-  ada untuk konteks publik (path segment vs host mapping) — modul turunan
-  yang menambah rute publik baru harus sadar memilih salah satu secara
-  eksplisit, bukan mengasumsikan satu mekanisme universal. Mode
-  `host_default` menambah permukaan risiko konfigurasi baru:
-  `PUBLIC_TRUST_PROXY=true` **wajib** hanya diaktifkan di belakang reverse
-  proxy tepercaya yang menimpa (bukan menambahkan/forward) `X-Forwarded-Host`
-  — kesalahan konfigurasi proxy di sini bisa membuka tenant spoofing lewat
-  header yang dipalsukan klien.
-- **Netral:** Ada satu follow-up keamanan yang sudah diidentifikasi dan
-  belum diperbaiki — timing side-channel lintas tiga outcome 404
-  `withNewsTenant` (tenant tidak resolve / `tenant_code_legacy` / module
-  `blog_content` disabled) yang punya biaya latency berbeda-beda, dicatat
-  sebagai **wajib diperbaiki sebelum `PUBLIC_TENANT_RESOLUTION_MODE=host_default`
-  diaktifkan di production** (lihat `.claude/skills/awcms-tenant-domain-routing/SKILL.md`
-  §Follow-up keamanan wajib). Ini tidak memblokir penerimaan ADR ini karena
-  `host_default` belum bisa resolve mapping nyata apa pun sampai Issue #562
-  (API tenant domain) ada.
+- **Positive:** Online/public/SaaS deployments with real domains get
+  public URLs that are clean, SEO-friendly, and tenant-implicit (`/news/...`,
+  not leaking `tenant_code` in the path) without changing AWCMS's default
+  LAN-first/offline topology at all — a deployment that never sets any
+  `PUBLIC_*` behaves identically
+  (`config:validate` still PASSes, `/blog/{tenantCode}` is still the only
+  relevant public route). The change is purely additive/opt-in.
+- **Negative/trade-off:** Two parallel tenant resolution mechanisms now
+  exist for the public context (path segment vs host mapping) — a derived
+  module adding a new public route must consciously pick one
+  explicitly, rather than assuming one universal mechanism. The
+  `host_default` mode adds a new configuration risk surface:
+  `PUBLIC_TRUST_PROXY=true` **must** only be enabled behind a trusted reverse
+  proxy that overwrites (not appends to/forwards) `X-Forwarded-Host`
+  — a proxy misconfiguration here can open up tenant spoofing through a
+  client-forged header.
+- **Neutral:** There is one security follow-up already identified and
+  not yet fixed — a timing side-channel across `withNewsTenant`'s three 404
+  outcomes (tenant does not resolve / `tenant_code_legacy` / the
+  `blog_content` module is disabled) which have different latency costs, recorded
+  as **must be fixed before `PUBLIC_TENANT_RESOLUTION_MODE=host_default`
+  is enabled in production** (see `.claude/skills/awcms-tenant-domain-routing/SKILL.md`
+  §Mandatory security follow-up). This does not block acceptance of this ADR because
+  `host_default` cannot resolve any real mapping until Issue #562
+  (the tenant domain API) exists.
 
-### Isolasi tenant tidak berubah, terlepas dari mode routing
+### Tenant isolation does not change, regardless of routing mode
 
-Mode resolusi tenant untuk rute publik (path segment vs host/domain) **hanya
-menentukan bagaimana `tenant_id` ditemukan** dari request anonim, sebelum
-transaksi `withTenant(...)` dibuka. Setelah `tenant_id` resolve — lewat
-mekanisme mana pun — **seluruh isolasi data tetap murni berbasis
-database/RLS** (ADR-0003): `FORCE ROW LEVEL SECURITY` pada tabel
-tenant-scoped, GUC `app.current_tenant_id` fail-closed, dan peran aplikasi
-`awcms_app` yang bukan superuser/table-owner. Fungsi `SECURITY DEFINER`
-yang direncanakan dipakai resolver host-based (`awcms_resolve_tenant_domain_lookup`,
-migrasi TBD saat modul `tenant_domain` di-port — **bukan `sql/033`, yang kini
-skema `theming`**) tidak akan melonggarkan RLS di jalur query manapun setelahnya — ia
-hanya melakukan satu lookup sempit (`hostname → tenant_id`) yang secara
-desain terjadi _sebelum_ tenant context ada, persis simetris dengan
-lookup `tenant_code → tenant_id` (juga RLS-free, tabel akar) yang sudah
-dipakai `/blog/{tenantCode}` sejak ADR-0009. Menambah mode resolusi baru
-tidak pernah berarti menambah cara baru untuk melewati RLS pada data
-tenant-scoped mana pun.
+The tenant resolution mode for public routes (path segment vs host/domain) **only
+determines how `tenant_id` is found** from an anonymous request, before the
+`withTenant(...)` transaction is opened. Once `tenant_id` resolves — through
+whichever mechanism — **all data isolation remains purely
+database/RLS-based** (ADR-0003): `FORCE ROW LEVEL SECURITY` on
+tenant-scoped tables, the fail-closed `app.current_tenant_id` GUC, and the
+application role `awcms_app` that is neither superuser nor table owner. The
+`SECURITY DEFINER` function planned for use by the host-based resolver
+(`awcms_resolve_tenant_domain_lookup`,
+migration TBD when the `tenant_domain` module is ported — **not `sql/033`, which is
+now the `theming` schema**) will not loosen RLS on any query path afterwards — it
+only performs one narrow lookup (`hostname → tenant_id`) which by
+design happens _before_ any tenant context exists, exactly symmetrical to the
+`tenant_code → tenant_id` lookup (also RLS-free, a root table) already
+used by `/blog/{tenantCode}` since ADR-0009. Adding a new resolution mode
+never means adding a new way to bypass RLS on any tenant-scoped
+data.
 
-## Alternatif yang dipertimbangkan
+## Alternatives considered
 
-- **Menjadikan host/domain-based routing sebagai default/satu-satunya
-  mekanisme, migrasi penuh dari `/blog/{tenantCode}`** — ditolak: memaksa
-  setiap deployment offline/LAN (yang sering tidak punya domain publik
-  sama sekali, doc 18 §Topologi LAN-first) untuk bergantung pada DNS/host
-  header, bertentangan langsung dengan prinsip LAN-first default AWCMS
-  dan dengan Out of Scope epic #555 ("removing legacy `/blog/{tenantCode}`
+- **Making host/domain-based routing the default/only
+  mechanism, with a full migration away from `/blog/{tenantCode}`** — rejected: it forces
+  every offline/LAN deployment (which often has no public domain
+  at all, doc 18 §LAN-first topology) to depend on DNS/host
+  headers, in direct conflict with AWCMS's default LAN-first principle
+  and with epic #555's Out of Scope ("removing legacy `/blog/{tenantCode}`
   routes in the MVP").
-- **Redirect otomatis dari `/blog/{tenantCode}` ke `/news` untuk tenant
-  yang sudah punya domain mapping** — ditolak untuk lingkup ADR ini: rute
-  lama dan baru memakai konteks resolusi tenant yang berbeda (path segment
-  eksplisit vs host implisit); redirect otomatis butuh keputusan produk
-  tambahan (mis. apakah tenantCode di URL boleh "bocor" sesaat sebelum
-  redirect) di luar cakupan issue #561 yang eksplisit docs-only. Dicatat
-  sebagai kemungkinan issue lanjutan, bukan bagian dari keputusan ini.
-- **Subdomain per tenant otomatis (mis. `{tenantCode}.platform.example.com`)
-  tanpa tabel mapping eksplisit** — ditolak: tidak mendukung custom domain
-  pelanggan (`blog.pelanggan-a.com`) yang menjadi salah satu motivasi utama
-  epic #555, dan tetap mewajibkan wildcard TLS yang sama seperti alternatif
-  yang sudah ditolak ADR-0009. Tabel `awcms_tenant_domains` (Issue
-  #557) mendukung keduanya (subdomain **dan** custom domain) lewat
-  `domain_type`, jadi dipilih sebagai mekanisme mapping yang lebih umum.
+- **An automatic redirect from `/blog/{tenantCode}` to `/news` for tenants
+  that already have a domain mapping** — rejected for the scope of this ADR: the old
+  and new routes use different tenant resolution contexts (an explicit path
+  segment vs an implicit host); an automatic redirect needs an additional
+  product decision (e.g. whether the tenantCode in the URL may "leak" briefly before
+  the redirect) beyond the scope of issue #561, which is explicitly docs-only. Recorded
+  as a possible follow-up issue, not part of this decision.
+- **Automatic per-tenant subdomains (e.g. `{tenantCode}.platform.example.com`)
+  without an explicit mapping table** — rejected: it does not support customer
+  custom domains (`blog.pelanggan-a.com`), which is one of the main motivations of
+  epic #555, and it still requires the same wildcard TLS as the alternative
+  already rejected by ADR-0009. The `awcms_tenant_domains` table (Issue
+  #557) supports both (subdomains **and** custom domains) through
+  `domain_type`, so it was chosen as the more general mapping mechanism.

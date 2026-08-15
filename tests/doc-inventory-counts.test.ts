@@ -46,9 +46,17 @@ import { listModules } from "../src/modules";
  * true statement that a total-matching gate would have to reject. Requiring
  * the qualifier is what separates "how many modules exist" from "how many of
  * them do X".
+ *
+ * ENGLISH FORMS, added with ADR-0097. English puts the qualifier BEFORE the
+ * noun — `**22 registered modules**` — so the Indonesian-shaped pattern, which
+ * expects it after, matched nothing at all in a translated document. It did not
+ * fail; it silently stopped covering the file, which is the same
+ * covers-nothing-while-green failure this gate's own header records about
+ * `dot: true`. As the corpus becomes English (ADR-0097) that blind spot would
+ * have grown to the whole corpus, one translated document at a time.
  */
 const MODULE_TOTAL =
-  /\*\*(\d+)\s+modul(?:e)?s?(?:\s+(?:aktif|base|terdaftar))?\*\*(?:\s+(?:aktif|terdaftar|yang terdaftar))?/gi;
+  /\*\*(\d+)\s+(?:registered\s+|active\s+|base\s+)?modul(?:e)?s?(?:\s+(?:aktif|base|terdaftar|registered|active))?\*\*(?:\s+(?:aktif|terdaftar|yang terdaftar|registered))?/gi;
 
 /** `` `sql/001`-`sql/070` `` or `` `sql/001`–`070` `` — an inclusive range. */
 const MIGRATION_RANGE = /`sql\/001`\s*[–-]\s*`(?:sql\/)?(\d{3})`/g;
