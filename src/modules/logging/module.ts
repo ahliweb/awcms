@@ -45,9 +45,7 @@ export const loggingModule = defineModule({
       schedule: {
         mode: "cron",
         expression: "0 3 * * *",
-        backlog: "review-before-first-run",
-        backlogNote:
-          "Deletes audit rows past retention. The first run deletes the entire accumulated excess in one pass, and audit data is exactly what you want when investigating why something was deleted. Take a backup, dry-run, read the count."
+        backlog: "bounded"
       },
       purpose:
         "Delete awcms_audit_events rows past retention (AUDIT_LOG_RETENTION_DAYS, default 730 days) for every active tenant, in bounded batches, recording each purge as its own audit event.",
