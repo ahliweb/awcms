@@ -5,7 +5,7 @@ description: Lapisan cache tepi Varnish SUDAH ADA di repo ini (ADR-0042; `src/li
 
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](SKILL.md)
 
-<!-- i18n-source-hash: sha256:44f8f932154278759f2c6fcdc5ba253aa2a97b73d5679b855ccd16e5a2651e37 -->
+<!-- i18n-source-hash: sha256:bd5fe5eb1aa80dada4ab33ef7bdb3fb24159d92d147d8169c696503a6c21c215 -->
 
 # AWCMS — Edge cache (Varnish)
 
@@ -98,9 +98,9 @@ ketiga yang senyap.
   disangkal komentar ACL itu. Perbaikannya bukan di VCL — tidak bisa, informasi yang dibutuhkan
   tidak sampai ke sana — melainkan di batas kepercayaan yang sesungguhnya: kecualikan
   `/__edge-cache-purge` dan method `BAN` dari rule router publik sepenuhnya
-  (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))` untuk Traefik), sehingga
-  request publik tidak pernah mencapai Varnish sama sekali. Pastikan `EDGE_CACHE_PURGE_ENDPOINT`
-  deployment menunjuk langsung ke Varnish lewat jaringan internal (`http://<varnish-service>:80`,
+  (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))`untuk Traefik), sehingga
+request publik tidak pernah mencapai Varnish sama sekali. Pastikan`EDGE_CACHE_PURGE_ENDPOINT`
+deployment menunjuk langsung ke Varnish lewat jaringan internal (`http://<varnish-service>:80`,
   jangan pernah lewat domain publik) sebelum mengandalkan ini — jika origin sendiri memanggil keluar
   lewat edge, pengecualian ini justru merusak jalur yang sah.
 - **Mock `fetchImpl` TIDAK bisa menangkap kelas bug ini.** Ia memeriksa argumen,

@@ -124,7 +124,7 @@ bun run db:pool:health    # pool sehat terhadap DB target
 > baru butuh entri sendiri atau job diam-diam jalan tanpa konfigurasi.** Ditemukan langsung di
 > produksi: `EDGE_CACHE_MODE`/`EDGE_CACHE_PURGE_ENDPOINT`/`EDGE_CACHE_PURGE_TOKEN` semuanya sudah
 > diset benar di container app, tapi `edge-cache:purge` melaporkan `mode=off
-> endpointConfigured=false` saat dijalankan lewat `run-job.sh` — whitelist `grep -E`
+endpointConfigured=false` saat dijalankan lewat `run-job.sh` — whitelist `grep -E`
 > (`^(DATABASE_URL|...|CLOUDFLARE_)`) memang tak pernah mencantumkan `EDGE_CACHE_`. Tak ada error,
 > tak ada log yang mengarah ke situ — pesan sukses yang TERLIHAT seperti konfigurasi
 > (`skipped — mode=off`) terbaca sebagai "memang sengaja dimatikan", bukan "salah konfigurasi".

@@ -95,9 +95,9 @@ third state.
   only real control**, exactly the single-point-of-failure the ACL comment claims it isn't. The fix
   is not in the VCL — it can't be, the information needed doesn't reach it — it's at the actual
   trust boundary: exclude `/__edge-cache-purge` and method `BAN` from the public router's rule
-  entirely (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))` for Traefik), so a
-  public request never reaches Varnish at all. Confirm the deployment's `EDGE_CACHE_PURGE_ENDPOINT`
-  points at Varnish directly over the internal network (`http://<varnish-service>:80`, never through
+  entirely (`Host(...) && !(Path(\`/__edge-cache-purge\`) || Method(\`BAN\`))`for Traefik), so a
+public request never reaches Varnish at all. Confirm the deployment's`EDGE_CACHE_PURGE_ENDPOINT`
+points at Varnish directly over the internal network (`http://<varnish-service>:80`, never through
   the public domain) before relying on this — if the origin itself calls out through the edge, the
   exclusion breaks the legitimate path too.
 - **A mock `fetchImpl` CANNOT catch this class of bug.** It inspects arguments,
