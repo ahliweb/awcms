@@ -93,7 +93,8 @@ onSubmit("account-preferences-form", async ({ submit }) => {
     () =>
       sendJson("POST", "/api/v1/auth/preferences", {
         locale: selectValueOrNull("account-locale"),
-        theme: selectValueOrNull("account-theme")
+        theme: selectValueOrNull("account-theme"),
+        timeZone: selectValueOrNull("account-time-zone")
       }),
     message(
       "preferencesFailed",
@@ -101,6 +102,43 @@ onSubmit("account-preferences-form", async ({ submit }) => {
     ),
     message("saving", "Saving…")
   );
+});
+
+/**
+ * Selects the browser's own zone in the picker — it does not save.
+ *
+ * Two reasons it stops at selecting. The zone is a GUESS the browser makes from
+ * the operating system, and a guess that silently persists is the class of
+ * defect the old hard-coded UTC existed to avoid; and the reader can see what
+ * was chosen and correct it before pressing Save, which is the difference
+ * between a suggestion and a decision made on their behalf.
+ *
+ * If the detected zone is not among the server-rendered options — a browser
+ * whose tzdata is ahead of the server's — the assignment is REFUSED by the
+ * `<select>` and this reports it rather than leaving the control silently
+ * unchanged, which would read as "the button is broken".
+ */
+onAction("#account-time-zone-detect", async (button) => {
+  const select = document.getElementById("account-time-zone");
+
+  if (!(select instanceof HTMLSelectElement)) return;
+
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  preferencesError.clear();
+  select.value = detected;
+
+  if (select.value !== detected) {
+    preferencesError.show(
+      message(
+        "timeZoneUnknown",
+        "This browser reports a time zone this deployment does not know. Choose the closest one."
+      )
+    );
+  }
+
+  // `onAction` expects a promise; nothing here is asynchronous.
+  await Promise.resolve(button);
 });
 
 // --------------------------------------------------------------- password --

@@ -1038,6 +1038,9 @@ msgstr "Konsumen adalah registri kode sumber yang statis dan sudah ditinjau — 
 msgid "Control"
 msgstr "Kontrol"
 
+msgid "Coordinated Universal Time (UTC)"
+msgstr "Waktu Universal Terkoordinasi (UTC)"
+
 msgid "core"
 msgstr "inti"
 
@@ -3513,6 +3516,9 @@ msgstr "Outbox transaksional dan konsumennya. Event dicatat dalam transaksi yang
 msgid "the Users screen"
 msgstr "layar Pengguna"
 
+msgid "This browser reports a time zone this deployment does not know. Choose the closest one."
+msgstr "Peramban ini melaporkan zona waktu yang tidak dikenal deployment ini. Pilih yang paling dekat."
+
 msgid "This build ships no theme descriptors, so there is nothing to configure."
 msgstr "Build ini tidak mengirimkan deskriptor tema, jadi tidak ada yang bisa dikonfigurasi."
 
@@ -3542,6 +3548,12 @@ msgstr "— penulisan itu membawa client secret, dan form yang mengirimkannya la
 
 msgid "Time range"
 msgstr "Rentang waktu"
+
+msgid "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
+msgstr "Cap waktu di halaman ini dan di daftar sesi Anda ditampilkan dalam zona ini. Biarkan pada UTC dan setiap waktu membawa Z, yaitu yang dilakukan admin sebelum kendali ini ada."
+
+msgid "Time zone"
+msgstr "Zona waktu"
 
 msgid "Title"
 msgstr "Judul"
@@ -3593,6 +3605,9 @@ msgstr "Penangkapan perubahan URL"
 
 msgid "User groups could not be loaded right now. Please try again later."
 msgstr "Grup pengguna tidak dapat dimuat saat ini. Silakan coba lagi nanti."
+
+msgid "Use this device's time zone"
+msgstr "Pakai zona waktu perangkat ini"
 
 msgid "UTC"
 msgstr "UTC"

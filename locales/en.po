@@ -1039,6 +1039,9 @@ msgstr ""
 msgid "Control"
 msgstr ""
 
+msgid "Coordinated Universal Time (UTC)"
+msgstr ""
+
 msgid "core"
 msgstr ""
 
@@ -3526,6 +3529,9 @@ msgstr ""
 msgid "the Users screen"
 msgstr ""
 
+msgid "This browser reports a time zone this deployment does not know. Choose the closest one."
+msgstr ""
+
 msgid "This build ships no theme descriptors, so there is nothing to configure."
 msgstr ""
 
@@ -3554,6 +3560,12 @@ msgid "— those writes carry a client secret, and a form that posts one deserve
 msgstr ""
 
 msgid "Time range"
+msgstr ""
+
+msgid "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
+msgstr ""
+
+msgid "Time zone"
 msgstr ""
 
 msgid "Title"
@@ -3605,6 +3617,9 @@ msgid "URL-change capture"
 msgstr ""
 
 msgid "User groups could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Use this device's time zone"
 msgstr ""
 
 msgid "UTC"

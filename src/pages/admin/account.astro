@@ -42,6 +42,7 @@ import {
   type OwnSsoProviderLink
 } from "../../modules/identity-access/application/tenant-sso";
 import {
+  FALLBACK_TIME_ZONE,
   readPreferences,
   resolvePrincipalIdForIdentity
 } from "../../modules/identity-access/application/principal-preference-store";
@@ -60,15 +61,19 @@ const locale = Astro.locals.locale;
 const { t, tx } = getTranslatorFor(locale);
 
 /**
- * Timestamps render in UTC.
+ * Every zone this runtime can render, for the picker below.
  *
- * Deliberate, and a limitation stated rather than hidden: this base has no
- * per-user time zone, and guessing the server's would make a session's "last
- * seen" wrong in a way nobody could detect — the reader would simply believe it.
- * `Z` on the label says which clock it is. A real per-user zone belongs with the
- * preferences ADR-0095 introduced, and is not invented here.
+ * `Intl.supportedValuesOf` rather than a checked-in list, and rather than the
+ * `Intl` fallback of "whatever the browser has": the SERVER renders the option
+ * list, so the values offered are exactly the values `coerceTimeZone` will
+ * accept on the way back in. A list from anywhere else could offer a zone this
+ * deployment cannot resolve, and the save would fail with the reader looking at
+ * a value the page itself suggested.
+ *
+ * Resolved once at module scope — it is a constant of the runtime, not of the
+ * request.
  */
-const DISPLAY_TIME_ZONE = "UTC";
+const supportedTimeZones = Intl.supportedValuesOf("timeZone");
 
 type SessionRow = {
   id: string;
@@ -87,6 +92,7 @@ let mfaEnabled = false;
 let mfaActivatedAt: string | null = null;
 let storedLocale: string | null = null;
 let storedTheme: string | null = null;
+let storedTimeZone: string | null = null;
 let ssoProviders: OwnSsoProviderLink[] = [];
 let loadError = false;
 
@@ -175,10 +181,27 @@ if (screen.state === "allowed") {
     : null;
   storedLocale = account.preferences.locale;
   storedTheme = account.preferences.theme;
+  storedTimeZone = account.preferences.timeZone;
   ssoProviders = account.sso;
 } else {
   loadError = true;
 }
+
+/**
+ * The clock every timestamp on this page is rendered in.
+ *
+ * This used to be the literal `"UTC"`, with a comment explaining that guessing
+ * the SERVER's zone would make "last seen" wrong in a way nobody could detect —
+ * the reader would simply believe it. That reasoning still holds and is why the
+ * fallback is UTC rather than the host's zone: the only safe answer, absent a
+ * stated preference, is the one that is obviously nobody's local time.
+ *
+ * What changed is that there is now a stated preference to read. A zone the
+ * runtime cannot resolve has already been coerced to `null` by
+ * `readPreferences`, so this cannot hand `formatDateTime` a value that throws
+ * mid-render.
+ */
+const DISPLAY_TIME_ZONE = storedTimeZone ?? FALLBACK_TIME_ZONE;
 
 /**
  * The two concrete modes reuse the `theme` CONTEXT the topbar toggle uses, so
@@ -256,6 +279,9 @@ const themeOptions = [
     data-mfa-verify-failed={t("Could not confirm the code. Please try again.")}
     data-mfa-disable-failed={t(
       "Could not turn off two-factor authentication. Please try again."
+    )}
+    data-time-zone-unknown={t(
+      "This browser reports a time zone this deployment does not know. Choose the closest one."
     )}
     data-mfa-codes-failed={t(
       "Could not generate new recovery codes. Please try again."
@@ -396,6 +422,48 @@ const themeOptions = [
             )
           }
         </p>
+      </div>
+
+      <div class="admin-field">
+        <label for="account-time-zone">{t("Time zone")}</label>
+        <select id="account-time-zone" name="timeZone">
+          <option value="" selected={storedTimeZone === null}>
+            {t("Coordinated Universal Time (UTC)")}
+          </option>
+          {
+            /* Rendered from `Intl.supportedValuesOf`, not a list this repo
+              keeps: the IANA database ships with the runtime and changes
+              several times a year, so a checked-in list would start missing
+              zones. sql/130 constrains only the shape for the same reason.
+
+              Server-rendered rather than built by script, so the control works
+              without JavaScript and so the selected value is correct on first
+              paint. It is ~445 options of SSR HTML on one admin page — no
+              client asset, so it does not touch the budget `bun run build`
+              enforces. */
+          }
+          {
+            supportedTimeZones.map((zone) => (
+              <option value={zone} selected={storedTimeZone === zone}>
+                {zone.replaceAll("_", " ")}
+              </option>
+            ))
+          }
+        </select>
+        <p class="admin-field-hint">
+          {
+            t(
+              "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
+            )
+          }
+        </p>
+        <button
+          type="button"
+          class="btn-secondary"
+          id="account-time-zone-detect"
+        >
+          {t("Use this device's time zone")}
+        </button>
       </div>
 
       <p class="form-error" id="account-preferences-error" role="alert" hidden>

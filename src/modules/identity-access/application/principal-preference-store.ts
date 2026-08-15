@@ -53,20 +53,66 @@ export function coerceThemeMode(value: unknown): ThemeMode | null {
   return isThemeMode(value) ? value : null;
 }
 
+/**
+ * The zone a reader who has chosen nothing sees.
+ *
+ * UTC rather than the server's zone, and that is the whole point of the
+ * feature's absence until now: a server zone renders "last seen 14:02" to a
+ * reader in Jakarta with no marker saying whose 14:02 it is, and they believe
+ * it. UTC is foreign to everybody, which is why it is safe as a default and why
+ * the label says `Z`.
+ */
+export const FALLBACK_TIME_ZONE = "UTC";
+
+/**
+ * Whether THIS runtime can actually render a zone.
+ *
+ * `Intl.DateTimeFormat` throws `RangeError` for an unknown `timeZone`, which
+ * makes it an exact oracle — better than any list this repo could keep, since
+ * the IANA database ships with the runtime and changes several times a year.
+ * sql/130 deliberately constrains only the SHAPE for the same reason.
+ */
+export function isRenderableTimeZone(value: unknown): value is string {
+  if (typeof value !== "string" || value.trim() === "") return false;
+
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Coerces an untrusted zone, mirroring `coerceLocale` and `coerceThemeMode`.
+ *
+ * The read path leans on this: a zone stored by an older tzdata and dropped by
+ * a newer one must degrade to "not chosen" rather than throw while a page is
+ * rendering. A 500 on the account screen because a zone was renamed upstream is
+ * a worse outcome than a timestamp in UTC.
+ */
+export function coerceTimeZone(value: unknown): string | null {
+  return isRenderableTimeZone(value) ? value : null;
+}
+
 export interface PrincipalPreferences {
   readonly locale: Locale | null;
   readonly theme: ThemeMode | null;
+  /** IANA zone, or `null` for "not chosen" → {@link FALLBACK_TIME_ZONE}. */
+  readonly timeZone: string | null;
 }
 
-/** "No opinion on either axis" — the value every failure path returns. */
+/** "No opinion on any axis" — the value every failure path returns. */
 export const NO_PREFERENCES: PrincipalPreferences = {
   locale: null,
-  theme: null
+  theme: null,
+  timeZone: null
 };
 
 interface PreferenceRow {
   locale: string | null;
   theme: string | null;
+  time_zone: string | null;
 }
 
 /**
@@ -86,7 +132,7 @@ export async function readPreferences(
 
   try {
     const rows = (await tx`
-      SELECT locale, theme
+      SELECT locale, theme, time_zone
       FROM awcms_principal_preferences
       WHERE principal_id = ${principalId}
     `) as PreferenceRow[];
@@ -101,7 +147,8 @@ export async function readPreferences(
     // must read as "no opinion" rather than select a catalog that is gone.
     return {
       locale: coerceLocale(row.locale),
-      theme: coerceThemeMode(row.theme)
+      theme: coerceThemeMode(row.theme),
+      timeZone: coerceTimeZone(row.time_zone)
     };
   } catch {
     return NO_PREFERENCES;
@@ -137,9 +184,9 @@ export async function resolvePrincipalIdForIdentity(
 /**
  * Upserts a principal's preferences.
  *
- * Both fields are written on every call, so passing `null` for one is how a
- * reader RESETS that axis to "not chosen" (sql/128 withholds DELETE precisely so
- * this is the only way to express it).
+ * All three fields are written on every call, so passing `null` for one is how
+ * a reader RESETS that axis to "not chosen" (sql/128 withholds DELETE precisely
+ * so this is the only way to express it).
  *
  * `ON CONFLICT` here is the reason sql/128 grants SELECT alongside INSERT: the
  * conflict target has to be read to be resolved, and `GRANT INSERT` alone fails
@@ -155,11 +202,17 @@ export async function writePreferences(
   preferences: PrincipalPreferences
 ): Promise<void> {
   await tx`
-    INSERT INTO awcms_principal_preferences (principal_id, locale, theme)
-    VALUES (${principalId}, ${preferences.locale}, ${preferences.theme})
+    INSERT INTO awcms_principal_preferences (principal_id, locale, theme, time_zone)
+    VALUES (
+      ${principalId},
+      ${preferences.locale},
+      ${preferences.theme},
+      ${preferences.timeZone}
+    )
     ON CONFLICT (principal_id) DO UPDATE
       SET locale = EXCLUDED.locale,
           theme = EXCLUDED.theme,
+          time_zone = EXCLUDED.time_zone,
           updated_at = now()
   `;
 }
