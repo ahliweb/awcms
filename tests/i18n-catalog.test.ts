@@ -25,7 +25,10 @@ import { resolveRequestLocale } from "../src/lib/i18n/request-locale";
 import { catalogKey, parsePo, PoParseError } from "../src/lib/i18n/po";
 import { formatCurrency, formatNumber } from "../src/lib/i18n/format";
 import { getTranslator } from "../src/lib/i18n";
-import { stripComments } from "../scripts/i18n-catalog-check";
+import {
+  placeholderMismatches,
+  stripComments
+} from "../scripts/i18n-catalog-check";
 
 describe("locale vocabulary", () => {
   test("every supported locale declares a plural selector consistent with its form count", () => {
@@ -364,5 +367,101 @@ describe("the catalog gate's comment stripper", () => {
 
     expect(stripped.length).toBe(source.length);
     expect(stripped.split("\n").length).toBe(source.split("\n").length);
+  });
+});
+
+describe("placeholder parity between a msgid and its translation", () => {
+  const entry = (
+    msgid: string,
+    msgstr: string[],
+    extra: { msgidPlural?: string; fuzzy?: boolean } = {}
+  ) => ({
+    msgid,
+    msgidPlural: extra.msgidPlural ?? null,
+    msgstr,
+    fuzzy: extra.fuzzy ?? false
+  });
+
+  test("a faithful translation reports nothing", () => {
+    expect(
+      placeholderMismatches(
+        entry("Allow ({days} days)", ["Izinkan ({days} hari)"])
+      )
+    ).toEqual([]);
+  });
+
+  test("reordering placeholders is allowed — word order is the whole point", () => {
+    // Indonesian does not put these in the English order, and a check that
+    // compared sequences rather than sets would reject every correct
+    // translation of a two-placeholder sentence.
+    expect(
+      placeholderMismatches(
+        entry("{setting} is stored in {table}.", [
+          "Di {table} lah {setting} disimpan."
+        ])
+      )
+    ).toEqual([]);
+  });
+
+  test("a DROPPED placeholder is caught — the silent half of the defect", () => {
+    const [mismatch] = placeholderMismatches(
+      entry("Allow ({days} days)", ["Izinkan (beberapa hari)"])
+    );
+
+    expect(mismatch).toBeDefined();
+    expect(mismatch!.expected).toEqual(["days"]);
+    expect(mismatch!.actual).toEqual([]);
+  });
+
+  test("an INVENTED placeholder is caught — it would print verbatim", () => {
+    const [mismatch] = placeholderMismatches(
+      entry("Connected {linked}", ["Terhubung {tautan}"])
+    );
+
+    expect(mismatch).toBeDefined();
+    expect(mismatch!.actual).toEqual(["tautan"]);
+  });
+
+  test("an untranslated entry cannot disagree with itself", () => {
+    expect(placeholderMismatches(entry("Allow ({days} days)", [""]))).toEqual(
+      []
+    );
+    expect(
+      placeholderMismatches(entry("Allow ({days} days)", ["   "]))
+    ).toEqual([]);
+  });
+
+  test("a fuzzy entry is skipped, as the compiler already treats it untranslated", () => {
+    expect(
+      placeholderMismatches(
+        entry("Allow ({days} days)", ["Izinkan (beberapa hari)"], {
+          fuzzy: true
+        })
+      )
+    ).toEqual([]);
+  });
+
+  test("a plural form may draw from either source string", () => {
+    // `nplurals=1` for Indonesian means the single form has to serve both the
+    // singular and the plural msgid. Comparing it against only `msgid` would
+    // reject a form that legitimately uses the plural source's placeholder.
+    expect(
+      placeholderMismatches(
+        entry("{count} row", ["{count} baris dari {total}"], {
+          msgidPlural: "{count} rows of {total}"
+        })
+      )
+    ).toEqual([]);
+  });
+
+  test("reports the offending form index on a plural entry", () => {
+    const found = placeholderMismatches(
+      entry("{count} row", ["{count} row", "rows"], {
+        msgidPlural: "{count} rows"
+      })
+    );
+
+    expect(found).toHaveLength(1);
+    expect(found[0]!.form).toBe(1);
   });
 });

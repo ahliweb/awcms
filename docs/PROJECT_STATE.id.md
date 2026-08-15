@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:7ddf2a51f8f85b90b4727c5b32b166923363406ebca5cfb202d019e100383199 -->
+<!-- i18n-source-hash: sha256:ef9830fcb7059e83b05ca3912b5172c6e8fec58e788eabeb646000d4ed51f493 -->
 
 # AWCMS — Project State & Continuation
 
@@ -114,7 +114,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Migrasi                            | **129** (`sql/001`–`129`)                                                             | `ls sql/`                                                                               |
 | ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.013 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **56** (30.063 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -593,23 +593,49 @@ pending_verification`.
 
   **Angka yang tersisa, semuanya ber-ledger yang hanya boleh MENYUSUT:**
 
-  | Ledger                                               | Sekarang | Artinya                                                |
-  | ---------------------------------------------------- | -------- | ------------------------------------------------------ |
-  | `i18n:screens:check`                                 | 18 layar | masih merender total 25 literal Inggris                |
-  | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | 718      | msgid dideklarasikan tetapi `msgstr` `id` masih kosong |
+  | Ledger                                               | Sekarang         | Artinya                                                |
+  | ---------------------------------------------------- | ---------------- | ------------------------------------------------------ |
+  | `i18n:screens:check`                                 | 17 layar         | masih merender total 23 literal Inggris                |
+  | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | **0** (dulu 718) | msgid dideklarasikan tetapi `msgstr` `id` masih kosong |
 
-  **Langkah berikutnya, berurutan:**
+  **Langkah 1 DITUTUP — 718 → 0, dan angkanya menyembunyikan satu cacat. 15 Agustus 2026.**
 
-  1. **Terjemahkan 718 entri `id` yang tersisa.** Mayoritasnya kalimat panjang,
-     bukan label. Turunkan angkanya di `scripts/i18n-catalog-check.ts` tiap
-     kali — gerbangnya MENOLAK ledger yang lebih besar dari kenyataan, jadi ia
-     tidak bisa dibiarkan menua.
-  2. **Selesaikan 18 layar** di ledger `i18n:screens:check`. Sisa literalnya
-     adalah kasus yang alat migrasi sengaja tidak sentuh: kalimat yang terbelah
-     oleh `<code>`/`<strong>` di tengah. Perbaikannya adalah menggabungkannya
-     jadi SATU msgid ber-placeholder (`t("… {code} …", { code })`), bukan
-     membungkus tiap penggalan — 12 msgid penggalan yang sudah ada berasal dari
-     kelas yang sama dan sebaiknya ikut digabung.
+  Seluruh 1.258 msgid kini punya terjemahan Indonesia. Yang ditemukan pass ini
+  lebih berharga daripada angkanya: **delapan belas msgid ternyata SUDAH
+  berbahasa Indonesia** — msgid-nya SENDIRI, di `en.po`, berkas yang oleh
+  ADR-0097 disebut sumber bahasa Inggris. `/admin/blog-settings` adalah semuanya:
+  migrasi `t()` massal di layar itu membungkus literal Indonesia yang sudah ada
+  alih-alih menerjemahkannya lebih dulu.
+
+  Karena `en.po` memakai fallback identitas gettext (`msgstr ""` → msgid ITULAH
+  keluarannya), **pembaca Inggris mendapat layar berbahasa Indonesia**, sementara
+  pembaca Indonesia mendapat halaman yang sama secara KEBETULAN — jatuh kembali
+  ke msgid yang kebetulan bahasanya. Dua string lain (`Tersimpan.` dan sebuah
+  pesan gagal simpan) di-hardcode di script klien, berbahasa Indonesia di _setiap_
+  locale tanpa ada yang mendeklarasikannya.
+
+  Kedua locale merender sesuatu yang masuk akal, jadi tidak ada gerbang maupun
+  tinjauan tangkapan layar yang bisa menangkapnya. Satu-satunya artefak yang
+  tidak sepakat adalah penghitung entri belum-diterjemahkan — dan itu pun baru
+  setelah ada yang MEMBACA string yang dihitungnya. Itulah alasan sebuah ledger
+  dipertahankan di 0, bukan dihapus.
+
+  Sebuah cek kelima kini menjaga kelas yang tak bisa dilihat ledger:
+  `i18n:catalog:check` menegakkan **paritas placeholder** — setiap `{name}` di
+  msgid bertahan sampai ke terjemahannya, dan tidak ada yang diada-adakan.
+  `{days}` yang hilang terbaca sempurna sambil kehilangan angkanya; yang
+  diada-adakan dicetak apa adanya oleh `interpolate()`. Dibuktikan pada kedua
+  bentuknya, bukan sekadar hijau.
+
+  2. **Selesaikan 17 layar** di ledger `i18n:screens:check`.
+     `blog-settings.astro` KELUAR dari ledger itu pada pass yang sama dan menjadi
+     contoh kerjanya: sisa literalnya adalah kasus yang alat migrasi sengaja tidak
+     sentuh — kalimat yang terbelah oleh `<code>`/`<strong>` di tengah.
+     Perbaikannya adalah menggabungkannya jadi SATU msgid ber-placeholder
+     (`t("… {code} …", { code })`), bukan membungkus tiap penggalan. Perhatikan
+     ongkos penggabungan: `t()` mengembalikan STRING, jadi elemen `<code>` di
+     sekeliling placeholder-nya hilang. Pertahankan `<a>` sungguhan sebagai label
+     tersendiri alih-alih melipat tautan ke dalam kalimat.
   3. **Locale untuk permukaan PUBLIK — TERBLOKIR oleh keputusan kunci cache,
      dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
      yang badannya berubah menurut cookie locale berarti pembaca Inggris

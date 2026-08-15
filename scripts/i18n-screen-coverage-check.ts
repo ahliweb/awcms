@@ -64,7 +64,6 @@ const SCREENS_ROOT = join(REPO_ROOT, "src", "pages", "admin");
 export const SCREENS_AWAITING_TRANSLATION: readonly string[] = [
   "audit-trail.astro",
   "blog-presentation.astro",
-  "blog-settings.astro",
   "blog-taxonomy.astro",
   "business-scope.astro",
   "form-drafts.astro",
