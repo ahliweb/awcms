@@ -27,6 +27,21 @@ export type PublicPageShellOptions = {
   bodyHtml: string;
   locale: string;
   /**
+   * ADR-0098 decision 5 — the `hreflang` set for this resource, one entry per
+   * supported locale plus `x-default`.
+   *
+   * Expressible only now: before the locale lived in the path there was no
+   * second URL to point at, which is why ADR-0095 recorded `hreflang` as
+   * something waiting on this decision rather than something forgotten.
+   *
+   * `x-default` must name a PREFIXED URL, never the bare alias. The bare path
+   * answers `307` by choosing a locale from the request, so pointing
+   * `x-default` at it would hand the choice of which document is canonical to
+   * the crawler's own `Accept-Language` — reintroducing, at the crawler, exactly
+   * the header-driven variation this ADR removed at the cache.
+   */
+  hreflangAlternates?: readonly { hreflang: string; href: string }[];
+  /**
    * Issue #636 — an already-resolved, verified R2 media object public URL
    * (`seo-rendering.ts`'s `resolveOgImageUrl`), or `null` to omit
    * `og:image`/`twitter:image` entirely. Never a raw/unvalidated URL.
@@ -178,6 +193,13 @@ export function renderPublicPageShell(options: PublicPageShellOptions): string {
     ? `<link rel="canonical" href="${escapeHtml(options.canonicalUrl)}" />`
     : "";
 
+  const hreflangTags = (options.hreflangAlternates ?? [])
+    .map(
+      (alternate) =>
+        `<link rel="alternate" hreflang="${escapeHtml(alternate.hreflang)}" href="${escapeHtml(alternate.href)}" />`
+    )
+    .join("\n");
+
   const robotsTag = options.robotsContent
     ? `<meta name="robots" content="${escapeHtml(options.robotsContent)}" />`
     : "";
@@ -204,6 +226,7 @@ export function renderPublicPageShell(options: PublicPageShellOptions): string {
 <meta name="description" content="${escapeHtml(options.description)}" />
 <link rel="stylesheet" href="${PUBLIC_CONTENT_STYLESHEET_HREF}" />
 ${canonicalTag}
+${hreflangTags}
 ${robotsTag}
 ${ogTags}
 ${jsonLdTag}

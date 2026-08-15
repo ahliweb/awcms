@@ -91,6 +91,8 @@
  * on the ADR-0009 path-scoped surface keep the caching they already had.
  */
 
+import { splitPublicLocalePath } from "../i18n/public-locale-path";
+
 /** A declared cacheable public surface. */
 export type PublicCacheSurface = {
   /** Stable identifier; also the `s:` component of the surrogate key. */
@@ -121,6 +123,22 @@ export type PublicCacheSurface = {
    * into a small finite one.
    */
   allowedQueryParams: readonly string[];
+  /**
+   * Whether this surface's canonical URL carries a locale segment (ADR-0098).
+   *
+   * True for the surfaces that render interface chrome a human reads: their
+   * bodies differ by the reader's language, and since the edge keys on the URL
+   * alone, that difference MUST be in the URL or the cache misdelivers. False
+   * for the machine surfaces — a sitemap, a robots policy and a stylesheet
+   * contain no interface language, and `/feed.xml` already carries its locale
+   * as an allow-listed query parameter, which is the same key in a different
+   * spelling.
+   *
+   * `src/lib/i18n/public-locale-path.ts` owns the path patterns, and
+   * `edge-cache:surfaces:check` fails when the two disagree — so a new cacheable
+   * HTML surface cannot be added without deciding this.
+   */
+  localePrefixed: boolean;
   /** Why this surface is safe to cache — kept next to the declaration on purpose. */
   rationale: string;
 };
@@ -138,6 +156,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 120,
     requiresTenant: true,
     allowedQueryParams: ["page"],
+    localePrefixed: true,
     rationale:
       "Published-post listing for one tenant (ADR-0009 path-scoped). Shorter TTL than discovery because an editor expects a new post to appear promptly even if a purge is missed."
   },
@@ -148,6 +167,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 300,
     requiresTenant: true,
     allowedQueryParams: [],
+    localePrefixed: true,
     rationale:
       "A single published post. Purged by resource key on update/unpublish, so the TTL is only the fallback."
   },
@@ -158,6 +178,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 120,
     requiresTenant: true,
     allowedQueryParams: ["page"],
+    localePrefixed: true,
     rationale:
       "Published-post listing filtered by a taxonomy term; same reasoning as the index."
   },
@@ -168,6 +189,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 300,
     requiresTenant: true,
     allowedQueryParams: [],
+    localePrefixed: false,
     rationale:
       "Per-tenant blog feed and sitemap; content-derived, anonymous, identical for every reader."
   },
@@ -178,6 +200,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 600,
     requiresTenant: true,
     allowedQueryParams: [],
+    localePrefixed: false,
     rationale:
       "The tenant's crawl policy at its verified primary domain root. Derived from config rather than content — it changes only when an operator edits SEO settings, which enqueues the module purge — so it carries the longest TTL here alongside theming tokens."
   },
@@ -188,6 +211,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 300,
     requiresTenant: true,
     allowedQueryParams: [],
+    localePrefixed: false,
     rationale:
       "The sitemap index and its bounded child pages. Identical for every anonymous reader and rebuilt from a content roll-up on each request today, which is the single most repeated piece of database work on the public surface."
   },
@@ -198,6 +222,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 300,
     requiresTenant: true,
     allowedQueryParams: ["locale"],
+    localePrefixed: false,
     rationale:
       "RSS, Atom and JSON syndication of the latest published items. `locale` is the only permitted parameter and it is already validated to a short BCP-47-ish shape by `parseDiscoveryLocaleParam`, so the key space stays small and finite."
   },
@@ -208,6 +233,7 @@ export const PUBLIC_CACHE_SURFACES: readonly PublicCacheSurface[] = [
     ttlSeconds: 600,
     requiresTenant: true,
     allowedQueryParams: [],
+    localePrefixed: false,
     rationale:
       "Published design tokens for a tenant. Changes only on theme publish, which enqueues a module purge — the longest TTL here because it is the most stable and the most frequently re-fetched."
   }
@@ -234,9 +260,42 @@ export function matchPublicCacheSurface(
     (left, right) => right.pattern.source.length - left.pattern.source.length
   );
 
-  return (
-    specificFirst.find((surface) => surface.pattern.test(pathname)) ?? null
-  );
+  const direct =
+    specificFirst.find((surface) => surface.pattern.test(pathname)) ?? null;
+
+  if (direct) {
+    return direct;
+  }
+
+  /**
+   * ADR-0098: the canonical URL of an HTML surface carries a locale segment, so
+   * `/id/blog/acme` must resolve to `blog-index`. Patterns stay written against
+   * the BARE path — the prefix is a property of the URL, not of the surface —
+   * and are retried once against the stripped path.
+   *
+   * This retry is what makes the prefixed URL cacheable at all. Without it every
+   * `/en/…` and `/id/…` request would miss the registry, be stamped
+   * `private, no-store`, and the ADR would have moved the locale into the key
+   * while turning the entire public surface uncacheable — a regression that
+   * reads as a caching bug rather than a routing one.
+   *
+   * The `localePrefixed` guard is why `/en/robots.txt` and `/id/sitemap.xml` do
+   * NOT resolve here: those surfaces have no prefixed spelling and nothing
+   * serves one, so declaring a cacheable alias for them would let the edge store
+   * a 404 under a name the origin never blesses. Every guard above still applies
+   * — traversal and reserved segments are checked against the FULL path, before
+   * either attempt.
+   */
+  const { locale, pathname: bare } = splitPublicLocalePath(pathname);
+
+  if (!locale) {
+    return null;
+  }
+
+  const prefixed =
+    specificFirst.find((surface) => surface.pattern.test(bare)) ?? null;
+
+  return prefixed?.localePrefixed ? prefixed : null;
 }
 
 /**

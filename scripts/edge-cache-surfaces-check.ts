@@ -20,6 +20,7 @@ import {
   PUBLIC_CACHE_SURFACES,
   matchPublicCacheSurface
 } from "../src/lib/edge-cache/surface-registry";
+import { requiresPublicLocalePrefix } from "../src/lib/i18n/public-locale-path";
 import { listModules } from "../src/modules";
 
 /** Roots searched for `enqueueModuleContentPurge` call sites. */
@@ -152,8 +153,183 @@ export const MUST_NEVER_MATCH = [
   "/theming/preview/abc123",
   "/theming/preview-tokens/abc123.css",
   "/search",
-  "/blog/acme/search"
+  "/blog/acme/search",
+  // ADR-0098 gave `matchPublicCacheSurface` a SECOND matching attempt against
+  // the locale-stripped path, and a second attempt is a second chance to match
+  // something it must not. These probe that the retry inherits every guard the
+  // direct match has — traversal, the `/admin` and `/api` reserved segments,
+  // and the `localePrefixed` restriction that keeps machine surfaces from
+  // acquiring a prefixed alias nothing serves.
+  "/en/admin/users",
+  "/id/api/v1/health",
+  "/en/blog/../admin",
+  "/id/blog/%2e%2e/admin",
+  "/en/robots.txt",
+  "/id/sitemap.xml",
+  "/en/feed.xml",
+  "/id/theming/acme/tokens.css",
+  "/en/blog/acme/feed.xml",
+  "/id/blog/acme/search",
+  // Not a locale — `/es` has no catalogue, so it is a tenant code at most and
+  // must not be stripped into a prefixed match for a locale this build has
+  // never heard of.
+  "/es/blog/acme",
+  // Two prefixes is a second canonical name for one resource, which decision 4
+  // forbids outright.
+  "/en/id/blog/acme"
 ] as const;
+
+/**
+ * One representative path per declared surface, used to prove that the registry
+ * and `src/lib/i18n/public-locale-path.ts` still agree about which URLs carry a
+ * locale (ADR-0098).
+ *
+ * Two files decide this and they decide it with different machinery — a
+ * per-entry boolean here, path patterns there — because coupling them into one
+ * shared constant would make the edge cache import the i18n layer for its own
+ * matching, and cycles between those two are how a cache ends up unable to
+ * decide whether a path is cacheable. Independent definitions plus a gate that
+ * fails when they diverge is the trade this repo already makes for its ledgers.
+ *
+ * Drift here is silent in the worst way: a cacheable HTML surface added without
+ * `localePrefixed: true` serves one language to every reader of both URLs, and
+ * a machine surface marked `true` acquires a `/en/…` alias nothing renders.
+ */
+export const LOCALE_PREFIX_PROBES = [
+  "/blog/acme",
+  "/blog/acme/my-post",
+  "/blog/acme/category/news",
+  "/blog/acme/tag/launch",
+  "/blog/acme/feed.xml",
+  "/blog/acme/sitemap-blog.xml",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/sitemap-2.xml",
+  "/feed.xml",
+  "/atom.xml",
+  "/feed.json",
+  "/theming/acme/tokens.css"
+] as const;
+
+/**
+ * Every surface must be reachable by at least one probe, or the agreement check
+ * above is only as complete as somebody remembered to make it.
+ */
+export function findSurfacesWithoutLocaleProbes(
+  surfaces: readonly { key: string }[],
+  probes: readonly string[],
+  match: (pathname: string) => { key: string } | null
+): string[] {
+  const covered = new Set(
+    probes.map((probe) => match(probe)?.key).filter(Boolean) as string[]
+  );
+
+  return surfaces
+    .filter((surface) => !covered.has(surface.key))
+    .map(
+      (surface) =>
+        `Surface "${surface.key}" is matched by no entry in LOCALE_PREFIX_PROBES, so nothing checks whether its locale decision (ADR-0098) is still right.`
+    );
+}
+
+/** Fails when the registry's `localePrefixed` and the path patterns disagree. */
+export function findLocalePrefixDrift(
+  probes: readonly string[],
+  match: (pathname: string) => { key: string; localePrefixed: boolean } | null,
+  requiresPrefix: (pathname: string) => boolean
+): string[] {
+  const failures: string[] = [];
+
+  for (const probe of probes) {
+    const surface = match(probe);
+
+    if (!surface) {
+      failures.push(
+        `LOCALE_PREFIX_PROBES contains "${probe}", which matches no declared surface — the probe is stale and proves nothing.`
+      );
+      continue;
+    }
+
+    const declared = surface.localePrefixed;
+    const derived = requiresPrefix(probe);
+
+    if (declared !== derived) {
+      failures.push(
+        `Surface "${surface.key}" declares localePrefixed=${declared} but src/lib/i18n/public-locale-path.ts ${
+          derived ? "prefixes" : "does not prefix"
+        } "${probe}". One of them is wrong, and the failure would be a cache serving one language to every reader.`
+      );
+    }
+  }
+
+  return failures;
+}
+
+/** Roots scanned for a response that varies on a header ADR-0098 forbids. */
+const VARY_SCAN_ROOTS = ["src"];
+
+/**
+ * ADR-0098 decision 2, enforced at BUILD time.
+ *
+ * `decideCacheability` already refuses such a response at run time, which makes
+ * the mistake safe; this makes it visible. A refusal alone would show up as an
+ * unexplained collapse in hit rate on one surface — a symptom nobody
+ * attributes to a header somebody added three weeks earlier.
+ *
+ * The scan is deliberately blunt: it looks for the two forbidden names appearing
+ * as a `Vary` value anywhere under `src/`, rather than trying to prove which
+ * responses are cacheable. A false positive costs one comment explaining why a
+ * `private, no-store` surface needs it; the false NEGATIVE this avoids costs a
+ * cross-reader disclosure.
+ */
+export async function findForbiddenVaryEmitters(
+  roots: readonly string[] = VARY_SCAN_ROOTS
+): Promise<string[]> {
+  const failures: string[] = [];
+  const pattern =
+    /["'`]\s*[Vv]ary\s*["'`]\s*[,:]\s*["'`]([^"'`]*)["'`]|[Vv]ary\s*:\s*["'`]([^"'`]*)["'`]/g;
+
+  async function walk(dir: string): Promise<void> {
+    let entries;
+
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+
+      if (!/\.(ts|tsx|astro|mts)$/.test(entry.name)) {
+        continue;
+      }
+
+      const source = await readFile(full, "utf8");
+
+      for (const match of source.matchAll(pattern)) {
+        const value = (match[1] ?? match[2] ?? "").toLowerCase();
+
+        if (/\bcookie\b|\baccept-language\b/.test(value)) {
+          failures.push(
+            `${full} sets \`Vary: ${match[1] ?? match[2]}\`. ADR-0098 §2 forbids both on a cacheable public response: Cookie multiplies cache objects by distinct cookie strings and puts a credential-bearing header in the key, and Accept-Language cannot see an explicit language click. The locale belongs in the PATH.`
+          );
+        }
+      }
+    }
+  }
+
+  for (const root of roots) {
+    await walk(root);
+  }
+
+  return failures;
+}
 
 /** Mirrors `sanitizeKeySegment` — a surface key becomes a surrogate-key segment. */
 const SAFE_SURFACE_KEY = /^[A-Za-z0-9._-]{1,128}$/;
@@ -435,7 +611,18 @@ async function main(): Promise<void> {
     ...validateSurfaces(PUBLIC_CACHE_SURFACES, moduleKeys),
     ...findCacheableForbiddenPaths(MUST_NEVER_MATCH, matchPublicCacheSurface),
     ...findOwnersWithoutPurges(PUBLIC_CACHE_SURFACES, purgedKeys),
-    ...findSurfacesWithoutServingRoutes(PUBLIC_CACHE_SURFACES, routesByModule)
+    ...findSurfacesWithoutServingRoutes(PUBLIC_CACHE_SURFACES, routesByModule),
+    ...findSurfacesWithoutLocaleProbes(
+      PUBLIC_CACHE_SURFACES,
+      LOCALE_PREFIX_PROBES,
+      matchPublicCacheSurface
+    ),
+    ...findLocalePrefixDrift(
+      LOCALE_PREFIX_PROBES,
+      matchPublicCacheSurface,
+      requiresPublicLocalePrefix
+    ),
+    ...(await findForbiddenVaryEmitters())
   ];
 
   if (failures.length > 0) {

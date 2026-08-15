@@ -5,6 +5,9 @@ import { withTenantOrThrow } from "../../../lib/database/tenant-context";
 import { resolvePublicTenantByCode } from "../../../lib/tenant/public-tenant-resolver";
 import { escapeHtml } from "../../../lib/html/escape";
 import { resolveRequestOrigin } from "../../../lib/http/site-origin";
+import { DEFAULT_LOCALE } from "../../../lib/i18n/locales";
+import { coerceLocale } from "../../../lib/i18n/negotiate";
+import { buildLocalisedPublicUrls } from "../../../lib/i18n/public-locale-path";
 import {
   notFoundHtmlResponse,
   serverErrorHtmlResponse
@@ -37,7 +40,7 @@ const NEWS_SHARE_CLIENT_SCRIPT_SRC = "/js/news-share.js";
  * 404s (same generic shape) when the tenant's `legacyTenantRouteEnabled`
  * setting is `false`.
  */
-export const GET: APIRoute = async ({ params, request, url }) => {
+export const GET: APIRoute = async ({ locals, params, request, url }) => {
   const tenantCode = params.tenantCode;
   const slug = params.slug;
 
@@ -64,7 +67,23 @@ export const GET: APIRoute = async ({ params, request, url }) => {
         return notFoundHtmlResponse();
       }
 
-      const selfUrl = `${resolveRequestOrigin(url, request)}/blog/${tenantCode}/${post.slug}`;
+      // ADR-0098 — `selfUrl` is the PREFIXED spelling, because it becomes the
+      // canonical URL when the post declares no external one. Leaving it bare
+      // would point every crawler at the alias that answers `307`, and the two
+      // real documents would be indexed as duplicates of a redirect.
+      const urls = buildLocalisedPublicUrls(
+        resolveRequestOrigin(url, request),
+        `/blog/${tenantCode}/${post.slug}`,
+        locals.locale,
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
+      );
+      const blogRootPath = buildLocalisedPublicUrls(
+        resolveRequestOrigin(url, request),
+        `/blog/${tenantCode}`,
+        locals.locale,
+        coerceLocale(tenant.defaultLocale) ?? DEFAULT_LOCALE
+      ).basePath;
+      const selfUrl = urls.canonicalUrl;
       const seoTitle = resolveSeoTitle(post);
       const metaDescription = resolveMetaDescription(post);
       const canonicalUrl = resolveCanonicalUrl(post, selfUrl);
@@ -120,12 +139,13 @@ export const GET: APIRoute = async ({ params, request, url }) => {
   ${contentHtml}
 </article>
 ${shareButtonsHtml}
-<p><a href="/blog/${escapeHtml(tenantCode)}">Back to blog</a></p>`;
+<p><a href="${escapeHtml(blogRootPath)}">Back to blog</a></p>`;
 
       const html = renderPublicPageShell({
         title: seoTitle,
         description: metaDescription,
         canonicalUrl,
+        hreflangAlternates: urls.hreflangAlternates,
         bodyHtml,
         locale: post.locale,
         ogImageUrl: seoMetadata.ogImageUrl,

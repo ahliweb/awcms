@@ -1,11 +1,21 @@
+import type { APIContext } from "astro";
 import { defineMiddleware } from "astro:middleware";
 
 import { resolveSsrContext } from "./lib/auth/ssr-session";
+import { getDatabaseClient } from "./lib/database/client";
 import { annotateEdgeCache } from "./lib/edge-cache/runtime";
+import type { Locale } from "./lib/i18n/locales";
+import { coerceLocale } from "./lib/i18n/negotiate";
+import {
+  carryLocaleThroughRedirect,
+  resolvePublicLocaleRoute
+} from "./lib/i18n/public-locale-path";
 import {
   LOCALE_COOKIE_NAME,
   resolveRequestLocale
 } from "./lib/i18n/request-locale";
+import { log } from "./lib/logging/logger";
+import { resolvePublicTenantByCode } from "./lib/tenant/public-tenant-resolver";
 import { buildSecurityHeaders } from "./lib/security/security-headers";
 import { isTurnstileRequired } from "./lib/security/turnstile";
 import {
@@ -47,6 +57,116 @@ function applyResponseHeaders(
   }
 
   return response;
+}
+
+/**
+ * ADR-0098 decision 3 — the locale-selection redirect.
+ *
+ * `307`, not `301`/`308`: the choice is made from a cookie that a reader can
+ * change at any moment, so it must never be written into a browser's permanent
+ * redirect cache. A `301` here would pin the first-ever visitor's language onto
+ * that browser for the life of its cache, and the language switcher would look
+ * broken with nothing in any log to explain it.
+ *
+ * `private, no-store` is what keeps the cookie out of the shared cache. It is
+ * set here rather than left to `annotateEdgeCache`'s default because this
+ * response is the ONE place a cookie influences a public body, and a default is
+ * the wrong thing to rely on for that.
+ */
+function buildLocaleSelectionRedirect(target: URL): Response {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      Location: target.pathname + target.search,
+      "Cache-Control": "private, no-store"
+    }
+  });
+}
+
+/**
+ * Rewrites a `seo_distribution` redirect's `Location` so a reader who arrived
+ * on `/id/…` stays on `/id/…`. Returns the response untouched when there is
+ * nothing to carry.
+ */
+function withLocaleCarriedThroughRedirect(
+  response: Response,
+  locale: Locale | null
+): Response {
+  const location = response.headers.get("Location");
+
+  if (!locale || !location) {
+    return response;
+  }
+
+  const carried = carryLocaleThroughRedirect(location, locale);
+
+  if (carried === location) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("Location", carried);
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
+/** `/blog/{tenantCode}/…` → `tenantCode`; `null` when the path names none. */
+function readTenantCodeFromPath(pathname: string): string | null {
+  return /^\/blog\/([^/]+)/.exec(pathname)?.[1] ?? null;
+}
+
+/**
+ * The locale for a bare public URL, following ADR-0095's chain as far as a
+ * request with no session can follow it: cookie → tenant default →
+ * `Accept-Language` → `en`. The stored principal preference is skipped because
+ * there is no principal — this is an anonymous public request, and the `/admin`
+ * branch below is where a session exists to read one from.
+ *
+ * The tenant default costs one query, and it is paid ONLY here — on a bare URL
+ * that is about to redirect, never on the prefixed URL that actually serves.
+ * That keeps the promise the provisional-locale block above makes (a served
+ * public request performs no extra query to know its language) while still
+ * honouring the tenant's own default, which is the step an Indonesian tenant's
+ * readers would notice missing.
+ *
+ * Fails OPEN, matching the redirect subsystem beside it: if the lookup throws,
+ * the reader is redirected using cookie and `Accept-Language` alone rather than
+ * being shown a 500 because a language preference could not be read.
+ */
+async function resolvePublicRedirectLocale(
+  context: APIContext
+): Promise<Locale> {
+  const cookieValue = context.cookies.get(LOCALE_COOKIE_NAME)?.value ?? null;
+  const acceptLanguage = context.request.headers.get("accept-language");
+  const tenantCode = readTenantCodeFromPath(context.url.pathname);
+
+  let tenantDefault: string | null = null;
+
+  if (tenantCode && !coerceLocale(cookieValue)) {
+    try {
+      const tenant = await resolvePublicTenantByCode(
+        getDatabaseClient(),
+        tenantCode
+      );
+
+      tenantDefault = tenant?.defaultLocale ?? null;
+    } catch (error) {
+      log("warning", "i18n.public_locale.tenant_default_unavailable", {
+        moduleKey: "i18n",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return resolveRequestLocale({
+    cookieValue,
+    tenantDefault,
+    acceptLanguage
+  });
 }
 
 /**
@@ -133,23 +253,68 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // page), and the 404 capture runs AFTER the response is produced and never
   // throws. The `/admin` guard and the API body-ceiling above are untouched.
   //
-  // `locale` stays `null` here, and the reason has CHANGED: a locale seam now
-  // exists (ADR-0095 sets `locals.locale` above), so this is no longer "there is
-  // nothing to pass". It is a deliberate refusal to make a PUBLIC response vary
-  // by locale before the edge-cache key carries one. Varnish keys on the URL;
-  // handing a locale to redirect matching here would let the first reader's
-  // language decide which redirect every later reader gets. Passing the resolved
-  // locale is a one-line change that must wait for that key (ADR-0095
-  // §"Keputusan 5" lists it as the prerequisite).
+  // The locale is no longer withheld here. ADR-0098 put it in the PATH, which
+  // means it is part of the cache key, which is exactly the condition ADR-0095
+  // §"Keputusan 5" named as the prerequisite. Redirect RULES are still matched
+  // against the bare path (a slug change is not a language change), and the
+  // reader's locale is carried across the hop by rewriting `Location` — see
+  // `carryLocaleThroughRedirect`.
   if (!context.url.pathname.startsWith(PROTECTED_PREFIX)) {
+    const localeRoute = resolvePublicLocaleRoute(context.url.pathname);
+
+    /**
+     * ADR-0098 decision 3 — selection happens by REDIRECT, never by variation.
+     *
+     * This is the one response in the public branch that reads a cookie, and it
+     * is the one response that must never be cached: `buildLocaleSelectionRedirect`
+     * stamps it `private, no-store`, so the cookie decides where a reader goes
+     * without ever deciding what a shared cache holds. Only the prefixed
+     * destination is cacheable.
+     */
+    if (localeRoute.action === "redirect") {
+      const locale = await resolvePublicRedirectLocale(context);
+
+      return finalize(
+        buildLocaleSelectionRedirect(
+          new URL(localeRoute.target(locale) + context.url.search, context.url)
+        )
+      );
+    }
+
+    /**
+     * A prefixed URL: the PATH is authoritative, outranking the cookie that
+     * `resolveRequestLocale` consulted above.
+     *
+     * This inversion is the whole safety property. If the cookie won here, two
+     * readers of `/en/blog/acme` would get different bodies under one cache key
+     * and the first one to miss would decide what the second sees — the
+     * misdelivery ADR-0098 exists to make impossible. The URL is the key, so the
+     * URL chooses the body.
+     */
+    if (localeRoute.action === "serve") {
+      context.locals.locale = localeRoute.locale;
+    }
+
+    const barePathname =
+      localeRoute.action === "serve"
+        ? localeRoute.servePathname
+        : context.url.pathname;
+    const bareUrl = new URL(context.url);
+    bareUrl.pathname = barePathname;
+
     const redirectResult = await resolvePublicRedirectForRequest(
       context.request,
-      context.url,
-      null
+      bareUrl,
+      localeRoute.action === "serve" ? localeRoute.locale : null
     );
 
     if (redirectResult && "redirect" in redirectResult) {
-      return finalize(redirectResult.redirect);
+      return finalize(
+        withLocaleCarriedThroughRedirect(
+          redirectResult.redirect,
+          localeRoute.action === "serve" ? localeRoute.locale : null
+        )
+      );
     }
 
     const notFoundCapture =
@@ -157,7 +322,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
         ? redirectResult.capture
         : null;
 
-    const response = await next();
+    // `next(path)` is a REWRITE, not a second request: the prefixed URL is what
+    // the reader sees and what the edge keys on, while the route file that
+    // serves it stays at `src/pages/blog/…` with no duplicated `[locale]` tree.
+    // Routes read the reader's language from `locals.locale`, set above, rather
+    // than from `Astro.url` — which a rewrite deliberately moves to the bare
+    // path (`Astro.originPathname` keeps the prefixed one).
+    const response =
+      localeRoute.action === "serve"
+        ? await next(barePathname + context.url.search)
+        : await next();
 
     if (notFoundCapture && response.status === 404) {
       await recordPublicNotFound(context.request, notFoundCapture);

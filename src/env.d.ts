@@ -14,9 +14,12 @@ declare global {
        * route that the middleware ran for — and non-optional here precisely so
        * a new route cannot forget to consider it.
        *
-       * Public surfaces do not read this yet: a public page whose body varies by
-       * locale needs the edge-cache key to carry the locale first, which
-       * ADR-0095 §"Keputusan 5" defers rather than assumes.
+       * On a locale-prefixed public URL (ADR-0098) this is read from the PATH
+       * and outranks the cookie, because the path is the cache key: two readers
+       * of one cached URL must get one body, and the URL is what decides which.
+       * On every other surface — `/admin`, `/login`, anything `private,
+       * no-store` — it still comes from the ADR-0095 chain, which is safe there
+       * for the same reason: nothing shared is holding the response.
        */
       locale: Locale;
       /** Populated by `src/middleware.ts` for every request — echoes `X-Correlation-ID` or a fresh UUID. */

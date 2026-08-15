@@ -683,17 +683,45 @@ Accept-Language` bounds the fan-out at two but cannot see an explicit click,
   outstanding reset token, and uniqueness is checked at confirmation so the form
   is not an account-existence oracle.
 
-  3. **Locale for the PUBLIC surface — DECIDED by ADR-0098; was blocked by the cache-key question,
-     and the block is real.** Varnish keys on the URL (ADR-0042). One public URL
-     whose body changes according to a locale cookie means an English reader is
-     served the Indonesian page from the cache. ADR-0095 §"Decision 5" therefore
-     localises NO public surface at all and registers this as a
-     prerequisite: the cache key must carry the locale first, and that is an ADR of its
-     own. What waits behind it: correct `hreflang`
-     (`src/middleware.ts` still passes `locale: null` into redirect resolution
-     — with a comment explaining that this is now a deliberate REFUSAL,
-     not a missing seam), and multi-language content fields for `blog_content`. 4. **Step 4 is CLOSED — `awcms_principal_preferences.time_zone`, sql/130.
+  3. **Step 3 is CLOSED — the locale is in the PATH, ADR-0098 is `Accepted`.
      15 August 2026.**
+
+  `src/lib/i18n/public-locale-path.ts` is the decision made executable: a path
+  goes in, a routing decision comes out, and it cannot read a header. `/blog/…`
+  answers `307 private, no-store` to `/en/…` or `/id/…`; the prefixed URL is
+  rewritten back onto the existing route, so there is no duplicated `[locale]`
+  page tree. On a prefixed URL the PATH sets `locals.locale` and outranks the
+  cookie — that inversion is the whole safety property, because the URL is the
+  cache key and the key must decide the body.
+
+  Three things are worth carrying forward. **The prefix is scoped to CACHEABLE
+  HTML**, not to every public URL: `/admin`, `/login` and `/blog/{t}/search` are
+  `private, no-store` and localise from the cookie exactly as ADR-0098 decision 6
+  says `/admin` may, so prefixing them would cost a redirect and buy nothing;
+  `robots.txt` is protocol-fixed and the feeds already carry `?locale=`, which is
+  the same key in a different spelling. **`matchPublicCacheSurface` needed a
+  second matching attempt** or every prefixed URL would have missed the registry
+  and been stamped uncacheable — the ADR would have moved the locale into the key
+  while turning the public surface uncacheable, a regression that reads as a
+  caching bug rather than a routing one. And **the sitemap had to move with the
+  canonical**: a `<loc>` naming the bare path while the page's own
+  `<link rel="canonical">` names the prefixed one is a disagreement search engines
+  resolve by trusting neither.
+
+  Decision 2 is enforced twice rather than documented once. `decideCacheability`
+  REFUSES a response that varies on `Cookie` or `Accept-Language` (refusing, not
+  stripping — stripping would cache a body its own author said varies), and
+  `edge-cache:surfaces:check` fails the build on the same two names anywhere
+  under `src/`. Both were proven by planting the defect: three spellings of a
+  forbidden `Vary`, a machine surface given a prefixed alias, and a `localePrefixed`
+  flag flipped out of agreement with the path patterns.
+
+  Still open behind it: multi-language content fields for `blog_content` (the
+  reader's interface language and the POST's own language are different axes —
+  `<html lang>` still comes from `post.locale`), and the public chrome itself is
+  not yet translated, so `/en/…` and `/id/…` differ today only in their
+  `hreflang` and canonical. 4. **Step 4 is CLOSED — `awcms_principal_preferences.time_zone`, sql/130.
+  15 August 2026.**
 
   `/admin/account` renders every timestamp in the reader's chosen zone, and the
   fallback stays UTC rather than the host's — the original reasoning ("guessing

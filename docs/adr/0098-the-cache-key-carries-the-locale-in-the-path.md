@@ -2,7 +2,7 @@
 
 # ADR-0098 — The cache key carries the locale, and it carries it in the PATH
 
-- **Status:** Accepted (not yet implemented)
+- **Status:** Accepted
 - **Date:** 2026-08-15
 - **Decision maker:** @ahliweb
 - **Related:** [ADR-0042](0042-varnish-edge-cache-auto-activation.md) (the URL is the cache key), [ADR-0095](0095-the-interface-speaks-the-readers-language.md) §"Decision 5" (registered this as a prerequisite), `infra/varnish/default.vcl`, `src/middleware.ts`

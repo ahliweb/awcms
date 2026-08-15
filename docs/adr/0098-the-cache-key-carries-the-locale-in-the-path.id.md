@@ -1,10 +1,10 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](0098-the-cache-key-carries-the-locale-in-the-path.md)
 
-<!-- i18n-source-hash: sha256:40f9a6024e84309db3f182cc0ac0a46d18fd56a8c0a93dd22c936cbc5599d5ef -->
+<!-- i18n-source-hash: sha256:3249dfe9efc7930a0aab5e42a825609ce8957c003c439d66d6712474cd92243c -->
 
 # ADR-0098 — Kunci cache membawa locale, dan ia membawanya di PATH
 
-- **Status:** Accepted (belum diimplementasikan)
+- **Status:** Accepted
 - **Tanggal:** 2026-08-15
 - **Pengambil keputusan:** @ahliweb
 - **Terkait:** [ADR-0042](0042-varnish-edge-cache-auto-activation.id.md) (URL adalah kunci cache), [ADR-0095](0095-the-interface-speaks-the-readers-language.id.md) §"Keputusan 5" (mencatat ini sebagai prasyarat), `infra/varnish/default.vcl`, `src/middleware.ts`
