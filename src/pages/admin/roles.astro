@@ -36,7 +36,7 @@ import {
 } from "../../modules/identity-access/application/role-admin";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 type RolePermRow = {
   role: RoleView;
@@ -133,9 +133,10 @@ const colCount = canConfigure ? 5 : 4;
     <p class="page-description">
       {
         t(
-          "RBAC roles for this tenant and the permissions granted to each. System roles (such as"
+          "RBAC roles for this tenant and the permissions granted to each. System roles (such as {role}) are protected and cannot be deleted.",
+          { role: "owner" }
         )
-      }<code>{t("owner")}</code>) are protected and cannot be deleted.
+      }
     </p>
   </header>
 
@@ -206,7 +207,11 @@ const colCount = canConfigure ? 5 : 4;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="roles-table">
-          <caption>{roles.length} role(s)</caption>
+          <caption>
+            {tn("{count} role", "{count} roles", roles.length, {
+              count: roles.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Code")}</th>
@@ -276,7 +281,11 @@ const colCount = canConfigure ? 5 : 4;
                         )}
                       </div>
                       <details class="role-permissions">
-                        <summary>Permissions ({granted.length})</summary>
+                        <summary>
+                          {t("Permissions ({count})", {
+                            count: granted.length
+                          })}
+                        </summary>
                         <ul class="perm-list">
                           {granted.length === 0 ? (
                             <li>
@@ -339,7 +348,14 @@ const colCount = canConfigure ? 5 : 4;
         </h2>
         <div class="data-table-scroll">
           <table class="data-table data-table--stack" id="deleted-roles-table">
-            <caption>{deletedRoles.length} deleted role(s)</caption>
+            <caption>
+              {tn(
+                "{count} deleted role",
+                "{count} deleted roles",
+                deletedRoles.length,
+                { count: deletedRoles.length }
+              )}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Code")}</th>

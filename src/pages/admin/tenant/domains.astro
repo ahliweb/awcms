@@ -31,7 +31,7 @@ import {
 } from "../../../modules/tenant-domain/domain/tenant-domain-validation";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. Five write affordances are decided the same
@@ -205,7 +205,11 @@ function statusVariant(status: string): string {
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="tenant-domains-table">
-          <caption>{domains.length} domain(s)</caption>
+          <caption>
+            {tn("{count} domain", "{count} domains", domains.length, {
+              count: domains.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Hostname")}</th>
