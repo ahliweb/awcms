@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ef9830fcb7059e83b05ca3912b5172c6e8fec58e788eabeb646000d4ed51f493 -->
+<!-- i18n-source-hash: sha256:3b4b2dd599b5e00ce01512909f8f8f3c11a0ce820a947760556018635363bdef -->
 
 # AWCMS — Project State & Continuation
 
@@ -535,7 +535,7 @@ must-revalidate` untuk browser. **Jangan** menyimpulkan cache mati dari
   | 5         | TUTUP — `/admin/account` bercabang pada saklar DEPLOYMENT, bukan hanya enrolmen                         |                                                                                |
   | 6         | **TERDIAGNOSIS, bukan diperbaiki — dan ia BUKAN fitur yang hilang**                                     | lihat di bawah                                                                 |
   | 7         | TUTUP — `build:inline-scripts:check` membaca manifes terbangun                                          | menemukan INSTANS KETIGA: `ThemeToggle` inert di produksi berminggu-minggu     |
-  | 8         | TERBUKA — uji asap ber-TLS                                                                              |                                                                                |
+  | 8         | DITUTUP — `tests/tls-terminating-proxy.test.ts` mendirikan proxy TLS nyata di depan origin HTTP polos   | mengembalikan resolver ke `url.protocol` telanjang memerahkan 3 skenarionya    |
   | 9, 10, 11 | KEPUTUSAN, bukan cacat                                                                                  | Varnish sehat; `s-maxage` tetap terblokir antrean purge CF; plafon aset 94%    |
   | 12, 13    | KEPUTUSAN — lihat di bawah                                                                              |                                                                                |
   | 14        | TUTUP — log SELAMAT dari deploy (`ops/ship-logs.sh`, per menit, re-attach saat container berganti)      |                                                                                |
