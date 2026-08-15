@@ -2,7 +2,7 @@
 /**
  * `bun run i18n:catalog:check` — ADR-0095 §"Keputusan 4".
  *
- * Four questions, all mechanical, all pure (source text only — no database, no
+ * Five questions, all mechanical, all pure (source text only — no database, no
  * network):
  *
  * 1. **Are the generated catalogs FRESH?** Recompile every `.po` and compare
@@ -16,6 +16,8 @@
  *    `.po` header is read to be VERIFIED, never evaluated.
  * 4. **How much of `id` is still untranslated?** Reported against a ledger that
  *    may only SHRINK.
+ * 5. **Does every translation carry the SAME `{placeholders}` as its msgid?**
+ *    The one translation defect a machine can see, and it is silent both ways.
  *
  * ## What this gate deliberately does NOT check
  *
@@ -36,7 +38,7 @@ import {
   poPathFor,
   CatalogCompileError
 } from "./i18n-compile";
-import { catalogKey } from "../src/lib/i18n/po";
+import { catalogKey, parsePo } from "../src/lib/i18n/po";
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
@@ -54,28 +56,26 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".astro"];
  * it is how a translation debt becomes permanent, so raising it must be a
  * reviewed edit with a reason rather than the reflex fix for a red gate.
  *
- * **718, raised from 0 — and this is the raise the previous note predicted**:
- * "the check exists for the next wave, when 40 screens' worth of msgids land and
- * some arrive ahead of their translations". Forty admin screens were migrated to
- * `t()` in one pass, declaring 1,074 new msgids; 540 are translated and 718 are
- * not.
- *
- * The alternative was worse in both directions. Holding the migration back until
- * every string had Indonesian would have parked forty screens' worth of
- * mechanical change in a branch nobody could review, and shipping the wrapping
- * WITHOUT declaring the msgids would have left the strings invisible to
+ * **It went 0 → 718 → 0.** The raise to 718 was the one the original note
+ * predicted: forty admin screens were migrated to `t()` in one pass, declaring
+ * 1,074 new msgids, and 718 of them arrived ahead of their Indonesian. Holding
+ * that migration back until every string had a translation would have parked
+ * forty screens of mechanical change in an unreviewable branch, and wrapping the
+ * strings WITHOUT declaring the msgids would have made them invisible to
  * translators — untranslatable rather than untranslated, and reported by nothing.
  *
- * What makes the raise safe is that an untranslated entry is not a broken
- * screen: `createTranslator` falls back to the msgid, which IS the English
- * source text (ADR-0095 §"Keputusan 2"), so an Indonesian reader sees correct
- * English on the parts not yet done rather than a leaked key or an empty
- * element. That property is the whole reason the catalog can land incrementally.
+ * What made the raise safe is that an untranslated entry is not a broken screen:
+ * `createTranslator` falls back to the msgid, which IS the English source text
+ * (ADR-0095 §"Keputusan 2"), so a reader saw correct English on the parts not yet
+ * done rather than a leaked key or an empty element.
  *
- * This number may only go DOWN from here. It is the count the next translation
- * pass is measured against.
+ * That fallback is also why the debt could hide: every screen looked fine in both
+ * locales. Only this counter said otherwise, which is the entire argument for
+ * keeping the ledger at 0 rather than deleting it — at 0 it rejects the NEXT
+ * msgid that lands without Indonesian, on the day it lands, instead of a year
+ * later when somebody counts again.
  */
-const MAX_UNTRANSLATED_ID_ENTRIES = 718;
+const MAX_UNTRANSLATED_ID_ENTRIES = 0;
 
 /**
  * There is deliberately NO exemption list here.
@@ -304,6 +304,97 @@ function harvestUsedMsgids(): UsedMsgid[] {
   return used;
 }
 
+/**
+ * `{name}` placeholders, in the shape `interpolate()` in `catalog.ts` replaces.
+ *
+ * Kept in sync with that regex by construction: if the two ever disagree, this
+ * check reports placeholders the runtime does not substitute, which is a louder
+ * failure than the silent one it exists to prevent.
+ */
+const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
+
+function placeholdersOf(message: string): string[] {
+  return [...message.matchAll(PLACEHOLDER)].map((match) => match[1]!).sort();
+}
+
+/**
+ * Every placeholder in a msgid survives into its translation, and none is
+ * invented.
+ *
+ * This is the one translation defect a machine CAN catch, and it is silent in
+ * both directions. A dropped `{days}` renders a sentence that reads perfectly
+ * and has lost its number; an invented `{dyas}` is left VERBATIM by
+ * `interpolate()` (a deliberate choice there — a placeholder with no value is
+ * printed rather than blanked), so the reader gets a literal brace in the
+ * middle of a sentence. Neither shows up in a screenshot review of the English.
+ *
+ * Only translated entries are compared. An untranslated one falls back to the
+ * msgid and therefore cannot disagree with itself.
+ *
+ * Pure and exported so the test suite can exercise it on hand-built entries —
+ * the alternative, asserting against `locales/id.po`, would go green the moment
+ * the catalog is correct and would never prove the check can FAIL.
+ */
+export interface PlaceholderMismatch {
+  /** Index into `msgstr`; 0 for a singular entry. */
+  readonly form: number;
+  readonly expected: readonly string[];
+  readonly actual: readonly string[];
+}
+
+export function placeholderMismatches(entry: {
+  readonly msgid: string;
+  readonly msgidPlural: string | null;
+  readonly msgstr: readonly string[];
+  readonly fuzzy: boolean;
+}): PlaceholderMismatch[] {
+  if (entry.fuzzy) return [];
+
+  const sources = entry.msgidPlural
+    ? [entry.msgid, entry.msgidPlural]
+    : [entry.msgid];
+
+  // A plural entry's forms may each come from either source string, so the
+  // expected set is their UNION — asserting against one form only would reject
+  // a correct Indonesian plural that draws from the other.
+  const expected = [...new Set(sources.flatMap(placeholdersOf))].sort();
+  const found: PlaceholderMismatch[] = [];
+
+  for (const [form, translation] of entry.msgstr.entries()) {
+    if (translation.trim() === "") continue;
+
+    const actual = placeholdersOf(translation);
+
+    if (actual.join(" ") === expected.join(" ")) continue;
+
+    found.push({ form, expected, actual });
+  }
+
+  return found;
+}
+
+function describePlaceholders(names: readonly string[]): string {
+  return names.length === 0
+    ? "none"
+    : names.map((name) => `{${name}}`).join(", ");
+}
+
+function checkPlaceholderParity(locale: Locale, failures: Failure[]): void {
+  const parsed = parsePo(readFileSync(poPathFor(locale), "utf8"));
+
+  for (const entry of parsed.entries) {
+    for (const mismatch of placeholderMismatches(entry)) {
+      const form =
+        entry.msgstr.length > 1 ? `msgstr[${mismatch.form}]` : "msgstr";
+
+      failures.push({
+        kind: "placeholder mismatch",
+        detail: `locales/${locale}.po line ${entry.line}: ${form} of "${entry.msgid.slice(0, 60)}" carries ${describePlaceholders(mismatch.actual)} but the msgid declares ${describePlaceholders(mismatch.expected)}. A dropped placeholder loses the value silently; an invented one is printed verbatim.`
+      });
+    }
+  }
+}
+
 function main(): void {
   const failures: Failure[] = [];
   const declaredKeysByLocale = new Map<Locale, Set<string>>();
@@ -361,6 +452,9 @@ function main(): void {
         });
       }
     }
+
+    // 5. Placeholder parity — the one translation defect a machine can see.
+    checkPlaceholderParity(locale, failures);
   }
 
   // 2. Every msgid the code uses is declared by EVERY catalog. Checking all

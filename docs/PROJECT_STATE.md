@@ -114,7 +114,7 @@ The used-directly/no-derived-repo governance model (ADR-0034 §2/§3) is **uncha
 | Migrations                        | **129** (`sql/001`–`129`)                                                              | `ls sql/`                                                                               |
 | ADR                               | **0000**–**0097** (`0000` = template; highest ADR status: **Accepted**)                | `ls docs/adr/`                                                                          |
 | Admin screens                     | **43** `.astro` files in `src/pages/admin/`; **0 of 22** modules without `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| `.astro` files                    | **56** (30.013 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
+| `.astro` files                    | **56** (30.063 lines) — on typechecking see §6                                         | `find src -name '*.astro'`                                                              |
 | Gates                             | **50** in the `bun run check` chain                                                    | `scripts.check` in `package.json`, split on `&&`                                        |
 | Contracts                         | Modular per-module OpenAPI + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -593,23 +593,46 @@ pending_verification`.
 
   **The numbers that remain, all carrying a ledger that may only SHRINK:**
 
-  | Ledger                                               | Now        | What it means                                        |
-  | ---------------------------------------------------- | ---------- | ---------------------------------------------------- |
-  | `i18n:screens:check`                                 | 18 screens | still render 25 English literals in total            |
-  | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | 718        | msgids declared but the `id` `msgstr` is still empty |
+  | Ledger                                               | Now             | What it means                                        |
+  | ---------------------------------------------------- | --------------- | ---------------------------------------------------- |
+  | `i18n:screens:check`                                 | 17 screens      | still render 23 English literals in total            |
+  | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | **0** (was 718) | msgids declared but the `id` `msgstr` is still empty |
 
-  **Next steps, in order:**
+  **Step 1 is CLOSED — 718 → 0, and the count was hiding a defect. 15 August 2026.**
 
-  1. **Translate the remaining 718 `id` entries.** Most of them are long sentences,
-     not labels. Lower the number in `scripts/i18n-catalog-check.ts` each
-     time — the gate REJECTS a ledger larger than reality, so it
-     cannot be left to age.
-  2. **Finish the 18 screens** in the `i18n:screens:check` ledger. The literals that
-     remain are the cases the migration tool deliberately did not touch: a sentence split
-     in the middle by `<code>`/`<strong>`. The fix is to merge them
-     into ONE msgid with a placeholder (`t("… {code} …", { code })`), not to
-     wrap each fragment — the 12 fragment msgids that already exist come from
-     the same class and should be merged too.
+  All 1,258 msgids carry Indonesian. What the pass found is worth more than the
+  number: **eighteen msgids were already Indonesian** — the msgid ITSELF, in
+  `en.po`, the file ADR-0097 calls the English source. `/admin/blog-settings`
+  was all of them: its bulk `t()` migration wrapped the screen's existing
+  Indonesian literals instead of translating them first.
+
+  Because `en.po` uses the gettext identity fallback (`msgstr ""` → the msgid IS
+  the output), an **English reader got an Indonesian screen**, while an
+  Indonesian reader got the same page by ACCIDENT — falling back to a msgid that
+  happened to be their language. Two more strings (`Tersimpan.` and a save
+  failure) were hard-coded in the client script, Indonesian in _every_ locale
+  with nothing declaring them.
+
+  Both locales rendered something plausible, so no gate and no screenshot review
+  could have caught it. The only artefact that disagreed was the untranslated
+  counter — and only once somebody read the strings it was counting. That is the
+  argument for keeping a ledger at 0 rather than deleting it.
+
+  A fifth check now guards the class the ledger cannot: `i18n:catalog:check`
+  asserts **placeholder parity** — every `{name}` in a msgid survives into its
+  translation, and none is invented. A dropped `{days}` reads perfectly and has
+  lost its number; an invented one is printed verbatim by `interpolate()`.
+  Proven against both shapes, not merely green.
+
+  2. **Finish the 17 screens** in the `i18n:screens:check` ledger.
+     `blog-settings.astro` came OFF it in the same pass and is the worked example:
+     the literals that remain are the cases the migration tool deliberately did not
+     touch — a sentence split in the middle by `<code>`/`<strong>`. The fix is to
+     merge them into ONE msgid with a placeholder
+     (`t("… {code} …", { code })`), not to wrap each fragment. Note what merging
+     costs: `t()` returns a STRING, so the `<code>` element around the placeholder
+     is lost. Keep a real `<a>` as its own label rather than folding a link into
+     the sentence.
   3. **Locale for the PUBLIC surface — BLOCKED by the cache-key decision,
      and the block is real.** Varnish keys on the URL (ADR-0042). One public URL
      whose body changes according to a locale cookie means an English reader is

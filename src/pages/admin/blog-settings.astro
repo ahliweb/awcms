@@ -108,7 +108,9 @@ const settings: BlogSettingsView | null =
 // A pool/circuit-breaker refusal is NOT a denial, and this screen already said
 // so with a message rather than a bare empty form.
 const loadError =
-  screen.state === "error" ? "Gagal memuat pengaturan blog." : null;
+  screen.state === "error"
+    ? t("Could not load the blog settings. Please try again.")
+    : null;
 const canConfigure = screen.state === "allowed" && screen.data.canConfigure;
 
 const VISIBILITY_OPTIONS = ["public", "private"] as const;
@@ -120,8 +122,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
   {
     !canRead && (
       <p class="admin-empty">
-        {t("Anda tidak punya permission")}
-        <code>{t("blog_content.settings.read")}</code>.
+        {t("You do not have permission to view blog settings.")}
       </p>
     )
   }
@@ -133,22 +134,44 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
       <>
         {!canConfigure && (
           <p class="admin-note">
-            Hanya baca — mengubah butuh{" "}
-            <code>{t("blog_content.settings.configure")}</code>.
+            {t("Read-only — changing these needs {permission}.", {
+              permission: "blog_content.settings.configure"
+            })}
           </p>
         )}
 
+        {/* The client script cannot read the message catalog — it is a server
+             module — so the page renders the strings it needs onto this host and
+             `admin-form-client` consumers read them back, with English
+             fallbacks. Same seam `/admin/account` uses. */}
+        <div
+          id="blog-settings-i18n"
+          hidden
+          data-saving={t("Saving…")}
+          data-saved={t("Saved.")}
+          data-save-failed={t(
+            "Could not save these settings. Please try again."
+          )}
+        />
+
+        {/* Both boxes render EMPTY. `messageBox().show()` overwrites
+             `textContent` and only then unhides, so any text placed here is
+             unreachable by construction — it was `Tersimpan.` before, which is
+             how an Indonesian string survived in this file unnoticed. */}
         <p class="admin-error" id="settings-error" hidden />
-        <p class="admin-note" id="settings-ok" hidden>
-          {t("Tersimpan.")}
-        </p>
+        <p class="admin-note" id="settings-ok" hidden />
 
         <form id="blog-settings-form" class="admin-form">
           <fieldset disabled={!canConfigure}>
-            <legend>{t("Identitas")}</legend>
+            {/* NOT `t("Identity")`: that msgid already exists carrying the
+                 `menu-section` context, where it means the identity_access
+                 module group. Reusing the bare word would put two unrelated
+                 senses on one key — the ambiguity `msgctxt` exists to prevent.
+                 This legend is about the blog's own title and description. */}
+            <legend>{t("Blog identity")}</legend>
 
             <label>
-              {t("Judul blog")}
+              {t("Blog title")}
               <input
                 type="text"
                 name="blogTitle"
@@ -159,16 +182,16 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              {t("Deskripsi")}
+              {t("Description")}
               <textarea name="blogDescription" maxlength="500" rows="3">
                 {settings.blogDescription ?? ""}
               </textarea>
             </label>
 
-            <legend>{t("Daftar")}</legend>
+            <legend>{t("Listing")}</legend>
 
             <label>
-              {t("Post per halaman")}
+              {t("Posts per page")}
               <input
                 type="number"
                 name="postsPerPage"
@@ -180,7 +203,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              {t("Locale bawaan")}
+              {t("Default locale")}
               <input
                 type="text"
                 name="defaultLocale"
@@ -190,7 +213,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              {t("Visibilitas bawaan")}
+              {t("Default visibility")}
               <select name="defaultVisibility">
                 {VISIBILITY_OPTIONS.map((option) => (
                   <option
@@ -215,7 +238,7 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 name="rssEnabled"
                 checked={settings.rssEnabled}
               />
-              {t("RSS aktif")}
+              {t("RSS enabled")}
             </label>
 
             <label class="admin-checkbox">
@@ -224,13 +247,13 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
                 name="sitemapEnabled"
                 checked={settings.sitemapEnabled}
               />
-              {t("Sitemap aktif")}
+              {t("Sitemap enabled")}
             </label>
 
-            <legend>{t("SEO bawaan")}</legend>
+            <legend>{t("SEO defaults")}</legend>
 
             <label>
-              {t("Judul SEO bawaan")}
+              {t("Default SEO title")}
               <input
                 type="text"
                 name="seoDefaultTitle"
@@ -240,29 +263,35 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
             </label>
 
             <label>
-              {t("Deskripsi SEO bawaan")}
+              {t("Default SEO description")}
               <textarea name="seoDefaultDescription" maxlength="300" rows="2">
                 {settings.seoDefaultDescription ?? ""}
               </textarea>
             </label>
 
             <button type="submit" id="blog-settings-save">
-              {t("Simpan")}
+              {t("Save")}
             </button>
           </fieldset>
         </form>
 
+        {/* One msgid per SENTENCE, not one per fragment. This note used to be
+             five `t()` calls interleaved with `<code>`/`<a>`, which asks a
+             translator to reorder a sentence they can only see in pieces \u2014 and
+             Indonesian does not put those pieces in the same order English
+             does. The identifiers are placeholders; the link keeps its own
+             label, because a link is a control rather than a phrase. */}
         <p class="admin-note">
-          {t("Saklar rute publik")}
-          <code>{t("legacyTenantRouteEnabled")}</code>
-          {t("BUKAN di sini \u2014 ia setting modul, disimpan di")}
-          <code>{t("awcms_module_settings")}</code> dan diedit lewat{" "}
-          <a href="/admin/modules/blog_content">
-            {t("/admin/modules/blog_content")}
-          </a>
           {t(
-            ". Dicantumkan sebagai tautan, bukan disalin ke form ini: field yang dicerminkan dua layar adalah field yang basi diam-diam."
-          )}
+            "The public-route switch {setting} is NOT here \u2014 it is a module setting, stored in {table}. It is linked rather than mirrored into this form: a field two screens both render is the field that goes stale silently.",
+            {
+              setting: "legacyTenantRouteEnabled",
+              table: "awcms_module_settings"
+            }
+          )}{" "}
+          <a href="/admin/modules/blog_content">
+            {t("Edit it on the blog_content module screen")}
+          </a>
         </p>
       </>
     )
@@ -285,6 +314,20 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
 
   const errorBox = messageBox("settings-error");
   const okBox = messageBox("settings-ok");
+
+  /**
+   * Translated strings the page rendered for us, with English fallbacks.
+   *
+   * The catalog is a server module: importing it here would ship every locale
+   * to every browser. Until this seam existed these three messages were
+   * hard-coded Indonesian, so an English reader saw Indonesian and an
+   * Indonesian reader saw it only by accident.
+   */
+  function message(key: string, fallback: string): string {
+    const host = document.getElementById("blog-settings-i18n");
+
+    return host?.dataset[key] ?? fallback;
+  }
 
   // NOT `mutateAndReload`: saving settings confirms in place rather than
   // reloading, so the operator can see that the values they just typed are the
@@ -315,7 +358,9 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
     // `lockElement` used to be called with no busy label here, which set the
     // button's text to the string "undefined" for the duration of the save,
     // and threw outright when the button was absent.
-    const unlock = submit ? lockElement(submit, "Saving…") : () => {};
+    const unlock = submit
+      ? lockElement(submit, message("saving", "Saving…"))
+      : () => {};
 
     try {
       const result = await sendJson("PATCH", "/api/v1/blog/settings", body);
@@ -324,11 +369,16 @@ const VISIBILITY_OPTIONS = ["public", "private"] as const;
         // Generic copy only. This used to read `result.message`, a property
         // `sendJson` has never returned — so the fallback below was the only
         // message that could ever appear.
-        errorBox.show("Gagal menyimpan pengaturan. Silakan coba lagi.");
+        errorBox.show(
+          message(
+            "saveFailed",
+            "Could not save these settings. Please try again."
+          )
+        );
         return;
       }
 
-      okBox.show("Tersimpan.");
+      okBox.show(message("saved", "Saved."));
     } finally {
       unlock();
     }
