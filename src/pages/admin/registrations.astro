@@ -119,9 +119,10 @@ const columnCount = canApprove || canReject ? 4 : 3;
   {
     canRead && !selfRegistrationEnabled && (
       <p class="state-notice fade-in-up" id="registrations-disabled">
-        {t("Self-registration is switched off for this deployment (")}
-        <code>{t("AUTH_SELF_REGISTRATION_ENABLED")}</code>), so no new request
-        can arrive. Anything already queued below can still be reviewed.
+        {t(
+          "Self-registration is switched off for this deployment ({setting}), so no new request can arrive. Anything already queued below can still be reviewed.",
+          { setting: "AUTH_SELF_REGISTRATION_ENABLED" }
+        )}
       </p>
     )
   }

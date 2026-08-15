@@ -610,6 +610,9 @@ msgstr ""
 msgid "Accounts that keep password sign-in even when SSO is required. Turning off password sign-in, or requiring SSO, is refused server-side unless at least one of these is still active — that is what stops an identity-provider outage from locking everyone out of the tenant permanently."
 msgstr ""
 
+msgid "A credential that can change data is bound to an address range and expires within {days} days. Leave this empty for the read-only credential."
+msgstr ""
+
 msgid "Action"
 msgstr ""
 
@@ -665,9 +668,6 @@ msgid "A delegation lets the delegate decide on the delegator's behalf while it 
 msgstr ""
 
 msgid "/admin/modules"
-msgstr ""
-
-msgid "/admin/modules/blog_content"
 msgstr ""
 
 msgid "Admin unique users"
@@ -835,9 +835,6 @@ msgstr ""
 msgid "Audit events, newest first"
 msgstr ""
 
-msgid "AUTH_MFA_ENABLED=false"
-msgstr ""
-
 msgid "Author"
 msgstr ""
 
@@ -845,9 +842,6 @@ msgid "Authority"
 msgstr ""
 
 msgid "Authority reference"
-msgstr ""
-
-msgid "AUTH_SELF_REGISTRATION_ENABLED"
 msgstr ""
 
 msgid "AUTH_SSO_ENABLED"
@@ -862,9 +856,6 @@ msgstr ""
 msgid "Awaiting retry"
 msgstr ""
 
-msgid "awcms_module_settings"
-msgstr ""
-
 msgid "Bearers for callers with no human behind them — build feeds, deploy hooks, integrations. A credential authenticates only: every request it makes still passes the same permission and policy checks a person's would. Revoking one takes effect on its next request."
 msgstr ""
 
@@ -875,9 +866,6 @@ msgid "block, the only block type this editor writes."
 msgstr ""
 
 msgid "Blog categories and tags, by name."
-msgstr ""
-
-msgid "blog_content.settings.configure"
 msgstr ""
 
 msgid "Blog identity"
@@ -958,9 +946,6 @@ msgstr ""
 msgid "Cancel rebuild"
 msgstr ""
 
-msgid "cannot be removed"
-msgstr ""
-
 msgid "Categories and tags"
 msgstr ""
 
@@ -980,6 +965,12 @@ msgid "Category"
 msgstr ""
 
 msgid "Change some keys"
+msgstr ""
+
+msgid "Changing the served version affects every tenant, so it can only be done from the platform tenant ({code}) — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
+msgstr ""
+
+msgid "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
 msgstr ""
 
 msgid "Checking this browser…"
@@ -1048,6 +1039,9 @@ msgstr ""
 msgid "Control"
 msgstr ""
 
+msgid "Coordinated Universal Time (UTC)"
+msgstr ""
+
 msgid "core"
 msgstr ""
 
@@ -1096,14 +1090,80 @@ msgstr ""
 msgid "Could not save these settings. Please try again."
 msgstr ""
 
+msgid "{count} office"
+msgid_plural "{count} offices"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} deleted office"
+msgid_plural "{count} deleted offices"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} module"
+msgid_plural "{count} modules"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} deleted role"
+msgid_plural "{count} deleted roles"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} group"
+msgid_plural "{count} groups"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} account configured."
+msgid_plural "{count} accounts configured."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} domain"
+msgid_plural "{count} domains"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} per page"
+msgstr ""
+
+msgid "{count} policy"
+msgid_plural "{count} policies"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} profile"
+msgid_plural "{count} profiles"
+msgstr[0] ""
+msgstr[1] ""
+
 msgid "Countries"
 msgstr ""
+
+msgid "{count} role"
+msgid_plural "{count} roles"
+msgstr[0] ""
+msgstr[1] ""
 
 msgid "Country"
 msgstr ""
 
 msgid "Counts what a purge WOULD do for one tenant-scoped table, right now. Read-only by construction: it writes nothing, not even a run record, and an active legal hold is applied before anything is reported purgeable."
 msgstr ""
+
+msgid "{count} template"
+msgid_plural "{count} templates"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "{count} tenant-scoped"
+msgstr ""
+
+msgid "{count} user"
+msgid_plural "{count} users"
+msgstr[0] ""
+msgstr[1] ""
 
 msgid "Create a group"
 msgstr ""
@@ -1184,9 +1244,6 @@ msgid "Create term"
 msgstr ""
 
 msgid "csv"
-msgstr ""
-
-msgid "current"
 msgstr ""
 
 msgid "Currently served"
@@ -1340,9 +1397,6 @@ msgid "Detail"
 msgstr ""
 
 msgid "Device type"
-msgstr ""
-
-msgid "different"
 msgstr ""
 
 msgid "Dimensions"
@@ -1633,13 +1687,10 @@ msgstr ""
 msgid "form-drafts:purge"
 msgstr ""
 
-msgid "Freshness is computed live from the last successful update, never read back from a stored column — a projection whose updater stopped running ages into"
+msgid "Freshness is computed live from the last successful update, never read back from a stored column — a projection whose updater stopped running ages into {stale} on its own rather than staying frozen at {current}."
 msgstr ""
 
 msgid "From"
-msgstr ""
-
-msgid "from here — the API has no way to clear it, only to change it. Until one is set, the blog follows the tenant default."
 msgstr ""
 
 msgid "Generated by"
@@ -1777,9 +1828,6 @@ msgstr ""
 msgid "IP hash"
 msgstr ""
 
-msgid "is not"
-msgstr ""
-
 msgid "Issue a credential"
 msgstr ""
 
@@ -1870,9 +1918,6 @@ msgstr ""
 msgid "Legacy /blog redirect (inert in this base — no /news routes)"
 msgstr ""
 
-msgid "legacyTenantRouteEnabled"
-msgstr ""
-
 msgid "Legal hold"
 msgstr ""
 
@@ -1942,7 +1987,7 @@ msgstr ""
 msgid "Message"
 msgstr ""
 
-msgid "MFA is enforced for this tenant, but enrolment is closed for this deployment ("
+msgid "MFA is enforced for this tenant, but enrolment is closed for this deployment ({setting}). A user without a factor cannot enrol one, and cannot sign in."
 msgstr ""
 
 msgid "Mime type"
@@ -1966,6 +2011,9 @@ msgstr ""
 msgid "module.ts"
 msgstr ""
 
+msgid "Most recent reconciliation of {projection}."
+msgstr ""
+
 msgid "Multi-factor authentication"
 msgstr ""
 
@@ -1973,9 +2021,6 @@ msgid "Name"
 msgstr ""
 
 msgid "Navigation placement"
-msgstr ""
-
-msgid ". Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
 msgstr ""
 
 msgid "never"
@@ -2009,6 +2054,9 @@ msgid "Next page"
 msgstr ""
 
 msgid "Next retry"
+msgstr ""
+
+msgid "· next retry due:"
 msgstr ""
 
 msgid "No 404s recorded"
@@ -2110,6 +2158,9 @@ msgstr ""
 msgid "No menus yet"
 msgstr ""
 
+msgid "No module is registered under that key. Check the list on"
+msgstr ""
+
 msgid "No modules"
 msgstr ""
 
@@ -2177,6 +2228,9 @@ msgid "No scheduled exports"
 msgstr ""
 
 msgid "No sessions yet."
+msgstr ""
+
+msgid "No {status} comments."
 msgstr ""
 
 msgid "No subject request has been made in this tenant."
@@ -2347,9 +2401,6 @@ msgstr ""
 msgid "Overdue only"
 msgstr ""
 
-msgid "owner"
-msgstr ""
-
 msgid "Owner"
 msgstr ""
 
@@ -2407,6 +2458,9 @@ msgstr ""
 msgid "Payload"
 msgstr ""
 
+msgid "Payload ({summary})"
+msgstr ""
+
 msgid "Pending"
 msgstr ""
 
@@ -2420,6 +2474,9 @@ msgid "permission for this tenant."
 msgstr ""
 
 msgid "Permissions"
+msgstr ""
+
+msgid "Permissions ({count})"
 msgstr ""
 
 msgid "Per-module enablement for this tenant. Core modules cannot be disabled, and a module other enabled modules depend on will refuse to turn off."
@@ -2554,13 +2611,10 @@ msgstr ""
 msgid "Purge permanently"
 msgstr ""
 
-msgid "Push delivery is switched off on this deployment ("
+msgid "Push delivery is switched off on this deployment ({setting} is not {value}), so the dispatcher claims nothing and no notification will be sent. This is the expected state on an offline/LAN deployment."
 msgstr ""
 
 msgid "push:dispatch"
-msgstr ""
-
-msgid "PUSH_ENABLED"
 msgstr ""
 
 msgid "Push is enabled but no valid VAPID key pair is configured, so a browser cannot subscribe. Generate one with"
@@ -2590,7 +2644,7 @@ msgstr ""
 msgid "Raised"
 msgstr ""
 
-msgid "RBAC roles for this tenant and the permissions granted to each. System roles (such as"
+msgid "RBAC roles for this tenant and the permissions granted to each. System roles (such as {role}) are protected and cannot be deleted."
 msgstr ""
 
 msgid "Reach"
@@ -2788,7 +2842,7 @@ msgstr ""
 msgid "Request erasure"
 msgstr ""
 
-msgid "Requesting does not erase anything. A"
+msgid "Requesting does not erase anything. A DIFFERENT person holding the approval permission must decide — the two permissions are a segregation-of-duties conflict, so you will not normally be able to do both."
 msgstr ""
 
 msgid "Request log"
@@ -2908,6 +2962,9 @@ msgstr ""
 msgid "Rows"
 msgstr ""
 
+msgid "Rows (max {max})"
+msgstr ""
+
 msgid "RSS enabled"
 msgstr ""
 
@@ -2921,6 +2978,9 @@ msgid "Run"
 msgstr ""
 
 msgid "Run a reconcile to build the index for the first time."
+msgstr ""
+
+msgid "Run {command} on the deployment to import the vendored dataset."
 msgstr ""
 
 msgid "Run history"
@@ -3043,7 +3103,7 @@ msgstr ""
 msgid "Sections"
 msgstr ""
 
-msgid "Sections, comma-separated, in the order they should render:"
+msgid "Sections, comma-separated, in the order they should render: {sections}. Leave a token empty to inherit the theme default shown as its placeholder."
 msgstr ""
 
 msgid "See diagnostics below"
@@ -3052,7 +3112,7 @@ msgstr ""
 msgid "Seen"
 msgstr ""
 
-msgid "Self-registration is switched off for this deployment ("
+msgid "Self-registration is switched off for this deployment ({setting}), so no new request can arrive. Anything already queued below can still be reviewed."
 msgstr ""
 
 msgid "Send a test notification"
@@ -3100,6 +3160,9 @@ msgstr ""
 msgid "Setting"
 msgstr ""
 
+msgid "Setting a blog theme creates an override that cannot be removed from here — the API has no way to clear it, only to change it. Until one is set, the blog follows the tenant default."
+msgstr ""
+
 msgid "Sever"
 msgstr ""
 
@@ -3115,10 +3178,16 @@ msgstr ""
 msgid "Showing the newest page. Older invitations are reachable through"
 msgstr ""
 
+msgid "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy."
+msgstr ""
+
 msgid "Sidebar"
 msgstr ""
 
 msgid "Sign-in methods"
+msgstr ""
+
+msgid "since {timestamp} UTC"
 msgstr ""
 
 msgid "Sitemap enabled"
@@ -3137,6 +3206,9 @@ msgid "Size"
 msgstr ""
 
 msgid "Skip email confirmation"
+msgstr ""
+
+msgid "{slot} media id"
 msgstr ""
 
 msgid "Slug"
@@ -3172,9 +3244,6 @@ msgstr ""
 msgid "Stable identifier. Cannot be changed after creation."
 msgstr ""
 
-msgid "stale"
-msgstr ""
-
 msgid "Standing site content — about, contact, policies. Pages have a narrower lifecycle than posts:"
 msgstr ""
 
@@ -3188,6 +3257,9 @@ msgid "Status"
 msgstr ""
 
 msgid "Status code"
+msgstr ""
+
+msgid "{status} comments awaiting moderation"
 msgstr ""
 
 msgid "Step"
@@ -3301,6 +3373,9 @@ msgstr ""
 msgid "Tenant user id"
 msgstr ""
 
+msgid "Tenant users, their status, and their assigned roles. Login identifiers are masked here — they are personal data and are never shown in full in a list view."
+msgstr ""
+
 msgid "Terms"
 msgstr ""
 
@@ -3337,6 +3412,9 @@ msgstr ""
 msgid "The built-in role/permission rules apply. Add a custom policy to extend or override them for this tenant."
 msgstr ""
 
+msgid "The code appears once, on this page, and cannot be read again. Hand it to your partner out of band. Access lasts at most {days} days."
+msgstr ""
+
 msgid "The credential acts AS this account. It can never do more than the account can — the permissions below narrow that, they never widen it."
 msgstr ""
 
@@ -3362,6 +3440,9 @@ msgid "The list below shows masked addresses only, so it cannot be searched. Sub
 msgstr ""
 
 msgid "Theme"
+msgstr ""
+
+msgid "Theme default ({value})"
 msgstr ""
 
 msgid "The media library could not be loaded right now. This is a problem reading it, not an empty library — please try again later."
@@ -3412,6 +3493,12 @@ msgstr ""
 msgid "The sync console could not be loaded right now. This is a problem reading it, not a healthy silence — please try again later."
 msgstr ""
 
+msgid "The tenant directory belongs to the platform tenant ({code}), not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+msgstr ""
+
+msgid "The tenant directory belongs to the platform tenant, not to this one. The refusal is about WHERE the action is being made, not who is making it — no grant on this tenant can unlock it."
+msgstr ""
+
 msgid "The tenant directory could not be loaded right now. Please try again later."
 msgstr ""
 
@@ -3440,6 +3527,9 @@ msgid "The transactional outbox and its consumers. Events are recorded in the sa
 msgstr ""
 
 msgid "the Users screen"
+msgstr ""
+
+msgid "This browser reports a time zone this deployment does not know. Choose the closest one."
 msgstr ""
 
 msgid "This build ships no theme descriptors, so there is nothing to configure."
@@ -3472,6 +3562,12 @@ msgstr ""
 msgid "Time range"
 msgstr ""
 
+msgid "Timestamps on this page and in your session list are shown in this zone. Leave it on UTC and every time carries a Z, which is what the admin did before this control existed."
+msgstr ""
+
+msgid "Time zone"
+msgstr ""
+
 msgid "Title"
 msgstr ""
 
@@ -3493,9 +3589,6 @@ msgstr ""
 msgid "Trigger"
 msgstr ""
 
-msgid "true"
-msgstr ""
-
 msgid "Turn off on this device"
 msgstr ""
 
@@ -3505,7 +3598,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-msgid "Type is"
+msgid "Type is {type} and parent is {parent}. Neither can be changed after creation: the API performs no cycle detection, so re-parenting here could create a loop no reader can escape. Delete the term and create it again instead."
 msgstr ""
 
 msgid "UA hash"
@@ -3524,6 +3617,9 @@ msgid "URL-change capture"
 msgstr ""
 
 msgid "User groups could not be loaded right now. Please try again later."
+msgstr ""
+
+msgid "Use this device's time zone"
 msgstr ""
 
 msgid "UTC"
@@ -3563,6 +3659,9 @@ msgid "Visibility"
 msgstr ""
 
 msgid "Visitor analytics collection is disabled (VISITOR_ANALYTICS_ENABLED=false). Figures below reflect only data collected while it was enabled."
+msgstr ""
+
+msgid "Waiting for a decision ({count})"
 msgstr ""
 
 msgid "warehouse"

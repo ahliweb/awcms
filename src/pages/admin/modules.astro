@@ -36,7 +36,7 @@ type ModuleRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. The toggle's two permissions are decided the
@@ -138,7 +138,11 @@ const canToggle = canEnable || canDisable;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="modules-table">
-          <caption>{modules.length} module(s)</caption>
+          <caption>
+            {tn("{count} module", "{count} modules", modules.length, {
+              count: modules.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Key")}</th>

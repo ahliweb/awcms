@@ -29,7 +29,7 @@ import {
 } from "../../modules/identity-access/application/access-directory";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // Issue #450 — the entry decision and the read share ONE transaction, and the
 // decision is the chokepoint's. This screen lists who holds what in the tenant,
@@ -142,7 +142,11 @@ const showActions =
         />
         <div class="data-table-scroll fade-in-up">
           <table class="data-table data-table--stack" id="users-table">
-            <caption>{users.length} user(s)</caption>
+            <caption>
+              {tn("{count} user", "{count} users", users.length, {
+                count: users.length
+              })}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">{t("Login identifier")}</th>

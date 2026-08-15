@@ -31,7 +31,7 @@ type TemplateRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
 // same transaction. The previous `result instanceof Response` branch was dead:
@@ -149,7 +149,11 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="email-templates-table">
-          <caption>{templates.length} template(s)</caption>
+          <caption>
+            {tn("{count} template", "{count} templates", templates.length, {
+              count: templates.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Key")}</th>

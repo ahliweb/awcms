@@ -26,6 +26,7 @@ import { catalogKey, parsePo, PoParseError } from "../src/lib/i18n/po";
 import { formatCurrency, formatNumber } from "../src/lib/i18n/format";
 import { getTranslator } from "../src/lib/i18n";
 import {
+  decodeSourceLiteral,
   placeholderMismatches,
   stripComments
 } from "../scripts/i18n-catalog-check";
@@ -463,5 +464,43 @@ describe("placeholder parity between a msgid and its translation", () => {
 
     expect(found).toHaveLength(1);
     expect(found[0]!.form).toBe(1);
+  });
+});
+
+describe("the catalog gate's source-literal decoder", () => {
+  test("decodes the escapes prettier actually writes", () => {
+    // The `—` case is the one that mattered: prettier rewrites an em dash
+    // inside a `t()` literal into that form, and this admin's prose is full of
+    // them, so 86 msgids were invisible to the "used but not declared" check.
+    expect(decodeSourceLiteral(String.raw`a — b`)).toBe("a — b");
+    expect(decodeSourceLiteral(String.raw`line\nbreak`)).toBe("line\nbreak");
+    expect(decodeSourceLiteral(String.raw`say \"hi\"`)).toBe('say "hi"');
+    expect(decodeSourceLiteral(String.raw`back\\slash`)).toBe("back\\slash");
+  });
+
+  test("a literal with no escape is returned unchanged", () => {
+    expect(decodeSourceLiteral("Log out")).toBe("Log out");
+  });
+
+  test("an UNKNOWN escape skips the literal rather than guessing", () => {
+    // Same choice `decodeEscapes` in po.ts makes. Guessing would let the gate
+    // demand a msgid whose text nobody wrote.
+    expect(decodeSourceLiteral(String.raw`a \q b`)).toBeNull();
+    expect(decodeSourceLiteral(String.raw`emoji \u{1F600}`)).toBeNull();
+    expect(decodeSourceLiteral(String.raw`short \u12`)).toBeNull();
+  });
+
+  test("agrees with the PO parser on the TEXT, though not on the escapes", () => {
+    // The two formats escape DIFFERENTLY, and that is fine — what has to match
+    // is the decoded string, because the two sides are compared as keys. A
+    // `.po` stores a real em dash and its parser rejects `\u` outright; a
+    // TypeScript source stores the `—` form, because that is what prettier
+    // writes. Asserting the escapes were identical would be asserting something
+    // untrue about the formats.
+    const fromSource = decodeSourceLiteral(String.raw`Deleted — not purged`);
+    const fromCatalog = parsePo('msgid "Deleted — not purged"\nmsgstr ""');
+
+    expect(fromSource).toBe("Deleted — not purged");
+    expect(fromSource).toBe(fromCatalog.entries[0]!.msgid);
   });
 });
