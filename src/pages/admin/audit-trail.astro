@@ -190,7 +190,7 @@ function severityVariant(severity: string): string {
           </datalist>
 
           <label for="filter-limit">
-            Rows (max {MAX_LIMIT})
+            {t("Rows (max {max})", { max: MAX_LIMIT })}
             <input
               type="number"
               id="filter-limit"
@@ -322,10 +322,10 @@ function severityVariant(severity: string): string {
 
           {possiblyTruncated && (
             <p class="page-description" id="audit-trail-truncated">
-              Showing the {events.length} most recent matching events. This view
-              is capped at {MAX_LIMIT} rows and cannot page further back — older
-              events exist and are retained according to the audit retention
-              policy.
+              {t(
+                "Showing the {shown} most recent matching events. This view is capped at {max} rows and cannot page further back — older events exist and are retained according to the audit retention policy.",
+                { shown: events.length, max: MAX_LIMIT }
+              )}
             </p>
           )}
         </section>

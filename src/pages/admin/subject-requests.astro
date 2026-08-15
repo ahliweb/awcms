@@ -196,11 +196,9 @@ const pending = requests.filter(
 
             <form id="subject-erase-form" class="admin-form">
               <p class="page-description">
-                {t("Requesting does not erase anything. A")}
-                <strong>{t("different")}</strong> person holding the approval
-                permission must decide — the two permissions are a
-                segregation-of-duties conflict, so you will not normally be able
-                to do both.
+                {t(
+                  "Requesting does not erase anything. A DIFFERENT person holding the approval permission must decide — the two permissions are a segregation-of-duties conflict, so you will not normally be able to do both."
+                )}
               </p>
 
               <label for="subject-erase-user">{t("Tenant user id")}</label>

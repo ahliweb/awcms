@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:6da9dd66cdc0a652f8ab1dbb642743bb6f085185a7e689afafa9312f439c5ae2 -->
+<!-- i18n-source-hash: sha256:d4ae1e9af757a55872933fcf66162a832dd9edf58ee27950542399bc2ebeed06 -->
 
 # AWCMS — Project State & Continuation
 
@@ -111,10 +111,10 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Changeset menunggu (per tipe bump) | _jalankan perintah di kolom kanan_                                                    | `grep -h '^"awcms":' .changeset/*.md \| sort \| uniq -c`                                |
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
-| Migrasi                            | **129** (`sql/001`–`129`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0099** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| Migrasi                            | **130** (`sql/001`–`130`)                                                             | `ls sql/`                                                                               |
+| ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
-| Berkas `.astro`                    | **56** (30.063 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
+| Berkas `.astro`                    | **56** (30.144 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
 | Kontrak                            | OpenAPI modular per-modul + AsyncAPI; `MODULE_CONTRACT_VERSION` **4.0.0**             | `openapi/`, `asyncapi/`, `_shared/module-contract.ts`                                   |
 
@@ -595,7 +595,7 @@ pending_verification`.
 
   | Ledger                                               | Sekarang         | Artinya                                                |
   | ---------------------------------------------------- | ---------------- | ------------------------------------------------------ |
-  | `i18n:screens:check`                                 | 17 layar         | masih merender total 23 literal Inggris                |
+  | `i18n:screens:check`                                 | **0** (dulu 18)  | layar yang masih merender literal template Inggris     |
   | `MAX_UNTRANSLATED_ID_ENTRIES` (`i18n:catalog:check`) | **0** (dulu 718) | msgid dideklarasikan tetapi `msgstr` `id` masih kosong |
 
   **Langkah 1 DITUTUP — 718 → 0, dan angkanya menyembunyikan satu cacat. 15 Agustus 2026.**
@@ -627,19 +627,46 @@ pending_verification`.
   diada-adakan dicetak apa adanya oleh `interpolate()`. Dibuktikan pada kedua
   bentuknya, bukan sekadar hijau.
 
-  2. **Selesaikan 17 layar** di ledger `i18n:screens:check`.
-     `blog-settings.astro` KELUAR dari ledger itu pada pass yang sama dan menjadi
-     contoh kerjanya: sisa literalnya adalah kasus yang alat migrasi sengaja tidak
-     sentuh — kalimat yang terbelah oleh `<code>`/`<strong>` di tengah.
-     Perbaikannya adalah menggabungkannya jadi SATU msgid ber-placeholder
-     (`t("… {code} …", { code })`), bukan membungkus tiap penggalan. Perhatikan
-     ongkos penggabungan: `t()` mengembalikan STRING, jadi elemen `<code>` di
-     sekeliling placeholder-nya hilang. Pertahankan `<a>` sungguhan sebagai label
-     tersendiri alih-alih melipat tautan ke dalam kalimat.
-     **Langkah 3 dan 5 sudah DIPUTUSKAN — [ADR-0098](adr/0098-the-cache-key-carries-the-locale-in-the-path.id.md)
-     dan [ADR-0099](adr/0099-changing-the-login-address-is-account-recovery.id.md),
-     15 Agustus 2026. Keduanya `Accepted (belum diimplementasikan)`, terikat pada
-     artefak yang dijanjikannya oleh `tests/adr-implementation-status.test.ts`.**
+  **Langkah 2 DITUTUP — 18 layar → 0, dan gerbangnya tidak bisa melihat
+  sepertiga pekerjaannya. 15 Agustus 2026.**
+
+  Ke-23 literal ber-ledger itu adalah kelas kalimat-terbelah, digabungkan jadi
+  msgid utuh ber-placeholder. Dua ongkos layak dicatat karena penggabungan
+  berikutnya akan membayarnya lagi: `t()` mengembalikan STRING, jadi
+  `<code>`/`<strong>` di sekeliling placeholder hilang (pertahankan `<a>`
+  sungguhan sebagai label tersendiri alih-alih melipat tautan ke dalam kalimat);
+  dan bila nilai yang disisipkan OPSIONAL, satu msgid `{code}` akan merender
+  "tenant platform ()" — bentuk itu butuh DUA msgid utuh, satu per cabang.
+
+  **Yang tidak dihitung ledger, dan tak ada yang akan menghitungnya:** pemindai
+  hanya membaca teks template yang mengikuti sebuah TAG. Teks setelah EKSPRESI —
+  `<caption>{roles.length} role(s)</caption>` — tidak terlihat. Sembilan belas
+  string seperti itu ditemukan dengan tangan di 15 layar yang sudah disebut
+  selesai oleh gerbangnya, semuanya merender bahasa Inggris kepada pembaca
+  Indonesia. Semuanya diperbaiki (caption `{n} thing(s)` menjadi plural `tn()`
+  sungguhan — sekaligus pemakaian pertama jalur plural lewat perjalanan
+  bolak-balik `.po`). PEMINDAINYA tetap tidak bisa melihat kelas ini:
+  melebarkannya akan mulai menangkap template literal dan ternary berantai
+  sebagai prosa, yaitu kegagalan false-positive yang ditahan `CODE_SHAPED`, jadi
+  pelebaran itu jadi perubahan tersendiri dengan mutation test-nya sendiri.
+  Sampai saat itu, ledger kosong berarti "tidak ada teks tak-diterjemahkan
+  setelah sebuah tag", yang lebih sempit daripada "tidak ada yang
+  tak-diterjemahkan" — batasannya ditulis di header gerbangnya, bukan
+  ditinggalkan untuk ditemukan pembaca berikutnya.
+
+  **Dan gerbang katalog buta terhadap 86 msgid.** Pemanen literalnya
+  mengecualikan string apa pun yang memuat backslash, sedangkan prettier menulis
+  ulang em dash di dalam `t()` menjadi `\u2014` — sehingga msgid terpanjang dan
+  paling mirip prosa tidak pernah DIWAJIBKAN ada. Akibatnya: `users.astro`
+  memanggil `t()` pada kalimat yang tidak dideklarasikan di katalog mana pun,
+  merender bahasa Inggris di setiap locale, sementara kedua ledger membaca 0.
+  Pemanennya kini mendekode escape; dibuktikan dengan menghapus satu msgid
+  ber-escape lalu melihat pola lama meloloskannya diam-diam.
+
+  **Langkah 3 dan 5 sudah DIPUTUSKAN — [ADR-0098](adr/0098-the-cache-key-carries-the-locale-in-the-path.id.md)
+  dan [ADR-0099](adr/0099-changing-the-login-address-is-account-recovery.id.md),
+  15 Agustus 2026. Keduanya `Accepted (belum diimplementasikan)`, terikat pada
+  artefak yang dijanjikannya oleh `tests/adr-implementation-status.test.ts`.**
 
   **Langkah 3 — locale masuk ke PATH, dan kunci cache tidak disentuh.**
   `Vary: Cookie` melipatgandakan objek cache menurut banyaknya string cookie
@@ -671,12 +698,25 @@ Accept-Language` membatasi fan-out pada dua tetapi tak bisa melihat klik
      (`src/middleware.ts` masih meneruskan `locale: null` ke resolusi redirect
      — dengan komentar yang menjelaskan bahwa ini kini PENOLAKAN yang disengaja,
      bukan ketiadaan seam), dan field konten multi-bahasa untuk `blog_content`.
-  4. **Zona waktu per-pengguna.** `/admin/account` merender stempel waktu dalam
-     UTC dan mengatakannya; menebak zona server akan membuat "terakhir dilihat"
-     salah tanpa ada yang bisa mendeteksinya. Ia milik tabel preferensi yang
-     sudah dibuat ADR-0095.
-  5. **Penggantian alamat login.** Sengaja DI LUAR ADR-0096: ia pemulihan akun,
-     bukan penyuntingan profil, dan menuntut pembuktian kepemilikan alamat baru.
+     **Langkah 4 DITUTUP — `awcms_principal_preferences.time_zone`, sql/130.
+     15 Agustus 2026.**
+
+  `/admin/account` merender setiap stempel waktu dalam zona pilihan pembacanya,
+  dan fallback-nya tetap UTC alih-alih zona host — alasan aslinya ("menebak zona
+  server akan membuat 'terakhir dilihat' salah tanpa ada yang bisa
+  mendeteksinya") justru itulah sebabnya. Yang berubah: kini ada preferensi
+  tersurat untuk dibaca, bukan tebakan untuk dibuat.
+
+  Dua hal layak dibawa ke depan. CHECK-nya adalah cek BENTUK dan migrasinya
+  menyatakannya: 445 zona, daftar milik tzdata yang berubah beberapa kali
+  setahun, berarti constraint yang mengenumerasi akan mulai MENOLAK nilai sah
+  dalam hitungan bulan — dan CHECK tidak boleh membaca `pg_timezone_names`.
+  Otoritas soal bisa-dirender adalah `Intl.DateTimeFormat`, yang melempar untuk
+  zona tak dikenal. Dan karena ia melempar, `readPreferences` melakukan koersi
+  saat KELUAR: zona yang dibuang tzdata baru harus terbaca "tidak dipilih", atau
+  layar akun 500 tepat pada hari seseorang membukanya untuk memeriksa dugaan
+  pembobolan. 5. **Penggantian alamat login.** Sengaja DI LUAR ADR-0096: ia pemulihan akun,
+  bukan penyuntingan profil, dan menuntut pembuktian kepemilikan alamat baru.
 
 - **PEMBLOKIR OPERASIONAL — image produksi TIDAK BISA menjalankan satu pun dari
   29 job terdaftar. Ditemukan 14 Agustus 2026 saat men-deploy v9.0.0.**

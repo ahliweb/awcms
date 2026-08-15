@@ -294,7 +294,9 @@ const columnCount = canDelete ? 7 : 6;
                           editing a payload is the owning wizard's job. */}
                       <details>
                         <summary>
-                          Payload ({payloadSummary(draft.payload)})
+                          {t("Payload ({summary})", {
+                            summary: payloadSummary(draft.payload)
+                          })}
                         </summary>
                         {/* `set:text` rather than a child expression: <pre>
                             preserves whitespace, and prettier reindents .astro

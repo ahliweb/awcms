@@ -23,7 +23,7 @@ type PartyRow = {
 };
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 // R3 (#450) — the entry decision is the chokepoint's, and the read runs in the
 // same transaction. `canCreate` is decided the same way, so a tenant's ABAC
@@ -130,7 +130,11 @@ const canCreate = screen.state === "allowed" && screen.data.canCreate;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="profiles-table">
-          <caption>{profiles.length} profile(s)</caption>
+          <caption>
+            {tn("{count} profile", "{count} profiles", profiles.length, {
+              count: profiles.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Display name")}</th>

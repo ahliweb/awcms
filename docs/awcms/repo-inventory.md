@@ -8,11 +8,11 @@
 | Aspect                              | Value |
 | ----------------------------------- | ----- |
 | Registered modules                  | 22    |
-| Migrations                          | 129   |
+| Migrations                          | 130   |
 | `awcms_*` tables                    | 148   |
 | Tables with `FORCE` RLS             | 130   |
 | RLS-free tables (global, by design) | 18    |
-| Test files                          | 394   |
+| Test files                          | 395   |
 | Route files                         | 361   |
 | ADR                                 | 200   |
 
@@ -176,6 +176,7 @@
 | 127 | `sql/127_awcms_worker_on_conflict_select_grants.sql`               |
 | 128 | `sql/128_awcms_principal_preferences.sql`                          |
 | 129 | `sql/129_awcms_worker_lifecycle_purge_grants.sql`                  |
+| 130 | `sql/130_awcms_principal_time_zone.sql`                            |
 
 ### Tables & Row-Level Security
 
@@ -334,7 +335,7 @@
 
 | Directory     | Test files |
 | ------------- | ---------- |
-| `(root)`      | 338        |
+| `(root)`      | 339        |
 | `e2e`         | 12         |
 | `integration` | 43         |
 | `unit`        | 1          |

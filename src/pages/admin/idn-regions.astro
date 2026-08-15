@@ -215,7 +215,9 @@ const numberFormatter = new Intl.NumberFormat("en-US");
             </span>
             {activeDataset && (
               <span class="stat-hint">
-                since {formatTimestamp(activeDataset.activatedAt)} UTC
+                {t("since {timestamp} UTC", {
+                  timestamp: formatTimestamp(activeDataset.activatedAt)
+                })}
               </span>
             )}
           </div>
@@ -249,17 +251,19 @@ const numberFormatter = new Intl.NumberFormat("en-US");
     withheldByPlatformScope && (
       <section class="admin-section fade-in-up" id="idn-regions-scope-notice">
         <h2 class="admin-section-title">{t("Read-only here")}</h2>
+        {/* TWO whole msgids rather than one sentence with an optional
+            fragment spliced into its middle. The tenant code is not always
+            resolvable, and a single `{code}` msgid would render "platform
+            tenant () —" when it is not. */}
         <p class="page-description">
-          Changing the served version affects every tenant, so it can only be
-          done from the platform tenant
-          {platformTenantCode && (
-            <>
-              {" "}
-              (<span class="cell-code">{platformTenantCode}</span>)
-            </>
-          )}
-          — not from this one. Your role carries the permission; the action is
-          refused because of where it is being made, not who is making it.
+          {platformTenantCode
+            ? t(
+                "Changing the served version affects every tenant, so it can only be done from the platform tenant ({code}) — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it.",
+                { code: platformTenantCode }
+              )
+            : t(
+                "Changing the served version affects every tenant, so it can only be done from the platform tenant — not from this one. Your role carries the permission; the action is refused because of where it is being made, not who is making it."
+              )}
         </p>
       </section>
     )
@@ -330,11 +334,10 @@ const numberFormatter = new Intl.NumberFormat("en-US");
                         {t("No versions imported")}
                       </span>
                       <span class="empty-state-text">
-                        {t("Run")}
-                        <code>
-                          {t("bun run idn-regions:import -- --commit")}
-                        </code>{" "}
-                        on the deployment to import the vendored dataset.
+                        {t(
+                          "Run {command} on the deployment to import the vendored dataset.",
+                          { command: "bun run idn-regions:import -- --commit" }
+                        )}
                       </span>
                     </div>
                   </td>

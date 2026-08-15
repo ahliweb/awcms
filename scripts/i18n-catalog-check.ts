@@ -129,14 +129,34 @@ function listSourceFiles(): string[] {
 }
 
 /**
- * A single-quoted/double-quoted/backticked string literal, with no escape and no
- * interpolation. Anything more complex is left UNHARVESTED rather than parsed
- * approximately: a harvester that guesses produces phantom msgids, and a gate
- * that reports a msgid nobody wrote trains its readers to widen the ignore list
- * until it asks nothing (the lesson `permission-enforcement-check.ts` paid for
- * four times).
+ * A single-quoted/double-quoted/backticked string literal with no
+ * interpolation. Simple escapes ARE accepted and decoded; anything more complex
+ * is left UNHARVESTED rather than parsed approximately, because a harvester
+ * that guesses produces phantom msgids, and a gate that reports a msgid nobody
+ * wrote trains its readers to widen the ignore list until it asks nothing (the
+ * lesson `permission-enforcement-check.ts` paid for four times).
+ *
+ * ## Why escapes had to be accepted rather than skipped
+ *
+ * This pattern originally excluded `\` outright, and the rejection was
+ * described as conservative. It was not. **Prettier rewrites an em dash inside
+ * a `t()` literal as `—`**, and this admin's prose is full of em dashes —
+ * so 86 distinct msgids were invisible to check 2 below, which is the check
+ * that makes a msgid REQUIRED to exist in the catalogs.
+ *
+ * The consequence is silent and one-directional: an unharvested msgid is never
+ * demanded, so it is never added to `locales/`, so `createTranslator` falls
+ * back to the msgid — correct English, forever, in every locale, with the
+ * untranslated ledger reading 0 the whole time. The strings most likely to be
+ * hit are the LONG ones, which is exactly where a reader most needs their own
+ * language.
+ *
+ * Decoding matches `decodeEscapes` in `src/lib/i18n/po.ts` deliberately: the
+ * comparison is only sound if source and catalog agree on what the text IS. An
+ * unknown escape still skips the literal, for the same reason the `.po` parser
+ * rejects one — it is far more likely a typo than an intentional backslash.
  */
-const LITERAL = String.raw`(?:"([^"\\\n]*)"|'([^'\\\n]*)'|\x60([^\x60\\\n$]*)\x60)`;
+const LITERAL = String.raw`(?:"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|\x60((?:[^\x60\\\n$]|\\.)*)\x60)`;
 
 const T_CALL = new RegExp(String.raw`\bt\(\s*${LITERAL}`, "g");
 const TN_CALL = new RegExp(
@@ -148,13 +168,87 @@ const TX_CALL = new RegExp(
   "g"
 );
 
+/**
+ * Decodes the escapes a TypeScript/Astro string literal may carry, or returns
+ * `null` for one this harvester will not guess at.
+ *
+ * The two sides are compared as KEYS, so a disagreement about what a sequence
+ * MEANS would report a msgid as undeclared while the catalog holds it under the
+ * text it actually renders — a false accusation, which is the failure mode this
+ * file's header warns against.
+ *
+ * It is not the same decoder as `decodeEscapes` in `src/lib/i18n/po.ts`, and it
+ * must not be: the two FORMATS escape differently. A `.po` stores a real em
+ * dash and rejects `\u` outright; a TypeScript literal stores `—`, because
+ * that is what prettier writes. What has to agree is the decoded text, not the
+ * accepted syntax.
+ */
+export function decodeSourceLiteral(raw: string): string | null {
+  let out = "";
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index]!;
+
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+
+    const next = raw[index + 1];
+    index += 1;
+
+    switch (next) {
+      case "n":
+        out += "\n";
+        break;
+      case "t":
+        out += "\t";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case '"':
+        out += '"';
+        break;
+      case "'":
+        out += "'";
+        break;
+      case "`":
+        out += "`";
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case "u": {
+        // `\uXXXX` only. `\u{1F600}` is valid TypeScript but does not appear
+        // here, and guessing at a form the decoder has not been proven against
+        // is how a harvester starts inventing msgids.
+        const hex = raw.slice(index + 1, index + 5);
+
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
+
+        out += String.fromCharCode(Number.parseInt(hex, 16));
+        index += 4;
+        break;
+      }
+      default:
+        return null;
+    }
+  }
+
+  return out;
+}
+
 function literalOf(
   match: RegExpMatchArray,
   offset: number
 ): string | undefined {
-  return (
-    match[offset + 1] ?? match[offset + 2] ?? match[offset + 3] ?? undefined
-  );
+  const raw =
+    match[offset + 1] ?? match[offset + 2] ?? match[offset + 3] ?? undefined;
+
+  if (raw === undefined) return undefined;
+
+  return decodeSourceLiteral(raw) ?? undefined;
 }
 
 /**

@@ -251,7 +251,7 @@ const hasTenantWideHold = holds.some(
             <span class="stat-label">{t("Registered tables")}</span>
             <span class="stat-value">{registryRows.length}</span>
             <span class="stat-hint">
-              {tenantDescriptors.length} tenant-scoped
+              {t("{count} tenant-scoped", { count: tenantDescriptors.length })}
             </span>
           </div>
           <div class="stat-card">

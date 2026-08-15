@@ -30,7 +30,7 @@ import {
 } from "../../modules/identity-access/application/user-group-admin";
 
 const ssr = Astro.locals.ssrContext!;
-const { t } = getTranslatorFor(Astro.locals.locale);
+const { t, tn } = getTranslatorFor(Astro.locals.locale);
 
 const screen = await loadAdminScreen({
   ssr,
@@ -168,7 +168,11 @@ const colCount = canMutate ? 6 : 5;
     canRead && !loadError && (
       <div class="data-table-scroll fade-in-up">
         <table class="data-table data-table--stack" id="user-groups-table">
-          <caption>{groups.length} group(s)</caption>
+          <caption>
+            {tn("{count} group", "{count} groups", groups.length, {
+              count: groups.length
+            })}
+          </caption>
           <thead>
             <tr>
               <th scope="col">{t("Code")}</th>
