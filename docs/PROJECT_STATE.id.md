@@ -1,6 +1,6 @@
 🇮🇩 Bahasa Indonesia · 🇬🇧 [English (source)](PROJECT_STATE.md)
 
-<!-- i18n-source-hash: sha256:ef9830fcb7059e83b05ca3912b5172c6e8fec58e788eabeb646000d4ed51f493 -->
+<!-- i18n-source-hash: sha256:f943cb6c6eb332e5dd3e89cefb4f694eb53fbd91014b4d1ebe9d61af67f38471 -->
 
 # AWCMS — Project State & Continuation
 
@@ -112,7 +112,7 @@ Model tata kelola dipakai-langsung/tanpa-repo-turunan (ADR-0034 §2/§3) **tidak
 | Commit sejak rilis terakhir        | _jalankan perintah di kolom kanan_                                                    | `git rev-list --count v9.1.2..HEAD`                                                     |
 | Modul base                         | **22** (lihat daftar di ARCHITECTURE.md)                                              | `src/modules/index.ts`                                                                  |
 | Migrasi                            | **129** (`sql/001`–`129`)                                                             | `ls sql/`                                                                               |
-| ADR                                | **0000**–**0097** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
+| ADR                                | **0000**–**0099** (`0000` = template; status ADR tertinggi: **Accepted**)             | `ls docs/adr/`                                                                          |
 | Layar admin                        | **43** berkas `.astro` di `src/pages/admin/`; **0 dari 22** modul tanpa `navigation:` | `find src/pages/admin -name '*.astro'`, `grep -L 'navigation:' src/modules/*/module.ts` |
 | Berkas `.astro`                    | **56** (30.063 baris) — soal typecheck lihat §6                                       | `find src -name '*.astro'`                                                              |
 | Gerbang                            | **50** di rantai `bun run check`                                                      | `scripts.check` di `package.json`, dipisah pada `&&`                                    |
@@ -636,7 +636,32 @@ pending_verification`.
      ongkos penggabungan: `t()` mengembalikan STRING, jadi elemen `<code>` di
      sekeliling placeholder-nya hilang. Pertahankan `<a>` sungguhan sebagai label
      tersendiri alih-alih melipat tautan ke dalam kalimat.
-  3. **Locale untuk permukaan PUBLIK — TERBLOKIR oleh keputusan kunci cache,
+     **Langkah 3 dan 5 sudah DIPUTUSKAN — [ADR-0098](adr/0098-the-cache-key-carries-the-locale-in-the-path.id.md)
+     dan [ADR-0099](adr/0099-changing-the-login-address-is-account-recovery.id.md),
+     15 Agustus 2026. Keduanya `Accepted (belum diimplementasikan)`, terikat pada
+     artefak yang dijanjikannya oleh `tests/adr-implementation-status.test.ts`.**
+
+  **Langkah 3 — locale masuk ke PATH, dan kunci cache tidak disentuh.**
+  `Vary: Cookie` melipatgandakan objek cache menurut banyaknya string cookie
+  berbeda dan memasukkan header pembawa kredensial ke kuncinya; `Vary:
+Accept-Language` membatasi fan-out pada dua tetapi tak bisa melihat klik
+  eksplisit, yang akan menjadikan pengalih bahasa dekoratif tepat di permukaan
+  yang dilihat paling banyak pembaca. `/en/…` dan `/id/…` sudah menjadi objek
+  berbeda di bawah kunci yang ada, jadi hit rate tidak berubah dan tidak ada
+  header request yang masuk ke kunci sama sekali. Pemilihannya lewat 307
+  ber-`private, no-store`, jadi cookie dihormati tanpa pernah mencapai cache.
+
+  **Langkah 5 — alamat login ADALAH akun itu, jadi alurnya dibangun seperti
+  pemulihan.** Kedua alamat dibuktikan secara berbeda: yang baru lewat token
+  sekali pakai, berumur pendek, di-hash, dan TERIKAT; yang lama diberi tahu
+  dengan tautan batal yang berlaku LEBIH LAMA daripada jendela konfirmasi,
+  karena pemberitahuan itulah satu-satunya bagian desain yang menolong orang
+  yang sudah dikompromikan. Otentikasi ulang yang segar diwajibkan (sesi saja
+  bukan wewenang untuk memindahkan kanal pemulihan), konfirmasi mencabut setiap
+  sesi lain dan setiap token reset yang beredar, dan keunikan diperiksa saat
+  konfirmasi agar formulirnya bukan orakel keberadaan akun.
+
+  3. **Locale untuk permukaan PUBLIK — DIPUTUSKAN oleh ADR-0098; sebelumnya terblokir oleh pertanyaan kunci cache,
      dan blokirnya nyata.** Varnish mem-key pada URL (ADR-0042). Satu URL publik
      yang badannya berubah menurut cookie locale berarti pembaca Inggris
      disajikan halaman Indonesia dari cache. ADR-0095 §"Keputusan 5" karena itu

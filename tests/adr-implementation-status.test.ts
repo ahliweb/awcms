@@ -124,6 +124,39 @@ const ADR_ARTIFACT_MAP: readonly {
         "src/modules/visitor-analytics/domain/web_vitals_aggregate.ts"
       ]
     ]
+  },
+  {
+    // ADR-0098 — accepted 15 August 2026, not built. The promised artifact is
+    // the PATH resolver, not the middleware branch that will call it: the whole
+    // decision is that the locale is chosen by URL rather than by a `Vary`
+    // header, so the file that maps a path to a locale (and back) IS the
+    // decision made executable. Pointing this at `middleware.ts` instead would
+    // be satisfied by a file that already exists, which would make the entry
+    // green on the day the ADR landed and mean nothing.
+    adrFile: "0098-the-cache-key-carries-the-locale-in-the-path.md",
+    artifacts: [
+      [
+        "src/lib/i18n/public-locale-path.ts",
+        "src/lib/i18n/public_locale_path.ts"
+      ]
+    ]
+  },
+  {
+    // ADR-0099 — accepted 15 August 2026, not built. Two artifacts, and both
+    // are required, because either one alone is a DIFFERENT and less safe
+    // design: the migration without the flow is a token table nothing mints,
+    // and the flow without the migration is an address change with no
+    // single-use, hashed, bound token behind it — precisely the version the ADR
+    // rejects. Listing them as two entries rather than one alternation is what
+    // makes "both" enforceable.
+    adrFile: "0099-changing-the-login-address-is-account-recovery.md",
+    artifacts: [
+      [
+        "src/modules/identity-access/application/login-address-change.ts",
+        "src/modules/identity-access/application/login_address_change.ts"
+      ],
+      ["sql/131_awcms_login_address_change_requests.sql"]
+    ]
   }
 ];
 
